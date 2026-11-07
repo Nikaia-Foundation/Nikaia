@@ -9,7 +9,7 @@ fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
     return f(s)
 }
 
-fn main() {
+fn main() throws {
     let g: String = "hi ".trim().to_string()
     println(apply(same, g))
     let h = "ho ".trim().to_string()

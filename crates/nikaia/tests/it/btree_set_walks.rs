@@ -8,7 +8,7 @@ fn run(purpose: &str, body: &str) -> String {
     let dir = common::scratch_dir(purpose);
     let source = format!(
         "use std::cli\nuse std::collections\n\nfn show(xs: ref Vec[i64]) -> String {{\n    let mut out: String = \"[\"\n    for x in xs {{\n        out.push_str(f\" {{x}}\")\n    }}\n    out.push_str(\" ]\")\n    return out\n}}\n\n\
-         fn main() {{\n    let mut a: collections::BTreeSet[i64] = collections::BTreeSet()\n    let mut b: collections::BTreeSet[i64] = collections::BTreeSet()\n    let none: collections::BTreeSet[i64] = collections::BTreeSet()\n    for x in [5, 1, 3] {{\n        a.insert(x)\n    }}\n    for x in [3, 4, 5] {{\n        b.insert(x)\n    }}\n{body}\n}}\n"
+         fn main() throws {{\n    let mut a: collections::BTreeSet[i64] = collections::BTreeSet()\n    let mut b: collections::BTreeSet[i64] = collections::BTreeSet()\n    let none: collections::BTreeSet[i64] = collections::BTreeSet()\n    for x in [5, 1, 3] {{\n        a.insert(x)\n    }}\n    for x in [3, 4, 5] {{\n        b.insert(x)\n    }}\n{body}\n}}\n"
     );
     std::fs::write(dir.join("main.nika"), source).expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))

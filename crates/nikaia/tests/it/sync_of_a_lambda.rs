@@ -51,7 +51,7 @@ fn a_sync_caller_may_call_it_with_a_lambda_that_does_not_pause() {
          \x20   return apply(fn(n) {{ n * 2 }}, x)\n\
          }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   println(f\"{{twice(21)}}\")\n\
          }}\n"
     );
@@ -79,7 +79,7 @@ fn a_sync_caller_may_not_hand_it_a_lambda_that_pauses() {
              \x20   }}, x)\n\
              }}\n\
              \n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   println(f\"{{twice(21)}}\")\n\
              }}\n"
         ),
@@ -105,7 +105,7 @@ fn a_body_that_pauses_elsewhere_breaks_the_promise() {
          \x20   return f(x)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{apply(fn(n) { n }, 1)}\")\n\
          }\n",
     );
@@ -137,7 +137,7 @@ fn the_promise_names_a_function_parameter() {
                  \x20   return f(x)\n\
                  }}\n\
                  \n\
-                 fn main() {{\n\
+                 fn main() throws {{\n\
                  \x20   println(f\"{{apply(fn(n) {{ n }}, 1)}}\")\n\
                  }}\n"
             ),
@@ -177,7 +177,7 @@ impl Holder {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { row: Row { id: 3 }, name: "n" }
     println(f"{h.row_copy().id} {h.name_copy()}")
 }
@@ -200,7 +200,7 @@ fn a_clone_of_a_number_or_a_tuple_is_sync() {
     return copy.0.clone()
 }
 
-fn main() {
+fn main() throws {
     let at: i64 = 4
     let x: String = "x"
     let pair = (at.clone(), x)
@@ -231,7 +231,7 @@ fn firsts(links: ref collections::BTreeSet[(String, String)]) -> i64 {
     return out.len()
 }
 
-fn main() {
+fn main() throws {
     let mut links: collections::BTreeSet[(String, String)] = collections::BTreeSet()
     let x: String = "x"
     let y: String = "y"

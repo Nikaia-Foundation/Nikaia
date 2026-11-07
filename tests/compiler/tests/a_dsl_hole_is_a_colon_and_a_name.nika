@@ -11,13 +11,13 @@ struct Db {
 }
 
 impl Db {
-    fn prepare(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl {
+    fn prepare(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl throws {
         println(f"{self.name}: {statement}")
         return args
     }
 }
 
-fn main() {
+fn main() throws {
     let db = Db { name: "people.db" }
     let query = dsl mysql {
         SELECT std::io::name FROM t WHERE at = 12:30 AND (a = :id OR b = :id) AND active = :active

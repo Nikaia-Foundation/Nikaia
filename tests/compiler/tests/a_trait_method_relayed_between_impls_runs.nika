@@ -26,7 +26,7 @@ impl H for B {
         return relay(A { tag: 1 }, n - 1, known) + self.tag
     }
 }
-fn main() {
+fn main() throws {
     let mut names: collections::BTreeMap[String, i64] = collections::BTreeMap()
     names.insert("a", 10)
     names.insert("b", 20)

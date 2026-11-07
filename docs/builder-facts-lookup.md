@@ -178,7 +178,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
       rule WS = "" -> { }
       entry rule doc(n: i64) -> i64 = d:dec[i64](digit+) eof -> { d + n }
   }
-  fn main() {
+  fn main() throws {
       let input = Bytes("41".bytes().collect())
       let r = G::doc(input, 1) catch {
           println("error")

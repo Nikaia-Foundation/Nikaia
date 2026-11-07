@@ -3,7 +3,7 @@
 
 use tags
 
-fn main() {
+fn main() throws {
     let t = tags::tag(f"app")
     let mut all: Vec[tags::Tag] = []
     for i in 0..<2 {

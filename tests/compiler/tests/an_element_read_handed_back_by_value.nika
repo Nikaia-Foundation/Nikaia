@@ -35,6 +35,6 @@ fn from_a_local_list() -> Sym? {
 	return s
 }
 
-fn main() {
+fn main() throws {
 	println("unreached")
 }

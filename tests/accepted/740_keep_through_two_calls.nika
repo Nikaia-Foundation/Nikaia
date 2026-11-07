@@ -10,7 +10,7 @@ fn outer(mut v: Vec[String]) {
     let t = f"z{3}"
     fill3(t, v)
 }
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = Vec()
     fill2("lit", v)
     outer(v)

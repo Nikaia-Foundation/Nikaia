@@ -9,7 +9,7 @@ fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
     return f(s)
 }
 
-fn main() {
+fn main() throws {
     let g: String = "hi"
     println(apply(same, g))
     println(apply(same, g))

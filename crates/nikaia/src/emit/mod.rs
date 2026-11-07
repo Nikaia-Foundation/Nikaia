@@ -723,10 +723,6 @@ impl<'p> Emitter<'p> {
     /// This is `std` itself - see [`emit_std`].
     fn for_std(mut self) -> Self {
         self.s.is_std = true;
-        // **The sums again, now that the file is known to be one of `std`'s
-        // or the tools'** (#1347): there each file writes only its own
-        // functions' (`error_sums`).
-        self.s.sums = self.s.error_sums(&self.world);
         self
     }
 

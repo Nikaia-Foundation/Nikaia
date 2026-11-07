@@ -10,7 +10,7 @@ fn run(fail: bool) -> i64 throws {
     1
 }
 
-fn main() {
+fn main() throws {
     let n = run(true) catch {
         println("x")
         -1

@@ -15,7 +15,7 @@ fn bump(c: SharedMut[i64]) {
     c.update fn(mut v) { v += 1 }
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(Conn { host: "localhost" })
     println(serve_old(db))
     println(serve(db))

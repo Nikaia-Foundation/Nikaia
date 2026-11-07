@@ -96,7 +96,7 @@ pub(crate) fn check_walks_values_operations(state: &CheckState, values: &mut Vec
             CheckWalksDoor::Unaccounted => { return None; },
             CheckWalksDoor::NotADoor => { },
         }
-        let found = accounted(&Stmt::Expr(value), words, walking);
+        let found = accounted_beside(&Stmt::Expr(value), words, walking);
         match found {
             Accounted::Operation(ref operation) => { out.push(operation.clone()); },
             Accounted::NotAnOperation => { },
@@ -232,7 +232,7 @@ impl CheckState {
             }
         }
         let mut operations: Vec<Accounted> = vec![];
-        for stmt in block.stmts.iter() { operations.push(accounted(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
+        for stmt in block.stmts.iter() { operations.push(accounted_beside(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
         let mut mentioned: Vec<collections::BTreeSet<String>> = vec![];
         for stmt in block.stmts.iter() {
             let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();

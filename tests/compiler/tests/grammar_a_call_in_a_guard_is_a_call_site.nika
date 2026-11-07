@@ -15,7 +15,7 @@ fn fits(s: String) -> bool sync {
 fn other(s: String) -> bool sync {
 	return ok(s)
 }
-fn main() {
+fn main() throws {
 	let r = G::top("abc") catch {
 		println("error")
 		return

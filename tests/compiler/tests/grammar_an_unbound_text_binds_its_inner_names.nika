@@ -9,7 +9,7 @@ grammar G {
 	entry rule guarded -> String = text(d:Ch+) if(d.len() > 1) ";" -> { "ok" }
 }
 
-fn main() {
+fn main() throws {
 	let a = G::plain("12;") catch {
 		println("error")
 		return

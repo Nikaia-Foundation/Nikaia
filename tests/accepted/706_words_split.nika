@@ -7,7 +7,7 @@ fn words(s: String, mut v: Vec[String]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = []
     words(f"a b {1}", v)
     println(v.len())

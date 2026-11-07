@@ -1,6 +1,6 @@
 struct Node { n: i64? }
 
-fn main() {
+fn main() throws {
     let mut a = Node { n: 1 }
     if a.n != null {
         let mut k = 0

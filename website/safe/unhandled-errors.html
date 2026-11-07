@@ -34,7 +34,7 @@ fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }
 
-fn main() {
+fn main() throws {
     println(load())
 }
 </code></pre>

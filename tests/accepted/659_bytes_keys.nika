@@ -13,7 +13,7 @@ fn cut(dna: String) -> collections::HashMap[String, i64] {
     return counts
 }
 
-fn main() {
+fn main() throws {
     let s = f"GATAGA{""}"
     let c = cut(s)
     let k = f"GA"

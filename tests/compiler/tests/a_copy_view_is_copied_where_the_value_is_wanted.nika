@@ -33,7 +33,7 @@ fn typed(m: ref collections::BTreeMap[String, C], k: String) -> C? {
 	return d
 }
 
-fn main() {
+fn main() throws {
 	let xs = [C { n: 1 }, C { n: 2 }]
 	let e: ref C = xs[1]
 	let g: C = e

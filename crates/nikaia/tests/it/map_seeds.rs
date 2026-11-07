@@ -1000,7 +1000,13 @@ fn a_private_struct_that_holds_a_pub_struct_compiles_in_both_programs() {
 #[test]
 fn a_grammar_rule_type_takes_the_hasher_the_package_fills() {
     let example = include_str!("../../../../examples/access-log/src/main.nika");
+    // The log is read as a file the program vouches for (ADR-365 D2), so the
+    // package fills its maps with trusted keys and the rule's type is `Fast`.
     let source = example
+        .replace(
+            "fs::map(path, fs::Root::Anywhere)",
+            "fs::map(path, fs::Root::Anywhere; trusted: true)",
+        )
         .replace(
             "fn main() throws {",
             "fn make() -> Report {\n    return Report()\n}\n\nfn main() throws {",

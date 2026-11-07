@@ -32,7 +32,7 @@ fn twice[H: Host](host: ref H, mut walk: Walk) -> i64 sync {
     return host.visit(walk, a)
 }
 
-fn main() {
+fn main() throws {
     let host = Rusty { name: \"h\" }
     let mut walk = Walk { log: [] }
     let n = twice(host, walk)
@@ -93,7 +93,7 @@ fn through[H: Asks](host: ref H, xs: ref Vec[i64]) -> i64 sync {
     return host.count(xs)
 }
 
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 2]
     let one = One { add: 1 }
     print(f\"{through(one, xs)}\")

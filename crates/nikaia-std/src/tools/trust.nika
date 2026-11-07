@@ -66,6 +66,26 @@ fn ends_with_variant(names: ref winnow_grammar::InternerContext, segments: ref V
 pub struct Reason {
     pub source: String,
     pub untrusted: bool,
+    /// Where a call wrote `trusted: true` (ADR-365 D2), as `file:line`, or
+    /// empty where the ledger's provenance is the answer.
+    pub marked_at: String,
+}
+
+/// **Whether a call writes `trusted: true`** (ADR-365 D2, ADR-010 D3): the
+/// one marker that makes a source's bytes the operator's. Only the literal
+/// counts: a value worked out while the program runs says nothing the
+/// compiler can read, so the source stays as untrusted as its ledger says
+/// (fail closed).
+pub fn says_trusted(names: ref winnow_grammar::InternerContext, config: ref Vec[ConfigArg]) -> bool {
+    for option in config {
+        if names.resolve(option.name) == "trusted" {
+            return match option.value {
+                Expr::LitBool(value, _) => value,
+                else => false,
+            }
+        }
+    }
+    return false
 }
 
 /// A call that wrote a root the review wants to see, where it stands.
@@ -83,7 +103,11 @@ pub fn render(untrusted: bool, reasons: ref Array[Reason], places: ref Array[Pla
         out.push_str("    no source is read, so nothing entered from outside\n")
     }
     for reason in reasons {
-        out.push_str(ref f"    {reason.source} is {provenance(reason.untrusted)}\n")
+        if reason.marked_at.is_empty() {
+            out.push_str(ref f"    {reason.source} is {provenance(reason.untrusted)}\n")
+        } else {
+            out.push_str(ref f"    {reason.source} is {provenance(reason.untrusted)}: `trusted: true` at {reason.marked_at}\n")
+        }
     }
     let hash = if untrusted {
         "keyed, per-process random seed - key choice cannot be aimed at the table"
@@ -283,7 +307,12 @@ pub fn trusted_maps(program: ref Program, words: ref winnow_grammar::InternerCon
     let mut env = MapEnv { sources: collections::BTreeSet(), own: collections::BTreeSet(), privates: collections::BTreeMap() }
     for (key, contract) in library.functions {
         let provenance = contract.provenance ?? continue
-        if provenance == Provenance::Untrusted {
+        // **A method, by its name**: `net::Connection::read` is read through
+        // whatever value has that method. A function of a module, `fs::map`,
+        // is called by its path and followed by `tm_call_deps`, so `.map(..)`
+        // and `.lines()` on a value of the program's are not sources.
+        let a_method = contract.signature?.takes_a_receiver() ?? true
+        if provenance == Provenance::Untrusted && a_method {
             let parts: Vec[ref String] = key.split("::").collect()
             env.sources.insert(parts[parts.len() - 1].clone())
         }
@@ -926,7 +955,7 @@ fn tm_call_deps(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg],
     let contract = library.functions[name] ?? return tm_never()
     if contract.provenance != null {
         let provenance = contract.provenance ?? return tm_never()
-        if provenance == Provenance::Trusted {
+        if provenance == Provenance::Trusted || says_trusted(words, config) {
             return tm_nothing()
         }
         return tm_never()

@@ -17,7 +17,7 @@ fn tail_match(
 ) -> String? { match c { 0 => h.name, 1 => null, else => own(h.name) } }
 fn view_or_null(h: ref Holder, c: bool) -> String? { if c { h.name } else { null } }
 fn view_tail(h: ref Holder) -> String? { h.name }
-fn main() {
+fn main() throws {
 	let h = Holder { name: f"n{1}" }
 	println(h.pick(true))
 	println(h.pick(false))

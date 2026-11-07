@@ -17,6 +17,6 @@ fn width(size: Size) -> i64 {
 	return w
 }
 
-fn main() {
+fn main() throws {
 	println(f"{width(Size::Small)}")
 }

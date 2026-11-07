@@ -5,7 +5,7 @@
 // refused it.
 fn blocking(dir: String) -> String { dir.trim() + "x" }
 
-fn main() {
+fn main() throws {
     let names = [" a b ", "c d"]
     let mut briefs: Vec[String] = []
     let urgent = names[0].trim()

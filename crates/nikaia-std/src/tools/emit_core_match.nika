@@ -961,7 +961,7 @@ impl EmitState {
                     }
                     let mut tested = EmitOut::empty()
                     self.emit_core_pattern_written(world, walk, tested, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
-                    out.push(f"{pad}#[allow(unused_variables)] crate::{sum}::{variant}(error) if nikaia_std::error::handed::<{ty}>(error.held()).is_some_and(|error| matches!(error, ")
+                    out.push(f"{pad}#[allow(unused_variables)] {self.sum_root()}{sum}::{variant}(error) if nikaia_std::error::handed::<{ty}>(error.held()).is_some_and(|error| matches!(error, ")
                     out.append(tested)
                     out.push(f")) => {{ let error = nikaia_std::error::opened::<{ty}>(Box::new(error.split().0)); #[allow(unreachable_patterns)] match error {{\n{inner}")
                     self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
@@ -971,9 +971,9 @@ impl EmitState {
                 }
             }
             if own {
-                out.push(f"{pad}crate::{sum}::{variant}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n")
+                out.push(f"{pad}{self.sum_root()}{sum}::{variant}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n")
             } else {
-                out.push(f"{pad}crate::{sum}::{variant}(error) => match error {{\n")
+                out.push(f"{pad}{self.sum_root()}{sum}::{variant}(error) => match error {{\n")
             }
             // The member's own arms, then the catch-all.
             for pass in 0..<2 {

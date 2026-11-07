@@ -30,7 +30,7 @@ fn guarded(name: ref String, n: i64) -> String sync {
     return r.clone()
 }
 
-fn main() {
+fn main() throws {
     let x: Ty? = Ty { name: "b" }
     let s: String = "i64"
     let u: String = "u8"

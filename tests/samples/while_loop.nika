@@ -9,7 +9,7 @@ fn countdown(start: i32) -> i32 {
     return steps
 }
 
-fn main() {
+fn main() throws {
     let mut seen = 0
     // Nested, and with a `for` inside it - the two loops are statements of the
     // same kind and neither is an expression.

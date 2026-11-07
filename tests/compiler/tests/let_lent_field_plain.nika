@@ -29,7 +29,7 @@ fn mixed(h: ref Holder, c: bool) -> i64 {
     return x.len()
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { name: f"ab{1}" }
     println(f"{label(h)} {assigned(h, true)} {assigned(h, false)}")
     println(f"{chosen(h, true, true)} {chosen(h, false, true)} {chosen(h, true, false)}")

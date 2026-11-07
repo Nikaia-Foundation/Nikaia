@@ -11,7 +11,7 @@ fn first_big(xs: Vec[i64?], limit: i64) -> i64 {
     return 0
 }
 
-fn main() {
+fn main() throws {
     let xs: Vec[i64?] = [1, null, 7, 3]
     println(first_big(xs, 2))
     println(first_big(xs, 9))

@@ -130,6 +130,22 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_drop_that_throws(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>]) {
+        if world.own.traits.contains_key("Drop") { return; }
+        for method in methods.iter() {
+            match &method.node {
+                Item::Fn { name, can_throw, .. } => {
+                    let can_throw = *can_throw; let name = *name;
+                    let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if world.words.resolve(symbol) != "drop" || !can_throw { continue; }
+                    self.findings.push(check_refusal("NK1140", &method.span, format!("`{}::drop` says `throws`, but a `drop` cannot fail.", target), vec![String::from("`drop` also runs while a panic unwinds or a task is cancelled, and there no failure can come out (Part I 6.4).")], Some(drop_help(target))));
+                },
+                _ => { },
+            }
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
         let mut wrote_cleanup = false;
         let note: &'static str = "`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail.";
@@ -163,6 +179,10 @@ impl CheckState {
         if !wrote_cleanup { self.findings.push(check_refusal("NK2601", span, format!("`impl Cleanup for {}` is missing its `cleanup` method.", target), vec![note.to_string()], Some(String::from("Add `fn cleanup(ref mut self) { … }`.")))); }
     }
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn drop_help(target: &str) -> String { format!("Handle the failure in the body (`… catch {{ }}`), or move teardown that can fail to `impl Cleanup for {} {{ fn cleanup(ref mut self) throws {{ … }} }}`.", target) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

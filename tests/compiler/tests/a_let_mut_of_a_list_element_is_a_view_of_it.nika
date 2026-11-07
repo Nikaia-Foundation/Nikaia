@@ -1,5 +1,5 @@
 struct P { pub n: i64, pub names: Vec[String] }
-fn main() {
+fn main() throws {
     let mut v: Vec[P] = [P { n: 1, names: [] }, P { n: 2, names: [] }]
     let mut e = v[0]
     e.n = 10

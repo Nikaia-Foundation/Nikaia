@@ -350,7 +350,7 @@ pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref Proje
 
 /// What a test program's `--bounds` reports got wrong, as differences
 /// (#1069).
-pub fn project_tests_explain_bounds(outcome: ref ProjectTestsOutcome) {
+pub fn project_tests_explain_bounds(outcome: ref ProjectTestsOutcome) throws {
     for (name, want, got) in outcome.bounds {
         if want != got {
             println(f"tests/{name} (- expected, + reported):")
@@ -396,7 +396,7 @@ pub fn project_tests_agree(outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> 
 
 /// Print one test's line, and say whether it passed: at every setting, and the
 /// same way at each.
-pub fn project_tests_verdict(label: String, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> bool {
+pub fn project_tests_verdict(label: String, outcomes: ref Vec[(String, ProjectTestsOutcome)]) -> bool throws {
     let agree = project_tests_agree(outcomes)
     let passed = agree && (0..<outcomes.len()).all(fn(at) { outcomes[at].1.passed })
     let said = match (passed, agree) {
@@ -409,7 +409,7 @@ pub fn project_tests_verdict(label: String, outcomes: ref Vec[(String, ProjectTe
 }
 
 /// The first line `nikaia test` prints: how many tests it runs.
-pub fn project_tests_running(total: i64) {
+pub fn project_tests_running(total: i64) throws {
     let plural = match total == 1 {
         true => "",
         false => "s",
@@ -418,7 +418,7 @@ pub fn project_tests_running(total: i64) {
 }
 
 /// The last line `nikaia test` prints, and the exit code it ends with.
-pub fn project_tests_result(total: i64, failed: i64) -> i32 {
+pub fn project_tests_result(total: i64, failed: i64) -> i32 throws {
     let passed = total - failed
     let said = match failed == 0 {
         true => "ok",
@@ -695,7 +695,7 @@ pub enum ProjectTestsBlessed {
 
 /// Print a blessed test's line, and say whether it passed: one that could
 /// not be blessed failed.
-pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlessed) -> bool {
+pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlessed) -> bool throws {
     match blessed {
         ProjectTestsBlessed::Unchanged => println(f"{label} ... ok"),
         ProjectTestsBlessed::Written => println(f"{label} ... blessed"),
@@ -758,7 +758,7 @@ pub fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(
 
 /// What a test wrote to standard error, `written`, against what it should
 /// have, `want` (its `.stderr`, or its `.stops`, #1260), as differences.
-pub fn project_tests_explain_said(want: ref Bytes, written: ref Bytes) {
+pub fn project_tests_explain_said(want: ref Bytes, written: ref Bytes) throws {
     if want != written {
         println("standard error (- expected, + written):")
         print(project_tests_difference(want, written))
@@ -767,7 +767,7 @@ pub fn project_tests_explain_said(want: ref Bytes, written: ref Bytes) {
 
 /// **What an output test got wrong, as differences**
 /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D4).
-pub fn project_tests_explain_output(output: ref OutputTest, outcome: ref ProjectTestsOutcome) {
+pub fn project_tests_explain_output(output: ref OutputTest, outcome: ref ProjectTestsOutcome) throws {
     match output.stops {
         null => {
             if !outcome.ended_well {
@@ -905,7 +905,7 @@ pub fn project_tests_program_done(program: ref ProgramTest, outcomes: Vec[(Strin
 /// what it did - once where the settings agree, else at each setting - with a
 /// test program's standard output read as UTF-8 lossily (#1182) and each
 /// standard error as it came.
-pub fn project_tests_report_failures(failed: ref Vec[ProjectTestsFailed]) {
+pub fn project_tests_report_failures(failed: ref Vec[ProjectTestsFailed]) throws {
     if failed.is_empty() {
         return
     }

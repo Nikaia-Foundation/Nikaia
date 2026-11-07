@@ -412,6 +412,17 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         } else {
             entry.touches_a_lock = Lock::No
         }
+    } else if key == "panics" {
+        // **Whether it can panic** (ADR-async-5 D35): `"?"`, and anything
+        // else, is the absence of a guarantee.
+        let said = value.trim()
+        if said == "true" {
+            entry.panics = Panics::Yes
+        } else if said == "false" {
+            entry.panics = Panics::No
+        } else {
+            entry.panics = Panics::Unknown
+        }
     } else if key == "threads" {
         let said = value.trim()
         if said == "true" {
@@ -684,7 +695,7 @@ fn provenance_of(value: ref String, n: i64) -> Provenance throws {
 }
 
 /// **A touch read back from its text**: `resource read`, `kind(parameter)
-/// write`.
+/// write`, `kind('name') write` for a resource the body named (#1354).
 pub fn touch_of(written: ref String) -> Touch throws {
     let whole = written.trim()
     let c: Vec[scalar] = whole.chars().collect()
@@ -718,7 +729,14 @@ pub fn touch_of(written: ref String) -> Touch throws {
     if kind.len() == 0 {
         throw Refused::Because(f"a touch needs a resource kind, found `{whole}`")
     }
-    return Touch { kind: kind, parameter: parameter, write: write }
+    let mut named: String? = null
+    let between: String = parameter?.clone() ?? ""
+    if between.len() >= 2 && between.starts_with("'") && between.ends_with("'") {
+        let b: Vec[scalar] = between.chars().collect()
+        named = slice(b, 1, b.len() - 1)
+        parameter = null
+    }
+    return Touch { kind: kind, parameter: parameter, named: named, write: write }
 }
 
 /// `position: borrowed` or `position: tethered`, or nothing.

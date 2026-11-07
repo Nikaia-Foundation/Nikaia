@@ -107,16 +107,22 @@ pub mod path {
 
     /// **A name printed as it is** (ADR-319 D4): its bytes, to standard
     /// output or standard error, with a newline where the call says so.
-    pub fn print(p: &FilePath, to_err: bool, newline: bool) {
+    ///
+    /// A failed write is an `IoError`, as every print's is (ADR-392).
+    pub fn print(p: &FilePath, to_err: bool, newline: bool) -> Result<(), crate::io::IoError> {
         use std::io::Write;
         let mut bytes = bytes(p).to_vec();
         if newline {
             bytes.push(b'\n');
         }
-        let _ = match to_err {
-            true => std::io::stderr().lock().write_all(&bytes),
-            false => std::io::stdout().lock().write_all(&bytes),
+        let (wrote, what) = match to_err {
+            true => (std::io::stderr().lock().write_all(&bytes), "standard error"),
+            false => (
+                std::io::stdout().lock().write_all(&bytes),
+                "standard output",
+            ),
         };
+        wrote.map_err(|error| crate::io::print_error(error, what))
     }
 
     /// **Text for showing** (ADR-319 D6): `�` for what is not text. It never

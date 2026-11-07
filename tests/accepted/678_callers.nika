@@ -17,7 +17,7 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let owned = f"own{1}"
     let line = f"a,bbbbbb,cc"
     for part in line.split(",") {

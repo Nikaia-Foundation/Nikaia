@@ -29,7 +29,7 @@ fn built() -> W {
 	return w
 }
 
-fn main() {
+fn main() throws {
 	println(make().own.n + built().k)
 	println(first().len())
 	println(rest(1).len())

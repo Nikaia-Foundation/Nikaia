@@ -33,7 +33,7 @@ fn show(v: i64?) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     let port = half(8) catch { null }
     let lost = half(7) catch { null }
     println(f"{show(port)} {show(lost)}")

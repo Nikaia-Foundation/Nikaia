@@ -5,7 +5,7 @@ use std::collections
 fn look(m: ref collections::HashMap[String, String], k: String) -> String? {
     return m[k]?.clone()
 }
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, String] = collections::HashMap()
     m["k"] = "vv"
     println(look(m, "k") ?? "none")

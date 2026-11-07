@@ -51,7 +51,7 @@ const POINT: &str = "struct Point { x: i64, y: i64, z: i64 }\n";
 fn it_lowers_to_a_functional_update_with_no_copy_inserted() {
     let rust = lower(&format!(
         "{POINT}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
          \x20   let moved = p with {{ x: 4 }}\n\
          \x20   println(f\"{{moved.x}}\")\n\
@@ -67,7 +67,7 @@ fn it_lowers_to_a_functional_update_with_no_copy_inserted() {
 fn a_field_the_type_does_not_have_is_refused() {
     let found = one(&format!(
         "{POINT}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
          \x20   let q = p with {{ w: 4 }}\n\
          \x20   println(f\"{{q.x}}\")\n\
@@ -89,14 +89,14 @@ fn a_field_named_twice_is_refused_in_both_places() {
     for source in [
         format!(
             "{POINT}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let p = Point {{ x: 1, x: 2, y: 3, z: 4 }}\n\
              \x20   println(f\"{{p.x}}\")\n\
              }}"
         ),
         format!(
             "{POINT}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
              \x20   let q = p with {{ x: 4, x: 5 }}\n\
              \x20   println(f\"{{q.x}}\")\n\
@@ -116,7 +116,7 @@ fn a_field_named_twice_is_refused_in_both_places() {
 fn a_with_that_names_no_field_is_refused() {
     let found = one(&format!(
         "{POINT}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
          \x20   let q = p with {{ }}\n\
          \x20   println(f\"{{q.x}}\")\n\
@@ -141,7 +141,7 @@ fn a_with_that_names_no_field_is_refused() {
 fn an_enum_operand_is_refused_and_the_way_out_names_match() {
     let found = one("enum Op { Add, Sub }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let o = Op::Add\n\
          \x20   let bad = o with { x: 1 }\n\
          \x20   println(\"unreachable\")\n\
@@ -173,7 +173,7 @@ fn a_view_is_not_something_to_copy_from() {
          \x20   return p with {{ x: 1 }}\n\
          }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
          \x20   println(f\"{{shifted(p).x}}\")\n\
          }}"
@@ -195,7 +195,7 @@ fn a_view_is_not_something_to_copy_from() {
 /// missing rather than the value.
 #[test]
 fn a_value_with_no_type_this_compiler_worked_out_is_refused() {
-    let found = one("fn main() {\n\
+    let found = one("fn main() throws {\n\
          \x20   let n = 7\n\
          \x20   let q = n with { x: 1 }\n\
          \x20   println(\"unreachable\")\n\
@@ -210,7 +210,7 @@ fn a_value_with_no_type_this_compiler_worked_out_is_refused() {
 fn a_with_that_names_every_field_reads_its_base_as_underscore() {
     let rust = lower(&format!(
         "{POINT}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let p = Point {{ x: 1, y: 2, z: 3 }}\n\
          \x20   let q = p with {{ x: 4, y: 5, z: 6 }}\n\
          \x20   println(f\"{{q.x}}\")\n\

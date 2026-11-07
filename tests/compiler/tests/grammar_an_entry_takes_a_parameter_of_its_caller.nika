@@ -24,7 +24,7 @@ fn parse_bytes(input: ref Bytes, lim: Limits) -> i64 {
 	}
 }
 
-fn main() {
+fn main() throws {
 	println(f"{parse("x", Limits { depth: 3 })}")
 	println(f"{parse("x", Limits { depth: 0 })}")
 	let b = Bytes("x".bytes().collect())

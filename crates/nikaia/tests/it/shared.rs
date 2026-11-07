@@ -32,11 +32,11 @@ fn connect(host: String) -> Connection {
     Connection { host: host }
 }
 
-fn serve(db: ref Connection) {
+fn serve(db: ref Connection) throws {
     println(f\"serving {db.host}\")
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(connect(\"localhost\"))
     serve(db)
     serve(db)
@@ -136,11 +136,11 @@ fn connect(host: String) -> Connection {
     Connection { host: host }
 }
 
-pub fn serve(db: Shared[Connection]) {
+pub fn serve(db: Shared[Connection]) throws {
     println(f\"serving {db.host}\")
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(connect(\"localhost\"))
     serve(db)
 }
@@ -180,7 +180,7 @@ fn connect(host: String) -> Connection {
     Connection { host: host }
 }
 
-fn main() {
+fn main() throws {
     let pool = Pool { db: Shared(connect(\"localhost\")), size: 4 }
     println(f\"{pool.size} to {pool.db.host}\")
 }
@@ -233,11 +233,11 @@ fn connect(host: String) -> Conn {
     Conn { host: host }
 }
 
-fn serve(db: ref Conn) {
+fn serve(db: ref Conn) throws {
     println(f\"serving {db.host}\")
 }
 
-fn peek(db: ref Shared[Conn]) {
+fn peek(db: ref Shared[Conn]) throws {
     println(f\"peeking {db.host}\")
 }
 
@@ -245,7 +245,7 @@ fn keep(db: Shared[Conn]) -> Pool {
     return Pool { db: db }
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(connect(\"localhost\"))
     serve(db)
     peek(db)
@@ -289,7 +289,7 @@ fn keep(db: Shared[Conn]) -> Pool {
     return Pool { db: db }
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(connect(\"localhost\"))
     let pool = keep(db)
     let again = keep(pool.db)
@@ -325,7 +325,7 @@ fn keep(db: Shared[Conn]) -> Pool {
     return Pool { db: db }
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(connect(\"localhost\"))
     serve(db)
     let pool = keep(db)
@@ -419,7 +419,7 @@ fn a_function_returning_a_shared_value_wraps_on_a_line_of_its_own() {
              return c\n\
          }\n\
          \n\
-         fn main() {\n    \
+         fn main() throws {\n    \
              let db = connect(\"localhost\")\n    \
              println(f\"connected to {db.host}\")\n\
          }\n",
@@ -441,7 +441,7 @@ fn zaehle(counter: SharedMut[i64]) {
     counter.update fn(mut alt) { alt += 1 }
 }
 
-fn main() {
+fn main() throws {
     let counter = SharedMut(0)
     counter.set(5)
     zaehle(counter)
@@ -639,7 +639,7 @@ fn main() throws {
 /// `update`'s rule widened rather than a second rule
 /// ([ADR-281](../../../docs/specification/adr/adr-281.md) D18).
 const TRANSFER: &str = "\
-fn main() {
+fn main() throws {
     let konto_a = SharedMut(100)
     let konto_b = SharedMut(5)
     update_all(konto_a, konto_b) fn(mut von, mut nach) {
@@ -697,7 +697,7 @@ fn a_door_over_several_locks_refuses_what_is_not_one() {
     };
 
     let said = refused(
-        "fn main() {\n    let a = SharedMut(1)\n    let n = 5\n\
+        "fn main() throws {\n    let a = SharedMut(1)\n    let n = 5\n\
          \x20   access_all(a, n) fn(x, y) { println(f\"{x} {y}\") }\n}",
     );
     assert!(said.contains("NK1124"), "{said}");
@@ -705,13 +705,13 @@ fn a_door_over_several_locks_refuses_what_is_not_one() {
 
     // One lock is not several, and the block names one value per lock.
     let alone = refused(
-        "fn main() {\n    let a = SharedMut(1)\n\
+        "fn main() throws {\n    let a = SharedMut(1)\n\
          \x20   access_all(a) fn(x) { println(f\"{x}\") }\n}",
     );
     assert!(alone.contains("at least two"), "{alone}");
 
     let short = refused(
-        "fn main() {\n    let a = SharedMut(1)\n    let b = SharedMut(2)\n\
+        "fn main() throws {\n    let a = SharedMut(1)\n    let b = SharedMut(2)\n\
          \x20   access_all(a, b) fn(x) { println(f\"{x}\") }\n}",
     );
     assert!(short.contains("one value per lock"), "{short}");

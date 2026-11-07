@@ -3,7 +3,7 @@ enum Tree {
     Node,
 }
 
-fn main() {
+fn main() throws {
     let e = Tree.Leaf(1)
     if e is Leaf(v) {
         println(v)

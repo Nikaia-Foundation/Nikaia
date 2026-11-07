@@ -19,7 +19,7 @@ fn id[T: Twin](x: T) -> T {
     return x.twin()
 }
 
-fn main() {
+fn main() throws {
     let n = id(N { v: 3 })
     println(f"{n.v}")
 }

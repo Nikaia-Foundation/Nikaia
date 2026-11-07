@@ -1,0 +1,372 @@
+// crates/nikaia-std/src/tools/panics.nika
+//
+// **Whether a function can panic** (ADR-async-5 D35, #1355): the ledger's
+// `panics` column, inferred as the throw set is (Part I 7.1). A panic site is
+// a `panic`, a run-time check the build keeps (an index into a list, an
+// overflow, a division, an `assume`), a call to a function that can panic,
+// and a call nothing describes; a check the compiler proved, and so dropped,
+// is none. `Unknown` counts as `Yes`: no guarantee is given that was not
+// shown.
+//
+// What a check is and whether it was proved are the checker's and the bounds
+// walk's (ADR-306), handed in as `PanicFacts`; the method calls are the type
+// checker's (`MethodsCalled`, ADR-288). The fixpoint grows each answer by its
+// callees', `No` below `Unknown` below `Yes`, until nothing changes.
+//
+// **A task's body is not the function's** (D35): the expression of `async e`
+// and the lambda of a `spawn` run as a task, whose panic ends that task and
+// reaches the function as `task::Crashed`, a failure, never as a panic.
+
+use std::collections
+
+/// **What the check and the bounds walk say about one file.** Where
+/// `checked` is false the walk has not been asked: a check is then noted in
+/// `PanicReach.checks` and is no site yet, which tells whether asking it can
+/// change an answer at all.
+pub struct PanicFacts {
+    pub checked: bool,
+    /// The `+`, `-`, `*` of whole numbers by the operator's first byte, and a
+    /// compound assignment's by the statement's.
+    pub arithmetic: collections::BTreeMap[i64, String],
+    pub negations: collections::BTreeMap[i64, String],
+    pub shifts: collections::BTreeMap[i64, String],
+    /// The map keys read or written through the brackets, by the key's node:
+    /// a map's index answers a `T?` and never panics (Part III A.2).
+    pub map_keys: collections::BTreeSet[i64],
+    pub proven_indices: collections::BTreeSet[i64],
+    pub proven_arithmetic: collections::BTreeSet[i64],
+    pub proven_negations: collections::BTreeSet[i64],
+}
+
+/// What one body reaches: a site that panics, a call nobody can see into,
+/// a check the walk was not asked about yet, and the functions of this
+/// package it calls.
+pub struct PanicReach {
+    pub sure: bool,
+    pub unknown: bool,
+    pub checks: bool,
+    pub calls: collections::BTreeSet[String],
+}
+
+/// The graph the walk builds, with the type checker's method calls by the
+/// key it files each body's answers under.
+pub struct PanicsGraph {
+    pub methods: collections::BTreeMap[String, MethodsCalled],
+    pub reaches: collections::BTreeMap[String, PanicReach],
+}
+
+/// Every function and method of one unit, into `graph`; the keys it walked,
+/// in order.
+pub fn unit_panics(program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut graph: PanicsGraph) -> Vec[String] {
+    let mut walked: Vec[String] = []
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                let key = key_of_function(name, "", names)
+                panics_function(key, body, program, names, holes_of, facts, own, library, graph)
+                walked.push(key)
+            }
+            Item::Impl { target, methods, .. } => {
+                let owner = names.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => {
+                            let key = key_of_function(name, owner, names)
+                            panics_function(key, body, program, names, holes_of, facts, own, library, graph)
+                            walked.push(key)
+                        }
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return walked
+}
+
+/// **The fixpoint**: each function's answer, its own reach joined with its
+/// callees' answers. A callee the graph does not hold answers what its
+/// ledger entry says.
+pub fn panics_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeMap[String, Panics] {
+    let mut answers: collections::BTreeMap[String, Panics] = collections::BTreeMap()
+    for (name, reach) in graph.reaches {
+        answers.insert(name.clone(), panics_own(reach))
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for (name, reach) in graph.reaches {
+            let before: Panics = answers[name]?.clone() ?? Panics::Unknown
+            if before == Panics::Yes {
+                continue
+            }
+            let mut after: Panics = before.clone()
+            for callee in reach.calls {
+                let theirs: Panics = answers[callee]?.clone() ?? (own.functions[callee]?.panics?.clone() ?? Panics::Unknown)
+                after = after.or(theirs)
+            }
+            if after != before {
+                answers.insert(name.clone(), after)
+                changed = true
+            }
+        }
+    }
+    return answers
+}
+
+/// Whether a unit's checks are worth asking the bounds walk about: one of
+/// its functions answers `No` with its checks left out, and has some.
+pub fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BTreeMap[String, Panics], walked: ref Vec[String]) -> bool {
+    for key in walked {
+        let reach = graph.reaches[key] ?? continue
+        let answer: Panics = answers[key]?.clone() ?? Panics::Unknown
+        if reach.checks && answer == Panics::No {
+            return true
+        }
+    }
+    return false
+}
+
+fn panics_own(reach: ref PanicReach) -> Panics {
+    if reach.sure {
+        return Panics::Yes
+    }
+    if reach.unknown {
+        return Panics::Unknown
+    }
+    return Panics::No
+}
+
+fn panics_function(key: ref String, body: ref Block, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut graph: PanicsGraph) {
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet() }
+    panics_block(body, program, names, holes_of, facts, own, library, reach)
+    panics_methods(graph.methods[key], own, library, reach)
+    graph.reaches.insert(key.clone(), reach)
+}
+
+// The method calls the type checker resolved: one of this package is a call,
+// one of a library brings its ledger's answer, and one nobody resolved or a
+// call through a function field is a call nobody can see into.
+fn panics_methods(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+    let known = resolved ?? return
+    if known.unseen || known.fields.len() > 0 {
+        reach.unknown = true
+    }
+    for callee in known.resolved {
+        if own.functions.contains_key(callee) {
+            reach.calls.insert(callee.clone())
+        } else {
+            panics_absorb(library.functions[callee]?.panics?.clone() ?? Panics::Unknown, reach)
+        }
+    }
+}
+
+fn panics_absorb(answer: Panics, mut reach: PanicReach) {
+    match answer {
+        Panics::Yes => {
+            reach.sure = true
+        }
+        Panics::Unknown => {
+            reach.unknown = true
+        }
+        Panics::No => {}
+    }
+}
+
+/// A run-time check: a site where it is not proved, once the walk was asked.
+fn panics_check(proved: bool, facts: ref PanicFacts, mut reach: PanicReach) {
+    if proved {
+        return
+    }
+    if facts.checked {
+        reach.sure = true
+    } else {
+        reach.checks = true
+    }
+}
+
+fn panics_block(block: ref Block, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+    for stmt in block.stmts {
+        panics_stmt(stmt.node, stmt.span, program, names, holes_of, facts, own, library, reach)
+    }
+}
+
+fn panics_stmt(stmt: ref Stmt, span: ref Span, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+    match stmt {
+        Stmt::Let { value, .. } => panics_expr(value, program, names, holes_of, facts, own, library, reach),
+        Stmt::Comptime { .. } => {}
+        Stmt::Assign { target, op, value } => {
+            // **A compound assignment is its operation** (ADR-306 D5a), keyed
+            // by the statement's first byte; a `/=` or `%=` divides.
+            let at = span.start as i64
+            match op {
+                null => {}
+                which => {
+                    if which == BinaryOp::Div || which == BinaryOp::Rem {
+                        panics_division(value, reach)
+                    } else if facts.arithmetic.contains_key(at) {
+                        panics_check(facts.proven_arithmetic.contains(at), facts, reach)
+                    }
+                }
+            }
+            panics_expr(target, program, names, holes_of, facts, own, library, reach)
+            panics_expr(value, program, names, holes_of, facts, own, library, reach)
+        }
+        Stmt::For { iter, body, .. } => {
+            panics_expr(iter, program, names, holes_of, facts, own, library, reach)
+            panics_block(body, program, names, holes_of, facts, own, library, reach)
+        }
+        Stmt::While { cond, body, .. } => {
+            panics_expr(cond, program, names, holes_of, facts, own, library, reach)
+            panics_block(body, program, names, holes_of, facts, own, library, reach)
+        }
+        Stmt::Return(value) => {
+            match value {
+                null => {}
+                inner => panics_expr(inner, program, names, holes_of, facts, own, library, reach),
+            }
+        }
+        Stmt::Break => {}
+        Stmt::Continue => {}
+        Stmt::Expr(inner) => panics_expr(inner, program, names, holes_of, facts, own, library, reach),
+    }
+}
+
+/// A `/` or `%` of whole numbers stops the program on a zero divisor, and on
+/// the least value divided by `-1`; a literal divisor other than those, or a
+/// float literal, does not. A divisor of another kind is a site: which
+/// operands are whole numbers is not handed in, so a float's counts too.
+fn panics_division(divisor: ref Expr, mut reach: PanicReach) {
+    match divisor {
+        Expr::LitInt { value, negative, .. } => {
+            if value == 0 || (value == 1 && negative) {
+                reach.sure = true
+            }
+        }
+        Expr::LitFloat(_, _) => {}
+        else => {
+            reach.sure = true
+        }
+    }
+}
+
+fn panics_expr(expr: ref Expr, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+    match expr {
+        // **A task runs elsewhere** (D35): its panic reaches this function as
+        // `task::Crashed`, a failure; only a deadline is read here.
+        Expr::Async(_, _, within) => {
+            match within {
+                null => {}
+                deadline => panics_expr(deadline, program, names, holes_of, facts, own, library, reach),
+            }
+            return
+        }
+        Expr::Spawn { .. } => return,
+        Expr::Call { func, .. } => panics_call(expr, func, program, names, own, library, reach),
+        Expr::Dsl { .. } => {
+            reach.unknown = true
+        }
+        Expr::Index { base, index, .. } => {
+            if !facts.map_keys.contains(node_key(index)) {
+                panics_check(facts.proven_indices.contains(node_key(base)), facts, reach)
+            }
+        }
+        Expr::Binary { op, rhs, span, .. } => {
+            let at = span.start as i64
+            if op == BinaryOp::Div || op == BinaryOp::Rem {
+                panics_division(rhs, reach)
+            } else if op == BinaryOp::Shl || op == BinaryOp::Shr {
+                let literal = match rhs {
+                    Expr::LitInt { .. } => true,
+                    else => false,
+                }
+                if facts.shifts.contains_key(at) && !literal {
+                    panics_check(facts.proven_arithmetic.contains(at), facts, reach)
+                }
+            } else if facts.arithmetic.contains_key(at) {
+                panics_check(facts.proven_arithmetic.contains(at), facts, reach)
+            }
+        }
+        Expr::Unary { op, .. } => {
+            let key = node_key(expr)
+            if op == UnaryOp::Neg && facts.negations.contains_key(key) {
+                panics_check(facts.proven_negations.contains(key), facts, reach)
+            }
+        }
+        else => {}
+    }
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            panics_expr(hole, program, names, holes_of, facts, own, library, reach)
+        }
+    }
+    for child in check_visit_children(expr) {
+        panics_expr(child, program, names, holes_of, facts, own, library, reach)
+    }
+    for block in panics_blocks(expr) {
+        panics_block(block, program, names, holes_of, facts, own, library, reach)
+    }
+}
+
+/// The blocks an expression holds itself, not through the expressions inside
+/// it, which `panics_expr` reaches on its own: a lambda's body runs where it
+/// is called, so it is walked as part of the function.
+fn panics_blocks(expr: ref Expr) -> Vec[ref Block] {
+    let mut out: Vec[ref Block] = []
+    match expr {
+        Expr::Block(block, _) => out.push(block),
+        Expr::AsyncGroup(block, _, _) => out.push(block),
+        Expr::Unsafe(block, _) => out.push(block),
+        Expr::Overlap(block, _) => out.push(block),
+        Expr::Closure { body, .. } => out.push(body),
+        Expr::If { then_branch, else_branch, .. } => {
+            out.push(then_branch)
+            if else_branch != null {
+                out.push(else_branch ?? return out)
+            }
+        }
+        Expr::TryCatch { handler, .. } => out.push(handler),
+        Expr::Select(arms, _) => {
+            for arm in arms {
+                out.extend(check_visit_block_one(arm.body))
+            }
+        }
+        else => {}
+    }
+    return out
+}
+
+// A call by name: `panic` panics; one of this package is a call; one of a
+// library brings its ledger's answer; one nobody can name is unknown. An
+// `assert` the program was accepted with is proved, or its caller's
+// precondition (ADR-269 D4); an `assume` is checked where the build keeps
+// its checks.
+fn panics_call(expr: ref Expr, func: ref Expr, program: ref Program, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+    match func {
+        Expr::Variable(symbol, _) => {
+            let written = names.resolve(symbol)
+            if !own.functions.contains_key(written) {
+                if written == "panic" || written == "assume" {
+                    reach.sure = true
+                    return
+                }
+                if written == "assert" {
+                    return
+                }
+            }
+        }
+        else => {}
+    }
+    let callee = callee_of(names, expr, own, library, program.items) ?? return
+    match callee {
+        Callee::Own(name) => {
+            reach.calls.insert(name.clone())
+        }
+        Callee::Library { key, .. } => panics_absorb(library.functions[key]?.panics?.clone() ?? Panics::Unknown, reach),
+        Callee::Opaque(_) => {
+            reach.unknown = true
+        }
+        Callee::Method => {}
+    }
+}

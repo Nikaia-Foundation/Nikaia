@@ -160,7 +160,7 @@ pub(crate) fn rules_into(def: &GrammarDef, names: &winnow_grammar::InternerConte
 pub(crate) fn reached_by(seen: &[Seen], program: &Program, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, reach: &mut Reach) {
     for one in seen.iter() {
         match one {
-            Seen::Call { name, .. } => { reached_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), library, reach); },
+            Seen::Call { name, literals, .. } => { reached_call((callee_named(names, name.to_string(), own, library, &program.items)).as_ref(), literals, library, reach); },
             Seen::Spawn { .. } => { reach.unknown = true; },
             Seen::Opaque { .. } => { reach.unknown = true; },
             _ => { },
@@ -168,11 +168,11 @@ pub(crate) fn reached_by(seen: &[Seen], program: &Program, names: &winnow_gramma
     }
 }
 
-pub(crate) fn reached_call(callee: Option<&Callee>, library: &Ledger, reach: &mut Reach) {
+pub(crate) fn reached_call(callee: Option<&Callee>, literals: &[Option<String>], library: &Ledger, reach: &mut Reach) {
     let known = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
     match known {
         Callee::Own(name) => { reach.calls.insert(name.to_string()); },
-        Callee::Library { key, .. } => { absorb(*nikaia_std::index::get(&library.functions, key), reach); },
+        Callee::Library { key, .. } => { absorb(*nikaia_std::index::get(&library.functions, key), literals, reach); },
         Callee::Opaque(_) => { reach.unknown = true; },
         _ => { },
     }
@@ -181,16 +181,45 @@ pub(crate) fn reached_call(callee: Option<&Callee>, library: &Ledger, reach: &mu
 pub(crate) fn methods_reach(resolved: Option<&MethodsCalled>, own: &Ledger, library: &Ledger, reach: &mut Reach) {
     let known = match resolved { Some(__nikaia_value) => __nikaia_value, None => return };
     if known.unseen { reach.unknown = true; }
-    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { reach.calls.insert(callee.to_string()); } else { absorb(*nikaia_std::index::get(&library.functions, callee), reach); } }
+    for callee in known.resolved.iter() { if own.functions.contains_key(callee) { reach.calls.insert(callee.to_string()); } else { absorb(*nikaia_std::index::get(&library.functions, callee), &vec![], reach); } }
 }
 
-pub(crate) fn absorb(contract: Option<&FnContract>, reach: &mut Reach) {
+pub(crate) fn absorb(contract: Option<&FnContract>, literals: &[Option<String>], reach: &mut Reach) {
     if !touches_said(contract) {
         reach.unknown = true;
         return;
     }
     let known = match contract { Some(__nikaia_value) => __nikaia_value, None => return };
-    for touch in known.touches.iter() { if touch.parameter.is_some() { reach.unknown = true; } else if !holds_touch(&reach.outside, touch) { reach.outside.push(touch.clone()); } }
+    for touch in known.touches.iter() {
+        if touch.parameter.is_some() {
+            let named = nikaia_std::index::or(literal_for(known, nikaia_std::index::or(touch.parameter.as_deref(), || ""), literals), || "".into());
+            if named.is_empty() {
+                reach.unknown = true;
+                continue;
+            }
+            let mine = Touch { kind: touch.kind.to_string(), parameter: None, named: Some(named), write: touch.write };
+            if !holds_touch(&reach.outside, &mine) { reach.outside.push(mine); }
+        } else if !holds_touch(&reach.outside, touch) { reach.outside.push(touch.clone()); }
+    }
+}
+
+pub(crate) fn literal_for(contract: &FnContract, parameter: &str, literals: &[Option<String>]) -> Option<String> {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut at: i64 = 0;
+    for (name, _) in signature.params.iter() {
+        if name == "self" { return None; }
+        if name == parameter {
+            if ((at) as usize) >= literals.len() { return None; }
+            let text = match match nikaia_std::index::get(&literals, (at) as usize) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if text.contains("\"") || text.contains("\\") || text.contains("\n") { return None; }
+            return Some(text);
+        }
+        at += 1;
+    }
+    None
 }
 
 pub(crate) fn touches_said(contract: Option<&FnContract>) -> bool {
@@ -199,7 +228,7 @@ pub(crate) fn touches_said(contract: Option<&FnContract>) -> bool {
 }
 
 pub(crate) fn holds_touch(touches: &[Touch], touch: &Touch) -> bool {
-    for one in touches.iter() { if one.kind == touch.kind && one.write == touch.write { return true; } }
+    for one in touches.iter() { if one.kind == touch.kind && one.named == touch.named && one.write == touch.write { return true; } }
     false
 }
 
@@ -208,7 +237,7 @@ pub(crate) fn touch_test_reached(kind: String, named: Option<String>, write: boo
 
 #[cfg(test)]
 pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
-    for written in ["file(path) read", "file(path) write", "stdout write", "stderr write", "args read"] {
+    for written in ["file(path) read", "file(path) write", "file('a.txt') write", "stdout write", "stderr write", "args read"] {
         let touch = match touch_of(written) {
             Ok(value) => value,
             Err(_error) => {

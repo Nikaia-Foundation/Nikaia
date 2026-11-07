@@ -332,6 +332,7 @@ pub trait LedgerInferHost {
     fn infer_maps(&self, ledger: &mut Ledger);
     fn infer_locks(&self, ledger: &mut Ledger);
     fn infer_tether(&self, ledger: &mut Ledger);
+    fn infer_panics(&self, ledger: &mut Ledger);
     fn known_default(&self, unit: i64, key: &str, at: i64) -> Option<String>;
     fn computed_literal(&self, unit: i64, name: &str, expr: &Expr, ty: &Ty) -> Option<String>;
 }
@@ -356,6 +357,7 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     host.infer_maps(ledger);
     host.infer_locks(ledger);
     host.infer_tether(ledger);
+    host.infer_panics(ledger);
     ledger_result_sources(ledger, units.len() as i64, host);
     ledger_evaluate_defaults(ledger, units, &defaults, host);
     attribute_values(ledger, units, library, &|unit, ty, argument| { host.computed_literal(unit, "an attribute's argument", argument, ty) });

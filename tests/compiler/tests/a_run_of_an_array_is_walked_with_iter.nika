@@ -6,7 +6,7 @@ fn dot(xs: ref Array[i64], ys: ref Array[i64]) -> i64 {
     return total
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[i64] = [1, 2, 3]
     let w: Vec[i64] = [4, 5, 6]
     println(f"{dot(v, w)}")

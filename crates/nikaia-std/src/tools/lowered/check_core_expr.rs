@@ -226,6 +226,8 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Async(inner, _, within) => {
             let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
             check_core_async_within(state, world, host, (within).as_ref(), span);
+            let held = state.inside_a_door;
+            if state.an_async_inside_a_door(span) { state.inside_a_door = false; }
             if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             let loops = state.flow.loops;
             let barrier = match state.flow.barrier.as_ref() {
@@ -259,6 +261,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
+            state.inside_a_door = held;
             state.flow.async_depth -= 1;
             state.flow.loops = loops;
             state.flow.barrier = barrier;
@@ -283,6 +286,8 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::AsyncGroup(block, _, within) => {
             let within = nikaia_std::boxed::open(within);
             check_core_async_within(state, world, host, (within).as_ref(), span);
+            let held = state.inside_a_door;
+            if state.an_async_inside_a_door(span) { state.inside_a_door = false; }
             if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             let loops = state.flow.loops;
             let barrier = match state.flow.barrier.as_ref() {
@@ -298,6 +303,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.async_started = 0;
             state.flow.async_group_block = Some(id_of(expr) as i64);
             let ty = check_core_block(state, world, host, block);
+            state.inside_a_door = held;
             if state.flow.async_started == 0 { state.a_group_with_no_task(span); }
             if a_child_handle(&ty) { state.a_child_handle_leaving_its_group(span, "it is the value of this `async { … }`, which ends its group"); }
             state.flow.async_depth -= 1;
@@ -332,7 +338,10 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let child = *child; let written_async = *written_async;
             check_core_async_within(state, world, host, (within).as_ref(), span);
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
-            if child { state.flow.async_started += 1; }
+            if child {
+                state.flow.async_started += 1;
+                state.an_async_inside_a_door(span);
+            }
             check_core_ops_spawn(state, world, host, body, written_async, child, span)
         },
         Expr::Dsl { target, package, context, content, .. } => { let context = *context; let package = *package; let target = *target; check_core_expr_dsl(state, world, host, expr, target, package, context, content, span) },

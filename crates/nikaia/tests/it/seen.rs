@@ -45,7 +45,7 @@ fn lowered(source: &str) -> String {
 #[test]
 fn the_stamp_costs_nothing_in_the_generated_file() {
     let rust = lowered(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let kasse = SharedMut(0)\n\
          \x20   let stand = kasse.get()\n\
          \x20   println(f\"{stand + 1}\")\n\
@@ -62,7 +62,7 @@ fn the_stamp_costs_nothing_in_the_generated_file() {
 fn a_field_declared_seen_is_an_ordinary_field() {
     let rust = lowered(
         "struct Snapshot { at: Seen[i64] }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let kasse = SharedMut(0)\n\
          \x20   let s = Snapshot { at: kasse.get() }\n\
          \x20   println(f\"{s.at}\")\n\
@@ -77,7 +77,7 @@ fn a_field_declared_seen_is_an_ordinary_field() {
 #[test]
 fn a_stamped_value_reaches_every_sink() {
     let clean = "fn width(n: i64) -> i64 sync { return n * 2 }\n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let kasse = SharedMut(0)\n\
                  \x20   let stand = kasse.get()\n\
                  \x20   println(f\"{stand}\")\n\
@@ -247,7 +247,7 @@ fn what_access_hands_back_is_stamped() {
 fn a_type_the_program_calls_seen_is_its_own() {
     let source = "struct Seen {\n    at: i64,\n}\n\n\
                   fn place(s: Seen) -> i64 {\n    return s.at\n}\n\n\
-                  fn main() {\n    println(f\"{place(Seen { at: 4 })}\")\n}\n";
+                  fn main() throws {\n    println(f\"{place(Seen { at: 4 })}\")\n}\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("fn place(s: &Seen) -> i64"), "{rust}");

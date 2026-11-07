@@ -273,6 +273,8 @@ COMPILER_NIKA = {
     "fold_bound.nika": "fold bound: the fewest bytes a rule takes, the most steps a fold takes, the merge and the counters' invariant (ADR-367)",
     "fmt.nika": "fmt: the printer of `nikaia fmt`, over the tokens with the comments the parser records (ADR-337, #101)",
     "view_changes.nika": "view_changes: a change in place under a view still used (NK2305) and the give-ups - a new value as a binding of its own, or into the frame's keep (0.0.1260)",
+    "panics.nika": "ledger: whether a function can panic (ADR-async-5 D35) (0.0.1356)",
+    "migrate_print_throws.nika": "migrate: print-throws writes throws on every function that prints and its callers (ADR-392) (0.0.1357)",
 }
 
 

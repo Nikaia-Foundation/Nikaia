@@ -49,7 +49,7 @@ fn program(rule: &str) -> String {
          \n\
          fn zero() -> i64 {{ return 0 }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let text = \"7\"\n\
          \x20   let it = Nums::{entry}(text) catch {{ 0 }}\n\
          \x20   println(f\"{{it}}\")\n\

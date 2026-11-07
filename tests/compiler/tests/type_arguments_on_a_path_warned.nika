@@ -3,6 +3,6 @@
 
 use compiler_tests
 
-fn main() {
+fn main() throws {
 	println(compiler_tests::same[i64](3))
 }

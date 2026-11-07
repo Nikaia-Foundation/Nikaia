@@ -11,7 +11,7 @@ fn present(xs: Vec[String?]) -> i64 {
     return n
 }
 
-fn main() {
+fn main() throws {
     let s = "a"
     let texts: Vec[String?] = [f"{1}", "x", s]
     let numbers: Vec[i64?] = [1, 2]

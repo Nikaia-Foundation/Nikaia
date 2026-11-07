@@ -111,7 +111,7 @@ impl S {
     }
 }
 
-fn main() {
+fn main() throws {
     let on = F::Wrap(F::On(true, 3))
     let off = F::Wrap(F::On(false, 3))
     let held = F::Hold(S { f: F::On(true, 2), n: 0 })

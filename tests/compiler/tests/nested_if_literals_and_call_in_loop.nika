@@ -17,7 +17,7 @@ fn pick(i: i64, quick: bool) -> String {
     return got.clone()
 }
 
-fn main() {
+fn main() throws {
     let self_test = true
     let mut seen: Vec[String] = []
     for i in 0..<3 {

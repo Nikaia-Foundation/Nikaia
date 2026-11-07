@@ -24,7 +24,7 @@ fn boxed(n: ref String) -> Box? {
     let a = part(n, true) ?? return null
     return Box { name: a }
 }
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     for s in gather(x) { println(s) }
     println(boxed(x)?.name ?? "-")

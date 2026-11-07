@@ -1,6 +1,6 @@
 use std::collections
 
-fn main() {
+fn main() throws {
     let xs = [3, 1, 2]
     let mut b: collections::BTreeSet[i64] = collections::BTreeSet()
     b.extend(xs.clone())

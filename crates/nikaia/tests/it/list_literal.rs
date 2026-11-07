@@ -30,7 +30,7 @@ fn lowered(source: &str) -> String {
 /// there, so the lowering is a transcription (D1).
 #[test]
 fn a_list_literal_is_a_vec() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let xs = [1, 2, 3]\n\
                   \x20   println(f\"{xs.len()}\")\n\
                   }\n";
@@ -47,7 +47,7 @@ fn a_list_literal_is_a_vec() {
 /// it.
 #[test]
 fn a_trailing_comma_is_allowed() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let names = [\"a\", \"b\",]\n\
                   \x20   println(f\"{names.len()}\")\n\
                   }\n";
@@ -62,7 +62,7 @@ fn a_trailing_comma_is_allowed() {
 /// **`[]` with the type beside it** (D2's first spelling).
 #[test]
 fn an_empty_list_takes_the_type_the_let_writes() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let mut xs: Vec[i64] = []\n\
                   \x20   xs.push(4)\n\
                   \x20   println(f\"{xs.len()}\")\n\
@@ -79,7 +79,7 @@ fn an_empty_list_takes_the_type_the_let_writes() {
 /// type is what gives it one, so nothing here is refused.
 #[test]
 fn an_empty_list_a_push_answers_is_not_refused() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let mut xs = []\n\
                   \x20   xs.push(1)\n\
                   \x20   println(f\"{xs.len()}\")\n\
@@ -97,7 +97,7 @@ fn an_empty_list_a_push_answers_is_not_refused() {
 /// read says nothing of what it holds, a first write does.
 #[test]
 fn a_map_nothing_writes_into_is_refused() {
-    let source = "use std::collections\n\nfn main() {\n    let m = collections::HashMap()\n    \
+    let source = "use std::collections\n\nfn main() throws {\n    let m = collections::HashMap()\n    \
                   let has = m.contains_key(\"a\")\n    println(f\"{m.len()} {has}\")\n}\n";
     let found: Vec<_> = findings(source)
         .into_iter()
@@ -114,7 +114,7 @@ fn a_map_nothing_writes_into_is_refused() {
         "m.entry(\"a\").or_insert(1)",
     ] {
         let source = format!(
-            "use std::collections\n\nfn main() {{\n    let mut m = collections::HashMap()\n    \
+            "use std::collections\n\nfn main() throws {{\n    let mut m = collections::HashMap()\n    \
              {written}\n    println(f\"{{m.len()}}\")\n}}\n"
         );
         let found = findings(&source);
@@ -145,11 +145,12 @@ fn an_empty_list_nothing_uses_is_refused() {
 /// every numeric type and arrives as `?`, so the **kind** is what answers.
 #[test]
 fn a_number_and_a_piece_of_text_do_not_agree() {
-    let found: Vec<_> =
-        findings("fn main() {\n\x20   let xs = [1, \"two\"]\n\x20   println(f\"{xs.len()}\")\n}\n")
-            .into_iter()
-            .filter(|f| f.code == "NK1154")
-            .collect();
+    let found: Vec<_> = findings(
+        "fn main() throws {\n\x20   let xs = [1, \"two\"]\n\x20   println(f\"{xs.len()}\")\n}\n",
+    )
+    .into_iter()
+    .filter(|f| f.code == "NK1154")
+    .collect();
     assert_eq!(found.len(), 1, "{found:#?}");
     assert!(found[0].message.contains("a number"), "{found:#?}");
 }
@@ -158,7 +159,7 @@ fn a_number_and_a_piece_of_text_do_not_agree() {
 #[test]
 fn two_types_that_do_not_agree_are_both_named() {
     let found: Vec<_> = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let a: i64 = 1\n\
          \x20   let xs = [a, \"two\"]\n\
          \x20   println(f\"{xs.len()}\")\n\
@@ -177,7 +178,7 @@ fn two_types_that_do_not_agree_are_both_named() {
 #[test]
 fn a_literal_that_disagrees_is_one_finding() {
     let found: Vec<_> = findings(
-        "fn main() {\n\x20   let xs = [\"a\", 1, 2, 3]\n\x20   println(f\"{xs.len()}\")\n}\n",
+        "fn main() throws {\n\x20   let xs = [\"a\", 1, 2, 3]\n\x20   println(f\"{xs.len()}\")\n}\n",
     )
     .into_iter()
     .filter(|f| f.code == "NK1154")
@@ -191,7 +192,7 @@ fn a_literal_that_disagrees_is_one_finding() {
 /// C.1](../../../docs/specification/30-nikaia-tooling.md)'s class exactly.
 #[test]
 fn a_bracket_that_starts_a_line_is_a_literal() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let n = 1\n\
                   \x20   println(f\"{n}\")\n\
                   \x20   [n].len()\n\
@@ -205,7 +206,7 @@ fn a_bracket_that_starts_a_line_is_a_literal() {
 /// subject is on — including where *that* line is the first thing in a block.
 #[test]
 fn an_index_on_its_subjects_line_still_indexes() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let xs = [10, 20, 30]\n\
                   \x20   println(f\"{xs[0]}\")\n\
                   \x20   let y = xs [2]\n\
@@ -228,11 +229,11 @@ fn an_index_on_its_subjects_line_still_indexes() {
 #[test]
 fn a_comment_does_not_move_the_line() {
     let same = lowered(
-        "fn main() {\n\x20   let xs = [1, 2]\n\x20   println(f\"{xs /* here */ [0]}\")\n}\n",
+        "fn main() throws {\n\x20   let xs = [1, 2]\n\x20   println(f\"{xs /* here */ [0]}\")\n}\n",
     );
     assert!(same.contains("nikaia_std::index::get(&xs,"), "{same}");
     let across = lowered(
-        "fn main() {\n\x20   let n = 1\n\x20   println(f\"{n}\")\n\x20   /* here */ [n].len()\n}\n",
+        "fn main() throws {\n\x20   let n = 1\n\x20   println(f\"{n}\")\n\x20   /* here */ [n].len()\n}\n",
     );
     assert!(across.contains("vec![n].len()"), "{across}");
 }
@@ -241,7 +242,7 @@ fn a_comment_does_not_move_the_line() {
 /// the rule is special about it.
 #[test]
 fn a_list_of_lists_is_a_list() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let grid = [[1, 2], [3, 4]]\n\
                   \x20   println(f\"{grid.len()}\")\n\
                   }\n";

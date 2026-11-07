@@ -77,7 +77,7 @@ fn written[H: Host](text: String, crate_word: String, host: ref H) -> collection
     return out
 }
 
-fn main() {
+fn main() throws {
     for n in matched_set(["shim::a", "x::b", "shim::c"]) {
         println(n)
     }

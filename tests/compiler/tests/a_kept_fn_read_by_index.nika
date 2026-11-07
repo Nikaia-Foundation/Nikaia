@@ -1,6 +1,6 @@
 // A function value read from a list by index is a copy: it shares the one
 // closure, and the list keeps its own (Part I, #1018).
-fn main() {
+fn main() throws {
     let mut fs: Vec[fn(i64) -> i64] = []
     fs.push(fn(x) { x + 1 })
     let f = fs[0]

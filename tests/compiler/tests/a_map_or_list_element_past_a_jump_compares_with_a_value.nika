@@ -45,7 +45,7 @@ fn each(xs: Vec[E], held: ref K) -> bool {
 	return false
 }
 
-fn main() {
+fn main() throws {
 	let mut m: collections::BTreeMap[String, E] = collections::BTreeMap()
 	m.insert("a", E::A("x"))
 	let held = K { e: E::A("x") }

@@ -19,7 +19,7 @@ fn pick_match(h: ref Holder, n: i64) -> i64 {
     return x.len()
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { name: f"abc{1}" }
     println(f"{pick(h, true, 7)} {pick(h, false, 7)}")
     println(f"{pick_match(h, 0)} {pick_match(h, 1)} {pick_match(h, 5)}")

@@ -5,7 +5,7 @@ fn apply(f: fn(s: String) -> String, s: String) -> String {
 	f(s)
 }
 
-fn main() {
+fn main() throws {
 	let g: String = "  hi  "
 	println(apply(fn(_s) {
 		let t: String = "made"

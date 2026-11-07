@@ -21,7 +21,7 @@ impl LentFieldBag {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut b = LentFieldBag { items: [] }
 	println(f"{b.add(1)}")
 	println(f"{b.add(2)}")

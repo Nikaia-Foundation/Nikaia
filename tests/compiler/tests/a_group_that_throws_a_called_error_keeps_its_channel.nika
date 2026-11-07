@@ -34,7 +34,7 @@ fn odd(x: i64) -> i64 throws {
     return even(x - 1)
 }
 
-fn main() {
+fn main() throws {
     let r = even(4) catch { -1 }
     let q = odd(8) catch { -2 }
     let z = even(7) catch { -3 }

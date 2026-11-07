@@ -23,7 +23,7 @@ fn escape(mut bodies: Vec[B], name: String) {
     bodies.push(B { name: s, held: [] })
 }
 
-fn main() {
+fn main() throws {
     let mut bs: Vec[B] = []
     add(bs, "x", ["a"])
     println(bs[0].name)

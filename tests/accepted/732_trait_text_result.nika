@@ -12,7 +12,7 @@ impl Named for Point {
 fn describe[T: Named](value: T) -> String {
     return value.label()
 }
-fn main() {
+fn main() throws {
     let p = Point { x: 1 }
     println(f"{p.label()} {p.tag()} {describe(p)} {p.x}")
 }

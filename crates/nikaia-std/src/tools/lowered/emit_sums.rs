@@ -46,16 +46,27 @@ impl EmitState {
     }
     pub fn error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeMap<Vec<String>, String> {
         let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
-        let declared = sums_declared_here(world);
         for key in self.own_contracts.functions.keys() {
             let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if contract.fails_with.len() < 2 { continue; }
-            if self.is_std && !declared.contains(key) { continue; }
             let mut all_named = true;
             for member in contract.fails_with.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }
             if all_named { out.insert(contract.fails_with.to_owned(), sum_name(&contract.fails_with)); }
         }
         out
+    }
+    pub fn sums_used_here(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {
+        let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for key in sums_declared_here(world) {
+            let contract = match self.own_contracts.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let name = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            out.insert(name.to_string());
+        }
+        out
+    }
+    pub fn sum_root(&self) -> String {
+        if self.is_std { return String::from(""); }
+        String::from("crate::")
     }
     pub fn sum_member_held(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, params: &str) -> String {
         if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params, self.is_std); }
@@ -63,8 +74,8 @@ impl EmitState {
     }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
-        for members in self.sums.keys() {
-            let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for (members, name) in self.sums.iter() {
+            if self.is_std && !self.sums_written.contains(name) { continue; }
             let mut borrows = false;
             for member in members.iter() { if self.borrows_named(world, member) { borrows = true; } }
             let mut decl: String = String::from("");
@@ -85,7 +96,10 @@ impl EmitState {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
                 out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
-                if self.name_of_error(world, member) == 2 { out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(nikaia_std::error::Thrown::from(error)) }}\n}}\n", decl, member, name, params, member, name, params, name, variant)); }
+                if self.name_of_error(world, member) == 2 {
+                    let bare = library_error_path(member, self.is_std);
+                    out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(nikaia_std::error::Thrown::from(error)) }}\n}}\n", decl, bare, name, params, bare, name, params, name, variant));
+                }
             }
             let mut crashed = false;
             let mut timed_out = false;
@@ -107,31 +121,29 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => e.fmt(f),\n", name, variant));
             }
             out.push(&format!("        }}\n    }}\n}}\nimpl{} std::error::Error for {}{} {{}}\n", decl, name, params));
-            if crashed {
-                out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n", decl, name, params));
+            out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n", decl, name, params));
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                let held = self.sum_member_held(world, member, &params);
+                if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
+            }
+            if params == "" && crashed {
                 for member in members.iter() {
                     let variant = sum_variant(member);
                     let held = self.sum_member_held(world, member, &params);
-                    if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
-                }
-                if params == "" {
-                    for member in members.iter() {
-                        let variant = sum_variant(member);
-                        let held = self.sum_member_held(world, member, &params);
-                        if held.starts_with("nikaia_std::error::Thrown<") {
-                            for other in members.iter() {
-                                let other_held = self.sum_member_held(world, other, &params);
-                                if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
-                                    let other_variant = sum_variant(other);
-                                    out.push(&format!("            ({}::{}(first), {}::{}(later)) => first.joined_by_other(later),\n", name, variant, name, other_variant));
-                                }
+                    if held.starts_with("nikaia_std::error::Thrown<") {
+                        for other in members.iter() {
+                            let other_held = self.sum_member_held(world, other, &params);
+                            if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
+                                let other_variant = sum_variant(other);
+                                out.push(&format!("            ({}::{}(first), {}::{}(later)) => first.joined_by_other(later),\n", name, variant, name, other_variant));
                             }
                         }
                     }
                 }
-                out.push("            _ => {}\n        }\n    }\n}\n");
-                out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params));
             }
+            out.push("            _ => {}\n        }\n    }\n}\n");
+            if crashed { out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params)); }
             out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n", decl, name, params));
             out.push(&format!("impl{} nikaia_std::error::Full for {}{} {{\n    fn full(&self) -> String {{\n        match self {{\n", decl, name, params));
             for member in members.iter() {
@@ -160,8 +172,7 @@ impl EmitState {
             let mut any = false;
             for member in thrown.iter() { if self.borrows_named(world, member) { any = true; } }
             if any { shown = self.channel_params(elided, params, static_params, borrows); }
-            if self.is_std { return format!("{}{}", nikaia_std::index::or(sum, || ""), shown); }
-            return format!("crate::{}{}", nikaia_std::index::or(sum, || ""), shown);
+            return format!("{}{}{}", self.sum_root(), nikaia_std::index::or(sum, || ""), shown);
         }
         let kind = self.named_error_of(world, thrown);
         if kind == 0 { return String::from("Box<dyn std::error::Error>"); }
@@ -175,10 +186,43 @@ impl EmitState {
         if elided && !borrows { return format!("<{}>", static_params); }
         format!("<{}>", params)
     }
+    pub fn box_into_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, scope: &EmitScope) -> String {
+        if scope.channel == "Box<dyn std::error::Error>" || scope.function == "" { return String::from(""); }
+        let contract = match self.own_contracts.functions.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let mut arms: String = String::from("");
+        for member in contract.fails_with.iter() {
+            let kind = self.name_of_error(world, member);
+            if kind == 0 { return String::from(""); }
+            let held = if kind == 2 { library_error_path(member, self.is_std) } else { member.to_string() };
+            arms = format!("{}if nikaia_std::error::holds::<{}>(&*error) {{ return nikaia_std::error::reopened::<{}>(error).into(); }} ", arms, held, held);
+        }
+        if arms == "" { return String::from(""); }
+        let channel = scope.channel.to_string();
+        format!(".map_err(|error: Box<dyn std::error::Error>| -> {} {{ {}unreachable!(\"a function value failed outside its set\") }})", channel, arms)
+    }
     pub fn error_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };
         self.channel_of(world, &contract.fails_with, elided, params, static_params, borrows)
     }
+}
+
+pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], used_here: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut declared: Vec<collections::BTreeSet<String>> = vec![];
+    for unit in units.iter() { declared.push(declared_errors(unit.words, unit.items)); }
+    for (members, name) in sums.iter() {
+        if units.len() < 2 {
+            out.insert(name.to_string());
+            continue;
+        }
+        let mut owner: i64 = -1;
+        for member in members.iter() {
+            if owner >= 0 { break; }
+            for at in 0..declared.len() as i64 { if owner < 0 && (*nikaia_std::index::get(&declared, (at) as usize)).contains(member) { owner = at; } }
+        }
+        if owner == 0 || owner < 0 && used_here.contains(name) { out.insert(name.to_string()); }
+    }
+    out
 }
 
 pub(crate) fn sums_declared_here(world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {

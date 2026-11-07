@@ -16,19 +16,28 @@ description: >-
     <h1 class="home-heading">Two tasks changing the same value</h1>
     <div class="limit-class">
         <h3>Two tasks that change the same balance</h3>
-        <p>Two tasks update the same account balance. When they run at the same time, one update can overwrite the other, and money appears to disappear. Nikaia looks at what each task touches when the program is built. Two tasks that change the same value are refused, and so are two tasks that both write to standard output; standard output and standard error count as one destination, because they often end up in the same place. The message names what the two share. Two tasks that only read the same value are accepted. A lambda of <code>par_iter</code>, which runs on several cores at once, is held to the same rule: one that changes a name outside it is refused.</p>
+        <p>Two tasks update the same account balance. When they run at the same time, one update can overwrite the other, and money appears to disappear. Nikaia looks at what each task touches when the program is built. A task that changes a value bound outside it is refused, and so are two tasks that write the same file or the same lock, or both write to standard output; standard output and standard error count as one destination, because they often end up in the same place. The message names what the two share. Two tasks that only read the same value are accepted. A lambda of <code>par_iter</code>, which runs on several cores at once, is held to the same rule: one that changes a name outside it is refused.</p>
         <h3>How to write it instead</h3>
         <p>The message names the ways out. Give each task a value of its own and combine the results afterwards, keep the balance in a <code>SharedMut</code> and change it through <code>update</code>, which takes the lock for you, or, where the order matters, write the two changes as ordinary statements one after the other.</p>
         <h3>Where the check stops</h3>
-        <p>The compiler refuses what it can see. Where it cannot tell what a call touches, for example code in a Rust crate or a C library that starts threads of its own, it does not refuse, so the check is not a proof that every race is found. At such a boundary you hand over a copy rather than shared data. Today it also does not tell two writes to the same file from writes to two files: both are accepted.</p>
+        <p>The compiler refuses what it can see. Where it cannot tell what a call touches, for example code in a Rust crate or a C library that starts threads of its own, it does not refuse, so the check is not a proof that every race is found. At such a boundary you hand over a copy rather than shared data. Two writes to the same file are refused and writes to two files are accepted, also where the write sits in a function the task calls. A file is told apart by a name written in the program; a path worked out while the program runs cannot be told apart, and two tasks writing such paths are not refused.</p>
         <h3>What it looks like with <code>async</code></h3>
-        <p>A task is started with <code>async</code> written before an expression, which runs that expression beside the code after it. The check runs between a task and everything that runs beside it, other tasks included, so the specification refuses the second task below:</p>
+        <p>A task is started with <code>async</code> written before an expression, which runs that expression beside the code after it. The check runs between a task and everything that runs beside it, other tasks included, so both tasks below are refused:</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let mut balance = 100
 async {
     async fn { balance = balance + 50 }
-    async fn { balance = balance - 30 }   // refused (NK2104): both change `balance`
+    async fn { balance = balance - 30 }   // refused (NK2107): `balance` is bound outside the task
 }</code></pre></div>
-        <p>The compiler already builds <code>async</code> tasks and groups, but this check between them is still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>): today it accepts the program above, so it is shown here as the specification describes it and not as a run. Older programs written with <code>overlap</code> get the check today, with the same <code>NK2104</code> message.</p>
+        <div class="home-code markdown-body"><pre><code>$ nikaia check main.nika
+error[NK2107]: You're changing `balance` in an `async` task, and `balance` is bound outside it.
+  --&gt; main.nika:4:5
+   |
+ 4 |     async fn { balance = balance + 50 }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A task runs at the same time as everything after its start, so it would write `balance` while the rest of the program reads or writes it.
+   = help: Have the task produce a value, `let n = async count()`, and use it after, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre></div>
+        <p>Two tasks that both write the same <code>SharedMut</code>, the same file or standard output are refused with <code>NK2104</code>, naming what they share.</p>
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>

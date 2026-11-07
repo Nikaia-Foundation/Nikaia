@@ -9,7 +9,7 @@ fn apply_sync(f: fn(i64) -> i64 sync) -> i64 {
 	return f(1)
 }
 
-fn main() {
+fn main() throws {
 	let add = fn(x) { x + 3 }
 	println(f"{apply(add)}")
 	let more = fn(x) { x + 4 }

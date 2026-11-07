@@ -27,7 +27,7 @@ fn from_call() -> String {
     return s.trim()
 }
 
-fn main() {
+fn main() throws {
     println(from_len("abc"))
     println(from_literal())
     println(from_sum(6))

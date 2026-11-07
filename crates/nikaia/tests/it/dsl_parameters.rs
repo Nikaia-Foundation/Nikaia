@@ -77,7 +77,7 @@ fn the_shadow_type_carries_the_names_and_the_call_site_the_types() {
     // per DSL string" is in the language below.
     assert!(
         rust.contains(
-            "pub fn prepare<NikaiaDsl>(&self, statement: &str, args: NikaiaDsl) -> NikaiaDsl"
+            "pub fn prepare<NikaiaDsl>(&self, statement: &str, args: NikaiaDsl) -> Result<NikaiaDsl, nikaia_std::error::Thrown<io::IoError>>"
         ),
         "{rust}"
     );
@@ -87,7 +87,7 @@ fn the_shadow_type_carries_the_names_and_the_call_site_the_types() {
 #[test]
 fn only_a_colon_and_a_name_is_a_hole() {
     let rust = emit(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let s = dsl sql { SELECT a::b FROM t WHERE at = 12:30 AND id = :id } eod\n\
          \x20   println(f\"{s}\")\n\
          }\n",
@@ -342,13 +342,13 @@ fn parameters_handed_to_a_callee_that_is_no_driver_are_refused() {
     let source = "pub struct Page { name: String }\n\
                   \n\
                   impl Page {\n\
-                  \x20   pub fn run(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl {\n\
+                  \x20   pub fn run(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl throws {\n\
                   \x20       println(f\"{self.name}: {statement}\")\n\
                   \x20       return args\n\
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let driver = Page { name: \"index\" }\n\
                   \x20   let message = \"hi\"\n\
                   \x20   let script = dsl js { console.log(:msg) } eod\n\
@@ -368,7 +368,7 @@ fn parameters_handed_to_a_callee_that_is_no_driver_are_refused() {
 /// driver binds.
 #[test]
 fn a_package_grammar_is_named_with_its_package() {
-    let source = "use http\n\nfn main() {\n    let id: i64 = 3\n    \
+    let source = "use http\n\nfn main() throws {\n    let id: i64 = 3\n    \
                   let q = dsl http::Sql {\n        SELECT name FROM users WHERE id = :id\n    } eod\n    \
                   println(q)\n}\n";
     let found = findings(source);
@@ -383,7 +383,7 @@ fn a_package_grammar_is_named_with_its_package() {
 /// **`NK1228`**: the package's name alone, where a grammar stands.
 #[test]
 fn a_package_where_a_grammar_stands_is_nk1228() {
-    let source = "use http\n\nfn main() {\n    let id: i64 = 3\n    \
+    let source = "use http\n\nfn main() throws {\n    let id: i64 = 3\n    \
                   let q = dsl http {\n        SELECT name FROM users WHERE id = :id\n    } eod\n    \
                   println(q)\n}\n";
     let found = findings(source);
@@ -404,7 +404,7 @@ fn a_package_where_a_grammar_stands_is_nk1228() {
 #[test]
 fn a_programs_grammar_and_html_stay_bare() {
     let source = "use std::html\n\ngrammar Sql {\n    entry rule word -> ref String = w:until(\";\") -> { w }\n}\n\n\
-                  fn main() {\n    let id: i64 = 3\n    \
+                  fn main() throws {\n    let id: i64 = 3\n    \
                   let q = dsl Sql {\n        SELECT :id\n    } eod\n    \
                   let page = dsl html {\n        <p>hi</p>\n    } eod\n    \
                   println(f\"{q} {page}\")\n}\n";

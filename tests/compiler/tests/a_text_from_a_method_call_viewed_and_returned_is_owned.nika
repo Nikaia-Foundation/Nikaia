@@ -11,7 +11,7 @@ fn tag2(seed: String, host: ref Plain) -> String {
     let hex = host.hex(seed)
     return hex.trim()
 }
-fn main() {
+fn main() throws {
     let p = Plain {}
     println(tag("ab", p))
     println(tag2("cd", p))

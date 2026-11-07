@@ -15,7 +15,7 @@ fn through(m: ref collections::BTreeMap[String, E], keys: ref Vec[String], shown
     }
     return out
 }
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, E] = collections::BTreeMap()
     m["a"] = E { n: 1 }
     m["c"] = E { n: 3 }

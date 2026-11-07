@@ -18,7 +18,7 @@ and the reasons in [ADR-360](../docs/specification/adr/adr-360.md).
 
 ```nika
 /// Greets someone, a few times.
-fn main(name: String; times: int = 1, loud: bool = false) {
+fn main(name: String; times: int = 1, loud: bool = false) throws {
     for _ in 0..<times {
         if loud {
             println(f"HELLO, {name}!")
@@ -66,7 +66,7 @@ started with, the program's own path first, and a program may read them itself:
 ```nika
 use std::cli
 
-fn main() {
+fn main() throws {
     let count = cli::args().len()
     println(f"{count} word(s), the program's name first")
     for i in 0..<count {
@@ -99,7 +99,7 @@ exceptions.
 required one:
 
 ```nika
-fn main(greeting: String, name: String?) {
+fn main(greeting: String, name: String?) throws {
     let who = name ?? "world"
     println(f"{greeting}, {who}!")
 }
@@ -116,7 +116,7 @@ Hi, Ada!
 
 ```nika
 /// Copies files into a directory (only prints what it would do).
-fn main(target: String, files: Vec[String]; max_depth: int = 3, dry_run: bool = false) {
+fn main(target: String, files: Vec[String]; max_depth: int = 3, dry_run: bool = false) throws {
     for f in files {
         println(f"{f} -> {target} (depth {max_depth}, dry run {dry_run})")
     }
@@ -186,7 +186,7 @@ A number is read as `std` reads one from text: `-3` and `+5` are numbers, `0x10`
 `1_000` are not. It must fit its type. A `bool` is `true` or `false`.
 
 ```nika
-fn main(x: int, scale: f64; offset: i32 = 0, level: u8 = 1) {
+fn main(x: int, scale: f64; offset: i32 = 0, level: u8 = 1) throws {
     println(f"x = {x}, scale = {scale}, offset = {offset}, level = {level}")
 }
 ```
@@ -259,7 +259,7 @@ fn share(total: int, people: int) -> int {
 }
 
 /// Splits a bill between people.
-fn main(total: int, people: int; tip: int = 0) {
+fn main(total: int, people: int; tip: int = 0) throws {
     assert(total >= 0)
     assert(tip <= 30)
     let each = share(total + total * tip / 100, people)

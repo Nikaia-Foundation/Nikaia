@@ -122,6 +122,11 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         Lock::Holds => { out.push_str("locks = true\n"); },
         Lock::Undecided => { out.push_str("locks = \"?\"\n"); },
     }
+    match contract.panics {
+        Panics::No => { out.push_str("panics = false\n"); },
+        Panics::Yes => { out.push_str("panics = true\n"); },
+        Panics::Unknown => { },
+    }
     match contract.threads {
         Threads::Undecided => { },
         Threads::May => { out.push_str("threads = true\n"); },

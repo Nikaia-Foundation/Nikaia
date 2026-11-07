@@ -2,7 +2,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let s = f"p q r{1} p"
     let mut a: collections::HashMap[String, i64] = collections::HashMap()
     let mut b: collections::HashMap[String, i64] = collections::HashMap()

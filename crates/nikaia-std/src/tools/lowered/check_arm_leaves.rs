@@ -416,8 +416,19 @@ impl CheckState {
                 self.hands_over(world, index, found, "used as a map key", span);
             }
             form = FactKeyForm::Handed;
-        } else if self.a_key_read_as_it_is(world, found, index) { form = FactKeyForm::AsIs; }
+        } else if self.a_key_read_as_it_is(world, found, index) { form = FactKeyForm::AsIs; } else { self.a_key_an_arm_bound(world, index); }
         self.facts.map_keys.insert((node_key(index), writing), form);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_key_an_arm_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, index: &Expr) {
+        let name = match index {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            _ => return,
+        };
+        let bound = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let arm = match self.arm_bound.get(&bound.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+        self.facts.arm_subjects.insert(node_key(index), arm);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

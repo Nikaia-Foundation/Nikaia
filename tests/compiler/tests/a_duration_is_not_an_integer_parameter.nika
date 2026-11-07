@@ -3,10 +3,10 @@
 
 use std::time
 
-fn f(d: time::Duration) {
+fn f(d: time::Duration) throws {
 	println("ok")
 }
 
-fn main() {
+fn main() throws {
 	f(20)
 }

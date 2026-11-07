@@ -11,7 +11,7 @@ fn size(how: ref Wrap?) -> i64 {
     return w.n
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[i64, Wrap] = collections::BTreeMap()
     m.insert(1, Wrap { n: 5 })
     println(f"{size(m.get(1))} {size(m.get(2))}")

@@ -5,7 +5,7 @@ fn load(n: i64) -> i64 {
 	return n * 2
 }
 
-fn main() {
+fn main() throws {
 	let (a, b) = (async load(1), 2)
 	println("between")
 	println(f"{a} {b}")

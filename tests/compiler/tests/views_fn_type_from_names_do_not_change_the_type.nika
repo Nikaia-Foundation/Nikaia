@@ -13,7 +13,7 @@ fn tag(s: String, n: i64) -> String {
     return f"{s}{n}"
 }
 
-fn main() {
+fn main() throws {
     let g: fn(String, i64) -> String = tag
     let h: fn(text: String, times: i64) -> String = tag
     println(named(g, "ab"))

@@ -17,7 +17,7 @@ fn double(x: i64) -> i64 {
 	return x * 2
 }
 
-fn describe[T](_value: T) {
+fn describe[T](_value: T) throws {
 	let mut kind = "other"
 	if T::kind == meta::Type::I64 {
 		kind = "I64"
@@ -31,7 +31,7 @@ fn describe[T](_value: T) {
 	println(f"{T::name}: {kind}")
 }
 
-fn main() {
+fn main() throws {
 	describe(User { name: "a", age: 1 })
 	describe(Color::Green)
 	describe(7)

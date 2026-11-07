@@ -5,7 +5,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let mut m = collections::HashMap()
     m.insert("a", 1)
     m.entry("b").or_insert(0)

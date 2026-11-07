@@ -5,7 +5,7 @@
 // a_view_pushed_beside_own_text_is_refused.
 fn count(names: Vec[String]) -> i64 { names.len() }
 
-fn main() {
+fn main() throws {
     let names = [" a b ", "c d"]
     let mut briefs: Vec[String] = []
     let urgent = names[0].trim()

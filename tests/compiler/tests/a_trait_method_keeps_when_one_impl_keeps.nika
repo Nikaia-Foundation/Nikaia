@@ -17,7 +17,7 @@ impl H for Runs {
 fn hand[T: H](mut h: T, n: i64) -> i64 {
     return h.take(fn(x) { x + n })
 }
-fn main() {
+fn main() throws {
     let mut k = Keeps { held: [] }
     println(hand(k, 1))
     println(hand(k, 2))

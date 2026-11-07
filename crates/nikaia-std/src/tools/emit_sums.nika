@@ -92,18 +92,9 @@ impl EmitState {
     /// the emitter can all name, and the sum it is.
     pub fn error_sums(ref self, world: ref EmitWorld) -> collections::BTreeMap[Vec[String], String] {
         let mut out: collections::BTreeMap[Vec[String], String] = collections::BTreeMap()
-        let declared = sums_declared_here(world)
         for key in self.own_contracts.functions.keys() {
             let contract = self.own_contracts.functions.get(key) ?? continue
             if contract.fails_with.len() < 2 {
-                continue
-            }
-            // **Only the sums of this file's own functions** in `std` and the
-            // tools (#1347): a file there is checked with the others beside it,
-            // and a sum of theirs written here too would stand in every lowered
-            // file, a different type in each. A program writes them all at its
-            // crate root.
-            if self.is_std && !declared.contains(key) {
                 continue
             }
             // One member this compiler cannot name is the whole set unnamed: a
@@ -119,6 +110,29 @@ impl EmitState {
             }
         }
         return out
+    }
+
+    /// **The sums the functions this file declares fail with**, by name: in
+    /// `std` and the tools the ledger holds the files beside it too (#1347).
+    pub fn sums_used_here(ref self, world: ref EmitWorld) -> collections::BTreeSet[String] {
+        let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+        for key in sums_declared_here(world) {
+            let contract = self.own_contracts.functions.get(key) ?? continue
+            let name = self.sums.get(contract.fails_with) ?? continue
+            out.insert(name.clone())
+        }
+        return out
+    }
+
+    /// The path to a generated sum from inside a function: from the crate root
+    /// in a program, whose modules import nothing of it; bare in a file of
+    /// `std` or the tools package, whose modules import the package root, where
+    /// the sum's own file puts it (`emit_sums_written`, #1360).
+    pub fn sum_root(ref self) -> String {
+        if self.is_std {
+            return ""
+        }
+        return "crate::"
     }
 
     /// The type a member of a sum is held as, with the lifetime parameters of
@@ -137,8 +151,12 @@ impl EmitState {
         if !self.entry {
             return
         }
-        for members in self.sums.keys() {
-            let name = self.sums.get(members) ?? continue
+        for (members, name) in self.sums {
+            // A file of `std` or the tools package writes only its own
+            // (`emit_sums_written`); `is_std` is set after the state is made.
+            if self.is_std && !self.sums_written.contains(name) {
+                continue
+            }
             let mut borrows = false
             for member in members {
                 if self.borrows_named(world, member) {
@@ -153,8 +171,8 @@ impl EmitState {
                 decl = f"<{sum_input_lifetime()}>"
                 params = f"<{sum_input_lifetime()}>"
             }
-            // In `std` and the tools a `pub fn` hands it to the crates that
-            // call it, so it is as public as they are.
+            // **`pub` in a file of `std` or the tools package**: its functions
+            // are called from the Rust around it, which matches on the sum.
             let shared = if self.is_std { "pub " } else { "" }
             out.push(f"// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\n{shared}enum {name}{decl} {{\n")
             for member in members {
@@ -170,8 +188,11 @@ impl EmitState {
                 // A `?` straight from `std` hands a library's error bare, and
                 // the member is its envelope (ADR-280 D13): put on here, with no
                 // site, as `From<E> for Thrown<E>` puts it on.
+                // By a path that resolves without the prelude, as the member's
+                // envelope is named (#1360).
                 if self.name_of_error(world, member) == 2 {
-                    out.push(f"impl{decl} From<{member}> for {name}{params} {{\n    fn from(error: {member}) -> {name}{params} {{ {name}::{variant}(nikaia_std::error::Thrown::from(error)) }}\n}}\n")
+                    let bare = library_error_path(member, self.is_std)
+                    out.push(f"impl{decl} From<{bare}> for {name}{params} {{\n    fn from(error: {bare}) -> {name}{params} {{ {name}::{variant}(nikaia_std::error::Thrown::from(error)) }}\n}}\n")
                 }
             }
             // **`join(within:)` fails in two of `std`'s ways at once** (ADR-346
@@ -210,35 +231,41 @@ impl EmitState {
             }
             out.push(f"        }}\n    }}\n}}\nimpl{decl} std::error::Error for {name}{params} {{}}\n")
             // **A scope's tasks fail in it** (ADR-346 D7): the first failure is
-            // the scope's, and one channel crosses the pool as itself.
-            if crashed {
-                // A later failure of the first one's member joins its list; one
-                // of another member joins it in the box, so nothing is lost.
-                out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n")
+            // the scope's, and one channel crosses the pool as itself. **An
+            // `overlap` joins its branches' failures in it too** (ADR-292 D8),
+            // whatever the members: a function that prints fails with
+            // `io::IoError` beside its own (ADR-392), so the channel of an
+            // `overlap` in it is a sum without `task::Crashed` (#1360).
+            // A later failure of the first one's member joins its list; one
+            // of another member joins it in the box, so nothing is lost.
+            out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n")
+            for member in members {
+                let variant = sum_variant(member)
+                let held = self.sum_member_held(world, member, params)
+                if held.starts_with("nikaia_std::error::Thrown<") {
+                    out.push(f"            ({name}::{variant}(first), {name}::{variant}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n")
+                }
+            }
+            // Boxing asks for `'static`: only a sum without parameters. And
+            // for `Send` and `Sync`, which a scope's channel has and a
+            // supervisor's `Handed` has not: only a scope's.
+            if params == "" && crashed {
                 for member in members {
                     let variant = sum_variant(member)
                     let held = self.sum_member_held(world, member, params)
                     if held.starts_with("nikaia_std::error::Thrown<") {
-                        out.push(f"            ({name}::{variant}(first), {name}::{variant}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n")
-                    }
-                }
-                // Boxing asks for `'static`: only a sum without parameters.
-                if params == "" {
-                    for member in members {
-                        let variant = sum_variant(member)
-                        let held = self.sum_member_held(world, member, params)
-                        if held.starts_with("nikaia_std::error::Thrown<") {
-                            for other in members {
-                                let other_held = self.sum_member_held(world, other, params)
-                                if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
-                                    let other_variant = sum_variant(other)
-                                    out.push(f"            ({name}::{variant}(first), {name}::{other_variant}(later)) => first.joined_by_other(later),\n")
-                                }
+                        for other in members {
+                            let other_held = self.sum_member_held(world, other, params)
+                            if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
+                                let other_variant = sum_variant(other)
+                                out.push(f"            ({name}::{variant}(first), {name}::{other_variant}(later)) => first.joined_by_other(later),\n")
                             }
                         }
                     }
                 }
-                out.push("            _ => {}\n        }\n    }\n}\n")
+            }
+            out.push("            _ => {}\n        }\n    }\n}\n")
+            if crashed {
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
             // `error.message()` on an error, one of several (ADR-280 D30).
@@ -294,13 +321,7 @@ impl EmitState {
             if any {
                 shown = self.channel_params(elided, params, static_params, borrows)
             }
-            // A file of `std` or of the tools is a module of its own, which
-            // writes the sums of its own functions (`error_sums`): the name
-            // stands bare, the file's own or another's through `use super::*`.
-            if self.is_std {
-                return f"{sum ?? ""}{shown}"
-            }
-            return f"crate::{sum ?? ""}{shown}"
+            return f"{self.sum_root()}{sum ?? ""}{shown}"
         }
         let kind = self.named_error_of(world, thrown)
         if kind == 0 {
@@ -325,11 +346,77 @@ impl EmitState {
         return f"<{params}>"
     }
 
+    /// **A call through a function value hands its failure back in the box**
+    /// (a `fn() throws` is always lowered so, `emit_core_types`), while the
+    /// function around it fails in the channel its set names (ADR-351 D1-D4):
+    /// what the value carries is that set or a part of it, so the box is
+    /// opened into the channel before the `?`. Nothing where the channel is
+    /// the box itself.
+    pub fn box_into_channel(ref self, world: ref EmitWorld, scope: ref EmitScope) -> String {
+        if scope.channel == "Box<dyn std::error::Error>" || scope.function == "" {
+            return ""
+        }
+        let contract = self.own_contracts.functions.get(scope.function) ?? return ""
+        let mut arms: String = ""
+        for member in contract.fails_with {
+            let kind = self.name_of_error(world, member)
+            if kind == 0 {
+                return ""
+            }
+            let held = if kind == 2 { library_error_path(member, self.is_std) } else { member.clone() }
+            arms = f"{arms}if nikaia_std::error::holds::<{held}>(&*error) {{ return nikaia_std::error::reopened::<{held}>(error).into(); }} "
+        }
+        if arms == "" {
+            return ""
+        }
+        let channel = scope.channel.clone()
+        return f".map_err(|error: Box<dyn std::error::Error>| -> {channel} {{ {arms}unreachable!(\"a function value failed outside its set\") }})"
+    }
+
     /// The failure channel of the function `key`.
     pub fn error_channel(ref self, world: ref EmitWorld, key: ref String, elided: bool, params: ref String, static_params: ref String, borrows: bool) -> String {
         let contract = self.own_contracts.functions.get(key) ?? return "Box<dyn std::error::Error>"
         return self.channel_of(world, contract.fails_with, elided, params, static_params, borrows)
     }
+}
+
+/// **Which sums this file writes when it is a file of `std`**, by name (#1360).
+/// A program's entry writes every one. A file of `std` or the tools package
+/// is one module of several, each lowered alone against the package's ledger,
+/// and every module names a sum by its path from the package root: a sum
+/// written into each would be declared once per module. So it is written
+/// once, in the file that declares its first member the package declares. A
+/// sum of library errors alone has no such file and is written in each file
+/// whose own functions fail with it (`used_here`, #1347), and only there; each
+/// such file then names its own copy, so a failure of one file's sum does not
+/// cross into another's (no tool has one yet).
+pub fn emit_sums_written(sums: ref collections::BTreeMap[Vec[String], String], units: ref Vec[ParsedView], used_here: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut declared: Vec[collections::BTreeSet[String]] = []
+    for unit in units {
+        declared.push(declared_errors(unit.words, unit.items))
+    }
+    for (members, name) in sums {
+        if units.len() < 2 {
+            out.insert(name.clone())
+            continue
+        }
+        let mut owner = -1
+        for member in members {
+            if owner >= 0 {
+                break
+            }
+            for at in 0..<declared.len() {
+                if owner < 0 && declared[at].contains(member) {
+                    owner = at
+                }
+            }
+        }
+        if owner == 0 || (owner < 0 && used_here.contains(name)) {
+            out.insert(name.clone())
+        }
+    }
+    return out
 }
 
 /// **The ledger keys of the functions this file declares**: each `fn` by its

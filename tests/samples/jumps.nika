@@ -49,7 +49,7 @@ fn countdown(start: i64) -> i64 {
     return steps
 }
 
-fn main() {
+fn main() throws {
     let xs = [3, 7, 8, 10]
     println(f"{first_even(xs)} {triangle(4)} {countdown(5)}")
 }

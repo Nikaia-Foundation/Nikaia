@@ -26,7 +26,7 @@ fn whole(p: Person) -> Person {
     return p.clone()
 }
 
-fn main() {
+fn main() throws {
     let p = Person { name: "Ada", tags: ["a"] }
     let n = name_of(p)
     let t = tags_of(p)

@@ -25,7 +25,7 @@ struct Runner {
 	go: fn(fn(i64) -> i64 sync) -> i64 sync,
 }
 
-fn main() {
+fn main() throws {
 	println(f"{twice(fn(at, run) { return at + run() })}")
 	println(f"{shifted(10, fn(add) { return add(5) })}")
 	println(f"{named(fn(f) { return f(7) })}")

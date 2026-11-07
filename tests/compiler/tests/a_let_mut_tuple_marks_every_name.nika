@@ -1,6 +1,6 @@
 // #1126: `mut` in front of a tuple pattern marks every name in it, in a `let`
 // as in a `for`, and a name the body leaves alone is no warning.
-fn main() {
+fn main() throws {
 	let mut (at, depth) = (0, 0)
 	at += 1
 	depth += at

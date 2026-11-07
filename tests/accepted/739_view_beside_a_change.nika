@@ -20,7 +20,7 @@ fn kinds(key: String, mut walk: Walk) -> String {
     return f"{line} {n}"
 }
 
-fn main() {
+fn main() throws {
     let mut fns: collections::HashMap[String, Fun] = collections::HashMap()
     fns.insert(f"k{1}", Fun { result: f"r{2}" })
     let mut walk = Walk { fns: fns, seen: [], n: 0 }

@@ -8,13 +8,13 @@ fn keep(p: P) -> P {
     return p
 }
 
-fn by_if(t: P, c: bool) {
+fn by_if(t: P, c: bool) throws {
     let s: P = if c { t } else { P { name: "b" } }
     println(s.name)
     println(t.name)
 }
 
-fn by_match(t: P, c: bool) {
+fn by_match(t: P, c: bool) throws {
     let s: P = match c {
         true => t,
         false => P { name: "b" },
@@ -23,25 +23,25 @@ fn by_match(t: P, c: bool) {
     println(t.name)
 }
 
-fn proved(p: P?) {
+fn proved(p: P?) throws {
     let s: P = if p != null { p } else { P { name: "b" } }
     println(s.name)
     println(p?.name ?? "none")
 }
 
-fn passed(t: P, c: bool) {
+fn passed(t: P, c: bool) throws {
     let k = keep(if c { t } else { P { name: "b" } })
     println(k.name)
     println(t.name)
 }
 
-fn stored(t: P, c: bool) {
+fn stored(t: P, c: bool) throws {
     let h = H { p: if c { t } else { P { name: "b" } } }
     println(h.p.name)
     println(t.name)
 }
 
-fn main() {
+fn main() throws {
     by_if(P { name: "a" }, true)
     by_match(P { name: "a" }, true)
     proved(P { name: "a" })

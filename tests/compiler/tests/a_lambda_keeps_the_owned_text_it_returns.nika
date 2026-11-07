@@ -10,7 +10,7 @@ fn lend(f: fn(ref String) -> String, s: String) -> String {
 	return f(s)
 }
 
-fn main() {
+fn main() throws {
 	let g: String = "  hi  "
 	let outer: String = "hi"
 	println(apply(fn(s) { s.trim().clone() }, g))

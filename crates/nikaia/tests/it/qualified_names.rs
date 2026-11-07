@@ -41,7 +41,7 @@ const OP: &str = "enum Op { Add, Sub }\n";
 fn a_variant_the_enum_does_not_have_is_refused() {
     let found = one(&format!(
         "{OP}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let chosen = Op::Mul\n\
          \x20   println(f\"{{chosen}}\")\n\
          }}"
@@ -65,7 +65,7 @@ fn a_variant_the_enum_does_not_have_is_refused() {
 fn a_variant_the_enum_does_not_have_is_refused_in_a_pattern() {
     let found = one(&format!(
         "{OP}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let chosen = Op::Add\n\
          \x20   match chosen {{\n\
          \x20       Op::Add => println(\"add\"),\n\
@@ -89,7 +89,7 @@ fn a_variant_inside_a_nested_pattern_is_refused() {
         "{OP}\n\
          enum Event {{ Chose(Op), Left }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let what = Event::Left\n\
          \x20   match what {{\n\
          \x20       Event::Chose(Op::Mul) => println(\"mul\"),\n\
@@ -111,7 +111,7 @@ fn a_variant_inside_a_nested_pattern_is_refused() {
 fn a_near_miss_names_the_variant_that_was_meant() {
     let found = one(&format!(
         "{OP}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let chosen = Op::Sbu\n\
          \x20   println(f\"{{chosen}}\")\n\
          }}"
@@ -125,7 +125,7 @@ fn a_near_miss_names_the_variant_that_was_meant() {
 fn a_struct_has_no_members_under_the_separator() {
     let found = one("struct Point { x: i64, y: i64 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{Point::x}\")\n\
          }");
     assert_eq!(found.code, "NK1171");
@@ -154,7 +154,7 @@ fn a_struct_has_no_members_under_the_separator() {
 fn the_shape_of_a_type_is_reached_through_a_bound() {
     let found = one("struct Point { x: i64, y: i64 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   for field in Point::fields {\n\
          \x20       println(field.name)\n\
          \x20   }\n\
@@ -193,7 +193,7 @@ fn a_method_the_program_declares_is_not_refused() {
          \x20   }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let first = Summary { total: 1 }\n\
          \x20   let second = Summary { total: 2 }\n\
          \x20   println(f\"{first.merge(second).total}\")\n\
@@ -207,7 +207,7 @@ fn a_method_the_program_declares_is_not_refused() {
 fn a_variant_the_enum_has_is_not_refused() {
     let source = format!(
         "{OP}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let chosen = Op::Add\n\
          \x20   match chosen {{\n\
          \x20       Op::Add => println(\"add\"),\n\
@@ -232,7 +232,7 @@ fn a_variant_the_enum_has_is_not_refused() {
 /// under that word at all.
 #[test]
 fn a_head_nothing_declares_is_its_own_refusal() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   println(f\"{nowhere::wobble}\")\n\
          }";
     let found = findings(source);
@@ -279,7 +279,7 @@ fn a_head_this_program_has_is_not_refused() {
          \x20   }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let op = Op::Times\n\
          \x20   let one = Summary { total: 1 }\n\
          \x20   let two = one.merge(Summary { total: 2 })\n\
@@ -302,7 +302,7 @@ fn a_head_this_program_has_is_not_refused() {
 /// may hold is the ledger's question and not this one's.
 #[test]
 fn a_std_module_is_a_head_whatever_stands_after_it() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   println(f\"{io::wobble}\")\n\
          }";
     let found = findings(source);
@@ -317,7 +317,8 @@ fn a_std_module_is_a_head_whatever_stands_after_it() {
 /// help offers the `use` (D33).
 #[test]
 fn a_call_through_a_head_nothing_declares_is_refused() {
-    let found = findings("fn main() {\n    let t = nowhere::wobble(1)\n    println(f\"{t}\")\n}");
+    let found =
+        findings("fn main() throws {\n    let t = nowhere::wobble(1)\n    println(f\"{t}\")\n}");
     let head = found
         .iter()
         .find(|f| f.code == "NK1181")
@@ -338,11 +339,11 @@ fn a_call_through_a_head_nothing_declares_is_refused() {
 fn a_head_one_edit_from_a_std_module_is_named() {
     for (source, said) in [
         (
-            "use std::fs\nfn main() {\n    let t = fx::read_to_string(\"a\", fs::Root::Anywhere) catch { \"\" }\n    println(t)\n}",
+            "use std::fs\nfn main() throws {\n    let t = fx::read_to_string(\"a\", fs::Root::Anywhere) catch { \"\" }\n    println(t)\n}",
             "Did you mean `fs`?",
         ),
         (
-            "fn main() {\n    let t = fx::wobble(1)\n    println(f\"{t}\")\n}",
+            "fn main() throws {\n    let t = fx::wobble(1)\n    println(f\"{t}\")\n}",
             "Did you mean `fs`? Write `use std::fs`",
         ),
     ] {
@@ -370,7 +371,7 @@ fn a_call_through_a_head_this_compiler_has_read_is_not_refused() {
          \x20   fn again() -> Point { return Self::origin() }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let p = Point::origin()\n\
          \x20   let q = Point::again()\n\
          \x20   let t = fs::read_to_string(\"a\", fs::Root::Anywhere) catch { \"\" }\n\
@@ -385,11 +386,11 @@ fn a_call_through_a_head_this_compiler_has_read_is_not_refused() {
 /// root is asked for and a `let` that says something else is told so.
 #[test]
 fn a_std_enum_case_is_a_value_of_its_enum() {
-    let fine = "use std::fs\nfn main() {\n    \
+    let fine = "use std::fs\nfn main() throws {\n    \
          let t = fs::read_to_string(\"a\", fs::Root::Anywhere) catch { \"\" }\n    \
          println(t)\n}";
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
-    let wrong = "use std::fs\nfn main() {\n    \
+    let wrong = "use std::fs\nfn main() throws {\n    \
          let r: i64 = fs::Root::Anywhere\n    println(f\"{r}\")\n}";
     let found = findings(wrong);
     assert!(

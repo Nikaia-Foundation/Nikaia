@@ -30,7 +30,7 @@ fn give(keep r: Row?) -> Row {
     return r ?? Row { id: 0, name: "" }
 }
 
-fn main() {
+fn main() throws {
     let r: Row? = Row { id: 1, name: "x" }
     println(id_of(r))
     println(id_of(r))

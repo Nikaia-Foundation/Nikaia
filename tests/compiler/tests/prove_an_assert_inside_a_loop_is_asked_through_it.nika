@@ -32,7 +32,7 @@ fn g(n: i64) -> i64 sync {
 	return s
 }
 
-fn main() {
+fn main() throws {
 	println(f"{f(4)}")
 	println(f"{h(3)}")
 	println(f"{g(5)}")

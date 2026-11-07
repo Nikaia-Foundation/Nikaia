@@ -1,0 +1,14 @@
+// Two tasks of one group call a function that writes one file and prints in
+// its `catch` handler: NK2104 (Part I 8.1.2, #1354).
+use std::fs
+
+fn put(text: String) throws {
+	fs::write("a.txt", fs::Root::Anywhere, text) catch { println("failed") }
+}
+
+fn main() throws {
+	async {
+		async put("a")
+		async put("b")
+	}
+}

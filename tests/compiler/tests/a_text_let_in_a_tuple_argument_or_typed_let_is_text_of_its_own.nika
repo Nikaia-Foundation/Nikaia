@@ -10,7 +10,7 @@ fn keep(mut into: Vec[(i64, String)], t: (i64, String)) {
     into.push(t)
 }
 
-fn main() {
+fn main() throws {
     let o3 = "abc"
     println(f"{length((1, o3))}")
     let o4 = "de"

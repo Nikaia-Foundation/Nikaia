@@ -15,7 +15,7 @@ fn halves(xs: ref Vec[i64]) -> Vec[i64]? {
     return out
 }
 
-fn main() {
+fn main() throws {
     let good: Vec[String] = ["1", "2", "3"]
     let bad: Vec[String] = ["1", "x", "3"]
     let a = parse_all(good) ?? []

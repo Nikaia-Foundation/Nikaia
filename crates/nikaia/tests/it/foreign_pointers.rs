@@ -52,7 +52,7 @@ fn a_view_in_a_declaration_is_the_pointer() {
          \x20   fn fills_one(n: ref mut i32) -> i32\n\
          }\n\
          \n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     for expected in [
         "fn strlen(s: *const u8) -> usize;",
@@ -74,7 +74,7 @@ fn a_call_hands_over_the_address() {
          \x20   fn strlen(s: ref Array[u8]) -> usize\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let text = \"hello\"\n\
          \x20   let n = unsafe { strlen(text) }\n\
          \x20   println(f\"{n}\")\n\
@@ -92,7 +92,7 @@ fn a_value_parameter_is_passed_as_it_was_written() {
          \x20   fn abs(n: i32) -> i32\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let a = unsafe { abs(-3) }\n\
          \x20   println(f\"{a}\")\n\
          }\n",
@@ -182,7 +182,7 @@ fn the_mut_is_the_boundarys_and_the_run_is_not() {
          \x20   return xs.len()\n\
          }\n\
          \n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1158").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
@@ -218,7 +218,7 @@ fn the_boundary_itself_is_left_alone() {
          \x20   fn read(fd: i32, buf: ref mut Array[u8], count: usize) -> i64\n\
          }\n\
          \n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     assert!(
         found
@@ -261,7 +261,7 @@ extern {
     fn abs(n: i32) -> i32
 }
 
-fn main() {
+fn main() throws {
     let text = "hello\0"
     let n = unsafe { strlen(text) }
     let a = unsafe { abs(-3) }
@@ -309,7 +309,7 @@ fn a_length_a_buffer_covers_is_accepted() {
              \x20   fn read(fd: i32, buf: ref mut Array[u8], count: usize) -> i64\n\
              }}\n\
              \n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let mut room: Array[u8, 2] = [0, 0]\n\
              \x20   let n = unsafe {{ read(0, room, {count}) }}\n\
              \x20   println(f\"{{n}}\")\n\
@@ -337,7 +337,7 @@ fn a_constant_within_a_known_length_is_accepted() {
                   \x20   fn read(fd: i32, buf: ref mut Array[u8], count: usize) -> i64\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let mut room: Array[u8, 4] = [0, 0, 0, 0]\n\
                   \x20   let n = unsafe { read(0, room, 4) }\n\
                   \x20   println(f\"{n}\")\n\
@@ -355,7 +355,7 @@ fn a_length_that_cannot_be_shown_to_fit_is_refused() {
          \x20   fn read(fd: i32, buf: ref mut Array[u8], count: usize) -> i64\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut buf: Vec[u8] = []\n\
          \x20   buf.push(0)\n\
          \x20   let n = unsafe { read(0, buf, 8) }\n\
@@ -390,7 +390,7 @@ fn a_size_takes_an_i64_and_the_conversion_is_written() {
                   \x20   fn read(fd: i32, buf: ref mut Array[u8], count: usize) -> i64\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let mut buf: Vec[u8] = []\n\
                   \x20   buf.push(0)\n\
                   \x20   let n = unsafe { read(0, buf, buf.len()) }\n\
@@ -420,7 +420,7 @@ fn a_size_with_no_buffer_before_it_is_left_alone() {
                   \x20   fn sleep(seconds: usize) -> i32\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let n = unsafe { sleep(1) }\n\
                   \x20   println(f\"{n}\")\n\
                   }\n";
@@ -442,7 +442,7 @@ fn an_opaque_handle_is_an_address_and_a_cleanup() {
          \x20   fn fclose(f: FILE) -> i32\n\
          }\n\
          \n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     // `repr(transparent)`, because the whole point of the type is its layout:
     // a handle **is** the address, so what C is handed is the pointer.
@@ -484,7 +484,7 @@ fn a_handle_is_lent_and_only_its_release_takes_it() {
          \x20   fn fileno(f: FILE) -> i32\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let f = unsafe { fopen(\"/etc/hosts\\0\", \"r\\0\") }\n\
          \x20   let fd = unsafe { fileno(f) }\n\
          \x20   let g = unsafe { fopen(\"/etc/hosts\\0\", \"r\\0\") }\n\
@@ -508,7 +508,7 @@ fn nothing_reaches_inside_a_handle() {
          \x20   fn fclose(f: FILE) -> i32\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let f = unsafe { fopen(\"/etc/hosts\\0\", \"r\\0\") }\n\
          \x20   println(f\"{f.handle}\")\n\
          \x20   println(f\"{f[0]}\")\n\
@@ -540,7 +540,7 @@ fn nothing_reaches_inside_a_handle() {
 fn the_four_words_are_still_names() {
     for word in ["opaque", "type", "released", "by"] {
         let source = format!(
-            "fn main() {{\n\
+            "fn main() throws {{\n\
              \x20   let {word} = 3\n\
              \x20   println(f\"{{{word}}}\")\n\
              }}\n"
@@ -569,7 +569,7 @@ extern {
     fn fileno(f: FILE) -> i32
 }
 
-fn main() {
+fn main() throws {
     let f = unsafe { fopen("/etc/hosts\0", "r\0") }
     let fd = unsafe { fileno(f) }
     println(f"{fd > 2}")
@@ -653,7 +653,8 @@ fn the_copy_is_a_call_that_can_fail() {
          \n\
          fn main() {\n\
          \x20   let raw = unsafe { getenv(\"HOME\\0\") }\n\
-         \x20   println(raw.to_string())\n\
+         \x20   let text = raw.to_string()\n\
+         \x20   println(text) catch { return }\n\
          }\n",
     )
     .into_iter()
@@ -744,7 +745,7 @@ fn a_declaration_that_claims_a_handle_is_checked() {
          \x20   fn fclose(f: FILE) -> i32\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let f = unsafe { fopen(\"/etc/hosts\\0\", \"r\\0\") }\n\
          \x20   println(\"opened\")\n\
          }\n",
@@ -770,7 +771,7 @@ fn a_nullable_handle_is_one_machine_word() {
          \x20   fn free(b: Block)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut room: Block? = null\n\
          \x20   let rc = unsafe { posix_memalign(room, 64, 128) }\n\
          \x20   println(f\"{rc}\")\n\

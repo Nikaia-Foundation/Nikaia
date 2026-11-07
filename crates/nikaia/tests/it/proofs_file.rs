@@ -20,7 +20,7 @@ const SOURCE: &str = "fn half(n: i64) -> i64 {\n\
      \x20   return sum\n\
      }\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let xs = [1, 2, 3]\n\
      \x20   println(f\"{half(4)} {total(xs)}\")\n\
      }\n";
@@ -190,7 +190,7 @@ fn a_dependencys_questions_are_its_own() {
     .expect("a manifest");
     std::fs::write(
         program.join("src/main.nika"),
-        "use sums\n\nfn main() {\n    let xs = [1, 2, 3]\n    println(f\"{sums::total(xs)}\")\n}\n",
+        "use sums\n\nfn main() throws {\n    let xs = [1, 2, 3]\n    println(f\"{sums::total(xs)}\")\n}\n",
     )
     .expect("a source");
     let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))

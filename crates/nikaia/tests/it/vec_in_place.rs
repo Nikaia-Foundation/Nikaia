@@ -9,7 +9,7 @@ fn run(purpose: &str, body: &str) -> String {
     let dir = common::scratch_dir(purpose);
     let source = format!(
         "use std::cli\n\nfn show(xs: ref Vec[i64]) -> String {{\n    let mut out: String = \"[\"\n    for x in xs {{\n        out.push_str(f\" {{x}}\")\n    }}\n    out.push_str(\" ]\")\n    return out\n}}\n\n\
-         fn main() {{\n    let mut xs: Vec[i64] = [3, 8, 1, 8, 8, 9, 4, 4]\n    let mut none: Vec[i64] = []\n{body}\n}}\n"
+         fn main() throws {{\n    let mut xs: Vec[i64] = [3, 8, 1, 8, 8, 9, 4, 4]\n    let mut none: Vec[i64] = []\n{body}\n}}\n"
     );
     std::fs::write(dir.join("main.nika"), source).expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))

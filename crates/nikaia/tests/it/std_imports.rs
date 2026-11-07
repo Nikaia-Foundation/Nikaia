@@ -58,7 +58,7 @@ fn a_use_that_names_a_type_from_the_list_says_to_drop_the_line() {
 /// rule rather than a tidy-up.
 #[test]
 fn the_prelude_needs_no_use() {
-    let source = "use std::collections\n\nfn main() {\n\
+    let source = "use std::collections\n\nfn main() throws {\n\
                   \x20   let mut scores = collections::HashMap()\n\
                   \x20   scores[\"a\"] = 1\n\
                   \x20   println(f\"{scores.len()}\")\n\
@@ -160,7 +160,7 @@ fn refused(source: &str) -> Vec<nikaia::check::Finding> {
 /// write, with a `help` telling them to `cargo add` a crate that does not exist.
 #[test]
 fn a_std_module_nobody_declared_is_refused_here() {
-    let found = refused("use std::nosuchthing\n\nfn main() { println(\"x\") }\n");
+    let found = refused("use std::nosuchthing\n\nfn main() throws { println(\"x\") }\n");
     assert_eq!(found.len(), 1, "{found:#?}");
     assert!(
         found[0]

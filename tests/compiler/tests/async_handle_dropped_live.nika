@@ -5,13 +5,13 @@
 // still stops at its pause.
 use std::time
 
-fn slow(s: String, n: i64) -> i64 {
+fn slow(s: String, n: i64) -> i64 throws {
 	time::sleep(50.millis())
 	println(f"end {s}")
 	return n
 }
 
-fn main() {
+fn main() throws {
 	let s = "slow"
 	let h = async(handle) fn { slow(s, 7) }
 	let v = h.join(within: 5.millis()) catch { 0 }

@@ -57,7 +57,7 @@ fn five(h: ref H) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = H { kind: V::Case(1, 5), list: [10, 20, 30] }
     let vs = [V::Case(1, 5), V::Pair(V::Case(2, 1), 4)]
     println(f"{h.one()} {h.two(vs)} {three(vs, h.list)} {five(h)}")

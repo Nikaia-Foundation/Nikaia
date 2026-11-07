@@ -9,7 +9,7 @@ fn twice(n: i64) -> i64 {
     return n * 2
 }
 
-fn main() {
+fn main() throws {
     let g = fn(x) { x + 1 }
     let h = H { f: g }
     println(f"{h.f(1)}")

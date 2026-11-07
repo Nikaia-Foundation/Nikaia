@@ -6,7 +6,7 @@ impl S {
         return self.items.drain().collect()
     }
 }
-fn main() {
+fn main() throws {
     let mut s = S { items: ["a"] }
     let t = s.take_all()
     println(f"{t.len()} {s.items.len()}")

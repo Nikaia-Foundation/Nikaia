@@ -75,7 +75,7 @@ const PROGRAM: &str = "@inline\n\
      \x20   }\n\
      }\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let p = Point { x: 3 }\n\
      \x20   println(f\"{digit(50)} {twice(3)} {fail(4)} {countdown(3)} {p.shifted(1)}\")\n\
      }\n";
@@ -130,7 +130,7 @@ fn both_entries_of_a_checked_function_carry_the_hint() {
          \x20   return n / 2\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let g = half\n\
          \x20   println(f\"{half(4)} {g(6)}\")\n\
          }\n",

@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let a = !5
     println(f"{a}")
 }

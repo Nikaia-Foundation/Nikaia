@@ -6,7 +6,7 @@ fn fill(mut ns: Vec[String]) {
     keep(ns, f"k{ns.len()}")
 }
 
-fn main() {
+fn main() throws {
     let mut ns: Vec[String] = []
     fill(ns)
     keep(ns, f"k{ns.len()}")

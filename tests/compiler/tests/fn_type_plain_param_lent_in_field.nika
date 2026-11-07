@@ -6,7 +6,7 @@ fn count(s: String) -> i64 {
     return s.len()
 }
 
-fn main() {
+fn main() throws {
     let t = Tools { measure: count }
     let g = "four ".trim().to_string()
     println(t.measure(g))

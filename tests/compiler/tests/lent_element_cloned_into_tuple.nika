@@ -1,5 +1,5 @@
 // The element copied into the tuple part runs (#909).
-fn main() {
+fn main() throws {
     let mut names: Vec[String] = []
     names.push(f"a{1}")
     let mut files: Vec[(String, i64)] = []

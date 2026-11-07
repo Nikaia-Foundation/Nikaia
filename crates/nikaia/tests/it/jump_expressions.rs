@@ -163,7 +163,7 @@ fn a_loop_body_may_be_one_return() {
                   \x20   for i in 0..<n { return i }\n\
                   \x20   return 0\n\
                   }\n\
-                  fn main() { println(f\"{first(3)}\") }\n";
+                  fn main() throws { println(f\"{first(3)}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(lowered(source).contains("return i;"), "{}", lowered(source));
 }

@@ -22,7 +22,7 @@ fn written(m: ref collections::BTreeMap[String, String], c: String, n: i64) -> S
 	return x.clone()
 }
 
-fn main() {
+fn main() throws {
 	let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()
 	m.insert("a", "va")
 	println(f"{pick(m, "a")} {pick(m, "b")}")

@@ -24,7 +24,7 @@ fn from_map(m: collections::HashMap[i64, Sym]) -> Sym? {
 	return s
 }
 
-fn main() {
+fn main() throws {
 	let v = [Sym { name: "a", n: 1 }, Sym { name: "b", n: 2 }]
 	println(last_sym(v)?.name ?? "")
 	println(first_sym(v)?.name ?? "")

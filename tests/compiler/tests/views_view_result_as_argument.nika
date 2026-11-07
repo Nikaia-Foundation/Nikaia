@@ -30,7 +30,7 @@ fn size(b: Bytes) -> i64 {
 	return b.len()
 }
 
-fn main() {
+fn main() throws {
 	let v = [1, 2, 3]
 	println(f"{total(v[1..])}")
 	println(f"{total(rest(v))}")

@@ -19,7 +19,7 @@ fn half(n: i64) -> i64 throws {
     return n / 2
 }
 
-fn main() {
+fn main() throws {
     let v = half(7) catch { "none" }
     println(f"{v}")
 }

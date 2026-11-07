@@ -38,7 +38,7 @@ fn per_row(rows: int) -> int {
     return percent(50, r)           // r >= 1: proved, no check
 }
 
-fn main() {
+fn main() throws {
     println(f"{per_row(4)}% {share(3, 4)}%")
     // and this call breaks it:
     println(f"{share(1, 0)}%")
@@ -101,7 +101,7 @@ fn fib(n: int) -> int {
     return a
 }
 
-fn main() {
+fn main() throws {
     assert(fib(10) == 54)
     println(f"{fib(10)}")
 }
@@ -155,7 +155,7 @@ fn price(base: int, member: bool) -> int {
     return p
 }
 
-fn main() {
+fn main() throws {
     println(f"{steps(5)} {price(12, true)}")
 }
 ```
@@ -196,7 +196,7 @@ fn area(w: int, h: int) -> int {
     return a
 }
 
-fn main() {
+fn main() throws {
     let scores = [3, 5, 9]
     let n = scores.len()
     assert(n == 3)
@@ -250,7 +250,7 @@ the parameters, options, `--help` and the rest are in [The command line](command
 
 ```nika
 /// Divides 100 by a, a few times.
-fn main(a: int; times: int = 4) {
+fn main(a: int; times: int = 4) throws {
     assert(a > 0)
     for i in 0..<times {
         println(f"{i}: {100 / a}")

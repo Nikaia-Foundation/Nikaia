@@ -72,7 +72,7 @@ fn shout[T: Summarize](x: T) -> String {
     return x.summary()
 }
 
-fn main() {
+fn main() throws {
     let u = User { name: f"Ada" }
     println(shout(u))
 }
@@ -121,7 +121,7 @@ impl Named for User {
     fn name(ref self) -> String sync { return self.username.clone() }
 }
 
-fn main() { println(User { username: f"Ada" }.name()) }
+fn main() throws { println(User { username: f"Ada" }.name()) }
 "#,
     );
     assert!(
@@ -180,7 +180,7 @@ fn both[T: Named + Aged](x: T) -> String {
     return x.name_of()
 }
 
-fn main() {
+fn main() throws {
     let u = User { name: f"Ada", age: 36 }
     println(both(u))
 }
@@ -207,7 +207,7 @@ fn shout[T: Summarize](x: T) -> String {
     return x.summary(1)
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -232,7 +232,7 @@ fn shout[T: Summarize](x: T) -> i64 {
     return x.summary()
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -257,7 +257,7 @@ fn shout[T: Summarize](x: T) -> String {
     return x.to_uppercase()
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -356,7 +356,7 @@ impl Loader for File {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -403,7 +403,7 @@ impl Summarize for User {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -442,7 +442,7 @@ impl Summarize for User {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -486,7 +486,7 @@ impl Error for ConfigError {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -521,7 +521,7 @@ impl Loader for File {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -557,7 +557,7 @@ impl Loader for Fixed {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -658,7 +658,7 @@ fn tell[T: Speaks](x: T) -> String sync {
     return x.say()
 }
 
-fn main() {
+fn main() throws {
     let r = Rock { weight: 3 }
     println(tell(r))
 }
@@ -709,7 +709,7 @@ fn both[T: Speaks + Weighs](x: T) -> String sync {
     return x.say()
 }
 
-fn main() {
+fn main() throws {
     let d = Dog { name: f"rex" }
     println(both(d))
 }
@@ -765,7 +765,7 @@ fn passes_on[V: Weighs](z: V) -> String sync {
     return tell(z)
 }
 
-fn main() {
+fn main() throws {
     let d = Dog { name: f"rex" }
     println(passes_on(d))
 }
@@ -812,7 +812,7 @@ fn passes_on[U: Speaks](y: U) -> String sync {
     return tell(y)
 }
 
-fn main() {
+fn main() throws {
     let d = Dog { name: f"rex" }
     println(passes_on(d))
 }
@@ -840,7 +840,7 @@ fn tell[T: Error](x: T) -> i64 sync {
     return 1
 }
 
-fn main() {
+fn main() throws {
     let r = Rock { weight: 3 }
     println(f"{tell(r)}")
 }
@@ -868,7 +868,7 @@ fn an_impl_of_a_trait_nothing_declares_is_refused() {
              impl {trait_name} for Fake {{\n\
              \x20   fn run(ref self) -> i64 {{ return self.n }}\n\
              }}\n\
-             fn main() {{ println(\"x\") }}\n"
+             fn main() throws {{ println(\"x\") }}\n"
         )
     };
 
@@ -906,12 +906,12 @@ fn an_impl_of_a_declared_trait_is_silent() {
                impl Speaks for Dog {\n\
                \x20   fn speak(ref self) -> String { return \"woof\" }\n\
                }\n\
-               fn main() { println(Dog { name: \"rex\" }.speak()) }\n";
+               fn main() throws { println(Dog { name: \"rex\" }.speak()) }\n";
     assert!(findings(own).is_empty(), "{:#?}", findings(own));
 
     let dropped = "struct Handle { name: String }\n\
                    impl Drop for Handle {\n\
-                   \x20   fn drop(ref mut self) { println(f\"closing {self.name}\") }\n\
+                   \x20   fn drop(ref mut self) { println(f\"closing {self.name}\") catch { } }\n\
                    }\n\
                    fn main() { let h = Handle { name: \"a\" } }\n";
     assert!(findings(dropped).is_empty(), "{:#?}", findings(dropped));
@@ -939,7 +939,7 @@ fn a_method_takes_self_the_way_its_trait_declares() {
                 \x20   }\n\
                 }\n\
                 \n\
-                fn main() {\n\
+                fn main() throws {\n\
                 \x20   println(P { n: \"a\" }.name())\n\
                 }\n";
     let found: Vec<_> = findings(mine)

@@ -33,7 +33,7 @@ fn a_function_named_as_a_value_is_typed() {
         ("P::merge", "fn(ref P, P) sync"),
     ] {
         let source = format!(
-            "{DECLARED}fn main() {{\n    let wrong: bool = {value}\n    println(\"x\")\n}}\n"
+            "{DECLARED}fn main() throws {{\n    let wrong: bool = {value}\n    println(\"x\")\n}}\n"
         );
         let found = findings(&source);
         assert!(
@@ -53,7 +53,7 @@ fn a_declared_function_passed_as_an_argument_runs() {
     std::fs::write(
         dir.join("passed.nika"),
         format!(
-            "{DECLARED}fn main() {{\n    println(f\"{{apply(double, 5)}} {{make(P).x}}\")\n}}\n"
+            "{DECLARED}fn main() throws {{\n    println(f\"{{apply(double, 5)}} {{make(P).x}}\")\n}}\n"
         ),
     )
     .expect("write the source");
@@ -89,7 +89,7 @@ fn a_recursive_method_runs_the_lambda_it_hands_on() {
          \x20       self.down(n - 1, ask)\n\
          \x20   }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut walk = D { total: 0 }\n\
          \x20   walk.down(6) fn(k) { k % 2 == 0 }\n\
          \x20   println(f\"{walk.total}\")\n\
@@ -116,7 +116,7 @@ fn a_recursive_method_runs_the_lambda_it_hands_on() {
 #[test]
 fn a_tuple_position_it_does_not_have_is_refused() {
     let found = findings(
-        "fn main() {\n    let t = (\"a\", 2)\n    let u = t.2\n    println(f\"{u}\")\n}\n",
+        "fn main() throws {\n    let t = (\"a\", 2)\n    let u = t.2\n    println(f\"{u}\")\n}\n",
     );
     let refused = found
         .iter()
@@ -138,7 +138,7 @@ fn a_tuple_position_it_does_not_have_is_refused() {
 fn a_list_is_not_collected() {
     let found = findings(
         "fn double(n: i64) -> i64 sync { return n * 2 }\n\
-         fn main() {\n    let ys = [1, 2, 3].map(double).collect()\n    println(f\"{ys.len()}\")\n}\n",
+         fn main() throws {\n    let ys = [1, 2, 3].map(double).collect()\n    println(f\"{ys.len()}\")\n}\n",
     );
     let refused = found
         .iter()
@@ -160,7 +160,7 @@ fn a_parameter_that_may_pause_runs_either_kind_of_function() {
          fn slow(n: i64) -> i64 {\n    time::sleep(1.millis())\n    return n + 1\n}\n\
          fn double(n: i64) -> i64 { return n * 2 }\n\
          fn apply(f: fn(i64) -> i64, x: i64) -> i64 { return f(x) }\n\
-         fn main() {\n    println(f\"{apply(slow, 5)} {apply(double, 5)}\")\n}\n",
+         fn main() throws {\n    println(f\"{apply(slow, 5)} {apply(double, 5)}\")\n}\n",
     )
     .expect("write the source");
     let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -197,7 +197,7 @@ fn a_named_function_handed_to_a_kept_parameter_runs() {
          fn keep_two(f: fn(i64) -> i64, g: fn(i64) -> i64) -> Two {\n    return Two { f: f, g: g }\n}\n\
          fn double(x: i64) -> i64 {\n    return x * 2\n}\n\
          fn slow(n: i64) -> i64 {\n    time::sleep(1.millis())\n    return n + 1\n}\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let o = keep(double)\n    let g = o.f\n\
          \x20   let s = keep(slow)\n    let h = s.f\n\
          \x20   let q = keep_quick(double)\n    let k = q.f\n\
@@ -275,7 +275,7 @@ fn a_method_named_where_a_function_value_is_kept_runs() {
          fn keep_two(keep f: fn(ref P, i64) -> i64 sync, keep g: fn(ref P, i64) -> i64 sync) -> Two {\n\
          \x20   return Two { f: f, g: g }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let p = P { base: 10 }\n\
          \x20   let o = keep(P::add)\n\
          \x20   let a = o.f\n\
@@ -344,7 +344,7 @@ struct One {
 struct Words {
     f: fn(ref P, ref String) -> String,
 }
-fn main() {
+fn main() throws {
     let p = P { base: 10 }
     let lambda = One { f: fn(q, n) { q.add(n) } }
     let method = One { f: P::add }

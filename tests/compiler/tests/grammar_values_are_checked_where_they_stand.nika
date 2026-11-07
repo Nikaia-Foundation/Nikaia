@@ -14,6 +14,6 @@ grammar G {
     entry rule f -> i64 = v:Item -> { v }
 }
 
-fn main() {
+fn main() throws {
     println(G::a(" 1") catch { -1 })
 }

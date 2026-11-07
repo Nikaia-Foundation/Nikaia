@@ -23,7 +23,7 @@ fn pat(n: i64) -> String {
     return f"{n}"
 }
 
-fn main() {
+fn main() throws {
     let written = pat(1)
     let w = if written == "0" { "_" } else { written }
     println(w)

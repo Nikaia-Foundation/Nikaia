@@ -16,7 +16,7 @@ fn beside_a_variant(e: E) -> Vec[String] {
     }
 }
 
-fn main() {
+fn main() throws {
     println(beside_else(E::A(["a", "b"])).len())
     println(beside_else(E::N).len())
     println(beside_a_variant(E::A(["c"]))[0])

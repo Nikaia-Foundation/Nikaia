@@ -48,7 +48,7 @@ fn a_bound_gives_the_operators() {
          }\n\
          fn same[T: Eq](a: ref T, b: ref T) -> bool { return a == b }\n\
          fn ordered_is_equal[T: Ord](a: ref T, b: ref T) -> bool { return a == b }\n\
-         fn main() { println(biggest(1, 2)) }\n";
+         fn main() throws { println(biggest(1, 2)) }\n";
     assert!(codes(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("fn biggest<T: Ord>"), "{rust}");
@@ -60,7 +60,7 @@ fn an_operator_without_a_bound_is_refused_in_this_languages_words() {
     for (op, needs) in [("<", "Ord"), (">=", "Ord"), ("==", "Eq"), ("!=", "Eq")] {
         let source = format!(
             "fn f[T](a: ref T, b: ref T) -> bool {{ return a {op} b }}\n\
-             fn main() {{ println(1) }}\n"
+             fn main() throws {{ println(1) }}\n"
         );
         let found: Vec<_> = findings(&source)
             .into_iter()
@@ -75,13 +75,13 @@ fn an_operator_without_a_bound_is_refused_in_this_languages_words() {
     }
     // `Eq` does not give an order.
     let source = "fn f[T: Eq](a: ref T, b: ref T) -> bool { return a < b }\n\
-                  fn main() { println(1) }\n";
+                  fn main() throws { println(1) }\n";
     assert!(codes(source).contains(&"NK1248".to_string()));
 }
 
 #[test]
 fn an_impl_ord_is_a_bridge_to_the_standard_librarys() {
-    let source = format!("{POINT}fn main() {{ println(1) }}\n");
+    let source = format!("{POINT}fn main() throws {{ println(1) }}\n");
     assert!(codes(&source).is_empty(), "{:#?}", findings(&source));
     let rust = lowered(&source);
     assert!(rust.contains("impl Ord for P"), "{rust}");
@@ -95,7 +95,7 @@ fn an_impl_eq_replaces_the_derived_equality() {
          impl Eq for P {\n\
          \x20   fn eq(ref self, other: ref P) -> bool { return self.x == other.x }\n\
          }\n\
-         fn main() { println(1) }\n";
+         fn main() throws { println(1) }\n";
     assert!(codes(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("impl PartialEq for P"), "{rust}");
@@ -108,7 +108,7 @@ fn an_impl_for_a_type_the_program_does_not_declare_is_nk1249() {
          impl Ord for time::Duration {\n\
          \x20   fn compare(ref self, other: ref time::Duration) -> Ordering { return Ordering::Equal }\n\
          }\n\
-         fn main() { println(1) }\n";
+         fn main() throws { println(1) }\n";
     assert!(
         codes(source).contains(&"NK1249".to_string()),
         "{:#?}",
@@ -122,7 +122,7 @@ fn an_order_for_a_type_that_is_not_eq_is_nk1249() {
          impl Ord for R {\n\
          \x20   fn compare(ref self, other: ref R) -> Ordering { return Ordering::Equal }\n\
          }\n\
-         fn main() { println(1) }\n";
+         fn main() throws { println(1) }\n";
     let found: Vec<_> = findings(source)
         .into_iter()
         .filter(|f| f.code == "NK1249")
@@ -133,7 +133,7 @@ fn an_order_for_a_type_that_is_not_eq_is_nk1249() {
 
 #[test]
 fn an_impl_owes_its_one_method_and_no_other() {
-    let missing = "struct P { x: i64 }\nimpl Ord for P {}\nfn main() { println(1) }\n";
+    let missing = "struct P { x: i64 }\nimpl Ord for P {}\nfn main() throws { println(1) }\n";
     assert!(
         codes(missing).contains(&"NK1130".to_string()),
         "{:#?}",
@@ -144,7 +144,7 @@ fn an_impl_owes_its_one_method_and_no_other() {
          \x20   fn eq(ref self, other: ref P) -> bool { return true }\n\
          \x20   fn other(ref self) -> bool { return true }\n\
          }\n\
-         fn main() { println(1) }\n";
+         fn main() throws { println(1) }\n";
     assert!(
         codes(extra).contains(&"NK1130".to_string()),
         "{:#?}",
@@ -156,7 +156,7 @@ fn an_impl_owes_its_one_method_and_no_other() {
 fn a_declared_type_with_impl_ord_is_a_key() {
     let source = format!(
         "use std::collections\n{POINT}\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let mut m: collections::BTreeMap[P, i64] = collections::BTreeMap()\n\
          \x20   m.insert(P {{ x: 1 }}, 1)\n\
          \x20   println(m.len())\n\
@@ -175,6 +175,6 @@ fn a_program_that_declares_its_own_ord_keeps_it() {
          struct P { x: i64 }\n\
          impl Ord for P { fn rank(ref self) -> i64 { return self.x } }\n\
          fn first[T: Ord](a: ref T) -> i64 { return a.rank() }\n\
-         fn main() { println(first(P { x: 1 })) }\n";
+         fn main() throws { println(first(P { x: 1 })) }\n";
     assert!(codes(source).is_empty(), "{:#?}", findings(source));
 }

@@ -8,7 +8,7 @@ impl Error for Missing {
     }
 }
 
-fn main() {
+fn main() throws {
     let ada = Person { name: "Ada", age: 36 }
     println(ada.name)
     println(f"{ada.name} is {ada.age}")

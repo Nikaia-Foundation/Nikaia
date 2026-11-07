@@ -1,5 +1,5 @@
 comptime P = (1, -2)
 
-fn main() {
+fn main() throws {
     println(f"{P.0} {P.1}")
 }

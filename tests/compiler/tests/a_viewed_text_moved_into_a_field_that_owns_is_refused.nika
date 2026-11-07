@@ -5,7 +5,7 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-fn advance(mut c: Cursor) {
+fn advance(mut c: Cursor) throws {
     c.input.push_str("!")
     println(c.input)
 }
@@ -13,7 +13,7 @@ fn advance(mut c: Cursor) {
 // ADR-views-3 D9 (#942): `advance` changes a `Cursor`'s `input` in place, so that
 // field must own its text; `text` moved there while `v` still reads it is
 // refused at the move.
-fn main() {
+fn main() throws {
     let n = 1
     let text = f"a: {n}"
     let v = parse(text)

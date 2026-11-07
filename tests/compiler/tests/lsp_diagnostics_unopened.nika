@@ -43,7 +43,7 @@ fn main() throws {
     let root = fs::scratch()
     fs::create_dir("pk/src", root; recursive: true)
     fs::write("pk/nikaia.toml", root, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
-    let main_text = "fn main() {\n    println(\"hello\")\n}\n"
+    let main_text = "fn main() throws {\n    println(\"hello\")\n}\n"
     fs::write("pk/src/main.nika", root, main_text.clone())
     fs::write("pk/src/other.nika", root, "pub fn g() -> i64 {\n    return \"x\"\n}\n")
     let base = fs::canonical(".", root).display()

@@ -9,6 +9,6 @@ fn other(f: fn(ref String) -> ref String from s, s: String) -> String {
     return f(s).to_uppercase()
 }
 
-fn main() {
+fn main() throws {
     println("unreached")
 }

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1352 (Draft)
+**Version:** 0.0.1357 (Draft)
 **Date:** 2026-11-07
 
 ---
@@ -205,7 +205,7 @@ attached to a declaration. A type's shape is **ordinary data**, and a loop over
 it runs while the program is built.
 
 ```nika
-fn describe[T: Struct](value: T) {
+fn describe[T: Struct](value: T) throws {
     for field in T::fields {
         println(f"{field.name} = {field.of(value)}")
     }
@@ -447,7 +447,7 @@ use sqlite                                // a driver package, not `std`
 
 comptime APP = asset("schema.sql")        // the schema, read while building
 
-fn query_users(min_age: i32) {
+fn query_users(min_age: i32) throws {
     let db = sqlite::open("app.db"; schema: APP)   // typed by its schema
 
     // 1. The driver's grammar parses this SQL while the program is built,
@@ -1016,7 +1016,7 @@ fn charge(kasse: SharedMut[i64], wieviel: i64) throws {
     kasse.set(stand + wieviel; after: stand)
 }
 
-fn main() {
+fn main() throws {
     let kasse = SharedMut(100)
     charge(kasse, 23) catch { println("somebody got there first") }
     println(f"{kasse.get()}")

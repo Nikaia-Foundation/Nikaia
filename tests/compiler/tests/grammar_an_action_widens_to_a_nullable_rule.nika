@@ -8,7 +8,7 @@ grammar M {
 	rule Num -> i64 = d:dec[i64](digit+) -> { d }
 }
 
-fn main() {
+fn main() throws {
 	let n: i64? = M::read(Bytes("42".bytes().collect())) catch {
 		println("error")
 		return

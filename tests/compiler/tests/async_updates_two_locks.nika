@@ -1,5 +1,5 @@
 // Two tasks that write two different locks run beside each other (Part II 12.2, #985).
-fn main() {
+fn main() throws {
 	let left = SharedMut(0)
 	let right = Locked(10)
 	async {

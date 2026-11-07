@@ -7,6 +7,6 @@ fn second(a: String, b: String) -> String from a {
     return b.trim()
 }
 
-fn main() {
+fn main() throws {
     println(second("ab", "cd"))
 }

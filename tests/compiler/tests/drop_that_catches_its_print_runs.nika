@@ -1,0 +1,14 @@
+// Part I 6.4, ADR-392, #1360: a `drop` that catches the failure of its
+// `println` builds and runs after the last use of its value.
+struct File { name: String }
+
+impl Drop for File {
+    fn drop(mut self) {
+        println(f"closing {self.name}") catch { }
+    }
+}
+
+fn main() throws {
+    let f = File { name: "a" }
+    println(f.name)
+}

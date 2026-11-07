@@ -6,10 +6,10 @@ fn half(n: i64) -> i64 throws {
     if n < 0 { throw Refused::Negative }
     return n / 2
 }
-fn last(n: i64) {
+fn last(n: i64) throws {
     half(n) catch { println("caught at the tail") }
 }
-fn main() {
+fn main() throws {
     let mut failed = false
     half(-4) catch { failed = true }
     half(4) catch {}

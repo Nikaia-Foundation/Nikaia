@@ -201,6 +201,13 @@ impl EmitState {
         }
         let inside_scope = EmitScope { changed: changed, tasks_channel: scope.tasks_channel.to_string(), tasks_function: scope.tasks_function.to_string(), ..EmitScope::plain() };
         if copied && pauses { out.push(&format!("{{ let mut {} = *__nikaia_slot; async ", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!("{{ let mut {} = *__nikaia_slot; (|| ", *nikaia_std::index::get(&names, 0))); }
+        if !copied && self.facts.failing_lambdas.contains(&node_key(node)) {
+            out.push("{ let __nikaia_done = ");
+            self.emit_core_block(world, walk, out, host, body, depth, EmitFlow { can_throw: true, ..inside }, &inside_scope, &EmitTail::Value)?;
+            out.push("; Ok(__nikaia_done) }");
+            if a_task { out.push(")"); }
+            return Ok(());
+        }
         self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return)?;
         if copied && pauses { out.push(&format!(".await; *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
         if a_task { out.push(")"); }
@@ -767,7 +774,7 @@ impl EmitState {
                             }
                         }
                     }
-                    if !unless.is_empty() { out.push(&format!("{}Err(crate::{}::{}(error)) if {} => return Err(error.into()),\n", pad, held_sum, sum_variant(member), unless)); } else { out.push(&format!("{}Err(crate::{}::{}(error)) => return Err(error.into()),\n", pad, held_sum, sum_variant(member))); }
+                    if !unless.is_empty() { out.push(&format!("{}Err({}{}::{}(error)) if {} => return Err(error.into()),\n", pad, self.sum_root(), held_sum, sum_variant(member), unless)); } else { out.push(&format!("{}Err({}{}::{}(error)) => return Err(error.into()),\n", pad, self.sum_root(), held_sum, sum_variant(member))); }
                 }
             }
         }
@@ -849,7 +856,8 @@ impl EmitState {
             if scope.caught_sum.is_some() && scope.caught_member.is_some() {
                 let sum = nikaia_std::index::or(scope.caught_sum.as_deref(), || "").to_string();
                 let member = nikaia_std::index::or(scope.caught_member.as_deref(), || "").to_string();
-                if sum == "" { held = format!("{}.into()", held); } else { held = format!("crate::{}::{}({})", sum, sum_variant(&member), held); }
+                let own: String = nikaia_std::index::or(self.sum_of(&scope.function), || "".into()).to_string();
+                if sum == "" || own != sum { held = format!("{}.into()", held); } else { held = format!("{}{}::{}({})", self.sum_root(), sum, sum_variant(&member), held); }
             }
             out.push(&format!("return Err({})", held));
             return Ok(());

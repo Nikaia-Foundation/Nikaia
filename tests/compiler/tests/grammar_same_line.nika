@@ -27,7 +27,7 @@ fn bytes_of(text: String) -> Bytes {
     return Bytes(all)
 }
 
-fn main() {
+fn main() throws {
     for s in ["a\n[0]", "a [0]", "f\n(x)", "f (x)", "a [0] !", "a [0]\n[1]", "a\n\n  [0](x)\n(y)"] {
         let text = P::items(s) catch { ["refused"] }
         let bytes = P::items(bytes_of(s)) catch { ["refused"] }

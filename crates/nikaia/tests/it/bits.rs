@@ -117,31 +117,31 @@ fn a_large_constant_is_an_i64_and_mixes_with_nothing_else() {
 fn a_shift_past_the_width_is_refused() {
     for (source, ty, count, width) in [
         (
-            "fn main() {\n    let n: i64 = 1\n    let m = n << 64\n    println(f\"{m}\")\n}\n",
+            "fn main() throws {\n    let n: i64 = 1\n    let m = n << 64\n    println(f\"{m}\")\n}\n",
             "an `i64`",
             "64",
             "64",
         ),
         (
-            "fn main() {\n    let n = 1\n    let m = n >> 70\n    println(f\"{m}\")\n}\n",
+            "fn main() throws {\n    let n = 1\n    let m = n >> 70\n    println(f\"{m}\")\n}\n",
             "an `i32`",
             "70",
             "32",
         ),
         (
-            "fn main() {\n    let b: u8 = 1\n    let m = b << 8\n    println(f\"{m}\")\n}\n",
+            "fn main() throws {\n    let b: u8 = 1\n    let m = b << 8\n    println(f\"{m}\")\n}\n",
             "a `u8`",
             "8",
             "8",
         ),
         (
-            "fn main() {\n    let c: i32 = 1\n    let m = c >> 32\n    println(f\"{m}\")\n}\n",
+            "fn main() throws {\n    let c: i32 = 1\n    let m = c >> 32\n    println(f\"{m}\")\n}\n",
             "an `i32`",
             "32",
             "32",
         ),
         (
-            "fn main() {\n    let c: i32 = 1\n    let m = c << -1\n    println(f\"{m}\")\n}\n",
+            "fn main() throws {\n    let c: i32 = 1\n    let m = c << -1\n    println(f\"{m}\")\n}\n",
             "an `i32`",
             "-1",
             "32",
@@ -157,9 +157,9 @@ fn a_shift_past_the_width_is_refused() {
         );
     }
     for source in [
-        "fn main() {\n    let n: i64 = 1\n    let m = n << 63\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let b: u8 = 1\n    let m = b << 7\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let c: i32 = 1\n    let s = 3\n    let m = c >> s\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let n: i64 = 1\n    let m = n << 63\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let b: u8 = 1\n    let m = b << 7\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let c: i32 = 1\n    let s = 3\n    let m = c >> s\n    println(f\"{m}\")\n}\n",
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");
@@ -173,9 +173,9 @@ fn a_shift_past_the_width_is_refused() {
 #[test]
 fn an_open_number_is_shifted_as_the_type_it_gets() {
     for source in [
-        "fn main() {\n    let n = 1\n    let m = n << 40\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let m = 1 << 40\n    let w: i32 = m\n    println(f\"{w}\")\n}\n",
-        "fn main() {\n    let m: i32 = 1 << 40\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let n = 1\n    let m = n << 40\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let m = 1 << 40\n    let w: i32 = m\n    println(f\"{w}\")\n}\n",
+        "fn main() throws {\n    let m: i32 = 1 << 40\n    println(f\"{m}\")\n}\n",
     ] {
         let found = findings(source);
         let message = "This shifts an `i32` by 40 places, and it has 32 bits.";
@@ -188,10 +188,10 @@ fn an_open_number_is_shifted_as_the_type_it_gets() {
         assert_eq!(found.len(), 1, "{source}: {found:#?}");
     }
     for source in [
-        "fn main() {\n    let n = 1\n    let m: i64 = n << 40\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let m = 1 << 40\n    let w: i64 = m\n    println(f\"{w}\")\n}\n",
-        "fn main() {\n    let n = 3000000000\n    let m = n << 4\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let n = 1\n    let m = n << 31\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let n = 1\n    let m: i64 = n << 40\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let m = 1 << 40\n    let w: i64 = m\n    println(f\"{w}\")\n}\n",
+        "fn main() throws {\n    let n = 3000000000\n    let m = n << 4\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let n = 1\n    let m = n << 31\n    println(f\"{m}\")\n}\n",
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");
@@ -207,34 +207,34 @@ fn an_open_number_is_shifted_as_the_type_it_gets() {
 #[test]
 fn a_shift_of_literals_is_folded_exactly() {
     for source in [
-        "fn main() {\n    println(1 << 40)\n}\n",
-        "fn main() {\n    if (1 << 40) > 0 {\n        println(\"big\")\n    }\n}\n",
-        "fn main() {\n    println(1 << 31)\n}\n",
-        "fn main() {\n    println(-(1 << 31))\n}\n",
-        "fn main() {\n    let m = 1 << 40\n    println(m)\n}\n",
-        "fn main() {\n    let m = (1 << 40) + 2\n    println(f\"{m}\")\n}\n",
-        "fn main() {\n    let m: i32 = 1 << 31\n    println(m)\n}\n",
-        "fn main() {\n    let m = 1 << 31\n    let w: i32 = m\n    println(w)\n}\n",
-        "fn main() {\n    let m: i64 = 1 << 63\n    println(m)\n}\n",
+        "fn main() throws {\n    println(1 << 40)\n}\n",
+        "fn main() throws {\n    if (1 << 40) > 0 {\n        println(\"big\")\n    }\n}\n",
+        "fn main() throws {\n    println(1 << 31)\n}\n",
+        "fn main() throws {\n    println(-(1 << 31))\n}\n",
+        "fn main() throws {\n    let m = 1 << 40\n    println(m)\n}\n",
+        "fn main() throws {\n    let m = (1 << 40) + 2\n    println(f\"{m}\")\n}\n",
+        "fn main() throws {\n    let m: i32 = 1 << 31\n    println(m)\n}\n",
+        "fn main() throws {\n    let m = 1 << 31\n    let w: i32 = m\n    println(w)\n}\n",
+        "fn main() throws {\n    let m: i64 = 1 << 63\n    println(m)\n}\n",
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");
     }
     for (source, message) in [
         (
-            "fn main() {\n    println(1 << 63)\n}\n",
+            "fn main() throws {\n    println(1 << 63)\n}\n",
             "This comes to 9223372036854775808, which doesn't fit in an `i64`.",
         ),
         (
-            "fn main() {\n    let m = 1 << 63\n    println(m)\n}\n",
+            "fn main() throws {\n    let m = 1 << 63\n    println(m)\n}\n",
             "This comes to 9223372036854775808, which doesn't fit in an `i64`.",
         ),
         (
-            "fn main() {\n    println(1 << 70)\n}\n",
+            "fn main() throws {\n    println(1 << 70)\n}\n",
             "This shifts an `i64` by 70 places, and it has 64 bits.",
         ),
         (
-            "fn main() {\n    let m: u8 = 1 << 8\n    println(m)\n}\n",
+            "fn main() throws {\n    let m: u8 = 1 << 8\n    println(m)\n}\n",
             "This shifts a `u8` by 8 places, and it has 8 bits.",
         ),
     ] {

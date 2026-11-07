@@ -94,7 +94,7 @@ fn a_grammar_runs_while_the_program_is_built_and_the_answer_is_a_const() {
          comptime SETTINGS: Array[Setting, 2] = \
          Cfg::file(\"host = example.com\\nport = 8080  # the usual one\\n\")\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   for s in SETTINGS {{\n\
          \x20       println(f\"{{s.key}}={{s.value}}\")\n\
          \x20   }}\n\
@@ -136,7 +136,7 @@ fn invalid_input_fails_the_build_in_the_parsers_own_words() {
         "{SETTINGS}\n\
          comptime SETTINGS: Array[Setting, 1] = Cfg::file(\"host = ok\\n!!! broken\\n\")\n\
          \n\
-         fn main() {{ println(f\"{{SETTINGS.len()}}\") }}"
+         fn main() throws {{ println(f\"{{SETTINGS.len()}}\") }}"
     );
     let found = one(&source, &reads);
     assert_eq!(found.code, "NK1178");
@@ -190,7 +190,7 @@ fn an_enum_crosses_from_a_grammar_by_the_variant_the_value_is() {
         "{SHADES}\n\
          comptime SHADES: Array[Shade, 4] = Pick::many(\"odd even n:blue w:2.5\")\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   for s in SHADES {{\n\
          \x20       match s {{\n\
          \x20           Shade::Odd => {{ println(\"odd\") }}\n\
@@ -241,7 +241,7 @@ fn a_variant_with_named_fields_is_refused_by_name() {
          \n\
          comptime CHOICE: Shape = Pick::one(\"spot\")\n\
          \n\
-         fn main() { println(\"hi\") }";
+         fn main() throws { println(\"hi\") }";
     let found = one(source, &reads);
     assert_eq!(found.code, "NK1178");
     assert!(
@@ -269,7 +269,7 @@ fn a_build_with_nowhere_to_build_says_so() {
         "{SETTINGS}\n\
          comptime SETTINGS: Array[Setting, 1] = Cfg::file(\"a = 1\\n\")\n\
          \n\
-         fn main() {{ println(f\"{{SETTINGS.len()}}\") }}"
+         fn main() throws {{ println(f\"{{SETTINGS.len()}}\") }}"
     );
     let found = one(&source, &Reads::none());
     assert_eq!(found.code, "NK1178");
@@ -365,7 +365,7 @@ fn a_rule_that_hands_back_a_run_crosses_as_a_view() {
          comptime SETTINGS: ref Array[Setting] = \
          Cfg::file(\"host = example.com\\nport = 8080\\nuser = ada\\n\")\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   println(f\"{{SETTINGS.len()}}\")\n\
          \x20   for s in SETTINGS {{\n\
          \x20       println(f\"{{s.key}}={{s.value}}\")\n\
@@ -405,7 +405,7 @@ fn an_action_that_reaches_c_is_refused_once() {
          entry rule t -> i64 = d:dec[i64](digit+) -> { tripled(d) }\n}\n\n\
          comptime N: i64 = Num::n(\"21\")\n\
          comptime T: i64 = Num::t(\"21\")\n\n\
-         fn main() {\n    println(f\"{N} {T}\")\n}\n";
+         fn main() throws {\n    println(f\"{N} {T}\")\n}\n";
     let found = findings_in(source, &reads);
     std::fs::remove_dir_all(&dir).ok();
     let codes: Vec<&str> = found.iter().map(|f| f.code_str()).collect();

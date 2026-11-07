@@ -6,7 +6,7 @@ struct P {
     pub name: String,
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[P] = [P { name: "a" }]
     v[0].name += "!"
     println(v[0].name)

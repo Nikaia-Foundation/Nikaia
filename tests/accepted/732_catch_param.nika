@@ -9,9 +9,9 @@ fn fail() throws {
     throw Bad::Oops
 }
 fn quiet() {
-    println("fine")
+    println("fine") catch {}
 }
-fn guard(run: fn() throws) {
+fn guard(run: fn() throws) throws {
     run() catch {
         match error {
             Bad::Oops => println("oops")
@@ -34,7 +34,7 @@ fn tried(run: fn(i64) -> i64 sync throws, n: i64) -> i64 {
         }
     }
 }
-fn main() {
+fn main() throws {
     guard(fail)
     guard(quiet)
     println(f"{tried(checked, 1)} {tried(checked, 0)} {tried(twice, 4)}")

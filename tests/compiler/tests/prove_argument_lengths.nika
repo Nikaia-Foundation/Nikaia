@@ -15,7 +15,7 @@ fn h(b: ref Bytes) -> i64 {
 	return b.len()
 }
 
-fn main() {
+fn main() throws {
 	let v: Vec[u8] = [59; 40]
 	println(f"{g(v)}")
 	let mut m: Vec[u8] = [59; 40]

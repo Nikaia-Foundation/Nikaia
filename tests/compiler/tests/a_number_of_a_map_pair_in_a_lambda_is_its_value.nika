@@ -3,7 +3,7 @@
 // to a set's `contains` and put into a tuple of `i64`.
 use std::collections
 
-fn main() {
+fn main() throws {
 	let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()
 	m.insert(1, 10)
 	m.insert(2, 20)

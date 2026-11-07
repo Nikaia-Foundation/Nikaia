@@ -25,7 +25,7 @@ fn kinds(name: String, given: String) -> String {
     }
 }
 
-fn parts(name: String, given: String) {
+fn parts(name: String, given: String) throws {
     match owned(given) {
         null => println("none"),
         tag => {
@@ -36,7 +36,7 @@ fn parts(name: String, given: String) {
     }
 }
 
-fn main() {
+fn main() throws {
     println(tagged("abc-x"))
     println(kinds("-xab-x", "-x"))
     parts("-xab-x", "-x")

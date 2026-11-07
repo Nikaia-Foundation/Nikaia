@@ -15,7 +15,7 @@ impl S {
     fn size(ref self) -> i64 { return size(self.p) }
 }
 
-fn main() {
+fn main() throws {
     let s = S { p: f"a{1}" }
     let n: String = "a1c"
     println(f"{s.has(n)} {n.contains(s.p)} {s.size()}")

@@ -24,7 +24,7 @@ fn run() -> i64 throws {
     c.names = []
     return n
 }
-fn main() {
+fn main() throws {
     let n = run() catch { 0 }
     println(f"{n}")
 }

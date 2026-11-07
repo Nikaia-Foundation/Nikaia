@@ -1,0 +1,78 @@
+migrated TMP/a.nika
+migrated TMP/b.md
+TMP/a.nika:33: a printing lambda handed to a parameter that cannot fail; handle it or use a for loop
+TMP/b.md:11: a printing lambda handed to a parameter that cannot fail; handle it or use a for loop
+trait Show {
+    fn draw(self) throws
+}
+
+struct P {
+    x: i64,
+}
+
+impl Show for P {
+    fn draw(self) throws {
+        println(f"P {self.x}")
+    }
+}
+
+fn quiet(x: i64) -> i64 sync {
+    return x + 1
+}
+
+fn uses(p: P) throws {
+    p.draw()
+}
+
+fn already() -> i64 throws {
+    eprintln("e")
+    return 1
+}
+
+fn calls_already() -> i64 throws {
+    return already()
+}
+
+fn each(items: Vec[i64]) throws {
+    items.iter().for_each fn(v) { print(f"{v} ") }
+}
+
+fn generic[T]() throws {
+    println("g")
+}
+
+fn main() throws {
+    // println("in a comment") is left alone
+    uses(P { x: quiet(1) })
+    generic[i64]()
+    let n = calls_already()
+    each([n])
+}
+# A page
+
+```nika
+fn main() throws {
+    println("hi")
+}
+```
+
+```nika
+fn show(xs: Vec[i64]) throws {
+    xs.iter().for_each fn(v) { println(f"{v}") }
+}
+```
+
+```rust
+fn main() {
+    println!("hi");
+}
+```
+check: error[NK2606]: This lambda can fail, but the parameter it's passed to doesn't say `throws`.
+   --> TMP/a.nika:33:5
+    |
+ 33 |     items.iter().for_each fn(v) { print(f"{v} ") }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.
+    = help: Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.
+1 other error

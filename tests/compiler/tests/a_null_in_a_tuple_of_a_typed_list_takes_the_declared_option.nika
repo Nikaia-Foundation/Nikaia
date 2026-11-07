@@ -1,6 +1,6 @@
 // #957: a `null` part of a tuple in a list literal takes the option the
 // declared element holds there, wherever in the list it stands.
-fn main() {
+fn main() throws {
     let c: Vec[(String, String?)] = [("a", "y"), ("b", null)]
     println(f"{c.len()}")
     let d: Vec[(String?, i64)] = [(null, 1), ("y", 2)]

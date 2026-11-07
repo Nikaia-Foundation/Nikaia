@@ -20,7 +20,7 @@ grammar Interned {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let p = Peek::doc("-a;") catch {
 		println("peek: error")
 		return

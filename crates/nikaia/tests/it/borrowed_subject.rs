@@ -56,7 +56,7 @@ impl Row {{
 {body}
 }}
 
-fn main() {{
+fn main() throws {{
     let r = Row {{ name: f"a", count: 1 }}
     println(f"{{{call}}}")
 }}
@@ -137,7 +137,7 @@ fn name_of(r: Row) -> String {
     return r.name
 }
 
-fn main() {
+fn main() throws {
     let r = Row { name: f"a" }
     println(name_of(r))
 }
@@ -182,7 +182,7 @@ impl Row {
     }
 }
 
-fn main() {
+fn main() throws {
     println("x")
 }
 "#,
@@ -230,7 +230,7 @@ fn the_reference_is_written_once_whichever_way_the_source_says_it() {
              \x20   }}\n\
              }}\n\
              \n\
-             fn main() {{ println(\"x\") }}\n"
+             fn main() throws {{ println(\"x\") }}\n"
         );
         assert!(
             findings(&source).is_empty(),
@@ -340,7 +340,7 @@ impl Row {
     }
 }
 
-fn main() { println("x") }
+fn main() throws { println("x") }
 "#,
     );
     assert!(
@@ -400,7 +400,7 @@ fn a_written_ref_at_a_lending_return_is_refused() {
              \x20   {}\n\
              }}\n\
              \n\
-             fn main() {{ println(\"x\") }}\n",
+             fn main() throws {{ println(\"x\") }}\n",
             if body.contains("self") {
                 body
             } else {

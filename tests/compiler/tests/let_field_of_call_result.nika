@@ -21,7 +21,7 @@ impl Holder {
 
 fn lent_of(h: ref Holder) -> ref Held { return h.held }
 
-fn main() {
+fn main() throws {
 	let i = literal().inner
 	let s: String = i
 	println(s)

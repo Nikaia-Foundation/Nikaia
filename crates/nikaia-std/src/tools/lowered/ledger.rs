@@ -351,6 +351,9 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
     } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
         let said = value.trim();
         if said == "true" { entry.touches_a_lock = Lock::Holds; } else if said == "\"?\"" { entry.touches_a_lock = Lock::Undecided; } else { entry.touches_a_lock = Lock::No; }
+    } else if key == "panics" {
+        let said = value.trim();
+        if said == "true" { entry.panics = Panics::Yes; } else if said == "false" { entry.panics = Panics::No; } else { entry.panics = Panics::Unknown; }
     } else if key == "threads" {
         let said = value.trim();
         if said == "true" { entry.threads = Threads::May; } else if said == "false" { entry.threads = Threads::MayNot; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `threads` is `true` or `false`, not `{}`. (Leave it out if nobody knows.)", n, said)), &"function_key")); }
@@ -511,7 +514,17 @@ pub fn touch_of(written: &str) -> Result<Touch, nikaia_std::error::Thrown<Refuse
         parameter = Some(inside.trim().to_string());
     }
     if kind.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("a touch needs a resource kind, found `{}`", whole)), &"touch_of")); }
-    Ok(Touch { kind, parameter, write })
+    let mut named: Option<String> = None;
+    let between: String = nikaia_std::index::or(match parameter.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    if between.len() >= 2 && between.starts_with('\'') && between.ends_with('\'') {
+        let b: Vec<scalar> = nikaia_std::list::chars(between.chars());
+        named = Some(slice(&b, 1, b.len() as i64 - 1));
+        parameter = None;
+    }
+    Ok(Touch { kind, parameter, named, write })
 }
 
 pub fn held_of(written: &str) -> Option<Held> {

@@ -826,6 +826,16 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         return Ty::Named { name: "Vec", args: [check_core_call_named(read)], view: false }
     }
+    // **`NK2203`**: a free call inside a door's block, to something that
+    // takes a lock (ADR-281 D28), a door over several locks among them.
+    if state.inside_a_door {
+        let callee: String? = check_core_call_free_callee(world, func)
+        if callee != null {
+            let called: String = callee ?? ""
+            let holds = check_core_call_holds(world, called)
+            state.a_lock_inside_a_lock(called, holds, span)
+        }
+    }
     let mut written: String = ""
     if check_core_call_is_variable(func) {
         match func {
@@ -841,16 +851,6 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
         if written == "asset" && !state.flow.inside_a_comptime {
             state.an_asset_outside_a_comptime(span)
             return Ty::Unknown
-        }
-    }
-    // **`NK2203`**: a free call inside a door's block, to something that
-    // takes a lock (ADR-281 D28).
-    if state.inside_a_door {
-        let callee: String? = check_core_call_free_callee(world, func)
-        if callee != null {
-            let called: String = callee ?? ""
-            let holds = check_core_call_holds(world, called)
-            state.a_lock_inside_a_lock(called, holds, span)
         }
     }
     // **The callee is named and resolved before the arguments are walked**

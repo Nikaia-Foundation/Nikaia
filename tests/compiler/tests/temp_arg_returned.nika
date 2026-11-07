@@ -18,12 +18,12 @@ fn pad_left(text: String, width: i64) -> String {
     }
     return out + text
 }
-fn show(walk: ref Walk) {
+fn show(walk: ref Walk) throws {
     for site in walk.sites {
         println(f"[{pad_left(site.line.to_string(), 4)}]")
     }
 }
-fn main() {
+fn main() throws {
     let sites: Vec[Site] = [Site { line: 7 }, Site { line: 12345 }]
     let mut cells: Vec[String] = []
     for site in sites {

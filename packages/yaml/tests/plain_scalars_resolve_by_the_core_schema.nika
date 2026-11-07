@@ -24,7 +24,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -34,7 +34,7 @@ fn line(text: String) {
 	println(parts.join(" | "))
 }
 
-fn number(text: String) {
+fn number(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -51,7 +51,7 @@ fn number(text: String) {
 	println(f"{text}: {i} {x}")
 }
 
-fn float(text: String) {
+fn float(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -64,7 +64,7 @@ fn float(text: String) {
 	println(f"{text}: {x}")
 }
 
-fn main() {
+fn main() throws {
 	// strings in YAML 1.2, booleans only in 1.1
 	line("- yes\n- no\n- on\n- off\n- y\n")
 	// null

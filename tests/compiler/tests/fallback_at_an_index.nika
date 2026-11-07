@@ -6,7 +6,7 @@ fn number(maybe: i64?, list: ref Vec[i64]) -> i64 {
     let x = maybe ?? list[0]
     return x
 }
-fn main() {
+fn main() throws {
     let words: Vec[String] = ["z"]
     let numbers: Vec[i64] = [7]
     println(f"{word(null, words)} {word("a", words)} {number(null, numbers)} {number(3, numbers)}")

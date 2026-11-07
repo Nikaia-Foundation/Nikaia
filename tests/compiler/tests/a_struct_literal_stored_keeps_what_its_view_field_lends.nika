@@ -9,7 +9,7 @@ fn go(l: L, mut b: Holder) {
     b.w = W { own: l, k: 1 }
 }
 
-fn main() {
+fn main() throws {
     let l = L { n: 3, tag: "a" }
     let mut b = Holder { w: null }
     go(l, b)

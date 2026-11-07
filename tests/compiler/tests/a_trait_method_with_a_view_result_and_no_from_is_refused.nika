@@ -8,6 +8,6 @@ trait Choose {
     fn choose(a: ref String, b: ref String) -> ref String from a | b
 }
 
-fn main() {
+fn main() throws {
     println("unreached")
 }

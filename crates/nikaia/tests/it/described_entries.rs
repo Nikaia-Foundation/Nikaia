@@ -104,7 +104,7 @@ fn a_described_signature_reaches_the_type_checker() {
     let root = project("arity", Some(DESCRIPTION));
     let found = findings(
         &root,
-        "fn main() {\n    let n = fremd::zwei(1)\n    println(f\"{n}\")\n}",
+        "fn main() throws {\n    let n = fremd::zwei(1)\n    println(f\"{n}\")\n}",
     );
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1101");
@@ -120,7 +120,7 @@ fn a_described_call_hands_back_a_type() {
     let found = findings(
         &root,
         "fn zahl() -> String {\n    fremd::zwei(1, 2)\n}\n\
-         fn main() { println(zahl()) }",
+         fn main() throws { println(zahl()) }",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1104"),
@@ -136,7 +136,7 @@ fn a_described_call_that_can_fail_is_a_place_that_says_so() {
     let found = findings(
         &root,
         "fn zahl() -> i64 {\n    fremd::kann_scheitern()\n}\n\
-         fn main() { println(f\"{zahl()}\") }",
+         fn main() throws { println(f\"{zahl()}\") }",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1104"),
@@ -180,7 +180,7 @@ fn an_undescribed_crate_is_refused_and_asked_nothing() {
     let root = project("absent", None);
     let found = findings(
         &root,
-        "fn main() {\n    let n = fremd::zwei(1)\n    println(f\"{n}\")\n}",
+        "fn main() throws {\n    let n = fremd::zwei(1)\n    println(f\"{n}\")\n}",
     );
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK2504");
@@ -199,7 +199,7 @@ fn a_described_crate_is_not_something_to_import_from_std() {
     let root = project("import", Some(DESCRIPTION));
     let found = findings(
         &root,
-        "fn main() {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}",
+        "fn main() throws {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}",
     );
     assert!(
         found.is_empty(),
@@ -240,7 +240,7 @@ fn a_description_is_believed_while_its_hashes_hold() {
     )
     .expect("write the description");
 
-    let calls = "fn main() {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}";
+    let calls = "fn main() throws {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}";
     assert!(
         foreign_of(&root).moved.is_empty(),
         "the hash holds, so nothing has moved"
@@ -289,7 +289,7 @@ fn a_description_with_no_hash_to_compare_is_not_refused() {
     assert!(foreign_of(&root).moved.is_empty());
     let found = findings(
         &root,
-        "fn main() {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}",
+        "fn main() throws {\n    let n = fremd::zwei(1, 2)\n    println(f\"{n}\")\n}",
     );
     assert!(found.is_empty(), "{found:#?}");
 }
@@ -333,13 +333,13 @@ fn a_view_crosses_to_a_described_view_and_is_refused_where_the_crate_keeps() {
     let root = project("text-crosses", Some(TEXT));
     let read = findings_keeping(
         &root,
-        "fn main() {\n    let line = \"  a b  \"\n    let n = fremd::zaehle(line.trim())\n    let m = fremd::behalte(f\"{n}\")\n    println(f\"{n} {m}\")\n}",
+        "fn main() throws {\n    let line = \"  a b  \"\n    let n = fremd::zaehle(line.trim())\n    let m = fremd::behalte(f\"{n}\")\n    println(f\"{n} {m}\")\n}",
     );
     assert!(read.is_empty(), "{read:#?}");
     let kept = findings(
         &root,
         "fn count(text: ref String) -> i64 {\n    return fremd::behalte(text.trim())\n}\n\
-         fn main() {\n    let n = count(\"x\")\n    println(f\"{n}\")\n}",
+         fn main() throws {\n    let n = count(\"x\")\n    println(f\"{n}\")\n}",
     );
     assert!(
         kept.iter().any(|f| f.code == "NK1102"
@@ -363,7 +363,7 @@ fn the_sync_inference_reads_the_descriptions() {
             format!(
                 "fn plain() -> i64 {{\n    return fremd::{callee}\n}}\n\n\
                  fn caller() -> i64 sync {{\n    return plain()\n}}\n\n\
-                 fn main() {{\n    println(f\"{{caller()}}\")\n}}\n"
+                 fn main() throws {{\n    println(f\"{{caller()}}\")\n}}\n"
             ),
         )
         .expect("the source");

@@ -13,7 +13,7 @@ fn either(a: collections::BTreeMap[String, E], b: collections::BTreeMap[String, 
     return found.n * 10 + found.tags.len()
 }
 
-fn main() {
+fn main() throws {
     let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
     a.insert("j", E { n: 4, tags: ["j"] })
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()

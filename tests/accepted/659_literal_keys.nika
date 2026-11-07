@@ -2,7 +2,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
     m.insert("a", 1)
     m.insert("b", 2)

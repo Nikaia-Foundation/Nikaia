@@ -1,6 +1,6 @@
 // A `ref mut self` call on an `immutable` is refused (ADR-389 D2).
 
-fn main() {
+fn main() throws {
 	immutable items: Vec[i64] = [1, 2]
 	items.push(3)
 	println(f"{items.len()}")

@@ -18,7 +18,7 @@ fn both(p: Point) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     let p = Point { x: 3, y: 4 }
     println(f"{first(p)} {both(p)}")
     let q = p with { x: 5, y: 6 }

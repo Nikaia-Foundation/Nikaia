@@ -4,7 +4,7 @@
 // lookup's tuple holds it too: `let other: String`.
 use std::collections
 
-fn main() {
+fn main() throws {
     let n = 1
     let mut set: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     set.insert((1, f"lhs{n}"))

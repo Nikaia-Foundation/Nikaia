@@ -19,7 +19,7 @@ fn shown(b: ref compiler_tests::Branching) -> String {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut b = compiler_tests::Branching::Fork {
 		left: compiler_tests::Branching::Leaf(1),
 		right: compiler_tests::Branching::Leaf(2),

@@ -21,7 +21,7 @@ fn label(s: String) -> Label {
     return Label { name: s }
 }
 
-fn main() {
+fn main() throws {
     let t: String? = "x"
     println(text_of(t))
     println(text_of(t))

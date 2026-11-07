@@ -2,7 +2,7 @@
 // that pauses stops at its pause, and its group does not wait for its rest.
 use std::time
 
-fn slow(n: i64) -> i64 {
+fn slow(n: i64) -> i64 throws {
 	time::sleep(1.millis())
 	println(f"slow {n} ended")
 	return n

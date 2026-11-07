@@ -1,0 +1,9 @@
+error[NK1140]: `File::drop` says `throws`, but a `drop` cannot fail.
+  --> tests/drop_that_throws_is_refused.nika:7:5
+   |
+ 7 |     fn drop(mut self) throws {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `drop` also runs while a panic unwinds or a task is cancelled, and there no failure can come out (Part I 6.4).
+   = help: Handle the failure in the body (`… catch { }`), or move teardown that can fail to `impl Cleanup for File { fn cleanup(ref mut self) throws { … } }`.
+1 type error

@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let p = (1, -2)
     println(f"{p.0} {p.1}")
     let q = (1, "a")

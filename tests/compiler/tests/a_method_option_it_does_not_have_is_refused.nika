@@ -10,7 +10,7 @@ impl P {
     }
 }
 
-fn main() {
+fn main() throws {
     let p = P { n: 1 }
     println(f"{p.get(extra: 1)} {p.get(extar: 2)}")
 }

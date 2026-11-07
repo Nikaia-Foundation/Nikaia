@@ -102,7 +102,7 @@ fn parse(text: String) -> String {
     return show(v)
 }
 
-fn main() {
+fn main() throws {
     // nested mappings and sequences
     println(parse("name: winnow\ntags:\n  - parser\n  - grammar\nowner:\n  login: keywan\n  repos:\n    - a\n    - b\n"))
     // the indentation is the first line's: four spaces as well as two

@@ -14,7 +14,7 @@ grammar G {
 		if(f(1, 2), "a node its tag fits") eof -> { 2 }
 }
 
-fn main() {
+fn main() throws {
 	let input = Bytes([])
 	let r = G::top(input) catch {
 		println("error")

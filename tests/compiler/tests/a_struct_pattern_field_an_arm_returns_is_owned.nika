@@ -16,7 +16,7 @@ fn list_of(s: Listed) -> Vec[String] {
     }
 }
 
-fn main() {
+fn main() throws {
     println(name_of(Named { name: "a" }))
     println(list_of(Listed { xs: ["b", "c"] }).len())
 }

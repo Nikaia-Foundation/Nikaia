@@ -34,7 +34,7 @@ fn total(e: ref Expr) -> i64 {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut e = Expr::Add {
 		lhs: Expr::Num(1),
 		rhs: Expr::Call { args: [Expr::Num(2), Expr::Num(3)] },

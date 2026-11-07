@@ -22,7 +22,7 @@ fn either(ask: Ask, name: String) -> i64 {
     return found.n * 10 + found.tags.len()
 }
 
-fn main() {
+fn main() throws {
     let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
     a.insert("j", E { n: 4, tags: ["j"] })
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()

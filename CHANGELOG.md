@@ -8,6 +8,41 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1357] — 2026-11-07
+
+**Writing output can fail: println, print, eprintln and eprint throw io::IoError and never panic (ADR-392, #1360)**
+- ADR-392 (owner): the four print functions throw `io::IoError` when the write fails; a function that prints says `throws` or catches, `main` included (NK2605); a closed pipe ends the program with status 1 and the error's message.
+- `nikaia migrate print-throws PATH...` adds `throws` to every function that prints and to the callers the failure reaches; a printing lambda handed to a parameter that cannot fail is reported, not swallowed. The repository is moved with it.
+- A `drop` cannot fail: one that says `throws` is refused (NK1140), a failing call in it is caught there; teardown that can fail is a `Cleanup`.
+- Typed error channels meet function values, overlaps, rethrows and fatal sums; an async group whose tasks all have a fallback lowers in a function whose channel holds no crash.
+- A false precondition beside a print is still NK1207 with its value; two overlap branches that both print are NK2104 again.
+
+## [0.0.1356] — 2026-11-07
+
+**A task's crash is a failure only where the task can panic: the panics column (ADR-async-5 D35, #1355)**
+- ADR-async-5 D35 (owner): whether a function can panic is inferred like its throw set; a proved check is no panic site; the ledger records `panics`, and `?` counts as yes.
+- std's hand-written entries say whether they can panic (611 of 633).
+- A function declared `throws` whose only failure is a task's crash lowers its group; its caller catches `task::Crashed`.
+- Left open: the checker and lowering parts of D35 (#1355).
+
+## [0.0.1355] — 2026-11-07
+
+**Trust: standard input and file reads are untrusted unless the call says trusted: true (ADR-365, #649)**
+- `io::read`, `io::read_to_string`, `io::lines` and the `fs` reads are untrusted: an `assert` on their data is NK1202 until a guard handles the bad case; a literal `trusted: true` makes the read trusted, and `--trust` lists its place.
+- A map keyed by file data gets the keyed hash unless the read says `trusted: true`; the benches and examples that read their own data say so.
+- Left open: the marker's record in the ledger and method sources (#1357).
+
+## [0.0.1354] — 2026-11-07
+
+**Locks: NK2203 for update, access_all and update_all inside a door, and for an async form there (#677)**
+- `update`, `access_all` and `update_all` opened inside another door's block are refused with NK2203, as `get`, `set` and `access` were; their std entries say `locks = true`.
+- An `async` form (not a detached one) inside a door is refused with NK2203; Part III C.6 says "an async form" where it said "a scope".
+
+## [0.0.1353] — 2026-11-07
+
+**Tasks: a callee's write of a file named by a literal reaches the caller's task (#1354)**
+- Two async tasks that write one file through a function they call are refused with NK2104, naming the file; a touch named by a parameter is mapped onto the literal the call passes, and the ledger writes it as `file('a.txt') write` (Part III 13.5).
+- A task's uncaught failure no longer makes the statements beside it unaccounted for: what runs beside it has already run.
 ## [0.0.1352] — 2026-11-07
 
 **Builders' changes (#1340, #1351, #1352, #1366)**

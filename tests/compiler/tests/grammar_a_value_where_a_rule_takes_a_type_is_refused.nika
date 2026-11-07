@@ -5,7 +5,7 @@ grammar Num {
 	entry rule read[T] -> T = d:dec[T](digit+) eof -> { d }
 }
 
-fn main() {
+fn main() throws {
 	let n: i64 = Num::read[42](Bytes("7".bytes().collect())) catch {
 		println("error")
 		return

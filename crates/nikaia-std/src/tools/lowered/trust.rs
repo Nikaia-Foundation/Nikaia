@@ -43,6 +43,19 @@ pub(crate) fn ends_with_variant(names: &winnow_grammar::InternerContext, segment
 pub struct Reason {
     pub source: String,
     pub untrusted: bool,
+    pub marked_at: String,
+}
+
+pub fn says_trusted(names: &winnow_grammar::InternerContext, config: &[ConfigArg]) -> bool {
+    for option in config.iter() {
+        if names.resolve(option.name) == "trusted" {
+            return match &option.value {
+                Expr::LitBool(value, _) => { let value = *value; value },
+                _ => false,
+            };
+        }
+    }
+    false
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +69,7 @@ pub struct Place {
 pub fn render(untrusted: bool, reasons: &[Reason], places: &[Place], path: &str) -> String {
     let mut out = format!("input provenance: {}\n", provenance(untrusted));
     if reasons.is_empty() { out.push_str("    no source is read, so nothing entered from outside\n"); }
-    for reason in reasons.iter() { out.push_str(&format!("    {} is {}\n", reason.source, provenance(reason.untrusted))); }
+    for reason in reasons.iter() { if reason.marked_at.is_empty() { out.push_str(&format!("    {} is {}\n", reason.source, provenance(reason.untrusted))); } else { out.push_str(&format!("    {} is {}: `trusted: true` at {}\n", reason.source, provenance(reason.untrusted), reason.marked_at)); } }
     let hash = if untrusted { "keyed, per-process random seed - key choice cannot be aimed at the table" } else { "fast, fixed seed - no adversary chooses these keys" };
     out.push_str(&format!("hash for a map keyed by the input: {}\n", hash));
     out.push_str("file access with no root to check against:\n");
@@ -180,7 +193,11 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
     let mut env = MapEnv { sources: collections::BTreeSet::new(), own: collections::BTreeSet::new(), privates: collections::BTreeMap::new() };
     for (key, contract) in library.functions.iter() {
         let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if provenance == Provenance::Untrusted {
+        let a_method = nikaia_std::index::or(match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.takes_a_receiver()),
+            None => None,
+        }, || true);
+        if provenance == Provenance::Untrusted && a_method {
             let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
             env.sources.insert((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
         }
@@ -710,7 +727,7 @@ pub(crate) fn tm_call_deps(func: &Expr, args: &[Expr], config: &[ConfigArg], wor
     let contract = match *nikaia_std::index::get(&library.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return tm_never() };
     if contract.provenance.is_some() {
         let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => return tm_never() };
-        if provenance == Provenance::Trusted { return tm_nothing(); }
+        if provenance == Provenance::Trusted || says_trusted(words, config) { return tm_nothing(); }
         return tm_never();
     }
     let mut all = tm_all_deps(args, words, library, env, walk);

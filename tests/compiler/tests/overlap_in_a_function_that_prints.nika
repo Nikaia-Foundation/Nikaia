@@ -1,0 +1,40 @@
+// ADR-292 D8, ADR-392, #1360: a function that prints fails with
+// `io::IoError` beside its own error, so the channel its `overlap` joins the
+// branches' failures in is a sum; the first failure still wins.
+enum LoadError {
+    Missing(String),
+}
+
+impl Error for LoadError {
+    fn message(ref self) -> String {
+        match self {
+            LoadError::Missing(w) => { return f"{w} is missing" }
+        }
+    }
+}
+
+fn load(which: String) -> String throws {
+    if which == "a" {
+        throw LoadError::Missing(which)
+    }
+    return which
+}
+
+fn main() throws {
+    let pair = overlap {
+        load("c")
+        load("d")
+    }
+    println(f"{pair.0} {pair.1}")
+    let failed = overlap {
+        load("a")
+        load("e")
+    } catch {
+        match error {
+            LoadError::Missing(w) => println(f"{w} caught"),
+            else => println("other"),
+        }
+        return
+    }
+    println(f"{failed.0} {failed.1}")
+}

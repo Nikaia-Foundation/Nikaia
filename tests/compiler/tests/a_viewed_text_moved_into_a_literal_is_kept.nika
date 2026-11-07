@@ -6,7 +6,7 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-fn show(p: Piece) {
+fn show(p: Piece) throws {
     match p {
         Piece::Word(s) => println(s)
         Piece::Gap => println("gap")
@@ -16,7 +16,7 @@ fn show(p: Piece) {
 // ADR-views-3 D9 (#942): a text that a live view reads, moved into a literal
 // whose position only reads it, is kept where it is and the position views
 // it: a struct, a tuple, a list, a variant, and a text moved on first.
-fn main() {
+fn main() throws {
     let n = 1
     let a = f"struct: {n}"
     let va = parse(a)

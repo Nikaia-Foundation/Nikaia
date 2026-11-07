@@ -28,7 +28,7 @@ impl Columns {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut beside = compiler_tests::MutLentColumns { vars: compiler_tests::MutLentVars { names: [] } }
 	println(f"{beside.diff("a")} {beside.diff("b")}")
 	let mut here = Columns { vars: Vars { names: [], kind: Kind::B } }

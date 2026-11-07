@@ -628,7 +628,7 @@ impl EmitState {
                     if ty.contains("::") { continue; }
                     let mut tested = EmitOut::empty();
                     self.emit_core_pattern_written(world, walk, &mut tested, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
-                    out.push(&format!("{}#[allow(unused_variables)] crate::{}::{}(error) if nikaia_std::error::handed::<{}>(error.held()).is_some_and(|error| matches!(error, ", pad, sum, variant, ty));
+                    out.push(&format!("{}#[allow(unused_variables)] {}{}::{}(error) if nikaia_std::error::handed::<{}>(error.held()).is_some_and(|error| matches!(error, ", pad, self.sum_root(), sum, variant, ty));
                     out.append(&tested);
                     out.push(&format!(")) => {{ let error = nikaia_std::error::opened::<{}>(Box::new(error.split().0)); #[allow(unreachable_patterns)] match error {{\n{}", ty, inner));
                     self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
@@ -637,7 +637,7 @@ impl EmitState {
                     out.push(&format!(",\n{}_ => unreachable!(\"the guard asked\"),\n{}}} }},\n", inner, pad));
                 }
             }
-            if own { out.push(&format!("{}crate::{}::{}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n", pad, sum, variant)); } else { out.push(&format!("{}crate::{}::{}(error) => match error {{\n", pad, sum, variant)); }
+            if own { out.push(&format!("{}{}{}::{}(error) => {{ let (error, __nikaia_site) = error.split(); match error {{\n", pad, self.sum_root(), sum, variant)); } else { out.push(&format!("{}{}{}::{}(error) => match error {{\n", pad, self.sum_root(), sum, variant)); }
             for pass in 0..2 {
                 let mut k: i64 = 0;
                 for arm in arms.iter() {

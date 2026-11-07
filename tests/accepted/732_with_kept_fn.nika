@@ -16,9 +16,9 @@ fn worse() throws {
     throw Boom::Bang
 }
 fn quiet() {
-    println("quiet")
+    println("quiet") catch {}
 }
-fn main() {
+fn main() throws {
     let job = Job { run: fail, name: "first" }
     let other = job with { run: worse }
     other.run() catch {

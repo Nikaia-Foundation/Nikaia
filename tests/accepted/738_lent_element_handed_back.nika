@@ -14,7 +14,7 @@ fn either_return(v: ref Vec[String], c: bool) -> String? { if c { return v[0] }
 fn either_tail(v: ref Vec[String], c: bool) -> String? { if c { return own(v[0]) }
 	v[1] }
 pub fn published(v: ref Vec[String]) -> String { return v[0] }
-fn main() {
+fn main() throws {
 	let v = [f"a{1}", f"b{2}"]
 	let s = Shelf { items: [f"c{3}", f"d{4}"] }
 	println(first(v))

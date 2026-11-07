@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let v: Vec[i64] = [1, 2]
     for mut (i, x) in v.iter().enumerate() {
         println(f"{i} {x}")

@@ -7,7 +7,7 @@ fn sum(xs: Array[u32]) -> u32 {
     return s
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[u32] = [1, 2, 3, 4]
     let n = v.len() + 2
     println(f"{sum(v[1..<n])}")

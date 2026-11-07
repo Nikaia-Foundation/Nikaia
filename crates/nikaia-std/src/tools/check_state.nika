@@ -865,6 +865,9 @@ pub struct CheckState {
     /// needs the rule's name, because a grammar is a page of rules and a caret
     /// on a call inside one is not enough to find it.
     pub inside_an_action: String?,
+    /// Whether the methods walked are an `impl Drop`'s: a `drop` cannot fail
+    /// (Part I 6.4), so `NK2605` there does not tell it to add `throws`.
+    pub inside_a_drop: bool,
     /// The name of the enclosing function, where its declaration **writes**
     /// `sync` ([ADR-288](../../docs/specification/adr/adr-288.md) D4: an
     /// assertion is checked, never overwritten).

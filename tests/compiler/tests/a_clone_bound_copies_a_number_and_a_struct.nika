@@ -9,7 +9,7 @@ fn id[T: Clone](x: T) -> T {
 	return x.clone()
 }
 
-fn main() {
+fn main() throws {
 	let a = id(3)
 	let p = id(P { s: "x" })
 	println(f"{a}")

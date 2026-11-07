@@ -1,14 +1,14 @@
 struct Holder { sep: String }
 
-fn pieces(line: String, sep: String) {
+fn pieces(line: String, sep: String) throws {
     for p in line.split(sep) { println(p) }
 }
 
-fn lent(line: String, sep: ref String) {
+fn lent(line: String, sep: ref String) throws {
     for p in line.split(sep) { println(p) }
 }
 
-fn main() {
+fn main() throws {
     let name = "f"
     let line = "a f(x) b"
     let sep = name + "("

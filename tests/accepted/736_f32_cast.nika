@@ -2,7 +2,7 @@
 // integer into an `f32`, an `f32` into an `f64` and into an integer, a float
 // written out into an `f32`, and an `f64` within the `f32` range.
 
-fn main() {
+fn main() throws {
     let x: i64 = 3
     let n: i32 = 7
     let b: u8 = 200

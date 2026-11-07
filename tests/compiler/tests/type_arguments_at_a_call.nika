@@ -10,7 +10,7 @@ fn pick[T](n: i64) -> String {
     return f"{T::name} {n}"
 }
 
-fn main() {
+fn main() throws {
     println(pick[User](1))
     println(pick[i64](2))
 }

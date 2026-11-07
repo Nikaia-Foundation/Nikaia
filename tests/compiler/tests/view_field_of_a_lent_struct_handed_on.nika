@@ -10,7 +10,7 @@ fn again(w: ref Word) -> Word {
 	return Word { start: w.start + 1, text: w.text }
 }
 
-fn main() {
+fn main() throws {
 	let s = " hello "
 	let w = word_of(s)
 	let v = again(w)

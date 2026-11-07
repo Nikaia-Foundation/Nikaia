@@ -230,7 +230,7 @@ fn rules_into(def: ref GrammarDef, names: ref winnow_grammar::InternerContext, w
 fn reached_by(seen: ref Vec[Seen], program: ref Program, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: Reach) {
     for one in seen {
         match one {
-            Seen::Call { name, .. } => reached_call(callee_named(names, name.clone(), own, library, program.items), library, reach),
+            Seen::Call { name, literals, .. } => reached_call(callee_named(names, name.clone(), own, library, program.items), literals, library, reach),
             Seen::Spawn { .. } => {
                 reach.unknown = true
             }
@@ -242,13 +242,13 @@ fn reached_by(seen: ref Vec[Seen], program: ref Program, names: ref winnow_gramm
     }
 }
 
-fn reached_call(callee: ref Callee?, library: ref Ledger, mut reach: Reach) {
+fn reached_call(callee: ref Callee?, literals: ref Vec[String?], library: ref Ledger, mut reach: Reach) {
     let known = callee ?? return
     match known {
         Callee::Own(name) => {
             reach.calls.insert(name.clone())
         }
-        Callee::Library { key, .. } => absorb(library.functions[key], reach),
+        Callee::Library { key, .. } => absorb(library.functions[key], literals, reach),
         Callee::Opaque(_) => {
             reach.unknown = true
         }
@@ -267,16 +267,17 @@ fn methods_reach(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Led
         if own.functions.contains_key(callee) {
             reach.calls.insert(callee.clone())
         } else {
-            absorb(library.functions[callee], reach)
+            absorb(library.functions[callee], [], reach)
         }
     }
 }
 
 // Take a described callee's touch set into a caller's, or give up. A resource
-// named by a **parameter** is named in the callee's words: until a caller's
-// argument can be mapped onto it, inheriting the name would be claiming
-// something about the wrong resource.
-fn absorb(contract: ref FnContract?, mut reach: Reach) {
+// named by a **parameter** is named in the callee's words: the caller reaches
+// the resource its argument names where that argument is a text literal
+// (`literals`, by the call's argument; #1354), and anything else would be
+// claiming something about the wrong resource.
+fn absorb(contract: ref FnContract?, literals: ref Vec[String?], mut reach: Reach) {
     if !touches_said(contract) {
         reach.unknown = true
         return
@@ -284,11 +285,44 @@ fn absorb(contract: ref FnContract?, mut reach: Reach) {
     let known = contract ?? return
     for touch in known.touches {
         if touch.parameter != null {
-            reach.unknown = true
+            let named = literal_for(known, touch.parameter ?? "", literals) ?? ""
+            if named.len() == 0 {
+                reach.unknown = true
+                continue
+            }
+            let mine = Touch { kind: touch.kind.clone(), parameter: null, named: named, write: touch.write }
+            if !holds_touch(reach.outside, mine) {
+                reach.outside.push(mine)
+            }
         } else if !holds_touch(reach.outside, touch) {
             reach.outside.push(touch.clone())
         }
     }
+}
+
+// The literal a call by name hands the parameter `parameter`, where it is one
+// a ledger can write back (no `"`, `\` or line break in it). A method's
+// `self` may or may not be among the arguments, so a method gives none.
+fn literal_for(contract: ref FnContract, parameter: ref String, literals: ref Vec[String?]) -> String? {
+    let signature = contract.signature ?? return null
+    let mut at = 0
+    for (name, _) in signature.params {
+        if name == "self" {
+            return null
+        }
+        if name == parameter {
+            if at >= literals.len() {
+                return null
+            }
+            let text = literals[at]?.clone() ?? return null
+            if text.contains("\"") || text.contains("\\") || text.contains("\n") {
+                return null
+            }
+            return text
+        }
+        at += 1
+    }
+    return null
 }
 
 fn touches_said(contract: ref FnContract?) -> bool {
@@ -296,10 +330,11 @@ fn touches_said(contract: ref FnContract?) -> bool {
     return known.touches_known
 }
 
-// A touch named by no parameter is its kind and whether it writes.
+// A touch named by no parameter is its kind, the resource a literal named, and
+// whether it writes.
 fn holds_touch(touches: ref Vec[Touch], touch: ref Touch) -> bool {
     for one in touches {
-        if one.kind == touch.kind && one.write == touch.write {
+        if one.kind == touch.kind && one.named == touch.named && one.write == touch.write {
             return true
         }
     }
@@ -313,7 +348,7 @@ fn touch_test_reached(kind: String, named: String?, write: bool) -> Reached {
 }
 
 test "a touch round trips through its text" {
-    for written in ["file(path) read", "file(path) write", "stdout write", "stderr write", "args read"] {
+    for written in ["file(path) read", "file(path) write", "file('a.txt') write", "stdout write", "stderr write", "args read"] {
         let touch = touch_of(written) catch {
             assert(false)
             return

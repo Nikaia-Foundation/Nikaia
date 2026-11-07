@@ -50,7 +50,7 @@ fn a_member_off_a_map_read_is_refused() {
     let found: Vec<_> = findings(
         "use std::collections\n\
          struct Stats { min: i64 }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut m = collections::HashMap()\n\
          \x20   m[\"a\"] = Stats { min: 1 }\n\
          \x20   let s = m[\"a\"]\n\
@@ -71,7 +71,7 @@ fn a_view_of_a_map_read_is_still_nullable() {
     let found: Vec<_> = findings(
         "use std::collections\n\
          struct Stats { min: i64 }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut m = collections::HashMap()\n\
          \x20   m[\"a\"] = Stats { min: 1 }\n\
          \x20   let s = ref m[\"a\"]\n\
@@ -156,7 +156,7 @@ fn a_compound_write_to_a_list_is_left_alone() {
 #[test]
 fn panic_ends_the_program_at_the_nikaia_line() {
     let source = "use std::collections\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let mut m = collections::HashMap()\n\
                   \x20   m[\"a\"] = 1\n\
                   \x20   let n = m[\"b\"] ?? panic(f\"b was a key a moment ago\")\n\
@@ -196,7 +196,7 @@ fn a_map_read_off_a_caught_value_is_refused() {
          pub struct Counts { hits: i64 }\n\
          pub struct Report { paths: collections::HashMap[ref String, Counts] }\n\
          fn load() -> Report throws { return Report { paths: collections::HashMap() } }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let report = load() catch { return }\n\
          \x20   let counts = report.paths[\"a\"]\n\
          \x20   println(f\"{counts.hits}\")\n\
@@ -218,7 +218,7 @@ fn a_map_read_off_a_caught_value_is_refused() {
 fn a_read_of_a_map_whose_values_are_unknown_names_no_operator() {
     let found: Vec<_> = findings(&format!(
         "use std::collections\n\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let s = \"x\"\n\
          \x20   let mut m = collections::HashMap()\n\
          \x20   m.insert(\"a\", {})\n\
@@ -259,7 +259,7 @@ fn label(k: ref Kind?) -> String {
         Kind::B => \"b\",
     }
 }
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[i64, Kind?] = collections::BTreeMap()
     m[1] = Kind::A
     m[2] = null
@@ -293,7 +293,7 @@ fn a_map_read_kept_is_copied_out_or_refused() {
     let refused = "\
 use std::collections
 struct User { name: String }
-fn main() {
+fn main() throws {
     let mut users: collections::BTreeMap[i64, User?] = collections::BTreeMap()
     users[1] = User { name: \"Ann\" }
     let u: User? = users[1]
@@ -322,7 +322,7 @@ use std::collections
 fn count(items: ref Vec[String]) -> i64 {
     return items.len()
 }
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     m[\"a\"] = [\"x\", \"y\"]
     let none: Vec[String] = []
@@ -353,7 +353,7 @@ fn pick(all: ref collections::BTreeMap[String, Named], key: ref String) -> i64 {
     chosen = all[key] ?? return -1
     return chosen.name.len()
 }
-fn main() {
+fn main() throws {
     let all: collections::BTreeMap[String, Named] = collections::BTreeMap()
     println(f\"{pick(all, \"a\")}\")
 }
@@ -379,7 +379,7 @@ fn pick(all: ref collections::BTreeMap[String, Named], key: ref String) -> i64 {
     let chosen: Named = all.get(key) ?? return -1
     return chosen.name.len()
 }
-fn main() {
+fn main() throws {
     let all: collections::BTreeMap[String, Named] = collections::BTreeMap()
     println(f\"{pick(all, \"a\")}\")
 }
@@ -465,7 +465,7 @@ fn either(ask: ref Ask, name: String) -> bool {
     return found.tags.len() > 0
 }
 
-fn main() {
+fn main() throws {
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
     b.insert(\"k\", E { n: 3, tags: [\"x\"] })
     let ask = Ask { own: L { types: collections::BTreeMap() }, library: L { types: b } }
@@ -498,7 +498,7 @@ fn either(a: ref collections::BTreeMap[String, E], b: ref collections::BTreeMap[
     return found.tags.len() > 0
 }
 
-fn main() {
+fn main() throws {
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
     b.insert(\"k\", E { n: 3, tags: [\"x\"] })
     let a: collections::BTreeMap[String, E] = collections::BTreeMap()
@@ -526,7 +526,7 @@ fn total(own: ref L, library: ref L, names: ref Vec[String]) -> i64 {
     return sum
 }
 
-fn main() {
+fn main() throws {
     let mut a: collections::BTreeMap[String, E] = collections::BTreeMap()
     a.insert(\"j\", E { n: 4, tags: [] })
     let mut b: collections::BTreeMap[String, E] = collections::BTreeMap()
@@ -561,7 +561,7 @@ fn either(a: collections::BTreeMap[String, i64], b: collections::BTreeMap[String
     return found
 }
 
-fn main() {
+fn main() throws {
     let mut a: collections::BTreeMap[String, i64] = collections::BTreeMap()
     a.insert(\"j\", 4)
     let mut b: collections::BTreeMap[String, i64] = collections::BTreeMap()
@@ -583,7 +583,7 @@ fn twice(n: i64) -> i64 {
     return 2 * n
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[i64] = [10, 20, 30]
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
     m.insert(\"a\", 2)

@@ -5,7 +5,7 @@ fn longest(a: ref String, b: ref String) -> ref String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let x = "ab"
     let mut y = "short"
     let r = longest(x, y)

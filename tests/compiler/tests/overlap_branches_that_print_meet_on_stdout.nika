@@ -1,0 +1,10 @@
+// Two `overlap` branches that both print meet on stdout and are refused
+// (NK2104), though each print can fail (ADR-392): a branch's failure is the
+// block's to combine (ADR-292 D11), so it does not hide what the branch
+// touches.
+fn main() throws {
+    overlap {
+        println("x")
+        println("y")
+    }
+}

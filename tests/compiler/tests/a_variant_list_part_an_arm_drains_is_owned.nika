@@ -14,7 +14,7 @@ fn g(e: E) -> Vec[String] {
     return out
 }
 
-fn main() {
+fn main() throws {
     println(g(E::A(["a", "b"])).join(","))
     println(g(E::N).len())
 }

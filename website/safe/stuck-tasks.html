@@ -21,9 +21,9 @@ description: >-
           <dt>An example</dt>
           <dd>Two account transfers each hold a lock the other needs. Neither can continue.</dd>
           <dt>What Nikaia checks</dt>
-          <dd>A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</dd>
+          <dd>A task that pauses while it holds a lock is rejected, since everyone who needs that value would wait too. So is a lock taken while another is held, written in the block, reached through a chain of calls, or in a task the block waits for. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</dd>
           <dt>The limit</dt>
-          <dd>Nikaia does not yet reject a lock taken inside another lock when you write it by hand, so using <code>update_all</code> for several locks is up to you. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</dd>
+          <dd>Where a call's code is not known, such as a function handed in as a parameter, the compiler cannot tell whether it takes a lock and does not refuse it; the check while the program runs covers that case. And not every possible deadlock can be ruled out in every situation; where the analysis cannot decide, it does not claim the problem is solved.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>
@@ -61,7 +61,7 @@ fn main() throws {
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
-      <ul><li><a href="{{ "/docs/specification/adr/adr-281.html" | relative_url }}">ADR-281: locks without deadlocks</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II 12.3: atomic composition</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/677">Issue #677: a lock inside a lock is not refused yet</a></li></ul>
+      <ul><li><a href="{{ "/docs/specification/adr/adr-281.html" | relative_url }}">ADR-281: locks without deadlocks</a></li><li><a href="{{ "/docs/specification/20-nikaia-advance.html" | relative_url }}">Specification, Part II 12.3: atomic composition</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/677">Issue #677: a lock inside a lock is refused</a></li></ul>
     </div>
     <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a><a href="{{ "/safe/outside-data.html" | relative_url }}">Data from outside</a><a href="{{ "/safe/deadlines.html" | relative_url }}">A deadline for every wait</a></p>
   </div>

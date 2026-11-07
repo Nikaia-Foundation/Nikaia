@@ -15,7 +15,7 @@ impl Bag {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut m: collections::BTreeMap[String, (i64, i64)] = collections::BTreeMap()
 	m.insert("a", (1, 2))
 	let mut h: collections::HashMap[String, (i64, String)] = collections::HashMap()

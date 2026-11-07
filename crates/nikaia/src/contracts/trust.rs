@@ -56,6 +56,11 @@ pub struct Reason {
     /// The source, as the ledger names it.
     pub source: String,
     pub provenance: Provenance,
+    /// Where a call wrote `trusted: true`
+    /// ([ADR-365](../../../docs/specification/adr/adr-365.md) D2): `None`
+    /// where the ledger's provenance is the answer, `Some(None)` for a call in
+    /// another file of the package, `Some(Some(span))` for one in this file.
+    pub marked: Option<Option<Span>>,
 }
 
 /// One call that wrote a root the review wants to see
@@ -132,19 +137,39 @@ fn join(
     for file in package {
         let own_file = only.is_none_or(|only| std::ptr::eq(*file, only));
         for seen in crate::foreign::seen(file, &root_at) {
-            let crate::foreign::Seen::Call { name, wrote, span } = seen else {
+            let crate::foreign::Seen::Call {
+                name,
+                wrote,
+                span,
+                trusted,
+                ..
+            } = seen
+            else {
                 continue;
             };
             let Some((key, contract)) = library.lookup(&name) else {
                 continue;
             };
-            if let Some(provenance) = contract.provenance
-                && !reasons.iter().any(|r| r.source == key)
-            {
-                reasons.push(Reason {
-                    source: key.clone(),
-                    provenance,
-                });
+            // **`trusted: true` at the call** (ADR-365 D2): the operator chose
+            // these bytes, whatever the ledger says of the source.
+            if let Some(provenance) = contract.provenance {
+                let (provenance, marked) = if trusted {
+                    (Provenance::Trusted, Some(own_file.then_some(span)))
+                } else {
+                    (provenance, None)
+                };
+                let same = |r: &Reason| {
+                    r.source == key
+                        && r.provenance == provenance
+                        && r.marked.is_some() == marked.is_some()
+                };
+                if !reasons.iter().any(same) {
+                    reasons.push(Reason {
+                        source: key.clone(),
+                        provenance,
+                        marked,
+                    });
+                }
             }
             if let Some(wrote) = wrote
                 && own_file
@@ -187,6 +212,7 @@ fn join(
                 reasons.push(Reason {
                     source: key,
                     provenance,
+                    marked: None,
                 });
             }
         }
@@ -195,6 +221,7 @@ fn join(
         reasons.push(Reason {
             source: UNRESOLVED.to_string(),
             provenance: Provenance::Untrusted,
+            marked: None,
         });
     }
 
@@ -232,6 +259,14 @@ pub fn render(trust: &Trust, path: &str, source: &str) -> String {
         .map(|r| nika::Reason {
             source: r.source.clone(),
             untrusted: r.provenance == Provenance::Untrusted,
+            marked_at: match &r.marked {
+                None => String::new(),
+                Some(None) => "a call in another file of this package".to_string(),
+                Some(Some(span)) => format!(
+                    "{path}:{}",
+                    winnow_grammar::span::line_column(source, span.at()).0
+                ),
+            },
         })
         .collect();
     // **A site is a line and a column**, counted here where the source is:

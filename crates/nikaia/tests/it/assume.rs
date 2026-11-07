@@ -22,7 +22,7 @@ const PICK: &str = "use std::cli\n\
                     \x20   return xs[i]\n\
                     }\n\
                     \n\
-                    fn main() {\n\
+                    fn main() throws {\n\
                     \x20   let xs: Vec[i64] = [10, 20, 30]\n\
                     \x20   let i = cli::args().len() + AT\n\
                     \x20   println(f\"{pick(xs, i)}\")\n\
@@ -158,7 +158,7 @@ fn a_false_assumption_stops_where_no_checks_are_removed() {
 #[test]
 fn an_assume_outside_unsafe_is_refused() {
     let outside = "fn f(i: i64) -> i64 {\n    assume(i > 0)\n    return i\n}\n\
-                   fn main() {\n    println(f\"{f(1)}\")\n}\n";
+                   fn main() throws {\n    println(f\"{f(1)}\")\n}\n";
     assert!(codes(outside).contains(&"NK1294"), "{:?}", codes(outside));
     let inside = outside.replace("assume(i > 0)", "unsafe { assume(i > 0) }");
     assert!(codes(&inside).is_empty(), "{:?}", codes(&inside));
@@ -252,7 +252,7 @@ const SUMS: &str = "fn f(a: i64, b: i64, n: i64) -> i64 {\n\
                     \x20   return a\n\
                     }\n\
                     \n\
-                    fn main() {\n\
+                    fn main() throws {\n\
                     \x20   println(f\"{f(3, 1, 10)}\")\n\
                     }\n";
 

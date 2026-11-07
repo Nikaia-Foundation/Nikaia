@@ -1,5 +1,5 @@
 // The same off a list of lists, and off a list of numbers.
-fn main() {
+fn main() throws {
     let d: Vec[Vec[String?]] = [["x", null], [null, "yz"]]
     println(d[1][1]?.clone() ?? "none")
     println(f"{d[0][1]?.len() ?? 7}")

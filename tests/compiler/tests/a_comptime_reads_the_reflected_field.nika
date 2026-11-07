@@ -16,7 +16,7 @@ fn shout(s: String) -> String {
 	return f"{s}!"
 }
 
-fn show[T: Struct]() {
+fn show[T: Struct]() throws {
 	for f in T::fields {
 		comptime A = f.name
 		comptime B = shout(f.name)
@@ -27,6 +27,6 @@ fn show[T: Struct]() {
 	}
 }
 
-fn main() {
+fn main() throws {
 	show[Contact]()
 }

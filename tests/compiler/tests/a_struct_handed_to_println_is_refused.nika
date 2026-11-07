@@ -2,7 +2,7 @@ struct Person { name: String, age: int }
 
 enum Mood { Glad, Tired }
 
-fn main() {
+fn main() throws {
     let ada = Person { name: "Ada", age: 36 }
     println(ada.name)
     println(ada)

@@ -4,7 +4,7 @@
 comptime SLOTS = 32768
 comptime WIDTH: i64 = 1024
 
-fn main() {
+fn main() throws {
     let mut at: i64 = 0
     while at < SLOTS {
         at += 1

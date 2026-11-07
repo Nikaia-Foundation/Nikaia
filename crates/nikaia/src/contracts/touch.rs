@@ -30,14 +30,20 @@ use anyhow::{Result, anyhow};
 pub use nikaia_std::tools::ty::Touch;
 
 /// **The order a set of touches is kept and written in**: the kind, then the
-/// parameter (none first), then read before write - the order the derive gave
+/// parameter (none first), then the resource a literal named (none first),
+/// then read before write - the order the derive gave
 /// while `Touch` was Rust, spelled out now that it is Nikaia's, which has no
 /// order of its own (ADR-204 §4). A ledger written before and after reads the
 /// same.
-type TouchKey = (String, Option<String>, bool);
+type TouchKey = (String, Option<String>, Option<String>, bool);
 
 fn order_of(touch: &Touch) -> TouchKey {
-    (touch.kind.clone(), touch.parameter.clone(), touch.write)
+    (
+        touch.kind.clone(),
+        touch.parameter.clone(),
+        touch.named.clone(),
+        touch.write,
+    )
 }
 
 /// Every resource a `touches` entry may name (ADR-292 D3).

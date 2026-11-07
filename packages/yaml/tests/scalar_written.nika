@@ -14,7 +14,7 @@ fn style(s: yaml::Style) -> String {
 	}
 }
 
-fn walk(n: yaml::Node, depth: i64) {
+fn walk(n: yaml::Node, depth: i64) throws {
 	let mut pad = String()
 	let mut i = 0
 	while i < depth {
@@ -48,7 +48,7 @@ fn walk(n: yaml::Node, depth: i64) {
 	}
 }
 
-fn show(text: String) {
+fn show(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -59,7 +59,7 @@ fn show(text: String) {
 	}
 }
 
-fn main() {
+fn main() throws {
 	show("[~, null, NULL, true, True, FALSE, 0x1F, .inf, \"x\", 'y', !!int \"1\", !!null '', \"a\\tb\", &a 7, *a, [a: ], {k: v}]")
 	show("- |\n  lit\n  eral\n- >-\n  fold\n  ed\n- \n- !!null\n- &b k: v\n")
 }

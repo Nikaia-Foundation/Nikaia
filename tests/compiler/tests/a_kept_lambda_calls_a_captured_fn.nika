@@ -10,7 +10,7 @@ fn dbl(x: i64) -> i64 {
 	return x * 2
 }
 
-fn main() {
+fn main() throws {
 	let f: fn(i64) -> i64 = inc
 	let g: fn(i64) -> i64 = dbl
 	let w: fn(i64) -> i64 = fn(x) { f(x) + g(x) }

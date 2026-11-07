@@ -54,7 +54,7 @@ fn parse(input: String) -> Vec[N] {
 	return [N { name: input.trim() }]
 }
 
-fn main() {
+fn main() throws {
 	let ns = parse(" hello ")
 	let es = all(ns)
 	for e in es {

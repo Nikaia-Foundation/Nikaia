@@ -8,6 +8,6 @@ fn trimmed(n: i64) -> String {
     return made(n).trim().to_string()
 }
 
-fn main() {
+fn main() throws {
     println(trimmed(1))
 }

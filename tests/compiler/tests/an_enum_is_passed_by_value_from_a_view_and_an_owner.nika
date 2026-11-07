@@ -43,7 +43,7 @@ fn first(ops: ref Vec[Op]) -> String {
     return describe(op)
 }
 
-fn main() {
+fn main() throws {
     let t = Tree::Node(Op::Add, Tree::Leaf(2), Tree::Node(Op::Sub, Tree::Leaf(9), Tree::Leaf(4)))
     let ops = [Op::Add, Op::Sub]
     println(f"{eval(t)} {names(ops).len()} {first(ops)}")

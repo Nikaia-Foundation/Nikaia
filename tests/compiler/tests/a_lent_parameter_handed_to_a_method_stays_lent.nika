@@ -27,7 +27,7 @@ fn both(mut state: State, op: Op) -> bool {
     return adds(op)
 }
 
-fn main() {
+fn main() throws {
     let mut s = State { count: 0 }
     println(both(s, Op::Add))
     println(s.count)

@@ -5,7 +5,7 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let t = f"tea{1}"
     let r = longest(f"n{2}", "ab")
     println(r)

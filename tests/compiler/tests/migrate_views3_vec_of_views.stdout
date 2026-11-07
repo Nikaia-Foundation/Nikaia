@@ -29,7 +29,7 @@ fn marks() -> Marks {
     return Marks { all: [SEP, SEP] }
 }
 
-fn main() {
+fn main() throws {
     let text: String = "a b c"
     println(words(text).all.len())
     let block: String = "x\ny"

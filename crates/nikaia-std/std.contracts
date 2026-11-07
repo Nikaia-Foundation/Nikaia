@@ -51,6 +51,17 @@
 # `?` is the absence of a claim (ADR-024 D1) and it is the true one: the arity
 # is still checked, and the type is not claimed because there is no one type.
 #
+# **`panics` says whether the Rust body can stop the program** (ADR-async-5
+# D35, #1355): `false` where it cannot for any argument the types admit,
+# `true` where it can (an index or a position out of range, an overflow, a zero
+# divisor, a `limit:` or `piece:` below 1, a lock held twice or poisoned, and
+# the four print functions, whose Rust macros stop the program when the write
+# fails). An entry without the key is `?` and counts as `true`: the doors of
+# `task` and `supervisor`, `cleanup`, and the entries of the modules written in
+# Nikaia (`text`), which say exactly what their sources infer. A lambda handed
+# to a function here is walked where it is written, so `Seq::map` answers for
+# itself only.
+#
 # `touches` says which resources a function reaches and whether it changes them
 # (ADR-292, Part I 8.1.1). It is what lets two operations that meet on nothing
 # run at the same time. **Absent means it touches everything**, which is the
@@ -112,9 +123,13 @@
 # `provenance` marks a **source**: a function whose result is bytes that entered
 # the program from outside, and who chose them (ADR-010 D2). Its absence is not
 # "trusted" - it is "this is not a source", which is what almost every function
-# is. Every source `std` has today is the operator's own: a file they named, a
-# pipe they connected, the arguments they typed. The untrusted ones - `http`,
-# `net`, `db` - arrive with the modules that have them.
+# is. The arguments the program was started with are the operator's own, so
+# `trusted`. Standard input, every file read while the program runs, a socket
+# and another program's output are `untrusted` (ADR-365 D1): a path or a pipe
+# does not say who wrote the bytes. Each such source takes the option
+# `trusted: bool = false`; a call that writes `trusted: true` says the operator
+# chose them (ADR-365 D2). The option is the compiler's: the emitter does not
+# hand it to the function below, which reads the same bytes either way.
 version = 3
 
 # --- Written by hand: the modules that are still Rust ------------------------
@@ -130,6 +145,7 @@ version = 3
 # calls meet on nothing and neither waits for the other.
 [fn."cli::args"]
 pub = true
+panics = false
 # `sync` because there is nothing here to pause on: the arguments are a vector
 # the process was started with, and reading them is memory. It had no `sync`
 # line for want of somebody classifying it rather than because anybody decided
@@ -156,6 +172,7 @@ signature = "() -> Args"
 # examples write is `cli::args().nth(1) ?? some_default`.
 [fn."Args::nth"]
 pub = true
+panics = false
 sync = true
 touches = ["args read"]
 provenance = "trusted"
@@ -165,6 +182,7 @@ signature = "(ref mut self, at: i64) -> String?"
 # is read: `cli::args().len()` is the whole command line's count.
 [fn."Args::len"]
 pub = true
+panics = false
 sync = true
 touches = ["args read"]
 provenance = "trusted"
@@ -173,6 +191,7 @@ signature = "(ref self) -> i64"
 # Whether no argument is left to read.
 [fn."Args::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = ["args read"]
 provenance = "trusted"
@@ -181,6 +200,8 @@ signature = "(ref self) -> bool"
 # Write text to standard error, with no line break after it.
 [fn."eprint"]
 pub = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stderr write"]
 locks = true
@@ -189,6 +210,8 @@ signature = "(text: ?)"
 # Write text to standard error, and end the line.
 [fn."eprintln"]
 pub = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stderr write"]
 locks = true
@@ -205,6 +228,7 @@ signature = "(text: ?)"
 # fail with it.
 [fn."fs::create"]
 pub = true
+panics = false
 touches = ["file(path) write"]
 throws = ["io::IoError"]
 signature = "(path: ref fs::Path, root: ref fs::Root) -> Writer"
@@ -220,6 +244,7 @@ crosses = true
 # is flushed, closed or done with.
 [fn."fs::Writer::write"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(mut self: ref Writer, text: ?)"
@@ -227,6 +252,7 @@ signature = "(mut self: ref Writer, text: ?)"
 # Write what is held to the file now.
 [fn."fs::Writer::flush"]
 pub = true
+panics = false
 touches = ["file(path) write"]
 throws = ["io::IoError"]
 signature = "(mut self: ref Writer)"
@@ -234,6 +260,7 @@ signature = "(mut self: ref Writer)"
 # What being done with a writer does: it is flushed.
 [fn."fs::Writer::cleanup"]
 pub = true
+panics = false
 touches = ["file(path) write"]
 throws = ["io::IoError"]
 signature = "(mut self: ref Writer)"
@@ -283,12 +310,15 @@ signature = "(self: ?)"
 # What comes back reads as bytes and the pages arrive as they are touched, which
 # is what makes a file larger than memory workable. It checks nothing: `text()`
 # reads it as text (ADR-016 D5). It fails where the file cannot be opened.
+# Whoever wrote the file may not be the program's operator, so the bytes are
+# **untrusted** unless the call says `trusted: true` (ADR-365).
 [fn."fs::map"]
 pub = true
+panics = false
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Mapped"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Mapped"
 
 # The mapped file, as bytes.
 #
@@ -296,6 +326,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root) -> Mapped"
 # mapping does and costs nothing to take.
 [fn."fs::Mapped::deref"]
 pub = true
+panics = false
 sync = true
 # A mapping is memory that *is* a file, so reading through it reads the file -
 # and which file is the mapping's rather than a parameter this line could name.
@@ -309,6 +340,7 @@ signature = "(self: ref Mapped) -> ref(self) Bytes"
 # call hands back the same view without checking again.
 [fn."fs::Mapped::text"]
 pub = true
+panics = false
 sync = true
 # Reading the text reads the file, as `deref` does.
 touches = ["file read"]
@@ -318,26 +350,30 @@ signature = "(self: ref Mapped) -> ref(self) String"
 # The whole of a file, as bytes.
 #
 # It hands back one shared buffer and not a copy, so passing the file on costs a
-# reference count. It fails where the file cannot be read. The bytes came from
-# the program's own machine, so what it hands back is **trusted**.
+# reference count. It fails where the file cannot be read. A path does not say
+# who wrote the file, so what it hands back is **untrusted** unless the call
+# says `trusted: true` (ADR-365).
 [fn."fs::read"]
 pub = true
+panics = false
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Bytes"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Bytes"
 
 # The whole of a file, as text.
 #
-# It fails where the file cannot be read or is not UTF-8. The bytes came from
-# the program's own machine, so what it hands back is **trusted**: a map keyed
-# on it is hashed with the fast function.
+# It fails where the file cannot be read or is not UTF-8. A path does not say
+# who wrote the file, so what it hands back is **untrusted** unless the call
+# says `trusted: true` (ADR-365): only then is a map keyed on it hashed with
+# the fast function.
 [fn."fs::read_to_string"]
 pub = true
+panics = false
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> String"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> String"
 
 # Every file under a directory, as names relative to it, in sorted order.
 # Directories are not listed, and each is visited once.
@@ -345,20 +381,23 @@ signature = "(path: ref fs::Path, root: ref fs::Root) -> String"
 # Under `fs::Root::Dir` a name the walk finds that leads out of the root - a
 # symlink pointing away - is left out rather than failing the walk. It fails
 # where the directory itself cannot be read; a name that is not text is listed
-# as the platform's bytes (ADR-319 D7). The names came from the program's own machine, so they are **trusted**
-# (ADR-290 D14).
+# as the platform's bytes (ADR-319 D7). Whoever made the files chose their
+# names, so they are **untrusted** unless the call says `trusted: true`
+# (ADR-365).
 [fn."fs::walk"]
 pub = true
+panics = false
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Vec[fs::Path]"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Vec[fs::Path]"
 
 # Whether a file or directory is there (Part III 17.1). The root comes first
 # (ADR-108 D1): a name that leaves an `fs::Root::Dir` throws `Outside` rather
 # than answering `false`. `sync`: one `stat`, as `fs::scratch` is one call.
 [fn."fs::exists"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
@@ -370,6 +409,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root) -> bool"
 # `sync`, as `exists` is: one system call.
 [fn."fs::canonical"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
@@ -381,6 +421,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root) -> fs::Path"
 # `exists` is: one system call, or one walk of a tree for `recursive`.
 [fn."fs::create_dir"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) write"]
 throws = ["io::IoError"]
@@ -389,6 +430,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root; recursive: bool = false)"
 # A link is removed, never what it leads to.
 [fn."fs::remove"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) write"]
 throws = ["io::IoError"]
@@ -397,6 +439,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root; recursive: bool = false)"
 # Both names under the one root.
 [fn."fs::rename"]
 pub = true
+panics = false
 sync = true
 touches = ["file(from) write", "file(to) write"]
 throws = ["io::IoError"]
@@ -405,6 +448,7 @@ signature = "(from: ref fs::Path, to: ref fs::Path, root: ref fs::Root)"
 # How many bytes were copied.
 [fn."fs::copy"]
 pub = true
+panics = false
 sync = true
 touches = ["file(from) read", "file(to) write"]
 throws = ["io::IoError"]
@@ -413,19 +457,24 @@ signature = "(from: ref fs::Path, to: ref fs::Path, root: ref fs::Root) -> u64"
 # A name's length and what it is, a link followed to what it leads to.
 [fn."fs::metadata"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
 signature = "(path: ref fs::Path, root: ref fs::Root) -> fs::Metadata"
 
 # The names in a directory, each its own name, in byte order: the same on
-# every machine whatever order the system keeps them in.
+# every machine whatever order the system keeps them in. Whoever made the files
+# chose their names, so they are **untrusted** unless the call says `trusted:
+# true` (ADR-365).
 [fn."fs::read_dir"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
-signature = "(path: ref fs::Path, root: ref fs::Root) -> Vec[fs::Path]"
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Vec[fs::Path]"
 
 # **A test's own directory, as a root** (ADR-247 D5). `sync`: making one
 # directory is one system call, the same size of blocking as `cli::args`'s read.
@@ -437,6 +486,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root) -> Vec[fs::Path]"
 # system's temporary directory. Every call is a new one.
 [fn."fs::scratch"]
 pub = true
+panics = false
 sync = true
 throws = ["io::IoError"]
 touches = ["file write"]
@@ -450,6 +500,7 @@ signature = "() -> fs::Root"
 # written.
 [fn."fs::write"]
 pub = true
+panics = false
 touches = ["file(path) write"]
 throws = ["io::IoError"]
 signature = "(path: ref fs::Path, root: ref fs::Root, data: ?; append: bool = false, create: bool = true)"
@@ -462,6 +513,7 @@ signature = "(path: ref fs::Path, root: ref fs::Root, data: ?; append: bool = fa
 # can later prove it and leave the check out (ADR-269).
 [fn."assert"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(cond: bool; message: ref String = \"\")"
@@ -473,6 +525,7 @@ signature = "(cond: bool; message: ref String = \"\")"
 # behaviour (ADR-376).
 [fn."assume"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(cond: bool; message: ref String = \"\")"
@@ -480,6 +533,8 @@ signature = "(cond: bool; message: ref String = \"\")"
 # Write text to standard output, with no line break after it.
 [fn."print"]
 pub = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stdout write"]
 locks = true
@@ -488,6 +543,8 @@ signature = "(text: ?)"
 # Write text to standard output, and end the line.
 [fn."println"]
 pub = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stdout write"]
 locks = true
@@ -500,6 +557,7 @@ signature = "(text: ?)"
 # with no markup in it costs no allocation.
 [fn."html::escape"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(text)"
@@ -510,6 +568,7 @@ signature = "(text: ref String) -> ref String"
 # call.
 [fn."html::Raw::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(markup: ?) -> ?"
@@ -517,12 +576,15 @@ signature = "(markup: ?) -> ?"
 # The whole of standard input, as bytes.
 #
 # It may pause rather than holding the thread it is called on, and it fails
-# where the input cannot be read.
+# where the input cannot be read. Whoever is on the other end of the pipe chose
+# the bytes, so they are **untrusted** unless the call says `trusted: true`
+# (ADR-365).
 [fn."io::read"]
 pub = true
+panics = false
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "() -> Vec[u8]"
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> Vec[u8]"
 
 # **A produced sequence, and its step can fail**
 # ([ADR-105](../../docs/specification/adr/adr-105.md) D1). It said `-> Lines`,
@@ -542,21 +604,25 @@ signature = "() -> Vec[u8]"
 #
 # The lines are produced as they are asked for rather than read up front, so a
 # stream larger than memory is a `for` over this. A **step** can fail, because
-# a step of it reads the pipe.
+# a step of it reads the pipe. The lines are **untrusted** unless the call says
+# `trusted: true` (ADR-365).
 [fn."io::lines"]
 pub = true
-provenance = "trusted"
-signature = "() -> Seq[String] pauses throws"
+panics = false
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> Seq[String] pauses throws"
 
 # The whole of standard input, as text.
 #
 # It pauses rather than holding the thread it is called on. It fails where the
-# input is not UTF-8.
+# input is not UTF-8. The text is **untrusted** unless the call says `trusted:
+# true` (ADR-365).
 [fn."io::read_to_string"]
 pub = true
+panics = false
 throws = ["io::IoError"]
-provenance = "trusted"
-signature = "() -> String"
+provenance = "untrusted"
+signature = "(; trusted: bool = false) -> String"
 
 # One line of standard input, without its line ending; `null` at the end of
 # the input (Part III 17.1).
@@ -586,6 +652,7 @@ signature = "(n: i64) -> Bytes"
 # Whether this pauses is the lambda's answer and not its own.
 [fn."list::ListExt::map"]
 pub = true
+panics = false
 sync = "sync(f)"
 # The list goes in by value and a new one comes out, which is what the language
 # below's trait does; `U` is what the lambda comes to (ADR-293 D20).
@@ -635,6 +702,7 @@ signature = "[T, U](self: Vec[T], f: fn(T) -> U) -> Vec[U]"
 # The number without its sign.
 [fn."f64::abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -643,6 +711,7 @@ signature = "(self) -> f64"
 # hardware hands back rather than a failure.
 [fn."f64::sqrt"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -671,6 +740,7 @@ signature = "(self) -> f64"
 # Addition that **wraps** at the ends of an `i32` instead of aborting.
 [fn."i32::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -678,6 +748,7 @@ signature = "(self, i32) -> i32"
 # Subtraction that **wraps** at the ends of an `i32` instead of aborting.
 [fn."i32::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -685,6 +756,7 @@ signature = "(self, i32) -> i32"
 # Multiplication that **wraps** at the ends of an `i32` instead of aborting.
 [fn."i32::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -696,6 +768,7 @@ signature = "(self, i32) -> i32"
 # be the right one.
 [fn."i32::wrapping_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -704,6 +777,7 @@ signature = "(self, i32) -> i32"
 # negates to itself.
 [fn."i32::wrapping_neg"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -712,6 +786,7 @@ signature = "(self) -> i32"
 # negative `i32` comes back unchanged.
 [fn."i32::wrapping_abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -721,6 +796,7 @@ signature = "(self) -> i32"
 # loses them.
 [fn."i32::wrapping_shl"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, places: ?) -> i32"
@@ -729,6 +805,7 @@ signature = "(self, places: ?) -> i32"
 # rather than aborting. The sign bit is carried in, because an `i32` is signed.
 [fn."i32::wrapping_shr"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, places: ?) -> i32"
@@ -736,6 +813,7 @@ signature = "(self, places: ?) -> i32"
 # Addition that **stops** at the ends of an `i32` instead of aborting.
 [fn."i32::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -743,6 +821,7 @@ signature = "(self, i32) -> i32"
 # Subtraction that **stops** at the ends of an `i32` instead of aborting.
 [fn."i32::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -750,6 +829,7 @@ signature = "(self, i32) -> i32"
 # Multiplication that **stops** at the ends of an `i32` instead of aborting.
 [fn."i32::saturating_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -760,6 +840,7 @@ signature = "(self, i32) -> i32"
 # of zero still aborts.
 [fn."i32::saturating_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -768,6 +849,7 @@ signature = "(self, i32) -> i32"
 # most negative `i32` negates to the most positive one.
 [fn."i32::saturating_neg"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -776,6 +858,7 @@ signature = "(self) -> i32"
 # aborting: the most negative `i32` comes back as the most positive one.
 [fn."i32::saturating_abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -785,6 +868,7 @@ signature = "(self) -> i32"
 # are the ways to say otherwise.
 [fn."i32::abs"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -792,6 +876,7 @@ signature = "(self) -> i32"
 # The number without its sign. The most negative `i64` aborts, as for `i32`.
 [fn."i64::abs"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -808,6 +893,7 @@ signature = "(self) -> i64"
 # The number written in decimal, as text.
 [fn."i32::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -815,6 +901,7 @@ signature = "(self) -> String"
 # The smaller of two `i32`s.
 [fn."i32::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -822,6 +909,7 @@ signature = "(self, i32) -> i32"
 # The larger of two `i32`s.
 [fn."i32::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -830,6 +918,7 @@ signature = "(self, i32) -> i32"
 # between. A `lo` above `hi` aborts.
 [fn."i32::clamp"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, lo: i32, hi: i32) -> i32"
@@ -837,6 +926,7 @@ signature = "(self, lo: i32, hi: i32) -> i32"
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."i32::pow"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, exp: u32) -> i32"
@@ -844,6 +934,7 @@ signature = "(self, exp: u32) -> i32"
 # How many bits are set.
 [fn."i32::count_ones"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -851,6 +942,7 @@ signature = "(self) -> u32"
 # How many bits are clear above the highest one set.
 [fn."i32::leading_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 32"]
@@ -859,6 +951,7 @@ signature = "(self) -> u32"
 # How many bits are clear below the lowest one set.
 [fn."i32::trailing_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 32"]
@@ -867,6 +960,7 @@ signature = "(self) -> u32"
 # Division rounded so that the remainder is never negative; a divisor of zero aborts, as `/` does.
 [fn."i32::div_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -874,6 +968,7 @@ signature = "(self, i32) -> i32"
 # The remainder that is never negative; a divisor of zero aborts, as `%` does.
 [fn."i32::rem_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i32) -> i32"
@@ -881,6 +976,7 @@ signature = "(self, i32) -> i32"
 # The number written in decimal, as text.
 [fn."i64::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -888,6 +984,7 @@ signature = "(self) -> String"
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."i64::pow"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, exp: u32) -> i64"
@@ -895,6 +992,7 @@ signature = "(self, exp: u32) -> i64"
 # How many bits are set.
 [fn."i64::count_ones"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -902,6 +1000,7 @@ signature = "(self) -> u32"
 # How many bits are clear above the highest one set.
 [fn."i64::leading_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 64"]
@@ -910,6 +1009,7 @@ signature = "(self) -> u32"
 # How many bits are clear below the lowest one set.
 [fn."i64::trailing_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 64"]
@@ -918,6 +1018,7 @@ signature = "(self) -> u32"
 # The remainder that is never negative; a divisor of zero aborts, as `%` does.
 [fn."i64::rem_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -925,6 +1026,7 @@ signature = "(self, i64) -> i64"
 # The number written in decimal, as text.
 [fn."u32::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -932,6 +1034,7 @@ signature = "(self) -> String"
 # The smaller of two `u32`s.
 [fn."u32::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -939,6 +1042,7 @@ signature = "(self, u32) -> u32"
 # The larger of two `u32`s.
 [fn."u32::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -947,6 +1051,7 @@ signature = "(self, u32) -> u32"
 # between. A `lo` above `hi` aborts.
 [fn."u32::clamp"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, lo: u32, hi: u32) -> u32"
@@ -954,6 +1059,7 @@ signature = "(self, lo: u32, hi: u32) -> u32"
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."u32::pow"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, exp: u32) -> u32"
@@ -961,6 +1067,7 @@ signature = "(self, exp: u32) -> u32"
 # How many bits are set.
 [fn."u32::count_ones"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -968,6 +1075,7 @@ signature = "(self) -> u32"
 # How many bits are clear above the highest one set.
 [fn."u32::leading_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 32"]
@@ -976,6 +1084,7 @@ signature = "(self) -> u32"
 # How many bits are clear below the lowest one set.
 [fn."u32::trailing_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 32"]
@@ -984,6 +1093,7 @@ signature = "(self) -> u32"
 # Division rounded so that the remainder is never negative; a divisor of zero aborts, as `/` does.
 [fn."u32::div_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -991,6 +1101,7 @@ signature = "(self, u32) -> u32"
 # The remainder that is never negative; a divisor of zero aborts, as `%` does.
 [fn."u32::rem_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -998,6 +1109,7 @@ signature = "(self, u32) -> u32"
 # The number written in decimal, as text.
 [fn."u64::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -1005,6 +1117,7 @@ signature = "(self) -> String"
 # The smaller of two `u64`s.
 [fn."u64::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1012,6 +1125,7 @@ signature = "(self, u64) -> u64"
 # The larger of two `u64`s.
 [fn."u64::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1020,6 +1134,7 @@ signature = "(self, u64) -> u64"
 # between. A `lo` above `hi` aborts.
 [fn."u64::clamp"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, lo: u64, hi: u64) -> u64"
@@ -1027,6 +1142,7 @@ signature = "(self, lo: u64, hi: u64) -> u64"
 # The number to the power `exp`; a result that does not fit aborts, as `*` does.
 [fn."u64::pow"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, exp: u32) -> u64"
@@ -1034,6 +1150,7 @@ signature = "(self, exp: u32) -> u64"
 # How many bits are set.
 [fn."u64::count_ones"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -1041,6 +1158,7 @@ signature = "(self) -> u32"
 # How many bits are clear above the highest one set.
 [fn."u64::leading_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 64"]
@@ -1049,6 +1167,7 @@ signature = "(self) -> u32"
 # How many bits are clear below the lowest one set.
 [fn."u64::trailing_zeros"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result <= 64"]
@@ -1057,6 +1176,7 @@ signature = "(self) -> u32"
 # Division rounded so that the remainder is never negative; a divisor of zero aborts, as `/` does.
 [fn."u64::div_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1064,6 +1184,7 @@ signature = "(self, u64) -> u64"
 # The remainder that is never negative; a divisor of zero aborts, as `%` does.
 [fn."u64::rem_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1071,6 +1192,7 @@ signature = "(self, u64) -> u64"
 # `-1`, `0` or `1`, by the sign.
 [fn."i32::signum"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -1078,6 +1200,7 @@ signature = "(self) -> i32"
 # `-1`, `0` or `1`, by the sign.
 [fn."i64::signum"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1085,6 +1208,7 @@ signature = "(self) -> i64"
 # The largest whole number not above it.
 [fn."f64::floor"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1092,6 +1216,7 @@ signature = "(self) -> f64"
 # The smallest whole number not below it.
 [fn."f64::ceil"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1099,6 +1224,7 @@ signature = "(self) -> f64"
 # The nearest whole number, halves away from zero.
 [fn."f64::round"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1106,6 +1232,7 @@ signature = "(self) -> f64"
 # The whole part, toward zero.
 [fn."f64::trunc"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1113,6 +1240,7 @@ signature = "(self) -> f64"
 # What is left after the whole part.
 [fn."f64::fract"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1120,6 +1248,7 @@ signature = "(self) -> f64"
 # `-1.0` or `1.0` by the sign, not-a-number for not-a-number.
 [fn."f64::signum"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1127,6 +1256,7 @@ signature = "(self) -> f64"
 # `e` to the power of it.
 [fn."f64::exp"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1134,6 +1264,7 @@ signature = "(self) -> f64"
 # The natural logarithm; not-a-number below zero.
 [fn."f64::ln"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1141,6 +1272,7 @@ signature = "(self) -> f64"
 # The logarithm to base 10.
 [fn."f64::log10"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1148,6 +1280,7 @@ signature = "(self) -> f64"
 # The logarithm to base 2.
 [fn."f64::log2"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1155,6 +1288,7 @@ signature = "(self) -> f64"
 # The sine, in radians.
 [fn."f64::sin"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1162,6 +1296,7 @@ signature = "(self) -> f64"
 # The cosine, in radians.
 [fn."f64::cos"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1169,6 +1304,7 @@ signature = "(self) -> f64"
 # The tangent, in radians.
 [fn."f64::tan"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> f64"
@@ -1176,6 +1312,7 @@ signature = "(self) -> f64"
 # The number to a whole power.
 [fn."f64::powi"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: i32) -> f64"
@@ -1183,6 +1320,7 @@ signature = "(self, n: i32) -> f64"
 # The number to a power.
 [fn."f64::powf"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: f64) -> f64"
@@ -1190,6 +1328,7 @@ signature = "(self, n: f64) -> f64"
 # The smaller of two; a not-a-number loses to a number.
 [fn."f64::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, f64) -> f64"
@@ -1197,6 +1336,7 @@ signature = "(self, f64) -> f64"
 # The larger of two; a not-a-number loses to a number.
 [fn."f64::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, f64) -> f64"
@@ -1204,6 +1344,7 @@ signature = "(self, f64) -> f64"
 # Whether it is not-a-number.
 [fn."f64::is_nan"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -1211,6 +1352,7 @@ signature = "(self) -> bool"
 # Whether it is neither infinite nor not-a-number.
 [fn."f64::is_finite"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -1218,6 +1360,7 @@ signature = "(self) -> bool"
 # The number written as text, the shortest that reads back as the same number.
 [fn."f64::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -1225,6 +1368,7 @@ signature = "(self) -> String"
 # `true` or `false`, as text.
 [fn."bool::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -1232,6 +1376,7 @@ signature = "(self) -> String"
 # The character, as text of its own.
 [fn."scalar::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> String"
@@ -1256,6 +1401,7 @@ signature = "(n: i64) -> scalar"
 # The smaller of two `i64`s.
 [fn."i64::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1263,6 +1409,7 @@ signature = "(self, i64) -> i64"
 # The larger of two `i64`s.
 [fn."i64::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1271,6 +1418,7 @@ signature = "(self, i64) -> i64"
 # between. A `lo` above `hi` aborts.
 [fn."i64::clamp"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, lo: i64, hi: i64) -> i64"
@@ -1281,6 +1429,7 @@ signature = "(self, lo: i64, hi: i64) -> i64"
 # divided by `-1`, whose answer does not fit.
 [fn."i64::div_euclid"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1288,6 +1437,7 @@ signature = "(self, i64) -> i64"
 # Addition that **wraps** at the ends of an `i64` instead of aborting.
 [fn."i64::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1295,6 +1445,7 @@ signature = "(self, i64) -> i64"
 # Subtraction that **wraps** at the ends of an `i64` instead of aborting.
 [fn."i64::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1302,6 +1453,7 @@ signature = "(self, i64) -> i64"
 # Multiplication that **wraps** at the ends of an `i64` instead of aborting.
 [fn."i64::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1313,6 +1465,7 @@ signature = "(self, i64) -> i64"
 # be the right one.
 [fn."i64::wrapping_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1321,6 +1474,7 @@ signature = "(self, i64) -> i64"
 # negates to itself.
 [fn."i64::wrapping_neg"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1329,6 +1483,7 @@ signature = "(self) -> i64"
 # negative `i64` comes back unchanged.
 [fn."i64::wrapping_abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1338,6 +1493,7 @@ signature = "(self) -> i64"
 # loses them.
 [fn."i64::wrapping_shl"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, places: ?) -> i64"
@@ -1346,6 +1502,7 @@ signature = "(self, places: ?) -> i64"
 # rather than aborting. The sign bit is carried in, because an `i64` is signed.
 [fn."i64::wrapping_shr"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, places: ?) -> i64"
@@ -1353,6 +1510,7 @@ signature = "(self, places: ?) -> i64"
 # Addition that **stops** at the ends of an `i64` instead of aborting.
 [fn."i64::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1360,6 +1518,7 @@ signature = "(self, i64) -> i64"
 # Subtraction that **stops** at the ends of an `i64` instead of aborting.
 [fn."i64::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1367,6 +1526,7 @@ signature = "(self, i64) -> i64"
 # Multiplication that **stops** at the ends of an `i64` instead of aborting.
 [fn."i64::saturating_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1377,6 +1537,7 @@ signature = "(self, i64) -> i64"
 # of zero still aborts.
 [fn."i64::saturating_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, i64) -> i64"
@@ -1385,6 +1546,7 @@ signature = "(self, i64) -> i64"
 # most negative `i64` negates to the most positive one.
 [fn."i64::saturating_neg"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1393,6 +1555,7 @@ signature = "(self) -> i64"
 # aborting: the most negative `i64` comes back as the most positive one.
 [fn."i64::saturating_abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1422,6 +1585,7 @@ signature = "(self) -> i64"
 # to keep the low digits - said rather than assumed.
 [fn."i64::truncating_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -1433,6 +1597,7 @@ signature = "(self) -> i32"
 # to keep the low digits.
 [fn."f64::truncating_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -1444,6 +1609,7 @@ signature = "(self) -> i32"
 # to keep the low digits.
 [fn."f64::truncating_i64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1451,6 +1617,7 @@ signature = "(self) -> i64"
 # The low 8 bits of an `i32`, as a `u8` (ADR-285 D41).
 [fn."i32::truncating_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8"
@@ -1458,6 +1625,7 @@ signature = "(self) -> u8"
 # The low 8 bits of an `i64`, as a `u8` (ADR-285 D41).
 [fn."i64::truncating_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8"
@@ -1465,6 +1633,7 @@ signature = "(self) -> u8"
 # The low 8 bits of a `u32`, as a `u8` (ADR-285 D41).
 [fn."u32::truncating_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8"
@@ -1472,6 +1641,7 @@ signature = "(self) -> u8"
 # The low 8 bits of a `u64`, as a `u8` (ADR-285 D41).
 [fn."u64::truncating_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8"
@@ -1480,6 +1650,7 @@ signature = "(self) -> u8"
 # (not a number is 0).
 [fn."f64::truncating_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8"
@@ -1492,6 +1663,7 @@ signature = "(self) -> u8"
 # Addition that **wraps** at the ends of a `u32` instead of aborting.
 [fn."u32::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1499,6 +1671,7 @@ signature = "(self, u32) -> u32"
 # Subtraction that **wraps** at the ends of a `u32` instead of aborting.
 [fn."u32::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1507,6 +1680,7 @@ signature = "(self, u32) -> u32"
 # what a hash is made of.
 [fn."u32::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1514,6 +1688,7 @@ signature = "(self, u32) -> u32"
 # Division, which for a `u32` cannot overflow and is the plain division.
 [fn."u32::wrapping_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1521,6 +1696,7 @@ signature = "(self, u32) -> u32"
 # A shift left that takes the count modulo the width instead of aborting.
 [fn."u32::wrapping_shl"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> u32"
@@ -1528,6 +1704,7 @@ signature = "(self, i64) -> u32"
 # A shift right that takes the count modulo the width instead of aborting.
 [fn."u32::wrapping_shr"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> u32"
@@ -1535,6 +1712,7 @@ signature = "(self, i64) -> u32"
 # Addition that **stops** at the ends of a `u32` instead of aborting.
 [fn."u32::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1542,6 +1720,7 @@ signature = "(self, u32) -> u32"
 # Subtraction that **stops** at zero instead of aborting.
 [fn."u32::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1549,6 +1728,7 @@ signature = "(self, u32) -> u32"
 # Multiplication that **stops** at the largest `u32` instead of aborting.
 [fn."u32::saturating_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1556,6 +1736,7 @@ signature = "(self, u32) -> u32"
 # Division, which for a `u32` cannot overflow and is the plain division.
 [fn."u32::saturating_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u32) -> u32"
@@ -1563,6 +1744,7 @@ signature = "(self, u32) -> u32"
 # Addition that **wraps** at the ends of a `u8` instead of aborting (ADR-285 D41).
 [fn."u8::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1571,6 +1753,7 @@ signature = "(self, u8) -> u8"
 # `c.wrapping_sub(b'0')` is a digit's value, read with no check.
 [fn."u8::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1578,6 +1761,7 @@ signature = "(self, u8) -> u8"
 # Multiplication that **wraps** at the ends of a `u8` instead of aborting.
 [fn."u8::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1585,6 +1769,7 @@ signature = "(self, u8) -> u8"
 # Division, which for a `u8` cannot overflow and is the plain division.
 [fn."u8::wrapping_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1592,6 +1777,7 @@ signature = "(self, u8) -> u8"
 # A shift left that takes the count modulo the width instead of aborting.
 [fn."u8::wrapping_shl"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> u8"
@@ -1599,6 +1785,7 @@ signature = "(self, i64) -> u8"
 # A shift right that takes the count modulo the width instead of aborting.
 [fn."u8::wrapping_shr"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> u8"
@@ -1606,6 +1793,7 @@ signature = "(self, i64) -> u8"
 # Addition that **stops** at the ends of a `u8` instead of aborting.
 [fn."u8::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1613,6 +1801,7 @@ signature = "(self, u8) -> u8"
 # Subtraction that **stops** at zero instead of aborting.
 [fn."u8::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1620,6 +1809,7 @@ signature = "(self, u8) -> u8"
 # Multiplication that **stops** at 255 instead of aborting.
 [fn."u8::saturating_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1627,6 +1817,7 @@ signature = "(self, u8) -> u8"
 # Division, which for a `u8` cannot overflow and is the plain division.
 [fn."u8::saturating_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u8) -> u8"
@@ -1634,6 +1825,7 @@ signature = "(self, u8) -> u8"
 # Addition that **wraps** at the ends of a `u64` instead of aborting.
 [fn."u64::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1641,6 +1833,7 @@ signature = "(self, u64) -> u64"
 # Subtraction that **wraps** at the ends of a `u64` instead of aborting.
 [fn."u64::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1649,6 +1842,7 @@ signature = "(self, u64) -> u64"
 # what a hash is made of.
 [fn."u64::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1656,6 +1850,7 @@ signature = "(self, u64) -> u64"
 # Division, which for a `u64` cannot overflow and is the plain division.
 [fn."u64::wrapping_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1663,6 +1858,7 @@ signature = "(self, u64) -> u64"
 # A shift left that takes the count modulo the width instead of aborting.
 [fn."u64::wrapping_shl"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> u64"
@@ -1670,6 +1866,7 @@ signature = "(self, i64) -> u64"
 # A shift right that takes the count modulo the width instead of aborting.
 [fn."u64::wrapping_shr"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> u64"
@@ -1677,6 +1874,7 @@ signature = "(self, i64) -> u64"
 # Addition that **stops** at the ends of a `u64` instead of aborting.
 [fn."u64::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1684,6 +1882,7 @@ signature = "(self, u64) -> u64"
 # Subtraction that **stops** at zero instead of aborting.
 [fn."u64::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1691,6 +1890,7 @@ signature = "(self, u64) -> u64"
 # Multiplication that **stops** at the largest `u64` instead of aborting.
 [fn."u64::saturating_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1698,6 +1898,7 @@ signature = "(self, u64) -> u64"
 # Division, which for a `u64` cannot overflow and is the plain division.
 [fn."u64::saturating_div"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self, u64) -> u64"
@@ -1708,6 +1909,7 @@ signature = "(self, u64) -> u64"
 # The low 32 bits of a `u64`, as a `u32`.
 [fn."u64::truncating_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -1715,6 +1917,7 @@ signature = "(self) -> u32"
 # The low 32 bits of an `i64`, as a `u32`.
 [fn."i64::truncating_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -1722,6 +1925,7 @@ signature = "(self) -> u32"
 # The low 32 bits of a `u64`, read as an `i32`.
 [fn."u64::truncating_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -1730,6 +1934,7 @@ signature = "(self) -> i32"
 # ends of a `u32` (a negative number is 0, not a number is 0).
 [fn."f64::truncating_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -1738,6 +1943,7 @@ signature = "(self) -> u32"
 # ends of a `u64` (a negative number is 0, not a number is 0).
 [fn."f64::truncating_u64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u64"
@@ -1750,6 +1956,7 @@ signature = "(self) -> u64"
 # The 32 bits of a `u32`, read as an `i32`.
 [fn."u32::bits_as_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32"
@@ -1757,6 +1964,7 @@ signature = "(self) -> i32"
 # The 32 bits of an `i32`, read as a `u32`.
 [fn."i32::bits_as_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32"
@@ -1765,6 +1973,7 @@ signature = "(self) -> u32"
 # comes out negative.
 [fn."u64::bits_as_i64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -1773,6 +1982,7 @@ signature = "(self) -> i64"
 # the largest `i64`.
 [fn."i64::bits_as_u64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u64"
@@ -1787,6 +1997,7 @@ signature = "(self) -> u64"
 # The bits of a `u8` turned left by `n` places, modulo its width.
 [fn."u8::rotate_left"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u8"
@@ -1794,6 +2005,7 @@ signature = "(self, n: ?) -> u8"
 # The bits of a `u8` turned right by `n` places, modulo its width.
 [fn."u8::rotate_right"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u8"
@@ -1801,6 +2013,7 @@ signature = "(self, n: ?) -> u8"
 # The bits of a `u32` turned left by `n` places, modulo its width.
 [fn."u32::rotate_left"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u32"
@@ -1808,6 +2021,7 @@ signature = "(self, n: ?) -> u32"
 # The bits of a `u32` turned right by `n` places, modulo its width.
 [fn."u32::rotate_right"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u32"
@@ -1815,6 +2029,7 @@ signature = "(self, n: ?) -> u32"
 # The bits of a `u64` turned left by `n` places, modulo its width.
 [fn."u64::rotate_left"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u64"
@@ -1822,6 +2037,7 @@ signature = "(self, n: ?) -> u64"
 # The bits of a `u64` turned right by `n` places, modulo its width.
 [fn."u64::rotate_right"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u64"
@@ -1830,6 +2046,7 @@ signature = "(self, n: ?) -> u64"
 # bit is one bit like the others.
 [fn."i32::rotate_left"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> i32"
@@ -1838,6 +2055,7 @@ signature = "(self, n: ?) -> i32"
 # bit is one bit like the others.
 [fn."i32::rotate_right"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> i32"
@@ -1846,6 +2064,7 @@ signature = "(self, n: ?) -> i32"
 # bit is one bit like the others.
 [fn."i64::rotate_left"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> i64"
@@ -1854,6 +2073,7 @@ signature = "(self, n: ?) -> i64"
 # bit is one bit like the others.
 [fn."i64::rotate_right"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> i64"
@@ -1868,6 +2088,7 @@ signature = "(self, n: ?) -> i64"
 # A `u8` with only its `n` lowest bits kept.
 [fn."u8::low_bits"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u8"
@@ -1875,6 +2096,7 @@ signature = "(self, n: ?) -> u8"
 # A `u32` with only its `n` lowest bits kept.
 [fn."u32::low_bits"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u32"
@@ -1882,6 +2104,7 @@ signature = "(self, n: ?) -> u32"
 # A `u64` with only its `n` lowest bits kept.
 [fn."u64::low_bits"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, n: ?) -> u64"
@@ -1897,6 +2120,7 @@ signature = "(self, n: ?) -> u64"
 # The CRC-32C of `word`'s eight bytes, continued from `crc`.
 [fn."hash::crc32c"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(crc: u32, word: u64) -> u32"
@@ -1909,6 +2133,7 @@ signature = "(crc: u32, word: u64) -> u32"
 # The SHA-256 digest of `data`, in lowercase hex.
 [fn."hash::sha256_hex"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(data: ref Vec[u8]) -> String"
@@ -1925,12 +2150,14 @@ signature = "(data: ref Vec[u8]) -> String"
 # The value of the environment variable `name`, null where unset, empty or not Unicode.
 [fn."env::var"]
 pub = true
+panics = false
 sync = true
 signature = "(name: ref String) -> String?"
 
 # The directory for temporary files, as the system names it.
 [fn."env::temp_dir"]
 pub = true
+panics = false
 sync = true
 signature = "() -> fs::Path"
 
@@ -1952,6 +2179,7 @@ variants = ["Crc32c", "Bmi2", "Avx2"]
 # Whether the CPU level the program is built for has `i`.
 [fn."target::has"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(i: target::Instruction) -> bool"
@@ -1974,6 +2202,7 @@ signature = "(i: target::Instruction) -> bool"
 # Addition of an `i32`, or `null` where the answer does not fit.
 [fn."i32::checked_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32?"
@@ -1981,6 +2210,7 @@ signature = "(self, i32) -> i32?"
 # Subtraction of an `i32`, or `null` where the answer does not fit.
 [fn."i32::checked_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32?"
@@ -1988,6 +2218,7 @@ signature = "(self, i32) -> i32?"
 # Multiplication of an `i32`, or `null` where the answer does not fit.
 [fn."i32::checked_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32?"
@@ -1995,6 +2226,7 @@ signature = "(self, i32) -> i32?"
 # Division of an `i32`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."i32::checked_div"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32?"
@@ -2002,6 +2234,7 @@ signature = "(self, i32) -> i32?"
 # The remainder of an `i32`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."i32::checked_rem"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i32) -> i32?"
@@ -2009,6 +2242,7 @@ signature = "(self, i32) -> i32?"
 # Negation of an `i32`, or `null` where the answer does not fit.
 [fn."i32::checked_neg"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32?"
@@ -2016,6 +2250,7 @@ signature = "(self) -> i32?"
 # The number without its sign of an `i32`, or `null` where the answer does not fit.
 [fn."i32::checked_abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32?"
@@ -2023,6 +2258,7 @@ signature = "(self) -> i32?"
 # Addition of an `i64`, or `null` where the answer does not fit.
 [fn."i64::checked_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64?"
@@ -2030,6 +2266,7 @@ signature = "(self, i64) -> i64?"
 # Subtraction of an `i64`, or `null` where the answer does not fit.
 [fn."i64::checked_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64?"
@@ -2037,6 +2274,7 @@ signature = "(self, i64) -> i64?"
 # Multiplication of an `i64`, or `null` where the answer does not fit.
 [fn."i64::checked_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64?"
@@ -2044,6 +2282,7 @@ signature = "(self, i64) -> i64?"
 # Division of an `i64`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."i64::checked_div"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64?"
@@ -2051,6 +2290,7 @@ signature = "(self, i64) -> i64?"
 # The remainder of an `i64`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."i64::checked_rem"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, i64) -> i64?"
@@ -2058,6 +2298,7 @@ signature = "(self, i64) -> i64?"
 # Negation of an `i64`, or `null` where the answer does not fit.
 [fn."i64::checked_neg"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64?"
@@ -2065,6 +2306,7 @@ signature = "(self) -> i64?"
 # The number without its sign of an `i64`, or `null` where the answer does not fit.
 [fn."i64::checked_abs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64?"
@@ -2072,6 +2314,7 @@ signature = "(self) -> i64?"
 # Addition of a `u32`, or `null` where the answer does not fit.
 [fn."u32::checked_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32?"
@@ -2079,6 +2322,7 @@ signature = "(self, u32) -> u32?"
 # Subtraction of a `u32`, or `null` where the answer does not fit.
 [fn."u32::checked_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32?"
@@ -2086,6 +2330,7 @@ signature = "(self, u32) -> u32?"
 # Multiplication of a `u32`, or `null` where the answer does not fit.
 [fn."u32::checked_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32?"
@@ -2093,6 +2338,7 @@ signature = "(self, u32) -> u32?"
 # Division of a `u32`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."u32::checked_div"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32?"
@@ -2100,6 +2346,7 @@ signature = "(self, u32) -> u32?"
 # The remainder of a `u32`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."u32::checked_rem"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u32) -> u32?"
@@ -2107,6 +2354,7 @@ signature = "(self, u32) -> u32?"
 # Addition of a `u8`, or `null` where the answer does not fit.
 [fn."u8::checked_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8?"
@@ -2114,6 +2362,7 @@ signature = "(self, u8) -> u8?"
 # Subtraction of a `u8`, or `null` where the answer does not fit.
 [fn."u8::checked_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8?"
@@ -2121,6 +2370,7 @@ signature = "(self, u8) -> u8?"
 # Multiplication of a `u8`, or `null` where the answer does not fit.
 [fn."u8::checked_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8?"
@@ -2128,6 +2378,7 @@ signature = "(self, u8) -> u8?"
 # Division of a `u8`, or `null`, or a divisor of zero.
 [fn."u8::checked_div"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8?"
@@ -2135,6 +2386,7 @@ signature = "(self, u8) -> u8?"
 # The remainder of a `u8`, or `null`, or a divisor of zero.
 [fn."u8::checked_rem"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u8) -> u8?"
@@ -2142,6 +2394,7 @@ signature = "(self, u8) -> u8?"
 # Addition of a `u64`, or `null` where the answer does not fit.
 [fn."u64::checked_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64?"
@@ -2149,6 +2402,7 @@ signature = "(self, u64) -> u64?"
 # Subtraction of a `u64`, or `null` where the answer does not fit.
 [fn."u64::checked_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64?"
@@ -2156,6 +2410,7 @@ signature = "(self, u64) -> u64?"
 # Multiplication of a `u64`, or `null` where the answer does not fit.
 [fn."u64::checked_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64?"
@@ -2163,6 +2418,7 @@ signature = "(self, u64) -> u64?"
 # Division of a `u64`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."u64::checked_div"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64?"
@@ -2170,6 +2426,7 @@ signature = "(self, u64) -> u64?"
 # The remainder of a `u64`, or `null` where the answer does not fit, or a divisor of zero.
 [fn."u64::checked_rem"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, u64) -> u64?"
@@ -2182,6 +2439,7 @@ signature = "(self, u64) -> u64?"
 # An `i64` as an `i32`, or `null` where an `i32` does not hold it.
 [fn."i64::checked_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32?"
@@ -2189,6 +2447,7 @@ signature = "(self) -> i32?"
 # An `i64` as a `u32`, or `null` where a `u32` does not hold it.
 [fn."i64::checked_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32?"
@@ -2196,6 +2455,7 @@ signature = "(self) -> u32?"
 # An `i64` as a `u64`, or `null` where a `u64` does not hold it.
 [fn."i64::checked_u64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u64?"
@@ -2203,6 +2463,7 @@ signature = "(self) -> u64?"
 # A `u64` as an `i32`, or `null` where an `i32` does not hold it.
 [fn."u64::checked_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32?"
@@ -2210,6 +2471,7 @@ signature = "(self) -> i32?"
 # A `u64` as an `i64`, or `null` where an `i64` does not hold it.
 [fn."u64::checked_i64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64?"
@@ -2217,6 +2479,7 @@ signature = "(self) -> i64?"
 # A `u64` as a `u32`, or `null` where a `u32` does not hold it.
 [fn."u64::checked_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32?"
@@ -2224,6 +2487,7 @@ signature = "(self) -> u32?"
 # An `i32` as a `u32`, or `null` where a `u32` does not hold it.
 [fn."i32::checked_u32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u32?"
@@ -2231,6 +2495,7 @@ signature = "(self) -> u32?"
 # An `i32` as a `u64`, or `null` where a `u64` does not hold it.
 [fn."i32::checked_u64"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u64?"
@@ -2238,6 +2503,7 @@ signature = "(self) -> u64?"
 # A `u32` as an `i32`, or `null` where an `i32` does not hold it.
 [fn."u32::checked_i32"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i32?"
@@ -2245,6 +2511,7 @@ signature = "(self) -> i32?"
 # An `i32` as a `u8`, or `null` where a `u8` does not hold it.
 [fn."i32::checked_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8?"
@@ -2252,6 +2519,7 @@ signature = "(self) -> u8?"
 # An `i64` as a `u8`, or `null` where a `u8` does not hold it.
 [fn."i64::checked_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8?"
@@ -2259,6 +2527,7 @@ signature = "(self) -> u8?"
 # A `u32` as a `u8`, or `null` where a `u8` does not hold it.
 [fn."u32::checked_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8?"
@@ -2266,6 +2535,7 @@ signature = "(self) -> u8?"
 # A `u64` as a `u8`, or `null` where a `u8` does not hold it.
 [fn."u64::checked_u8"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> u8?"
@@ -2276,6 +2546,7 @@ signature = "(self) -> u8?"
 # and `and_modify` changes the one that is. The map **keeps** the key.
 [fn."collections::HashMap::entry"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["key"]
@@ -2284,6 +2555,7 @@ signature = "[K, V](mut self: ref collections::HashMap[K, V], key: ?) -> Entry[V
 # Take every entry out of the map, keeping it.
 [fn."collections::HashMap::clear"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](mut self: ref collections::HashMap[K, V])"
@@ -2307,6 +2579,7 @@ signature = "[K, V](mut self: ref collections::HashMap[K, V])"
 # shape a program writes is `counts.get(k) ?? 0`, or `counts.get(k)?.field`.
 [fn."collections::HashMap::get"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> V?"
@@ -2321,6 +2594,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> V?"
 # The map keeps both the key and the value.
 [fn."collections::HashMap::insert"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["key", "value"]
@@ -2332,6 +2606,7 @@ signature = "[K, V](mut self: ref collections::HashMap[K, V], key: K, value: V) 
 # it means.
 [fn."collections::HashMap::keys"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[ref K] sync sized"
@@ -2339,6 +2614,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[ref K] sync siz
 # How many pairs the map holds.
 [fn."collections::HashMap::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::HashMap[?, ?]) -> i64"
@@ -2346,6 +2622,7 @@ signature = "(self: ref collections::HashMap[?, ?]) -> i64"
 # Whether the map holds no pairs (#450).
 [fn."collections::HashMap::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::HashMap[?, ?]) -> bool"
@@ -2353,6 +2630,7 @@ signature = "(self: ref collections::HashMap[?, ?]) -> bool"
 # A map with nothing in it. It is written `HashMap()`.
 [fn."collections::HashMap::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> collections::HashMap[?, ?]"
@@ -2364,6 +2642,7 @@ signature = "() -> collections::HashMap[?, ?]"
 # Whether the map holds this key.
 [fn."collections::HashMap::contains_key"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> bool"
@@ -2385,6 +2664,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> bool"
 # A set with nothing in it. It is written `collections::HashSet()`.
 [fn."collections::HashSet::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> collections::HashSet[?]"
@@ -2395,6 +2675,7 @@ signature = "() -> collections::HashSet[?]"
 # The set keeps them, so `items` is given away rather than lent.
 [fn."collections::HashSet::extend"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["items"]
@@ -2405,6 +2686,7 @@ signature = "[T](mut self: ref collections::HashSet[T], items: ?)"
 # The set keeps the value.
 [fn."collections::HashSet::insert"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["value"]
@@ -2413,6 +2695,7 @@ signature = "[T](mut self: ref collections::HashSet[T], value: T) -> bool"
 # Whether the set holds this value.
 [fn."collections::HashSet::contains"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::HashSet[T], value: ?) -> bool"
@@ -2420,6 +2703,7 @@ signature = "[T](self: ref collections::HashSet[T], value: ?) -> bool"
 # Take a value out of the set, and say whether it was there.
 [fn."collections::HashSet::remove"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref collections::HashSet[T], value: ?) -> bool"
@@ -2427,6 +2711,7 @@ signature = "[T](mut self: ref collections::HashSet[T], value: ?) -> bool"
 # How many values the set holds.
 [fn."collections::HashSet::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::HashSet[?]) -> i64"
@@ -2434,6 +2719,7 @@ signature = "(self: ref collections::HashSet[?]) -> i64"
 # Whether the set holds no values (#450).
 [fn."collections::HashSet::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::HashSet[?]) -> bool"
@@ -2442,6 +2728,7 @@ signature = "(self: ref collections::HashSet[?]) -> bool"
 # that prints them says which order it means (ADR-collections-2 D3).
 [fn."collections::HashSet::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::HashSet[T]) -> Seq[ref(self) T] sync sized"
@@ -2449,6 +2736,7 @@ signature = "[T](self: ref collections::HashSet[T]) -> Seq[ref(self) T] sync siz
 # A set with nothing in it, kept in order. It is written `collections::BTreeSet()`.
 [fn."collections::BTreeSet::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> collections::BTreeSet[?]"
@@ -2459,6 +2747,7 @@ signature = "() -> collections::BTreeSet[?]"
 # The set keeps them, so `items` is given away rather than lent.
 [fn."collections::BTreeSet::extend"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["items"]
@@ -2469,6 +2758,7 @@ signature = "[T](mut self: ref collections::BTreeSet[T], items: ?)"
 # The set keeps the value.
 [fn."collections::BTreeSet::insert"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["value"]
@@ -2479,6 +2769,7 @@ signature = "[T](mut self: ref collections::BTreeSet[T], value: T) -> bool"
 # pause - found moving `contracts::send` into Nikaia).
 [fn."collections::BTreeSet::remove"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref collections::BTreeSet[T], value: ?) -> bool"
@@ -2486,6 +2777,7 @@ signature = "[T](mut self: ref collections::BTreeSet[T], value: ?) -> bool"
 # Whether the set holds this value.
 [fn."collections::BTreeSet::contains"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T], value: ?) -> bool"
@@ -2493,6 +2785,7 @@ signature = "[T](self: ref collections::BTreeSet[T], value: ?) -> bool"
 # How many values the set holds.
 [fn."collections::BTreeSet::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeSet[?]) -> i64"
@@ -2500,6 +2793,7 @@ signature = "(self: ref collections::BTreeSet[?]) -> i64"
 # Whether the set holds no values (#450).
 [fn."collections::BTreeSet::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeSet[?]) -> bool"
@@ -2507,6 +2801,7 @@ signature = "(self: ref collections::BTreeSet[?]) -> bool"
 # The elements, one at a time, lent, smallest first (ADR-collections-2 D3).
 [fn."collections::BTreeSet::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync ends sized"
@@ -2515,6 +2810,7 @@ signature = "[T](self: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync en
 # `collections::BTreeMap()`.
 [fn."collections::BTreeMap::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> collections::BTreeMap[?, ?]"
@@ -2525,6 +2821,7 @@ signature = "() -> collections::BTreeMap[?, ?]"
 # The map keeps both the key and the value.
 [fn."collections::BTreeMap::insert"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["key", "value"]
@@ -2536,6 +2833,7 @@ signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: K, value: V)
 # map **keeps** the key, and `Entry[V]` is one type for both maps.
 [fn."collections::BTreeMap::entry"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["key"]
@@ -2544,6 +2842,7 @@ signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: ?) -> Entry[
 # What this key names, or nothing where the key is not there.
 [fn."collections::BTreeMap::get"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V], key: ?) -> V?"
@@ -2553,6 +2852,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V], key: ?) -> V?"
 # that may pause).
 [fn."collections::BTreeMap::remove"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: ?) -> V?"
@@ -2560,6 +2860,7 @@ signature = "[K, V](mut self: ref collections::BTreeMap[K, V], key: ?) -> V?"
 # Whether the map holds this key.
 [fn."collections::BTreeMap::contains_key"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V], key: ?) -> bool"
@@ -2568,6 +2869,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V], key: ?) -> bool"
 # `.keys()` resolved to nothing and read as a call that may pause).
 [fn."collections::BTreeMap::keys"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[ref K] sync sized"
@@ -2575,6 +2877,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[ref K] sync si
 # The values, one at a time, in the order of their keys.
 [fn."collections::BTreeMap::values"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[ref V] sync sized"
@@ -2582,6 +2885,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[ref V] sync si
 # The pairs, one at a time, lent, in the order of their keys.
 [fn."collections::BTreeMap::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[(ref K, ref V)] sync sized"
@@ -2589,6 +2893,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[(ref K, ref V)
 # How many pairs the map holds.
 [fn."collections::BTreeMap::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeMap[?, ?]) -> i64"
@@ -2596,6 +2901,7 @@ signature = "(self: ref collections::BTreeMap[?, ?]) -> i64"
 # Whether the map holds no pairs (#450).
 [fn."collections::BTreeMap::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeMap[?, ?]) -> bool"
@@ -2604,6 +2910,7 @@ signature = "(self: ref collections::BTreeMap[?, ?]) -> bool"
 # `.clone()` of one resolved to nothing and read as a call that may pause).
 [fn."collections::HashMap::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V]) -> collections::HashMap[K, V]"
@@ -2612,6 +2919,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V]) -> collections::HashMa
 # `.clone()` of one resolved to nothing and read as a call that may pause).
 [fn."collections::HashSet::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::HashSet[T]) -> collections::HashSet[T]"
@@ -2620,6 +2928,7 @@ signature = "[T](self: ref collections::HashSet[T]) -> collections::HashSet[T]"
 # `.clone()` of one resolved to nothing and read as a call that may pause).
 [fn."collections::BTreeMap::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> collections::BTreeMap[K, V]"
@@ -2627,6 +2936,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> collections::BTree
 # The smallest element, or nothing where the set is empty.
 [fn."collections::BTreeSet::first"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
@@ -2634,6 +2944,7 @@ signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
 # The largest element, or nothing where the set is empty.
 [fn."collections::BTreeSet::last"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
@@ -2643,6 +2954,7 @@ signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
 # Each is a view of the set that holds it, not a copy.
 [fn."collections::BTreeSet::union"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
@@ -2652,6 +2964,7 @@ signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTr
 # Each is a view of this set, not a copy.
 [fn."collections::BTreeSet::intersection"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
@@ -2661,6 +2974,7 @@ signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTr
 # Each is a view of this set, not a copy.
 [fn."collections::BTreeSet::difference"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTreeSet[T]) -> Seq[ref(self) T] sync"
@@ -2669,6 +2983,7 @@ signature = "[T](self: ref collections::BTreeSet[T], other: ref collections::BTr
 # `.clone()` of one resolved to nothing and read as a call that may pause).
 [fn."collections::BTreeSet::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref collections::BTreeSet[T]) -> collections::BTreeSet[T]"
@@ -2676,6 +2991,7 @@ signature = "[T](self: ref collections::BTreeSet[T]) -> collections::BTreeSet[T]
 # The values, one at a time, in the order the keys come out in.
 [fn."collections::HashMap::values"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[ref V] sync sized"
@@ -2684,6 +3000,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[ref V] sync siz
 # `keys`'s.
 [fn."collections::HashMap::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[(ref K, ref V)] sync sized"
@@ -2697,6 +3014,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[(ref K, ref V)]
 # Whether this pauses is the lambda's answer and not its own.
 [fn."Entry::and_modify"]
 pub = true
+panics = false
 sync = "sync(f)"
 signature = "[V](self: Entry[V], f: fn(ref V)) -> Entry[V]"
 
@@ -2705,6 +3023,7 @@ signature = "[V](self: Entry[V], f: fn(ref V)) -> Entry[V]"
 # The map **keeps** the value, so it is given away rather than lent.
 [fn."Entry::or_insert"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["value"]
@@ -2716,6 +3035,7 @@ signature = "[V](self: Entry[V], value: ?) -> ref V"
 # Whether this pauses is the lambda's answer and not its own.
 [fn."Entry::or_insert_with"]
 pub = true
+panics = false
 sync = "sync(f)"
 signature = "[V](self: Entry[V], f: fn()) -> ref V"
 
@@ -2728,6 +3048,7 @@ signature = "[V](self: Entry[V], f: fn()) -> ref V"
 # program's, so it never pauses.
 [fn."Entry::or_default"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[V](self: Entry[V]) -> ref V"
@@ -2759,6 +3080,7 @@ signature = "[V](self: Entry[V]) -> ref V"
 # `ref Connection`: a caller is not meant to notice the handle.
 [fn."Shared::deref"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Shared[T]) -> ref(self) T"
@@ -2771,6 +3093,7 @@ signature = "[T](self: ref Shared[T]) -> ref(self) T"
 # Text with nothing in it. It is written `String()`.
 [fn."String::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> String"
@@ -2781,6 +3104,7 @@ signature = "() -> String"
 # one of them. A hash is over these.
 [fn."String::bytes"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self)"
@@ -2792,6 +3116,7 @@ signature = "(ref self) -> Seq[u8] sync ends"
 # one byte, and this walks one of it rather than several.
 [fn."String::chars"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self)"
@@ -2803,6 +3128,7 @@ signature = "(ref self) -> Seq[scalar] sync ends"
 # than one byte. `chars().count()` is the other question.
 [fn."String::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> i64"
@@ -2810,6 +3136,7 @@ signature = "(ref self) -> i64"
 # Whether the text is empty: no bytes, and so no characters.
 [fn."String::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> bool"
@@ -2817,6 +3144,7 @@ signature = "(ref self) -> bool"
 # Add one character to the end of the text.
 [fn."String::push"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["c"]
@@ -2825,6 +3153,7 @@ signature = "(ref mut self, c: scalar)"
 # Add text to the end of this text.
 [fn."String::push_str"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref mut self, text: ref String)"
@@ -2834,6 +3163,7 @@ signature = "(ref mut self, text: ref String)"
 # text is empty.
 [fn."String::pop"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref mut self) -> scalar?"
@@ -2844,6 +3174,7 @@ signature = "(ref mut self) -> scalar?"
 # as `split_at`'s does.
 [fn."String::insert_str"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(ref mut self, at: i64, text: ref String)"
@@ -2851,6 +3182,7 @@ signature = "(ref mut self, at: i64, text: ref String)"
 # The first element, or nothing where the list is empty.
 [fn."Vec::first"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T]) -> T?"
@@ -2858,6 +3190,7 @@ signature = "[T](self: ref Vec[T]) -> T?"
 # The last element, or nothing where the list is empty.
 [fn."Vec::last"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T]) -> T?"
@@ -2866,6 +3199,7 @@ signature = "[T](self: ref Vec[T]) -> T?"
 # position is a count that cannot be one, and stops the program as `nth`'s).
 [fn."Vec::get"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T], at: i64) -> T?"
@@ -2873,6 +3207,7 @@ signature = "[T](self: ref Vec[T], at: i64) -> T?"
 # Whether the list holds nothing.
 [fn."Vec::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Vec[?]) -> bool"
@@ -2880,6 +3215,7 @@ signature = "(self: ref Vec[?]) -> bool"
 # How many elements the list holds.
 [fn."Vec::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Vec[?]) -> i64"
@@ -2914,12 +3250,14 @@ variants = ["Less", "Equal", "Greater"]
 # never pause, which is what lets them stand in an `assert` and an operator.
 [fn."Ord::compare"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref T, other: ref T) -> Ordering"
 
 [fn."Eq::eq"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref T, other: ref T) -> bool"
@@ -2942,6 +3280,7 @@ crosses = true
 # same shape `collections::HashMap::get` has, and the same `?? 0` after it.
 [fn."Fixed::get"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref Fixed[K, V], key: ?) -> V?"
@@ -2949,6 +3288,7 @@ signature = "[K, V](self: ref Fixed[K, V], key: ?) -> V?"
 # Whether this key is one of the table's.
 [fn."Fixed::has"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref Fixed[K, V], key: ?) -> bool"
@@ -2956,6 +3296,7 @@ signature = "[K, V](self: ref Fixed[K, V], key: ?) -> bool"
 # How many pairs the table holds.
 [fn."Fixed::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref Fixed[K, V]) -> i64"
@@ -2963,6 +3304,7 @@ signature = "[K, V](self: ref Fixed[K, V]) -> i64"
 # Whether the table holds nothing.
 [fn."Fixed::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref Fixed[K, V]) -> bool"
@@ -2970,6 +3312,7 @@ signature = "[K, V](self: ref Fixed[K, V]) -> bool"
 # How many elements the array holds. It is the length in its type.
 [fn."Array::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Array[?, ?]) -> i64"
@@ -2977,6 +3320,7 @@ signature = "(self: ref Array[?, ?]) -> i64"
 # Whether the array holds nothing.
 [fn."Array::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Array[?, ?]) -> bool"
@@ -2986,6 +3330,7 @@ signature = "(self: ref Array[?, ?]) -> bool"
 # the function around it was taken to pause, and the value went below unlent.
 [fn."Array::contains"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Array[?, ?], value: ?) -> bool"
@@ -2995,6 +3340,7 @@ signature = "(self: ref Array[?, ?], value: ?) -> bool"
 # `enumerate` and `rev` follow.
 [fn."Array::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Array[T, ?]) -> Seq[ref(self) T] sync ends sized"
@@ -3008,6 +3354,7 @@ signature = "[T](self: ref Array[T, ?]) -> Seq[ref(self) T] sync ends sized"
 # the elements need an order (`NK1164` otherwise, ADR-341 D4).
 [fn."Array::sort"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T: Ord](mut self: ref Array[T, ?])"
@@ -3016,6 +3363,7 @@ signature = "[T: Ord](mut self: ref Array[T, ?])"
 # is **stable**, as a list's is.
 [fn."Array::sort_by_key"]
 pub = true
+panics = false
 sync = "sync(f)"
 signature = "[T, K](mut self: ref Array[T, ?], f: fn(ref T) -> K)"
 
@@ -3023,6 +3371,7 @@ signature = "[T, K](mut self: ref Array[T, ?], f: fn(ref T) -> K)"
 # aborts, as an index does.
 [fn."Array::swap"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](mut self: ref Array[T, ?], i: i64, j: i64)"
@@ -3030,6 +3379,7 @@ signature = "[T](mut self: ref Array[T, ?], i: i64, j: i64)"
 # Put the elements in the opposite order, in place.
 [fn."Array::reverse"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref Array[T, ?])"
@@ -3038,6 +3388,7 @@ signature = "[T](mut self: ref Array[T, ?])"
 # each place gets a copy of it.
 [fn."Array::fill"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["value"]
@@ -3046,6 +3397,7 @@ signature = "[T: Clone](mut self: ref Array[T, ?], value: T)"
 # A list with nothing in it. It is written `Vec()`.
 [fn."Vec::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> Vec[?]"
@@ -3058,6 +3410,7 @@ signature = "() -> Vec[?]"
 # A copy of the list, owned by whoever asked for it.
 [fn."Vec::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T]) -> Vec[T]"
@@ -3069,6 +3422,7 @@ signature = "[T](self: ref Vec[T]) -> Vec[T]"
 # that is what taking them out means.
 [fn."Vec::drain"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Vec[T]) -> Seq[T] sync ends sized"
@@ -3080,6 +3434,7 @@ signature = "[T](self: Vec[T]) -> Seq[T] sync ends sized"
 # because that is what taking them out means.
 [fn."collections::HashMap::drain"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: collections::HashMap[K, V]) -> Seq[(K, V)] sync sized"
@@ -3087,6 +3442,7 @@ signature = "[K, V](self: collections::HashMap[K, V]) -> Seq[(K, V)] sync sized"
 # The same for a `BTreeMap`, in key order (ADR-386).
 [fn."collections::BTreeMap::drain"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: collections::BTreeMap[K, V]) -> Seq[(K, V)] sync ends sized"
@@ -3094,6 +3450,7 @@ signature = "[K, V](self: collections::BTreeMap[K, V]) -> Seq[(K, V)] sync ends 
 # The elements, one at a time, **taken out** of the set (ADR-386).
 [fn."collections::HashSet::drain"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: collections::HashSet[T]) -> Seq[T] sync sized"
@@ -3101,6 +3458,7 @@ signature = "[T](self: collections::HashSet[T]) -> Seq[T] sync sized"
 # The same for a `BTreeSet`, in order (ADR-386).
 [fn."collections::BTreeSet::drain"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: collections::BTreeSet[T]) -> Seq[T] sync ends sized"
@@ -3140,6 +3498,7 @@ signature = "[T](self: collections::BTreeSet[T]) -> Seq[T] sync ends sized"
 # The walk is what consumes it, so the sequence is not there afterwards.
 [fn."Seq::collect"]
 pub = true
+panics = false
 sync = true
 touches = []
 # The walk is what consumes it (D2): the sequence goes in by value.
@@ -3151,6 +3510,7 @@ signature = "[T](self: Seq[T]) -> Vec[T]"
 # list's `len()`.
 [fn."Seq::count"]
 pub = true
+panics = false
 sync = true
 touches = []
 # `i64`, which is what `Vec::len` says for the same reason: this language's
@@ -3162,6 +3522,7 @@ signature = "[T](self: Seq[T]) -> i64"
 # It walks up to that position to answer.
 [fn."Seq::nth"]
 pub = true
+panics = false
 sync = true
 touches = []
 # **There may not be one**, which is `Args::nth`'s shape one type over.
@@ -3172,6 +3533,7 @@ signature = "[T](self: Seq[T], at: i64) -> T?"
 # handed back had no type: a `.clone()` of it stayed a view.
 [fn."Seq::next"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> T?"
@@ -3180,6 +3542,7 @@ signature = "[T](self: Seq[T]) -> T?"
 # between them.
 [fn."Seq::join"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T], sep: ref String) -> String"
@@ -3196,6 +3559,7 @@ signature = "[T](self: Seq[T], sep: ref String) -> String"
 # something walks the result. Whether a step pauses is the lambda's answer.
 [fn."Seq::map"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, U](self: Seq[T], f: fn(T) -> U) -> Seq[U] ends sized"
@@ -3208,6 +3572,7 @@ signature = "[T, U](self: Seq[T], f: fn(T) -> U) -> Seq[U] ends sized"
 # pauses.
 [fn."Seq::cloned"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> Seq[T] ends sized"
@@ -3218,6 +3583,7 @@ signature = "[T](self: Seq[T]) -> Seq[T] ends sized"
 # step pauses is the lambda's answer.
 [fn."Seq::filter"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 # The element type survives a filter, which is the one place a `Seq` entry says
@@ -3231,6 +3597,7 @@ signature = "[T](self: Seq[T], f: fn(T)) -> Seq[T] ends"
 # Whether the function says yes to any element; it stops at the first yes.
 [fn."Seq::any"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T) -> bool) -> bool"
@@ -3238,6 +3605,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> bool"
 # Whether the function says yes to every element; it stops at the first no.
 [fn."Seq::all"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T) -> bool) -> bool"
@@ -3245,6 +3613,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> bool"
 # The first element the function says yes to, or nothing; it stops there.
 [fn."Seq::find"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T) -> bool) -> T?"
@@ -3252,6 +3621,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> T?"
 # The position of the first element the function says yes to, or nothing.
 [fn."Seq::position"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T) -> bool) -> i64?"
@@ -3259,6 +3629,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> i64?"
 # Each element through a function, leaving out the ones it says `null` to.
 [fn."Seq::filter_map"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, U](self: Seq[T], f: fn(T) -> (U?)) -> Seq[U] ends"
@@ -3267,6 +3638,7 @@ signature = "[T, U](self: Seq[T], f: fn(T) -> (U?)) -> Seq[U] ends"
 # there.
 [fn."Seq::find_map"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, U](self: Seq[T], f: fn(T) -> (U?)) -> U?"
@@ -3274,6 +3646,7 @@ signature = "[T, U](self: Seq[T], f: fn(T) -> (U?)) -> U?"
 # The elements up to the first one the function says no to.
 [fn."Seq::take_while"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
@@ -3281,6 +3654,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
 # The elements from the first one the function says no to.
 [fn."Seq::skip_while"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
@@ -3288,6 +3662,7 @@ signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
 # The last element, or nothing where the sequence is empty. It walks all of it.
 [fn."Seq::last"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> T?"
@@ -3296,6 +3671,7 @@ signature = "[T](self: Seq[T]) -> T?"
 # the last.
 [fn."Seq::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> T?"
@@ -3304,6 +3680,7 @@ signature = "[T](self: Seq[T]) -> T?"
 # the first.
 [fn."Seq::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> T?"
@@ -3313,6 +3690,7 @@ signature = "[T](self: Seq[T]) -> T?"
 # reference to each element.
 [fn."Seq::min_by_key"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, K](self: Seq[T], f: fn(ref T) -> K) -> T?"
@@ -3322,6 +3700,7 @@ signature = "[T, K](self: Seq[T], f: fn(ref T) -> K) -> T?"
 # reference to each element.
 [fn."Seq::max_by_key"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, K](self: Seq[T], f: fn(ref T) -> K) -> T?"
@@ -3333,6 +3712,7 @@ signature = "[T, K](self: Seq[T], f: fn(ref T) -> K) -> T?"
 # steps but what it hands back.
 [fn."Seq::flat_map"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, U](self: Seq[T], f: fn(T) -> Vec[U]) -> Seq[U]"
@@ -3340,6 +3720,7 @@ signature = "[T, U](self: Seq[T], f: fn(T) -> Vec[U]) -> Seq[U]"
 # The elements added up; `0` for an empty sequence.
 [fn."Seq::sum"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> T"
@@ -3359,6 +3740,7 @@ signature = "[T](self: Seq[T]) -> T"
 # It walks the whole sequence, one element at a time.
 [fn."Seq::for_each"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T](self: Seq[T], f: fn(T))"
@@ -3369,6 +3751,7 @@ signature = "[T](self: Seq[T], f: fn(T))"
 # which is why it has to have one - a range, a list's `iter()`, `chars()`.
 [fn."Seq::rev"]
 pub = true
+panics = false
 sync = true
 touches = []
 # `ends` on the receiver is the demand: `io::lines().rev()` is `NK2703`.
@@ -3377,6 +3760,7 @@ signature = "[T](self: Seq[T] ends) -> Seq[T] ends sized"
 # Each item with its position, counted from 0, as an `i64`.
 [fn."Seq::enumerate"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T]) -> Seq[(i64, T)] sync ends sized"
@@ -3384,6 +3768,7 @@ signature = "[T](self: Seq[T]) -> Seq[(i64, T)] sync ends sized"
 # The items, then the other walk's.
 [fn."Seq::chain"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: Seq[T], other: Seq[T]) -> Seq[T] sync sized"
@@ -3392,6 +3777,7 @@ signature = "[T](self: Seq[T], other: Seq[T]) -> Seq[T] sync sized"
 # and the next item, and hands back what is made then.
 [fn."Seq::fold"]
 pub = true
+panics = false
 sync = "sync(f)"
 touches = []
 signature = "[T, A](self: Seq[T], init: A, f: fn(A, T) -> A) -> A"
@@ -3399,6 +3785,7 @@ signature = "[T, A](self: Seq[T], init: A, f: fn(A, T) -> A) -> A"
 # Pairs, one element of each, until the shorter of the two ends.
 [fn."Seq::zip"]
 pub = true
+panics = false
 sync = true
 touches = []
 ends_by_length = true
@@ -3407,6 +3794,7 @@ signature = "[T, U](self: Seq[T], other: Seq[U]) -> Seq[(T, U)] ends sized"
 # The first `n` elements, or all of them where there are fewer.
 [fn."Seq::take"]
 pub = true
+panics = false
 sync = true
 touches = []
 ends_by_length = true
@@ -3415,6 +3803,7 @@ signature = "[T](self: Seq[T], n: i64) -> Seq[T] ends sized"
 # Everything after the first `n` elements.
 [fn."Seq::skip"]
 pub = true
+panics = false
 sync = true
 touches = []
 ends_by_length = true
@@ -3425,6 +3814,7 @@ signature = "[T](self: Seq[T], n: i64) -> Seq[T] ends sized"
 # A step of `0` aborts, since it would never move.
 [fn."Seq::step_by"]
 pub = true
+panics = true
 sync = true
 touches = []
 ends_by_length = true
@@ -3445,6 +3835,7 @@ signature = "[T](self: Seq[T], step: i64) -> Seq[T] ends sized"
 # is never read: the call is lowered without it.
 [fn."Vec::par_iter"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T]; piece: i64 = 0) -> Par[ref(self) T] sync ends sized"
@@ -3465,6 +3856,7 @@ signature = "[T](self: ref Vec[T]; piece: i64 = 0) -> Par[ref(self) T] sync ends
 # program says the order does not matter.
 [fn."Par::fold"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T, A](self: Par[T], init: fn() -> A, step: fn(A, T) -> A, merge: fn(A, A) -> A; order: par::Order = par::Order::Kept, limit: i64 = task::cores()) -> A"
@@ -3475,6 +3867,7 @@ signature = "[T, A](self: Par[T], init: fn() -> A, step: fn(A, T) -> A, merge: f
 # can be walked from either end.
 [fn."Vec::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T]) -> Seq[ref(self) T] sync ends sized"
@@ -3485,6 +3878,7 @@ signature = "[T](self: ref Vec[T]) -> Seq[ref(self) T] sync ends sized"
 # Each run is a view of the list, not a copy.
 [fn."Vec::chunks"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T], n: i64) -> Seq[ref(self) Array[T]] sync ends sized"
@@ -3494,6 +3888,7 @@ signature = "[T](self: ref Vec[T], n: i64) -> Seq[ref(self) Array[T]] sync ends 
 # Each run is a view of the list, not a copy.
 [fn."Vec::windows"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T], n: i64) -> Seq[ref(self) Array[T]] sync ends sized"
@@ -3504,6 +3899,7 @@ signature = "[T](self: ref Vec[T], n: i64) -> Seq[ref(self) Array[T]] sync ends 
 # than lent.
 [fn."Vec::push"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["value"]
@@ -3515,6 +3911,7 @@ signature = "[T](mut self: ref Vec[T], value: T)"
 # Whether the list holds this value anywhere.
 [fn."Vec::contains"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: ref Vec[T], value: ?) -> bool"
@@ -3527,6 +3924,7 @@ signature = "[T](self: ref Vec[T], value: ?) -> bool"
 # list is empty.
 [fn."Vec::pop"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref Vec[T]) -> T?"
@@ -3537,6 +3935,7 @@ signature = "[T](mut self: ref Vec[T]) -> T?"
 # Take every element off the list, keeping it.
 [fn."Vec::clear"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref Vec[T])"
@@ -3547,6 +3946,7 @@ signature = "[T](mut self: ref Vec[T])"
 # The texts written one after another, with this text between them.
 [fn."Vec::join"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Vec[String], sep: ref String) -> String"
@@ -3561,6 +3961,7 @@ signature = "(self: ref Vec[String], sep: ref String) -> String"
 # than lent.
 [fn."Vec::insert"]
 pub = true
+panics = true
 sync = true
 touches = []
 keeps = ["value"]
@@ -3573,6 +3974,7 @@ signature = "[T](mut self: ref Vec[T], at: i64, value: T)"
 # Take the element at a position out, moving everything after it one back.
 [fn."Vec::remove"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](mut self: ref Vec[T], at: i64) -> T"
@@ -3582,6 +3984,7 @@ signature = "[T](mut self: ref Vec[T], at: i64) -> T"
 # Take the element at a position out, putting the last one in its place.
 [fn."Vec::swap_remove"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](mut self: ref Vec[T], at: i64) -> T"
@@ -3591,6 +3994,7 @@ signature = "[T](mut self: ref Vec[T], at: i64) -> T"
 # Keep the first `length` elements and drop the rest.
 [fn."Vec::truncate"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](mut self: ref Vec[T], length: i64)"
@@ -3607,6 +4011,7 @@ signature = "[T](mut self: ref Vec[T], length: i64)"
 # than lent.
 [fn."Vec::resize"]
 pub = true
+panics = true
 sync = true
 touches = []
 keeps = ["value"]
@@ -3622,6 +4027,7 @@ signature = "[T](mut self: ref Vec[T], length: i64, value: T)"
 # which one parameter type cannot say, so it is `?`.
 [fn."Vec::extend"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["items"]
@@ -3635,6 +4041,7 @@ signature = "[T](mut self: ref Vec[T], items: ?)"
 # The elements need an order (`NK1164` otherwise, ADR-341 D4).
 [fn."Vec::sort"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T: Ord](mut self: ref Vec[T])"
@@ -3645,6 +4052,7 @@ signature = "[T: Ord](mut self: ref Vec[T])"
 # front to back.
 [fn."Vec::retain"]
 pub = true
+panics = false
 sync = "sync(f)"
 signature = "[T](mut self: ref Vec[T], f: fn(ref T) -> bool)"
 
@@ -3654,6 +4062,7 @@ signature = "[T](mut self: ref Vec[T], f: fn(ref T) -> bool)"
 # here and `usize`s below (ADR-293 D20).
 [fn."Vec::swap"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(mut self: ref Vec[?], i: i64, j: i64)"
@@ -3661,6 +4070,7 @@ signature = "(mut self: ref Vec[?], i: i64, j: i64)"
 # Put the elements in the opposite order, in place.
 [fn."Vec::reverse"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(mut self: ref Vec[?])"
@@ -3670,6 +4080,7 @@ signature = "(mut self: ref Vec[?])"
 # The list **keeps** the value: each place gets a copy of it.
 [fn."Vec::fill"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["value"]
@@ -3680,6 +4091,7 @@ signature = "[T: Clone](mut self: ref Vec[T], value: T)"
 # Only **neighbours** are compared, so a sorted list ends with each value once.
 [fn."Vec::dedup"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(mut self: ref Vec[?])"
@@ -3705,6 +4117,7 @@ signature = "(mut self: ref Vec[?])"
 # that means *only if nothing changed since* can say which reading it means.
 [fn."Locked::get"]
 pub = true
+panics = true
 touches = ["lock read"]
 sync = true
 locks = true
@@ -3716,6 +4129,7 @@ signature = "[T](self: ref Locked[T]) -> Seen[T]"
 # one, `update` is the door that does not lose a change made in between.
 [fn."Locked::set"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = true
 keeps = ["value"]
@@ -3746,6 +4160,7 @@ signature = "[T](self: ref Locked[T], value: T)"
 # through two doors needs.
 [fn."Locked::set(after)"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = true
 throws = ["Overtaken"]
@@ -3761,6 +4176,7 @@ signature = "[T](self: ref Locked[T], value: T, seen: ref T)"
 # and not the door's; waiting to open the lock is not pausing.
 [fn."Locked::access"]
 pub = true
+panics = true
 touches = ["lock read"]
 sync = "sync(f)"
 locks = true
@@ -3777,6 +4193,7 @@ signature = "[T](self: ref Locked[T], f: fn(ref T)) -> ?"
 # block's answer.
 [fn."Locked::update"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = "sync(f)"
 # `fn(T)` and not `fn(T) -> T`: this ledger's type language has no result on a
@@ -3806,6 +4223,7 @@ signature = "[T](self: ref Locked[T], f: fn(T))"
 # that means *only if nothing changed since* can say which reading it means.
 [fn."SharedMut::get"]
 pub = true
+panics = true
 touches = ["lock read"]
 sync = true
 locks = true
@@ -3817,6 +4235,7 @@ signature = "[T](self: ref SharedMut[T]) -> Seen[T]"
 # `update` is the door that does not lose a change made in between.
 [fn."SharedMut::set"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = true
 keeps = ["value"]
@@ -3829,6 +4248,7 @@ signature = "[T](self: ref SharedMut[T], value: T)"
 # where something changed in between.
 [fn."SharedMut::set(after)"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = true
 throws = ["Overtaken"]
@@ -3848,6 +4268,7 @@ signature = "[T](self: ref SharedMut[T], value: T, seen: ref T)"
 # cannot.
 [fn."SharedMut::supervised"]
 pub = true
+panics = true
 sync = true
 touches = []
 keeps = ["build"]
@@ -3855,6 +4276,7 @@ signature = "[T, P: supervisor::Restart](build: fn() -> T sync; policy: P = supe
 
 [fn."SharedMut::access"]
 pub = true
+panics = true
 touches = ["lock read"]
 sync = "sync(f)"
 locks = true
@@ -3865,8 +4287,10 @@ signature = "[T](self: ref SharedMut[T], f: fn(ref T)) -> ?"
 # Whether the call pauses is the block's answer.
 [fn."SharedMut::update"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = "sync(f)"
+locks = true
 signature = "[T](self: ref SharedMut[T], f: fn(T))"
 
 # **The two doors over several locks** (Part II 12.3, ADR-281). They take the
@@ -3887,8 +4311,10 @@ signature = "[T](self: ref SharedMut[T], f: fn(T))"
 # waits forever. The block may not change what it is shown.
 [fn."access_all"]
 pub = true
+panics = true
 touches = ["lock read"]
 sync = "sync(f)"
+locks = true
 
 # Change several locked values at once.
 #
@@ -3897,8 +4323,10 @@ sync = "sync(f)"
 # waits forever.
 [fn."update_all"]
 pub = true
+panics = true
 touches = ["lock write"]
 sync = "sync(f)"
+locks = true
 
 # Put the elements in the order of what the function returns, in place.
 #
@@ -3906,6 +4334,7 @@ sync = "sync(f)"
 # first as the tie-breaker.
 [fn."Vec::sort_by_key"]
 pub = true
+panics = false
 sync = "sync(f)"
 signature = "[T, K](mut self: ref Vec[T], f: fn(ref T) -> K)"
 
@@ -3915,6 +4344,7 @@ signature = "[T, K](mut self: ref Vec[T], f: fn(ref T) -> K)"
 # one of them. A hash is over these.
 [fn."str::bytes"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self)"
@@ -3926,6 +4356,7 @@ signature = "(self: ref String) -> Seq[u8] sync ends"
 # one byte, and this walks one of it rather than several.
 [fn."str::chars"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self)"
@@ -3937,6 +4368,7 @@ signature = "(self: ref String) -> Seq[scalar] sync ends"
 # than one byte. `chars().count()` is the other question.
 [fn."str::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> i64"
@@ -3946,6 +4378,7 @@ signature = "(self: ref String) -> i64"
 # entry, so the call read as one that could pause and made its caller `async`.
 [fn."str::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> bool"
@@ -3960,6 +4393,7 @@ signature = "(self: ref String) -> bool"
 # negative* rather than with anything about the language below.
 [fn."str::repeat"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self: ref String, n: i64) -> String"
@@ -3971,6 +4405,7 @@ signature = "(self: ref String, n: i64) -> String"
 # character Unicode counts as white space.
 [fn."scalar::is_whitespace"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -3980,6 +4415,7 @@ signature = "(self) -> bool"
 # Whether the character is a letter or a digit, as Unicode counts them.
 [fn."scalar::is_alphanumeric"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -3989,6 +4425,7 @@ signature = "(self) -> bool"
 # Whether the character is a letter, as Unicode counts them.
 [fn."scalar::is_alphabetic"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -3996,6 +4433,7 @@ signature = "(self) -> bool"
 # Whether the character is an upper-case letter, as Unicode counts them.
 [fn."scalar::is_uppercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -4003,6 +4441,7 @@ signature = "(self) -> bool"
 # Whether the character is a lower-case letter, as Unicode counts them.
 [fn."scalar::is_lowercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -4010,6 +4449,7 @@ signature = "(self) -> bool"
 # Whether the character is one of the ASCII digits `0` to `9`.
 [fn."scalar::is_ascii_digit"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -4018,6 +4458,7 @@ signature = "(self) -> bool"
 # `a` to `f` and `A` to `F`.
 [fn."scalar::is_ascii_hexdigit"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -4026,6 +4467,7 @@ signature = "(self) -> bool"
 # otherwise.
 [fn."scalar::to_ascii_lowercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> scalar"
@@ -4033,6 +4475,7 @@ signature = "(self) -> scalar"
 # Whether the text begins with this.
 [fn."str::starts_with"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, prefix: ?) -> bool"
@@ -4040,6 +4483,7 @@ signature = "(self: ref String, prefix: ?) -> bool"
 # Whether the text ends with this.
 [fn."str::ends_with"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, suffix: ?) -> bool"
@@ -4050,6 +4494,7 @@ signature = "(self: ref String, suffix: ?) -> bool"
 # Whether this appears anywhere in the text.
 [fn."str::contains"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, part: ?) -> bool"
@@ -4057,6 +4502,7 @@ signature = "(self: ref String, part: ?) -> bool"
 # The same text, owned rather than borrowed.
 [fn."str::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> String"
@@ -4074,6 +4520,7 @@ signature = "(self: ref String) -> String"
 # than one character becomes all of them.
 [fn."str::to_uppercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> String"
@@ -4083,6 +4530,7 @@ signature = "(self: ref String) -> String"
 # It follows Unicode rather than ASCII.
 [fn."str::to_lowercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> String"
@@ -4096,6 +4544,7 @@ signature = "(self: ref String) -> String"
 # the ledger's writer into Nikaia, #125).
 [fn."str::replace"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, from: ?, to: ref String) -> String"
@@ -4113,6 +4562,7 @@ signature = "(self: ref String, from: ?, to: ref String, count: i64) -> String"
 # It follows Unicode rather than ASCII.
 [fn."String::to_uppercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> String"
@@ -4122,6 +4572,7 @@ signature = "(ref self) -> String"
 # It follows Unicode rather than ASCII.
 [fn."String::to_lowercase"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> String"
@@ -4134,6 +4585,7 @@ signature = "(ref self) -> String"
 # and `Nfkd` also make `ﬁ` equal to `fi`.
 [fn."str::normalized"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, form: text::Form) -> String"
@@ -4145,6 +4597,7 @@ signature = "(self: ref String, form: text::Form) -> String"
 # them, stands as it is. The result is a literal that reads back as the text.
 [fn."str::quoted"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> String"
@@ -4164,6 +4617,7 @@ signature = "(self: ref String) -> String"
 # copy is the caller's and the field stays where it is.
 [fn."String::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> String"
@@ -4174,6 +4628,7 @@ signature = "(ref self) -> String"
 # The same way out one type over: a view is copied into text of its own.
 [fn."str::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> String"
@@ -4184,6 +4639,7 @@ signature = "(self: ref String) -> String"
 # allocation and lives as long as that text does.
 [fn."str::trim"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> ref(self) String"
@@ -4195,6 +4651,7 @@ signature = "(self: ref String) -> ref(self) String"
 # The same text with the white space at the start left off, as a view into it.
 [fn."str::trim_start"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> ref(self) String"
@@ -4202,6 +4659,7 @@ signature = "(self: ref String) -> ref(self) String"
 # The same text with the white space at the end left off, as a view into it.
 [fn."str::trim_end"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> ref(self) String"
@@ -4212,12 +4670,14 @@ signature = "(self: ref String) -> ref(self) String"
 # a view where text of its own was wanted.
 [fn."str::trim_start_matches"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, pat: ?) -> ref(self) String"
 
 [fn."str::trim_end_matches"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, pat: ?) -> ref(self) String"
@@ -4226,12 +4686,14 @@ signature = "(self: ref String, pat: ?) -> ref(self) String"
 # it does not start or end with it (#547).
 [fn."str::strip_prefix"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, prefix: ?) -> ref(self) String?"
 
 [fn."str::strip_suffix"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, suffix: ?) -> ref(self) String?"
@@ -4245,6 +4707,7 @@ signature = "(self: ref String, suffix: ?) -> ref(self) String?"
 # pattern is; so is `rfind`'s, `replace`'s and `replacen`'s `from`.
 [fn."str::find"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, needle: ?; from: i64 = 0) -> i64?"
@@ -4253,6 +4716,7 @@ signature = "(self: ref String, needle: ?; from: i64 = 0) -> i64?"
 # text it came from, as `find`'s does.
 [fn."str::rfind"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, needle: ?) -> i64?"
@@ -4262,6 +4726,7 @@ signature = "(self: ref String, needle: ?) -> i64?"
 # Nothing is copied: a line lives as long as the text does.
 [fn."str::lines"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> Seq[ref(self) String] sync ends"
@@ -4269,6 +4734,7 @@ signature = "(self: ref String) -> Seq[ref(self) String] sync ends"
 # The pieces of the text between each `sep`, each a view into it.
 [fn."str::split"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
@@ -4277,6 +4743,7 @@ signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
 # last to the first.
 [fn."str::rsplit"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
@@ -4285,6 +4752,7 @@ signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
 # it on, both views into it. A position off a scalar's start aborts.
 [fn."str::split_at"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self: ref String, at: i64) -> (ref(self) String, ref(self) String)"
@@ -4294,6 +4762,7 @@ signature = "(self: ref String, at: i64) -> (ref(self) String, ref(self) String)
 # not occur (ADR-364).
 [fn."str::split_once"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, sep: ?) -> (ref(self) String, ref(self) String)?"
@@ -4301,6 +4770,7 @@ signature = "(self: ref String, sep: ?) -> (ref(self) String, ref(self) String)?
 # The text cut in two at the last `sep`, as `split_once` cuts it at the first.
 [fn."str::rsplit_once"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, sep: ?) -> (ref(self) String, ref(self) String)?"
@@ -4310,6 +4780,7 @@ signature = "(self: ref String, sep: ?) -> (ref(self) String, ref(self) String)?
 # program where a length is an `i64` (Part I 2.2).
 [fn."str::matches"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String, pat: ?) -> Seq[ref(self) String] sync ends"
@@ -4328,6 +4799,7 @@ signature = "(self: ref String, n: i64, sep: ?) -> Seq[ref(self) String] sync en
 # into it.
 [fn."str::split_whitespace"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> Seq[ref(self) String] sync ends"
@@ -4344,6 +4816,7 @@ signature = "(self: ref String) -> Seq[ref(self) String] sync ends"
 # back whatever the subtraction comes to.
 [fn."text::digit_value"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["result == c - 48"]
@@ -4359,6 +4832,7 @@ signature = "(c: scalar) -> i32"
 # it with a grammar, where `dec[i64](digit+)` reports where it went wrong.
 [fn."text::parse_i64"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4369,6 +4843,7 @@ signature = "(text: ref String) -> i64?"
 # it.
 [fn."text::parse_i32"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4379,6 +4854,7 @@ signature = "(text: ref String) -> i32?"
 # unsigned number takes no `-`, not even `-0`.
 [fn."text::parse_u32"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4388,6 +4864,7 @@ signature = "(text: ref String) -> u32?"
 # none or one a `u8` does not hold, as `parse_u32` reads it.
 [fn."text::parse_u8"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4397,6 +4874,7 @@ signature = "(text: ref String) -> u8?"
 # none or one a `u64` does not hold, as `parse_u32` reads it.
 [fn."text::parse_u64"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4410,6 +4888,7 @@ signature = "(text: ref String) -> u64?"
 # Nothing else: no space, no `_`, no `.5`, no `1.`, no `infinity`.
 [fn."text::parse_f64"]
 pub = true
+panics = false
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4457,6 +4936,7 @@ pub = true
 # that no program has to write one.
 [fn."foreign::CStr::to_string"]
 pub = true
+panics = false
 sync = true
 touches = []
 # The doc below already said it: *the same failure `fs::read_to_string` has*.
@@ -4522,36 +5002,42 @@ orders = true
 # bytes are compared and kept as they are.
 [fn."fs::Path::starts_with"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path, prefix: ref fs::Path) -> bool"
 
 [fn."fs::Path::ends_with"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path, suffix: ref fs::Path) -> bool"
 
 [fn."fs::Path::file_name"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> fs::Path?"
 
 [fn."fs::Path::extension"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> fs::Path?"
 
 [fn."fs::Path::parent"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> fs::Path?"
 
 [fn."fs::Path::with_extension"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path, extension: ref fs::Path) -> fs::Path"
@@ -4560,6 +5046,7 @@ signature = "(self: ref fs::Path, extension: ref fs::Path) -> fs::Path"
 # name (ADR-319 D3, amended 2026-10-28). It reads no file system.
 [fn."fs::Path::strip_prefix"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path, base: ref fs::Path) -> fs::Path?"
@@ -4570,6 +5057,7 @@ signature = "(self: ref fs::Path, base: ref fs::Path) -> fs::Path?"
 # no file system.
 [fn."fs::Path::parts"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> Vec[fs::Path]"
@@ -4578,12 +5066,14 @@ signature = "(self: ref fs::Path) -> Vec[fs::Path]"
 # beyond the call that lent it.
 [fn."fs::Path::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> fs::Path"
 
 [fn."fs::Path::join"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path, part: ref fs::Path) -> fs::Path"
@@ -4591,6 +5081,7 @@ signature = "(self: ref fs::Path, part: ref fs::Path) -> fs::Path"
 # Text for showing (ADR-319 D6): `�` for what is not text. It never fails.
 [fn."fs::Path::display"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> String"
@@ -4601,6 +5092,7 @@ signature = "(self: ref fs::Path) -> String"
 # every target.
 [fn."fs::Path::to_text"]
 pub = true
+panics = false
 sync = true
 touches = []
 throws = ["io::IoError"]
@@ -4611,6 +5103,7 @@ signature = "(self: ref fs::Path) -> String"
 # program writes `to_text`.
 [fn."fs::Path::text_of"]
 pub = false
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Path) -> String"
@@ -4620,6 +5113,7 @@ signature = "(self: ref fs::Path) -> String"
 # Every call is the system's own and blocks for it, as `exists` does: `sync`.
 [fn."fs::open"]
 pub = true
+panics = false
 sync = true
 touches = ["file(path) read"]
 throws = ["io::IoError"]
@@ -4634,6 +5128,7 @@ crosses = true
 # Bytes into `into` from where the file is; how many, `0` at its end.
 [fn."fs::File::read"]
 pub = true
+panics = false
 sync = true
 touches = ["file read"]
 throws = ["io::IoError"]
@@ -4642,6 +5137,7 @@ signature = "(mut self: ref fs::File, mut into: Vec[u8]) -> i64"
 # Bytes or text into the file where it is; how many were written.
 [fn."fs::File::write"]
 pub = true
+panics = false
 sync = true
 touches = ["file write"]
 throws = ["io::IoError"]
@@ -4649,6 +5145,7 @@ signature = "(mut self: ref fs::File, data: ?) -> i64"
 
 [fn."fs::File::flush"]
 pub = true
+panics = false
 sync = true
 touches = ["file write"]
 throws = ["io::IoError"]
@@ -4657,6 +5154,7 @@ signature = "(mut self: ref fs::File)"
 # Moves to a position; the byte position it is at now.
 [fn."fs::File::seek"]
 pub = true
+panics = false
 sync = true
 touches = ["file read"]
 throws = ["io::IoError"]
@@ -4665,6 +5163,7 @@ signature = "(mut self: ref fs::File, to: fs::Seek) -> i64"
 # How many bytes the file holds now.
 [fn."fs::File::len"]
 pub = true
+panics = false
 sync = true
 touches = ["file read"]
 throws = ["io::IoError"]
@@ -4673,6 +5172,7 @@ signature = "(self: ref fs::File) -> i64"
 # What being done with a file does: what was written is handed to the system.
 [fn."fs::File::cleanup"]
 pub = true
+panics = false
 sync = true
 touches = ["file write"]
 throws = ["io::IoError"]
@@ -4695,18 +5195,21 @@ compares = true
 # Its length in bytes, an `i64` as a length is.
 [fn."fs::Metadata::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Metadata) -> i64"
 
 [fn."fs::Metadata::is_dir"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Metadata) -> bool"
 
 [fn."fs::Metadata::is_file"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Metadata) -> bool"
@@ -4715,6 +5218,7 @@ signature = "(self: ref fs::Metadata) -> bool"
 # `time::since_epoch` reads; zero where the platform does not say (#922).
 [fn."fs::Metadata::modified"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Metadata) -> time::Duration"
@@ -4722,6 +5226,7 @@ signature = "(self: ref fs::Metadata) -> time::Duration"
 # The number of hard links to the file; `1` off Unix (#922).
 [fn."fs::Metadata::links"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Metadata) -> u64"
@@ -4730,6 +5235,7 @@ signature = "(self: ref fs::Metadata) -> u64"
 # Unix (#922).
 [fn."fs::Metadata::file_id"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref fs::Metadata) -> (u64, u64)?"
@@ -4745,6 +5251,7 @@ touches = ["file read"]
 # What went wrong, in words: `Error`'s `message` (Part I 7.1).
 [fn."io::IoError::message"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref io::IoError) -> String"
@@ -4753,6 +5260,7 @@ signature = "(self: ref io::IoError) -> String"
 # 7.1). A library's failure has no site in the program, and says so.
 [fn."io::IoError::full"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref io::IoError) -> String"
@@ -4899,6 +5407,7 @@ throws = ["task::Crashed", "task::TimedOut"]
 # run), with `task::OnTimeout::Keep` it keeps running.
 [fn."TaskHandle::join(within, on_timeout)"]
 pub = true
+panics = false
 signature = "[T](self: TaskHandle[T], within: time::Duration, on_timeout: task::OnTimeout) -> T"
 throws = ["task::Crashed", "task::TimedOut"]
 
@@ -4946,6 +5455,7 @@ variants = ["Kept", "Any"]
 # Always at least 1.
 [fn."task::cores"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> i64"
@@ -5003,6 +5513,7 @@ signature = "(self: ref task::Scope, body: fn() throws)"
 # that. Cancelling takes the handle, so a cancelled task is never joined.
 [fn."TaskHandle::cancel"]
 pub = true
+panics = false
 sync = true
 signature = "[T](self: TaskHandle[T])"
 
@@ -5011,6 +5522,7 @@ signature = "[T](self: TaskHandle[T])"
 # Give the task up: it runs on and nobody waits for it.
 [fn."TaskHandle::detach"]
 pub = true
+panics = false
 sync = true
 signature = "[T](self: TaskHandle[T])"
 
@@ -5055,6 +5567,7 @@ throws = ["task::Crashed", "task::TimedOut"]
 # run), with `task::OnTimeout::Keep` it keeps running.
 [fn."task::ChildHandle::join(within, on_timeout)"]
 pub = true
+panics = false
 signature = "[T](self: task::ChildHandle[T], within: time::Duration, on_timeout: task::OnTimeout) -> T"
 throws = ["task::Crashed", "task::TimedOut"]
 
@@ -5064,6 +5577,7 @@ throws = ["task::Crashed", "task::TimedOut"]
 # Stop the task, and drop what it ends with.
 [fn."task::ChildHandle::cancel"]
 pub = true
+panics = false
 sync = true
 signature = "[T](self: task::ChildHandle[T])"
 
@@ -5072,6 +5586,7 @@ signature = "[T](self: task::ChildHandle[T])"
 # Start a deferred task; the handle stays.
 [fn."task::ChildHandle::start"]
 pub = true
+panics = false
 sync = true
 signature = "[T](mut self: ref task::ChildHandle[T])"
 
@@ -5118,6 +5633,7 @@ constant = "time::Duration::new(secs: u64, nanos: u32)"
 # span is made with `seconds`, `millis` and the rest.
 [fn."time::Duration::new"]
 pub = false
+panics = true
 sync = true
 touches = []
 signature = "(secs: u64, nanos: u32) -> time::Duration"
@@ -5128,6 +5644,7 @@ signature = "(secs: u64, nanos: u32) -> time::Duration"
 # This many hours, as a span of time.
 [fn."i32::hours"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5135,6 +5652,7 @@ signature = "(self) -> time::Duration"
 # This many minutes, as a span of time.
 [fn."i32::minutes"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5142,6 +5660,7 @@ signature = "(self) -> time::Duration"
 # This many seconds, as a span of time.
 [fn."i32::seconds"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5149,6 +5668,7 @@ signature = "(self) -> time::Duration"
 # This many thousandths of a second, as a span of time.
 [fn."i32::millis"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5156,6 +5676,7 @@ signature = "(self) -> time::Duration"
 # This many millionths of a second, as a span of time.
 [fn."i32::micros"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5163,6 +5684,7 @@ signature = "(self) -> time::Duration"
 # This many hours, as a span of time.
 [fn."i64::hours"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5170,6 +5692,7 @@ signature = "(self) -> time::Duration"
 # This many minutes, as a span of time.
 [fn."i64::minutes"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5177,6 +5700,7 @@ signature = "(self) -> time::Duration"
 # This many seconds, as a span of time.
 [fn."i64::seconds"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5184,6 +5708,7 @@ signature = "(self) -> time::Duration"
 # This many thousandths of a second, as a span of time.
 [fn."i64::millis"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5191,6 +5716,7 @@ signature = "(self) -> time::Duration"
 # This many millionths of a second, as a span of time.
 [fn."i64::micros"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> time::Duration"
@@ -5204,6 +5730,7 @@ signature = "(self) -> time::Duration"
 # How many whole hours the span holds, cut off.
 [fn."time::Duration::in_hours"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -5211,6 +5738,7 @@ signature = "(self) -> i64"
 # How many whole minutes the span holds, cut off.
 [fn."time::Duration::in_minutes"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -5218,6 +5746,7 @@ signature = "(self) -> i64"
 # How many whole seconds the span holds, cut off.
 [fn."time::Duration::in_seconds"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -5225,6 +5754,7 @@ signature = "(self) -> i64"
 # How many whole thousandths of a second the span holds, cut off.
 [fn."time::Duration::in_millis"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -5232,6 +5762,7 @@ signature = "(self) -> i64"
 # How many whole millionths of a second the span holds, cut off.
 [fn."time::Duration::in_micros"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -5240,6 +5771,7 @@ signature = "(self) -> i64"
 # stays there ([ADR-368](../../docs/specification/adr/adr-368.md) D2).
 [fn."time::Duration::in_nanos"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -5262,6 +5794,7 @@ copies = true
 # Read the monotonic clock.
 [fn."time::now"]
 pub = true
+panics = false
 sync = true
 signature = "() -> time::Instant"
 
@@ -5270,18 +5803,21 @@ signature = "() -> time::Instant"
 # go back, so it measures no span within a run (ADR-368, #922).
 [fn."time::since_epoch"]
 pub = true
+panics = false
 sync = true
 signature = "() -> time::Duration"
 
 # How long ago the reading was: the span from it to now.
 [fn."time::Instant::elapsed"]
 pub = true
+panics = false
 sync = true
 signature = "(self) -> time::Duration"
 
 # The span from `earlier` to this reading, or zero where this one is earlier.
 [fn."time::Instant::since"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, earlier: time::Instant) -> time::Duration"
@@ -5305,6 +5841,7 @@ signature = "(self, earlier: time::Instant) -> time::Duration"
 # The thread is given up rather than held, so other tasks run while this waits.
 [fn."time::sleep"]
 pub = true
+panics = false
 signature = "(span: time::Duration)"
 
 # --- Message passing (ADR-149) -----------------------------------------------
@@ -5325,6 +5862,7 @@ signature = "(span: time::Duration)"
 # writes a large number - and has said it.
 [fn."channel::bounded"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T](capacity: i64) -> (channel::Sender[T], channel::Receiver[T])"
@@ -5357,6 +5895,7 @@ pub = true
 # waits.
 [fn."channel::Sender::send"]
 pub = true
+panics = false
 signature = "[T](self: ref channel::Sender[T], value: ?)"
 
 # **`-> T?`**, and the `?` is D3: a closed channel is the ordinary **end** of a
@@ -5368,6 +5907,7 @@ signature = "[T](self: ref channel::Sender[T], value: ?)"
 # is what reads it. It gives the thread up rather than holding it.
 [fn."channel::Receiver::recv"]
 pub = true
+panics = false
 signature = "[T](self: ref channel::Receiver[T]) -> T?"
 
 # --- The collections outside the prelude (ADR-313 D3) ------------------------
@@ -5485,10 +6025,11 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 # The wait gives the thread up, so other tasks run while the program does.
 [fn."process::run"]
 pub = true
+panics = false
 throws = ["io::IoError"]
 provenance = "untrusted"
 keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured) -> process::Output"
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
 # hands back. Its two output streams are read to their end from the start, so
@@ -5504,6 +6045,7 @@ crosses = true
 # program cannot be started.
 [fn."process::spawn"]
 pub = true
+panics = false
 sync = true
 throws = ["io::IoError"]
 provenance = "untrusted"
@@ -5514,6 +6056,7 @@ signature = "(program: ref String, args: Vec[String]) -> process::Child"
 # nothing while it runs. It does not wait.
 [fn."process::Child::try_wait"]
 pub = true
+panics = false
 sync = true
 throws = ["io::IoError"]
 signature = "(mut self: ref process::Child) -> i32?"
@@ -5521,6 +6064,7 @@ signature = "(mut self: ref process::Child) -> i32?"
 # End the program (SIGKILL on Unix). One that has ended already is no failure.
 [fn."process::Child::kill"]
 pub = true
+panics = false
 sync = true
 throws = ["io::IoError"]
 signature = "(mut self: ref process::Child)"
@@ -5533,6 +6077,7 @@ signature = "(mut self: ref process::Child)"
 # `try_wait` saw it first; `timed_out` is `false`.
 [fn."process::Child::wait"]
 pub = true
+panics = false
 throws = ["io::IoError"]
 provenance = "untrusted"
 signature = "(mut self: ref process::Child) -> process::Output"
@@ -5543,6 +6088,7 @@ signature = "(mut self: ref process::Child) -> process::Output"
 # nobody joined.
 [fn."process::exit"]
 pub = true
+panics = false
 sync = true
 throws = ["process::Exit"]
 signature = "(code: i64)"
@@ -5600,6 +6146,7 @@ crosses = true
 # already listening there.
 [fn."net::listen"]
 pub = true
+panics = false
 touches = ["socket write"]
 throws = ["io::IoError"]
 signature = "(address: ref String) -> net::Listener"
@@ -5609,6 +6156,7 @@ signature = "(address: ref String) -> net::Listener"
 # It fails where nothing is listening there.
 [fn."net::connect"]
 pub = true
+panics = false
 touches = ["socket write"]
 throws = ["io::IoError"]
 signature = "(address: ref String) -> net::Connection"
@@ -5618,6 +6166,7 @@ signature = "(address: ref String) -> net::Connection"
 # It gives the thread up while it waits, so one thread serves many connections.
 [fn."net::Listener::accept"]
 pub = true
+panics = false
 touches = ["socket read"]
 throws = ["io::IoError"]
 signature = "(self: ref Listener) -> net::Connection"
@@ -5629,6 +6178,7 @@ signature = "(self: ref Listener) -> net::Connection"
 # A program that asked for port `0` finds out here which port it got.
 [fn."net::Listener::address"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Listener) -> String"
@@ -5642,6 +6192,7 @@ signature = "(self: ref Listener) -> String"
 # else chose these bytes.
 [fn."net::Connection::read"]
 pub = true
+panics = false
 touches = ["socket read"]
 throws = ["io::IoError"]
 provenance = "untrusted"
@@ -5655,6 +6206,7 @@ signature = "(mut self: ref Connection) -> Bytes"
 # useful with: the loop that would follow one is inside this.
 [fn."net::Connection::write"]
 pub = true
+panics = false
 touches = ["socket write"]
 throws = ["io::IoError"]
 signature = "(mut self: ref Connection, bytes: ?)"
@@ -5662,6 +6214,7 @@ signature = "(mut self: ref Connection, bytes: ?)"
 # Who is on the other end.
 [fn."net::Connection::peer"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Connection) -> String"
@@ -5781,6 +6334,7 @@ signature = "(children: Vec[supervisor::Child]; strategy: supervisor::Strategy =
 # wants the close at a named moment writes this.
 [fn."net::Connection::close"]
 pub = true
+panics = false
 sync = true
 touches = ["socket write"]
 signature = "(self: Connection)"
@@ -5834,6 +6388,7 @@ crosses = true
 # Nothing read yet. It is written `http1::Buffer()`.
 [fn."http1::Buffer::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> http1::Buffer"
@@ -5850,6 +6405,7 @@ signature = "(mut self: ref Buffer, more: ?)"
 # How many bytes have arrived.
 [fn."http1::Buffer::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Buffer) -> i64"
@@ -5867,6 +6423,7 @@ signature = "(self: ref Buffer) -> i64"
 # ended and is already too long never will.
 [fn."http1::Buffer::head_end"]
 pub = true
+panics = false
 sync = true
 touches = []
 throws = ["io::IoError"]
@@ -5879,6 +6436,7 @@ signature = "(self: ref Buffer, cap: i64) -> i64"
 # `content-length` that is not a count, a `transfer-encoding` at all.
 [fn."http1::Buffer::head"]
 pub = true
+panics = false
 sync = true
 touches = []
 throws = ["io::IoError"]
@@ -5890,6 +6448,7 @@ signature = "(self: ref Buffer) -> http1::Head"
 # into a request a handler is given, which owns it.
 [fn."http1::Buffer::text_from"]
 pub = true
+panics = false
 sync = true
 touches = []
 throws = ["io::IoError"]
@@ -5898,6 +6457,7 @@ signature = "(self: ref Buffer, at: i64) -> String"
 # `GET` or `POST`, as it was written.
 [fn."http1::Head::method"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> ref(self) String"
@@ -5906,6 +6466,7 @@ signature = "(self: ref Head) -> ref(self) String"
 # writes `path()` and `query()` as two things).
 [fn."http1::Head::path"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> ref(self) String"
@@ -5916,6 +6477,7 @@ signature = "(self: ref Head) -> ref(self) String"
 # untouched.
 [fn."http1::Head::target"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> ref(self) String"
@@ -5931,6 +6493,7 @@ signature = "(self: ref Head) -> ref(self) String"
 # was written.
 [fn."http1::Head::query"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head, name: ?) -> ref(self) String?"
@@ -5943,6 +6506,7 @@ signature = "(self: ref Head, name: ?) -> ref(self) String?"
 # something this module knows.
 [fn."http1::Head::header"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head, name: ?) -> ref(self) String?"
@@ -5951,6 +6515,7 @@ signature = "(self: ref Head, name: ?) -> ref(self) String?"
 # client is being unreasonable.
 [fn."http1::Head::headers"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> i64"
@@ -5958,6 +6523,7 @@ signature = "(self: ref Head) -> i64"
 # What `Content-Length` said, or `0` where it said nothing.
 [fn."http1::Head::length"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> i64"
@@ -5966,6 +6532,7 @@ signature = "(self: ref Head) -> i64"
 # starts.
 [fn."http1::Head::size"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> i64"
@@ -5977,6 +6544,7 @@ signature = "(self: ref Head) -> i64"
 # asked.
 [fn."http1::Head::keep_alive"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Head) -> bool"
@@ -5991,6 +6559,7 @@ signature = "(self: ref Head) -> bool"
 # After `net::Connection::read`, **zero means the peer closed**.
 [fn."Bytes::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> i64"
@@ -5998,6 +6567,7 @@ signature = "(ref self) -> i64"
 # Whether there are none.
 [fn."Bytes::is_empty"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> bool"
@@ -6006,6 +6576,7 @@ signature = "(ref self) -> bool"
 # (#877): where a pipeline over the bytes starts, `b.iter().filter(…)`.
 [fn."Bytes::iter"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> Seq[ref(self) u8] sync ends sized"
@@ -6014,6 +6585,7 @@ signature = "(ref self) -> Seq[ref(self) u8] sync ends sized"
 # `prefix` begins every one.
 [fn."Bytes::starts_with"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self, prefix: ref Bytes) -> bool"
@@ -6021,6 +6593,7 @@ signature = "(ref self, prefix: ref Bytes) -> bool"
 # Whether the bytes end with `suffix`, byte for byte (#877).
 [fn."Bytes::ends_with"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self, suffix: ref Bytes) -> bool"
@@ -6029,6 +6602,7 @@ signature = "(ref self, suffix: ref Bytes) -> bool"
 # buffer, and `NotText` where the bytes are not UTF-8.
 [fn."Bytes::text"]
 pub = true
+panics = false
 sync = true
 touches = []
 throws = ["io::IoError"]
@@ -6038,6 +6612,7 @@ signature = "(ref self) -> ref(self) String"
 # an owned copy that never fails, for output a program only shows.
 [fn."Bytes::text_lossy"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> String"
@@ -6047,6 +6622,7 @@ signature = "(ref self) -> String"
 # (ADR-375 D3), the first byte of the set; the checker takes either.
 [fn."Bytes::find"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
@@ -6063,6 +6639,7 @@ signature = "(ref self, byte: u8; from: i64 = 0) -> i64?"
 # `AfterHit` looks for each hit in the half block right after the one before.
 [fn."Bytes::find_all"]
 pub = true
+panics = false
 sync = true
 touches = []
 consumers = ["count", "nth", "last"]
@@ -6084,6 +6661,7 @@ variants = ["ByBlock", "AfterHit"]
 # an empty set the whole as its one piece.
 [fn."Bytes::split"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self, set: bytes::ByteSet) -> Seq[ref(self) Bytes] sync"
@@ -6110,6 +6688,7 @@ signature = "(ref self, sep: u8; piece: i64 = 0) -> Par[ref(self) Bytes] sync"
 # (ADR-320 D12): checked as the cut `b[at..<at + 4]` is, and proved as it is.
 [fn."Bytes::u32_le"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(ref self, at: i64) -> u32"
@@ -6118,6 +6697,7 @@ signature = "(ref self, at: i64) -> u32"
 # (ADR-320 D12): checked as the cut `b[at..<at + 4]` is, and proved as it is.
 [fn."Bytes::u32_be"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(ref self, at: i64) -> u32"
@@ -6126,6 +6706,7 @@ signature = "(ref self, at: i64) -> u32"
 # (ADR-320 D12): checked as the cut `b[at..<at + 8]` is, and proved as it is.
 [fn."Bytes::u64_le"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(ref self, at: i64) -> u64"
@@ -6134,6 +6715,7 @@ signature = "(ref self, at: i64) -> u64"
 # (ADR-320 D12): checked as the cut `b[at..<at + 8]` is, and proved as it is.
 [fn."Bytes::u64_be"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(ref self, at: i64) -> u64"
@@ -6143,6 +6725,7 @@ signature = "(ref self, at: i64) -> u64"
 # beyond the text.
 [fn."Bytes::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> Bytes"
@@ -6158,6 +6741,7 @@ copies = true
 # The set of the bytes in the list; a byte written twice is in it once.
 [fn."bytes::ByteSet"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(bytes: Vec[u8]) -> bytes::ByteSet"
@@ -6166,6 +6750,7 @@ signature = "(bytes: Vec[u8]) -> bytes::ByteSet"
 # vector's memory becomes the buffer and nothing is copied.
 [fn."Bytes"]
 pub = true
+panics = false
 sync = true
 touches = []
 keeps = ["bytes"]
@@ -6231,6 +6816,7 @@ copies = true
 # proved as it is.
 [fn."simd::load"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(bytes: ref Bytes, at: i64) -> ?"
@@ -6238,6 +6824,7 @@ signature = "(bytes: ref Bytes, at: i64) -> ?"
 # Every lane `x`, in the type the result is written as.
 [fn."simd::splat"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(x: ?) -> ?"
@@ -6245,6 +6832,7 @@ signature = "(x: ?) -> ?"
 # `a`'s lane where `mask` holds, `b`'s where it does not.
 [fn."simd::select"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[V](mask: ?, a: V, b: V) -> V"
@@ -6260,6 +6848,7 @@ signature = "(lanes: ?) -> ?"
 # Lane by lane `+`, wrapping (D4).
 [fn."simd::Lanes::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6267,6 +6856,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # Lane by lane `-`, wrapping.
 [fn."simd::Lanes::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6274,6 +6864,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # Lane by lane `*`, wrapping.
 [fn."simd::Lanes::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6281,6 +6872,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # Lane by lane `+`, the nearest value a lane holds where it does not fit.
 [fn."simd::Lanes::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6288,6 +6880,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # Lane by lane `-`, the nearest value a lane holds where it does not fit.
 [fn."simd::Lanes::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6295,6 +6888,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # The smaller of each pair of lanes.
 [fn."simd::Lanes::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6302,6 +6896,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # The larger of each pair of lanes.
 [fn."simd::Lanes::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
@@ -6309,6 +6904,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Lanes[T]"
 # Lane by lane `eq`, as a mask (D3).
 [fn."simd::Lanes::eq"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
@@ -6316,6 +6912,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
 # Lane by lane `ne`, as a mask (D3).
 [fn."simd::Lanes::ne"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
@@ -6323,6 +6920,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
 # Lane by lane `lt`, as a mask (D3).
 [fn."simd::Lanes::lt"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
@@ -6330,6 +6928,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
 # Lane by lane `le`, as a mask (D3).
 [fn."simd::Lanes::le"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
@@ -6337,6 +6936,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
 # Lane by lane `gt`, as a mask (D3).
 [fn."simd::Lanes::gt"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
@@ -6344,6 +6944,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
 # Lane by lane `ge`, as a mask (D3).
 [fn."simd::Lanes::ge"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
@@ -6351,6 +6952,7 @@ signature = "[T](self: simd::Lanes[T], other: simd::Lanes[T]) -> simd::Mask[T]"
 # The lanes added, wrapping.
 [fn."simd::Lanes::wrapping_sum"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T]) -> T"
@@ -6358,6 +6960,7 @@ signature = "[T](self: simd::Lanes[T]) -> T"
 # The smallest lane.
 [fn."simd::Lanes::min_lane"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T]) -> T"
@@ -6365,6 +6968,7 @@ signature = "[T](self: simd::Lanes[T]) -> T"
 # The largest lane.
 [fn."simd::Lanes::max_lane"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T]) -> T"
@@ -6372,6 +6976,7 @@ signature = "[T](self: simd::Lanes[T]) -> T"
 # How many lanes it holds: a constant of the build.
 [fn."simd::Lanes::count"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T](self: simd::Lanes[T]) -> i64"
@@ -6379,6 +6984,7 @@ signature = "[T](self: simd::Lanes[T]) -> i64"
 # Lane by lane `+`, wrapping (D4).
 [fn."simd::Fixed::wrapping_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6386,6 +6992,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `-`, wrapping.
 [fn."simd::Fixed::wrapping_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6393,6 +7000,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `*`, wrapping.
 [fn."simd::Fixed::wrapping_mul"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6400,6 +7008,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `+`, the nearest value a lane holds where it does not fit.
 [fn."simd::Fixed::saturating_add"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6407,6 +7016,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `-`, the nearest value a lane holds where it does not fit.
 [fn."simd::Fixed::saturating_sub"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6414,6 +7024,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # The smaller of each pair of lanes.
 [fn."simd::Fixed::min"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6421,6 +7032,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # The larger of each pair of lanes.
 [fn."simd::Fixed::max"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Fixed[T, N]"
@@ -6428,6 +7040,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `eq`, as a mask (D3).
 [fn."simd::Fixed::eq"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
@@ -6435,6 +7048,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `ne`, as a mask (D3).
 [fn."simd::Fixed::ne"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
@@ -6442,6 +7056,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `lt`, as a mask (D3).
 [fn."simd::Fixed::lt"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
@@ -6449,6 +7064,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `le`, as a mask (D3).
 [fn."simd::Fixed::le"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
@@ -6456,6 +7072,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `gt`, as a mask (D3).
 [fn."simd::Fixed::gt"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
@@ -6463,6 +7080,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # Lane by lane `ge`, as a mask (D3).
 [fn."simd::Fixed::ge"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::Mask[T, N]"
@@ -6470,6 +7088,7 @@ signature = "[T, N](self: simd::Fixed[T, N], other: simd::Fixed[T, N]) -> simd::
 # The lanes added, wrapping.
 [fn."simd::Fixed::wrapping_sum"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N]) -> T"
@@ -6477,6 +7096,7 @@ signature = "[T, N](self: simd::Fixed[T, N]) -> T"
 # The smallest lane.
 [fn."simd::Fixed::min_lane"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N]) -> T"
@@ -6484,6 +7104,7 @@ signature = "[T, N](self: simd::Fixed[T, N]) -> T"
 # The largest lane.
 [fn."simd::Fixed::max_lane"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N]) -> T"
@@ -6491,6 +7112,7 @@ signature = "[T, N](self: simd::Fixed[T, N]) -> T"
 # How many lanes it holds: a constant of the build.
 [fn."simd::Fixed::count"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N]) -> i64"
@@ -6498,6 +7120,7 @@ signature = "[T, N](self: simd::Fixed[T, N]) -> i64"
 # Lane `i`, checked as an index is.
 [fn."simd::Fixed::lane"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], i: i64) -> T"
@@ -6506,6 +7129,7 @@ signature = "[T, N](self: simd::Fixed[T, N], i: i64) -> T"
 # literals below `N` (`NK1298`).
 [fn."simd::Fixed::shuffle"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], of: simd::Fixed[u8, N]) -> simd::Fixed[T, N]"
@@ -6515,6 +7139,7 @@ signature = "[T, N](self: simd::Fixed[T, N], of: simd::Fixed[u8, N]) -> simd::Fi
 # `Fixed[i16, N]` by `Fixed[i16, N]` into `Fixed[i32, N / 2]`, wrapping.
 [fn."simd::Fixed::dot_pairs"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self, w: ?) -> ?"
@@ -6522,6 +7147,7 @@ signature = "(self, w: ?) -> ?"
 # Each lane in a lane of twice the width, signed where it was.
 [fn."simd::Fixed::widen"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> ?"
@@ -6530,6 +7156,7 @@ signature = "(self) -> ?"
 # does not fit.
 [fn."simd::Fixed::narrow_saturating"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> ?"
@@ -6538,6 +7165,7 @@ signature = "(self) -> ?"
 # which is at most 64 lanes: a fact of the number it holds (D7).
 [fn."simd::Mask::first"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["0 <= result", "result < 64"]
@@ -6547,6 +7175,7 @@ signature = "(self) -> i64?"
 # is at most 64 lanes: a fact for the bounds walk on the name a `for` binds.
 [fn."simd::Mask::positions"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures_each = ["0 <= item", "item < 64"]
@@ -6555,6 +7184,7 @@ signature = "(self) -> Seq[i64] sync"
 # How many lanes hold.
 [fn."simd::Mask::count"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> i64"
@@ -6562,6 +7192,7 @@ signature = "(self) -> i64"
 # Whether any lane holds.
 [fn."simd::Mask::any"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -6569,6 +7200,7 @@ signature = "(self) -> bool"
 # Whether every lane holds.
 [fn."simd::Mask::all"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self) -> bool"
@@ -6633,6 +7265,7 @@ compares = true
 # engine's message.
 [fn."regex::dynamic"]
 pub = true
+panics = false
 sync = true
 touches = []
 throws = ["regex::Error"]
@@ -6641,6 +7274,7 @@ signature = "(pattern: ref String) -> regex::Regex[regex::Dynamic]"
 # Whether the pattern matches anywhere in `s`.
 [fn."regex::Regex::is_match"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> bool"
@@ -6649,6 +7283,7 @@ signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> bool"
 # `null`.
 [fn."regex::Regex::find"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(s)"
@@ -6657,6 +7292,7 @@ signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> text::Ma
 # Every match in `s`, left to right, not overlapping.
 [fn."regex::Regex::find_all"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self | s)"
@@ -6665,6 +7301,7 @@ signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> Seq[text
 # The groups of the match `find` finds, or `null` where there is none.
 [fn."regex::Regex::captures"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(s)"
@@ -6674,6 +7311,7 @@ signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> regex::C
 # text and `${name}` for the group called `name`'s (`$$` is a `$`).
 [fn."regex::Regex::replace_all"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String, with: ref String) -> String"
@@ -6682,6 +7320,7 @@ signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String, with: ref S
 # start or the end gives an empty piece there.
 [fn."regex::Regex::split"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> Seq[ref(self | s) String] sync"
@@ -6690,6 +7329,7 @@ signature = "(self: ref regex::Regex[regex::Dynamic], s: ref String) -> Seq[ref(
 # in the match or there is no group `i`.
 [fn."regex::Captures::group"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self)"
@@ -6699,6 +7339,7 @@ signature = "(self: ref regex::Captures, i: i64) -> text::Match?"
 # the match or no group has that name.
 [fn."regex::Captures::named"]
 pub = true
+panics = false
 sync = true
 touches = []
 returns = "ref(self)"
@@ -6707,6 +7348,7 @@ signature = "(self: ref regex::Captures, name: ref String) -> text::Match?"
 # The matched text, a view of the text that was searched.
 [fn."text::Match::text"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> ref(self) String"
@@ -6723,6 +7365,7 @@ pub = true
 # An empty table.
 [fn."winnow_grammar::InternerContext::new"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "() -> winnow_grammar::InternerContext"
@@ -6730,6 +7373,7 @@ signature = "() -> winnow_grammar::InternerContext"
 # The text a name was interned from.
 [fn."winnow_grammar::InternerContext::resolve"]
 pub = true
+panics = true
 sync = true
 touches = []
 signature = "(self: ref winnow_grammar::InternerContext, symbol: winnow_grammar::Symbol) -> ref(self) String"
@@ -6748,6 +7392,7 @@ copies = true
 # A copy of the handle, which is the handle (0.0.325).
 [fn."winnow_grammar::Symbol::clone"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref winnow_grammar::Symbol) -> winnow_grammar::Symbol"

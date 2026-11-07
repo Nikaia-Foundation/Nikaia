@@ -4,7 +4,7 @@ fn twice(n: i64) -> i64 {
     return n * 2
 }
 
-fn main() {
+fn main() throws {
     let row = [1, 2]
     let mut total = 0
     for n in row {

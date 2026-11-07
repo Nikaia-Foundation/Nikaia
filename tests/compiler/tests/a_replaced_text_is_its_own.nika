@@ -25,7 +25,7 @@ fn calls(names: ref Vec[String], given: String) -> String {
     return s
 }
 
-fn main() {
+fn main() throws {
     println(view("abcx"))
     println(calls(["f", "g"], "self.f(1) + self.g(2)"))
 }

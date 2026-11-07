@@ -2,7 +2,7 @@
 // trailing space, a comment or the line break. `é` is two bytes.
 use yaml
 
-fn walk(n: yaml::Node, depth: i64) {
+fn walk(n: yaml::Node, depth: i64) throws {
 	let mut pad = String()
 	let mut i = 0
 	while i < depth {
@@ -36,7 +36,7 @@ fn walk(n: yaml::Node, depth: i64) {
 	}
 }
 
-fn spans(text: String) {
+fn spans(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -48,7 +48,7 @@ fn spans(text: String) {
 	println("--")
 }
 
-fn main() {
+fn main() throws {
 	// é: [ab, "c d"]   é 0..2, `[` 4, ab 5..7, "c d" 9..14, `]` 14
 	// k:               k 16..17, `:` 17, the empty value at 18
 	// l:               l 19..20

@@ -26,7 +26,7 @@ const BOTH: &str = "use std::net\n\
      use std::fs\n\
      use std::collections\n\
      fn main() throws {\n\
-     \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere)\n\
+     \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere; trusted: true)\n\
      \x20   let mut from_file = collections::HashMap()\n\
      \x20   for w in text.split(\" \") { from_file.insert(w, 1) }\n\
      \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\
@@ -98,7 +98,7 @@ fn a_program_that_reads_only_files_keeps_every_map_fast() {
     let source = "use std::fs\n\
          use std::collections\n\
          fn main() throws {\n\
-         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere)\n\
+         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere; trusted: true)\n\
          \x20   let mut m = collections::HashMap()\n\
          \x20   for w in text.split(\" \") { m.insert(w, 1) }\n\
          \x20   println(f\"{m.len()}\")\n\
@@ -288,7 +288,7 @@ fn the_order_of_the_files_does_not_change_the_hasher() {
 fn a_package_that_reads_only_files_keeps_the_fast_map_in_every_file() {
     let reads_a_file = "use std::fs\nuse std::collections\n\n\
          pub fn counted() -> i64 throws {\n\
-         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere)\n\
+         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere; trusted: true)\n\
          \x20   let mut m = collections::HashMap()\n\
          \x20   for w in text.split(\" \") { m.insert(w, 1) }\n\
          \x20   return size(m)\n}\n";
@@ -488,7 +488,7 @@ fn a_helper_given_two_file_maps_is_fast_in_all_three() {
          use std::collections\n\
          fn count(m: collections::HashMap[i64, i64]) -> i64 {\n    return m.len()\n}\n\
          fn main() throws {\n\
-         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere)\n\
+         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere; trusted: true)\n\
          \x20   let mut a = collections::HashMap()\n\
          \x20   let mut b = collections::HashMap()\n\
          \x20   for w in text.split(\" \") { a.insert(w.len(), 1) }\n\
@@ -521,7 +521,7 @@ fn classes_program(call: &str, helpers: &str) -> String {
          use std::collections\n\
          {helpers}\
          fn main() throws {{\n\
-         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere)\n\
+         \x20   let text = fs::read_to_string(\"words.txt\", fs::Root::Anywhere; trusted: true)\n\
          \x20   let mut a = collections::HashMap()\n\
          \x20   for w in text.split(\" \") {{ a.insert(w.len(), 1) }}\n\
          \x20   let mut c = net::connect(\"127.0.0.1:1\")\n\

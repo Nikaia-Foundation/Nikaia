@@ -22,7 +22,7 @@ fn made(word: String) -> String? {
     return built
 }
 
-fn main() {
+fn main() throws {
     let n = made("abc")
     println(size(n))
     println(size(n))

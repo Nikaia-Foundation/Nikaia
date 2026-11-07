@@ -473,7 +473,7 @@ fn a_hole_in_a_string_is_checked_like_anything_else() {
     let outside = one("fn add(a: i32, b: i32) -> i32 { return a + b }\n\
          fn main() { let n = add(1) }");
     let inside = one("fn add(a: i32, b: i32) -> i32 { return a + b }\n\
-         fn main() { println(f\"{add(1)}\") }");
+         fn main() throws { println(f\"{add(1)}\") }");
     assert_eq!(
         inside, outside,
         "a hole is checked differently from a statement"
@@ -681,16 +681,16 @@ fn a_tuple_pattern_of_another_shape_is_refused() {
         "struct Row { id: i32 }\nfn main() {\n    let (a, b) = Row { id: 1 }\n}",
         "fn main() {\n    let (a, b) = (1, 2, 3)\n}",
         "fn main() {\n    let x: i64 = 2\n    let (a, (b, c)) = (1, x)\n}",
-        "struct Row { id: i32 }\nfn main() {\n    let rows = [Row { id: 1 }]\n    for (a, b) in rows { println(\"x\") }\n}",
-        "fn main() {\n    let rows = [(1, 2, 3)]\n    for (a, b) in rows { println(f\"{a}{b}\") }\n}",
+        "struct Row { id: i32 }\nfn main() throws {\n    let rows = [Row { id: 1 }]\n    for (a, b) in rows { println(\"x\") }\n}",
+        "fn main() throws {\n    let rows = [(1, 2, 3)]\n    for (a, b) in rows { println(f\"{a}{b}\") }\n}",
     ] {
         let (code, _) = one(source);
         assert_eq!(code, "NK1283", "{source}");
     }
     for source in [
-        "fn main() {\n    let (a, b) = (1, 2)\n    println(f\"{a}{b}\")\n}",
-        "fn main() {\n    let (a, (b, c)) = (1, (2, 3))\n    println(f\"{a}{b}{c}\")\n}",
-        "fn main() {\n    let rows = [(1, 2)]\n    for (a, b) in rows { println(f\"{a}{b}\") }\n}",
+        "fn main() throws {\n    let (a, b) = (1, 2)\n    println(f\"{a}{b}\")\n}",
+        "fn main() throws {\n    let (a, (b, c)) = (1, (2, 3))\n    println(f\"{a}{b}{c}\")\n}",
+        "fn main() throws {\n    let rows = [(1, 2)]\n    for (a, b) in rows { println(f\"{a}{b}\") }\n}",
     ] {
         assert!(
             !findings(source).iter().any(|f| f.code == "NK1283"),
@@ -774,7 +774,7 @@ fn a_value_from_a_written_signature_is_measured_against_the_parameter() {
 /// silent one a bug in this compiler.
 #[test]
 fn a_string_that_used_to_interpolate_is_warned_about() {
-    let found = findings("fn main() { let name = \"welt\"\nprintln(\"hallo {name}\") }");
+    let found = findings("fn main() throws { let name = \"welt\"\nprintln(\"hallo {name}\") }");
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1111");
     assert_eq!(found[0].severity, Severity::Warning);
@@ -790,17 +790,17 @@ fn a_string_that_used_to_interpolate_is_warned_about() {
 /// JSON document all hold braces, and `margin` is nobody's variable.
 #[test]
 fn braces_that_name_nothing_are_just_braces() {
-    assert!(findings("fn main() { println(\"{ margin: 0 }\") }").is_empty());
-    assert!(findings("fn main() { println(\"\\\\d{3}\") }").is_empty());
-    assert!(findings("fn main() { println(\"{}\") }").is_empty());
-    assert!(findings("fn main() { println(\"\\u{0041}\") }").is_empty());
+    assert!(findings("fn main() throws { println(\"{ margin: 0 }\") }").is_empty());
+    assert!(findings("fn main() throws { println(\"\\\\d{3}\") }").is_empty());
+    assert!(findings("fn main() throws { println(\"{}\") }").is_empty());
+    assert!(findings("fn main() throws { println(\"\\u{0041}\") }").is_empty());
 }
 
 /// The other half of the change of meaning: `"{{}}"` printed `{}` and now
 /// prints itself.
 #[test]
 fn a_doubled_brace_in_a_plain_string_is_warned_about_too() {
-    let found = findings("fn main() { print(\"{{}}\") }");
+    let found = findings("fn main() throws { print(\"{{}}\") }");
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1111");
     assert_eq!(found[0].severity, Severity::Warning);
@@ -814,8 +814,8 @@ fn a_doubled_brace_in_a_plain_string_is_warned_about_too() {
 /// An `f"…"` is held to nothing by this - it says what it is.
 #[test]
 fn an_f_string_is_never_warned_about() {
-    assert!(findings("fn main() { let n = 1\nprintln(f\"{n}\") }").is_empty());
-    assert!(findings("fn main() { let n = 1\nprintln(f\"{{{n}}}\") }").is_empty());
+    assert!(findings("fn main() throws { let n = 1\nprintln(f\"{n}\") }").is_empty());
+    assert!(findings("fn main() throws { let n = 1\nprintln(f\"{{{n}}}\") }").is_empty());
 }
 
 /// **The type comes from the syntax** (ADR-309 D2), so a `&str` return that
@@ -1407,7 +1407,7 @@ fn a_constant_that_no_type_holds_is_refused_in_this_language_s_words() {
 #[test]
 fn an_operation_past_every_type_is_said_with_its_sign() {
     let up = findings(
-        "fn main() {\n    let a: u64 = 18446744073709551615\n    println(f\"{a * 2}\")\n}\n",
+        "fn main() throws {\n    let a: u64 = 18446744073709551615\n    println(f\"{a * 2}\")\n}\n",
     );
     assert!(
         up.iter()
@@ -1415,7 +1415,7 @@ fn an_operation_past_every_type_is_said_with_its_sign() {
         "{up:#?}"
     );
     let down = findings(
-        "fn main() {\n    let a: i64 = -9223372036854775807\n    println(f\"{a * 9223372036854775807}\")\n}\n",
+        "fn main() throws {\n    let a: i64 = -9223372036854775807\n    println(f\"{a * 9223372036854775807}\")\n}\n",
     );
     assert!(
         down.iter()
@@ -1716,10 +1716,10 @@ fn a_word_this_language_does_not_know_is_refused() {
     // moving *onto* the list is the direction that breaks programs and the one
     // worth a line.
     assert!(
-        parse_to_ast("fn main() {\n    unsafe { println(\"x\") }\n}").is_ok(),
+        parse_to_ast("fn main() throws {\n    unsafe { println(\"x\") }\n}").is_ok(),
         "`unsafe` and a block is a construct now, not a name nothing declares"
     );
-    let (code, message) = one("fn main() {\n    println(f\"{_000}\")\n}");
+    let (code, message) = one("fn main() throws {\n    println(f\"{_000}\")\n}");
     assert_eq!(code, "NK1117");
     assert!(message.contains("_000"), "{message}");
     // **`assert` left this list with its construct**
@@ -1746,7 +1746,7 @@ fn a_name_something_declares_is_not_refused() {
         // a function of this program, named rather than called
         "fn helper() -> i64 {\n    return 1\n}\n\nfn f() {\n    helper\n}",
         // `error`, which a `catch` block binds
-        "use std::fs\n\nfn f(p: ref String) {\n    fs::read_to_string(p, fs::Root::Anywhere) catch { println(f\"{error}\") }\n}",
+        "use std::fs\n\nfn f(p: ref String) throws {\n    fs::read_to_string(p, fs::Root::Anywhere) catch { println(f\"{error}\") }\n}",
     ] {
         assert!(
             findings(source).is_empty(),
@@ -1764,7 +1764,7 @@ fn a_type_named_as_a_value_is_refused() {
     for source in [
         "struct Conn { id: i64 }\n\nfn f() {\n    Conn\n}",
         "struct Conn { id: i64 }\n\nfn main() {\n    let c = Conn\n}",
-        "struct Conn { id: i64 }\nfn take(c: Conn) -> i64 { return c.id }\nfn main() {\n    let r = take(Conn)\n    println(f\"{r}\")\n}",
+        "struct Conn { id: i64 }\nfn take(c: Conn) -> i64 { return c.id }\nfn main() throws {\n    let r = take(Conn)\n    println(f\"{r}\")\n}",
         "enum Color { Red, Blue }\n\nfn main() {\n    let c = Color\n}",
     ] {
         let (code, message) = one(source);
@@ -2028,7 +2028,7 @@ fn every_refused_arm_shape_is_pointed_at() {
         assert_eq!(under(&source, code).0, "t", "{code}");
     }
     let (text, line) = under(
-        "fn f(c: bool) {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n",
+        "fn f(c: bool) throws {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n",
         "NK1245",
     );
     assert_eq!((text.as_str(), line), ("\"x\"", 2));
@@ -2047,7 +2047,7 @@ fn a_refused_number_literal_is_pointed_at() {
 fn the_tail_if_of_a_loop_body_is_a_statement() {
     let found = findings(
         "use std::collections\n\n\
-         fn main() {\n    \
+         fn main() throws {\n    \
          let mut m: collections::BTreeMap[i64, String] = collections::BTreeMap()\n    \
          let mut n: collections::BTreeMap[i64, i64] = collections::BTreeMap()\n    \
          let xs: Vec[i64] = [1, 2]\n    \
@@ -2064,7 +2064,7 @@ fn the_tail_if_of_a_loop_body_is_a_statement() {
 #[test]
 fn a_refused_expression_is_pointed_at() {
     let (text, _) = under(
-        "fn f(n: i64) {\n    if n + 1 {\n        println(\"x\")\n    }\n}\n",
+        "fn f(n: i64) throws {\n    if n + 1 {\n        println(\"x\")\n    }\n}\n",
         "NK1108",
     );
     assert_eq!(text, "n + 1");
@@ -2143,7 +2143,7 @@ fn a_match_arm_that_is_a_view_is_refused_in_a_field() {
 #[test]
 fn arms_that_disagree_with_no_position_are_nk1245() {
     let (code, message) =
-        one("fn f(c: bool) {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n");
+        one("fn f(c: bool) throws {\n    let r = if c { 1 } else { \"x\" }\n    println(r)\n}\n");
     assert_eq!(code, "NK1245");
     assert!(message.contains("`ref String`"), "{message}");
 }
@@ -2196,10 +2196,10 @@ fn arms_that_disagree_under_a_written_type_ask_for_no_annotation() {
 #[test]
 fn an_open_number_arm_under_written_text_is_refused() {
     let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\" } else { 1 }\n    \
-                  return y.len()\n}\n\nfn main() {\n    println(f\"{f(true)}\")\n}\n";
+                  return y.len()\n}\n\nfn main() throws {\n    println(f\"{f(true)}\")\n}\n";
     assert_eq!(one(source).0, "NK1103");
     assert_eq!(
-        one("fn main() {\n    let s: String = 3\n    println(s)\n}\n").0,
+        one("fn main() throws {\n    let s: String = 3\n    println(s)\n}\n").0,
         "NK1103"
     );
 }

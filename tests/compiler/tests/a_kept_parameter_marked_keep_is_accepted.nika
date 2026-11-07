@@ -3,7 +3,7 @@ fn store(mut into: Vec[String], keep s: String) {
 	into.push(s)
 }
 
-fn main() {
+fn main() throws {
 	let mut v: Vec[String] = []
 	store(v, "a")
 	println(f"{v.len()}")

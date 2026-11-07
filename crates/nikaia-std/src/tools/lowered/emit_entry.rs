@@ -143,6 +143,15 @@ impl EmitState {
                 _ => { },
             }
         }
+        for (members, name) in self.sums.iter() {
+            let mut fatal_member = false;
+            let mut borrows = false;
+            for member in members.iter() {
+                if emit_is_fatal(&self.own_contracts, member) { fatal_member = true; }
+                if self.borrows_named(world, member) { borrows = true; }
+            }
+            if fatal_member && !borrows { text = format!("{}    nikaia_std::process::fatal::<{}{}>();\n", text, self.sum_root(), name); }
+        }
         text
     }
     pub(crate) fn crossing_registrations(&self, world: &EmitWorld<'_, '_, '_, '_>) -> String {

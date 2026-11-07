@@ -1,6 +1,6 @@
 use json
 
-fn main() {
+fn main() throws {
     let v = json::parse("[1,") catch {
         match error {
             json::Error => {

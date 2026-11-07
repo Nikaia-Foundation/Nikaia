@@ -31,7 +31,7 @@ fn c(t: String) -> String {
     return s.to_string()
 }
 
-fn main() {
+fn main() throws {
     println(f(3))
     println(g(BV::Int(4)))
     println(g(BV::Text("q")))

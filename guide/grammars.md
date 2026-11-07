@@ -154,7 +154,7 @@ grammar Words {
     rule DIGITS -> String = s:text(digit+) -> { s }
 }
 
-fn main() {
+fn main() throws {
     println(Words::loose("1 2") catch { "refused" })
     println(Words::tight("1 2") catch { "refused" })
 }
@@ -532,7 +532,7 @@ grammar Point {
     rule NUM -> i64 # "number" = n:dec[i64]("-"? digit+) -> { n }
 }
 
-fn show(input: String) {
+fn show(input: String) throws {
     let p = Point::point(input) catch {
         println(f"{input}: {error}")
         return
@@ -541,7 +541,7 @@ fn show(input: String) {
     println(f"{input}: x {x}, y {y}")
 }
 
-fn main() {
+fn main() throws {
     show("(3, -4)")
     show("origin")
     show("(3 4)")
@@ -606,7 +606,7 @@ grammar Rgb {
     rule BYTE -> i64 = n:dec[i64](digit+) -> { byte(n) }
 }
 
-fn main() {
+fn main() throws {
     for input in ["rgb(255, 128, 0)", "rgb(255, 300, 0)"] {
         let (r, g, b) = Rgb::color(input) catch {
             println(f"{input}: {error}")
@@ -692,7 +692,7 @@ grammar Record {
     rule Field(width: i64) -> String = s:text(any{width}) -> { s }
 }
 
-fn main() {
+fn main() throws {
     for input in ["4:AbcdEf", "2:AbCd", "0:Ab"] {
         let (a, b) = Record::record(input) catch {
             println(f"{input}: {error}")
@@ -822,7 +822,7 @@ grammar Size {
 
 comptime LIMIT: i64 = Size::size("4 MiB")
 
-fn main() {
+fn main() throws {
     println(f"{LIMIT}")
 }
 ```

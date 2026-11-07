@@ -5,6 +5,6 @@ async fn load(n: i64) -> i64 {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	println(f"{load(1)}")
 }

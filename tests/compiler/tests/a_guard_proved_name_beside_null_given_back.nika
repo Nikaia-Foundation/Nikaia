@@ -23,7 +23,7 @@ fn a_struct(a: Point?, b: Point?) -> Point {
     }
 }
 
-fn main() {
+fn main() throws {
     println(beside_null("a", null))
     println(beside_null("a", "b"))
     println(beside_literal("c", 2))

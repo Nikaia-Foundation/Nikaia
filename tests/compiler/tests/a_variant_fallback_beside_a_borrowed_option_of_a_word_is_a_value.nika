@@ -17,7 +17,7 @@ fn shown(s: ref Stmt) -> String {
         Stmt::Other => "none",
     }
 }
-fn main() {
+fn main() throws {
     let a = Stmt::Assign { op: BinaryOp::Add, n: 1 }
     let b = Stmt::Assign { op: null, n: 2 }
     println(f"{shown(a)} {shown(b)} {shown(Stmt::Other)}")

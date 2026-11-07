@@ -3,7 +3,7 @@ use std::fs
 // #1317: a `let` whose own `catch` returns binds nothing on that path, so a
 // value closed by hand with `close() catch { … }` after it has nothing left
 // for its block's end: no NK2605 (ADR-297 D4).
-fn put(root: ref fs::Root, name: String, text: String) {
+fn put(root: ref fs::Root, name: String, text: String) throws {
 	let mut file = fs::open(name, root; write: true, create: true, truncate: true) catch { return }
 	file.write(text) catch { println("write failed") }
 	file.close() catch { println("close failed") }

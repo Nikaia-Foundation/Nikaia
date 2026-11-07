@@ -9,17 +9,38 @@
 # something this compiler cannot name.
 version = 4
 
+[fn."MutLentColumns::diff"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+panics = false
+touches = []
+signature = "(ref mut self, n: String) -> i64"
+
+[fn."MutLentVars::column"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+panics = false
+touches = []
+signature = "(ref mut self, n: String) -> i64"
+
 [fn."Nest::close"]
 pub = true
+panics = true
+touches = ["file('/dev/null') read"]
 signature = "(ref mut self, k: i64) -> String"
 
 [fn."Nest::open"]
 pub = true
+panics = true
+touches = ["file('/dev/null') read"]
 signature = "(ref mut self, k: i64) -> String"
 
 [fn."copy_places"]
 sync = "inferred"
 returns = "a: ref(p), b: ref(p), value: ref(p)"
+panics = false
 touches = []
 views = ["p: borrowed", "<result>: borrowed"]
 signature = "(p: ref Places) -> Places"
@@ -27,6 +48,7 @@ signature = "(p: ref Places) -> Places"
 [fn."cycle_alt"]
 pub = true
 sync = true
+panics = false
 touches = []
 views = ["name: borrowed"]
 inferred = ["result == name.len()"]
@@ -36,6 +58,7 @@ signature = "(name: String) -> i64?"
 pub = true
 sync = true
 locks = "?"
+panics = true
 views = ["known: borrowed"]
 signature = "(n: i64, known: fn(ref String) -> i64? sync) -> i64"
 
@@ -43,12 +66,37 @@ signature = "(n: i64, known: fn(ref String) -> i64? sync) -> i64"
 pub = true
 sync = true
 locks = "?"
+panics = true
 views = ["known: borrowed"]
 signature = "(n: i64, known: fn(ref String) -> i64? sync) -> i64"
+
+[fn."derived_take"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["xs: borrowed"]
+signature = "(xs: ref Vec[i64], at: i64) -> i64"
+
+[fn."derived_take_all"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["xs: borrowed"]
+signature = "(xs: ref Vec[i64]) -> i64"
+
+[fn."derived_take_first"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["xs: borrowed"]
+signature = "(xs: ref Vec[i64], n: i64) -> i64"
 
 [fn."keeps_beside_flag"]
 pub = true
 sync = "inferred"
+panics = false
 touches = []
 views = ["ty: borrowed"]
 signature = "(ty: ref KeepsBesideType, mutable: bool) -> KeepsBesideType"
@@ -57,37 +105,59 @@ signature = "(ty: ref KeepsBesideType, mutable: bool) -> KeepsBesideType"
 pub = true
 sync = "inferred"
 keeps = ["ty"]
+panics = false
 touches = []
 signature = "(ty: KeepsBesideType) -> String"
 
 [fn."keeps_beside_pointer"]
 pub = true
 sync = "inferred"
+panics = false
 touches = []
 views = ["ty: borrowed"]
 signature = "(ty: ref KeepsBesideType) -> KeepsBesidePointer?"
 
 [fn."main"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "()"
 
 [fn."mirrored"]
 pub = true
 sync = "inferred"
+panics = false
 touches = []
 signature = "(mut b: Branching)"
+
+[fn."mut_lent_row_of"]
+pub = true
+sync = "inferred"
+keeps = ["n"]
+panics = false
+touches = []
+signature = "(n: String, mut vars: MutLentVars) -> i64"
 
 [fn."none_of"]
 pub = true
 sync = "inferred"
+panics = false
 touches = []
 signature = "[T](_n: i64) -> Vec[T]"
+
+[fn."over_at"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["xs: borrowed"]
+signature = "(xs: ref Vec[i64], i: i64) -> i64"
 
 [fn."places"]
 pub = true
 sync = "inferred"
 returns = "a: ref(s), b: ref(s), value: ref(s)"
+panics = false
 touches = []
 views = ["s: borrowed", "<result>: borrowed"]
 signature = "(s: String) -> Vec[Places]"
@@ -96,6 +166,7 @@ signature = "(s: String) -> Vec[Places]"
 pub = true
 sync = "inferred"
 returns = "a: ref(s), b: ref(s), value: ref(s)"
+panics = false
 touches = []
 views = ["s: borrowed", "<result>: borrowed"]
 signature = "(s: String) -> Vec[Places]"
@@ -104,8 +175,50 @@ signature = "(s: String) -> Vec[Places]"
 pub = true
 sync = "inferred"
 keeps = ["x"]
+panics = false
 touches = []
 signature = "[T](x: T) -> T"
+
+[fn."shelved"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["shelf: borrowed", "name: borrowed", "<result>: borrowed"]
+signature = "(shelf: ref Shelf, name: String) -> ref(shelf) Shelved?"
+
+[fn."shelved_shown"]
+pub = true
+sync = "inferred"
+keeps = ["shelf"]
+panics = false
+touches = []
+views = ["shelf: borrowed", "name: borrowed"]
+signature = "(shelf: ref Shelf, name: String) -> String"
+
+[fn."shelved_with_name"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["shelf: borrowed", "name: borrowed", "<result>: borrowed"]
+signature = "(shelf: ref Shelf, name: String) -> (String, ref(shelf) Shelved)?"
+
+[fn."slice_tail_first"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["s: borrowed"]
+signature = "(s: SliceTail) -> i64"
+
+[fn."slice_tail_second"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref Vec[i64]) -> i64"
 
 [type."Branching"]
 pub = true
@@ -118,6 +231,14 @@ variants = ["Run { mutable: bool }", "Plain"]
 [type."KeepsBesideType"]
 pub = true
 fields = ["pub name: String", "pub is_slice: bool", "pub is_mut: bool"]
+
+[type."MutLentColumns"]
+pub = true
+fields = ["pub vars: MutLentVars"]
+
+[type."MutLentVars"]
+pub = true
+fields = ["pub names: Vec[String]"]
 
 [type."Nest"]
 pub = true
@@ -132,3 +253,16 @@ tethered = ["a", "b", "value"]
 pub = true
 variants = ["Bool(bool)", "Str(ref String)"]
 tethered = ["Str"]
+
+[type."Shelf"]
+pub = true
+fields = ["pub entries: collections::BTreeMap[String, Shelved]"]
+
+[type."Shelved"]
+pub = true
+fields = ["pub n: i64", "pub s: String"]
+
+[type."SliceTail"]
+pub = true
+fields = ["pub xs: ref Array[i64]"]
+tethered = ["xs"]

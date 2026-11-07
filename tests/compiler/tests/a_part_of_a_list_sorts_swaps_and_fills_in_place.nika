@@ -1,6 +1,6 @@
 // A part `v[a..<b]` of a `mut` list changes in place: the list sees it
 // (ADR-views-3 D11, #1209).
-fn main() {
+fn main() throws {
     let mut p: Vec[u32] = [5, 4, 3, 2, 1, 0]
     p[2..<5].sort()
     p[0..<2].fill(0)

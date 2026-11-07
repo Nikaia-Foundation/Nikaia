@@ -30,7 +30,7 @@ fn first_line(said: String) -> String {
 	}
 	return said
 }
-fn main() {
+fn main() throws {
 	let given = "{\"to\":{\"x\":3,\"label\":\"b\"},\"from\":{\"y\":2,\"x\":1,\"label\":null}" + "}"
 	let l: Line = J::read[Line](Bytes(given.bytes().collect())) catch {
 		println(f"error: {first_line(f"{error}")}")

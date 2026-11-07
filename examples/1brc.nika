@@ -157,8 +157,10 @@ fn main() throws {
     // many gigabytes is never copied, and every station name points into it.
     // No `async` or `await` is written: I/O does not block, and the code reads
     // straight through. `catch` runs its block when the call fails, with the
-    // failure named `error`.
-    let data = fs::map(path, fs::Root::Anywhere) catch {
+    // failure named `error`. A file is untrusted unless the call says who
+    // wrote it: `trusted: true` says this one is the challenge's own
+    // measurements, so the stations' map takes the fast hash (ADR-365 D2).
+    let data = fs::map(path, fs::Root::Anywhere; trusted: true) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }

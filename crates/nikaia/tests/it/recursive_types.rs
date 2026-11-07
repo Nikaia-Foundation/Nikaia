@@ -68,7 +68,7 @@ fn an_expression_tree_is_built_matched_and_taken_apart() {
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let tree = Expr::Add(Expr::Num(2), Expr::Mul(Expr::Num(3), Expr::Neg { inner: Expr::Num(4) }))\n\
                   \x20   println(f\"{show(tree)} = {eval(tree)}\")\n\
                   \x20   let l = left(tree)\n\
@@ -120,7 +120,7 @@ fn a_ring_through_another_type_is_boxed_on_both_edges() {
                   \x20   return n\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let e = Expr::Apply(Call { name: \"f\", arg: Expr::Apply(Call { name: \"g\", arg: Expr::Lit(1) }) })\n\
                   \x20   let inner = Block { stmts: [Stmt::Say(\"a\"), Stmt::Say(\"b\")] }\n\
                   \x20   let outer = Block { stmts: [Stmt::Say(\"x\"), Stmt::Nested(inner)] }\n\
@@ -148,7 +148,7 @@ fn an_arm_that_looks_inside_a_box_does_not_cover_its_variant() {
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() { println(f\"{f(Expr::Num(1))}\") }\n";
+                  fn main() throws { println(f\"{f(Expr::Num(1))}\") }\n";
     let found = findings(source);
     assert!(
         found
@@ -185,7 +185,7 @@ fn a_pattern_too_deep_inside_a_box_is_refused_with_the_way_that_works() {
              \x20   }}\n\
              }}\n\
              \n\
-             fn main() {{ println(f\"{{f(Expr::Num(1))}}\") }}\n"
+             fn main() throws {{ println(f\"{{f(Expr::Num(1))}}\") }}\n"
         );
         let found: Vec<_> = findings(&source)
             .into_iter()
@@ -233,7 +233,7 @@ fn a_guard_reads_a_name_bound_inside_a_box() {
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(owned(Expr::Add(Expr::Num(0), Expr::Num(1))))\n\
                   \x20   println(owned(Expr::Add(Expr::Num(2), Expr::Num(1))))\n\
                   \x20   println(owned(Expr::Add(Expr::Name(\"x\"), Expr::Num(1))))\n\
@@ -275,7 +275,7 @@ fn a_boxed_field_lent_as_an_option_is_written_once_parenthesised() {
                   \x20   return count(found.shape)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let s: Shape? = Shape { inner: Wrap { shape: Shape { inner: null } } }\n\
                   \x20   println(f\"{count(s)}\")\n\
                   }\n";

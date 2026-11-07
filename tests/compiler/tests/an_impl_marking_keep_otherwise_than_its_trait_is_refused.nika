@@ -14,7 +14,7 @@ impl Sink for Bag {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut bag = Bag { items: [] }
 	bag.take("a")
 	println(f"{bag.items.len()}")

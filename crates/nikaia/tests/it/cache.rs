@@ -476,7 +476,7 @@ fn a_file_named_another_way_is_not_served_the_other_name() {
     let dir = common::scratch_dir("cache-named");
     std::fs::write(
         dir.join("one.nika"),
-        "fn main() {\n    let z = 1\n    println(f\"{z}\")\n}\n",
+        "fn main() throws {\n    let z = 1\n    println(f\"{z}\")\n}\n",
     )
     .expect("source");
     let cache = dir.join("cache");
@@ -525,7 +525,7 @@ fn a_hit_says_the_warnings_of_the_check_again() {
     let input = dir.join("warned.nika");
     std::fs::write(
         &input,
-        "fn main() {\n    let c = 'e\\u{301}'\n    println(f\"{c}\")\n}\n",
+        "fn main() throws {\n    let c = 'e\\u{301}'\n    println(f\"{c}\")\n}\n",
     )
     .expect("write the program");
 

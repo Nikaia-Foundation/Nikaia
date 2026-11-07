@@ -1,5 +1,5 @@
 // ADR-390: a subtraction broken after its `-` still subtracts.
-fn main() {
+fn main() throws {
     let a = 10
     let b = 3
     let d = a -

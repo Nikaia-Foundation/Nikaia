@@ -100,6 +100,8 @@ pub struct EmitState {
     pub declared_errors: collections::BTreeSet[String],
     /// The generated sum of each set of errors, by the set.
     pub sums: collections::BTreeMap[Vec[String], String],
+    /// The sums this file writes, by name (`emit_sums_written`, #1360).
+    pub sums_written: collections::BTreeSet[String],
     /// The names of the `dsl` drivers this file uses.
     pub dsl_drivers: collections::BTreeSet[String],
     /// Each `extern` function's parameter types.

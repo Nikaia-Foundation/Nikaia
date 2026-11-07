@@ -15,7 +15,7 @@ fn published(name: ref String, errors: ref Vec[String]) -> Vec[String] {
     return out
 }
 
-fn main() {
+fn main() throws {
     let errors: Vec[String] = ["from(f::p)", "from(g::q)", "from(f::r)"]
     let n: String = "f"
     println(published(n, errors).join(" "))

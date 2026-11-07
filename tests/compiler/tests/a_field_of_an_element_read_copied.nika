@@ -9,7 +9,7 @@ fn last_inner(path: Vec[Item]) -> Inner? {
 	return s.inner.clone()
 }
 
-fn main() {
+fn main() throws {
 	let xs = [Item { inner: Inner { name: "a" } }, Item { inner: Inner { name: "b" } }]
 	let r = last_inner(xs) ?? return
 	println(r.name)

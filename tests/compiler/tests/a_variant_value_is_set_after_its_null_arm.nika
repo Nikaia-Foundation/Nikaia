@@ -22,7 +22,7 @@ fn pair(v: V) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(f"{show(R::Opaque("x"))} {show(R::Opaque(null))} {show(R::Method)}")
     println(pair(V::Pair("abc", 10)))
     println(pair(V::Pair(null, 10)))

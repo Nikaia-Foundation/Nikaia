@@ -53,7 +53,7 @@ fn said(output: &Output) -> String {
 
 const MAIN: &str = r#"use std::text
 
-fn main() {
+fn main() throws {
     println(f"{double(21)}")
 }
 
@@ -148,7 +148,7 @@ fn a_test_is_checked_by_the_test_build_and_by_nothing_else() {
         "nikaia-test-only",
         &[(
             "main.nika",
-            "fn main() {\n    println(\"built\")\n}\n\ntest \"wrong\" {\n    let n: i64 = \"a\"\n}\n",
+            "fn main() throws {\n    println(\"built\")\n}\n\ntest \"wrong\" {\n    let n: i64 = \"a\"\n}\n",
         )],
     );
     let run = nikaia(&["run"], &dir);
@@ -375,7 +375,7 @@ fn a_test_program_is_compared_with_its_files() {
     let tests = dir.join("tests");
     std::fs::write(
         tests.join("ok.nika"),
-        "use tally\n\nfn main() {\n    println(f\"{tally::twice(4)}\")\n}\n",
+        "use tally\n\nfn main() throws {\n    println(f\"{tally::twice(4)}\")\n}\n",
     )
     .expect("ok");
     std::fs::write(tests.join("ok.stdout"), "").expect("stdout");
@@ -440,7 +440,7 @@ fn a_dependency_with_a_main_raises_no_dead_code_warning() {
     .expect("manifest");
     std::fs::write(
         dir.join("src/main.nika"),
-        "fn main() {\n    println(\"hi\")\n}\n",
+        "fn main() throws {\n    println(\"hi\")\n}\n",
     )
     .expect("source");
     let out = nikaia(&["build"], &dir);
@@ -467,7 +467,7 @@ fn bless_writes_no_stderr_for_warnings_and_no_refusal_for_rustc_failures() {
     std::fs::create_dir_all(&tests).expect("tests");
     std::fs::write(
         tests.join("warns.nika"),
-        "fn keep(s: ref String) -> i64 sync {\n    return s.len()\n}\n\nfn main() {\n    println(f\"{keep(\"ab\")}\")\n}\n",
+        "fn keep(s: ref String) -> i64 sync {\n    return s.len()\n}\n\nfn main() throws {\n    println(f\"{keep(\"ab\")}\")\n}\n",
     )
     .expect("warns");
     std::fs::write(tests.join("warns.stdout"), "").expect("stdout");

@@ -176,6 +176,9 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                             state.facts.run_lambdas.insert(id)
                         }
                     }
+                    if runs && fails && declared_here {
+                        state.facts.failing_lambdas.insert(id)
+                    }
                     if !runs {
                         state.facts.kept_lambdas.insert(id, (pauses, fails))
                         state.a_kept_lambdas_result(id, result, pauses, fails)

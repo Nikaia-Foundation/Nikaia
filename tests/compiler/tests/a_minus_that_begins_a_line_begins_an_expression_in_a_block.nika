@@ -1,9 +1,9 @@
 // ADR-390: the block's value is its last line, `-1`; `f()` is a statement.
-fn f() {
+fn f() throws {
     println("f")
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = {
         f()
         -1

@@ -14,7 +14,7 @@ fn hc(x: ref Vec[u8]) -> i64 sync {
 	return hb(x)
 }
 
-fn main() {
+fn main() throws {
 	let z = [0 as u8; 8]
 	println(f"{hb([1, 2, 3, 4])} {hc(z)}")
 }

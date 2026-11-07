@@ -155,7 +155,7 @@ fn holds(atoms: ref Vec[SvAtom], names: ref Vec[String], values: ref collections
 // Every atom asserted to the exact theory at one level, then a final check;
 // a conflict closed by one learned clause and the log replayed, broken as
 // `how` says where it is not `\"\"`.
-fn run(title: String, names: Vec[String], atoms: Vec[SvAtom], how: String) {
+fn run(title: String, names: Vec[String], atoms: Vec[SvAtom], how: String) throws {
 	let n = atoms.len()
 	let mut clauses: Vec[Vec[u32]] = []
 	let mut a: u32 = 0

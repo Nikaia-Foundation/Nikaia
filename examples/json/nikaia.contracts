@@ -19,24 +19,29 @@ signature = "(input: ?) -> Json"
 
 [fn."longest"]
 sync = "inferred"
+panics = false
 touches = []
 views = ["value: borrowed"]
 signature = "(value: Json) -> i64"
 
 [fn."main"]
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
+panics = true
 signature = "()"
 
 [fn."show"]
 sync = "inferred"
+throws = ["io::IoError"]
 locks = true
+panics = true
 touches = ["stdout write"]
 views = ["value: borrowed"]
 signature = "(value: Json, indent: i64)"
 
 [fn."unescape"]
 sync = "inferred"
+panics = false
 touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String) -> String"

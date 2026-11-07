@@ -67,7 +67,7 @@ pub fn lsp_read_message() -> String? throws {
 /// **One message to the editor**: its header and its body. Standard output is
 /// flushed before the next read waits (`io::read_line`), so the editor has the
 /// answer before this waits for the next question.
-pub fn lsp_write_message(body: ref json::Value) {
+pub fn lsp_write_message(body: ref json::Value) throws {
     let text = json::to_string(body)
     print(f"Content-Length: {text.len()}\r\n\r\n{text}")
 }
@@ -88,12 +88,12 @@ pub fn lsp_number(n: i64) -> json::Value {
 }
 
 /// The answer to the request `id`.
-pub fn lsp_respond(id: ref json::Value, result: json::Value) {
+pub fn lsp_respond(id: ref json::Value, result: json::Value) throws {
     lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("result", result)]))
 }
 
 /// The request `id` refused with `code` and `message` (JSON-RPC 2.0, 5.1).
-pub fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) {
+pub fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) throws {
     let error = lsp_object([("code", lsp_number(code)), ("message", lsp_string(message))])
     lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("error", error)]))
 }
@@ -259,7 +259,7 @@ pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
 /// checked alone cleared the markers of a package's file). What it gives
 /// back is the URIs marked, each with its package: `path`'s directory, or
 /// `path` itself for a document checked alone.
-fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections::BTreeMap[String, String], uris: ref collections::BTreeMap[String, String], marked: ref collections::BTreeMap[String, String], alone: bool) -> collections::BTreeMap[String, String] {
+fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections::BTreeMap[String, String], uris: ref collections::BTreeMap[String, String], marked: ref collections::BTreeMap[String, String], alone: bool) -> collections::BTreeMap[String, String] throws {
     let checked: fs::Path = path
     let package = match checked.parent() {
         null => path.clone(),
@@ -319,7 +319,7 @@ fn lsp_open_beside(path: ref String, open: ref collections::BTreeMap[String, Str
 }
 
 /// One `textDocument/publishDiagnostics` notification.
-fn lsp_notify_diagnostics(uri: ref String, diagnostics: Vec[json::Value]) {
+fn lsp_notify_diagnostics(uri: ref String, diagnostics: Vec[json::Value]) throws {
     let params = lsp_object([("uri", lsp_string(uri)), ("diagnostics", json::Value::Array(diagnostics))])
     lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("method", lsp_string("textDocument/publishDiagnostics")), ("params", params)]))
 }

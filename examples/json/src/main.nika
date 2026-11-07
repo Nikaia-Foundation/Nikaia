@@ -106,7 +106,7 @@ grammar Json_ {
 //
 // Strings are printed back raw, as they were in the file, so printing never
 // decodes and never has to re-escape.
-fn show(value: Json, indent: i64) {
+fn show(value: Json, indent: i64) throws {
     let pad = "  ".repeat(indent)
     let inner = "  ".repeat(indent + 1)
 

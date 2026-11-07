@@ -10,7 +10,7 @@ fn left(mut c: C) -> i64 {
     let kept = keep(c.ensures)
     return kept.len()
 }
-fn main() {
+fn main() throws {
     let mut c = C { ensures: [f"e{1}"] }
     println(f"{left(c)}")
 }

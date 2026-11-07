@@ -17,7 +17,7 @@ fn first(wanted: bool, m: ref collections::BTreeMap[String, bool]) -> bool? {
     return if wanted { m.get("a") } else { null }
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, bool] = collections::BTreeMap()
     m.insert("a", true)
     m.insert("b", false)
