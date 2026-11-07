@@ -1,0 +1,39 @@
+// #1254, ADR-views-3 D8, ADR-282 D12: a body that ends in an `if` or a
+// `match` hands back each arm's value as a `return` in each arm does. A
+// plain `String` parameter one arm hands back is lent, beside text of the
+// body's own in another arm, so the caller uses its text again (was NK2105,
+// "passed to `by_if`, which keeps it", where `return` in each arm ran).
+
+fn own(n: String) -> String? {
+    if n == "" { return null }
+    return f"{n}!"
+}
+
+fn by_if(a: String, c: bool) -> String? {
+    if c { a } else { own(a) }
+}
+
+fn by_match(a: String, c: i64) -> String? {
+    match c {
+        0 => a,
+        1 => null,
+        else => own(a),
+    }
+}
+
+fn plain_if(a: String, c: bool) -> String {
+    if c { a } else { f"{a}?" }
+}
+
+fn both_arms(a: String, c: bool) -> String {
+    if c { a } else { a }
+}
+
+fn main() {
+    let x = f"x{1}"
+    println(f"{by_if(x, true) ?? "-"} {by_if(x, false) ?? "-"}")
+    println(f"{by_match(x, 0) ?? "-"} {by_match(x, 1) ?? "-"} {by_match(x, 2) ?? "-"}")
+    println(f"{plain_if(x, true)} {plain_if(x, false)}")
+    println(f"{both_arms(x, true)} {both_arms(x, false)}")
+    println(x)
+}

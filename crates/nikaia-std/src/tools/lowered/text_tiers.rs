@@ -1996,6 +1996,26 @@ pub(crate) fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_,
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let result = match function.result { Some(__nikaia_value) => __nikaia_value, None => return };
+    let arms = tail_arms(value);
+    if plain_string(ask.names, &result) && !function.of_a_trait && !arms.is_empty() {
+        let mut any = false;
+        for arm in arms.iter() {
+            let arm = *arm;
+            let mut sides: Vec<String> = vec![];
+            if lendable_sides(arm, ask, walk, &mut sides) && !sides.is_empty() { any = true; }
+        }
+        if any {
+            for arm in arms.iter() {
+                let arm = *arm;
+                let arm_kinds = match arm {
+                    Expr::Variable(name, _) => { let name = *name; kinds_of_local(ask.names.resolve(name), &walk) },
+                    _ => kinds.clone(),
+                };
+                flow_result(arm, &arm_kinds, ask, walk);
+            }
+            return;
+        }
+    }
     let mut handed = handed_kinds(value, kinds, ask, walk);
     let through = lent_through_code(value, ask, &walk);
     if through.is_some() {
@@ -2024,6 +2044,27 @@ pub(crate) fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_,
         }
     }
     flow_value(&going_into(&TextOwner::Returned(key.to_string()), &result, vec![], false), Some(value), &handed, ask, walk);
+}
+
+pub(crate) fn tail_arms(value: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return out };
+            out.extend(block_tail(then_branch));
+            out.extend(block_tail(otherwise));
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() {
+                match &arm.body {
+                    Expr::Block(block, _) => { out.extend(block_tail(block)); },
+                    body => { out.push(body); },
+                }
+            }
+        },
+        _ => { },
+    }
+    out
 }
 
 pub(crate) fn lendable_sides(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) -> bool {

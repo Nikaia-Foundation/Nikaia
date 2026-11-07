@@ -572,11 +572,12 @@ fn a_parameter_only_compared_in_a_match_is_read() {
     assert!(rust.contains("fn is_len(name: &str)"), "{rust}");
 }
 
-/// An arm that hands the scrutinee on keeps it.
+/// An arm that hands the scrutinee on keeps it. (A match that is the tail of
+/// the body lends it instead, ADR-views-3 D8: `views_a_tail_choice_hands_back_a_lent_parameter`.)
 #[test]
 fn a_parameter_a_match_arm_returns_is_kept() {
     let found = findings(
-        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\"\n    let a = pick(n)\n    let b = pick(n)\n    print(a)\n}\n",
+        "fn pick(name: String) -> String sync {\n    let r = match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n    return r\n}\n\nfn main() {\n    let n = \"a\"\n    let a = pick(n)\n    let b = pick(n)\n    print(a)\n}\n",
     );
     assert_eq!(codes_of(&found), ["NK2105"], "{found:#?}");
 }
@@ -586,7 +587,7 @@ fn a_parameter_a_match_arm_returns_is_kept() {
 #[test]
 fn a_value_handed_over_in_a_condition_is_gone_in_the_else_if() {
     let found = findings(
-        "fn pick(name: String) -> String sync {\n    return match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n}\n\nfn main() {\n    let n = \"a\"\n    if pick(n) == \"a\" {\n        print(1)\n    } else if pick(n) == \"b\" {\n        print(2)\n    }\n}\n",
+        "fn pick(name: String) -> String sync {\n    let r = match name {\n        \"a\" => name,\n        else => \"b\",\n    }\n    return r\n}\n\nfn main() {\n    let n = \"a\"\n    if pick(n) == \"a\" {\n        print(1)\n    } else if pick(n) == \"b\" {\n        print(2)\n    }\n}\n",
     );
     assert_eq!(codes_of(&found), ["NK2105"], "{found:#?}");
 }

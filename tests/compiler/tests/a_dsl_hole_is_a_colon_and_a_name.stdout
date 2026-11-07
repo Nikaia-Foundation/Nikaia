@@ -1,0 +1,4 @@
+people.db: SELECT std::io::name FROM t WHERE at = 12:30 AND (a = :id OR b = :id) AND active = :active
+id=501 active=true
+people.db: SELECT std::io::name FROM t WHERE at = 12:30 AND (a = :id OR b = :id) AND active = :active
+id=7 active=false

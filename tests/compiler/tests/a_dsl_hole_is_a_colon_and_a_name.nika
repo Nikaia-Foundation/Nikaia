@@ -1,0 +1,29 @@
+// The holes of a deferred `dsl` body (ADR-296 D4), once the unit tests of
+// the crossing `dsl.rs`: `:name` is a hole, each name once however often the
+// body writes it, and neither a path (`a::b`) nor a time (`12:30`) is one. A
+// false hole would be a missing parameter (`NK1112`), a lost one an unknown
+// parameter (`NK1113`): the program builds only if the scan reads exactly
+// `id` and `active`. The second call writes the names in the other order and
+// gets the same shadow type.
+
+struct Db {
+    name: String,
+}
+
+impl Db {
+    fn prepare(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl {
+        println(f"{self.name}: {statement}")
+        return args
+    }
+}
+
+fn main() {
+    let db = Db { name: "people.db" }
+    let query = dsl mysql {
+        SELECT std::io::name FROM t WHERE at = 12:30 AND (a = :id OR b = :id) AND active = :active
+    } eod
+    let bound = db.prepare(query; id: 501, active: true)
+    println(f"id={bound.id} active={bound.active}")
+    let again = db.prepare(query; active: false, id: 7)
+    println(f"id={again.id} active={again.active}")
+}
