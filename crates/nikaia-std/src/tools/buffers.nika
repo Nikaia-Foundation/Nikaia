@@ -280,7 +280,19 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
     }
     let mut plan = decide(key, body, walk, ask)
     match item {
-        Item::Fn { ret_type, .. } => plan.refusals.extend(untethered_returns(plan.key, ret_type, body, ask)),
+        Item::Fn { ret_type, .. } => {
+            let anchored = untethered_returns(plan.key, ret_type, body, ask)
+            plan.refusals.extend(anchored.findings)
+            // **The local moves into the caller's keep** (ADR-views-3 D9,
+            // ADR-283 D23, #1218): a buffer that is no text, which no view is
+            // found in by address, put there whole.
+            for (at, source) in anchored.anchored {
+                plan.puts.insert(at, KeepAt::Param)
+                plan.opaque_puts.insert(at)
+                plan.takes_keep = true
+                plan.escapes.push((source.clone(), Escape::Returned))
+            }
+        },
         else => {}
     }
     return plan
@@ -2161,24 +2173,25 @@ fn element_refusal(keeper: ref String, why: ref String, help: ref String, plan: 
 // A view of a local that is no text, handed back (#1155)
 // ---------------------------------------------------------------------------
 
-// **What the tether cannot lower yet: a view of a local that is no text or
-// bytes, handed back**, bare or in a field of the struct the function returns
-// (ADR-283 D9). A local lives on in the caller's keep where the views of it
-// are text or bytes (`a_viewed_buffer`); a view of an element of a list the
-// body made, or of a part of a struct it built, would outlive its local. It is
-// refused on the Nikaia line rather than left to `rustc`. Typed by what is
-// written: the result's type, the fields of the struct it names, and the
-// locals bound to a literal or a copy - nothing else counts as owned, so a
-// view the walk cannot place is never refused.
-fn untethered_returns(function: ref String, ret_type: ref Type?, body: ref Block, ask: ref BufferAsk) -> Vec[Finding] {
-    let written = ret_type ?? return []
+// **A view of a local that is no text or bytes, handed back**, bare or in a
+// field of the struct the function returns (ADR-283 D9, D23; ADR-views-3 D9,
+// D10; #1218): a view of an element of a list the body made, or of a part of
+// a struct it built. The function gives the local up while the result holds a
+// view of it, so the local moves whole into the caller's keep (`anchored`, by
+// its `let`), as text does; no copy is made. Typed by what is written: the
+// result's type, the fields of the struct it names, and the locals bound to a
+// literal, a copy or the value a function of the file hands back - nothing
+// else counts as owned, so a view the walk cannot
+// place is left as it was.
+fn untethered_returns(function: ref String, ret_type: ref Type?, body: ref Block, ask: ref BufferAsk) -> UntetheredWalk {
+    let mut walk = UntetheredWalk { owned: collections::BTreeSet(), views: collections::BTreeMap(), carrying: collections::BTreeMap(), lets: collections::BTreeMap(), anchored: collections::BTreeMap(), findings: [] }
+    let written = ret_type ?? return walk
     let fields = untethered_fields(written, ask)
     let bare = untethered_view(written, ask)
     if !bare && fields.len() == 0 {
-        return []
+        return walk
     }
     let asked = UntetheredAsk { function: function.clone(), bare: bare, struct_name: ask.names.resolve(written.name).clone(), fields: fields }
-    let mut walk = UntetheredWalk { owned: collections::BTreeSet(), views: collections::BTreeMap(), carrying: collections::BTreeMap(), findings: [] }
     untethered_block(body, asked, ask, walk)
     if body.stmts.len() > 0 {
         let last = body.stmts[body.stmts.len() - 1]
@@ -2187,7 +2200,7 @@ fn untethered_returns(function: ref String, ret_type: ref Type?, body: ref Block
             else => {}
         }
     }
-    return walk.findings
+    return walk
 }
 
 struct UntetheredAsk {
@@ -2206,6 +2219,11 @@ struct UntetheredWalk {
     views: collections::BTreeMap[String, String],
     /// The locals bound to the result's struct with a view of an owned local.
     carrying: collections::BTreeMap[String, String],
+    /// The `let` each owned local is bound by.
+    lets: collections::BTreeMap[String, Source],
+    /// The `let`s of the owned locals a view handed back points into: each
+    /// moves into the caller's keep.
+    anchored: collections::BTreeMap[i64, Source],
     findings: Vec[Finding],
 }
 
@@ -2254,7 +2272,7 @@ fn untethered_block(block: ref Block, asked: ref UntetheredAsk, ask: ref BufferA
             Stmt::Let { names, value, .. } => {
                 untethered_expr(value, stmt.span, asked, ask, walk)
                 if names.len() == 1 {
-                    untethered_let(ask.names.resolve(names[0]).clone(), value, asked, ask, walk)
+                    untethered_let(ask.names.resolve(names[0]).clone(), value, stmt.span, asked, ask, walk)
                 }
             }
             Stmt::Return(value) => {
@@ -2293,15 +2311,17 @@ fn untethered_expr(expr: ref Expr, at: ref Span, asked: ref UntetheredAsk, ask: 
     }
 }
 
-fn untethered_let(name: String, value: ref Expr, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
+fn untethered_let(name: String, value: ref Expr, span: Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
     walk.owned.remove(name)
     walk.views.remove(name)
     walk.carrying.remove(name)
+    walk.lets.remove(name)
     let owned = match value {
         Expr::ListLit { .. } => true,
         Expr::ListRepeat { .. } => true,
         Expr::StructLit { .. } => true,
         Expr::MethodCall { method, .. } => ask.names.resolve(method) == "clone",
+        Expr::Call { func, .. } => untethered_made_by(func, ask),
         else => false,
     }
     if owned {
@@ -2309,11 +2329,31 @@ fn untethered_let(name: String, value: ref Expr, asked: ref UntetheredAsk, ask: 
         if carried != null {
             walk.carrying.insert(name.clone(), carried ?? "")
         }
+        walk.lets.insert(name.clone(), Source::Buffer { at: span.start as i64, name: name.clone(), ty: "", span: span })
         walk.owned.insert(name)
         return
     }
     let root = untethered_root(value, ask, walk) ?? return
     walk.views.insert(name, root)
+}
+
+// A function of the file that hands back a value of its own: no view in its
+// contract, a result that is no view and no struct of views.
+fn untethered_made_by(func: ref Expr, ask: ref BufferAsk) -> bool {
+    let named = match func {
+        Expr::Variable(name, _) => ask.names.resolve(name),
+        else => return false,
+    }
+    let contract = ask.own.functions[named] ?? return false
+    if contract.views.len() > 0 {
+        return false
+    }
+    let signature = contract.signature ?? return false
+    let result = signature.result ?? return false
+    return match result {
+        Ty::Named { view, .. } => !view && !a_struct_of_views(result, ask),
+        else => false,
+    }
 }
 
 // The variable a place starts from, through the views bound to one.
@@ -2379,5 +2419,6 @@ fn untethered_returned(value: ref Expr, at: ref Span, asked: ref UntetheredAsk, 
         }
     }
     let root = found ?? return
-    walk.findings.push(refusal("NK2304", at.clone(), f"`{asked.function}` hands back a view of `{root}`, a local that is gone once it returns.", ["Only text or bytes a function made live on in the caller after it returns; a view of a list's element or of a part of a struct does not yet."], f"Hand back a copy with `.clone()` and declare it without `ref`, or take `{root}` as a parameter so that the caller owns it."))
+    let bound = walk.lets[root] ?? return
+    walk.anchored.insert(source_at(bound), bound.clone())
 }

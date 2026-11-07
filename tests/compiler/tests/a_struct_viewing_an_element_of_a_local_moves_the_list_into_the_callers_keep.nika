@@ -1,0 +1,34 @@
+// A struct handed back with a field filled from an element of a list the
+// body made: the field is a view and the list moves whole into the caller's
+// keep (ADR-views-3 D9, D10, ADR-283 D23; #1218). No element is copied, so a
+// list of 100000 entries costs one move, and the view is read after the call.
+struct L { n: i64, tag: String }
+struct W { own: L, k: i64 }
+
+fn make() -> W {
+	let xs = [L { n: 3, tag: "a" }]
+	let first = xs[0]
+	return W { own: first, k: 1 }
+}
+
+fn many(count: i64) -> Vec[L] {
+	let mut out: Vec[L] = []
+	for i in 0..<count {
+		out.push(L { n: i, tag: f"t{i}" })
+	}
+	return out
+}
+
+fn last_of(count: i64) -> W {
+	let xs = many(count)
+	let last = xs[count - 1]
+	return W { own: last, k: xs.len() }
+}
+
+fn main() {
+	let w = make()
+	println(w.own.n + w.k)
+	println(w.own.tag)
+	let big = last_of(100000)
+	println(f"{big.own.n} {big.own.tag} {big.k}")
+}

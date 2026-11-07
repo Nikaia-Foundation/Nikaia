@@ -1,0 +1,39 @@
+// A lent parameter, or a field of one, put into a struct literal is a view:
+// the field is tethered and the caller goes on using what it lent
+// (ADR-views-3 D5, Part I 6.6; #1218). Before, the parameter was taken as
+// kept and the caller's use refused (NK2105). A parameter marked `keep`
+// still moves into the struct, which owns it.
+struct L { n: i64, tag: String }
+struct W { own: L, k: i64 }
+struct Held { l: L }
+struct Part { n: i64 }
+struct Config { part: Part, name: String }
+struct Seen { part: Part, k: i64 }
+
+fn held(keep l: L) -> Held {
+	return Held { l: l }
+}
+
+fn show(w: W) -> i64 {
+	return w.own.n + w.k
+}
+
+fn go(l: L) -> i64 {
+	let w = W { own: l, k: 1 }
+	return show(w)
+}
+
+fn seen(config: Config) -> Seen {
+	return Seen { part: config.part, k: 2 }
+}
+
+fn main() {
+	let l = L { n: 3, tag: "a" }
+	println(go(l))
+	println(l.tag)
+	let c = Config { part: Part { n: 5 }, name: "c" }
+	let s = seen(c)
+	println(s.part.n + s.k)
+	println(c.name)
+	println(held(L { n: 9, tag: "h" }).l.n)
+}

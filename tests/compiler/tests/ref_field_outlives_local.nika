@@ -1,28 +1,29 @@
 // A view of a local that is no text, handed back bare or in a struct's
-// field, outlives the local: refused at the `return` (NK2304), not left to
-// rustc (#1155).
+// field, moves the local into the caller's keep (ADR-views-3 D9, D10,
+// ADR-283 D23; #1218): nothing is copied and the view is read after the
+// call. Before, it was refused at the `return` (NK2304, #1155).
 struct L { n: i64 }
 struct W { own: ref L, k: i64 }
 
 fn make() -> W {
-    let xs = [L { n: 3 }]
-    let first: ref L = xs[0]
-    return W { own: first, k: 1 }
+	let xs = [L { n: 3 }]
+	let first: ref L = xs[0]
+	return W { own: first, k: 1 }
 }
 
-fn first(a: Array[i64]) -> ref Array[i64] {
-    let v: Vec[i64] = [1, 2, 3]
-    return v[0..1]
+fn first() -> ref Array[i64] {
+	let v: Vec[i64] = [1, 2, 3]
+	return v[0..1]
 }
 
 fn built() -> W {
-    let xs = [L { n: 4 }]
-    let one: ref L = xs[0]
-    let w = W { own: one, k: 2 }
-    return w
+	let xs = [L { n: 4 }]
+	let one: ref L = xs[0]
+	let w = W { own: one, k: 2 }
+	return w
 }
 
 fn main() {
-    println(make().own.n + built().k)
-    println(first([1]).len())
+	println(make().own.n + built().k)
+	println(first().len())
 }

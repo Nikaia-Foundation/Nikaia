@@ -5257,6 +5257,7 @@ pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerCon
         if (views.len() as i64) == before { break; }
     }
     sf_slice_fields(program, words);
+    sv_view_fields(program, words, &plain, opted);
 }
 
 pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext) {
@@ -5309,6 +5310,179 @@ pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, fil
 }
 
 pub(crate) fn sf_a_run(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.count.is_none() && (*ty.code).is_none() && ty.generics.len() == 1 && words.resolve(ty.name) == "Array" }
+
+pub(crate) fn sv_view_fields(program: &mut Program, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool) {
+    let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Struct { name, generics, is_extern, .. } => {
+                let is_extern = *is_extern; let name = *name;
+                if !is_extern && generics.is_empty() { types.insert(words.resolve(name).to_string()); }
+            },
+            Item::Enum { name, .. } => {
+                let name = *name;
+                let of = words.resolve(name);
+                if !plain.contains(of) { types.insert(of.to_string()); }
+            },
+            _ => { },
+        }
+    }
+    let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    let mut viewed: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in program.items.iter() { sv_item(&item.node, words, opted, &mut filled); }
+    for item in program.items.iter_mut() {
+        match &mut (*item).node {
+            Item::Struct { name, fields, is_extern, .. } => {
+                let is_extern = *is_extern; let name = *name;
+                if !is_extern {
+                    let of = words.resolve(name).to_string();
+                    for field in fields.iter_mut() {
+                        let key = format!("{}.{}", of, words.resolve((*field).name));
+                        if sv_a_named_value(&(*field).ty, words, &types) && nikaia_std::index::or(filled.get(&key), || false) {
+                            (*field).ty.is_view = true;
+                            viewed.insert(key);
+                        }
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    for item in program.items.iter_mut() { sv_lend(&mut (*item).node, words, &viewed); }
+}
+
+pub(crate) fn sv_lend(item: &mut Item, words: &winnow_grammar::InternerContext, viewed: &collections::BTreeSet<String>) {
+    match item {
+        Item::Fn { args, body, is_extern, .. } => {
+            let is_extern = *is_extern;
+            if is_extern { return; }
+            let lent = sv_lent_roots(body, words, viewed);
+            for arg in args.iter_mut() { if lent.contains(words.resolve((*arg).name)) && !(*arg).keep && !(*arg).mutable && !(*arg).ty.is_mut && !(*arg).ty.is_view && (*(*arg).ty.code).is_none() { hb_set(&mut (*arg).ty); } }
+        },
+        Item::Impl { methods, .. } => { for method in methods.iter_mut() { sv_lend(&mut (*method).node, words, viewed); } },
+        _ => { },
+    }
+}
+
+pub(crate) fn sv_lent_roots(body: &Block, words: &winnow_grammar::InternerContext, viewed: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for each in visited_in_block(body) {
+        match each {
+            Expr::StructLit { name, fields, .. } => {
+                let name = *name;
+                let of = words.resolve(name).to_string();
+                for init in fields.iter() {
+                    if viewed.contains(&format!("{}.{}", of, words.resolve(init.name))) {
+                        let root = match &init.value {
+                            None => words.resolve(init.name).to_string(),
+                            Some(value) => match hb_place_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue },
+                        };
+                        out.insert(root);
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn sv_a_named_value(ty: &Type, words: &winnow_grammar::InternerContext, types: &collections::BTreeSet<String>) -> bool {
+    if ty.is_view || ty.is_slice || ty.is_mut || ty.is_nullable || ty.is_tuple || ty.count.is_some() || (*ty.code).is_some() || ty.either || ty.lasting || !ty.generics.is_empty() { return false; }
+    types.contains(words.resolve(ty.name))
+}
+
+pub(crate) fn sv_item(item: &Item, words: &winnow_grammar::InternerContext, opted: bool, filled: &mut collections::BTreeMap<String, bool>) {
+    match item {
+        Item::Fn { receiver, args, body, .. } => {
+            let mut views: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
+            if opted && hb_plain_self((receiver).as_ref()) && receiver.is_some() {
+                roots.insert(String::from("self"));
+                views.insert(String::from("self"));
+            }
+            for arg in args.iter() {
+                if opted && !arg.keep && !arg.mutable && !arg.ty.is_mut {
+                    let named = words.resolve(arg.name).to_string();
+                    roots.insert(named.to_string());
+                    views.insert(named);
+                }
+            }
+            sv_block(body, words, &mut roots, &mut views, filled);
+        },
+        Item::Impl { methods, .. } => { for method in methods.iter() { sv_item(&method.node, words, opted, filled); } },
+        _ => { },
+    }
+}
+
+pub(crate) fn sv_block(block: &Block, words: &winnow_grammar::InternerContext, roots: &mut collections::BTreeSet<String>, views: &mut collections::BTreeSet<String>, filled: &mut collections::BTreeMap<String, bool>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, mutable, value, .. } => {
+                let mutable = *mutable;
+                sv_literals(value, words, &roots, &views, filled);
+                if names.len() == 1 {
+                    let named = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
+                    let view = sv_a_view(value, words, &roots, &views);
+                    views.remove(&named);
+                    roots.insert(named.to_string());
+                    if view && !mutable { views.insert(named); }
+                } else {
+                    for name in names.iter() {
+                        let name = *name;
+                        views.remove(words.resolve(name));
+                        roots.remove(words.resolve(name));
+                    }
+                }
+            },
+            Stmt::For { body, .. } => { sv_block(body, words, roots, views, filled); },
+            Stmt::While { body, .. } => { sv_block(body, words, roots, views, filled); },
+            Stmt::Return(value) => { if value.is_some() { sv_literals(match value { Some(__nikaia_value) => __nikaia_value, None => continue }, words, &roots, &views, filled); } },
+            Stmt::Expr(value) => { sv_literals(value, words, &roots, &views, filled); },
+            Stmt::Assign { value, .. } => { sv_literals(value, words, &roots, &views, filled); },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn sv_literals(expr: &Expr, words: &winnow_grammar::InternerContext, roots: &collections::BTreeSet<String>, views: &collections::BTreeSet<String>, filled: &mut collections::BTreeMap<String, bool>) {
+    for each in visited_in_expr(expr) {
+        match each {
+            Expr::StructLit { name, fields, .. } => {
+                let name = *name;
+                let of = words.resolve(name).to_string();
+                for init in fields.iter() {
+                    let view = match &init.value {
+                        None => views.contains(words.resolve(init.name)),
+                        Some(value) => sv_a_view(value, words, roots, views),
+                    };
+                    let key = format!("{}.{}", of, words.resolve(init.name));
+                    let before = nikaia_std::index::or(filled.get(&key), || true);
+                    filled.insert(key, before && view);
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn sv_a_view(expr: &Expr, words: &winnow_grammar::InternerContext, roots: &collections::BTreeSet<String>, views: &collections::BTreeSet<String>) -> bool {
+    let root = match hb_place_root(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match expr {
+        Expr::Variable(..) => views.contains(&root),
+        Expr::Field { .. } => views.contains(&root) || roots.contains(&root) && sv_through_an_index(expr),
+        Expr::Index { .. } => roots.contains(&root),
+        _ => false,
+    }
+}
+
+pub(crate) fn sv_through_an_index(expr: &Expr) -> bool {
+    match expr {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); sv_through_an_index(base) },
+        Expr::Index { .. } => true,
+        _ => false,
+    }
+}
 
 pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>) {
     match item {
