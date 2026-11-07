@@ -75,6 +75,8 @@ pub(crate) fn emit_arg_through_index(arg: &Expr) -> bool {
 
 pub(crate) fn emit_arg_is_closure(arg: &Expr) -> bool { matches!(arg, Expr::Closure { .. }) }
 
+pub(crate) fn emit_arg_binds_looser_than_a_borrow(arg: &Expr) -> bool { matches!(arg, Expr::Binary { .. } | Expr::Range { .. }) }
+
 pub(crate) fn emit_arg_is_variable(arg: &Expr) -> bool { matches!(arg, Expr::Variable(..)) }
 
 pub(crate) fn emit_arg_is_null(arg: &Expr) -> bool { matches!(arg, Expr::LitNull(_)) }
@@ -328,17 +330,21 @@ impl EmitState {
             return Ok(());
         }
         let mut kept_here = false;
+        let mut lent_whole = false;
         if pointer == 0 {
             if change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
-                } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) { out.push("&"); }
+                } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) {
+                    out.push("&");
+                    lent_whole = emit_arg_binds_looser_than_a_borrow(arg) || self.emits_as_cast(world, arg);
+                }
             }
         }
         let boxed_alone = pointer == 0 && !count && self.facts.boxed_reads.contains(&node);
-        let held = has_how && how != "" && !boxed_alone;
+        let held = has_how && how != "" && !boxed_alone || lent_whole;
         if held { out.push("("); }
         if pointer == 3 { out.push("&"); } else if pointer == 4 { out.push("&mut "); }
         if count { out.push("nikaia_std::count::of("); }

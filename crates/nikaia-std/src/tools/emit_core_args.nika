@@ -123,6 +123,16 @@ fn emit_arg_is_closure(arg: ref Expr) -> bool {
     }
 }
 
+/// Whether the argument is written as an operator that binds looser than a
+/// `&` in front of it (#1290): a binary operator or a range.
+fn emit_arg_binds_looser_than_a_borrow(arg: ref Expr) -> bool {
+    return match arg {
+        Expr::Binary { .. } => true,
+        Expr::Range { .. } => true,
+        else => false,
+    }
+}
+
 fn emit_arg_is_variable(arg: ref Expr) -> bool {
     return match arg {
         Expr::Variable(..) => true,
@@ -521,6 +531,7 @@ impl EmitState {
             return
         }
         let mut kept_here = false
+        let mut lent_whole = false
         if pointer == 0 {
             if change && self.facts.reborrowed_args.contains(node) {
                 out.push("&mut *")
@@ -540,15 +551,17 @@ impl EmitState {
                     out.push("&*")
                 } else if lend && !self.facts.views_handed_on.contains(node) {
                     // **A part an expression arm binds as a view** is one
-                    // already (#456); the others are lent here.
+                    // already (#456); the others are lent here, an operator
+                    // expression whole: `&(l ^ 1)`, never `&l ^ 1` (#1290).
                     out.push("&")
+                    lent_whole = emit_arg_binds_looser_than_a_borrow(arg) || self.emits_as_cast(world, arg)
                 }
             }
         }
         // **A boxed field is its own parentheses** (`(*code.result)`,
         // ADR-246 D2): a second pair around it is `unused_parens`.
         let boxed_alone = pointer == 0 && !count && self.facts.boxed_reads.contains(node)
-        let held = has_how && how != "" && !boxed_alone
+        let held = (has_how && how != "" && !boxed_alone) || lent_whole
         if held {
             out.push("(")
         }

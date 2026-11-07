@@ -1,0 +1,46 @@
+// An operator expression handed to a parameter the callee only reads is lent
+// whole, `&(l ^ 1)` and never `&l ^ 1` (#1290): `contains`, `get`,
+// `contains_key` and `remove` of a list, a set and a map, with an operator, a
+// call and a conversion as the argument.
+use std::collections
+
+struct B {
+	row: i64,
+}
+
+struct E {
+	first: u32,
+}
+
+fn three() -> u32 {
+	return 3
+}
+
+fn row_after(m: ref collections::BTreeMap[u32, B], e: E) -> i64? {
+	let r = (m.get(e.first + 1) ?? return null).row
+	return r
+}
+
+fn main() {
+	let v: Vec[u32] = [1, 2]
+	let l: u32 = 3
+	println(f"{v.contains(l ^ 1)}")
+	println(f"{v.contains(l + 1)}")
+	println(f"{v.contains(l - 1)}")
+	println(f"{v.contains(three())}")
+	println(f"{v.contains(three() - 2)}")
+	let n: i64 = 1
+	println(f"{v.contains(n as u32)}")
+	let mut m: collections::BTreeMap[u32, B] = collections::BTreeMap()
+	m.insert(1, B { row: 7 })
+	println(row_after(m, E { first: 0 }) ?? -1)
+	println(m.contains_key(l - 2))
+	let mut s: collections::HashSet[u32] = collections::HashSet()
+	s.insert(2)
+	println(s.contains(l * 2 - 4))
+	println(s.remove(l - 1))
+	let mut h: collections::HashMap[u32, i64] = collections::HashMap()
+	h.insert(2, 5)
+	println(h.get(l - 1) ?? 0)
+	println(h.contains_key(l & 2))
+}
