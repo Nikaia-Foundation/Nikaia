@@ -1,0 +1,24 @@
+// ADR-views-3 D14, #1224: without a body, `from` alone makes a result a view,
+// so `nikaia migrate views-3` writes a trait method's `ref` result as the
+// `from` the old declaration meant, the one its implementations are held to:
+// a lent receiver, `from self`; else the one parameter written `ref`. Where
+// the old declaration names several or none, the `ref` stays and the
+// migration names the choices. A method with a body loses its `ref` alone.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "trait Named {\n    fn name(ref self) -> ref String\n    fn first(a: ref String, n: i64) -> ref String\n    fn either(a: ref String, b: ref String) -> ref String\n    fn made(self) -> String\n    fn told(self, a: ref String) -> ref String from a\n}\n\nstruct P {\n    n: String,\n}\n\nimpl Named for P {\n    fn name(ref self) -> ref String {\n        return self.n\n    }\n    fn first(a: ref String, n: i64) -> ref String {\n        return a\n    }\n    fn either(a: ref String, b: ref String) -> ref String {\n        return a\n    }\n    fn made(self) -> String {\n        return \"m\"\n    }\n    fn told(self, a: ref String) -> ref String {\n        return a\n    }\n}\n\nfn main() {\n    let p = P { n: \"x\" }\n    println(p.name())\n}\n")
+    let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))
+    process::run("rm", ["-rf", tmp])
+}

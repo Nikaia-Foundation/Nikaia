@@ -3055,7 +3055,7 @@ fn rsrc_seed(unit: ref Unit, asked: ref Asked, subject: ref Type?, item: ref Ite
 }
 
 // One function. The answer is stored in `known`; true where it grew.
-fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_name: ref winnow_grammar::Symbol?, at: ref Span, item: ref Item, own_buffer: fn(ref Expr) -> bool sync, mut known: collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[Finding], report: bool) -> bool {
+fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_name: ref winnow_grammar::Symbol?, declared_result: ref RsrcTraitResult, at: ref Span, item: ref Item, own_buffer: fn(ref Expr) -> bool sync, mut known: collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[Finding], report: bool) -> bool {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, body, ret_from, .. } => {
             if !buffered(unit, asked, ret_type) {
@@ -3159,13 +3159,80 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
                 for way in flow.ways {
                     plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(way.reach) })
                 }
-                rsrc_report(asked, of, sources, declared_views, plain_ways, rsrc_plain(reach), receiver, trait_name, !ret_from.is_empty(), at, out)
+                let mut trait_from: Vec[String] = []
+                for position in declared_result.from {
+                    if position < 0 {
+                        trait_from.push(self_name.clone())
+                    } else if position < args.len() {
+                        trait_from.push(asked.names.resolve(args[position].name).clone())
+                    }
+                }
+                rsrc_report(asked, of, sources, declared_views, plain_ways, rsrc_plain(reach), receiver, trait_name, declared_result, trait_from, !ret_from.is_empty(), at, out)
             }
             return changed
         }
         else => {}
     }
     return false
+}
+
+// **What an `impl`'s trait declares for the method's result** (ADR-views-3
+// D14, #1224): `found` where the trait is one of this file's; `view` where the
+// result is a view at all (it writes `from`, or `ref` until the migration);
+// `from` the positions its `from` names, -1 for the receiver, else the
+// parameter's index, so an `impl` that names its parameters otherwise is read
+// alike.
+struct RsrcTraitResult {
+    found: bool,
+    view: bool,
+    from: Vec[i64],
+}
+
+fn rsrc_trait_result(asked: ref Asked, items: ref Vec[Spanned[Item]], trait_name: ref winnow_grammar::Symbol?, method: ref Item) -> RsrcTraitResult {
+    let wanted = trait_name ?? return RsrcTraitResult { found: false, view: false, from: [] }
+    let mut function: String = ""
+    match method {
+        Item::Fn { name, .. } => {
+            function = function_name(asked.names, name)
+        }
+        else => {}
+    }
+    for item in items {
+        match item.node {
+            Item::Trait { name, methods, .. } => {
+                if asked.names.resolve(name) == asked.names.resolve(wanted) {
+                    for declared in methods {
+                        if asked.names.resolve(declared.node.name) == function {
+                            let mut from: Vec[i64] = []
+                            for source in declared.node.ret_from {
+                                let written = asked.names.resolve(source).clone()
+                                if written == "self" {
+                                    from.push(-1)
+                                }
+                                for position in 0..<declared.node.args.len() {
+                                    if asked.names.resolve(declared.node.args[position].name) == written {
+                                        from.push(position)
+                                    }
+                                }
+                            }
+                            let mut view = !declared.node.ret_from.is_empty()
+                            match declared.node.ret_type {
+                                null => {}
+                                result => {
+                                    if result.is_view {
+                                        view = true
+                                    }
+                                }
+                            }
+                            return RsrcTraitResult { found: true, view: view, from: from }
+                        }
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return RsrcTraitResult { found: false, view: false, from: [] }
 }
 
 // A result of text of either kind (ADR-282 D12): `String` the text tiers made
@@ -3194,7 +3261,7 @@ fn rsrc_tail(body: ref Block, tail: ref collections::BTreeSet[String], mut flow:
     }
 }
 
-fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, written_from: bool, at: ref Span, mut out: Vec[Finding]) {
+fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], declared_views: ref Vec[String], ways: ref Vec[ResultSrcWay], reach: ref collections::BTreeSet[String], receiver: ref Receiver?, trait_name: ref winnow_grammar::Symbol?, declared_result: ref RsrcTraitResult, trait_from: ref Vec[String], written_from: bool, at: ref Span, mut out: Vec[Finding]) {
     for way in ways {
         for each in way.reach {
             if each.starts_with("!") {
@@ -3220,6 +3287,33 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
     // names its sources itself, and the body is checked against that (D8,
     // D14, #1230: `fn pick(self, a: String) -> String from a`).
     if trait_name == null || written_from {
+        return
+    }
+    // **The trait's declaration says it** (D14, #1224): without a body,
+    // `from` alone makes its result a view of what it names, and a result
+    // that writes neither `from` nor (until the migration) `ref` owns its
+    // value. Read where the trait is this file's.
+    if declared_result.found && !declared_result.view {
+        for source in named {
+            let message = f"{of} implements a trait method whose result is text of its own, but this hands back a view of `{source}`'s data."
+            let note: String = "The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-3 D14)."
+            let help = f"Hand back a copy with `.clone()`, or write `from {source}` on the trait's result."
+            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, [note], help))
+            return
+        }
+        return
+    }
+    if declared_result.found && !trait_from.is_empty() {
+        let written = trait_from.join(" | ")
+        for source in named {
+            if !trait_from.contains(source) {
+                let message = f"{of} implements a trait method that hands back views of `{written}` only, but this hands back a view of `{source}`'s data."
+                let note = f"Whoever calls it through the trait reads the trait's declaration, which says `from {written}`."
+                let help: String = "Hand back a view of what the trait names, or a copy with `.clone()`."
+                out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, [note], help))
+                return
+            }
+        }
         return
     }
     // The receiver, else the declaration's only view; a plain parameter the
@@ -3476,6 +3570,7 @@ fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn
 fn rsrc_solve(unit: ref Unit, asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut known: collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[Finding]) {
     let nothing: Type? = null
     let no_trait: winnow_grammar::Symbol? = null
+    let no_result = RsrcTraitResult { found: false, view: false, from: [] }
     for item in items {
         match item.node {
             Item::Fn { .. } => rsrc_seed(unit, asked, nothing, item.node, known),
@@ -3495,14 +3590,14 @@ fn rsrc_solve(unit: ref Unit, asked: ref Asked, items: ref Vec[Spanned[Item]], o
         for item in items {
             match item.node {
                 Item::Fn { .. } => {
-                    if rsrc_function(unit, asked, nothing, no_trait, item.span, item.node, own_buffer, known, out, false) {
+                    if rsrc_function(unit, asked, nothing, no_trait, no_result, item.span, item.node, own_buffer, known, out, false) {
                         grew = true
                     }
                 }
                 Item::Impl { target, methods, .. } => {
                     let subject: Type? = target.clone()
                     for method in methods {
-                        if rsrc_function(unit, asked, subject, no_trait, method.span, method.node, own_buffer, known, out, false) {
+                        if rsrc_function(unit, asked, subject, no_trait, no_result, method.span, method.node, own_buffer, known, out, false) {
                             grew = true
                         }
                     }
@@ -3524,13 +3619,14 @@ fn rsrc_solve(unit: ref Unit, asked: ref Asked, items: ref Vec[Spanned[Item]], o
     for item in items {
         match item.node {
             Item::Fn { args, ret_type, .. } => {
-                let grew = rsrc_function(unit, asked, nothing, no_trait, item.span, item.node, own_buffer, known, out, true)
+                let grew = rsrc_function(unit, asked, nothing, no_trait, no_result, item.span, item.node, own_buffer, known, out, true)
                 rsrc_function_types(unit, asked, args, ret_type, item.span, out)
             }
             Item::Impl { trait_name, target, methods, .. } => {
                 let subject: Type? = target.clone()
                 for method in methods {
-                    let grew = rsrc_function(unit, asked, subject, trait_name, method.span, method.node, own_buffer, known, out, true)
+                    let declared_result = rsrc_trait_result(asked, items, trait_name, method.node)
+                    let grew = rsrc_function(unit, asked, subject, trait_name, declared_result, method.span, method.node, own_buffer, known, out, true)
                     match method.node {
                         Item::Fn { args, ret_type, .. } => rsrc_function_types(unit, asked, args, ret_type, method.span, out),
                         else => {}

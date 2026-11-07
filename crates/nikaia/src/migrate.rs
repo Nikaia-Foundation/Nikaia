@@ -58,6 +58,14 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
                 }
             }
         };
+        // A trait's `ref` result whose source the old declaration does not fix
+        // keeps its `ref`, and the choices are named (ADR-views-3 D14).
+        if file.extension().is_none_or(|e| e != "md") {
+            for unwritten in nikaia_std::tools::migrate_views3::migrate_views3_unwritten(&source) {
+                eprintln!("{}:{unwritten}", file.display());
+                code = 1;
+            }
+        }
         if migrated != source {
             std::fs::write(file, &migrated)
                 .with_context(|| format!("cannot write {}", file.display()))?;
