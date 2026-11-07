@@ -108,4 +108,8 @@ together with the specification section and an example test.
 * When the before binary's `lower-std` fails on files nobody changed, put HEAD's version of your own `.rs` files back, build, lower, then restore them and build again. (issue-1350)
 * Test programs had only `.stdout`, `.stderr`, `.stops`, `.bounds` and `.loops.bounds` expectations until `.asserts` (#1350); a new report expectation goes through `project_tests_bounds_outcome` and the host's `explained(args)`. (issue-1350)
 * A change to the `check --asserts` header breaks `it` tests `assert::asserts_reports_every_claim` and `assume::asserts_lists_every_assume`, which match it exactly. (issue-1350)
+* A move probe needs a callee that keeps its argument (`all.push(x)` into a list declared outside the loop), or the checker lends the parameter and no move happens. (issue-1366)
+* Nikaia's `a..b` includes `b`; use `0..<n` for n turns. (issue-1366)
+* After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. (issue-1366)
+* NK2105 for loops is decided in `hands_over_path_of` and `CheckRepeats` (`check_takes.nika`, `check_state.nika`); `revived` there also drives narrowing (ADR-382), so a new exemption needs its own set. (issue-1366)
 
