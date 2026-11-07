@@ -64,7 +64,7 @@ fn main() throws {
 <p>A name from outside is opened under the directory the call names. The second name leaves it, and the call refuses it:</p>
 <pre><code class="language-nika">use std::fs
 
-fn main() {
+fn main() throws {
     for name in ["a.txt", "../../etc/passwd"] {
         let text = fs::read_to_string(name, fs::Root::Dir("store")) catch {
             println(f"refused {name}: {error}")

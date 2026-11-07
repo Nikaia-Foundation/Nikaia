@@ -35,10 +35,14 @@ fn lookup() -&gt; String {
     return "fresh price"
 }
 
-fn main() {
+fn render() -&gt; String {
     let price = async(within: 100.millis()) lookup()
-    println("rendering the page")
-    println(price)
+    let page = "the page"
+    return f"{page} with the {price}"
+}
+
+fn main() throws {
+    println(render())
 }
 </code></pre>
 <pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
@@ -49,7 +53,7 @@ fn main() {
 <span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
 <span class="d-gutter">   |</span>
 <span class="d-gutter">   =</span> <span class="d-note">note:</span> When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).
-<span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `main`, or write a fallback: `async(within: d) … catch { … }`.</code></pre>
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `render`, or write a fallback: `async(within: d) … catch { … }`.</code></pre>
 <p>With a fallback, the page is rendered with the price the program already has:</p>
 <pre><code class="language-nika">use std::time
 
@@ -58,15 +62,18 @@ fn lookup() -&gt; String {
     return "fresh price"
 }
 
-fn main() {
+fn render() -&gt; String {
     let price = async(within: 100.millis()) lookup() catch { "cached price" }
-    println("rendering the page")
-    println(price)
+    let page = "the page"
+    return f"{page} with the {price}"
+}
+
+fn main() throws {
+    println(render())
 }
 </code></pre>
 <pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia run main.nika</b>
-rendering the page
-cached price</code></pre>
+the page with the cached price</code></pre>
         </details>
       </div>
     <div class="safe-reading">

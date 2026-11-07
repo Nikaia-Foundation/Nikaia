@@ -39,7 +39,7 @@ fn total(first: String, second: String) -&gt; int throws {
     return a + b                         // waits for both; an error is thrown here
 }
 
-fn main() {
+fn main() throws {
     let n = total("the quick brown fox", "jumps over the lazy dog") catch {
         println(f"caught: {error}")
         0
