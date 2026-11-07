@@ -1,0 +1,57 @@
+migrated TMP/a.nika
+migrated TMP/b.md
+trait Show {
+    fn draw(self) throws
+}
+
+struct P {
+    x: i64,
+}
+
+impl Show for P {
+    fn draw(self) throws {
+        println(f"P {self.x}")
+    }
+}
+
+fn quiet(x: i64) -> i64 sync {
+    return x + 1
+}
+
+fn uses(p: P) throws {
+    p.draw()
+}
+
+fn already() -> i64 throws {
+    eprintln("e")
+    return 1
+}
+
+fn calls_already() -> i64 throws {
+    return already()
+}
+
+fn each(items: Vec[i64]) throws {
+    items.iter().for_each fn(v) { print(f"{v} ") }
+}
+
+fn main() throws {
+    // println("in a comment") is left alone
+    uses(P { x: quiet(1) })
+    let n = calls_already()
+    each([n])
+}
+# A page
+
+```nika
+fn main() throws {
+    println("hi")
+}
+```
+
+```rust
+fn main() {
+    println!("hi");
+}
+```
+check: Checked TMP/a.nika

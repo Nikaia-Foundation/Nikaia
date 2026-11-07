@@ -265,10 +265,12 @@ pub enum Command {
     },
     /// Rewrite `.nika` files and the Nikaia blocks of `.md` files to a new
     /// edition of the language: `views-3` drops `ref` outside `extern "C"`
-    /// and writes `keep` where the body keeps a parameter (ADR-views-3 D4).
+    /// and writes `keep` where the body keeps a parameter (ADR-views-3 D4);
+    /// `print-throws` writes `throws` on every function that can fail because
+    /// it prints (ADR-392).
     Migrate {
-        /// The edition to migrate to: `views-3`.
-        #[arg(value_parser = ["views-3"])]
+        /// The edition to migrate to: `views-3` or `print-throws`.
+        #[arg(value_parser = ["views-3", "print-throws"])]
         edition: String,
         /// The files, or directories to migrate the `.nika` and `.md` files of.
         #[arg(value_name = "PATH", required = true)]
@@ -1126,8 +1128,11 @@ fn run() -> Result<()> {
             let code = nikaia::fmt::run(&start, files, *check)?;
             std::process::exit(code);
         }
-        Command::Migrate { files, .. } => {
-            let code = nikaia::migrate::run(files)?;
+        Command::Migrate { edition, files } => {
+            let code = match edition.as_str() {
+                "print-throws" => nikaia::migrate::print_throws(files)?,
+                _ => nikaia::migrate::run(files)?,
+            };
             std::process::exit(code);
         }
         Command::Interpret { file } => single_file(&args, file, Verb::Interpret),
