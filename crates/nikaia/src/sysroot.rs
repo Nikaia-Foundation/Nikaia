@@ -408,18 +408,25 @@ fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
 fn read_tools_package(
     paths: &[PathBuf],
 ) -> Result<(Vec<usize>, Vec<String>, Vec<crate::parser::Parsed>)> {
-    let mut parsed: Vec<crate::parser::Parsed> = Vec::new();
     let mut sizes: Vec<usize> = Vec::new();
     let mut texts: Vec<String> = Vec::new();
     for path in paths {
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         sizes.push(source.len());
-        let one = crate::parser::parse_unrefined(&source)
-            .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         texts.push(source);
-        parsed.push(one);
     }
+    // **Each file parsed on its own thread** (#1277): a parse reads only its
+    // text and makes its own interner; the largest first, the answers in file
+    // order.
+    let mut order: Vec<usize> = (0..paths.len()).collect();
+    order.sort_by_key(|at| std::cmp::Reverse(sizes[*at]));
+    let mut parsed: Vec<crate::parser::Parsed> = in_parallel(&order, None, |at| {
+        crate::parser::parse_unrefined(&texts[at])
+            .map_err(|e| anyhow::anyhow!("{}: {e}", paths[at].display()))
+    })
+    .into_iter()
+    .collect::<Result<_>>()?;
     // **The package's text tiers, once all its files are parsed** (ADR-282
     // D17, #956): a file reads the published fields of the others.
     {
