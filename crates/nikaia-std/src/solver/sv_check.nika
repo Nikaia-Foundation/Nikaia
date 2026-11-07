@@ -43,6 +43,10 @@ struct SvReplay {
 	/// them (ADR-270 D27).
 	reals: Vec[u32],
 	refuted: bool,
+	/// Per atom while a learned clause is checked: 0 open, 1 true, -1
+	/// false; all 0 between checks, so a check costs its own literals, not
+	/// the atoms (#1312).
+	value: Vec[i64],
 }
 
 /// A combination's result, or why there is none.
@@ -59,6 +63,7 @@ fn sv_check(query: ref SvQuery, log: ref Vec[SvStep]) -> SvVerdict {
 		columns: query.columns,
 		reals: query.reals.clone(),
 		refuted: false,
+		value: [],
 	}
 	for atom in query.atoms {
 		let why = replay.row_known(atom.row)
@@ -165,42 +170,18 @@ impl SvReplay {
 		if why != "" {
 			return why
 		}
-		// Per atom: 0 open, 1 true, -1 false.
-		let mut value: Vec[i64] = []
-		for _ in self.atoms {
-			value.push(0)
+		while self.value.len() < self.atoms.len() {
+			self.value.push(0)
 		}
-		for l in lits {
-			sv_assign(value, l ^ 1)
+		let mut touched: Vec[u32] = []
+		let unit = sv_unit_chain(self.entries, self.value, lits, hints, touched)
+		for l in touched {
+			self.value[(l / 2) as i64] = 0
 		}
-		for h in hints {
-			let at = h as i64
-			if at >= self.entries.len() {
-				return f"hint {h} is no earlier entry"
-			}
-			let clause = match self.entries[at] {
-				SvEntry::Clause(c) => c,
-				else => return f"hint {h} is no clause",
-			}
-			let mut open: Vec[u32] = []
-			for l in clause {
-				let v = sv_value(value, l)
-				if v > 0 {
-					return f"hint {h} is already true"
-				}
-				if v == 0 {
-					open.push(l)
-				}
-			}
-			if open.len() == 0 {
-				return self.add_clause(lits.clone())
-			}
-			if open.len() > 1 {
-				return f"hint {h} is not unit: {open.len()} literals open"
-			}
-			sv_assign(value, open[0])
+		if unit != "" {
+			return unit
 		}
-		return "the hints end without a conflict"
+		return self.add_clause(lits.clone())
 	}
 
 	fn delete(ref mut self, id: u32) -> String {
@@ -461,6 +442,51 @@ impl SvReplay {
 }
 
 /// Makes literal `l` true.
+/// Unit propagation of `hints` from the negation of `lits` (RUP): `""`
+/// where it ends in a conflict, else why not. Every literal assigned in
+/// `value` is added to `touched`.
+fn sv_unit_chain(
+	entries: ref Vec[SvEntry],
+	mut value: Vec[i64],
+	lits: ref Vec[u32],
+	hints: ref Vec[u32],
+	mut touched: Vec[u32],
+) -> String {
+	for l in lits {
+		sv_assign(value, l ^ 1)
+		touched.push(l)
+	}
+	for h in hints {
+		let at = h as i64
+		if at >= entries.len() {
+			return f"hint {h} is no earlier entry"
+		}
+		let clause = match entries[at] {
+			SvEntry::Clause(c) => c,
+			else => return f"hint {h} is no clause",
+		}
+		let mut open: Vec[u32] = []
+		for l in clause {
+			let v = sv_value(value, l)
+			if v > 0 {
+				return f"hint {h} is already true"
+			}
+			if v == 0 {
+				open.push(l)
+			}
+		}
+		if open.len() == 0 {
+			return ""
+		}
+		if open.len() > 1 {
+			return f"hint {h} is not unit: {open.len()} literals open"
+		}
+		sv_assign(value, open[0])
+		touched.push(open[0])
+	}
+	return "the hints end without a conflict"
+}
+
 fn sv_assign(mut value: Vec[i64], l: u32) {
 	let at = (l / 2) as i64
 	value[at] = if l % 2 == 0 { 1 } else { -1 }

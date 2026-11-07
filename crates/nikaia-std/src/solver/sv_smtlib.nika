@@ -26,6 +26,13 @@
 //   Booleans are rewritten the same way. The definitions are facts of their
 //   own: each holds for some value of its fresh variable, whatever else
 //   holds, so they stay when an assertion that used them is popped.
+// * **`ite` folded** (#1312): a constant condition takes its branch; an atom
+//   whose linear form reads one `ite` variable `v`, `k·v + c rel 0`, is
+//   pushed into the branches, `cond ? k·a + c rel 0 : k·b + c rel 0`, again
+//   where a branch is an `ite`, so an `ite` of constants compared with a
+//   constant becomes a formula over the conditions. The atoms and choices
+//   are kept once by their text, and only the definitions of the `ite`
+//   variables the facts still read, after the script is read, are added.
 // * **Fresh names** start with `|sv!|`: a declared name is read unquoted and
 //   cannot hold a `|`, so the two never collide.
 // * **Commands**: `push`, `pop` and `reset-assertions` keep an assertion
@@ -74,6 +81,15 @@ struct SvFun {
 	body: LgSexp,
 }
 
+/// A numeric `ite` read: its condition and branches, the definition of its
+/// fresh variable `v`, `c ? v = a : v = b`, made only if `v` is still read
+/// when the script is done.
+struct SvIte {
+	c: i64,
+	a: SvLin,
+	b: SvLin,
+}
+
 struct SvSmtReader {
 	arena: TermArena,
 	/// The constants declared `Int`.
@@ -93,6 +109,15 @@ struct SvSmtReader {
 	/// definition.
 	side: Vec[i64],
 	fresh: i64,
+	/// The numeric `ite`s by their fresh variable.
+	ites: collections::BTreeMap[String, SvIte],
+	/// An atom over one `ite` variable pushed into the branches, by its
+	/// text: the formula made, kept once (the branches are shared).
+	folds: collections::BTreeMap[String, i64],
+	/// The formulas `choice` and `compare_atom` made, by their text, kept
+	/// once: the arena does not share nodes, and the folds must see two
+	/// equal branches as one.
+	made: collections::BTreeMap[String, i64],
 }
 
 /// The linear form of the constant `r`.
@@ -288,10 +313,84 @@ impl SvSmtReader {
 		return null
 	}
 
-	/// The atom `a rel b` over linear forms, cleared of denominators: `rel`
-	/// is `<=`, `<`, `>=`, `>`, `=` or `distinct`.
+	/// The atom `a rel b` over linear forms: `rel` is `<=`, `<`, `>=`, `>`,
+	/// `=` or `distinct`. Where `a - b` reads one variable and that is an
+	/// `ite`'s, `k·v + c rel 0` is pushed into its branches, `cond ?
+	/// k·a' + c rel 0 : k·b' + c rel 0`, so an `ite` of constants compared
+	/// with a constant becomes a formula over its conditions and its
+	/// variable is not needed (#1312).
 	fn compare(ref mut self, rel: String, a: ref SvLin, b: ref SvLin) -> SvGot {
 		let d = sv_lin_sub(a, b) ?? return sv_overflow(f"the atom ({rel} ...)")
+		if d.terms.len() == 1 {
+			for (name, k) in d.terms {
+				if self.ites.contains_key(name) {
+					match self.fold(rel, name, k, d.c) {
+						null => {},
+						id => {
+							return SvGot::Val(SvVal::Formula(id))
+						},
+					}
+				}
+			}
+		}
+		return self.compare_atom(rel, d)
+	}
+
+	/// `k·v + c rel 0` for the `ite` variable `v`, pushed into its branches;
+	/// null where a branch's scaled form leaves `i64`.
+	fn fold(ref mut self, rel: String, name: String, k: SvRat, c: SvRat) -> i64? {
+		let key = f"{rel} {k.num}/{k.den} {c.num}/{c.den} {name}"
+		// A sentinel, not `match get { id => return id }`: that returns the
+		// map's `&i64` in rustc (#1313).
+		let known: i64 = self.folds.get(key) ?? -1
+		if known >= 0 {
+			return known
+		}
+		let ite = (self.ites.get(name) ?? return null).clone()
+		let at = sv_lin_constant(c)
+		let zero = sv_lin_constant(sv_int(0))
+		let scaled_a = sv_lin_scale(ite.a, k) ?? return null
+		let then_lin = sv_lin_add(scaled_a, at) ?? return null
+		let scaled_b = sv_lin_scale(ite.b, k) ?? return null
+		let else_lin = sv_lin_add(scaled_b, at) ?? return null
+		let then = match self.compare(rel, then_lin, zero) {
+			SvGot::Val(SvVal::Formula(id)) => id,
+			else => {
+				return null
+			},
+		}
+		let otherwise = match self.compare(rel, else_lin, zero) {
+			SvGot::Val(SvVal::Formula(id)) => id,
+			else => {
+				return null
+			},
+		}
+		let made = self.choice(ite.c, then, otherwise)
+		self.folds.insert(key, made)
+		return made
+	}
+
+	/// The atom `d rel 0`, cleared of denominators, made once per text.
+	fn compare_atom(ref mut self, rel: String, d: ref SvLin) -> SvGot {
+		let mut key = f"{rel} {d.c.num}/{d.c.den}"
+		for (name, k) in d.terms {
+			key = f"{key} {k.num}/{k.den} {name}"
+		}
+		let known: i64 = self.made.get(key) ?? -1
+		if known >= 0 {
+			return SvGot::Val(SvVal::Formula(known))
+		}
+		let got = self.compare_new(rel, d)
+		match got {
+			SvGot::Val(SvVal::Formula(id)) => {
+				self.made.insert(key, id)
+			},
+			else => {},
+		}
+		return got
+	}
+
+	fn compare_new(ref mut self, rel: String, d: ref SvLin) -> SvGot {
 		let mut scale: i64 = d.c.den
 		for (_, k) in d.terms {
 			scale = sv_lcm(scale, k.den) ?? return sv_overflow(f"the atom ({rel} ...)")
@@ -312,7 +411,7 @@ impl SvSmtReader {
 			} else {
 				c != 0
 			}
-			return SvGot::Val(SvVal::Formula(self.arena.boolean(holds)))
+			return SvGot::Val(SvVal::Formula(self.truth_node(holds)))
 		}
 		// `k·x` added, or `|k|·x` subtracted after the first part.
 		let mut lhs: i64 = -1
@@ -367,8 +466,75 @@ impl SvSmtReader {
 		return self.arena.or([both, neither])
 	}
 
-	/// `c ? a : b` over formulas.
+	/// The node of the constant `value`, one per value.
+	fn truth_node(ref mut self, value: bool) -> i64 {
+		let key = f"{value}"
+		let known: i64 = self.made.get(key) ?? -1
+		if known >= 0 {
+			return known
+		}
+		let made = self.arena.boolean(value)
+		self.made.insert(key, made)
+		return made
+	}
+
+	/// Whether the formula `id` is the constant true (1), false (0), or
+	/// neither (-1).
+	fn truth(ref self, id: i64) -> i64 {
+		return match self.arena.at(id) {
+			SolverTerm::Bool(v) => if v {
+				1
+			} else {
+				0
+			},
+			else => -1,
+		}
+	}
+
+	/// `c ? a : b` over formulas, kept once per `(c, a, b)`; a constant
+	/// condition takes its branch, and a constant branch or one that is `c`
+	/// gives a single junction (#1312).
 	fn choice(ref mut self, c: i64, a: i64, b: i64) -> i64 {
+		let tc = self.truth(c)
+		if tc == 1 || a == b {
+			return a
+		}
+		if tc == 0 {
+			return b
+		}
+		let ta = self.truth(a)
+		let tb = self.truth(b)
+		if ta >= 0 && ta == tb {
+			return a
+		}
+		if ta == 1 && tb == 0 {
+			return c
+		}
+		let key = f"? {c} {a} {b}"
+		let known: i64 = self.made.get(key) ?? -1
+		if known >= 0 {
+			return known
+		}
+		let made = if ta == 0 && tb == 1 {
+			self.arena.not(c)
+		} else if a == c || ta == 1 {
+			self.arena.or([c, b])
+		} else if b == c || tb == 0 {
+			self.arena.and([c, a])
+		} else if ta == 0 {
+			let not_c = self.arena.not(c)
+			self.arena.and([not_c, b])
+		} else if tb == 1 {
+			let not_c = self.arena.not(c)
+			self.arena.or([not_c, a])
+		} else {
+			self.choice_new(c, a, b)
+		}
+		self.made.insert(key, made)
+		return made
+	}
+
+	fn choice_new(ref mut self, c: i64, a: i64, b: i64) -> i64 {
 		let then = self.arena.and([c, a])
 		let not_c = self.arena.not(c)
 		let otherwise = self.arena.and([not_c, b])
@@ -467,33 +633,130 @@ impl SvSmtReader {
 				b,
 			))),
 			(SvVal::Lin(a), SvVal::Lin(b)) => {
+				let tc = self.truth(c)
+				if tc == 1 {
+					return SvGot::Val(SvVal::Lin(a.clone()))
+				}
+				if tc == 0 {
+					return SvGot::Val(SvVal::Lin(b.clone()))
+				}
 				let name = self.fresh_name("ite")
 				if self.is_real(a) || self.is_real(b) {
 					self.reals.insert(name.clone())
 				} else {
 					self.ints.insert(name.clone())
 				}
-				let v = sv_lin_var(name)
-				let then = match self.compare("=", v, a) {
-					SvGot::Val(SvVal::Formula(id)) => id,
-					SvGot::Val(_) => -1,
-					SvGot::Failed(why) => {
-						return SvGot::Failed(why.clone())
-					},
-				}
-				let otherwise = match self.compare("=", v, b) {
-					SvGot::Val(SvVal::Formula(id)) => id,
-					SvGot::Val(_) => -1,
-					SvGot::Failed(why) => {
-						return SvGot::Failed(why.clone())
-					},
-				}
-				let definition = self.choice(c, then, otherwise)
-				self.side.push(definition)
-				SvGot::Val(SvVal::Lin(v))
+				self.ites.insert(name.clone(), SvIte { c: c, a: a.clone(), b: b.clone() })
+				SvGot::Val(SvVal::Lin(sv_lin_var(name)))
 			},
 			else => SvGot::Failed(SvReadWhy::Unsupported(f"an ite mixing a formula and a number: {lg_show(sexp)}")),
 		}
+	}
+
+	/// The variables `id` reads, added to `names`; `seen` holds the nodes
+	/// walked, as the folded formulas share their parts.
+	fn reads(ref self, id: i64, mut seen: collections::BTreeSet[i64], mut names: collections::BTreeSet[String]) {
+		if seen.contains(id) {
+			return
+		}
+		seen.insert(id)
+		match self.arena.at(id) {
+			SolverTerm::Var(name) => {
+				names.insert(name.clone())
+			},
+			SolverTerm::Neg(a) => self.reads(a, seen, names),
+			SolverTerm::Not(a) => self.reads(a, seen, names),
+			SolverTerm::Quot(a, _) => self.reads(a, seen, names),
+			SolverTerm::Add(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Sub(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Mul(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Le(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Lt(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Ge(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Gt(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Eq(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::Ne(a, b) => self.reads_both(a, b, seen, names),
+			SolverTerm::And(parts) => {
+				for part in parts {
+					self.reads(part, seen, names)
+				}
+			},
+			SolverTerm::Or(parts) => {
+				for part in parts {
+					self.reads(part, seen, names)
+				}
+			},
+			else => {},
+		}
+	}
+
+	fn reads_both(ref self, a: i64, b: i64, mut seen: collections::BTreeSet[i64], mut names: collections::BTreeSet[String]) {
+		self.reads(a, seen, names)
+		self.reads(b, seen, names)
+	}
+
+	/// The definitions of the `ite` variables the facts `facts` read, and of
+	/// those these definitions read in turn.
+	fn definitions(ref mut self, facts: ref Vec[i64]) -> SvReadWhy? {
+		let mut seen: collections::BTreeSet[i64] = collections::BTreeSet()
+		let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+		for id in facts {
+			self.reads(id, seen, names)
+		}
+		let mut done: collections::BTreeSet[String] = collections::BTreeSet()
+		let mut todo: Vec[String] = []
+		for name in names {
+			todo.push(name.clone())
+		}
+		while todo.len() > 0 {
+			let name = todo.pop() ?? ""
+			if done.contains(name) {
+				continue
+			}
+			done.insert(name.clone())
+			let ite = match self.ites.get(name) {
+				null => {
+					continue
+				},
+				found => found.clone(),
+			}
+			let v = sv_lin_var(name)
+			let then_lin = sv_lin_sub(v, ite.a) ?? return SvReadWhy::Overflow("the definition of an ite")
+			let then = match self.compare_atom("=", then_lin) {
+				SvGot::Val(SvVal::Formula(id)) => id,
+				SvGot::Val(_) => -1,
+				SvGot::Failed(why) => {
+					return why.clone()
+				},
+			}
+			let else_lin = sv_lin_sub(v, ite.b) ?? return SvReadWhy::Overflow("the definition of an ite")
+			let otherwise = match self.compare_atom("=", else_lin) {
+				SvGot::Val(SvVal::Formula(id)) => id,
+				SvGot::Val(_) => -1,
+				SvGot::Failed(why) => {
+					return why.clone()
+				},
+			}
+			let definition = self.choice(ite.c, then, otherwise)
+			self.side.push(definition)
+			let mut more: collections::BTreeSet[String] = collections::BTreeSet()
+			self.reads(definition, seen, more)
+			for m in more {
+				todo.push(m.clone())
+			}
+		}
+		// The variables of the `ite`s no fact reads are not the script's.
+		let mut unread: Vec[String] = []
+		for (name, _) in self.ites {
+			if !done.contains(name) {
+				unread.push(name.clone())
+			}
+		}
+		for name in unread {
+			self.ints.remove(name)
+			self.reals.remove(name)
+		}
+		return null
 	}
 
 	/// A `define-fun` with parameters applied: the body read with the
@@ -842,6 +1105,9 @@ pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 		funs: collections::BTreeMap(),
 		side: [],
 		fresh: 0,
+		ites: collections::BTreeMap(),
+		folds: collections::BTreeMap(),
+		made: collections::BTreeMap(),
 	}
 	let mut stack: Vec[Vec[i64]] = [[]]
 	for command in commands {
@@ -933,6 +1199,16 @@ pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 		for id in level {
 			assertions.push(id)
 		}
+	}
+	let mut facts = assertions.clone()
+	for id in reader.side {
+		facts.push(id)
+	}
+	match reader.definitions(facts) {
+		null => {},
+		why => {
+			return SvSmtRead::Failed(why.clone())
+		},
 	}
 	for id in reader.side {
 		assertions.push(id)

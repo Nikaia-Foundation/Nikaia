@@ -517,28 +517,42 @@ fn sv_smt_congruence(
 	let mut n_ids: Vec[u32] = []
 	for h in clause {
 		let a = (sv_not(h) / 2) as i64
+		// The first pair `x - v <= 0`, `v - x <= 0` (in the order of the
+		// list, the first one's place first), found through the second
+		// ones by column and constant: one pass, not one per pair (#1312).
+		let n = short_lit[a].len()
+		let mut rows: Vec[SvBound] = []
+		let mut second: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		for k in 0..<n {
+			let r = book.lit_bound(short_lit[a][k]) ?? return true
+			if r.row.ks == [-1] {
+				let key = f"{r.row.cols[0]} {r.row.constant}"
+				if !second.contains_key(key) {
+					second.insert(key, k)
+				}
+			}
+			rows.push(r)
+		}
 		let mut found = false
 		let mut i = 0
-		while i < short_lit[a].len() && !found {
-			let pr = book.lit_bound(short_lit[a][i]) ?? return true
-			let mut j = 0
-			while j < short_lit[a].len() && !found {
-				let nr = book.lit_bound(short_lit[a][j]) ?? return true
-				let sum = pr.row.constant.checked_add(nr.row.constant) ?? return true
-				let x = if pr.row.cols.len() == 1 { pr.row.cols[0] as i64 } else { -1 }
-				if pr.row.ks == [1] && nr.row.ks == [-1] && pr.row.cols == nr.row.cols && sum == 0
-					&& (column < 0 || x == column) {
-						column = x
-						values.push(pr.row.constant.checked_neg() ?? return true)
-						ps.push(short_lit[a][i])
-						ns.push(short_lit[a][j])
-						p_ids.push(short_id[a][i])
-						n_ids.push(short_id[a][j])
-						found = true
-					}
-				j += 1
-			}
+		while i < n && !found {
+			let pr = rows[i].clone()
 			i += 1
+			if pr.row.ks != [1] {
+				continue
+			}
+			let x = pr.row.cols[0] as i64
+			let v = pr.row.constant.checked_neg() ?? continue
+			let j: i64 = second.get(f"{x} {v}") ?? -1
+			if j >= 0 && (column < 0 || x == column) {
+				column = x
+				values.push(v)
+				ps.push(short_lit[a][i - 1])
+				ns.push(short_lit[a][j])
+				p_ids.push(short_id[a][i - 1])
+				n_ids.push(short_id[a][j])
+				found = true
+			}
 		}
 		if !found {
 			return true

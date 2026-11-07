@@ -1,5 +1,5 @@
 // The solver's SMT-LIB reader (`solver/sv_smtlib.nika`, ADR-270 D6, D17,
-// #1299): one row per form the measuring rod's files use - the form, read yes
+// #1299; the `ite` folding #1312): one row per form the measuring rod's files use - the form, read yes
 // or no, the number of assertions and the assertions as terms, or the reason
 // for a refusal, then the script's real variables (ADR-270 D27). `prover_arena`, `solver_terms`, `prove_text`,
 // `logic_smtlib` (for `lg_parse`), `sv_num` and `sv_smtlib` are run beside a
@@ -125,6 +125,26 @@ fn main() throws {
 			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (= x (+ 1 (ite p 2 3))))\n(check-sat)\n",
 		),
 		(
+			"ite, constant condition",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= x (ite (< 1 2) 2 3)))\n(check-sat)\n",
+		),
+		(
+			"ite, compared with a constant",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (= (ite p 2 3) 3))\n(check-sat)\n",
+		),
+		(
+			"ite, nested, compared with a constant",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (ite (= x 1) 5 (ite (= x 2) 7 x)) 7))\n(check-sat)\n",
+		),
+		(
+			"ite, scaled and shifted",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(assert (<= (+ (* 2 (ite p 4 1)) 1) 5))\n(check-sat)\n",
+		),
+		(
+			"ite, read twice",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (let ((v (ite p 1 0))) (and (= v 1) (> (+ x v) 3))))\n(check-sat)\n",
+		),
+		(
 			"= between Booleans",
 			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (>= x 5) (< x 0)))\n(check-sat)\n",
 		),
@@ -190,7 +210,7 @@ fn main() throws {
 		),
 		(
 			"real ite",
-			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (> (ite (> x 0) x 0.5) 0))\n(check-sat)\n",
+			"(set-logic QF_LRA)\n(declare-const x Real)\n(assert (> (ite (> x 0) x 0.5) x))\n(check-sat)\n",
 		),
 		(
 			"division by a variable",
