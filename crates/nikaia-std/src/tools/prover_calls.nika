@@ -112,6 +112,11 @@ fn whole_type(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool
 /// that one `throws` (`in_throwing`): what the callee declares, by its
 /// `throws` or its ledger's; a call nothing describes may. `unaliased`
 /// resolves a package's alias.
+///
+/// **A failure only the world decides does not count** (ADR-392): a call
+/// whose every failure is `io::IoError` - a `println`, a file read - fails or
+/// not by what is outside the program, never by its values, so it narrows no
+/// state past it; for each state there is a world in which it goes on.
 pub fn may_throw(call: ref Expr, in_throwing: bool, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, unaliased: fn(ref String) -> String sync) -> bool {
     if !in_throwing {
         return false
@@ -120,14 +125,29 @@ pub fn may_throw(call: ref Expr, in_throwing: bool, program: ref Program, words:
     let function = free_function(program, words, name)
     if function != null {
         let found = function ?? return true
-        return found.can_throw
+        if !found.can_throw {
+            return false
+        }
+        let inferred = own.functions[name] ?? return true
+        return inferred.fails_with.is_empty() || fails_by_the_program(inferred.fails_with)
     }
     if own.functions.contains_key(name) {
         let contract = own.functions[name] ?? return true
-        return !contract.fails_with.is_empty()
+        return fails_by_the_program(contract.fails_with)
     }
     let contract = library.functions[name] ?? return true
-    return !contract.fails_with.is_empty()
+    return fails_by_the_program(contract.fails_with)
+}
+
+/// Whether one of the failures a contract names is not the world's
+/// (`io::IoError`), so the program's values may decide it.
+fn fails_by_the_program(fails_with: ref Vec[String]) -> bool {
+    for one in fails_with {
+        if one != "io::IoError" {
+            return true
+        }
+    }
+    return false
 }
 
 /// The callee a call names: a bare name, or a path as the ledger keys it.

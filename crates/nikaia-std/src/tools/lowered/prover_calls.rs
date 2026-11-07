@@ -89,14 +89,21 @@ pub fn may_throw(call: &Expr, in_throwing: bool, program: &Program, words: &winn
     let function = free_function(program, words, &name);
     if function.is_some() {
         let found = match function { Some(__nikaia_value) => __nikaia_value, None => return true };
-        return found.can_throw;
+        if !found.can_throw { return false; }
+        let inferred = match *nikaia_std::index::get(&own.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        return inferred.fails_with.is_empty() || fails_by_the_program(&inferred.fails_with);
     }
     if own.functions.contains_key(&name) {
         let contract = match *nikaia_std::index::get(&own.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return true };
-        return !contract.fails_with.is_empty();
+        return fails_by_the_program(&contract.fails_with);
     }
     let contract = match *nikaia_std::index::get(&library.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return true };
-    !contract.fails_with.is_empty()
+    fails_by_the_program(&contract.fails_with)
+}
+
+pub(crate) fn fails_by_the_program(fails_with: &[String]) -> bool {
+    for one in fails_with.iter() { if one != "io::IoError" { return true; } }
+    false
 }
 
 pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> Option<String> {
