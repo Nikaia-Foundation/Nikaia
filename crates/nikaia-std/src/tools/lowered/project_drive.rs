@@ -51,8 +51,6 @@ pub trait ProjectDriveHost {
     fn report(&self, messages: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn package_name(&self) -> Option<String>;
     fn bind(&self) -> Option<String>;
-    fn libraries_in(&self, messages: &str) -> Vec<fs::Path>;
-    fn executable_in(&self, messages: &str) -> Option<fs::Path>;
     fn own_copy(&self, built: &std::path::Path) -> Result<fs::Path, Box<dyn std::error::Error>>;
     fn record_resolved_dependencies(&self) -> Option<String>;
     fn cargo_run(&self, args: &[String]) -> Result<i32, Box<dyn std::error::Error>>;
@@ -179,7 +177,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
             Some(ref text) => { project_drive_c_library(host, text, (python).as_deref(), (node).as_deref(), &messages)?; },
         }
     }
-    let built = host.executable_in(&messages);
+    let built = diagnostics_executable_in(&messages);
     let binary: Option<fs::Path> = match built {
         None => None,
         Some(ref path) => if shared { Some(host.own_copy(path)?) } else { Some(nikaia_std::fs::path::clone(&(path))) },
@@ -269,7 +267,7 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
             },
         }
     }
-    for built in host.libraries_in(messages) {
+    for built in diagnostics_libraries_in(messages) {
         let name = match nikaia_std::fs::path::file_name(&(built)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         match fs::copy(&built, &nikaia_std::fs::path::join(&(made), &name), &fs::Root::Anywhere) {
             Ok(_) => {},
@@ -373,8 +371,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple34141| {
-        let (a, b) = __nikaia_tuple34141;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple33887| {
+        let (a, b) = __nikaia_tuple33887;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

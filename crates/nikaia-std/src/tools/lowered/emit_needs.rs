@@ -48,7 +48,22 @@ impl EmitNeeds {
     }
 }
 
-pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[String], sources: &[&str]) -> String {
+pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[String], sources: &[&str], beside: &[String], has_main: bool) -> String {
+    let mut out: String = String::from("\n// ADR-300 D9: the generated file and line, the `.nika` line it came from,\n// and the tables of the packages it uses (#1351).\n");
+    out.push_str("#[doc(hidden)]\npub const __NIKAIA_PLACES: nikaia_std::abort::Places = nikaia_std::abort::Places {\n");
+    out.push_str("file: file!(),\nsites: &[\n");
+    out.push_str(&emit_needs_abort_rows(rust, rows, paths, sources));
+    out.push_str("],\nbeside: &[");
+    for name in beside.iter() {
+        let crate_name = name.replace('-', "_");
+        out.push_str(&format!("&::{}::__NIKAIA_PLACES, ", crate_name));
+    }
+    out.push_str("],\n};\n");
+    if has_main { out.push_str("const __NIKAIA_SITES: nikaia_std::abort::Places = __NIKAIA_PLACES;\n"); }
+    out
+}
+
+pub(crate) fn emit_needs_abort_rows(rust: &str, rows: &[(i64, i64, i64)], paths: &[String], sources: &[&str]) -> String {
     let starts = emit_needs_line_starts(rust);
     let mut nika: Vec<Vec<i64>> = vec![];
     for source in sources.iter() {
@@ -63,15 +78,13 @@ pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[Str
         let line = emit_needs_line_at(nikaia_std::index::get(&nika, nikaia_std::index::at(unit)), source_at);
         lines.entry(generated).or_insert((unit, line));
     }
-    let mut out: String = String::from("\n// ADR-300 D9: the generated line, and the `.nika` line it came from.\n");
-    out.push_str("const __NIKAIA_SITES: &[nikaia_std::abort::Site] = &[\n");
+    let mut out: String = String::from("");
     for (generated, (unit, line)) in lines.iter() {
         let generated = nikaia_std::num::value(generated);let unit = nikaia_std::num::value(unit);let line = nikaia_std::num::value(line);
         let mut path = rust_string("<unknown>");
         if unit < paths.len() as i64 { path = rust_string(nikaia_std::index::get(&paths, nikaia_std::index::at(unit))); }
         out.push_str(&format!("    ({}, {}, {}),\n", generated, path, line));
     }
-    out.push_str("];\n");
     out
 }
 

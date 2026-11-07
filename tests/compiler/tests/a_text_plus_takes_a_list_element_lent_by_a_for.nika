@@ -1,0 +1,30 @@
+// #1268: the element of a `for` over a `Vec[String]` is lent, and a text `+`
+// takes it on either side.
+
+fn names() -> Vec[String] {
+    let mut out: Vec[String] = []
+    out.push("a")
+    return out
+}
+
+fn main() throws {
+    let v = names()
+    let mut shown: Vec[String] = []
+    for p in "a b".split(" ") {
+        if v.contains(p) { continue }
+        shown.push(p.clone())
+    }
+    let mut t: String = ""
+    for r in v { t = t + r + "!" }
+    for s in shown {
+        if !v.contains(s) { t = t + s + "?" }
+    }
+    println(t)
+    let mut u: String = ""
+    for s in v { u = s + "?" + u }
+    println(u)
+    for s in shown { u = "<" + s }
+    println(u)
+    for s in shown { u = s + s }
+    println(u)
+}

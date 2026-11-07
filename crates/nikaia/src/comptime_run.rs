@@ -633,7 +633,7 @@ impl Default for Bounds {
 
 use nikaia_std::rt::exec::block_on;
 use nikaia_std::tools::comptime_bundle::{
-    self as moved, ComptimeBundle, ComptimeBundleArtifacts, ComptimeBundleHost, ComptimeBundleRan,
+    self as moved, ComptimeBundle, ComptimeBundleHost, ComptimeBundleRan,
 };
 
 /// **The dynamic library build-time code links against** (D3): one crate that
@@ -730,10 +730,6 @@ impl ComptimeBundleHost for BundleHost {
         orchestrator::cache::Layout::where_tools_start()
     }
 
-    fn artifacts(&self, messages: &str, named: &[String]) -> ComptimeBundleArtifacts {
-        artifacts_in(messages, named)
-    }
-
     fn toolchain(&self) -> String {
         toolchain().to_string()
     }
@@ -792,41 +788,6 @@ impl ComptimeBundleHost for BundleHost {
             status: ran.status.to_string(),
         })
     }
-}
-
-/// **The library and the crates Cargo's JSON messages name**: the
-/// `nikaia_bundle` target's dynamic library and each named crate's `rlib`.
-fn artifacts_in(messages: &str, named: &[String]) -> ComptimeBundleArtifacts {
-    let mut dylib = None;
-    let mut rlibs: Vec<(String, PathBuf)> = Vec::new();
-    for line in messages.lines() {
-        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
-        if message["reason"] != "compiler-artifact" {
-            continue;
-        }
-        let files = message["filenames"].as_array().cloned().unwrap_or_default();
-        let files = files.iter().filter_map(|f| f.as_str()).map(PathBuf::from);
-        match message["target"]["name"].as_str() {
-            Some(name) if named.iter().any(|n| n == name) => {
-                if let Some(rlib) = files
-                    .clone()
-                    .find(|f| f.extension().is_some_and(|e| e == "rlib"))
-                {
-                    rlibs.push((name.to_string(), rlib));
-                }
-            }
-            Some("nikaia_bundle") => {
-                dylib = files.clone().find(|f| {
-                    f.extension()
-                        .is_some_and(|e| e == std::env::consts::DLL_EXTENSION)
-                })
-            }
-            _ => {}
-        }
-    }
-    ComptimeBundleArtifacts { dylib, rlibs }
 }
 
 /// **The CPU level this process builds for** (ADR-371 D6), as

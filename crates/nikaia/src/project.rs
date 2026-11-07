@@ -371,8 +371,17 @@ pub fn packages_of(
     root: &Path,
     announce: bool,
 ) -> Result<Vec<modules::Dependency>> {
+    packages_of_view(&manifest_view(manifest), root, announce)
+}
+
+/// [`packages_of`] for a manifest already read as the walk reads one.
+fn packages_of_view(
+    view: &ProjectMembersManifest,
+    root: &Path,
+    announce: bool,
+) -> Result<Vec<modules::Dependency>> {
     let host = Manifests::default();
-    project_members::project_members_packages_of(&manifest_view(manifest), root, announce, &host)
+    project_members::project_members_packages_of(view, root, announce, &host)
         .map_err(|thrown| host.error(thrown))
 }
 
@@ -580,7 +589,12 @@ pub fn reads_for_file(input: &Path, allowlist: Option<&Path>) -> Result<assets::
 
 pub fn read_file(input: &Path) -> Result<(modules::Program, Vec<modules::Dependency>)> {
     let packages = packages_of_file(input)?;
-    match Layout::resolve(input).in_project {
+    let layout = Layout::resolve(input);
+    match layout.in_project {
+        _ if is_program_test(input, &layout) => Ok((
+            modules::Program::read_program_test(input, &packages)?,
+            packages,
+        )),
         false => Ok((modules::Program::read_one(input)?, packages)),
         true => Ok((modules::Program::read_with(input, &packages)?, packages)),
     }
@@ -597,7 +611,26 @@ pub fn packages_of_file(input: &Path) -> Result<Vec<modules::Dependency>> {
     let manifest = Manifest::read(&layout.root.join("nikaia.toml"))?;
     // Not announced: `Manifest::find` already read this manifest for the
     // settings, and a note said twice is noise.
-    packages_of(&manifest, &layout.root, false)
+    match is_program_test(input, &layout) {
+        // **A test program depends on the package** (ADR-269 D22, #972),
+        // under the manifest `nikaia test` builds it with.
+        true => packages_of_view(
+            &project_tests::project_tests_program_manifest(
+                &layout.root,
+                manifest.package_name().map(str::to_string),
+            ),
+            &layout.root,
+            false,
+        ),
+        false => packages_of(&manifest, &layout.root, false),
+    }
+}
+
+/// **Whether `input` is a test program** of the project `layout` found,
+/// `tests/NAME.nika` (ADR-269 D22, #972): a program of its own, not a file
+/// of a package `tests/` (`project_tests_is_program`).
+fn is_program_test(input: &Path, layout: &Layout) -> bool {
+    layout.in_project && project_tests::project_tests_is_program(input, &layout.root)
 }
 
 /// **The project `nikaia run <file>` builds** ([ADR-260](../../docs/specification/adr/adr-260.md) D4).
@@ -689,71 +722,20 @@ pub fn lower_reading(
     packages: &[modules::Dependency],
     allowlist: Option<&Path>,
 ) -> Result<Lowered> {
-    // `Layout` decides where the lock and the store go, and guarantees that
-    // outside a `nikaia.toml` project nothing is written into the source tree.
-    // It also names the unit relative to its root: an absolute path is D7's
-    // first failure direction, a key that moves with the checkout.
-    let layout = Layout::resolve(input);
-    let unit = layout.unit_name(input);
-    // **What this build may read, resolved before anything is read**
-    // ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D5).
-    let reads = reads_for(&layout, allowlist)?;
-    // **The level `target::has` answers for in a `comptime`** (ADR-371 D6).
-    crate::comptime_run::build_for_cpu(settings.cpu_key().unwrap_or_default());
-    let choices = match reads.list_digest() {
-        Some(digest) => settings.choices().reading(digest),
-        None => settings.choices(),
-    };
-    // **And what this build's boundaries say**
-    // ([ADR-290](../../docs/specification/adr/adr-290.md) D5). A description is
-    // a file a person edits, so an edit has to reach the next build - which it
-    // did not, and failed open while it did not.
-    let choices = choices.describing(crate::describe::descriptions_digest(&layout.root));
-    // **The committed proofs are an input** (#448): a recorded answer is what
-    // the lowering uses, so the file belongs in the key once it exists.
-    let choices = match layout.in_project {
-        true => choices.proving(block_on(project_members::project_members_proofs_digest(
-            &layout.root,
-            &ForeignHost,
-        ))),
-        false => choices,
-    };
-
-    // A cache that cannot be opened is a slower build, never a failed one
-    // (D12). The steps from here on are Nikaia (`project_lower_reading`,
-    // ADR-294, #125, P5b); the program, the cache, the check and the emitter
-    // stay Rust behind [`LowerHost`].
-    let host = LowerHost {
+    let open = modules::Open::new();
+    let (out, proofs, exported) = with_lower_host(
         input,
         settings,
         no_cache,
         packages,
-        unit,
-        layout: &layout,
-        reads: &reads,
-        choices: RefCell::new(Some(choices)),
-        program: RefCell::new(None),
-        key_source: RefCell::new(String::new()),
-        cache: RefCell::new(None),
-        exported: RefCell::new(None),
-        foreign: RefCell::new(None),
-        book: RefCell::new(None),
-        checked_facts: RefCell::new(BTreeMap::new()),
-        published: RefCell::new(BTreeMap::new()),
-        proofs: RefCell::new(None),
-        failed: RefCell::new(None),
-    };
-    let out = match project_lower::project_lower_reading(&host, layout.in_project) {
-        Ok(out) => out,
-        Err(error) => {
-            return Err(host
-                .failed
-                .into_inner()
-                .unwrap_or_else(|| anyhow!("{error}")));
-        }
-    };
-    let proofs = host.proofs.into_inner();
-    let exported = host.exported.into_inner();
+        allowlist,
+        &open,
+        false,
+        |host, in_project| match project_lower::project_lower_reading(host, in_project) {
+            Ok(out) => Ok((out, host.proofs.take(), host.exported.take())),
+            Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
+        },
+    )??;
     let (rust, ledger) = (out.rust, out.ledger);
 
     // **A library's entry points get their wrappers and their header**
@@ -796,6 +778,147 @@ pub fn lower_reading(
     })
 }
 
+/// **What `nikaia lsp` shows of the file `input`** (#1347): its program read
+/// as `nikaia check` reads it, the files in `open` as the editor holds them,
+/// and checked; then it stops - no emitter, no cache, no ledger written. Each
+/// finding comes back as data beside the file it is about, warnings too; a
+/// refusal that has no finding of its own (a manifest, a file that cannot be
+/// read) is one on `input`, with no code, at its first byte. `alone` reads
+/// `input` as a file of no project, whatever directory it names: an editor's
+/// document with no `file://` path (#1365).
+pub fn diagnose(
+    input: &Path,
+    open: &modules::Open,
+    alone: bool,
+) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+    let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
+        let (manifest, packages) = match alone {
+            true => (Manifest::default(), Vec::new()),
+            false => (Manifest::find(input)?, packages_of_file(input)?),
+        };
+        let settings = Settings::resolve(&manifest, None, None)?;
+        with_lower_host(
+            input,
+            &settings,
+            true,
+            &packages,
+            None,
+            open,
+            alone,
+            |host, _| {
+                use project_lower::ProjectLowerHost;
+                host.read_program()
+                    .and_then(|()| host.check_units().map(|_| ()))
+                    .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
+            },
+        )?
+    });
+    if let Err(error) = checked
+        && !found.iter().any(|(_, shown)| !shown.warning)
+    {
+        found.push((
+            input.display().to_string(),
+            diagnostics::refusal_shown(&format!("{error:#}"), 0),
+        ));
+    }
+    found
+}
+
+/// What `nikaia lsp` asks of the compiler (`tools/lsp.nika`, #1347):
+/// [`diagnose`].
+pub struct Lsp;
+
+impl nikaia_std::tools::lsp::LspHost for Lsp {
+    fn diagnose(
+        &self,
+        entry: &str,
+        open: &BTreeMap<String, String>,
+        alone: bool,
+    ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+        diagnose(Path::new(entry), open, alone)
+    }
+}
+
+/// The [`LowerHost`] of a build of `input`, handed to `run` with whether the
+/// input is in a project: what [`lower_reading`] and [`diagnose`] share.
+/// `alone` reads the input as a file of no project ([`diagnose`]).
+#[allow(clippy::too_many_arguments)]
+fn with_lower_host<R>(
+    input: &Path,
+    settings: &Settings,
+    no_cache: bool,
+    packages: &[modules::Dependency],
+    allowlist: Option<&Path>,
+    open: &modules::Open,
+    alone: bool,
+    run: impl FnOnce(&LowerHost<'_>, bool) -> R,
+) -> Result<R> {
+    // `Layout` decides where the lock and the store go, and guarantees that
+    // outside a `nikaia.toml` project nothing is written into the source tree.
+    // It also names the unit relative to its root: an absolute path is D7's
+    // first failure direction, a key that moves with the checkout.
+    let layout = Layout::resolve(input);
+    // **A test program is read as `nikaia test` builds it** (ADR-269 D22,
+    // #972): alone, with the package as its dependency, in no project.
+    let program_test = !alone && is_program_test(input, &layout);
+    let layout = match program_test || alone {
+        true => Layout::alone(input),
+        false => layout,
+    };
+    let unit = layout.unit_name(input);
+    // **What this build may read, resolved before anything is read**
+    // ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D5).
+    let reads = reads_for(&layout, allowlist)?;
+    // **The level `target::has` answers for in a `comptime`** (ADR-371 D6).
+    crate::comptime_run::build_for_cpu(settings.cpu_key().unwrap_or_default());
+    let choices = match reads.list_digest() {
+        Some(digest) => settings.choices().reading(digest),
+        None => settings.choices(),
+    };
+    // **And what this build's boundaries say**
+    // ([ADR-290](../../docs/specification/adr/adr-290.md) D5). A description is
+    // a file a person edits, so an edit has to reach the next build - which it
+    // did not, and failed open while it did not.
+    let choices = choices.describing(crate::describe::descriptions_digest(&layout.root));
+    // **The committed proofs are an input** (#448): a recorded answer is what
+    // the lowering uses, so the file belongs in the key once it exists.
+    let choices = match layout.in_project {
+        true => choices.proving(block_on(project_members::project_members_proofs_digest(
+            &layout.root,
+            &ForeignHost,
+        ))),
+        false => choices,
+    };
+
+    // A cache that cannot be opened is a slower build, never a failed one
+    // (D12). The steps from here on are Nikaia (`project_lower_reading`,
+    // ADR-294, #125, P5b); the program, the cache, the check and the emitter
+    // stay Rust behind [`LowerHost`].
+    let host = LowerHost {
+        input,
+        settings,
+        no_cache,
+        packages,
+        unit,
+        layout: &layout,
+        program_test,
+        open,
+        reads: &reads,
+        choices: RefCell::new(Some(choices)),
+        program: RefCell::new(None),
+        key_source: RefCell::new(String::new()),
+        cache: RefCell::new(None),
+        exported: RefCell::new(None),
+        foreign: RefCell::new(None),
+        book: RefCell::new(None),
+        checked_facts: RefCell::new(BTreeMap::new()),
+        published: RefCell::new(BTreeMap::new()),
+        proofs: RefCell::new(None),
+        failed: RefCell::new(None),
+    };
+    Ok(run(&host, layout.in_project))
+}
+
 /// What `project_lower_reading` asks of the compiler (`tools/project_lower.nika`,
 /// P5b): the program, the cache and the build's choices it holds, the check
 /// and the emitter over them, and what they leave for [`Lowered`]. A refusal
@@ -807,6 +930,11 @@ struct LowerHost<'a> {
     packages: &'a [modules::Dependency],
     unit: String,
     layout: &'a Layout,
+    /// Whether the input is a test program (ADR-269 D22, #972).
+    program_test: bool,
+    /// The files an editor has open, read as it holds them (#1347): empty
+    /// for every build but `nikaia lsp`'s.
+    open: &'a modules::Open,
     reads: &'a assets::Reads,
     /// The key's choices; named with the program's paths once it is read.
     choices: RefCell<Option<Choices>>,
@@ -867,11 +995,14 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         let program =
             crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
                 match (self.settings.words.tests, self.layout.in_project) {
-                    (true, in_project) => {
-                        modules::Program::read_for_tests(input, packages, in_project)
+                    _ if self.program_test => {
+                        modules::Program::read_program_test_open(input, packages, self.open)
                     }
-                    (false, true) => modules::Program::read_with(input, packages),
-                    (false, false) => modules::Program::read_one(input),
+                    (true, in_project) => modules::Program::read_for_tests_open(
+                        input, packages, in_project, self.open,
+                    ),
+                    (false, true) => modules::Program::read_with_open(input, packages, self.open),
+                    (false, false) => modules::Program::read_one_open(input, self.open),
                 }
             });
         let mut program = self.held(program)?;
@@ -1001,7 +1132,10 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     }
 
     fn eprint(&self, text: &str) {
-        eprint!("{text}");
+        // `nikaia lsp` keeps the findings as data instead (#1347).
+        if !diagnostics::is_collecting() {
+            eprint!("{text}");
+        }
     }
 
     fn check_units(&self) -> HostResult<String> {
@@ -1414,7 +1548,10 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
     }
 
     fn eprint(&self, text: &str) {
-        eprint!("{text}");
+        // `nikaia lsp` keeps the findings as data instead (#1347).
+        if !diagnostics::is_collecting() {
+            eprint!("{text}");
+        }
     }
 }
 
@@ -2274,70 +2411,6 @@ impl Project {
     }
 }
 
-/// What this particular program links against, out of the three crates the
-/// emitter can name.
-///
-/// Declared because the *emitted Rust* names them, not because a program might:
-/// a program with no grammar in it depends on nothing at all and builds without
-/// fetching anything, and a manifest that declared three crates regardless would
-/// make every project pay for the ones it does not use.
-///
-/// `std` is reached **by path into the sysroot** (ADR-002 D4). It is not
-/// published, so there is no registry to reach it through; what changed is that
-/// the path is a sysroot's rather than a checkout's, and that the sources there
-/// need nothing but `rustc` to build.
-///
-/// The other two versions are baked into this binary by `build.rs` rather than
-/// read from a workspace manifest at run time. A sysroot is not a Cargo
-/// workspace and has no `[workspace.dependencies]` above it - and these are the
-/// *compiler's* versions anyway, since it is the emitter that writes
-/// `winnow::Parser` into a program. Read at the compiler's build time rather
-/// than written down twice: a program that linked a different `winnow` from the
-/// one `winnow-grammar` was built against is a type error at every `Stream`
-/// bound, so the two must not be able to drift apart.
-/// The program Cargo built, as its own build said where it was.
-///
-/// **Read rather than computed.** Cargo decides where a binary lands from the
-/// target directory, the profile and `CARGO_TARGET_DIR`; a second place that
-/// worked those rules out would have to keep agreeing with Cargo forever. A
-/// `--message-format=json` build says it outright, on the `compiler-artifact`
-/// line whose `executable` is not null - and this compiler already captures that
-/// output to read the diagnostics.
-///
-/// `None` where nothing says, which is not an error: the caller falls back to
-/// `cargo run` and the build behaves as it did before.
-/// The shared and the static library a `c-library` build made (ADR-284 D4).
-fn libraries_in(messages: &str) -> Vec<std::path::PathBuf> {
-    messages
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|value| value["reason"] == "compiler-artifact")
-        .filter(|value| {
-            value["target"]["kind"]
-                .as_array()
-                .is_some_and(|kinds| kinds.iter().any(|k| k == "cdylib" || k == "staticlib"))
-        })
-        .flat_map(|value| {
-            value["filenames"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|f| f.as_str().map(std::path::PathBuf::from))
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
-
-fn executable_in(messages: &str) -> Option<std::path::PathBuf> {
-    messages
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|value| value["reason"] == "compiler-artifact")
-        .filter_map(|value| value["executable"].as_str().map(std::path::PathBuf::from))
-        .next_back()
-}
-
 /// The package's output tests, by name (`tools/project_tests.nika`).
 pub fn output_tests(root: &Path) -> Result<Vec<OutputTest>> {
     block_on(project_tests::output_tests(root)).map_err(|e| anyhow!("{e}"))
@@ -2658,20 +2731,42 @@ impl ProgramHost {
         })
     }
 
-    /// `program` run in `own` with no standard input and no
-    /// `CARGO_TARGET_DIR`, as `command` has it set up.
+    /// `program` run in `own` with `stdin` on its standard input (none where
+    /// it is empty) and no `CARGO_TARGET_DIR`, as `command` has it set up.
     fn ran(
         &self,
         program: &Path,
         mut command: std::process::Command,
         own: &Path,
+        stdin: &[u8],
     ) -> Result<project_tests::ProjectTestsRan> {
-        let out = command
-            .current_dir(own)
-            .env_remove("CARGO_TARGET_DIR")
-            .stdin(std::process::Stdio::null())
-            .output()
-            .with_context(|| format!("running {}", program.display()))?;
+        use std::io::Write;
+        command.current_dir(own).env_remove("CARGO_TARGET_DIR");
+        let out = if stdin.is_empty() {
+            command.stdin(std::process::Stdio::null()).output()
+        } else {
+            command
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    // Written beside the wait, so a program that prints before
+                    // it reads does not fill its pipe and stop; one that stops
+                    // reading early closes the pipe, which is its business.
+                    let mut input = child.stdin.take();
+                    let given = stdin.to_vec();
+                    let writing = std::thread::spawn(move || {
+                        if let Some(input) = input.as_mut() {
+                            let _ = input.write_all(&given);
+                        }
+                    });
+                    let out = child.wait_with_output();
+                    let _ = writing.join();
+                    out
+                })
+        }
+        .with_context(|| format!("running {}", program.display()))?;
         Ok(project_tests::ProjectTestsRan {
             code: exit_code(&out.status),
             stdout: out.stdout.into(),
@@ -2694,6 +2789,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         setting: &str,
         project: &Path,
         own: &Path,
+        stdin: &[u8],
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -2703,7 +2799,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, own))
+        self.held(self.ran(&self.exe, command, own, stdin))
     }
 
     fn bounds(
@@ -2716,13 +2812,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         command
             .args(["check", "--bounds", "--optimization", level])
             .arg(entry);
-        self.held(self.ran(&self.exe, command, own).map(|out| out.stdout))
+        self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
     }
 
     fn built(
         &self,
         project: &Path,
         own: &Path,
+        stdin: &[u8],
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -2734,7 +2831,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, own).map(Some))
+        self.held(self.ran(&binary, command, own, stdin).map(Some))
     }
 }
 
@@ -3083,14 +3180,6 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
 
     fn bind(&self) -> Option<String> {
         self.project.settings.words.bind.clone()
-    }
-
-    fn libraries_in(&self, messages: &str) -> Vec<PathBuf> {
-        libraries_in(messages)
-    }
-
-    fn executable_in(&self, messages: &str) -> Option<PathBuf> {
-        executable_in(messages)
     }
 
     fn own_copy(&self, built: &Path) -> HostResult<PathBuf> {

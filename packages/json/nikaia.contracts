@@ -116,12 +116,31 @@ touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String) -> String"
 
+[fn."to_string"]
+pub = true
+sync = "inferred"
+touches = []
+views = ["v: borrowed"]
+signature = "(v: ref Value) -> String"
+
 [fn."value"]
 sync = "inferred"
 throws = ["Error"]
 touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String, depth: i64) -> Value"
+
+[fn."write_string"]
+sync = "inferred"
+touches = []
+views = ["s: borrowed"]
+signature = "(s: String, mut out: String)"
+
+[fn."write_value"]
+sync = "inferred"
+touches = []
+views = ["v: borrowed"]
+signature = "(v: ref Value, mut out: String)"
 
 [fn."zero_fraction"]
 sync = "inferred"

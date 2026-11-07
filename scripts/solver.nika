@@ -23,7 +23,8 @@
 // one program in a temporary directory, builds it with the `nikaia` that runs
 // this script, and answers every `.smt2` file: one line per file (`name answer
 // work`), then a row per directory: solved, unknown (overflow and files the
-// reader refuses among them), wrong, PAR-2 over the work budget, certificates
+// reader refuses among them), malformed (a script that is not well-formed
+// SMT-LIB, its reason on its line, ADR-270 D28), wrong, PAR-2 over the work budget, certificates
 // checked, models evaluated. `--stats` adds below each file's line the new
 // engine's counters (#1312 item 2): the SAT core's conflicts, the theory's,
 // theory lemmas and those repeating an earlier one, decisions, restarts.
@@ -44,7 +45,7 @@ fn solver_logic_files() -> Vec[String] {
 // The new engine's files of `crates/nikaia-std/src/tools/` (#1282, #1283, #1285), in the
 // order the program takes them, before the driver.
 fn solver_engine_files() -> Vec[String] {
-	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib"]
+	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_lemma", "sv_nl"]
 }
 
 // The work budget PAR-2 doubles: `lg_budget().cases`, the branches
@@ -232,6 +233,7 @@ fn solver_summary(label: String, rows: Vec[SolverRow]) -> String {
 	let mut unknown = 0
 	let mut overflow = 0
 	let mut unreadable = 0
+	let mut malformed = 0
 	let mut wrong = 0
 	let mut checked = 0
 	let mut evaluated = 0
@@ -248,9 +250,11 @@ fn solver_summary(label: String, rows: Vec[SolverRow]) -> String {
 		if r.answer.starts_with("unknown") { unknown += 1 }
 		if r.answer == "unknown (overflow)" { overflow += 1 }
 		if r.answer == "unknown (unreadable)" { unreadable += 1 }
+		if r.answer.starts_with("malformed") { malformed += 1 }
 		if r.answer.starts_with("wrong") { wrong += 1 }
 		if r.answer == "proved"
 			|| r.answer == "wrong (certificate rejected)"
+			|| r.answer == "wrong (lemma rejected)"
 			|| r.answer == "wrong (proved, status sat)" { checked += 1 }
 		if r.answer == "refuted"
 			|| r.answer == "wrong (model rejected)"
@@ -258,7 +262,7 @@ fn solver_summary(label: String, rows: Vec[SolverRow]) -> String {
 	}
 	let n = rows.len()
 	let mean = if n > 0 { par2 * 10 / n } else { 0 }
-	return f"{label}: {n} files, solved {solved} (proved {proved}, refuted {refuted}), unknown {unknown} (overflow {overflow}, unreadable {unreadable}), wrong {wrong}, PAR-2 {solver_tenths(mean)}, certificates checked {checked}, models evaluated {evaluated}"
+	return f"{label}: {n} files, solved {solved} (proved {proved}, refuted {refuted}), unknown {unknown} (overflow {overflow}, unreadable {unreadable}), malformed {malformed}, wrong {wrong}, PAR-2 {solver_tenths(mean)}, certificates checked {checked}, models evaluated {evaluated}"
 }
 
 fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {

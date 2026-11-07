@@ -27,6 +27,8 @@ use nikaia_std::fs;
 #[allow(unused_imports)]
 use nikaia_std::hash;
 #[allow(unused_imports)]
+use nikaia_std::io;
+#[allow(unused_imports)]
 use nikaia_std::node_id;
 #[allow(unused_imports)]
 use nikaia_std::process;
@@ -178,6 +180,14 @@ mod calls_lowered {
 }
 #[allow(unused_imports)]
 pub use calls_lowered::*;
+
+mod cargo_json_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/cargo_json.rs");
+}
+#[allow(unused_imports)]
+pub use cargo_json_lowered::*;
 
 mod cexport_lowered {
     #[allow(unused_imports)]
@@ -1643,6 +1653,14 @@ mod logic_smtlib_lowered {
 #[allow(unused_imports)]
 pub use logic_smtlib_lowered::*;
 
+mod lsp_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/lsp.rs");
+}
+#[allow(unused_imports)]
+pub use lsp_lowered::*;
+
 mod manifest_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2083,6 +2101,22 @@ mod sv_fast_lowered {
 #[allow(unused_imports)]
 pub use sv_fast_lowered::*;
 
+mod sv_lemma_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_lemma.rs");
+}
+#[allow(unused_imports)]
+pub use sv_lemma_lowered::*;
+
+mod sv_nl_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_nl.rs");
+}
+#[allow(unused_imports)]
+pub use sv_nl_lowered::*;
+
 mod sv_num_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2394,6 +2428,10 @@ pub mod build_values {
 pub mod calls {
     #[allow(unused_imports)]
     pub use super::{Callee, callee_of, callee_named};
+}
+pub mod cargo_json {
+    #[allow(unused_imports)]
+    pub use super::{cargo_json_lines, cargo_json_member, cargo_json_text, cargo_json_bool, cargo_json_number, cargo_json_items, cargo_json_an_artifact, cargo_json_filenames, cargo_json_path, cargo_json_extension};
 }
 pub mod cexport {
     #[allow(unused_imports)]
@@ -2751,7 +2789,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -2783,7 +2821,7 @@ pub mod describe {
 }
 pub mod diagnostics {
     #[allow(unused_imports)]
-    pub use super::{DiagnosticsRead, DiagnosticsChild, DiagnosticsPlaced, diagnostics_placed};
+    pub use super::{DiagnosticsRead, DiagnosticsChild, diagnostics_read_json, diagnostics_libraries_in, diagnostics_executable_in, DiagnosticsPlaced, diagnostics_placed};
 }
 pub mod diffs {
     #[allow(unused_imports)]
@@ -3046,6 +3084,10 @@ pub mod logic_smtlib {
     #[allow(unused_imports)]
     pub use super::{lg_smtlib_write, lg_symbol, lg_term, LgScript, LgReadError, LgRead, lg_smtlib_read};
 }
+pub mod lsp {
+    #[allow(unused_imports)]
+    pub use super::{LspHost, LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position, lsp_path_uri, lsp_diagnostic, lsp_range};
+}
 pub mod manifest {
     #[allow(unused_imports)]
     pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
@@ -3064,7 +3106,7 @@ pub mod migrate_views3 {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_names, a_use_refused, could_promise, pause_path, lost_sync, ModulesPause, lost_sync_unplaced, declared_once, groups, as_promised, contracts_as_promised, dependency_ledgers, absorb_own, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, modules_test_only_mark, modules_only_tests_reach, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
+    pub use super::{declared_at, a_use_refused, could_promise, pause_path, lost_sync, ModulesPause, lost_sync_unplaced, declared_once, groups, as_promised, contracts_as_promised, dependency_ledgers, absorb_own, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, modules_test_only_mark, modules_only_tests_reach, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
 }
 pub mod names {
     #[allow(unused_imports)]
@@ -3140,7 +3182,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]
@@ -3263,6 +3305,14 @@ pub mod sv_fast {
     #[allow(unused_imports)]
     pub use super::{SvFastEnd, SvFastRun};
 }
+pub mod sv_lemma {
+    #[allow(unused_imports)]
+    pub use super::{SvLemma, sv_lemma_formula, sv_lemma_alethe, sv_nl_holds, sv_lemma_query, sv_lemma_check};
+}
+pub mod sv_nl {
+    #[allow(unused_imports)]
+    pub use super::{SvNlRun, sv_nl_engine};
+}
 pub mod sv_num {
     #[allow(unused_imports)]
     pub use super::{SvUnknown, sv_fits32, sv_reduced, sv_max_abs, sv_dense_combine, sv_dense_eliminate, sv_pick_column, SvRat, sv_rat_text, SvDelta, sv_delta_sub, sv_delta_text};
@@ -3293,7 +3343,7 @@ pub mod sv_smt {
 }
 pub mod sv_smtlib {
     #[allow(unused_imports)]
-    pub use super::{SvReadWhy, SvSorts, SvSmtRead, sv_smtlib_script, sv_smtlib_read};
+    pub use super::{SvReadWhy, SvNl, SvSorts, SvSmtRead, sv_smtlib_script, sv_smtlib_read};
 }
 pub mod sv_strategy {
     #[allow(unused_imports)]
@@ -3317,7 +3367,7 @@ pub mod sysroot_cache {
 }
 pub mod sysroot_package {
     #[allow(unused_imports)]
-    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble};
+    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble, sysroot_package_with_dependencies};
 }
 pub mod template {
     #[allow(unused_imports)]
@@ -3329,7 +3379,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, hands_back_a_piece_of_self, hb_plain_enums};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_plain_enums};
 }
 pub mod threads {
     #[allow(unused_imports)]
@@ -3382,4 +3432,9 @@ pub mod views {
 pub mod written {
     #[allow(unused_imports)]
     pub use super::{written_expression, written_pattern};
+}
+pub mod json {
+    #[allow(unused_imports)]
+    use super::{scalar, IntoEither, IntoEitherMaybe, TextQuoted};
+    include!("lowered/json/lowered.rs");
 }

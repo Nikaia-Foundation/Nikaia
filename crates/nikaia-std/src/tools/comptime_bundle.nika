@@ -89,8 +89,6 @@ pub trait ComptimeBundleHost {
     fn use_entry(ref self, at: ref fs::Path) sync
     /// The directory Cargo and `rustc` start in.
     fn where_tools_start(ref self) -> fs::Path sync
-    /// The library and the crates Cargo's JSON `messages` name.
-    fn artifacts(ref self, messages: ref String, named: ref Vec[String]) -> ComptimeBundleArtifacts sync
     /// `rustc -vV`, once.
     fn toolchain(ref self) -> String sync
     /// `rustc --print target-libdir`, once.
@@ -130,6 +128,28 @@ panic = \"unwind\"
 comptime COMPTIME_BUNDLE_NAMED: Array[ref String, 3] = ["nikaia_std", "winnow", "winnow_grammar"]
 
 /// The crates the bundle names, as a list.
+/// **The library and the crates Cargo's JSON messages name** (#1163): the
+/// `nikaia_bundle` target's dynamic library (`.so`, `.dylib` or `.dll`, as
+/// the platform names one) and each named crate's `rlib`.
+pub fn comptime_bundle_artifacts(messages: String, named: ref Vec[String]) -> ComptimeBundleArtifacts {
+    let mut dylib: fs::Path? = null
+    let mut rlibs: Vec[(String, fs::Path)] = []
+    for message in cargo_json_lines(messages) {
+        if !cargo_json_an_artifact(message) {
+            continue
+        }
+        let files = cargo_json_filenames(message)
+        let name = cargo_json_text(cargo_json_member(cargo_json_member(message, "target"), "name")) ?? continue
+        if named.iter().any(fn(each) { each == name }) {
+            let rlib = files.iter().find(fn(file) { cargo_json_extension(file) == "rlib" }) ?? continue
+            rlibs.push((name, rlib.clone()))
+        } else if name == "nikaia_bundle" {
+            dylib = files.iter().find(fn(file) { let extension = cargo_json_extension(file); extension == "so" || extension == "dylib" || extension == "dll" })?.clone()
+        }
+    }
+    return ComptimeBundleArtifacts { dylib: dylib, rlibs: rlibs }
+}
+
 fn comptime_bundle_named() -> Vec[String] {
     return COMPTIME_BUNDLE_NAMED.iter().map(fn(name) { name.clone() }).collect()
 }
@@ -290,7 +310,7 @@ fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavo
     if !built.ok {
         throw ComptimeBundleFailed::Said(built.stderr)
     }
-    let found = host.artifacts(built.stdout, comptime_bundle_named())
+    let found = comptime_bundle_artifacts(built.stdout, comptime_bundle_named())
     if found.rlibs.len() != COMPTIME_BUNDLE_NAMED.len() {
         throw ComptimeBundleFailed::Said("cargo built the bundle and named no library")
     }

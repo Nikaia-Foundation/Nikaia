@@ -9,11 +9,43 @@ goes to the owner. The cycle and the hand-over between main sessions are
 below, under *Running the lanes*; briefs and reports under *Briefs and
 reports*.
 
+## Reporting to the owner
+
 * **Every message to the owner begins with the time** (owner, 2026-11-07):
   `HH:MM` in the owner's time zone (Europe/Berlin, `TZ=Europe/Berlin date
   +%H:%M`), before the first word, in replies, status updates and questions
   alike. The owner reads the session later and on several devices; the time
   says how fresh a status is.
+* **Short, progress by topic** (owner, 2026-11-07). A status report to the
+  owner names the topics and how far each has got: what is finished, what is
+  being built now, what comes next, and what needs the owner. Each topic is
+  named by what it is ("the JSON reader for the tools", "the language
+  server"), with its issue number only in brackets after the name, never the
+  number alone.
+* **Left out**: the machinery of getting there, such as a suite that went red
+  and then green, a QA round, a merge conflict, a badge regenerated or a fix
+  of our own slip. These belong in the drive log and the reports. A report
+  mentions them only where they change what the owner sees: a topic is
+  delayed, blocked or needs the owner's decision.
+* **New findings** (a defect filed, a gap found) get one line each, by name,
+  with the issue number in brackets.
+
+## Pushing the supervisor's own commits
+
+* **The supervisor never pushes the shared `develop` while builders' commits
+  are on it untested** (owner, 2026-11-07: a doc commit pushed with `git push
+  origin develop` carried two builders' commits past the suite). While a lane's
+  `DIR/unpushed.txt` is not empty or a builder runs, `git log
+  origin/develop..develop` holds more than the supervisor's commit, so it
+  pushes only its own:
+  `git worktree add --detach ../push-tmp origin/develop`, `git -C ../push-tmp
+  cherry-pick <sha>`, `git -C ../push-tmp push origin HEAD:develop`, `git
+  worktree remove ../push-tmp`. The shared checkout then takes it back with
+  `git fetch origin develop && git merge origin/develop` (the same change, no
+  conflict). The builders' commits reach `develop` only through the driver,
+  after the suite.
+* **Before any push, look**: `git log --oneline origin/develop..develop`;
+  a commit that is not the supervisor's own means the step above.
 
 ## Watching CI
 
@@ -276,7 +308,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
   commit on green (`PUSHED <sha8>`), and on red starts QA
   (on `DIR/qa/qa-task.md`, the lane's own copy of the template
-  `docs/briefs/qa-task.md`, so its report and run files land in `DIR/qa/`;
+  `docs/qa-task.md`, so its report and run files land in `DIR/qa/`;
   input `DIR/qa-input.txt`, log `DIR/suite.log`),
   at most two rounds, then `ESCALATE`. The suite stops at the first red cheap
   step (build, lower-std, fmt, clippy, pre-push) without running the tests,
@@ -387,7 +419,7 @@ batch the driver has CI run the complete suite (one at a time per checkout,
 lock `target/suite.lock`: it pushes the tested sha to `ci/<lane>`, and the
 whole workflow runs on exactly that commit); green, it pushes the tested
 commit; red, it writes `qa-input.txt` and starts QA
-(`docs/briefs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
+(`docs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
 final gate for what other sessions push meanwhile.
 
 ## Lanes

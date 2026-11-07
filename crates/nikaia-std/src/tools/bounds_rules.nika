@@ -913,17 +913,16 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
                 walk.rule_failed.insert(at)
             }
         } else if walk.checked_results.contains(at) && !throwing {
-            if !rules_hands_back(walk, facts, returned, rule.b, context, program, words, ask) {
+            // A `return` with no value hands back no position of `self.b`.
+            if returned == null {
+                walk.rule_failed.insert(at)
+                continue
+            }
+            if !rules_position(walk, facts, returned ?? continue, rule.b, context, program, words, ask) {
                 walk.rule_failed.insert(at)
             }
         }
     }
-}
-
-/// Whether what a `return` hands back is a position of `self.b`.
-fn rules_hands_back(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
-    let value = returned ?? return false
-    return rules_position(walk, facts, value, b, context, program, words, ask)
 }
 
 fn rules_same_length(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref BoundsRule, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {

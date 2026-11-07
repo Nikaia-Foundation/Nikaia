@@ -489,7 +489,7 @@ impl EmitState {
             let found = self.facts.number_lets.get(at) ?? return ""
             return f": {found}"
         }
-        if kept {
+        if kept || self.facts.text_bytes_typed_lets.contains(at) {
             return ""
         }
         let own = ty ?? return ""

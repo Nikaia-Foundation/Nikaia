@@ -1,0 +1,21 @@
+// #1364: a `use` of a package no dependency declares is `NK1341`, at the
+// `use` line, with what to declare as help (ADR-286 D13).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "use nosuch\n\nfn main() {}\n")
+    let out = process::run(toolchain(), ["check", "src/main.nika"]; dir: tmp.clone())
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

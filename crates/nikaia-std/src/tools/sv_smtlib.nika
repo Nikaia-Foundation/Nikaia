@@ -8,14 +8,23 @@
 // of `logic_smtlib.nika`, which the program is concatenated with.
 //
 // * **Arithmetic** is read into a linear form over `sv_num` rationals and
-//   emitted per atom as `Σ k·x rel c` with integer coefficients. A product of
-//   two non-constant terms is refused (non-linear); a number out of `i64` is
-//   an overflow (D11).
+//   emitted per atom as `Σ k·x rel c` with integer coefficients; a number out
+//   of `i64` is an overflow (D11).
+// * **Non-linear terms** (D28.1): a product of two non-constant terms, `/`
+//   by a variable or by zero, `div` and `mod`, and `int.pow2` of a
+//   non-constant become a fresh variable `|sv!|nl:k` each, equal terms one
+//   (`SvNl`, kept beside the script in `SvSorts`). Their arguments are
+//   variables: a linear form that is not one is a fresh `|sv!|arg:k` with
+//   its equality among the reader's facts. A `mod` brings the `div` over the
+//   same arguments with it, for the division identity (`sv_lemma.nika`).
 // * **Reals** (D27): a constant declared `Real` is a variable like an `Int`
-//   one, its sort kept beside the script (`SvSorts`); a decimal `d.d` is the
-//   rational it writes, `(/ a b ...)` divides by constants only (by a
-//   variable is non-linear, by zero unsupported). Each atom is cleared of its
-//   denominators as above, so its coefficients stay integers.
+//   one, its sort kept beside the script (`SvSorts`); a decimal `d.d` and a
+//   literal `n/d` are the rationals they write, `(/ a b ...)` by a non-zero
+//   constant scales. Each atom is cleared of its denominators as above, so
+//   its coefficients stay integers.
+// * **Malformed** (D28, last paragraph): a literal `n/0`, and a parallel
+//   `let` whose binding reads one of the names it binds, are refused as
+//   malformed, with the place; neither is a formula.
 // * **Substitution**: `let`, `(! t :named n)` and `define-fun` (with or
 //   without parameters) are read by value - a bound term is read once, where
 //   it is bound, and its value used wherever its name is.
@@ -66,6 +75,9 @@ pub enum SvReadWhy {
 	Undeclared(String),
 	/// A number or a scale out of `i64` (ADR-270 D11).
 	Overflow(String),
+	/// Not well-formed SMT-LIB (ADR-270 D28): a zero denominator, a name a
+	/// parallel `let` binds read in its own bindings; with the place.
+	Malformed(String),
 }
 
 /// A term's value, or why not.
@@ -88,6 +100,19 @@ struct SvIte {
 	c: i64,
 	a: SvLin,
 	b: SvLin,
+}
+
+/// A non-linear term the reader abstracted (ADR-270 D28.1): the variable
+/// `name` stands for `a op b`, `op` one of `*`, `/`, `div`, `mod` and
+/// `pow2` (whose `b` is empty); `a` and `b` name variables. A `mod` names
+/// the `div` over the same arguments, `partner`, for the division identity;
+/// every other term's `partner` is empty.
+pub struct SvNl {
+	pub name: String,
+	pub op: String,
+	pub a: String,
+	pub b: String,
+	pub partner: String,
 }
 
 struct SvSmtReader {
@@ -118,6 +143,12 @@ struct SvSmtReader {
 	/// once: the arena does not share nodes, and the folds must see two
 	/// equal branches as one.
 	made: collections::BTreeMap[String, i64],
+	/// The non-linear terms read, in the order they were made: an argument
+	/// before the term that reads it (ADR-270 D28.1).
+	nl: Vec[SvNl],
+	/// The variable of each non-linear term and argument by its text, so
+	/// equal terms share one.
+	nl_names: collections::BTreeMap[String, String],
 }
 
 /// The linear form of the constant `r`.
@@ -211,6 +242,117 @@ fn sv_decimal(a: String) -> SvGot {
 	return SvGot::Val(SvVal::Lin(sv_lin_constant(r)))
 }
 
+/// The atom `d rel 0` in `arena`: `rel` is `<=`, `<`, `>=`, `>`, `=` or
+/// `distinct`, `d` cleared of its denominators first so its coefficients are
+/// integers; a constant `d` is the truth it has. `null` where a number
+/// leaves `i64` (ADR-270 D11).
+fn sv_lin_atom(mut arena: TermArena, rel: String, d: ref SvLin) -> i64? {
+	let mut scale: i64 = d.c.den
+	for (_, k) in d.terms {
+		scale = sv_lcm(scale, k.den) ?? return null
+	}
+	let cleared = sv_lin_scale(d, sv_int(scale)) ?? return null
+	let c = cleared.c.num
+	if cleared.terms.len() == 0 {
+		let holds = if rel == "<=" {
+			c <= 0
+		} else if rel == "<" {
+			c < 0
+		} else if rel == ">=" {
+			c >= 0
+		} else if rel == ">" {
+			c > 0
+		} else if rel == "=" {
+			c == 0
+		} else {
+			c != 0
+		}
+		return arena.boolean(holds)
+	}
+	// `k·x` added, or `|k|·x` subtracted after the first part.
+	let mut lhs: i64 = -1
+	for (name, k) in cleared.terms {
+		let v = arena.var(name)
+		let minus = lhs >= 0 && k.num < 0
+		let size = if minus { k.num.checked_neg() ?? return null } else { k.num }
+		let part = if size == 1 {
+			v
+		} else if size == -1 {
+			arena.neg(v)
+		} else {
+			let factor = arena.int(size)
+			arena.mul(factor, v)
+		}
+		lhs = if lhs < 0 {
+			part
+		} else if minus {
+			arena.sub(lhs, part)
+		} else {
+			arena.add(lhs, part)
+		}
+	}
+	let bound = c.checked_neg() ?? return null
+	let rhs = arena.int(bound)
+	return if rel == "<=" {
+		arena.le(lhs, rhs)
+	} else if rel == "<" {
+		arena.lt(lhs, rhs)
+	} else if rel == ">=" {
+		arena.ge(lhs, rhs)
+	} else if rel == ">" {
+		arena.gt(lhs, rhs)
+	} else if rel == "=" {
+		arena.equal(lhs, rhs)
+	} else {
+		arena.unequal(lhs, rhs)
+	}
+}
+
+/// A rational literal `n/d`, as pysmt writes one, `null` for any other
+/// atom; `n/0` is malformed (ADR-270 D28.6).
+fn sv_ratio(a: String) -> SvGot? {
+	let at = a.find("/") ?? return null
+	let num = a[0..<at].to_string()
+	let den = a[at + "/".len()..].to_string()
+	if !sv_is_numeral(num) || !sv_is_numeral(den) {
+		return null
+	}
+	let n = text::parse_i64(num) ?? return sv_overflow(f"the numeral {a}")
+	let d = text::parse_i64(den) ?? return sv_overflow(f"the numeral {a}")
+	if d == 0 {
+		return SvGot::Failed(SvReadWhy::Malformed(f"the literal {a} has a zero denominator"))
+	}
+	let r = sv_rat(n, d) ?? return sv_overflow(f"the numeral {a}")
+	return SvGot::Val(SvVal::Lin(sv_lin_constant(r)))
+}
+
+/// The coefficient `k` of a form `k·x` of one variable and no constant, `1`
+/// for every other form: what a product takes outside (ADR-270 D28.1).
+fn sv_lin_unit(a: ref SvLin) -> SvRat {
+	if a.terms.len() == 1 && a.c.num == 0 {
+		for (_, k) in a.terms {
+			return k.clone()
+		}
+	}
+	return sv_int(1)
+}
+
+/// `2^n` for `0 <= n <= 62`, `0` for `n < 0` (cvc5's `int.pow2`), `null`
+/// above.
+fn sv_pow2(n: i64) -> i64? {
+	if n < 0 {
+		return 0
+	}
+	if n > 62 {
+		return null
+	}
+	let mut p: i64 = 1
+	for _ in 0..<n {
+		p = p * 2
+	}
+	return p
+}
+
 impl SvSmtReader {
 	fn fresh_name(ref mut self, kind: String) -> String {
 		self.fresh += 1
@@ -264,6 +406,12 @@ impl SvSmtReader {
 		}
 		if a.contains(".") {
 			return sv_decimal(a)
+		}
+		match sv_ratio(a) {
+			null => {},
+			got => {
+				return got.clone()
+			},
 		}
 		return self.symbol(lg_unquoted(a))
 	}
@@ -413,47 +561,7 @@ impl SvSmtReader {
 			}
 			return SvGot::Val(SvVal::Formula(self.truth_node(holds)))
 		}
-		// `k·x` added, or `|k|·x` subtracted after the first part.
-		let mut lhs: i64 = -1
-		for (name, k) in cleared.terms {
-			let v = self.arena.var(name)
-			let minus = lhs >= 0 && k.num < 0
-			let size = if minus {
-				k.num.checked_neg() ?? return sv_overflow(f"the atom ({rel} ...)")
-			} else {
-				k.num
-			}
-			let part = if size == 1 {
-				v
-			} else if size == -1 {
-				self.arena.neg(v)
-			} else {
-				let factor = self.arena.int(size)
-				self.arena.mul(factor, v)
-			}
-			lhs = if lhs < 0 {
-				part
-			} else if minus {
-				self.arena.sub(lhs, part)
-			} else {
-				self.arena.add(lhs, part)
-			}
-		}
-		let bound = c.checked_neg() ?? return sv_overflow(f"the atom ({rel} ...)")
-		let rhs = self.arena.int(bound)
-		let made = if rel == "<=" {
-			self.arena.le(lhs, rhs)
-		} else if rel == "<" {
-			self.arena.lt(lhs, rhs)
-		} else if rel == ">=" {
-			self.arena.ge(lhs, rhs)
-		} else if rel == ">" {
-			self.arena.gt(lhs, rhs)
-		} else if rel == "=" {
-			self.arena.equal(lhs, rhs)
-		} else {
-			self.arena.unequal(lhs, rhs)
-		}
+		let made = sv_lin_atom(self.arena, rel, cleared) ?? return sv_overflow(f"the atom ({rel} ...)")
 		return SvGot::Val(SvVal::Formula(made))
 	}
 
@@ -543,6 +651,78 @@ impl SvSmtReader {
 
 	/// `let`: every binding read in the outer scope, then the body with them
 	/// bound.
+	/// The variable of the non-linear term `a op b` (ADR-270 D28.1): equal
+	/// terms share one; a new one is real where `real` says so.
+	fn nl_term(ref mut self, op: String, a: String, b: String, partner: String, real: bool) -> String {
+		let key = f"{op} {a} {b}"
+		match self.nl_names.get(key) {
+			null => {},
+			name => {
+				return name.clone()
+			},
+		}
+		let name = self.fresh_name("nl")
+		if real {
+			self.reals.insert(name.clone())
+		} else {
+			self.ints.insert(name.clone())
+		}
+		self.nl_names.insert(key, name.clone())
+		self.nl.push(SvNl { name: name.clone(), op: op, a: a, b: b, partner: partner })
+		return name
+	}
+
+	/// The variable that stands for the argument `a` of a non-linear term:
+	/// a variable itself, else a fresh one with the side fact `v = a`, one
+	/// per text. `null` where a number leaves `i64`.
+	fn nl_arg(ref mut self, a: ref SvLin) -> String? {
+		let mut key = "arg"
+		for (name, k) in a.terms {
+			if a.terms.len() == 1 && a.c.num == 0 && k.num == 1 && k.den == 1 {
+				return name.clone()
+			}
+			key = f"{key} {sv_rat_text(k)}*{name}"
+		}
+		key = f"{key} {sv_rat_text(a.c)}"
+		match self.nl_names.get(key) {
+			null => {},
+			name => {
+				return name.clone()
+			},
+		}
+		let name = self.fresh_name("arg")
+		if self.is_real(a) {
+			self.reals.insert(name.clone())
+		} else {
+			self.ints.insert(name.clone())
+		}
+		self.nl_names.insert(key, name.clone())
+		let d = sv_lin_sub(sv_lin_var(name.clone()), a) ?? return null
+		let fact = sv_lin_atom(self.arena, "=", d) ?? return null
+		self.side.push(fact)
+		return name
+	}
+
+	/// The product of two forms that both read a variable: `k·x · l·y` is
+	/// `k·l` times the variable of `x * y` (ADR-270 D28.1). `null` where a
+	/// number leaves `i64`.
+	fn nl_product(ref mut self, a: ref SvLin, b: ref SvLin) -> SvLin? {
+		let ka = sv_lin_unit(a)
+		let kb = sv_lin_unit(b)
+		let ia = sv_rat_div(sv_int(1), ka) ?? return null
+		let ib = sv_rat_div(sv_int(1), kb) ?? return null
+		let x = self.nl_arg(sv_lin_scale(a, ia) ?? return null) ?? return null
+		let y = self.nl_arg(sv_lin_scale(b, ib) ?? return null) ?? return null
+		let real = self.is_real(a) || self.is_real(b)
+		let m = if x <= y {
+			self.nl_term("*", x, y, "", real)
+		} else {
+			self.nl_term("*", y, x, "", real)
+		}
+		let k = sv_rat_mul(ka, kb) ?? return null
+		return sv_lin_scale(sv_lin_var(m), k)
+	}
+
 	fn let_term(ref mut self, sexp: ref LgSexp, items: ref Vec[LgSexp]) -> SvGot {
 		if items.len() != 3 {
 			return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
@@ -552,6 +732,19 @@ impl SvSmtReader {
 			LgSexp::Atom(_) => {
 				return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
 			},
+		}
+		// The names this `let` binds: read in its own bindings, one is
+		// unbound (a parallel `let`), and the script malformed (ADR-270 D28).
+		let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+		for binding in bindings {
+			match binding.clone() {
+				LgSexp::List(pair) => {
+					if pair.len() == 2 && lg_is_atom(pair, 0) {
+						own.insert(lg_unquoted(lg_atom_at(pair, 0)))
+					}
+				},
+				LgSexp::Atom(_) => {},
+			}
 		}
 		let mut names: Vec[String] = []
 		let mut values: Vec[SvVal] = []
@@ -567,6 +760,12 @@ impl SvSmtReader {
 			}
 			match self.term(pair[1]) {
 				SvGot::Val(v) => values.push(v.clone()),
+				SvGot::Failed(SvReadWhy::Undeclared(name)) => {
+					if own.contains(name) {
+						return SvGot::Failed(SvReadWhy::Malformed(f"{name} is unbound: a parallel let binds its names only in its body"))
+					}
+					return SvGot::Failed(SvReadWhy::Undeclared(name.clone()))
+				},
 				SvGot::Failed(why) => {
 					return SvGot::Failed(why.clone())
 				},
@@ -896,27 +1095,75 @@ impl SvSmtReader {
 					} else if acc.terms.len() == 0 {
 						acc = sv_lin_scale(next, acc.c) ?? return sv_overflow(lg_show(sexp))
 					} else {
-						return SvGot::Failed(SvReadWhy::Unsupported(f"a non-linear product: {lg_show(sexp)}"))
+						acc = self.nl_product(acc, next) ?? return sv_overflow(lg_show(sexp))
 					}
 				}
 				return SvGot::Val(SvVal::Lin(acc))
 			}
-			// Division by constants only (ADR-270 D27); by zero is outside what
-			// the reader covers (SMT-LIB leaves its value open).
+			// Division by a constant scales (ADR-270 D27); by a term or by
+			// zero, whose value SMT-LIB leaves open, it is a term of its own
+			// (ADR-270 D28.1).
 			if op == "/" && n >= 2 {
 				let mut acc = lins[0].clone()
 				for at in 1..<n {
 					let next = lins[at].clone()
-					if next.terms.len() > 0 {
-						return SvGot::Failed(SvReadWhy::Unsupported(f"a non-linear division: {lg_show(sexp)}"))
-					}
-					if next.c.num == 0 {
-						return SvGot::Failed(SvReadWhy::Unsupported(f"a division by zero: {lg_show(sexp)}"))
+					if next.terms.len() > 0 || next.c.num == 0 {
+						let x = self.nl_arg(acc) ?? return sv_overflow(lg_show(sexp))
+						let y = self.nl_arg(next) ?? return sv_overflow(lg_show(sexp))
+						acc = sv_lin_var(self.nl_term("/", x, y, "", true))
+						continue
 					}
 					let inverse = sv_rat_div(sv_int(1), next.c) ?? return sv_overflow(lg_show(sexp))
 					acc = sv_lin_scale(acc, inverse) ?? return sv_overflow(lg_show(sexp))
 				}
 				return SvGot::Val(SvVal::Lin(acc))
+			}
+			// Integer division and remainder, Euclidean, and `int.pow2`:
+			// folded over constants, else terms of their own (ADR-270 D28.1).
+			if (op == "div" && n >= 2) || (op == "mod" && n == 2) {
+				for l in lins {
+					if self.is_real(l) {
+						return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+					}
+				}
+				let mut acc = lins[0].clone()
+				for at in 1..<n {
+					let next = lins[at].clone()
+					if acc.terms.len() == 0 && next.terms.len() == 0 && next.c.num != 0 {
+						// The one quotient out of `i64`: the least by `-1`.
+						if next.c.num == -1 && acc.c.num.checked_neg() == null {
+							return sv_overflow(lg_show(sexp))
+						}
+						let folded = if op == "div" {
+							acc.c.num.div_euclid(next.c.num)
+						} else {
+							acc.c.num.rem_euclid(next.c.num)
+						}
+						acc = sv_lin_constant(sv_int(folded))
+						continue
+					}
+					let x = self.nl_arg(acc) ?? return sv_overflow(lg_show(sexp))
+					let y = self.nl_arg(next) ?? return sv_overflow(lg_show(sexp))
+					let q = self.nl_term("div", x.clone(), y.clone(), "", false)
+					acc = if op == "div" {
+						sv_lin_var(q)
+					} else {
+						sv_lin_var(self.nl_term("mod", x, y, q, false))
+					}
+				}
+				return SvGot::Val(SvVal::Lin(acc))
+			}
+			if op == "int.pow2" && n == 1 {
+				let a = lins[0].clone()
+				if self.is_real(a) {
+					return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+				}
+				if a.terms.len() == 0 {
+					let p = sv_pow2(a.c.num) ?? return sv_overflow(lg_show(sexp))
+					return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(p))))
+				}
+				let x = self.nl_arg(a) ?? return sv_overflow(lg_show(sexp))
+				return SvGot::Val(SvVal::Lin(sv_lin_var(self.nl_term("pow2", x, "", "", false))))
 			}
 			if (op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=") && n >= 2 {
 				let mut links: Vec[i64] = []
@@ -1059,6 +1306,9 @@ fn sv_smtlib_levels(items: ref Vec[LgSexp]) -> i64? {
 /// integer.
 pub struct SvSorts {
 	pub reals: collections::BTreeSet[String],
+	/// The non-linear terms the reader abstracted, an argument's before
+	/// the term that reads it (ADR-270 D28.1).
+	pub nl: Vec[SvNl],
 }
 
 /// A script, or why not: its assertions in a fresh arena, the reader's
@@ -1108,8 +1358,11 @@ pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 		ites: collections::BTreeMap(),
 		folds: collections::BTreeMap(),
 		made: collections::BTreeMap(),
+		nl: [],
+		nl_names: collections::BTreeMap(),
 	}
 	let mut stack: Vec[Vec[i64]] = [[]]
+	let mut asserted = 0
 	for command in commands {
 		let items = match command.clone() {
 			LgSexp::List(inside) => inside,
@@ -1157,12 +1410,16 @@ pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 			continue
 		}
 		if n == 2 && head == "assert" {
+			asserted += 1
 			match reader.formula(items[1]) {
 				SvGot::Val(SvVal::Formula(id)) => {
 					let last = stack.len() - 1
 					stack[last].push(id)
 				},
 				SvGot::Val(_) => {},
+				SvGot::Failed(SvReadWhy::Malformed(s)) => {
+					return SvSmtRead::Failed(SvReadWhy::Malformed(f"{s}, in assertion {asserted}"))
+				},
 				SvGot::Failed(why) => {
 					return SvSmtRead::Failed(why.clone())
 				},
@@ -1215,7 +1472,7 @@ pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 	}
 	return SvSmtRead::Script(
 		LgScript { arena: reader.arena, assertions: assertions },
-		SvSorts { reals: reader.reals },
+		SvSorts { reals: reader.reals, nl: reader.nl },
 	)
 }
 
@@ -1226,6 +1483,7 @@ fn sv_read_why_text(why: ref SvReadWhy) -> String {
 		SvReadWhy::Unsupported(s) => f"unsupported: {s}",
 		SvReadWhy::Undeclared(s) => f"undeclared: {s}",
 		SvReadWhy::Overflow(s) => f"overflow: {s}",
+		SvReadWhy::Malformed(s) => f"malformed: {s}",
 	}
 }
 

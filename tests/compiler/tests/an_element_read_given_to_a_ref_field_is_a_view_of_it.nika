@@ -1,0 +1,11 @@
+struct L { n: i64 }
+struct W { own: ref L }
+fn first(xs: ref Vec[L]) -> W {
+	return W { own: xs[0] }
+}
+fn main() throws {
+	let xs: Vec[L] = [L { n: 3 }]
+	let one: ref L = xs[0]
+	let w = first(xs)
+	println(f"{one.n} {w.own.n}")
+}

@@ -1,0 +1,9 @@
+error[NK1338]: `helpers` is used twice in this file.
+  --> src/main.nika:3:1
+   |
+ 3 | use other as helpers
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Two packages can't have the same name in one file.
+   = help: Write `use … as …` to give one of them another name.
+exit 1

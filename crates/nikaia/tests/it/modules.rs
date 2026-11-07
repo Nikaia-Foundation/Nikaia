@@ -283,7 +283,7 @@ fn a_use_naming_a_sibling_file_says_to_remove_it() {
     };
     let message = format!("{error:#}");
     assert!(
-        message.contains("the files of a package already see each other"),
+        message.contains("The files of a package already see each other"),
         "{message}"
     );
     assert!(message.contains("Remove the line"), "{message}");
@@ -305,7 +305,7 @@ fn a_use_naming_no_dependency_says_what_to_declare() {
     };
     let message = format!("{error:#}");
     assert!(
-        message.contains("there's no dependency called `helpers`"),
+        message.contains("There's no dependency called `helpers`"),
         "{message}"
     );
     assert!(message.contains("[dependencies]"), "{message}");

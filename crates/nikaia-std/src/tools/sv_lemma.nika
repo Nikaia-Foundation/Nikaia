@@ -1,0 +1,384 @@
+// crates/nikaia-std/src/tools/sv_lemma.nika
+//
+// **The refinement lemmas of non-linear terms** (ADR-270 D28, #1339): the
+// checker's part. The reader abstracts each non-linear term to a variable
+// (`SvNl`, sv_smtlib.nika); the solver (sv_nl.nika) adds lemmas over those
+// variables where a model breaks a term's meaning. A lemma is an instance of
+// a named schema, `SvLemma`: its formula is derived here from the schema and
+// the instance's numbers, never taken from the solver, so the checker builds
+// the query it checks the proof log against itself: the facts, then each
+// lemma's formula in order. A lemma with one number changed is another
+// formula, and the log fails on it.
+//
+// The schemas, `m` the term's variable over the arguments `x` and `y`:
+//
+// * `*`: `square` (`x * x`: `m >= 0`), `zero` (`x = 0` gives `m = 0`, as
+//   `y = 0` does; `m = 0` gives `x = 0` or `y = 0`), `sign` (the signs of `x`
+//   and `y` give `m`'s), `tangent` (at the point `(a, b)`: `(x - a)(y - b)`
+//   has the sign of its factors), `point` (`x = a` gives `m = a·y`),
+//   `mono` (between two products of non-negative factors).
+// * `/`: `divpoint` (`y = b`, `b` not zero, gives `b·m = x`).
+// * `div` and `mod`: `division` (`y = b`, `b` not zero, gives `x = b·q + r`
+//   with `0 <= r < |b|`, Euclidean).
+// * `pow2`: `pow2-neg`, `pow2-low` (`m > x` for `x >= 0`), `pow2-pos`,
+//   `pow2-point` (`x = a` gives `m = 2^a`), `pow2-mono`.
+// * any: `congruence` (equal arguments give equal values).
+//
+// The exact meaning of a term, against which a model is held, is
+// `sv_nl_value`: a division by zero has no fixed value (SMT-LIB leaves it
+// open), only the same one for the same arguments.
+
+use std::collections
+
+/// One lemma: the schema, the term `def` (an index into the terms) and,
+/// where the schema reads them, another term `other`, the numbers `a`, `b`
+/// and the choices `sa`, `sb`.
+pub struct SvLemma {
+	pub schema: String,
+	pub def: i64,
+	pub other: i64,
+	pub a: SvRat,
+	pub b: SvRat,
+	pub sa: i64,
+	pub sb: i64,
+}
+
+/// A lemma of `schema` over the term `def`, with nothing else read.
+fn sv_lemma(schema: String, def: i64) -> SvLemma {
+	return SvLemma { schema: schema, def: def, other: -1, a: sv_int(0), b: sv_int(0), sa: 0, sb: 0 }
+}
+
+/// `k·x` as a linear form.
+fn sv_lm(k: ref SvRat, name: String) -> SvLin? {
+	return sv_lin_scale(sv_lin_var(name), k)
+}
+
+/// The form `k·x + c`.
+fn sv_lm_c(k: ref SvRat, name: String, c: ref SvRat) -> SvLin? {
+	return sv_lin_add(sv_lm(k, name) ?? return null, sv_lin_constant(c.clone()))
+}
+
+/// The atom `d rel 0`, `rel` read as by `sv_lin_atom`.
+fn sv_la(mut arena: TermArena, rel: String, d: ref SvLin) -> i64? {
+	return sv_lin_atom(arena, rel, d)
+}
+
+/// `x rel a` over a variable and a number.
+fn sv_lv(mut arena: TermArena, rel: String, name: String, a: ref SvRat) -> i64? {
+	let minus = sv_rat_neg(a) ?? return null
+	return sv_la(arena, rel, sv_lm_c(sv_int(1), name, minus) ?? return null)
+}
+
+/// `x - y rel 0` over two variables.
+fn sv_lvv(mut arena: TermArena, rel: String, x: String, y: String) -> i64? {
+	let d = sv_lin_sub(sv_lin_var(x), sv_lin_var(y)) ?? return null
+	return sv_la(arena, rel, d)
+}
+
+/// `|b|`, `null` where it leaves `i64`.
+fn sv_rat_abs(b: ref SvRat) -> SvRat? {
+	if b.num < 0 {
+		return sv_rat_neg(b)
+	}
+	return b.clone()
+}
+
+/// The formula of lemma `l` over the terms `defs`; `null` where the
+/// instance is not one of its schema (a wrong term, a zero divisor, a
+/// number out of `i64`).
+pub fn sv_lemma_formula(mut arena: TermArena, defs: ref Vec[SvNl], l: ref SvLemma) -> i64? {
+	if l.def < 0 || l.def >= defs.len() {
+		return null
+	}
+	let t = defs[l.def].clone()
+	let m = t.name.clone()
+	let x = t.a.clone()
+	let y = t.b.clone()
+	let zero = sv_int(0)
+	let one = sv_int(1)
+	let s = l.schema.clone()
+	// The schemas that relate two terms of one operator.
+	if s == "mono" || s == "pow2-mono" || s == "congruence" {
+		if l.other < 0 || l.other >= defs.len() || defs[l.other].op != t.op {
+			return null
+		}
+		let u = defs[l.other].clone()
+		if s == "congruence" {
+			let mut parts: Vec[i64] = [sv_lvv(arena, "distinct", x, u.a) ?? return null]
+			if t.op != "pow2" {
+				parts.push(sv_lvv(arena, "distinct", y, u.b) ?? return null)
+			}
+			parts.push(sv_lvv(arena, "=", m, u.name) ?? return null)
+			return arena.or(parts)
+		}
+		if s == "pow2-mono" {
+			let wider = sv_lvv(arena, ">", x, u.a) ?? return null
+			let below = sv_lvv(arena, "<=", m, u.name) ?? return null
+			return arena.or([wider, below])
+		}
+		if t.op != "*" {
+			return null
+		}
+		let xn = sv_lv(arena, "<", x, zero) ?? return null
+		let yn = sv_lv(arena, "<", y, zero) ?? return null
+		let xw = sv_lvv(arena, ">", x, u.a) ?? return null
+		let yw = sv_lvv(arena, ">", y, u.b) ?? return null
+		let below = sv_lvv(arena, "<=", m, u.name) ?? return null
+		return arena.or([xn, yn, xw, yw, below])
+	}
+	if t.op == "*" {
+		if s == "square" {
+			if x != y {
+				return null
+			}
+			return sv_lv(arena, ">=", m, zero)
+		}
+		if s == "zero" {
+			let m0 = sv_lv(arena, "=", m, zero) ?? return null
+			if l.sa == 1 || l.sa == 2 {
+				let v = if l.sa == 1 { x } else { y }
+				let off = sv_lv(arena, "distinct", v, zero) ?? return null
+				return arena.or([off, m0])
+			}
+			if l.sa == 0 {
+				let m1 = sv_lv(arena, "distinct", m, zero) ?? return null
+				let x0 = sv_lv(arena, "=", x, zero) ?? return null
+				let y0 = sv_lv(arena, "=", y, zero) ?? return null
+				return arena.or([m1, x0, y0])
+			}
+			return null
+		}
+		if s == "sign" || s == "tangent" {
+			if (l.sa != 1 && l.sa != -1) || (l.sb != 1 && l.sb != -1) {
+				return null
+			}
+			let sa = sv_int(l.sa)
+			let sb = sv_int(l.sb)
+			let both = sv_int(l.sa * l.sb)
+			if s == "sign" {
+				let xs = sv_la(arena, "<=", sv_lm(sa, x) ?? return null) ?? return null
+				let ys = sv_la(arena, "<=", sv_lm(sb, y) ?? return null) ?? return null
+				let ms = sv_la(arena, ">", sv_lm(both, m) ?? return null) ?? return null
+				return arena.or([xs, ys, ms])
+			}
+			// `sa·(x - a) < 0`, `sb·(y - b) < 0`, or `sa·sb·(m - b·x - a·y + a·b) >= 0`.
+			let na = sv_rat_neg(l.a) ?? return null
+			let nb = sv_rat_neg(l.b) ?? return null
+			let xa = sv_lin_scale(sv_lm_c(one, x, na) ?? return null, sa) ?? return null
+			let yb = sv_lin_scale(sv_lm_c(one, y, nb) ?? return null, sb) ?? return null
+			let ab = sv_rat_mul(l.a, l.b) ?? return null
+			let mut tp = sv_lm_c(one, m, ab) ?? return null
+			tp = sv_lin_add(tp, sv_lm(nb, x) ?? return null) ?? return null
+			tp = sv_lin_add(tp, sv_lm(na, y) ?? return null) ?? return null
+			tp = sv_lin_scale(tp, both) ?? return null
+			let xs = sv_la(arena, "<", xa) ?? return null
+			let ys = sv_la(arena, "<", yb) ?? return null
+			let ts = sv_la(arena, ">=", tp) ?? return null
+			return arena.or([xs, ys, ts])
+		}
+		if s == "point" && (l.sa == 1 || l.sa == 2) {
+			let fixed = if l.sa == 1 { x.clone() } else { y.clone() }
+			let free = if l.sa == 1 { y } else { x }
+			let off = sv_lv(arena, "distinct", fixed, l.a) ?? return null
+			let na = sv_rat_neg(l.a) ?? return null
+			let d = sv_lin_add(sv_lin_var(m), sv_lm(na, free) ?? return null) ?? return null
+			let on = sv_la(arena, "=", d) ?? return null
+			return arena.or([off, on])
+		}
+		return null
+	}
+	if t.op == "/" && s == "divpoint" {
+		if l.b.num == 0 {
+			return null
+		}
+		let off = sv_lv(arena, "distinct", y, l.b) ?? return null
+		let d = sv_lin_sub(sv_lm(l.b, m) ?? return null, sv_lin_var(x)) ?? return null
+		let on = sv_la(arena, "=", d) ?? return null
+		return arena.or([off, on])
+	}
+	if (t.op == "div" || t.op == "mod") && s == "division" {
+		if l.b.num == 0 || !sv_rat_is_int(l.b) {
+			return null
+		}
+		let off = sv_lv(arena, "distinct", y, l.b) ?? return null
+		let size = sv_rat_abs(l.b) ?? return null
+		let top = sv_rat_sub(size, one) ?? return null
+		let nb = sv_rat_neg(l.b) ?? return null
+		let q = if t.op == "div" { m.clone() } else { t.partner.clone() }
+		if q == "" {
+			return null
+		}
+		// `r = x - b·q`, the remainder: `m` itself for `mod`.
+		let r = sv_lin_add(sv_lin_var(x), sv_lm(nb, q) ?? return null) ?? return null
+		if t.op == "div" {
+			let low = sv_la(arena, ">=", r) ?? return null
+			let high = sv_la(arena, "<=", sv_lin_sub(r, sv_lin_constant(top)) ?? return null) ?? return null
+			let on = arena.and([low, high])
+			return arena.or([off, on])
+		}
+		let is = sv_la(arena, "=", sv_lin_sub(r, sv_lin_var(m.clone())) ?? return null) ?? return null
+		let low = sv_lv(arena, ">=", m, zero) ?? return null
+		let high = sv_lv(arena, "<=", m, top) ?? return null
+		let on = arena.and([is, low, high])
+		return arena.or([off, on])
+	}
+	if t.op == "pow2" {
+		if s == "pow2-neg" {
+			let up = sv_lv(arena, ">=", x, zero) ?? return null
+			let m0 = sv_lv(arena, "=", m, zero) ?? return null
+			return arena.or([up, m0])
+		}
+		if s == "pow2-low" {
+			let down = sv_lv(arena, "<", x, zero) ?? return null
+			let d = sv_lin_sub(sv_lin_var(m), sv_lin_var(x)) ?? return null
+			let above = sv_la(arena, ">=", sv_lin_sub(d, sv_lin_constant(one)) ?? return null) ?? return null
+			return arena.or([down, above])
+		}
+		if s == "pow2-pos" {
+			return sv_lv(arena, ">=", m, zero)
+		}
+		if s == "pow2-point" && sv_rat_is_int(l.a) && l.a.num >= 0 && l.a.num <= 62 {
+			let p = sv_pow2(l.a.num) ?? return null
+			let off = sv_lv(arena, "distinct", x, l.a) ?? return null
+			let on = sv_lv(arena, "=", m, sv_int(p)) ?? return null
+			return arena.or([off, on])
+		}
+	}
+	return null
+}
+
+/// The Alethe rule a schema's lemma is justified by when the proof is
+/// exported (ADR-270 D28.4): the linear ones by `la_generic`, the products'
+/// signs by cvc5's `la_mult_pos` and `la_mult_neg`.
+pub fn sv_lemma_alethe(schema: String) -> String {
+	if schema == "square" || schema == "sign" || schema == "tangent" || schema == "mono" {
+		return "la_mult_pos/la_mult_neg"
+	}
+	if schema == "congruence" {
+		return "cong"
+	}
+	if schema == "zero" || schema == "point" || schema == "divpoint" {
+		return "la_mult_pos/la_generic"
+	}
+	return "lia_generic"
+}
+
+/// The exact value of a term under a model: a number, none fixed (a
+/// division by zero), or one out of `i64`.
+enum SvNlValue {
+	Value(SvRat),
+	Free,
+	Overflow,
+}
+
+/// The value of term `t` where its arguments have the values `values` (a
+/// name they omit is zero), Euclidean for `div` and `mod`, `2^x` for
+/// `pow2` and zero below `x = 0` (cvc5's `int.pow2`).
+fn sv_nl_value(t: ref SvNl, values: ref collections::BTreeMap[String, SvRat]) -> SvNlValue {
+	let a = sv_real_named(values, t.a)
+	let b = sv_real_named(values, t.b)
+	if t.op == "*" {
+		return match sv_rat_mul(a, b) {
+			null => SvNlValue::Overflow,
+			r => SvNlValue::Value(r.clone()),
+		}
+	}
+	if t.op == "/" {
+		if b.num == 0 {
+			return SvNlValue::Free
+		}
+		return match sv_rat_div(a, b) {
+			null => SvNlValue::Overflow,
+			r => SvNlValue::Value(r.clone()),
+		}
+	}
+	if t.op == "div" || t.op == "mod" {
+		if b.num == 0 {
+			return SvNlValue::Free
+		}
+		if !sv_rat_is_int(a) || !sv_rat_is_int(b) || (b.num == -1 && a.num.checked_neg() == null) {
+			return SvNlValue::Overflow
+		}
+		let r = if t.op == "div" { a.num.div_euclid(b.num) } else { a.num.rem_euclid(b.num) }
+		return SvNlValue::Value(sv_int(r))
+	}
+	if !sv_rat_is_int(a) {
+		return SvNlValue::Overflow
+	}
+	return match sv_pow2(a.num) {
+		null => SvNlValue::Overflow,
+		p => SvNlValue::Value(sv_int(p)),
+	}
+}
+
+/// Whether `values` give every term in `defs` its meaning: its exact value,
+/// or, where it has none fixed, the value of every term of the same
+/// operator and arguments.
+pub fn sv_nl_holds(defs: ref Vec[SvNl], values: ref collections::BTreeMap[String, SvRat]) -> bool {
+	for i in 0..<defs.len() {
+		let mine = sv_real_named(values, defs[i].name)
+		match sv_nl_value(defs[i], values) {
+			SvNlValue::Value(r) => {
+				if sv_rat_cmp(r, mine) != 0 {
+					return false
+				}
+			},
+			SvNlValue::Free => {
+				for j in 0..<i {
+					if sv_nl_same_place(defs[i], defs[j], values)
+						&& sv_rat_cmp(sv_real_named(values, defs[j].name), mine) != 0 {
+						return false
+					}
+				}
+			},
+			SvNlValue::Overflow => {
+				return false
+			},
+		}
+	}
+	return true
+}
+
+/// Whether terms `t` and `u` are of one operator over arguments of equal
+/// values.
+fn sv_nl_same_place(t: ref SvNl, u: ref SvNl, values: ref collections::BTreeMap[String, SvRat]) -> bool {
+	return t.op == u.op
+		&& sv_rat_cmp(sv_real_named(values, t.a), sv_real_named(values, u.a)) == 0
+		&& sv_rat_cmp(sv_real_named(values, t.b), sv_real_named(values, u.b)) == 0
+}
+
+/// The query a proof with `lemmas` answers: `facts` and each lemma's
+/// formula, derived here, in order (ADR-270 D28.2). `null` where a lemma is
+/// not an instance of its schema.
+pub fn sv_lemma_query(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	reals: ref collections::BTreeSet[String],
+	defs: ref Vec[SvNl],
+	lemmas: ref Vec[SvLemma],
+) -> SvCnf? {
+	let mut work = arena.clone()
+	let mut all = facts.clone()
+	for l in lemmas {
+		all.push(sv_lemma_formula(work, defs, l) ?? return null)
+	}
+	let mut why = lg_why()
+	return sv_cnf_sorted(work, all, goal, reals, why)
+}
+
+/// The check of a proof that used lemmas: `steps` replayed by `sv_check`
+/// against the query `sv_lemma_query` builds. `null` where a lemma is
+/// refused.
+pub fn sv_lemma_check(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	reals: ref collections::BTreeSet[String],
+	defs: ref Vec[SvNl],
+	lemmas: ref Vec[SvLemma],
+	steps: ref Vec[SvStep],
+) -> SvVerdict? {
+	let cnf = sv_lemma_query(arena, facts, goal, reals, defs, lemmas) ?? return null
+	return sv_check(cnf.query, steps)
+}

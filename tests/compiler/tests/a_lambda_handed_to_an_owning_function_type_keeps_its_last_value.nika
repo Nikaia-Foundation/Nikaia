@@ -1,0 +1,23 @@
+// A lambda handed where a function type's result owns its text keeps its
+// last value there (ADR-views-3 D14, #1263): static text it hands back is
+// text of its own, handed to a parameter or bound by a typed `let`.
+fn apply(f: fn(s: String) -> String, s: String) -> String {
+	f(s)
+}
+
+fn main() {
+	let g: String = "  hi  "
+	println(apply(fn(_s) {
+		let t: String = "made"
+		t
+	}, g.clone()))
+	println(apply(fn(s) {
+		let t: String = if s.len() > 3 { "long" } else { "short" }
+		t
+	}, g.clone()))
+	let h: fn(s: String) -> String = fn(_s) {
+		let u: String = "let"
+		u
+	}
+	println(h(g))
+}

@@ -1,0 +1,72 @@
+// #1347 items 4-5: `nikaia lsp` publishes the check's findings for the text
+// the editor holds, not the one on disk. A package in a scratch directory has
+// a `main.nika` that is fine on disk; the editor opens it with an `NK1104`
+// on a line that has an `ä` before the refused word, changes it to one with an
+// astral character there (two UTF-16 units), then to one with a warning
+// (`NK1261`), saves it, and changes it to a text that checks clean, which
+// empties the list. The range's `character` counts UTF-16 units. Last it
+// adds a `use` of no dependency, published at its line with `NK1341` (#1364).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn framed(body: String) -> String {
+    return f"Content-Length: {body.len()}\r\n\r\n{body}"
+}
+
+fn quoted(text: String) -> String {
+    return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+}
+
+fn opened(uri: String, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"languageId\":\"nikaia\",\"version\":1,\"text\":\"{quoted(text)}\"}}}}}}")
+}
+
+fn changed(uri: String, version: i64, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"version\":{version}}},\"contentChanges\":[{{\"text\":\"{quoted(text)}\"}}]}}}}")
+}
+
+// Each frame as `Content-Length: ok` when the length is the body's bytes: the
+// length depends on the scratch path, which is cut from the output.
+fn masked(stdout: String, base: String) -> String {
+    let mut out = ""
+    for part in stdout.split("Content-Length: ") {
+        let pieces: Vec[String] = part.split("\r\n\r\n").map(fn(p) { p.to_string() }).collect()
+        if pieces.len() == 2 {
+            let length = if pieces[0] == f"{pieces[1].len()}" { "ok" } else { "wrong" }
+            out.push_str(f"Content-Length: {length}\\r\\n\n\\r\\n\n{pieces[1].replace(base, "<scratch>")}\n")
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::create_dir("pk/src", root; recursive: true)
+    fs::write("pk/nikaia.toml", root, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
+    let fine = "fn f() -> i64 {\n    return 1\n}\n\nfn main() {\n    println(f\"{f()}\")\n}\n"
+    fs::write("pk/src/main.nika", root, fine.clone())
+    let base = fs::canonical(".", root).display()
+    let uri = f"file://{base}/pk/src/main.nika"
+    let umlaut = fine.replace("    return 1", "    let s = \"ä\"; return s")
+    let astral = fine.replace("    return 1", "    let s = \"😀\"; return s")
+    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{} } }")
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{} }"))
+    transcript.push_str(opened(uri, umlaut))
+    transcript.push_str(changed(uri, 2, astral))
+    transcript.push_str(changed(uri, 3, fine.replace("fn main", "fn h(s: ref String) {\n}\n\nfn main")))
+    transcript.push_str(framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didSave\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\"}}}}}}"))
+    transcript.push_str(changed(uri, 4, fine.clone()))
+    transcript.push_str(changed(uri, 5, f"use nosuch\n\n{fine}"))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    let out = process::run(toolchain(), ["lsp"]; stdin: process::Input::Text(transcript))
+    print(masked(out.stdout, base))
+    println(f"exit {out.code}")
+    print(out.stderr)
+}

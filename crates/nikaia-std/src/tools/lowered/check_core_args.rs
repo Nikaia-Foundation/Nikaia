@@ -148,6 +148,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     if paused && !declared_here { state.flow.paused_args.push(id); }
                     state.flow.lambda_tails.insert(id, came_to.clone());
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first);
+                    if declared_here || keeps { state.a_lambda_hands_back_text_it_does_not_own(world, &code, params, body, &came_to, span); }
                     let written: Ty = nikaia_std::index::or(match result.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,

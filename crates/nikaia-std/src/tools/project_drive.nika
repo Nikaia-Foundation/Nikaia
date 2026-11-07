@@ -114,10 +114,6 @@ pub trait ProjectDriveHost {
     fn package_name(ref self) -> String? sync
     /// The binding asked for (`--bind`), where one was.
     fn bind(ref self) -> String? sync
-    /// The libraries a `c-library` build made, as its messages say.
-    fn libraries_in(ref self, messages: ref String) -> Vec[fs::Path] sync
-    /// The program Cargo built, as its messages say.
-    fn executable_in(ref self, messages: ref String) -> fs::Path? sync
     /// The program built in the shared directory, under the project's name.
     fn own_copy(ref self, built: ref fs::Path) -> fs::Path sync throws
     /// Records the versions Cargo resolved in `nikaia.lock`: why it could
@@ -373,7 +369,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
             text => project_drive_c_library(host, text, python, node, messages),
         }
     }
-    let built = host.executable_in(messages)
+    let built = diagnostics_executable_in(messages)
     let binary: fs::Path? = match built {
         null => null,
         path => if shared { host.own_copy(path) } else { path.clone() },
@@ -503,7 +499,7 @@ fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String,
             },
         }
     }
-    for built in host.libraries_in(messages) {
+    for built in diagnostics_libraries_in(messages) {
         let name = built.file_name() ?? continue
         fs::copy(built, made.join(name), fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"copying {built.display()}: {error}") }
     }

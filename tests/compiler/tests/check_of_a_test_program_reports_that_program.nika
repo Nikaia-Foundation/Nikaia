@@ -1,0 +1,38 @@
+// #972, ADR-269 D22: `nikaia check tests/NAME.nika` inside a project checks
+// that test program as `nikaia test` builds it, a program of its own that may
+// `use` the package, and so reports its own refusal, never the one of
+// another test program beside it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn check(nikaia: String, tmp: String, file: String) throws {
+    println(f"-- check {file}")
+    let out = process::run(nikaia, ["check", file]; dir: tmp.clone())
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("error") || line.trim().starts_with("-->") || line.starts_with("Checked") {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"doubling\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub fn double(x: i64) -> i64 {\n    return x * 2\n}\n\nfn main() {\n    println(double(1))\n}\n")
+    fs::write(f"{tmp}/tests/a_bang.nika", fs::Root::Anywhere, "fn main() {\n    println!(\"hi\")\n}\n")
+    fs::write(f"{tmp}/tests/b_wrong_type.nika", fs::Root::Anywhere, "fn main() {\n    let x: i64 = \"text\"\n    println(x)\n}\n")
+    fs::write(f"{tmp}/tests/c_uses_the_package.nika", fs::Root::Anywhere, "use doubling\n\nfn main() {\n    println(doubling::double(2))\n}\n")
+    check(nikaia, tmp, "tests/b_wrong_type.nika")
+    check(nikaia, tmp, "tests/a_bang.nika")
+    check(nikaia, tmp, "tests/c_uses_the_package.nika")
+    check(nikaia, tmp, "src/main.nika")
+    process::run("rm", ["-rf", tmp])
+}

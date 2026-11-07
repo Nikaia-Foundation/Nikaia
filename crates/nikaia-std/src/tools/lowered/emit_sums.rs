@@ -55,6 +55,15 @@ impl EmitState {
         }
         out
     }
+    pub fn sums_used_here(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {
+        let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for key in sums_declared_here(world) {
+            let contract = match self.own_contracts.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let name = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            out.insert(name.to_string());
+        }
+        out
+    }
     pub fn sum_root(&self) -> String {
         if self.is_std { return String::from(""); }
         String::from("crate::")
@@ -197,7 +206,7 @@ impl EmitState {
     }
 }
 
-pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], used_here: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut declared: Vec<collections::BTreeSet<String>> = vec![];
     for unit in units.iter() { declared.push(declared_errors(unit.words, unit.items)); }
@@ -211,8 +220,41 @@ pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, unit
             if owner >= 0 { break; }
             for at in 0..declared.len() as i64 { if owner < 0 && (*nikaia_std::index::get(&declared, (at) as usize)).contains(member) { owner = at; } }
         }
-        if owner <= 0 { out.insert(name.to_string()); }
+        if owner == 0 || owner < 0 && used_here.contains(name) { out.insert(name.to_string()); }
     }
     out
+}
+
+pub(crate) fn sums_declared_here(world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {
+    let mut keys: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { name, .. } => {
+                let name = *name;
+                let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                keys.insert(world.words.resolve(held).to_string());
+            },
+            Item::Impl { trait_name, target, methods } => {
+                let trait_name = *trait_name;
+                let mut owners: Vec<String> = vec![world.words.resolve(target.name).to_string()];
+                match trait_name {
+                    None => { },
+                    Some(named) => { owners.push(world.words.resolve(named).to_string()); },
+                }
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, .. } => {
+                            let name = *name;
+                            let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            for owner in owners.iter() { keys.insert(format!("{}::{}", owner, world.words.resolve(held))); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    keys
 }
 

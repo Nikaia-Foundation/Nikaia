@@ -90,7 +90,7 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     state.kept_calls = holes.kept_calls;
     let world = EmitWorld { words, aliases: nikaia_std::index::get(&units, 0).aliases, items, library };
     state.sums = state.error_sums(&world);
-    state.sums_written = emit_sums_written(&state.sums, units);
+    state.sums_written = emit_sums_written(&state.sums, units, &state.sums_used_here(&world));
     let coalesced = vc_coalesced(&state.facts);
     let mut_viewed = vc_mut_viewed(&state.facts);
     let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed };

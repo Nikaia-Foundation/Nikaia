@@ -1,0 +1,26 @@
+// #1271 (ADR-views-3 D15): a `Bytes` field that every literal fills with a
+// cut (`a[1..]`) or a lent `Bytes` parameter is a view, as an `Array[T]`
+// field is (D11); a `let` declared `Bytes` over `s.bytes`, a cut or a call
+// whose result views its argument holds the view. Each reached rustc as
+// `&[u8]` into `Bytes`.
+struct Packet { body: Bytes }
+struct Whole { all: Bytes }
+
+fn wrap(a: Bytes) -> Packet { return Packet { body: a[1..] } }
+
+fn whole(a: Bytes) -> Whole { return Whole { all: a } }
+
+fn rest(a: Bytes) -> Bytes { return a[1..] }
+
+fn sizes(a: Bytes) -> i64 {
+    let cut: Bytes = a[2..]
+    let after: Bytes = rest(a)
+    return cut.len() * 10 + after.len()
+}
+
+fn main() throws {
+    let b: Bytes = "hey".bytes
+    println(wrap(b).body.len())
+    println(whole(b).all.len())
+    println(sizes("hello".bytes))
+}

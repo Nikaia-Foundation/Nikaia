@@ -176,3 +176,71 @@ impl CheckState {
     }
 }
 
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lambda_hands_back_text_it_does_not_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, params: &[winnow_grammar::Symbol], body: &Block, tail: &Ty, span: &Span) {
+        let result: Ty = match code {
+            Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return } },
+            _ => return,
+        };
+        if result != a_string_type() { return; }
+        let wanted = code.text();
+        let own = lambda_own(world, params);
+        let last = tail_value_of(body);
+        if last.is_some() {
+            let value = match last { Some(__nikaia_value) => __nikaia_value, None => return };
+            self.a_lambda_result_of_its_own(world, &wanted, &own, body, value, tail, &check_span_at(world, value, span));
+        }
+        let returned: Vec<CheckLambdaReturn> = self.flow.last_lambda_returns.to_owned();
+        for one in returned.iter() { for value in one.value.iter() { self.a_lambda_result_of_its_own(world, &wanted, &own, body, value, &one.ty, &one.at); } }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn a_lambda_result_of_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, wanted: &str, own: &collections::BTreeSet<String>, body: &Block, value: &Expr, ty: &Ty, at: &Span) {
+        if lambda_a_text_view(ty) && self.text_literal(world, &a_string_type(), value, true).is_none() {
+            let was = ty.text();
+            self.findings.push(check_refusal("NK1104", at, format!("This lambda returns `{}`, a view, but `{}` returns text of its own.", was, wanted), vec![String::from("`.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.")], Some(String::from("Hand back a copy with `.clone()`."))));
+            return;
+        }
+        let name: String = match value {
+            Expr::Variable(written, _) => { let written = *written; world.words.resolve(written).to_string() },
+            _ => return,
+        };
+        if own.contains(&name) || lambda_binds(world, body, &name) { return; }
+        let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if local.ty != a_string_type() { return; }
+        self.findings.push(check_refusal("NK1104", at, format!("This lambda returns `{}`, which it captures, but `{}` returns text of its own.", name, wanted), vec![String::from("A lambda may run more than once, so what it captures stays with it and is not given away.")], Some(format!("Hand back a copy with `{}.clone()`.", name))));
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn lambda_a_text_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == TEXT_VIEW || type_last_segment(name) == "String") },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn lambda_binds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Block, name: &str) -> bool {
+    for stmt in body.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, .. } => {
+                for bound in names.iter() {
+                    let bound = *bound;
+                    if world.words.resolve(bound) == name { return true; }
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+

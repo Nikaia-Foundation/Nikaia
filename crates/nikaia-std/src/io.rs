@@ -281,10 +281,105 @@ pub async fn read() -> Result<Vec<u8>, IoError> {
 /// [`read_to_string`] is the entry that does, for an input a program is willing
 /// to hold whole.
 pub async fn lines() -> Lines {
-    Lines {
-        held: Vec::new(),
-        at: 0,
-        ended: false,
+    Lines { _shared: () }
+}
+
+/// One line of standard input, without its line ending; `null` at the end of
+/// the input (Part III 17.1).
+///
+/// **It reads from the buffer [`lines`] reads from**, so the two can be mixed:
+/// a header read with this and a body read with [`read_exact`] leave the next
+/// line where `lines()` finds it. A final line without a newline is still a
+/// line, as in `lines()`.
+///
+/// It pauses while the stream has nothing to give, and fails where the line is
+/// not UTF-8 or the input cannot be read.
+pub async fn read_line() -> Result<Option<String>, IoError> {
+    loop {
+        if let Some(line) = with_held(Held::take_a_line) {
+            return line.map(Some);
+        }
+        if with_held(|held| held.ended) {
+            return Ok(None);
+        }
+        refill().await?;
+    }
+}
+
+/// Exactly `n` bytes of standard input (Part III 17.1).
+///
+/// The framing of a protocol that says how long its body is - a
+/// `Content-Length` header - needs exactly this: the body ends without a
+/// newline, so no line reader can find its end. It reads from the buffer
+/// [`lines`] and [`read_line`] read from.
+///
+/// **A short read is an error, not a shorter result** (Part I 6.4): an input
+/// that ends before `n` bytes have come is `IoError`, and what did come is
+/// not handed out as if it were the whole.
+pub async fn read_exact(n: i64) -> Result<crate::bytes::Bytes, IoError> {
+    let want = usize::try_from(n).map_err(|_| {
+        IoError::of(
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("read_exact of {n} bytes"),
+            ),
+            STDIN,
+        )
+    })?;
+    loop {
+        if let Some(bytes) = with_held(|held| held.take_exact(want)) {
+            return Ok(bytes.into());
+        }
+        if with_held(|held| held.ended) {
+            return Err(IoError::of(
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!("the input ended before {want} bytes"),
+                ),
+                STDIN,
+            ));
+        }
+        refill().await?;
+    }
+}
+
+/// **The one buffer of standard input** a process has: what the last chunks
+/// brought and what has not been handed out yet. [`lines`], [`read_line`] and
+/// [`read_exact`] all take from it, which is what lets them be mixed (#1347).
+static HELD: std::sync::Mutex<Held> = std::sync::Mutex::new(Held {
+    held: Vec::new(),
+    at: 0,
+    ended: false,
+});
+
+/// `step` on the process's buffer. The lock is never held across an `await`.
+fn with_held<T>(step: impl FnOnce(&mut Held) -> T) -> T {
+    let mut held = HELD.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    step(&mut held)
+}
+
+/// One more chunk of standard input into the buffer, or its end.
+///
+/// **Standard output is flushed first**, as C's stdio does before it reads a
+/// line-buffered input: what a program wrote before it waits for an answer -
+/// a prompt without its newline, a framed response whose body ends without one
+/// (#1347) - reaches the other side before the program waits for it.
+async fn refill() -> Result<(), IoError> {
+    {
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+    }
+    match crate::rt::io::stdin_chunk(CHUNK).await {
+        Err(e) => {
+            // The stream is over either way: a reader that kept asking
+            // after a failure would loop on it.
+            with_held(|held| held.ended = true);
+            Err(IoError::of(e, STDIN))
+        }
+        Ok(chunk) => {
+            with_held(|held| held.append(&chunk));
+            Ok(())
+        }
     }
 }
 
@@ -307,6 +402,13 @@ pub async fn lines() -> Lines {
 /// `nikaia_std::seq::Step` ([ADR-233](../../../docs/specification/adr/adr-233.md)
 /// D1), and this is one: its item is the line or the failure.
 pub struct Lines {
+    /// The buffer is the process's ([`HELD`]), shared with [`read_line`] and
+    /// [`read_exact`]; a `Lines` is only the handle a `for` walks.
+    _shared: (),
+}
+
+/// What standard input has brought and not yet handed out.
+struct Held {
     /// What the last chunks brought and what has not been handed out yet.
     held: Vec<u8>,
     /// How far into `held` the lines already handed out reach.
@@ -347,30 +449,14 @@ impl Lines {
     /// it.
     pub async fn next(&mut self) -> Option<Result<String, IoError>> {
         loop {
-            if let Some(line) = self.take_a_line() {
+            if let Some(line) = with_held(Held::take_a_line) {
                 return Some(line);
             }
-            if self.ended {
+            if with_held(|held| held.ended) {
                 return None;
             }
-            match crate::rt::io::stdin_chunk(CHUNK).await {
-                Err(e) => {
-                    // The stream is over either way: a reader that kept asking
-                    // after a failure would loop on it.
-                    self.ended = true;
-                    return Some(Err(IoError::of(e, STDIN)));
-                }
-                Ok(chunk) if chunk.is_empty() => self.ended = true,
-                Ok(chunk) => {
-                    // What has been handed out is dropped before the new bytes
-                    // go in, so the buffer is the size of what is *unread*
-                    // rather than of everything the stream ever carried —
-                    // which is what keeps a pipe larger than memory a program
-                    // that does not grow (Part III, 17.1).
-                    self.held.drain(..self.at);
-                    self.at = 0;
-                    self.held.extend_from_slice(&chunk);
-                }
+            if let Err(e) = refill().await {
+                return Some(Err(e));
             }
         }
     }
@@ -501,6 +587,35 @@ impl Lines {
     ) -> crate::seq::Failing<crate::seq::OkZip<Self, J::IntoIter>> {
         crate::seq::Failing(self).zip(other)
     }
+}
+
+impl Held {
+    /// A chunk appended, or the end where it is empty.
+    ///
+    /// What has been handed out is dropped before the new bytes go in, so the
+    /// buffer is the size of what is *unread* rather than of everything the
+    /// stream ever carried - which is what keeps a pipe larger than memory a
+    /// program that does not grow (Part III, 17.1).
+    fn append(&mut self, chunk: &[u8]) {
+        if chunk.is_empty() {
+            self.ended = true;
+            return;
+        }
+        self.held.drain(..self.at);
+        self.at = 0;
+        self.held.extend_from_slice(chunk);
+    }
+
+    /// The next `want` bytes, where that many are held.
+    fn take_exact(&mut self, want: usize) -> Option<Vec<u8>> {
+        let rest = &self.held[self.at..];
+        if rest.len() < want {
+            return None;
+        }
+        let bytes = rest[..want].to_vec();
+        self.at += want;
+        Some(bytes)
+    }
 
     /// One line out of what is already held, where there is one.
     ///
@@ -540,19 +655,19 @@ mod lines_tests {
     //! here is not the read but what is done with what came back. The read
     //! itself is asserted by `examples/tally/src/main.nika`, which runs end to end.
 
-    use super::Lines;
+    use super::Held;
 
-    /// A `Lines` that has been handed these bytes and told whether more are
+    /// A buffer that has been handed these bytes and told whether more are
     /// coming — the state one hop to a worker leaves behind.
-    fn holding(bytes: &[u8], ended: bool) -> Lines {
-        Lines {
+    fn holding(bytes: &[u8], ended: bool) -> Held {
+        Held {
             held: bytes.to_vec(),
             at: 0,
             ended,
         }
     }
 
-    fn drain(lines: &mut Lines) -> Vec<String> {
+    fn drain(lines: &mut Held) -> Vec<String> {
         let mut out = Vec::new();
         while let Some(line) = lines.take_a_line() {
             out.push(line.expect("the bytes are text"));
@@ -592,9 +707,7 @@ mod lines_tests {
         assert_eq!(drain(&mut lines), ["one"]);
 
         // What `next` does with a chunk: drop what was handed out, append.
-        lines.held.drain(..lines.at);
-        lines.at = 0;
-        lines.held.extend_from_slice(b"o\nthree\n");
+        lines.append(b"o\nthree\n");
         assert_eq!(drain(&mut lines), ["two", "three"]);
     }
 
@@ -615,6 +728,22 @@ mod lines_tests {
         assert_eq!(lines.take_a_line().expect("a line").expect("text"), "fine");
         assert!(lines.take_a_line().expect("a step").is_err());
         assert!(lines.take_a_line().is_none());
+    }
+
+    /// `read_exact`'s half: exactly the bytes asked for, a line after them
+    /// still where a line reader finds it, and nothing while too few are held.
+    #[test]
+    fn exact_bytes_and_lines_share_one_buffer() {
+        let mut held = holding(b"Content-Length: 2\r\n\r\n{}next\n", false);
+        assert_eq!(drain_one(&mut held), "Content-Length: 2");
+        assert_eq!(drain_one(&mut held), "");
+        assert_eq!(held.take_exact(2).expect("two held"), b"{}");
+        assert!(held.take_exact(6).is_none());
+        assert_eq!(drain_one(&mut held), "next");
+    }
+
+    fn drain_one(held: &mut Held) -> String {
+        held.take_a_line().expect("a line").expect("text")
     }
 }
 
