@@ -1,0 +1,24 @@
+x = y, x + y - 2z = 1
+  gcd: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked
+  cg: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked
+  gmi: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked
+  branch: unknown (cases), 1024 splits, 0 cuts, 0 gcd
+1 <= 3x - 3y <= 2, 0 <= x, y <= 3
+  gcd: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked
+  cg: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked
+  gmi: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; checked
+  branch: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked
+1 <= 3x + 5y <= 2, 0 <= x, y <= 1
+  gcd: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked
+  cg: conflict, 0 splits, 1 cuts, 0 gcd; 1 farkas, 1 combine, 1 round, 0 split, 1 learn; checked
+  gmi: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; checked
+  branch: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked
+2x + 3y = 7, x >= 0, y >= 0
+  gcd: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd
+  cg: consistent, x = 2, y = 1, 0 splits, 1 cuts, 0 gcd
+  gmi: consistent, x = 2, y = 1, 0 splits, 1 cuts, 0 gcd
+  branch: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd
+broken: the first rounding by 1 (none), the mixed-integer cut one too strong
+  gcd, round: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; rejected at 6: farkas: x1 is left in the combination
+  cg, round: conflict, 0 splits, 1 cuts, 0 gcd; 1 farkas, 1 combine, 1 round, 0 split, 1 learn; rejected at 8: farkas: x0 is left in the combination
+  gmi, strong: conflict, 0 splits, 1 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 4 learn; rejected at 8: farkas: the combination ends in 0 <= 0, no contradiction

@@ -250,26 +250,41 @@ impl SvBook {
 		}
 	}
 
-	/// `Σ multipliers[i]·sources[i]` over bounds `<= 0`, reduced by its gcd
-	/// as the checker reduces it; `null` where a source is unknown, a
-	/// multiplier negative or a step leaves `i64`.
+	/// `Σ multipliers[i]·sources[i]`, reduced by its gcd, as the checker
+	/// combines it: an equality where every summand is one, strict where a
+	/// strict summand has a positive multiplier; `null` where a source is
+	/// unknown, a multiplier on an inequality negative or a step leaves
+	/// `i64`.
 	fn sum(ref self, sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> SvBound? {
 		let mut row = sv_row_constant(0)
 		let mut assumed: Vec[u32] = []
+		let mut equality = true
+		let mut strict = false
 		let mut i = 0
 		while i < sources.len() {
 			let b = self.source(sources[i]) ?? return null
 			let m = multipliers[i]
-			if m < 0 {
+			let is_eq = match b.rel {
+				SvRel::Eq => true,
+				else => false,
+			}
+			if m < 0 && !is_eq {
 				return null
 			}
 			if m != 0 {
+				equality = equality && is_eq
+				let is_lt = match b.rel {
+					SvRel::Lt => true,
+					else => false,
+				}
+				strict = strict || (is_lt && m > 0)
 				row = sv_row_sum(1, row, m, b.row) ?? return null
 				assumed = sv_lits_union(assumed, b.assumed)
 			}
 			i += 1
 		}
-		return SvBound { row: sv_row_reduced(row), rel: SvRel::Le, assumed: assumed }
+		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
+		return SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed }
 	}
 
 	/// The combination kept as a bound entry; its id.
@@ -301,9 +316,8 @@ impl SvBook {
 		if g <= 1 {
 			return id
 		}
-		let row = sv_row_tightened(b.row)
 		let made = self.log.round(id, g)
-		self.bounds.insert(made, SvBound { row: row, rel: SvRel::Le, assumed: b.assumed.clone() })
+		self.bounds.insert(made, sv_rounded(b, g) ?? return null)
 		return made
 	}
 
@@ -368,4 +382,33 @@ pub struct SvAsserted {
 pub struct SvExtended {
 	pub column: u32,
 	pub first: u32,
+}
+
+/// Bound `b` divided by `d`, which divides every coefficient, as the checker
+/// rounds it (Chvátal-Gomory): `<=` rounds its constant up, `<` first adds
+/// one, `=` divides it exactly or is `1 <= 0` where `d` does not divide it
+/// (the GCD test); `null` where a step leaves `i64`.
+fn sv_rounded(b: ref SvBound, d: i64) -> SvBound? {
+	let mut ks: Vec[i64] = []
+	for k in b.row.ks {
+		ks.push(k / d)
+	}
+	let c = b.row.constant
+	let mut rel = SvRel::Le
+	let mut constant: i64 = 0
+	match b.rel {
+		SvRel::Le => { constant = sv_ceil_div(c, d) ?? return null },
+		SvRel::Lt => { constant = sv_ceil_div(c.checked_add(1) ?? return null, d) ?? return null },
+		SvRel::Eq => {
+			if c % d != 0 {
+				ks = []
+				constant = 1
+			} else {
+				constant = c / d
+				rel = SvRel::Eq
+			}
+		},
+	}
+	let cols = if ks.len() == 0 { [] } else { b.row.cols.clone() }
+	return SvBound { row: SvRow { cols: cols, ks: ks, constant: constant }, rel: rel, assumed: b.assumed.clone() }
 }

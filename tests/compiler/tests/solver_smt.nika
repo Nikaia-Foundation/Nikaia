@@ -7,8 +7,8 @@
 // two-way disjunctions, 2^20 cases for an enumeration (its budget is 1024),
 // proved by the search with learned clauses; `threes-10` is proved by the
 // congruence its disjunctions give (`x ≡ 0 (mod 3)`) before the search where
-// Fourier-Motzkin's elimination sees it, by branching over the simplex
-// alone; `branch-depth` is an equality without a unit coefficient that the
+// Fourier-Motzkin's elimination sees it, over the simplex alone by the GCD
+// test of a tableau row (#1284); `branch-depth` is an equality without a unit coefficient that the
 // elimination extended for ever before it preferred the unit coefficient of
 // the extension. The logic layer's
 // files, `solver/sv_*.nika` and the driver below make one program, as
