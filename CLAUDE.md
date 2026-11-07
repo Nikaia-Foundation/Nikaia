@@ -19,8 +19,7 @@ The rules every session and agent needs. What only the main session does
   Small commits, often.
 * **Agents commit, the supervisor pushes.** A builder or QA agent
   commits locally; the driver or the main session tests and pushes
-  (`docs/supervisor.md`). A session working alone pushes its own commits to
-  `develop` after `git pull --rebase origin develop`; no pull requests.
+  (`docs/supervisor.md`).
 * **A red `develop` is fixed forward**: whoever finds it red fixes it with the
   next commit or reverts the commit that broke it, at once.
 * **Version raises and new error codes are the supervisor's.** An agent
