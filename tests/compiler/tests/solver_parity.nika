@@ -1,9 +1,11 @@
 // Exact equality elimination (ADR-270 D5, #1282 item 6): queries
 // Fourier-Motzkin leaves unknown over the integers - an even and an odd
-// value of one `x`, a gcd that does not divide, a sum of twelve values in
-// `{-1, 1}` that is odd - answered by the new engine with the elimination
-// and its extension, each proof a log `sv_check` replays; the sums' logs grow
-// linearly with the count. The logic layer's files, `solver/sv_*.nika` and
+// value of one `x`, a gcd that does not divide, a sum of n values in
+// `{-1, 1}` for n = 2..12, odd n answered with a model, even n proved with a log
+// that grows linearly in n through `q = ⌊(x+1)/2⌋` per value (#1284 item 2) -
+// answered by the CDCL(T) engine over the simplex
+// alone, over Fourier-Motzkin with the elimination and its extension, and
+// over both, each proof a log `sv_check` replays. The logic layer's files, `solver/sv_*.nika` and
 // the driver below make one program, as `scripts/solver.nika` makes it.
 use std::fs
 use std::process
@@ -33,8 +35,9 @@ fn root() -> String throws {
 
 // The driver, run after the solver's files.
 fn driver() -> String {
-	return "// Each file answered by Fourier-Motzkin alone (`exact` off) and with the
-// exact equality elimination, the log of a proof replayed by `sv_check`.
+	return "// Each file answered over the simplex, over Fourier-Motzkin with the exact
+// equality elimination, and over both, the log of a proof replayed by
+// `sv_check`.
 fn answer_kind(answer: ref LgAnswer) -> String {
 	return match answer {
 		LgAnswer::Proved { .. } => \"proved\",
@@ -43,8 +46,8 @@ fn answer_kind(answer: ref LgAnswer) -> String {
 	}
 }
 
-fn engine(arena: ref TermArena, facts: ref Vec[i64], goal: i64, exact: bool) -> String {
-	let run = sv_engine(arena, facts, goal, lg_budget(), exact)
+fn engine(arena: ref TermArena, facts: ref Vec[i64], goal: i64, theory: String) -> String {
+	let run = sv_smt_engine(arena, facts, goal, lg_budget(), theory)
 	return match run.driven {
 		SvDriven::Proved(query, steps) => {
 			let v = sv_check(query, steps)
@@ -65,9 +68,10 @@ fn both(path: String) throws {
 	}
 	let mut arena = script.arena.clone()
 	let goal = arena.boolean(false)
-	let fm = engine(arena, script.assertions, goal, false)
-	let exact = engine(arena, script.assertions, goal, true)
-	println(f\"{name}: fm {fm}; exact {exact}\")
+	let simplex = engine(arena, script.assertions, goal, \"simplex\")
+	let fm = engine(arena, script.assertions, goal, \"fm\")
+	let both = engine(arena, script.assertions, goal, \"both\")
+	println(f\"{name}: simplex {simplex}; fm {fm}; both {both}\")
 }
 
 fn main() throws {
@@ -104,7 +108,7 @@ fn main() throws {
 	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
-	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_theory", "sv_elim", "sv_drive", "sv_rod"] {
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_smt", "sv_smtlib", "sv_rod"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
 	}
 	let mut uses: Vec[String] = []
@@ -122,14 +126,16 @@ fn main() throws {
 	}
 	fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, uses.join("\n") + "\n" + body + driver())
 	let decl = "(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const n Int)\n(declare-const m Int)\n"
-	let files = [
+	// Typed: a tuple's text literal is lowered borrowed, a pushed f-string
+	// then fails in rustc, #1303.
+	let mut files: Vec[(String, String)] = [
 		("even-odd", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 2 m) 1)))\n(check-sat)\n"),
 		("gcd", decl + "(assert (= (+ (* 6 x) (* 9 n)) (+ (* 3 m) 2)))\n(check-sat)\n"),
 		("even-even", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 4 m) 2)))\n(check-sat)\n"),
-		("sum-4", sum(4)),
-		("sum-8", sum(8)),
-		("sum-12", sum(12)),
 	]
+	for n in 2..12 {
+		files.push((f"sum-{n}", sum(n)))
+	}
 	let mut args: Vec[String] = ["run", "main.nika", "--"]
 	for (name, text) in files {
 		fs::write(f"{tmp}/{name}.smt2", fs::Root::Anywhere, text)

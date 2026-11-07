@@ -226,7 +226,10 @@ fn sv_eliminate(
 					}
 					if sum == 0 && !known {
 						let unit = sv_unit_column(held[i].row, held) != null
-						let cost = 2 * held[i].row.cols.len() + if unit { 0 } else { 1 }
+						// A unit coefficient first, then the fewest columns: an
+						// equality just extended has fewer columns than its `S`,
+						// and chosen again it would be extended for ever (#1283).
+						let cost = held[i].row.cols.len() + if unit { 0 } else { 4294967296 }
 						if lo < 0 || cost < best {
 							lo = i
 							hi = j

@@ -1,3 +1,4 @@
+fuzz-7-0.smt2: engine refuted, z3 unsat
 (set-logic QF_LIA)
 (declare-const x0 Int)
 (declare-const x1 Int)
@@ -9,5 +10,6 @@
 (assert (or (> (+ x0 (* 3 x3)) (- 3)) (< (+ (* (- 1) x1) x4) 0)))
 (check-sat)
 (exit)
+fuzz-7-3.smt2: engine refuted, z3 unsat
 fuzz-7-6.smt2: engine refuted, z3 unsat
-8 queries (seed 7): proved 0, refuted 3, unknown 5, disagreements 1
+8 queries (seed 7): proved 0, refuted 8, unknown 0, disagreements 3

@@ -1,0 +1,411 @@
+// crates/nikaia-std/src/solver/sv_fast.nika
+//
+// **The fast paths** (ADR-270 D12, #1283 item 4): a query with no Boolean
+// choice - every clause one literal of a theory atom - is decided before the
+// CDCL loop is built, where its atoms have one of two shapes:
+//
+// * **Intervals**: every atom bounds one column, `k·x + c <= 0`. Each
+//   column's tightest lower and upper bound decide it; a column whose bounds
+//   cross is refuted by the two atoms, each rounded to `x <= ⌊-c/k⌋` or
+//   `x >= ⌈c/-k⌉` first where `|k| > 1` (a `Combine` and a `Round`), in
+//   one Farkas lemma.
+// * **Differences**: every atom is `x - y + c <= 0`, `x + c <= 0` or
+//   `-x + c <= 0` - an edge `y -> x` of weight `-c` of a graph whose node
+//   `zero` stands for the constant. Bellman-Ford from a virtual source finds
+//   a negative cycle or the shortest distances; the cycle's atoms summed with
+//   every multiplier one leave a positive constant (the Farkas lemma), the
+//   distances relative to `zero` are a model.
+//
+// Either way a refutation is the Farkas lemma and the empty clause learned
+// from it and the unit input clauses, which `sv_check.nika` replays; a model
+// is evaluated as the loop's are. The paths allocate nothing to decide: the
+// interval path scans the units once per column, the difference path keeps
+// its distances in an `Array` up to the dense width (eight columns, D10),
+// in a `Vec` above it. Anything else - a choice, a wider atom, a step that
+// leaves `i64` - is left to the loop (`Skip`).
+
+/// What a fast path decided: refuted (the log holds the empty clause), a
+/// model by name, or nothing.
+pub enum SvFastEnd {
+	Unsat,
+	Sat(collections::BTreeMap[String, i64]),
+	Skip,
+}
+
+/// A fast path's answer, its work (the rounds it took) and its name.
+pub struct SvFastRun {
+	pub end: SvFastEnd,
+	pub work: i64,
+	pub path: String,
+}
+
+/// The bound a unit literal asserts, `Σ k·x + constant <= 0` over at most
+/// two columns, without a row of its own: `width` columns, `col0`/`k0` and
+/// `col1`/`k1`.
+struct SvFastBound {
+	width: i64,
+	col0: u32,
+	k0: i64,
+	col1: u32,
+	k1: i64,
+	constant: i64,
+}
+
+fn sv_fast_skip() -> SvFastRun {
+	return SvFastRun { end: SvFastEnd::Skip, work: 0, path: "" }
+}
+
+/// The bound literal `l` asserts; `null` past two columns, on an atom that
+/// is not `<= 0`, or where the negation leaves `i64`.
+fn sv_fast_bound(book: ref SvBook, l: u32) -> SvFastBound? {
+	let at = (l / 2) as i64
+	if at >= book.atoms.len() {
+		return null
+	}
+	let width = book.atoms[at].row.cols.len()
+	if width > 2 {
+		return null
+	}
+	match book.atoms[at].rel {
+		SvRel::Le => {},
+		else => return null,
+	}
+	let sign: i64 = if l % 2 == 0 { 1 } else { -1 }
+	let shift: i64 = if l % 2 == 0 { 0 } else { 1 }
+	let mut b = SvFastBound {
+		width: width,
+		col0: 0,
+		k0: 0,
+		col1: 0,
+		k1: 0,
+		constant: sv_mul_add(sign, book.atoms[at].row.constant, shift, 1) ?? return null,
+	}
+	if width > 0 {
+		b.col0 = book.atoms[at].row.cols[0]
+		b.k0 = sv_mul_add(sign, book.atoms[at].row.ks[0], 0, 0) ?? return null
+	}
+	if width > 1 {
+		b.col1 = book.atoms[at].row.cols[1]
+		b.k1 = sv_mul_add(sign, book.atoms[at].row.ks[1], 0, 0) ?? return null
+	}
+	return b
+}
+
+/// Whether every clause of `cnf` is one literal of a theory atom.
+fn sv_fast_choice_free(cnf: ref SvCnf) -> bool {
+	for clause in cnf.query.clauses {
+		if clause.len() != 1 {
+			return false
+		}
+		let at = (clause[0] / 2) as i64
+		if at < cnf.definition.len() && cnf.definition[at] {
+			return false
+		}
+	}
+	return true
+}
+
+/// The shape every unit of `cnf` has: `interval`, `difference` or `""`.
+fn sv_fast_shape(book: ref SvBook, cnf: ref SvCnf) -> String {
+	let mut interval = true
+	for clause in cnf.query.clauses {
+		let b = sv_fast_bound(book, clause[0]) ?? return ""
+		if b.width == 2 {
+			interval = false
+			if !(b.k0 == 1 && b.k1 == -1 || b.k0 == -1 && b.k1 == 1) {
+				return ""
+			}
+		}
+	}
+	if interval {
+		return "interval"
+	}
+	for clause in cnf.query.clauses {
+		let b = sv_fast_bound(book, clause[0]) ?? return ""
+		if b.width == 1 && b.k0 != 1 && b.k0 != -1 {
+			return ""
+		}
+	}
+	return "difference"
+}
+
+/// Refutes the query by the Farkas lemma of `sources` and the empty clause
+/// learned from the unit clauses `units` (indices into `ids`) and the lemma.
+fn sv_fast_refute(
+	mut book: SvBook,
+	ids: ref Vec[u32],
+	sources: Vec[SvSrc],
+	multipliers: Vec[i64],
+	units: Vec[u32],
+) -> SvFastEnd {
+	let lemma = book.farkas(sources, multipliers) ?? return SvFastEnd::Skip
+	let mut hints: Vec[u32] = []
+	for u in units {
+		hints.push(ids[u as i64])
+	}
+	hints.push(lemma.id)
+	book.learn([], hints)
+	return SvFastEnd::Unsat
+}
+
+/// A unit that is a false constant, `c <= 0` with `c > 0`, refuted alone.
+fn sv_fast_constants(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastEnd {
+	let mut c: u32 = 0
+	for clause in cnf.query.clauses {
+		let l = clause[0]
+		let b = sv_fast_bound(book, l) ?? return SvFastEnd::Skip
+		if b.width == 0 && b.constant > 0 {
+			return sv_fast_refute(book, ids, [SvSrc::Lit(l)], [1], [c])
+		}
+		c += 1
+	}
+	return SvFastEnd::Sat(collections::BTreeMap())
+}
+
+/// The source of a one-column bound as its column's bound: the literal
+/// itself where `|k| = 1`, else the literal rounded by its coefficient.
+fn sv_fast_rounded(mut book: SvBook, l: u32, k: i64) -> SvSrc? {
+	if k == 1 || k == -1 {
+		return SvSrc::Lit(l)
+	}
+	let combined = book.combine([SvSrc::Lit(l)], [1]) ?? return null
+	let rounded = book.round(combined) ?? return null
+	return SvSrc::Fact(rounded)
+}
+
+/// The interval path: each column's tightest bounds, scanned from the units.
+fn sv_fast_interval(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastEnd {
+	let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	let mut col: u32 = 0
+	while col < cnf.query.columns {
+		let mut lo: i64 = 0
+		let mut lo_at: u32 = 0
+		let mut has_lo = false
+		let mut hi: i64 = 0
+		let mut hi_at: u32 = 0
+		let mut has_hi = false
+		let mut c: u32 = 0
+		for clause in cnf.query.clauses {
+			let b = sv_fast_bound(book, clause[0]) ?? return SvFastEnd::Skip
+			if b.width == 1 && b.col0 == col {
+				let minus_c = sv_mul_add(-1, b.constant, 0, 0) ?? return SvFastEnd::Skip
+				if b.k0 > 0 {
+					let v = sv_floor_div(minus_c, b.k0) ?? return SvFastEnd::Skip
+					if !has_hi || v < hi {
+						hi = v
+						hi_at = c
+						has_hi = true
+					}
+				} else {
+					let minus_k = sv_mul_add(-1, b.k0, 0, 0) ?? return SvFastEnd::Skip
+					let v = sv_ceil_div(b.constant, minus_k) ?? return SvFastEnd::Skip
+					if !has_lo || v > lo {
+						lo = v
+						lo_at = c
+						has_lo = true
+					}
+				}
+			}
+			c += 1
+		}
+		if has_lo && has_hi && lo > hi {
+			let lo_lit = cnf.query.clauses[lo_at as i64][0]
+			let hi_lit = cnf.query.clauses[hi_at as i64][0]
+			let lo_k = (sv_fast_bound(book, lo_lit) ?? return SvFastEnd::Skip).k0
+			let hi_k = (sv_fast_bound(book, hi_lit) ?? return SvFastEnd::Skip).k0
+			let lo_src = sv_fast_rounded(book, lo_lit, lo_k) ?? return SvFastEnd::Skip
+			let hi_src = sv_fast_rounded(book, hi_lit, hi_k) ?? return SvFastEnd::Skip
+			return sv_fast_refute(book, ids, [lo_src, hi_src], [1, 1], [lo_at, hi_at])
+		}
+		let value = if has_lo { lo } else if has_hi { hi } else { 0 }
+		let at = col as i64
+		if at < cnf.names.len() {
+			values.insert(cnf.names[at].clone(), value)
+		}
+		col += 1
+	}
+	return SvFastEnd::Sat(values)
+}
+
+/// The difference path's distances and, per node, the unit that last
+/// lowered it (`-1`: none).
+trait SvDist {
+	fn dist(ref self, node: i64) -> i64
+	fn pred(ref self, node: i64) -> i64
+	fn lower(ref mut self, node: i64, d: i64, unit: i64)
+}
+
+/// Up to the dense width: eight columns and `zero`, inline.
+struct SvDistSmall {
+	dists: Array[i64, 9],
+	preds: Array[i64, 9],
+}
+
+impl SvDist for SvDistSmall {
+	fn dist(ref self, node: i64) -> i64 {
+		return self.dists[node]
+	}
+
+	fn pred(ref self, node: i64) -> i64 {
+		return self.preds[node]
+	}
+
+	fn lower(ref mut self, node: i64, d: i64, unit: i64) {
+		self.dists[node] = d
+		self.preds[node] = unit
+	}
+}
+
+/// Above the dense width.
+struct SvDistWide {
+	dists: Vec[i64],
+	preds: Vec[i64],
+}
+
+impl SvDist for SvDistWide {
+	fn dist(ref self, node: i64) -> i64 {
+		return self.dists[node]
+	}
+
+	fn pred(ref self, node: i64) -> i64 {
+		return self.preds[node]
+	}
+
+	fn lower(ref mut self, node: i64, d: i64, unit: i64) {
+		self.dists[node] = d
+		self.preds[node] = unit
+	}
+}
+
+/// A unit's edge `from -> to` of weight `w` (`to - from <= w`), node
+/// `zero` for the constant; `null` for a constant unit.
+struct SvEdge {
+	from: i64,
+	to: i64,
+	w: i64,
+}
+
+fn sv_fast_edge(b: ref SvFastBound, zero: i64) -> SvEdge? {
+	if b.width == 0 {
+		return null
+	}
+	let w = sv_mul_add(-1, b.constant, 0, 0) ?? return null
+	let x = b.col0 as i64
+	if b.width == 1 {
+		return if b.k0 == 1 {
+			SvEdge { from: zero, to: x, w: w }
+		} else {
+			SvEdge { from: x, to: zero, w: w }
+		}
+	}
+	let y = b.col1 as i64
+	return if b.k0 == 1 { SvEdge { from: y, to: x, w: w } } else { SvEdge { from: x, to: y, w: w } }
+}
+
+/// The difference path: Bellman-Ford over the units' edges, at most one
+/// round per node; the rounds it took are its work.
+fn sv_fast_difference[T: SvDist](
+	mut book: SvBook,
+	cnf: ref SvCnf,
+	ids: ref Vec[u32],
+	mut d: T,
+) -> SvFastRun {
+	let zero = cnf.query.columns as i64
+	let nodes = zero + 1
+	let mut round: i64 = 0
+	let mut last: i64 = -1
+	while round < nodes {
+		round += 1
+		last = -1
+		let mut c: i64 = 0
+		for clause in cnf.query.clauses {
+			let b = sv_fast_bound(book, clause[0]) ?? return sv_fast_skip()
+			if b.width > 0 {
+				let e = sv_fast_edge(b, zero) ?? return sv_fast_skip()
+				let via = d.dist(e.from).checked_add(e.w) ?? return sv_fast_skip()
+				if via < d.dist(e.to) {
+					d.lower(e.to, via, c)
+					last = e.to
+				}
+			}
+			c += 1
+		}
+		if last < 0 {
+			break
+		}
+	}
+	if last < 0 {
+		let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		let mut col: i64 = 0
+		while col < zero && col < cnf.names.len() {
+			let v = d.dist(col).checked_sub(d.dist(zero)) ?? return sv_fast_skip()
+			values.insert(cnf.names[col].clone(), v)
+			col += 1
+		}
+		return SvFastRun { end: SvFastEnd::Sat(values), work: round, path: "difference" }
+	}
+	// A node lowered in the last round: `nodes` steps back along the units
+	// that lowered it lead into the negative cycle.
+	let mut v = last
+	for _ in 0..<nodes {
+		let unit = d.pred(v)
+		if unit < 0 {
+			return sv_fast_skip()
+		}
+		let b = sv_fast_bound(book, cnf.query.clauses[unit][0]) ?? return sv_fast_skip()
+		v = (sv_fast_edge(b, zero) ?? return sv_fast_skip()).from
+	}
+	let start = v
+	let mut sources: Vec[SvSrc] = []
+	let mut multipliers: Vec[i64] = []
+	let mut units: Vec[u32] = []
+	while true {
+		let unit = d.pred(v)
+		if unit < 0 || units.len() > nodes {
+			return sv_fast_skip()
+		}
+		let l = cnf.query.clauses[unit][0]
+		sources.push(SvSrc::Lit(l))
+		multipliers.push(1)
+		units.push(unit.checked_u32() ?? return sv_fast_skip())
+		let b = sv_fast_bound(book, l) ?? return sv_fast_skip()
+		v = (sv_fast_edge(b, zero) ?? return sv_fast_skip()).from
+		if v == start {
+			break
+		}
+	}
+	let end = sv_fast_refute(book, ids, sources, multipliers, units)
+	return SvFastRun { end: end, work: round, path: "difference" }
+}
+
+/// **The fast paths** on `cnf`, its clauses' input entries `ids` in `book`:
+/// a decision on the interval or the difference path, or `Skip`.
+fn sv_fast(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastRun {
+	if !sv_fast_choice_free(cnf) {
+		return sv_fast_skip()
+	}
+	let shape = sv_fast_shape(book, cnf)
+	if shape == "" {
+		return sv_fast_skip()
+	}
+	match sv_fast_constants(book, cnf, ids) {
+		SvFastEnd::Sat(_) => {},
+		SvFastEnd::Unsat => return SvFastRun { end: SvFastEnd::Unsat, work: 1, path: shape },
+		SvFastEnd::Skip => return sv_fast_skip(),
+	}
+	if shape == "interval" {
+		return SvFastRun { end: sv_fast_interval(book, cnf, ids), work: 1, path: shape }
+	}
+	if cnf.query.columns <= 8 {
+		let mut small = SvDistSmall { dists: [0; 9], preds: [-1; 9] }
+		return sv_fast_difference(book, cnf, ids, small)
+	}
+	let mut dists: Vec[i64] = []
+	let mut preds: Vec[i64] = []
+	for _ in 0..cnf.query.columns as i64 {
+		dists.push(0)
+		preds.push(-1)
+	}
+	let mut wide = SvDistWide { dists: dists, preds: preds }
+	return sv_fast_difference(book, cnf, ids, wide)
+}

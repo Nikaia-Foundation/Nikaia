@@ -3,8 +3,8 @@
 // with a model, a conflict written as a Farkas lemma, `backtrack`, `shared` -
 // and the log they leave replayed by `sv_check`; then the smoke files of #1281
 // and two of the disjunction family answered by `lg_check` and by the
-// enumeration driver over the interface, each *proved* a log `sv_check`
-// accepts. The logic layer's files, `solver/sv_*.nika` and the driver below
+// CDCL(T) engine of `sv_smt.nika` over the interface (Fourier-Motzkin), each
+// *proved* a log `sv_check` accepts. The logic layer's files, `solver/sv_*.nika` and the driver below
 // make one program, as `scripts/solver.nika` makes it.
 use std::fs
 use std::process
@@ -34,8 +34,8 @@ fn root() -> String throws {
 
 // The driver, run after the solver's files.
 fn driver() -> String {
-	return "// A file answered both ways: `lg_check`, and the theory interface's driver
-// with its log replayed by `sv_check`.
+	return "// A file answered both ways: `lg_check`, and the CDCL(T) engine over the
+// theory interface with its log replayed by `sv_check`.
 fn answer_kind(answer: ref LgAnswer) -> String {
 	return match answer {
 		LgAnswer::Proved { .. } => \"proved\",
@@ -57,7 +57,7 @@ fn both(path: String) throws {
 	let goal = arena.boolean(false)
 	let budget = lg_budget()
 	let old = answer_kind(lg_check(arena, script.assertions, goal, budget))
-	let run = sv_engine(arena, script.assertions, goal, budget, false)
+	let run = sv_smt_engine(arena, script.assertions, goal, budget, \"fm\")
 	let new = match run.driven {
 		SvDriven::Proved(query, steps) => {
 			let v = sv_check(query, steps)
@@ -110,7 +110,7 @@ fn calls() {
 	let c1 = book.input(1)
 	let budget = lg_budget()
 	let mut theory = sv_theory([\"x\"])
-	theory.push()
+	theory.push_level()
 	println(f\"assert x <= 2: {said_by(theory.assert(0, book))}\")
 	let implied = theory.propagate(book)
 	println(f\"propagate: {lits_text(implied)}\")
@@ -119,7 +119,7 @@ fn calls() {
 	let first = theory.check(true, budget, book)
 	let x: i64 = theory.model().get(\"x\") ?? -1
 	println(f\"check: {said_by(first)}, model x = {x}\")
-	theory.push()
+	theory.push_level()
 	println(f\"assert x >= 3 at level {theory.level()}: {said_by(theory.assert(4, book))}\")
 	let conflict = theory.check(true, budget, book)
 	println(f\"check: {said_by(conflict)}\")
@@ -158,7 +158,7 @@ fn main() throws {
 	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
-	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_theory", "sv_elim", "sv_drive", "sv_rod"] {
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_smt", "sv_smtlib", "sv_rod"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
 	}
 	let mut uses: Vec[String] = []

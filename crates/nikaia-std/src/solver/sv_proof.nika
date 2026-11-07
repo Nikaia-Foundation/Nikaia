@@ -32,6 +32,11 @@
 //   (`L - k <= 0 ∨ k + 1 - L <= 0`) and the clause of both.
 // * `Extend(l, m, q)`: the fresh column `q = ⌊l / m⌋` for `m > 0`, the two
 //   bounds `m·q - l <= 0` and `l - m·q - (m - 1) <= 0`.
+//
+// The *book* (`SvBook`) is the log with what the checker will know when it
+// replays it - the atoms and every bound entry's bound - so an engine and
+// its theory write steps the checker accepts; the SAT core and the theory
+// share one book (#1283).
 
 /// How a row compares to zero.
 pub enum SvRel {
@@ -158,4 +163,252 @@ fn sv_step_kind(step: ref SvStep) -> String {
 		SvStep::Split(_, _) => "split",
 		SvStep::Extend(_, _, _) => "extend",
 	}
+}
+
+/// The log and what the checker will know when it replays it: the atoms (the
+/// query's, then each split's two) and the bound every bound entry holds.
+pub struct SvBook {
+	pub log: SvLog,
+	pub atoms: Vec[SvAtom],
+	pub bounds: collections::BTreeMap[u32, SvBound],
+	/// Per literal, the bound entry the preprocessing of `sv_pre.nika`
+	/// derived from it, which the theories assert in its place.
+	pub pre: collections::BTreeMap[u32, u32],
+}
+
+/// A book over `query`, its clauses not yet put in.
+fn sv_book(query: ref SvQuery) -> SvBook? {
+	let log = sv_log(query) ?? return null
+	return SvBook {
+		log: log,
+		atoms: query.atoms.clone(),
+		bounds: collections::BTreeMap(),
+		pre: collections::BTreeMap(),
+	}
+}
+
+/// A clause the log derived: its entry and its literals, ascending.
+pub struct SvClause {
+	pub id: u32,
+	pub lits: Vec[u32],
+}
+
+/// The literals in `a` and `b`, once each, ascending.
+fn sv_lits_union(a: ref Vec[u32], b: ref Vec[u32]) -> Vec[u32] {
+	let mut out = a.clone()
+	for l in b {
+		if !out.contains(l) {
+			out.push(l)
+		}
+	}
+	out.sort()
+	return out
+}
+
+impl SvBook {
+	/// The bound literal `l` assumes, as the checker reads it; `null` past
+	/// the atoms, on a negated equality, or where the negation overflows.
+	fn lit_bound(ref self, l: u32) -> SvBound? {
+		let at = (l / 2) as i64
+		if at >= self.atoms.len() {
+			return null
+		}
+		let atom = self.atoms[at].clone()
+		if l % 2 == 0 {
+			return SvBound { row: atom.row, rel: atom.rel, assumed: [l] }
+		}
+		let shift: i64 = match atom.rel {
+			SvRel::Le => 1,
+			SvRel::Lt => 0,
+			SvRel::Eq => return null,
+		}
+		let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1)) ?? return null
+		return SvBound { row: negated, rel: SvRel::Le, assumed: [l] }
+	}
+
+	/// The bound literal `l` asserts as a theory reads it, with its source:
+	/// the bound entry the preprocessing derived from it where there is one,
+	/// else the literal's own bound.
+	fn asserted(ref self, l: u32) -> SvAsserted? {
+		if self.pre.contains_key(l) {
+			let id = (self.pre.get(l) ?? return null).clone()
+			let b = self.bounds.get(id) ?? return null
+			return SvAsserted { bound: b.clone(), src: SvSrc::Fact(id) }
+		}
+		let b = self.lit_bound(l) ?? return null
+		return SvAsserted { bound: b, src: SvSrc::Lit(l) }
+	}
+
+	/// The bound a source adds.
+	fn source(ref self, src: ref SvSrc) -> SvBound? {
+		return match src {
+			SvSrc::Lit(l) => self.lit_bound(l),
+			SvSrc::Fact(id) => {
+				let got = self.bounds.get(id) ?? return null
+				got.clone()
+			},
+		}
+	}
+
+	/// `Σ multipliers[i]·sources[i]`, reduced by its gcd, as the checker
+	/// combines it: an equality where every summand is one, strict where a
+	/// strict summand has a positive multiplier; `null` where a source is
+	/// unknown, a multiplier on an inequality negative or a step leaves
+	/// `i64`.
+	fn sum(ref self, sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> SvBound? {
+		let mut row = sv_row_constant(0)
+		let mut assumed: Vec[u32] = []
+		let mut equality = true
+		let mut strict = false
+		let mut i = 0
+		while i < sources.len() {
+			let b = self.source(sources[i]) ?? return null
+			let m = multipliers[i]
+			let is_eq = match b.rel {
+				SvRel::Eq => true,
+				else => false,
+			}
+			if m < 0 && !is_eq {
+				return null
+			}
+			if m != 0 {
+				equality = equality && is_eq
+				let is_lt = match b.rel {
+					SvRel::Lt => true,
+					else => false,
+				}
+				strict = strict || (is_lt && m > 0)
+				row = sv_row_sum(1, row, m, b.row) ?? return null
+				assumed = sv_lits_union(assumed, b.assumed)
+			}
+			i += 1
+		}
+		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
+		return SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed }
+	}
+
+	/// The combination kept as a bound entry; its id.
+	fn combine(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> u32? {
+		let b = self.sum(sources, multipliers) ?? return null
+		// A bound entry taken once is itself where the checker would not
+		// reduce it.
+		if sources.len() == 1 && multipliers[0] == 1 {
+			match sources[0] {
+				SvSrc::Fact(id) => {
+					let had = self.bounds.get(id) ?? return null
+					if sv_row_same(had.row, b.row) {
+						return id
+					}
+				},
+				else => {},
+			}
+		}
+		let id = self.log.combine(sources, multipliers)
+		self.bounds.insert(id, b)
+		return id
+	}
+
+	/// Bound entry `id` divided by the gcd of its coefficients, its constant
+	/// rounded up (Chvátal-Gomory); `id` itself where the gcd is one.
+	fn round(ref mut self, id: u32) -> u32? {
+		let b = (self.bounds.get(id) ?? return null).clone()
+		let g = sv_row_content(b.row) ?? return null
+		if g <= 1 {
+			return id
+		}
+		let made = self.log.round(id, g)
+		self.bounds.insert(made, sv_rounded(b, g) ?? return null)
+		return made
+	}
+
+	/// A theory lemma from a combination that ends in `c <= 0` with
+	/// `c > 0`: the clause of the negations of what it assumed. `null`, and
+	/// nothing written, where the combination is no contradiction.
+	fn farkas(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> SvClause? {
+		let b = self.sum(sources, multipliers) ?? return null
+		if b.row.cols.len() > 0 || b.row.constant <= 0 {
+			return null
+		}
+		let mut lits: Vec[u32] = []
+		for l in b.assumed {
+			// `l ^ 1` written as a branch: #1286.
+			let negation = if l % 2 == 0 { l + 1 } else { l - 1 }
+			lits.push(negation)
+		}
+		lits.sort()
+		let id = self.log.farkas(lits.clone(), sources, multipliers, 1)
+		return SvClause { id: id, lits: lits }
+	}
+
+	/// The split `le <= 0 ∨ ge <= 0`: its clause, over the two atoms it adds.
+	fn split(ref mut self, le: SvRow, ge: SvRow) -> SvClause? {
+		let first = self.atoms.len().checked_u32() ?? return null
+		self.atoms.push(SvAtom { row: le.clone(), rel: SvRel::Le })
+		self.atoms.push(SvAtom { row: ge.clone(), rel: SvRel::Le })
+		let id = self.log.split(le, ge)
+		return SvClause { id: id, lits: [sv_lit(first, false), sv_lit(first + 1, false)] }
+	}
+
+	/// The fresh column `q = ⌊l / m⌋` and its two bounds `m·q - l <= 0` and
+	/// `l - m·q - (m - 1) <= 0`, entries `first` and `first + 1`.
+	fn extend(ref mut self, l: SvRow, m: i64) -> SvExtended? {
+		let q = self.log.columns
+		let mq = SvRow { cols: [q], ks: [m], constant: 0 }
+		let below = sv_row_sum(-1, l, 1, mq) ?? return null
+		let above0 = sv_row_sum(1, l, -1, mq) ?? return null
+		let above = sv_row_sum(1, above0, -(m - 1), sv_row_constant(1)) ?? return null
+		let first = self.log.extend(l, m)
+		self.bounds.insert(first, SvBound { row: below, rel: SvRel::Le, assumed: [] })
+		self.bounds.insert(first + 1, SvBound { row: above, rel: SvRel::Le, assumed: [] })
+		return SvExtended { column: q, first: first }
+	}
+
+	fn input(ref mut self, clause: u32) -> u32 {
+		return self.log.input(clause)
+	}
+
+	fn learn(ref mut self, lits: Vec[u32], hints: Vec[u32]) -> u32 {
+		return self.log.learn(lits, hints)
+	}
+}
+
+/// A bound a theory asserts and the source it cites.
+pub struct SvAsserted {
+	pub bound: SvBound,
+	pub src: SvSrc,
+}
+
+/// What an extension made: its column and its first bound entry.
+pub struct SvExtended {
+	pub column: u32,
+	pub first: u32,
+}
+
+/// Bound `b` divided by `d`, which divides every coefficient, as the checker
+/// rounds it (Chvátal-Gomory): `<=` rounds its constant up, `<` first adds
+/// one, `=` divides it exactly or is `1 <= 0` where `d` does not divide it
+/// (the GCD test); `null` where a step leaves `i64`.
+fn sv_rounded(b: ref SvBound, d: i64) -> SvBound? {
+	let mut ks: Vec[i64] = []
+	for k in b.row.ks {
+		ks.push(k / d)
+	}
+	let c = b.row.constant
+	let mut rel = SvRel::Le
+	let mut constant: i64 = 0
+	match b.rel {
+		SvRel::Le => { constant = sv_ceil_div(c, d) ?? return null },
+		SvRel::Lt => { constant = sv_ceil_div(c.checked_add(1) ?? return null, d) ?? return null },
+		SvRel::Eq => {
+			if c % d != 0 {
+				ks = []
+				constant = 1
+			} else {
+				constant = c / d
+				rel = SvRel::Eq
+			}
+		},
+	}
+	let cols = if ks.len() == 0 { [] } else { b.row.cols.clone() }
+	return SvBound { row: SvRow { cols: cols, ks: ks, constant: constant }, rel: rel, assumed: b.assumed.clone() }
 }

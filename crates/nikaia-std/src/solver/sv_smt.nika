@@ -1,0 +1,670 @@
+// crates/nikaia-std/src/solver/sv_smt.nika
+//
+// **The CDCL(T) engine** (ADR-270 D12, #1283 item A): the clauses of
+// `sv_cnf.nika` searched by the SAT core of `sv_sat.nika`, a theory behind
+// the interface `SvTh` of `sv_theory.nika` deciding the atoms. Every atom
+// literal the SAT trail assigns is asserted to the theory, one theory level
+// per decision level; after each unit propagation the theory checks what is
+// asserted (not final), may propagate literals (each explained by a Farkas
+// clause), and checks finally once every variable is assigned. A theory
+// conflict is a clause of the log, added to the SAT core as a learned clause:
+// it backjumps, analyses and learns as on a clause of its own. The SAT core
+// and the theory write one book (`sv_proof.nika`), so a refutation is one
+// log `sv_check.nika` replays.
+//
+// The theories: the simplex of `sv_simplex.nika`, Fourier-Motzkin
+// (`SvTheory`), and the two together (`SvBoth`), the simplex first and
+// Fourier-Motzkin with the equality elimination of `sv_elim.nika` where the
+// simplex cannot tell and once at level zero, where it finds a parity or a
+// gcd the simplex's branch-and-bound does not end on (#1282 item 6).
+//
+// Before the search, a disjunction at the top whose alternatives each fix
+// one column, `x = v_j`, gives the congruence `x ≡ v_0 (mod d)` for `d` the
+// gcd of the `v_j - v_0` (as the enumeration driver of #1282 derived it): an
+// extension, a split, a Farkas lemma per alternative, and a unit clause the
+// SAT core starts from.
+
+/// How the new engine answered a query.
+pub enum SvDriven {
+	/// The query and the log that refutes it.
+	Proved(SvQuery, Vec[SvStep]),
+	/// A model or an unknown, as `lg_check` gives them.
+	Answer(LgAnswer),
+}
+
+/// The new engine's answer, its work (the theory checks it ran, or a fast
+/// path's rounds) and the fast path that answered (`""`: the loop).
+pub struct SvEngineRun {
+	pub driven: SvDriven,
+	pub work: i64,
+	pub path: String,
+}
+
+fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
+	return SvEngineRun {
+		driven: SvDriven::Answer(LgAnswer::Unknown { why: why }),
+		work: work,
+		path: "",
+	}
+}
+
+/// `¬l`. Written as a branch: #1286.
+fn sv_not(l: u32) -> u32 {
+	return if l % 2 == 0 { l + 1 } else { l - 1 }
+}
+
+/// The literals `ls`, ascending.
+fn sv_sorted(ls: Vec[u32]) -> Vec[u32] {
+	let mut out = ls
+	out.sort()
+	return out
+}
+
+/// **Both theories**: every literal asserted to each; the simplex checks,
+/// Fourier-Motzkin with the equality elimination checks where the simplex
+/// answers unknown, and once more at level zero after each change there.
+pub struct SvBoth {
+	pub simplex: SvSimplex,
+	pub exact: SvTheory,
+	/// Whether Fourier-Motzkin answered the last final check.
+	pub by_exact: bool,
+	/// Fourier-Motzkin's trail at level zero when it last checked there,
+	/// `-1` before.
+	pub ran_at: i64,
+	/// The checks Fourier-Motzkin ran.
+	pub exact_checks: i64,
+}
+
+fn sv_both(names: Vec[String]) -> SvBoth {
+	return SvBoth {
+		simplex: sv_simplex(names.clone()),
+		exact: sv_theory(names),
+		by_exact: false,
+		ran_at: -1,
+		exact_checks: 0,
+	}
+}
+
+impl SvTh for SvBoth {
+	fn push_level(ref mut self) {
+		self.simplex.push_level()
+		self.exact.push_level()
+	}
+
+	fn level(ref self) -> i64 {
+		return self.simplex.level()
+	}
+
+	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
+		let first = self.exact.assert(lit, book)
+		let got = self.simplex.assert(lit, book)
+		return match got {
+			SvChecked::Consistent => first,
+			else => got,
+		}
+	}
+
+	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked {
+		self.exact.fact(id, book)
+		return self.simplex.fact(id, book)
+	}
+
+	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32] {
+		return self.simplex.propagate(book)
+	}
+
+	fn explain(ref mut self, lit: u32, mut book: SvBook) -> SvClause? {
+		return self.simplex.explain(lit, book)
+	}
+
+	fn backtrack(ref mut self, level: i64) {
+		self.simplex.backtrack(level)
+		self.exact.backtrack(level)
+	}
+
+	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked {
+		let got = self.simplex.check(final, limit, book)
+		match got {
+			SvChecked::Consistent => {
+				if final {
+					self.by_exact = false
+					return got
+				}
+				let here = self.exact.trail.len()
+				if self.level() > 0 || here == self.ran_at {
+					return got
+				}
+				self.ran_at = here
+				self.exact_checks += 1
+				return match self.exact.check(false, limit, book) {
+					SvChecked::Conflict(c) => SvChecked::Conflict(c.clone()),
+					else => got,
+				}
+			},
+			SvChecked::Unknown(_) => {},
+			else => {
+				return got
+			},
+		}
+		if !final {
+			return SvChecked::Consistent
+		}
+		self.exact_checks += 1
+		let second = self.exact.check(true, limit, book)
+		return match second {
+			SvChecked::Consistent => {
+				self.by_exact = true
+				second
+			},
+			SvChecked::Conflict(_) => second,
+			else => got,
+		}
+	}
+
+	fn model(ref self) -> collections::BTreeMap[String, i64] {
+		if self.by_exact {
+			return self.exact.model()
+		}
+		return self.simplex.model()
+	}
+
+	fn shared(ref self) -> Vec[u32] {
+		return []
+	}
+}
+
+/// The search: the SAT core (which holds the book), the theory, which
+/// variables are theory atoms, and how far the theory has seen the trail.
+pub struct SvSmt[T: SvTh] {
+	pub sat: SvSat,
+	pub th: T,
+	pub theory_atom: Vec[bool],
+	/// The SAT trail's entries handed to the theory.
+	pub head: i64,
+	pub budget: LgBudget,
+	/// Theory checks, partial and final: the work, capped by
+	/// `budget.cases`.
+	pub checks: i64,
+	/// Theory conflicts and the literals the theory propagated.
+	pub conflicts: i64,
+	pub propagated: i64,
+	/// Whether the theory's `propagate` is asked after each check.
+	pub propagating: bool,
+}
+
+/// How the search ended.
+pub enum SvSmtEnd {
+	Unsat,
+	Sat,
+	Unknown(LgUnknown),
+}
+
+/// The theory brought back to the SAT core's level, and the trail from
+/// where a backjump cut it handed to it again.
+fn sv_smt_sync[T: SvTh](mut s: SvSmt[T]) {
+	let level = s.sat.decision_level()
+	if s.th.level() > level {
+		s.th.backtrack(level)
+	}
+	if s.sat.undone < s.head {
+		s.head = s.sat.undone
+	}
+	s.sat.undone = s.sat.trail_len()
+}
+
+/// The trail's new entries asserted to the theory, a theory level per
+/// decision level; the first answer that is no `Consistent`.
+fn sv_smt_assert[T: SvTh](mut s: SvSmt[T]) -> SvChecked {
+	while s.head < s.sat.trail_len() {
+		let l = s.sat.trail_at(s.head)
+		s.head += 1
+		while s.th.level() < s.sat.level_of(l) {
+			s.th.push_level()
+		}
+		if !s.theory_atom[(l / 2) as i64] {
+			continue
+		}
+		let got = s.th.assert(l, s.sat.book)
+		match got {
+			SvChecked::Consistent => {},
+			else => {
+				return got
+			},
+		}
+	}
+	return SvChecked::Consistent
+}
+
+/// A clause of the theory added to the SAT core: on a conflict the core
+/// backjumps and learns. `false` where a literal is none of the core's.
+fn sv_smt_lemma[T: SvTh](mut s: SvSmt[T], clause: ref SvClause) -> bool {
+	for l in clause.lits {
+		if !s.sat.knows(l) {
+			return false
+		}
+	}
+	let conflict = s.sat.add_lemma(clause.lits, clause.id)
+	if conflict >= 0 {
+		s.sat.stats.conflicts += 1
+		s.sat.learn_conflict(conflict)
+	}
+	sv_smt_sync(s)
+	return true
+}
+
+/// What a theory's answer leaves the search with: `null` to go on (a
+/// conflict learned), else how it ends.
+fn sv_smt_answer[T: SvTh](mut s: SvSmt[T], got: ref SvChecked) -> SvSmtEnd? {
+	return match got {
+		SvChecked::Conflict(c) => {
+			s.conflicts += 1
+			if !sv_smt_lemma(s, c) {
+				return SvSmtEnd::Unknown(LgUnknown::OutsideTheTheory)
+			}
+			null
+		},
+		SvChecked::Lemmas(_) => SvSmtEnd::Unknown(LgUnknown::OutsideTheTheory),
+		SvChecked::Unknown(why) => SvSmtEnd::Unknown(why.clone()),
+		SvChecked::Consistent => null,
+	}
+}
+
+/// The literals the theory implies, each explained by a clause the SAT core
+/// propagates; whether one was new.
+fn sv_smt_propagate[T: SvTh](mut s: SvSmt[T]) -> bool {
+	let implied = s.th.propagate(s.sat.book)
+	let mut any = false
+	for l in implied {
+		if !s.sat.knows(l) || !s.theory_atom[(l / 2) as i64] || s.sat.lit_value(l) != 0 {
+			continue
+		}
+		let why = s.th.explain(l, s.sat.book) ?? continue
+		s.propagated += 1
+		if !sv_smt_lemma(s, why) {
+			continue
+		}
+		any = true
+	}
+	return any
+}
+
+/// **The CDCL(T) loop.**
+fn sv_smt_search[T: SvTh](mut s: SvSmt[T]) -> SvSmtEnd {
+	while true {
+		if s.sat.refuted {
+			return SvSmtEnd::Unsat
+		}
+		if s.checks >= s.budget.cases {
+			return SvSmtEnd::Unknown(LgUnknown::TooManyCases)
+		}
+		let conflict = s.sat.propagate()
+		if conflict >= 0 {
+			s.sat.stats.conflicts += 1
+			if s.sat.decision_level() == 0 {
+				s.sat.refute(conflict)
+				return SvSmtEnd::Unsat
+			}
+			s.sat.learn_conflict(conflict)
+			sv_smt_sync(s)
+			continue
+		}
+		let asserted = sv_smt_assert(s)
+		match asserted {
+			SvChecked::Consistent => {},
+			else => {
+				let end = sv_smt_answer(s, asserted)
+				if end != null {
+					return end ?? SvSmtEnd::Sat
+				}
+				continue
+			},
+		}
+		s.checks += 1
+		let partial = s.th.check(false, s.budget, s.sat.book)
+		match partial {
+			SvChecked::Conflict(_) => {
+				let end = sv_smt_answer(s, partial)
+				if end != null {
+					return end ?? SvSmtEnd::Sat
+				}
+				continue
+			},
+			// Unknown before the last check: the final one decides.
+			else => {},
+		}
+		if s.propagating && sv_smt_propagate(s) {
+			continue
+		}
+		let next = s.sat.pick()
+		if next == null {
+			s.checks += 1
+			let last = s.th.check(true, s.budget, s.sat.book)
+			match last {
+				SvChecked::Consistent => {
+					return SvSmtEnd::Sat
+				},
+				else => {},
+			}
+			let end = sv_smt_answer(s, last)
+			if end != null {
+				return end ?? SvSmtEnd::Sat
+			}
+			continue
+		}
+		s.sat.decide(next ?? 0)
+	}
+}
+
+/// The congruences of the top clauses (see the header): per clause whose
+/// alternatives are definitions each implying `x - v_j <= 0` and
+/// `v_j - x <= 0` on one column, the unit clause `x - v_0 - d·q <= 0` (its
+/// literal into `units`, its entry into `unit_ids`) and the extension's
+/// `d·q - (x - v_0) <= 0` (into `facts`). `false` where a step does not
+/// close.
+fn sv_smt_congruences(
+	cnf: ref SvCnf,
+	ids: ref Vec[u32],
+	mut book: SvBook,
+	mut units: Vec[u32],
+	mut unit_ids: Vec[u32],
+	mut facts: Vec[u32],
+) -> bool {
+	// What `¬d` implies, per definition atom: the other literal of each
+	// two-literal clause through `d`, and the clause.
+	let mut short_lit: Vec[Vec[u32]] = []
+	let mut short_id: Vec[Vec[u32]] = []
+	for _ in cnf.definition {
+		short_lit.push([])
+		short_id.push([])
+	}
+	let mut c = 0
+	while c < cnf.query.clauses.len() {
+		let clause = cnf.query.clauses[c].clone()
+		if clause.len() == 2 {
+			for k in [0, 1] {
+				let d = clause[k]
+				let a = (d / 2) as i64
+				if d % 2 == 0 && cnf.definition[a] {
+					short_lit[a].push(clause[1 - k])
+					short_id[a].push(ids[c])
+				}
+			}
+		}
+		c += 1
+	}
+	c = 0
+	while c < cnf.query.clauses.len() {
+		let clause = cnf.query.clauses[c].clone()
+		let mut defined = clause.len() >= 2
+		for l in clause {
+			if l % 2 == 0 || !cnf.definition[(l / 2) as i64] {
+				defined = false
+			}
+		}
+		if defined
+			&& !sv_smt_congruence(
+				clause,
+				ids[c],
+				short_lit,
+				short_id,
+				book,
+				units,
+				unit_ids,
+				facts,
+			) {
+				return false
+			}
+		c += 1
+	}
+	return true
+}
+
+/// The congruence of top clause `clause` (entry `id`), where it has one;
+/// `true` where it has none.
+fn sv_smt_congruence(
+	clause: ref Vec[u32],
+	id: u32,
+	short_lit: ref Vec[Vec[u32]],
+	short_id: ref Vec[Vec[u32]],
+	mut book: SvBook,
+	mut units: Vec[u32],
+	mut unit_ids: Vec[u32],
+	mut facts: Vec[u32],
+) -> bool {
+	let mut column: i64 = -1
+	let mut values: Vec[i64] = []
+	let mut ps: Vec[u32] = []
+	let mut ns: Vec[u32] = []
+	let mut p_ids: Vec[u32] = []
+	let mut n_ids: Vec[u32] = []
+	for h in clause {
+		let a = (sv_not(h) / 2) as i64
+		let mut found = false
+		let mut i = 0
+		while i < short_lit[a].len() && !found {
+			let pr = book.lit_bound(short_lit[a][i]) ?? return true
+			let mut j = 0
+			while j < short_lit[a].len() && !found {
+				let nr = book.lit_bound(short_lit[a][j]) ?? return true
+				let sum = pr.row.constant.checked_add(nr.row.constant) ?? return true
+				let x = if pr.row.cols.len() == 1 { pr.row.cols[0] as i64 } else { -1 }
+				if pr.row.ks == [1] && nr.row.ks == [-1] && pr.row.cols == nr.row.cols && sum == 0
+					&& (column < 0 || x == column) {
+						column = x
+						values.push(pr.row.constant.checked_neg() ?? return true)
+						ps.push(short_lit[a][i])
+						ns.push(short_lit[a][j])
+						p_ids.push(short_id[a][i])
+						n_ids.push(short_id[a][j])
+						found = true
+					}
+				j += 1
+			}
+			i += 1
+		}
+		if !found {
+			return true
+		}
+	}
+	let v0 = values[0]
+	let mut d = 0
+	for v in values {
+		d = sv_gcd(d, v.checked_sub(v0) ?? return true) ?? return true
+	}
+	if d < 2 {
+		return true
+	}
+	let x = column as u32
+	let l = SvRow { cols: [x], ks: [1], constant: v0.checked_neg() ?? return true }
+	let q = book.log.columns
+	let t = sv_row_sum(1, l, -d, SvRow { cols: [q], ks: [1], constant: 0 }) ?? return true
+	let not_t = sv_row_sum(-1, t, 1, sv_row_constant(1)) ?? return true
+	let ext = book.extend(l, d) ?? return false
+	let split = book.split(t, not_t) ?? return false
+	let first = split.lits[0] / 2
+	let below = sv_lit(first + 1, false)
+	let mut cases: Vec[u32] = []
+	let mut j = 0
+	while j < ps.len() {
+		let r1 = book.combine([SvSrc::Lit(below), SvSrc::Lit(ps[j])], [1, 1]) ?? return false
+		let r2 = book.combine([SvSrc::Fact(ext.first + 1), SvSrc::Lit(ns[j])], [1, 1])
+			?? return false
+		let f1 = book.round(r1) ?? return false
+		let f2 = book.round(r2) ?? return false
+		let lemma = book.farkas([SvSrc::Fact(f1), SvSrc::Fact(f2)], [1, 1]) ?? return false
+		cases.push(book.learn(
+			sv_sorted([sv_not(below), sv_not(clause[j])]),
+			[p_ids[j], n_ids[j], lemma.id],
+		))
+		j += 1
+	}
+	cases.push(id)
+	let no_gap = book.learn([sv_not(below)], cases)
+	units.push(sv_lit(first, false))
+	unit_ids.push(book.learn([sv_lit(first, false)], [no_gap, split.id]))
+	facts.push(ext.first)
+	return true
+}
+
+/// **The new engine** on whether `facts` imply `goal`, over `theory`:
+/// `simplex`, `fm` (Fourier-Motzkin with the equality elimination) or
+/// `both`.
+fn sv_smt_engine(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	theory: String,
+) -> SvEngineRun {
+	let mut why = lg_why()
+	let cnf = sv_cnf(arena, facts, goal, why)
+		?? return sv_engine_unknown(why.unknown.clone(), 0)
+	let mut book = sv_book(cnf.query) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
+	let mut ids: Vec[u32] = []
+	let mut c: u32 = 0
+	for _ in cnf.query.clauses {
+		ids.push(book.input(c))
+		c += 1
+	}
+	let fast = sv_fast(book, cnf, ids)
+	match fast.end {
+		SvFastEnd::Unsat => return SvEngineRun {
+			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
+			work: fast.work,
+			path: fast.path.clone(),
+		},
+		SvFastEnd::Sat(values) => return SvEngineRun {
+			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, values)),
+			work: fast.work,
+			path: fast.path.clone(),
+		},
+		SvFastEnd::Skip => {},
+	}
+	let pre = sv_pre(book, cnf, ids)
+	if pre.unsat {
+		return SvEngineRun {
+			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
+			work: 0,
+			path: "pre",
+		}
+	}
+	let shown = sv_smt_pre_shown(pre)
+	let mut units: Vec[u32] = []
+	let mut unit_ids: Vec[u32] = []
+	let mut known: Vec[u32] = []
+	if !sv_smt_congruences(cnf, ids, book, units, unit_ids, known) {
+		return sv_engine_unknown(LgUnknown::Overflow, 0)
+	}
+	let vars = book.atoms.len().checked_u32() ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
+	let mut theory_atom: Vec[bool] = []
+	let mut a = 0
+	while a < book.atoms.len() {
+		theory_atom.push(a >= cnf.definition.len() || !cnf.definition[a])
+		a += 1
+	}
+	let mut sat = sv_sat_book(vars, book)
+	let mut i = 0
+	while i < cnf.query.clauses.len() {
+		sat.add_input(cnf.query.clauses[i], ids[i])
+		i += 1
+	}
+	i = 0
+	while i < units.len() {
+		sat.assign_unit(units[i], unit_ids[i])
+		i += 1
+	}
+	for lemma in pre.lemmas {
+		sat.add_input(lemma.lits, lemma.id)
+	}
+	let mut run = if theory == "fm" {
+		sv_smt_run(sv_theory(cnf.names.clone()), sat,
+			theory_atom,
+			known,
+			cnf,
+			arena,
+			facts,
+			goal,
+			budget,
+		)
+	} else if theory == "simplex" {
+		sv_smt_run(sv_simplex(cnf.names.clone()), sat,
+			theory_atom,
+			known,
+			cnf,
+			arena,
+			facts,
+			goal,
+			budget,
+		)
+	} else {
+		sv_smt_run(sv_both(cnf.names.clone()), sat,
+			theory_atom,
+			known,
+			cnf,
+			arena,
+			facts,
+			goal,
+			budget,
+		)
+	}
+	run.path = shown
+	return run
+}
+
+/// What the preprocessing rewrote, for the runner's work column: `pre:`
+/// and its lemmas (`l`) and literals without a fixed column (`f`); `""`
+/// where it rewrote nothing.
+fn sv_smt_pre_shown(pre: ref SvPre) -> String {
+	if pre.lemmas.len() == 0 && pre.fixed == 0 {
+		return ""
+	}
+	return f"pre:l{pre.lemmas.len()}f{pre.fixed}"
+}
+
+/// The search over theory `th`, its answer as the runner reads it: a log
+/// for a refutation, a model checked against the query for a model.
+fn sv_smt_run[T: SvTh](
+	th: T,
+	sat: SvSat,
+	theory_atom: Vec[bool],
+	known: Vec[u32],
+	cnf: ref SvCnf,
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+) -> SvEngineRun {
+	let mut s = SvSmt {
+		sat: sat,
+		th: th,
+		theory_atom: theory_atom,
+		head: 0,
+		budget: budget.clone(),
+		checks: 0,
+		conflicts: 0,
+		propagated: 0,
+		propagating: true,
+	}
+	for f in known {
+		match s.th.fact(f, s.sat.book) {
+			SvChecked::Consistent => {},
+			else => {
+				return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
+			},
+		}
+	}
+	let end = sv_smt_search(s)
+	return match end {
+		SvSmtEnd::Unsat => SvEngineRun {
+			driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.clone()),
+			work: s.checks,
+			path: "",
+		},
+		SvSmtEnd::Sat => SvEngineRun {
+			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, s.th.model())),
+			work: s.checks,
+			path: "",
+		},
+		SvSmtEnd::Unknown(why) => sv_engine_unknown(why.clone(), s.checks),
+	}
+}

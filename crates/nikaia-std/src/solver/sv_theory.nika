@@ -13,184 +13,6 @@
 // as `sv_proof.nika` says); every atom is a bound `row <= 0` over integer
 // columns, so a negated atom is the bound `-row + 1 <= 0`.
 
-/// The log and what the checker will know when it replays it: the atoms (the
-/// query's, then each split's two) and the bound every bound entry holds.
-pub struct SvBook {
-	pub log: SvLog,
-	pub atoms: Vec[SvAtom],
-	pub bounds: collections::BTreeMap[u32, SvBound],
-}
-
-/// A book over `query`, its clauses not yet put in.
-fn sv_book(query: ref SvQuery) -> SvBook? {
-	let log = sv_log(query) ?? return null
-	return SvBook { log: log, atoms: query.atoms.clone(), bounds: collections::BTreeMap() }
-}
-
-/// A clause the log derived: its entry and its literals, ascending.
-pub struct SvClause {
-	pub id: u32,
-	pub lits: Vec[u32],
-}
-
-/// The literals in `a` and `b`, once each, ascending.
-fn sv_lits_union(a: ref Vec[u32], b: ref Vec[u32]) -> Vec[u32] {
-	let mut out = a.clone()
-	for l in b {
-		if !out.contains(l) {
-			out.push(l)
-		}
-	}
-	out.sort()
-	return out
-}
-
-impl SvBook {
-	/// The bound literal `l` assumes, as the checker reads it; `null` past
-	/// the atoms, on a negated equality, or where the negation overflows.
-	fn lit_bound(ref self, l: u32) -> SvBound? {
-		let at = (l / 2) as i64
-		if at >= self.atoms.len() {
-			return null
-		}
-		let atom = self.atoms[at].clone()
-		if l % 2 == 0 {
-			return SvBound { row: atom.row, rel: atom.rel, assumed: [l] }
-		}
-		let shift: i64 = match atom.rel {
-			SvRel::Le => 1,
-			SvRel::Lt => 0,
-			SvRel::Eq => return null,
-		}
-		let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1)) ?? return null
-		return SvBound { row: negated, rel: SvRel::Le, assumed: [l] }
-	}
-
-	/// The bound a source adds.
-	fn source(ref self, src: ref SvSrc) -> SvBound? {
-		return match src {
-			SvSrc::Lit(l) => self.lit_bound(l),
-			SvSrc::Fact(id) => {
-				let got = self.bounds.get(id) ?? return null
-				got.clone()
-			},
-		}
-	}
-
-	/// `Σ multipliers[i]·sources[i]` over bounds `<= 0`, reduced by its gcd
-	/// as the checker reduces it; `null` where a source is unknown, a
-	/// multiplier negative or a step leaves `i64`.
-	fn sum(ref self, sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> SvBound? {
-		let mut row = sv_row_constant(0)
-		let mut assumed: Vec[u32] = []
-		let mut i = 0
-		while i < sources.len() {
-			let b = self.source(sources[i]) ?? return null
-			let m = multipliers[i]
-			if m < 0 {
-				return null
-			}
-			if m != 0 {
-				row = sv_row_sum(1, row, m, b.row) ?? return null
-				assumed = sv_lits_union(assumed, b.assumed)
-			}
-			i += 1
-		}
-		return SvBound { row: sv_row_reduced(row), rel: SvRel::Le, assumed: assumed }
-	}
-
-	/// The combination kept as a bound entry; its id.
-	fn combine(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> u32? {
-		let b = self.sum(sources, multipliers) ?? return null
-		// A bound entry taken once is itself where the checker would not
-		// reduce it.
-		if sources.len() == 1 && multipliers[0] == 1 {
-			match sources[0] {
-				SvSrc::Fact(id) => {
-					let had = self.bounds.get(id) ?? return null
-					if sv_row_same(had.row, b.row) {
-						return id
-					}
-				},
-				else => {},
-			}
-		}
-		let id = self.log.combine(sources, multipliers)
-		self.bounds.insert(id, b)
-		return id
-	}
-
-	/// Bound entry `id` divided by the gcd of its coefficients, its constant
-	/// rounded up (Chvátal-Gomory); `id` itself where the gcd is one.
-	fn round(ref mut self, id: u32) -> u32? {
-		let b = (self.bounds.get(id) ?? return null).clone()
-		let g = sv_row_content(b.row) ?? return null
-		if g <= 1 {
-			return id
-		}
-		let row = sv_row_tightened(b.row)
-		let made = self.log.round(id, g)
-		self.bounds.insert(made, SvBound { row: row, rel: SvRel::Le, assumed: b.assumed.clone() })
-		return made
-	}
-
-	/// A theory lemma from a combination that ends in `c <= 0` with
-	/// `c > 0`: the clause of the negations of what it assumed. `null`, and
-	/// nothing written, where the combination is no contradiction.
-	fn farkas(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> SvClause? {
-		let b = self.sum(sources, multipliers) ?? return null
-		if b.row.cols.len() > 0 || b.row.constant <= 0 {
-			return null
-		}
-		let mut lits: Vec[u32] = []
-		for l in b.assumed {
-			// `l ^ 1` written as a branch: #1286.
-			let negation = if l % 2 == 0 { l + 1 } else { l - 1 }
-			lits.push(negation)
-		}
-		lits.sort()
-		let id = self.log.farkas(lits.clone(), sources, multipliers, 1)
-		return SvClause { id: id, lits: lits }
-	}
-
-	/// The split `le <= 0 ∨ ge <= 0`: its clause, over the two atoms it adds.
-	fn split(ref mut self, le: SvRow, ge: SvRow) -> SvClause? {
-		let first = self.atoms.len().checked_u32() ?? return null
-		self.atoms.push(SvAtom { row: le.clone(), rel: SvRel::Le })
-		self.atoms.push(SvAtom { row: ge.clone(), rel: SvRel::Le })
-		let id = self.log.split(le, ge)
-		return SvClause { id: id, lits: [sv_lit(first, false), sv_lit(first + 1, false)] }
-	}
-
-	/// The fresh column `q = ⌊l / m⌋` and its two bounds `m·q - l <= 0` and
-	/// `l - m·q - (m - 1) <= 0`, entries `first` and `first + 1`.
-	fn extend(ref mut self, l: SvRow, m: i64) -> SvExtended? {
-		let q = self.log.columns
-		let mq = SvRow { cols: [q], ks: [m], constant: 0 }
-		let below = sv_row_sum(-1, l, 1, mq) ?? return null
-		let above0 = sv_row_sum(1, l, -1, mq) ?? return null
-		let above = sv_row_sum(1, above0, -(m - 1), sv_row_constant(1)) ?? return null
-		let first = self.log.extend(l, m)
-		self.bounds.insert(first, SvBound { row: below, rel: SvRel::Le, assumed: [] })
-		self.bounds.insert(first + 1, SvBound { row: above, rel: SvRel::Le, assumed: [] })
-		return SvExtended { column: q, first: first }
-	}
-
-	fn input(ref mut self, clause: u32) -> u32 {
-		return self.log.input(clause)
-	}
-
-	fn learn(ref mut self, lits: Vec[u32], hints: Vec[u32]) -> u32 {
-		return self.log.learn(lits, hints)
-	}
-}
-
-/// What an extension made: its column and its first bound entry.
-pub struct SvExtended {
-	pub column: u32,
-	pub first: u32,
-}
-
 /// A bound the theory hands to its engine: `row <= 0`, and where it comes
 /// from - a literal on the trail or a bound entry the theory derived.
 pub struct SvHeld {
@@ -228,7 +50,7 @@ pub struct SvTheory {
 	pub implied: Vec[u32],
 	pub implied_by: Vec[u32],
 	pub values: collections::BTreeMap[String, i64],
-	/// Bound entries that hold at every level: what the driver derived
+	/// Bound entries that hold at every level: what the engine derived
 	/// before the search (a congruence's `x - a - d·q >= 0`).
 	pub facts: Vec[u32],
 	/// Whether `check` eliminates equalities before Fourier-Motzkin (#1282
@@ -349,10 +171,41 @@ fn sv_written(refutation: ref LgRefutation, held: ref Vec[SvHeld], mut book: SvB
 	return book.farkas(spelled[last].sources.clone(), spelled[last].multipliers.clone())
 }
 
-impl SvTheory {
+/// **The interface** every theory implements (D12), so one engine
+/// (`sv_smt.nika`) runs over any of them: Fourier-Motzkin here, the simplex
+/// of `sv_simplex.nika`, and the two together (`SvBoth`).
+pub trait SvTh {
 	/// A new level: what is asserted from now on is forgotten by
-	/// `backtrack` to the level before.
-	fn push(ref mut self) {
+	/// `backtrack` to the level before. D12's `push`, named `push_level`:
+	/// a trait method `push` breaks `v[i].push(x)` elsewhere, #1298.
+	fn push_level(ref mut self)
+	/// The current level.
+	fn level(ref self) -> i64
+	/// `assert(lit)`: the literal holds from now on.
+	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked
+	/// A bound entry of the log that holds at every level, given before the
+	/// first `push`.
+	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked
+	/// `propagate()`: literals of the book's atoms that what is asserted
+	/// implies, each explained by `explain`.
+	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32]
+	/// `explain(lit)`: the clause behind a propagated literal.
+	fn explain(ref mut self, lit: u32, mut book: SvBook) -> SvClause?
+	/// `backtrack(level)`: forgets what was asserted above `level`.
+	fn backtrack(ref mut self, level: i64)
+	/// `check(final, limit)`: whether what is asserted has integer values.
+	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked
+	/// `model()`: the values of the last consistent final `check`, by name.
+	fn model(ref self) -> collections::BTreeMap[String, i64]
+	/// `shared()`: the equalities a theory shares with others (D13).
+	fn shared(ref self) -> Vec[u32]
+}
+
+impl SvTh for SvTheory {
+	/// A new level: what is asserted from now on is forgotten by
+	/// `backtrack` to the level before. D12's `push`, named `push_level`:
+	/// a trait method `push` breaks `v[i].push(x)` elsewhere, #1298.
+	fn push_level(ref mut self) {
 		self.levels.push(self.trail.len())
 	}
 
@@ -361,13 +214,19 @@ impl SvTheory {
 		return self.levels.len()
 	}
 
+	/// A bound entry that holds at every level.
+	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked {
+		self.facts.push(id)
+		return SvChecked::Consistent
+	}
+
 	/// `assert(lit)`: the literal holds from now on. A bound without columns
 	/// that is false is a conflict at once.
 	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
 		self.trail.push(lit)
-		let b = book.lit_bound(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
-		if b.row.cols.len() == 0 && b.row.constant > 0 {
-			let clause = book.farkas([SvSrc::Lit(lit)], [1])
+		let a = book.asserted(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+		if a.bound.row.cols.len() == 0 && a.bound.row.constant > 0 {
+			let clause = book.farkas([a.src], [1])
 				?? return SvChecked::Unknown(LgUnknown::Overflow)
 			return SvChecked::Conflict(clause)
 		}
@@ -447,8 +306,8 @@ impl SvTheory {
 	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked {
 		let mut held: Vec[SvHeld] = []
 		for l in self.trail {
-			let b = book.lit_bound(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
-			held.push(SvHeld { row: b.row, src: SvSrc::Lit(l) })
+			let a = book.asserted(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+			held.push(SvHeld { row: a.bound.row, src: a.src })
 		}
 		for f in self.facts {
 			let b = book.bounds.get(f) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)

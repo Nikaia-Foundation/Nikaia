@@ -1,0 +1,968 @@
+// crates/nikaia-std/src/solver/sv_smtlib.nika
+//
+// **The solver's SMT-LIB 2 reader** (ADR-270 D6, D17, #1299): a script of the
+// measuring rod read into the logic layer's `LgScript`, a `TermArena` and its
+// assertions, so the rest of the pipeline is the one `lg_smtlib_read` feeds.
+// It lives beside the solver, not in `tools`: the compiler's reader stays as
+// it is (#1285 moves this one there later). It reuses `lg_parse` and `LgSexp`
+// of `logic_smtlib.nika`, which the program is concatenated with.
+//
+// * **Arithmetic** is read into a linear form over `sv_num` rationals and
+//   emitted per atom as `Σ k·x rel c` with integer coefficients. A product of
+//   two non-constant terms is refused (non-linear); a number out of `i64` is
+//   an overflow (D11).
+// * **Reals** (D27): a constant declared `Real` is a variable like an `Int`
+//   one, its sort kept beside the script (`SvSorts`); a decimal `d.d` is the
+//   rational it writes, `(/ a b ...)` divides by constants only (by a
+//   variable is non-linear, by zero unsupported). Each atom is cleared of its
+//   denominators as above, so its coefficients stay integers.
+// * **Substitution**: `let`, `(! t :named n)` and `define-fun` (with or
+//   without parameters) are read by value - a bound term is read once, where
+//   it is bound, and its value used wherever its name is.
+// * **Booleans**: a Bool constant is a fresh integer variable `b` with
+//   `0 <= b <= 1`, the constant meaning `b >= 1`. `ite` over Booleans is
+//   `(c ∧ a) ∨ (¬c ∧ b)`; in an arithmetic position it is a fresh variable
+//   `v` with `(c ∧ v = a) ∨ (¬c ∧ v = b)`. `=`, `distinct` and `xor` between
+//   Booleans are rewritten the same way. The definitions are facts of their
+//   own: each holds for some value of its fresh variable, whatever else
+//   holds, so they stay when an assertion that used them is popped.
+// * **Fresh names** start with `|sv!|`: a declared name is read unquoted and
+//   cannot hold a `|`, so the two never collide.
+// * **Commands**: `push`, `pop` and `reset-assertions` keep an assertion
+//   stack; reading stops at `check-sat` or `exit`; a script with more than one
+//   `check-sat` is refused (D3: a query is self-contained). `set-logic`,
+//   `set-info`, `set-option` and the `get-` commands and `echo` are skipped.
+
+use std::collections
+use std::text
+
+/// A linear form `Σ k·x + c` over rationals: the coefficients by name, none
+/// of them zero.
+struct SvLin {
+	terms: collections::BTreeMap[String, SvRat],
+	c: SvRat,
+}
+
+/// The value of a term read: a formula of the arena, or a linear form.
+enum SvVal {
+	Formula(i64),
+	Lin(SvLin),
+}
+
+/// Why a script could not be read.
+pub enum SvReadWhy {
+	/// The text is not balanced s-expressions.
+	Syntax(String),
+	/// A command, sort or operator outside what the reader covers.
+	Unsupported(String),
+	/// A name used without a declaration or definition.
+	Undeclared(String),
+	/// A number or a scale out of `i64` (ADR-270 D11).
+	Overflow(String),
+}
+
+/// A term's value, or why not.
+enum SvGot {
+	Val(SvVal),
+	Failed(SvReadWhy),
+}
+
+/// A `define-fun` with parameters: their names and the body, read at each
+/// application with the parameters bound to the arguments' values.
+struct SvFun {
+	params: Vec[String],
+	body: LgSexp,
+}
+
+struct SvSmtReader {
+	arena: TermArena,
+	/// The constants declared `Int`.
+	ints: collections::BTreeSet[String],
+	/// The constants declared `Real`, and the fresh `ite` variables of real
+	/// value (ADR-270 D27).
+	reals: collections::BTreeSet[String],
+	/// The constants declared `Bool`, each the variable `|sv!|b:name`.
+	bools: collections::BTreeSet[String],
+	/// The names `let` and a function's parameters bind, innermost last.
+	bound_names: Vec[String],
+	bound_values: Vec[SvVal],
+	/// `define-fun` without parameters and `:named` terms, by name.
+	defined: collections::BTreeMap[String, SvVal],
+	funs: collections::BTreeMap[String, SvFun],
+	/// The facts the reader adds: a Bool constant's range, an `ite`'s
+	/// definition.
+	side: Vec[i64],
+	fresh: i64,
+}
+
+/// The linear form of the constant `r`.
+fn sv_lin_constant(r: SvRat) -> SvLin {
+	return SvLin { terms: collections::BTreeMap(), c: r }
+}
+
+/// The linear form of the variable `name`.
+fn sv_lin_var(name: String) -> SvLin {
+	let mut terms: collections::BTreeMap[String, SvRat] = collections::BTreeMap()
+	terms.insert(name.clone(), sv_int(1))
+	return SvLin { terms: terms, c: sv_int(0) }
+}
+
+/// `a + b`, or `null` where a number leaves `i64`.
+fn sv_lin_add(a: ref SvLin, b: ref SvLin) -> SvLin? {
+	let mut terms = a.terms.clone()
+	for (name, k) in b.terms {
+		let sum = match terms.get(name) {
+			null => k.clone(),
+			old => sv_rat_add(old, k) ?? return null,
+		}
+		if sum.num == 0 {
+			terms.remove(name)
+		} else {
+			terms.insert(name.clone(), sum)
+		}
+	}
+	let c = sv_rat_add(a.c, b.c) ?? return null
+	return SvLin { terms: terms, c: c }
+}
+
+/// `r · a`, or `null` where a number leaves `i64`.
+fn sv_lin_scale(a: ref SvLin, r: ref SvRat) -> SvLin? {
+	let mut terms: collections::BTreeMap[String, SvRat] = collections::BTreeMap()
+	if r.num != 0 {
+		for (name, k) in a.terms {
+			terms.insert(name.clone(), sv_rat_mul(k, r) ?? return null)
+		}
+	}
+	let c = sv_rat_mul(a.c, r) ?? return null
+	return SvLin { terms: terms, c: c }
+}
+
+/// `a - b`, or `null` where a number leaves `i64`.
+fn sv_lin_sub(a: ref SvLin, b: ref SvLin) -> SvLin? {
+	let negated = sv_lin_scale(b, sv_int(-1)) ?? return null
+	return sv_lin_add(a, negated)
+}
+
+/// The least common multiple of `a` and `b`, both positive, or `null` out of
+/// `i64`.
+fn sv_lcm(a: i64, b: i64) -> i64? {
+	let g = sv_gcd(a, b) ?? return null
+	return (a / g).checked_mul(b)
+}
+
+/// Whether `a` is a numeral: digits only.
+fn sv_is_numeral(a: String) -> bool {
+	if a.len() == 0 {
+		return false
+	}
+	for c in a.chars() {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+fn sv_overflow(what: String) -> SvGot {
+	return SvGot::Failed(SvReadWhy::Overflow(what))
+}
+
+/// The decimal `a`, `digits.digits`, as the rational `n / 10^k` it is, or
+/// an overflow (ADR-270 D11).
+fn sv_decimal(a: String) -> SvGot {
+	let mut parts: Vec[String] = []
+	for part in a.split(".") {
+		parts.push(part.to_string())
+	}
+	if parts.len() != 2 || !sv_is_numeral(parts[0]) || !sv_is_numeral(parts[1]) {
+		return SvGot::Failed(SvReadWhy::Unsupported(f"the numeral {a}"))
+	}
+	let n = text::parse_i64(parts[0] + parts[1]) ?? return sv_overflow(f"the decimal {a}")
+	let mut den: i64 = 1
+	for _ in 0..<parts[1].len() {
+		den = den.checked_mul(10) ?? return sv_overflow(f"the decimal {a}")
+	}
+	let r = sv_rat(n, den) ?? return sv_overflow(f"the decimal {a}")
+	return SvGot::Val(SvVal::Lin(sv_lin_constant(r)))
+}
+
+impl SvSmtReader {
+	fn fresh_name(ref mut self, kind: String) -> String {
+		self.fresh += 1
+		return f"|sv!|{kind}:{self.fresh}"
+	}
+
+	/// The value a symbol stands for: a bound name, a definition, a declared
+	/// constant.
+	fn symbol(ref mut self, name: String) -> SvGot {
+		let mut at = self.bound_names.len() - 1
+		while at >= 0 {
+			if self.bound_names[at] == name {
+				return SvGot::Val(self.bound_values[at].clone())
+			}
+			at -= 1
+		}
+		match self.defined.get(name) {
+			null => {},
+			v => {
+				return SvGot::Val(v.clone())
+			},
+		}
+		if self.ints.contains(name) || self.reals.contains(name) {
+			return SvGot::Val(SvVal::Lin(sv_lin_var(name)))
+		}
+		if self.bools.contains(name) {
+			let v = self.arena.var(f"|sv!|b:{name}")
+			let one = self.arena.int(1)
+			return SvGot::Val(SvVal::Formula(self.arena.ge(v, one)))
+		}
+		return SvGot::Failed(SvReadWhy::Undeclared(name.clone()))
+	}
+
+	fn atom(ref mut self, a: String) -> SvGot {
+		if a == "true" {
+			return SvGot::Val(SvVal::Formula(self.arena.boolean(true)))
+		}
+		if a == "false" {
+			return SvGot::Val(SvVal::Formula(self.arena.boolean(false)))
+		}
+		if sv_is_numeral(a) {
+			let n = text::parse_i64(a)
+				?? return SvGot::Failed(SvReadWhy::Overflow(f"the numeral {a}"))
+			return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))))
+		}
+		// A negative numeral atom, as some benchmarks write it: `-175`.
+		if a.starts_with("-") && sv_is_numeral((a.strip_prefix("-") ?? "").to_string()) {
+			let n = text::parse_i64(a)
+				?? return SvGot::Failed(SvReadWhy::Overflow(f"the numeral {a}"))
+			return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))))
+		}
+		if a.contains(".") {
+			return sv_decimal(a)
+		}
+		return self.symbol(lg_unquoted(a))
+	}
+
+	/// Whether the linear form `a` is real-valued: a real variable, or a
+	/// coefficient or constant that is not an integer.
+	fn is_real(ref self, a: ref SvLin) -> bool {
+		if !sv_rat_is_int(a.c) {
+			return true
+		}
+		for (name, k) in a.terms {
+			if self.reals.contains(name) || !sv_rat_is_int(k) {
+				return true
+			}
+		}
+		return false
+	}
+
+	fn term(ref mut self, sexp: ref LgSexp) -> SvGot {
+		return match sexp {
+			LgSexp::Atom(a) => self.atom(a),
+			LgSexp::List(items) => self.application(sexp, items),
+		}
+	}
+
+	/// A term that must be a formula.
+	fn formula(ref mut self, sexp: ref LgSexp) -> SvGot {
+		let got = self.term(sexp)
+		return match got {
+			SvGot::Val(SvVal::Lin(_)) => SvGot::Failed(SvReadWhy::Unsupported(f"a number where a formula is meant: {lg_show(sexp)}")),
+			else => got,
+		}
+	}
+
+	/// The values of `items[from..]`, or why one could not be read.
+	fn values(ref mut self, items: ref Vec[LgSexp], from: i64, mut out: Vec[SvVal]) -> SvReadWhy? {
+		let mut at = from
+		while at < items.len() {
+			match self.term(items[at]) {
+				SvGot::Val(v) => out.push(v.clone()),
+				SvGot::Failed(why) => {
+					return why.clone()
+				},
+			}
+			at += 1
+		}
+		return null
+	}
+
+	/// The atom `a rel b` over linear forms, cleared of denominators: `rel`
+	/// is `<=`, `<`, `>=`, `>`, `=` or `distinct`.
+	fn compare(ref mut self, rel: String, a: ref SvLin, b: ref SvLin) -> SvGot {
+		let d = sv_lin_sub(a, b) ?? return sv_overflow(f"the atom ({rel} ...)")
+		let mut scale: i64 = d.c.den
+		for (_, k) in d.terms {
+			scale = sv_lcm(scale, k.den) ?? return sv_overflow(f"the atom ({rel} ...)")
+		}
+		let cleared = sv_lin_scale(d, sv_int(scale)) ?? return sv_overflow(f"the atom ({rel} ...)")
+		let c = cleared.c.num
+		if cleared.terms.len() == 0 {
+			let holds = if rel == "<=" {
+				c <= 0
+			} else if rel == "<" {
+				c < 0
+			} else if rel == ">=" {
+				c >= 0
+			} else if rel == ">" {
+				c > 0
+			} else if rel == "=" {
+				c == 0
+			} else {
+				c != 0
+			}
+			return SvGot::Val(SvVal::Formula(self.arena.boolean(holds)))
+		}
+		// `k·x` added, or `|k|·x` subtracted after the first part.
+		let mut lhs: i64 = -1
+		for (name, k) in cleared.terms {
+			let v = self.arena.var(name)
+			let minus = lhs >= 0 && k.num < 0
+			let size = if minus {
+				k.num.checked_neg() ?? return sv_overflow(f"the atom ({rel} ...)")
+			} else {
+				k.num
+			}
+			let part = if size == 1 {
+				v
+			} else if size == -1 {
+				self.arena.neg(v)
+			} else {
+				let factor = self.arena.int(size)
+				self.arena.mul(factor, v)
+			}
+			lhs = if lhs < 0 {
+				part
+			} else if minus {
+				self.arena.sub(lhs, part)
+			} else {
+				self.arena.add(lhs, part)
+			}
+		}
+		let bound = c.checked_neg() ?? return sv_overflow(f"the atom ({rel} ...)")
+		let rhs = self.arena.int(bound)
+		let made = if rel == "<=" {
+			self.arena.le(lhs, rhs)
+		} else if rel == "<" {
+			self.arena.lt(lhs, rhs)
+		} else if rel == ">=" {
+			self.arena.ge(lhs, rhs)
+		} else if rel == ">" {
+			self.arena.gt(lhs, rhs)
+		} else if rel == "=" {
+			self.arena.equal(lhs, rhs)
+		} else {
+			self.arena.unequal(lhs, rhs)
+		}
+		return SvGot::Val(SvVal::Formula(made))
+	}
+
+	/// `a ⇔ b` over formulas.
+	fn iff(ref mut self, a: i64, b: i64) -> i64 {
+		let both = self.arena.and([a, b])
+		let not_a = self.arena.not(a)
+		let not_b = self.arena.not(b)
+		let neither = self.arena.and([not_a, not_b])
+		return self.arena.or([both, neither])
+	}
+
+	/// `c ? a : b` over formulas.
+	fn choice(ref mut self, c: i64, a: i64, b: i64) -> i64 {
+		let then = self.arena.and([c, a])
+		let not_c = self.arena.not(c)
+		let otherwise = self.arena.and([not_c, b])
+		return self.arena.or([then, otherwise])
+	}
+
+	/// `let`: every binding read in the outer scope, then the body with them
+	/// bound.
+	fn let_term(ref mut self, sexp: ref LgSexp, items: ref Vec[LgSexp]) -> SvGot {
+		if items.len() != 3 {
+			return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+		}
+		let bindings = match items[1].clone() {
+			LgSexp::List(inside) => inside,
+			LgSexp::Atom(_) => {
+				return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+			},
+		}
+		let mut names: Vec[String] = []
+		let mut values: Vec[SvVal] = []
+		for binding in bindings {
+			let pair = match binding.clone() {
+				LgSexp::List(inside) => inside,
+				LgSexp::Atom(_) => {
+					return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+				},
+			}
+			if pair.len() != 2 || !lg_is_atom(pair, 0) {
+				return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+			}
+			match self.term(pair[1]) {
+				SvGot::Val(v) => values.push(v.clone()),
+				SvGot::Failed(why) => {
+					return SvGot::Failed(why.clone())
+				},
+			}
+			names.push(lg_unquoted(lg_atom_at(pair, 0)))
+		}
+		let depth = self.bound_names.len()
+		for i in 0..<names.len() {
+			self.bound_names.push(names[i].clone())
+			self.bound_values.push(values[i].clone())
+		}
+		let body = self.term(items[2])
+		self.bound_names.truncate(depth)
+		self.bound_values.truncate(depth)
+		return body
+	}
+
+	/// `(! t :named n ...)`: `t`, with `n` defined as it.
+	fn annotated(ref mut self, sexp: ref LgSexp, items: ref Vec[LgSexp]) -> SvGot {
+		if items.len() < 2 {
+			return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+		}
+		let got = self.term(items[1])
+		let value = match got {
+			SvGot::Val(v) => v.clone(),
+			SvGot::Failed(_) => {
+				return got
+			},
+		}
+		let mut at = 2
+		while at + 1 < items.len() {
+			if lg_atom_at(items, at) == ":named" && lg_is_atom(items, at + 1) {
+				self.defined.insert(lg_unquoted(lg_atom_at(items, at + 1)), value.clone())
+			}
+			at += 2
+		}
+		return SvGot::Val(value)
+	}
+
+	/// `ite`: over formulas a formula; over numbers a fresh variable with its
+	/// definition among the side facts.
+	fn ite(ref mut self, sexp: ref LgSexp, items: ref Vec[LgSexp]) -> SvGot {
+		if items.len() != 4 {
+			return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+		}
+		let c = match self.formula(items[1]) {
+			SvGot::Val(SvVal::Formula(id)) => id,
+			SvGot::Val(_) => -1,
+			SvGot::Failed(why) => {
+				return SvGot::Failed(why.clone())
+			},
+		}
+		let mut parts: Vec[SvVal] = []
+		match self.values(items, 2, parts) {
+			null => {},
+			why => {
+				return SvGot::Failed(why.clone())
+			},
+		}
+		return match (parts[0].clone(), parts[1].clone()) {
+			(SvVal::Formula(a), SvVal::Formula(b)) => SvGot::Val(SvVal::Formula(self.choice(
+				c,
+				a,
+				b,
+			))),
+			(SvVal::Lin(a), SvVal::Lin(b)) => {
+				let name = self.fresh_name("ite")
+				if self.is_real(a) || self.is_real(b) {
+					self.reals.insert(name.clone())
+				} else {
+					self.ints.insert(name.clone())
+				}
+				let v = sv_lin_var(name)
+				let then = match self.compare("=", v, a) {
+					SvGot::Val(SvVal::Formula(id)) => id,
+					SvGot::Val(_) => -1,
+					SvGot::Failed(why) => {
+						return SvGot::Failed(why.clone())
+					},
+				}
+				let otherwise = match self.compare("=", v, b) {
+					SvGot::Val(SvVal::Formula(id)) => id,
+					SvGot::Val(_) => -1,
+					SvGot::Failed(why) => {
+						return SvGot::Failed(why.clone())
+					},
+				}
+				let definition = self.choice(c, then, otherwise)
+				self.side.push(definition)
+				SvGot::Val(SvVal::Lin(v))
+			},
+			else => SvGot::Failed(SvReadWhy::Unsupported(f"an ite mixing a formula and a number: {lg_show(sexp)}")),
+		}
+	}
+
+	/// A `define-fun` with parameters applied: the body read with the
+	/// parameters, and nothing else the caller binds, bound to the arguments.
+	fn apply_fun(ref mut self, sexp: ref LgSexp, fun: ref SvFun, args: ref Vec[SvVal]) -> SvGot {
+		if args.len() != fun.params.len() {
+			return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+		}
+		let outer_names = self.bound_names.clone()
+		let outer_values = self.bound_values.clone()
+		self.bound_names = fun.params.clone()
+		self.bound_values = args.clone()
+		let body = self.term(fun.body)
+		self.bound_names = outer_names
+		self.bound_values = outer_values
+		return body
+	}
+
+	fn application(ref mut self, sexp: ref LgSexp, items: ref Vec[LgSexp]) -> SvGot {
+		if items.len() == 0 || !lg_is_atom(items, 0) {
+			return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+		}
+		let op = lg_atom_at(items, 0)
+		if op == "let" {
+			return self.let_term(sexp, items)
+		}
+		if op == "!" {
+			return self.annotated(sexp, items)
+		}
+		if op == "ite" {
+			return self.ite(sexp, items)
+		}
+		let mut args: Vec[SvVal] = []
+		match self.values(items, 1, args) {
+			null => {},
+			why => {
+				return SvGot::Failed(why.clone())
+			},
+		}
+		let fun_name = lg_unquoted(op)
+		match self.funs.get(fun_name) {
+			null => {},
+			fun => {
+				// A copy: the borrow of `self.funs` is a rustc error (#1300).
+				return self.apply_fun(sexp, fun.clone(), args)
+			},
+		}
+		let mut formulas: Vec[i64] = []
+		let mut lins: Vec[SvLin] = []
+		for a in args {
+			match a {
+				SvVal::Formula(id) => formulas.push(id),
+				SvVal::Lin(l) => lins.push(l.clone()),
+			}
+		}
+		let n = args.len()
+		let all_formulas = formulas.len() == n
+		let all_lins = lins.len() == n
+		if all_formulas {
+			if op == "not" && n == 1 {
+				return SvGot::Val(SvVal::Formula(self.arena.not(formulas[0])))
+			}
+			if op == "and" {
+				return SvGot::Val(SvVal::Formula(self.arena.and(formulas)))
+			}
+			if op == "or" {
+				return SvGot::Val(SvVal::Formula(self.arena.or(formulas)))
+			}
+			// `=>` associates to the right.
+			if op == "=>" && n >= 2 {
+				let mut acc = formulas[n - 1]
+				let mut at = n - 2
+				while at >= 0 {
+					let not_x = self.arena.not(formulas[at])
+					acc = self.arena.or([not_x, acc])
+					at -= 1
+				}
+				return SvGot::Val(SvVal::Formula(acc))
+			}
+			// `xor` associates to the left.
+			if op == "xor" && n >= 2 {
+				let mut acc = formulas[0]
+				for at in 1..<n {
+					let not_b = self.arena.not(formulas[at])
+					acc = self.choice(acc, not_b, formulas[at])
+				}
+				return SvGot::Val(SvVal::Formula(acc))
+			}
+			if op == "=" && n >= 2 {
+				let mut links: Vec[i64] = []
+				for at in 0..<(n - 1) {
+					links.push(self.iff(formulas[at], formulas[at + 1]))
+				}
+				if links.len() == 1 {
+					return SvGot::Val(SvVal::Formula(links[0]))
+				}
+				return SvGot::Val(SvVal::Formula(self.arena.and(links)))
+			}
+			if op == "distinct" && n >= 2 {
+				let mut links: Vec[i64] = []
+				for i in 0..<n {
+					for j in (i + 1)..<n {
+						let same = self.iff(formulas[i], formulas[j])
+						links.push(self.arena.not(same))
+					}
+				}
+				if links.len() == 1 {
+					return SvGot::Val(SvVal::Formula(links[0]))
+				}
+				return SvGot::Val(SvVal::Formula(self.arena.and(links)))
+			}
+		}
+		if all_lins && n >= 1 {
+			if op == "-" && n == 1 {
+				return SvGot::Val(SvVal::Lin(sv_lin_scale(
+					lins[0],
+					sv_int(-1),
+				) ?? return sv_overflow(lg_show(sexp))))
+			}
+			if op == "+" || op == "-" {
+				let mut acc = lins[0].clone()
+				for at in 1..<n {
+					acc = if op == "+" {
+						sv_lin_add(acc, lins[at]) ?? return sv_overflow(lg_show(sexp))
+					} else {
+						sv_lin_sub(acc, lins[at]) ?? return sv_overflow(lg_show(sexp))
+					}
+				}
+				return SvGot::Val(SvVal::Lin(acc))
+			}
+			if op == "*" {
+				let mut acc = lins[0].clone()
+				for at in 1..<n {
+					let next = lins[at].clone()
+					if next.terms.len() == 0 {
+						acc = sv_lin_scale(acc, next.c) ?? return sv_overflow(lg_show(sexp))
+					} else if acc.terms.len() == 0 {
+						acc = sv_lin_scale(next, acc.c) ?? return sv_overflow(lg_show(sexp))
+					} else {
+						return SvGot::Failed(SvReadWhy::Unsupported(f"a non-linear product: {lg_show(sexp)}"))
+					}
+				}
+				return SvGot::Val(SvVal::Lin(acc))
+			}
+			// Division by constants only (ADR-270 D27); by zero is outside what
+			// the reader covers (SMT-LIB leaves its value open).
+			if op == "/" && n >= 2 {
+				let mut acc = lins[0].clone()
+				for at in 1..<n {
+					let next = lins[at].clone()
+					if next.terms.len() > 0 {
+						return SvGot::Failed(SvReadWhy::Unsupported(f"a non-linear division: {lg_show(sexp)}"))
+					}
+					if next.c.num == 0 {
+						return SvGot::Failed(SvReadWhy::Unsupported(f"a division by zero: {lg_show(sexp)}"))
+					}
+					let inverse = sv_rat_div(sv_int(1), next.c) ?? return sv_overflow(lg_show(sexp))
+					acc = sv_lin_scale(acc, inverse) ?? return sv_overflow(lg_show(sexp))
+				}
+				return SvGot::Val(SvVal::Lin(acc))
+			}
+			if (op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=") && n >= 2 {
+				let mut links: Vec[i64] = []
+				for at in 0..<(n - 1) {
+					match self.compare(op, lins[at], lins[at + 1]) {
+						SvGot::Val(SvVal::Formula(id)) => links.push(id),
+						SvGot::Val(_) => {},
+						SvGot::Failed(why) => {
+							return SvGot::Failed(why.clone())
+						},
+					}
+				}
+				if links.len() == 1 {
+					return SvGot::Val(SvVal::Formula(links[0]))
+				}
+				return SvGot::Val(SvVal::Formula(self.arena.and(links)))
+			}
+			if op == "distinct" && n >= 2 {
+				let mut links: Vec[i64] = []
+				for i in 0..<n {
+					for j in (i + 1)..<n {
+						match self.compare("distinct", lins[i], lins[j]) {
+							SvGot::Val(SvVal::Formula(id)) => links.push(id),
+							SvGot::Val(_) => {},
+							SvGot::Failed(why) => {
+								return SvGot::Failed(why.clone())
+							},
+						}
+					}
+				}
+				if links.len() == 1 {
+					return SvGot::Val(SvVal::Formula(links[0]))
+				}
+				return SvGot::Val(SvVal::Formula(self.arena.and(links)))
+			}
+		}
+		return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp)))
+	}
+
+	/// A declaration of the constant `name` of sort `sort`, or why not.
+	fn declare(ref mut self, name: String, sort: String) -> SvReadWhy? {
+		if sort == "Int" {
+			self.ints.insert(name.clone())
+			return null
+		}
+		if sort == "Real" {
+			self.reals.insert(name.clone())
+			return null
+		}
+		if sort == "Bool" {
+			self.bools.insert(name.clone())
+			let v = self.arena.var(f"|sv!|b:{name}")
+			let zero = self.arena.int(0)
+			let one = self.arena.int(1)
+			let low = self.arena.le(zero, v)
+			let high = self.arena.le(v, one)
+			self.side.push(low)
+			self.side.push(high)
+			return null
+		}
+		return SvReadWhy::Unsupported(f"the sort {sort} of {name}")
+	}
+
+	/// `define-fun name ((p S) ...) S body`: without parameters the body read
+	/// now, with them kept for each application.
+	fn define(ref mut self, command: ref LgSexp, items: ref Vec[LgSexp]) -> SvReadWhy? {
+		if items.len() != 5 || !lg_is_atom(items, 1) {
+			return SvReadWhy::Unsupported(lg_show(command))
+		}
+		let name = lg_unquoted(lg_atom_at(items, 1))
+		let params = match items[2].clone() {
+			LgSexp::List(inside) => inside,
+			LgSexp::Atom(_) => {
+				return SvReadWhy::Unsupported(lg_show(command))
+			},
+		}
+		let mut names: Vec[String] = []
+		for param in params {
+			let pair = match param.clone() {
+				LgSexp::List(inside) => inside,
+				LgSexp::Atom(_) => {
+					return SvReadWhy::Unsupported(lg_show(command))
+				},
+			}
+			if pair.len() != 2 || !lg_is_atom(pair, 0) {
+				return SvReadWhy::Unsupported(lg_show(command))
+			}
+			names.push(lg_unquoted(lg_atom_at(pair, 0)))
+		}
+		if names.len() > 0 {
+			self.funs.insert(name, SvFun { params: names, body: items[4].clone() })
+			return null
+		}
+		let outer_names = self.bound_names.clone()
+		let outer_values = self.bound_values.clone()
+		self.bound_names = []
+		self.bound_values = []
+		let got = self.term(items[4])
+		self.bound_names = outer_names
+		self.bound_values = outer_values
+		return match got {
+			SvGot::Val(v) => {
+				self.defined.insert(name, v.clone())
+				null
+			},
+			SvGot::Failed(why) => why.clone(),
+		}
+	}
+}
+
+/// What the commands a script stops at: the commands read up to its
+/// `check-sat`.
+fn sv_smtlib_skipped(head: String) -> bool {
+	return head == "set-logic"
+		|| head == "set-info"
+		|| head == "set-option"
+		|| head == "get-value"
+		|| head == "get-model"
+		|| head == "get-info"
+		|| head == "get-assignment"
+		|| head == "get-option"
+		|| head == "get-unsat-core"
+		|| head == "get-proof"
+		|| head == "echo"
+}
+
+/// The count `n` of `(push n)` or `(pop n)`: 1 where it is left out.
+fn sv_smtlib_levels(items: ref Vec[LgSexp]) -> i64? {
+	if items.len() == 1 {
+		return 1
+	}
+	if items.len() == 2 && lg_is_atom(items, 1) {
+		return text::parse_i64(lg_atom_at(items, 1))
+	}
+	return null
+}
+
+/// The sorts of a script's variables the logic layer's terms do not carry:
+/// the names of the real ones (ADR-270 D27). Every other variable is an
+/// integer.
+pub struct SvSorts {
+	pub reals: collections::BTreeSet[String],
+}
+
+/// A script, or why not: its assertions in a fresh arena, the reader's
+/// facts after them, and its variables' sorts.
+pub enum SvSmtRead {
+	Script(LgScript, SvSorts),
+	Failed(SvReadWhy),
+}
+
+/// Read a script with its variables' sorts.
+pub fn sv_smtlib_script(source: String) -> SvSmtRead {
+	let commands = match lg_parse(source) {
+		LgParsedSexps::Done(read) => read.clone(),
+		LgParsedSexps::Failed(why) => {
+			return SvSmtRead::Failed(SvReadWhy::Syntax(match why {
+				LgReadError::Syntax(s) => s.clone(),
+				LgReadError::Unsupported(s) => s.clone(),
+				LgReadError::Undeclared(s) => s.clone(),
+			}))
+		},
+	}
+	let mut queries = 0
+	for command in commands {
+		match command.clone() {
+			LgSexp::List(items) => {
+				if lg_head(items) == "check-sat" {
+					queries += 1
+				}
+			},
+			LgSexp::Atom(_) => {},
+		}
+	}
+	if queries > 1 {
+		return SvSmtRead::Failed(SvReadWhy::Unsupported(f"{queries} check-sat commands: a query is self-contained (ADR-270 D3)"))
+	}
+	let mut reader = SvSmtReader {
+		arena: TermArena::empty(),
+		ints: collections::BTreeSet(),
+		reals: collections::BTreeSet(),
+		bools: collections::BTreeSet(),
+		bound_names: [],
+		bound_values: [],
+		defined: collections::BTreeMap(),
+		funs: collections::BTreeMap(),
+		side: [],
+		fresh: 0,
+	}
+	let mut stack: Vec[Vec[i64]] = [[]]
+	for command in commands {
+		let items = match command.clone() {
+			LgSexp::List(inside) => inside,
+			LgSexp::Atom(_) => {
+				return SvSmtRead::Failed(SvReadWhy::Syntax("a command is a list"))
+			},
+		}
+		let head = lg_head(items)
+		let n = items.len()
+		if head == "check-sat" || head == "exit" {
+			break
+		}
+		if sv_smtlib_skipped(head) {
+			continue
+		}
+		if n == 3 && head == "declare-const" && lg_is_atom(items, 1) && lg_is_atom(items, 2) {
+			match reader.declare(lg_unquoted(lg_atom_at(items, 1)), lg_atom_at(items, 2)) {
+				null => {},
+				why => {
+					return SvSmtRead::Failed(why.clone())
+				},
+			}
+			continue
+		}
+		if n == 4
+			&& head == "declare-fun"
+			&& lg_is_atom(items, 1)
+			&& lg_is_empty_list(items, 2)
+			&& lg_is_atom(items, 3) {
+				match reader.declare(lg_unquoted(lg_atom_at(items, 1)), lg_atom_at(items, 3)) {
+					null => {},
+					why => {
+						return SvSmtRead::Failed(why.clone())
+					},
+				}
+				continue
+			}
+		if head == "define-fun" {
+			match reader.define(command, items) {
+				null => {},
+				why => {
+					return SvSmtRead::Failed(why.clone())
+				},
+			}
+			continue
+		}
+		if n == 2 && head == "assert" {
+			match reader.formula(items[1]) {
+				SvGot::Val(SvVal::Formula(id)) => {
+					let last = stack.len() - 1
+					stack[last].push(id)
+				},
+				SvGot::Val(_) => {},
+				SvGot::Failed(why) => {
+					return SvSmtRead::Failed(why.clone())
+				},
+			}
+			continue
+		}
+		if head == "push" {
+			let levels = sv_smtlib_levels(items)
+				?? return SvSmtRead::Failed(SvReadWhy::Unsupported(lg_show(command)))
+			for _ in 0..<levels {
+				stack.push([])
+			}
+			continue
+		}
+		if head == "pop" {
+			let levels = sv_smtlib_levels(items)
+				?? return SvSmtRead::Failed(SvReadWhy::Unsupported(lg_show(command)))
+			if levels >= stack.len() {
+				return SvSmtRead::Failed(SvReadWhy::Unsupported(f"{lg_show(command)} below the first level"))
+			}
+			for _ in 0..<levels {
+				stack.pop()
+			}
+			continue
+		}
+		if n == 1 && head == "reset-assertions" {
+			stack = [[]]
+			continue
+		}
+		return SvSmtRead::Failed(SvReadWhy::Unsupported(lg_show(command)))
+	}
+	let mut assertions: Vec[i64] = []
+	for level in stack {
+		for id in level {
+			assertions.push(id)
+		}
+	}
+	for id in reader.side {
+		assertions.push(id)
+	}
+	return SvSmtRead::Script(
+		LgScript { arena: reader.arena, assertions: assertions },
+		SvSorts { reals: reader.reals },
+	)
+}
+
+/// The reason a script was refused, as one line.
+fn sv_read_why_text(why: ref SvReadWhy) -> String {
+	return match why {
+		SvReadWhy::Syntax(s) => f"syntax: {s}",
+		SvReadWhy::Unsupported(s) => f"unsupported: {s}",
+		SvReadWhy::Undeclared(s) => f"undeclared: {s}",
+		SvReadWhy::Overflow(s) => f"overflow: {s}",
+	}
+}
+
+/// Read a script of the measuring rod: the same `LgScript` as
+/// `lg_smtlib_read` gives, over the forms the header names. A real
+/// variable reads as an integer one here: `sv_smtlib_script` keeps the sorts.
+pub fn sv_smtlib_read(source: String) -> LgRead {
+	return match sv_smtlib_script(source) {
+		SvSmtRead::Script(s, _) => LgRead::Script(s.clone()),
+		SvSmtRead::Failed(why) => LgRead::Failed(match why {
+			SvReadWhy::Syntax(s) => LgReadError::Syntax(s.clone()),
+			SvReadWhy::Undeclared(s) => LgReadError::Undeclared(s.clone()),
+			else => LgReadError::Unsupported(sv_read_why_text(why)),
+		}),
+	}
+}
