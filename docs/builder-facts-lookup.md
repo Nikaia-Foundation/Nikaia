@@ -157,6 +157,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * In `keeps.nika`, a value handed back goes through `hand_over`/`reached_of`, so anything added there also keeps on `return`, which D8 forbids; put store-only escapes on `Stmt::Assign` instead. (issue-1225)
 * Thread-locals in proofs, comptime and project make a parallel check safe only in lower-std (`infer_package_parallel`), never in project builds. (issue-1277)
 * `lower_tools_files_cached` re-parses files with `test` blocks (`with_tests_as_functions`), so package-wide values computed from `parsed` do not cover those files' test functions. (issue-1279)
+* A `__keep_N` in the wrong scope comes from the keep plan in `buffers.nika` (`decide_source`, keyed by `walk.statement`), not from the emitter. (issue-1289)
 
 ### Grammar
 
