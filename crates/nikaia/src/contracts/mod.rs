@@ -361,47 +361,7 @@ impl LedgerOps for Ledger {
         units: &[&Parsed],
         library: &Ledger,
     ) -> (Self, Vec<crate::check::Checked>, sync::Noted) {
-        let mut ledger = Self::empty();
-        // **The order of the passes, in Nikaia** (`tools/ledger_items.nika`,
-        // `ledger_infer_package`, ADR-294, #125): the item loop, the checker,
-        // each derived column and the defaults. What holds a view is computed
-        // per unit here, by name (#544): a `Symbol` is interned by the parse
-        // of one file, so a set of them means nothing to another.
-        let views: Vec<nikaia_std::tools::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
-            .iter()
-            .map(|parsed| crate::check::parsed_view_of(parsed))
-            .collect();
-        let package_borrowing = package_borrowing(units);
-        let borrowing: Vec<BTreeSet<String>> = units
-            .iter()
-            .map(|parsed| {
-                borrowing_structs_beside(parsed, &package_borrowing)
-                    .iter()
-                    .map(|s| parsed.text(*s).to_string())
-                    .collect()
-            })
-            .collect();
-        let host = InferHost {
-            units,
-            library,
-            checked: RefCell::new(Vec::new()),
-            resolved: RefCell::new(BTreeMap::new()),
-            stored: RefCell::new(BTreeMap::new()),
-            noted: RefCell::new(None),
-            column: RefCell::new(None),
-        };
-        nikaia_std::tools::ledger_items::ledger_infer_package(
-            &mut ledger,
-            &views,
-            &borrowing,
-            library,
-            &host,
-        );
-        let mut noted = host.noted.take().unwrap_or_default();
-        if let Some(column) = host.column.take() {
-            noted.column = column;
-        }
-        (ledger, host.checked.take(), noted)
+        infer_package_with(units, library, false)
     }
 
     /// A function by the name a caller wrote.
@@ -649,6 +609,77 @@ fn computed_literal(
     }
 }
 
+/// **A package's ledger, its units checked on every core** where `parallel`
+/// (#1277): `lower-std`'s tools package, whose files are checked on worker
+/// threads for the lowering too. A project's build keeps one thread: its
+/// checker reads thread-local state the build sets around it (the proofs'
+/// file, a default's workshop).
+pub fn infer_package_parallel(
+    units: &[&Parsed],
+    library: &Ledger,
+) -> (Ledger, Vec<crate::check::Checked>) {
+    let (ledger, checked, _) = infer_package_with(units, library, true);
+    (ledger, checked)
+}
+
+/// [`LedgerOps::infer_package_noted`], with the units checked in parallel
+/// where `parallel`.
+fn infer_package_with(
+    units: &[&Parsed],
+    library: &Ledger,
+    parallel: bool,
+) -> (Ledger, Vec<crate::check::Checked>, sync::Noted) {
+    let mut ledger = Ledger::empty();
+
+    // **The order of the passes, in Nikaia** (`tools/ledger_items.nika`,
+    // `ledger_infer_package`, ADR-294, #125): the item loop, the checker,
+    // each derived column and the defaults. What holds a view is computed
+    // per unit here, by name (#544): a `Symbol` is interned by the parse
+    // of one file, so a set of them means nothing to another.
+    let views: Vec<nikaia_std::tools::parsed_view::ParsedView<'_, '_, '_, '_, '_, '_>> = units
+        .iter()
+        .map(|parsed| crate::check::parsed_view_of(parsed))
+        .collect();
+    let package_borrowing = package_borrowing(units);
+    let borrowing: Vec<BTreeSet<String>> = units
+        .iter()
+        .map(|parsed| {
+            borrowing_structs_beside(parsed, &package_borrowing)
+                .iter()
+                .map(|s| parsed.text(*s).to_string())
+                .collect()
+        })
+        .collect();
+    let host = InferHost {
+        units,
+        library,
+        checked: RefCell::new(Vec::new()),
+        resolved: RefCell::new(BTreeMap::new()),
+        stored: RefCell::new(BTreeMap::new()),
+        noted: RefCell::new(None),
+        column: RefCell::new(None),
+        parallel,
+        spent: RefCell::new(
+            std::env::var_os("NIKAIA_LOWER_TIMES")
+                .is_some()
+                .then(Vec::new),
+        ),
+    };
+    nikaia_std::tools::ledger_items::ledger_infer_package(
+        &mut ledger,
+        &views,
+        &borrowing,
+        library,
+        &host,
+    );
+    host.report();
+    let mut noted = host.noted.take().unwrap_or_default();
+    if let Some(column) = host.column.take() {
+        noted.column = column;
+    }
+    (ledger, host.checked.take(), noted)
+}
+
 /// A value as the literal both languages spell it the same way, where it has
 /// one.
 pub fn literal_of(value: &crate::build_time::Value) -> Option<String> {
@@ -666,34 +697,81 @@ struct InferHost<'a> {
     stored: RefCell<BTreeMap<String, crate::check::StoredCode>>,
     noted: RefCell<Option<sync::Noted>>,
     column: RefCell<Option<keeps::Column>>,
+    /// Whether `check_units` checks the units on every core (#1277).
+    parallel: bool,
+    /// The time each pass took, summed, where `NIKAIA_LOWER_TIMES` asks.
+    spent: RefCell<Option<Vec<(&'static str, std::time::Duration)>>>,
+}
+
+impl InferHost<'_> {
+    /// `run`, its time added to `pass` where the passes are timed.
+    fn timed<R>(&self, pass: &'static str, run: impl FnOnce() -> R) -> R {
+        if self.spent.borrow().is_none() {
+            return run();
+        }
+        let started = std::time::Instant::now();
+        let out = run();
+        let took = started.elapsed();
+        if let Some(spent) = self.spent.borrow_mut().as_mut() {
+            match spent.iter_mut().find(|(name, _)| *name == pass) {
+                Some((_, total)) => *total += took,
+                None => spent.push((pass, took)),
+            }
+        }
+        out
+    }
+
+    /// Each unit checked for the ledger, with the other files **beside** it,
+    /// so a type another file declares has its fields and variants here as
+    /// there (#125); on every core where `parallel` (#1277), the answers in
+    /// the units' order either way.
+    fn checked_units(&self, ledger: &Ledger) -> Vec<crate::check::Checked> {
+        let units = self.units;
+        let check = |at: usize| {
+            let beside: Vec<&Parsed> = units
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, other)| *other)
+                .collect();
+            crate::proofs::in_unit(at, || {
+                crate::check::check_for_the_ledger(
+                    units[at],
+                    &beside,
+                    ledger,
+                    self.library,
+                    &crate::assets::Reads::none(),
+                )
+            })
+        };
+        if !self.parallel {
+            return (0..units.len()).map(check).collect();
+        }
+        // The largest first, so no core is left with a long file at the end.
+        let mut order: Vec<usize> = (0..units.len()).collect();
+        order.sort_by_key(|at| std::cmp::Reverse(units[*at].program.items.len()));
+        crate::sysroot::in_parallel(&order, None, check)
+    }
+
+    /// Each pass's time, to stderr, beside `lower-std`'s phases.
+    fn report(&self) {
+        // Only the toolchain's own run (`lower-std`) is broken down; the
+        // inferences of `std`'s modules beside it would only repeat it.
+        if !self.parallel {
+            return;
+        }
+        for (pass, took) in self.spent.borrow().iter().flatten() {
+            eprintln!(
+                "lower-std:   ledger {pass:<14} {:>8.3}s",
+                took.as_secs_f64()
+            );
+        }
+    }
 }
 
 impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
     fn check_units(&self, ledger: &Ledger) {
-        // With the other files **beside** it, so a type another file
-        // declares has its fields and variants here as there (#125).
-        let units = self.units;
-        let checked: Vec<crate::check::Checked> = units
-            .iter()
-            .enumerate()
-            .map(|(at, parsed)| {
-                let beside: Vec<&Parsed> = units
-                    .iter()
-                    .enumerate()
-                    .filter(|(other, _)| *other != at)
-                    .map(|(_, other)| *other)
-                    .collect();
-                crate::proofs::in_unit(at, || {
-                    crate::check::check_for_the_ledger(
-                        parsed,
-                        &beside,
-                        ledger,
-                        self.library,
-                        &crate::assets::Reads::none(),
-                    )
-                })
-            })
-            .collect();
+        let checked = self.timed("check_units", || self.checked_units(ledger));
         *self.resolved.borrow_mut() = checked
             .iter()
             .flat_map(|c| c.methods.iter().map(|(k, v)| (k.clone(), v.clone())))
@@ -708,7 +786,9 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
     }
 
     fn infer_sync(&self, ledger: &mut Ledger) {
-        let noted = sync::infer(ledger, self.units, self.library, &self.resolved.borrow());
+        let noted = self.timed("sync", || {
+            sync::infer(ledger, self.units, self.library, &self.resolved.borrow())
+        });
         *self.noted.borrow_mut() = Some(noted);
     }
 
@@ -717,60 +797,87 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
     }
 
     fn infer_throws(&self, ledger: &mut Ledger) {
-        throws::infer(
-            ledger,
-            self.units,
-            self.library,
-            &self.resolved.borrow(),
-            &self.stored.borrow(),
-        );
+        self.timed("throws", || {
+            throws::infer(
+                ledger,
+                self.units,
+                self.library,
+                &self.resolved.borrow(),
+                &self.stored.borrow(),
+            )
+        });
     }
 
     fn infer_touch(&self, ledger: &mut Ledger) {
-        touch::infer(ledger, self.units, self.library, &self.resolved.borrow());
+        self.timed("touch", || {
+            touch::infer(ledger, self.units, self.library, &self.resolved.borrow())
+        });
+    }
+
+    fn result_package(&self, own: &Ledger) -> nikaia_std::tools::views::ResultPackage {
+        // The ledgers alone: any unit's interner serves, none is read.
+        self.timed("result_package", || match self.units.first() {
+            Some(parsed) => crate::views::result_package(parsed, own, self.library),
+            None => nikaia_std::tools::views::ResultPackage {
+                owned_results: Default::default(),
+                read_by_free: Default::default(),
+            },
+        })
     }
 
     fn result_sources(
         &self,
         unit: i64,
         own: &Ledger,
+        package: &nikaia_std::tools::views::ResultPackage,
     ) -> Vec<nikaia_std::tools::views::ResultSource> {
-        crate::views::result_sources(self.units[unit as usize], own, self.library)
+        self.timed("result_sources", || {
+            crate::views::result_sources_in(self.units[unit as usize], own, self.library, package)
+        })
     }
 
     fn places_stored(
         &self,
         unit: i64,
         own: &Ledger,
+        package: &nikaia_std::tools::views::ResultPackage,
     ) -> Vec<nikaia_std::tools::views::PlacesStored> {
-        crate::views::places_stored(self.units[unit as usize], own, self.library)
+        self.timed("places_stored", || {
+            crate::views::places_stored_in(self.units[unit as usize], own, self.library, package)
+        })
     }
 
     fn infer_keeps(&self, ledger: &mut Ledger) {
-        let column = keeps::infer(ledger, self.units, self.library, &self.resolved.borrow());
+        let column = self.timed("keeps", || {
+            keeps::infer(ledger, self.units, self.library, &self.resolved.borrow())
+        });
         *self.column.borrow_mut() = Some(column);
     }
 
     fn infer_sharing(&self, ledger: &mut Ledger, unit: i64) {
-        sharing::infer(ledger, self.units[unit as usize], self.library);
+        self.timed("sharing", || {
+            sharing::infer(ledger, self.units[unit as usize], self.library)
+        });
     }
 
     fn infer_maps(&self, ledger: &mut Ledger) {
-        maps::infer(ledger, self.units);
+        self.timed("maps", || maps::infer(ledger, self.units));
     }
 
     fn infer_locks(&self, ledger: &mut Ledger) {
-        locks::infer(
-            ledger,
-            self.units,
-            self.library,
-            &self.resolved.borrow(),
-            &self.stored.borrow(),
-        );
+        self.timed("locks", || {
+            locks::infer(
+                ledger,
+                self.units,
+                self.library,
+                &self.resolved.borrow(),
+                &self.stored.borrow(),
+            )
+        });
     }
 
     fn infer_tether(&self, ledger: &mut Ledger) {
-        tether::infer(ledger, self.units, self.library);
+        self.timed("tether", || tether::infer(ledger, self.units, self.library));
     }
 
     fn known_default(&self, unit: i64, key: &str, at: i64) -> Option<String> {

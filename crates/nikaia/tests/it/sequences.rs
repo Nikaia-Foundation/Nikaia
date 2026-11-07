@@ -337,10 +337,13 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
             let Ok(parsed) = parse_to_ast(&source) else {
                 continue;
             };
+            // **The solver is part of the tools' package**: its `sv_*` files
+            // call each other and the `lg_*` of `tools/logic_*.nika`, so read
+            // alone every one of those calls is unanswered.
             let in_tools = path
                 .parent()
                 .and_then(|dir| dir.file_name())
-                .is_some_and(|dir| dir == "tools");
+                .is_some_and(|dir| dir == "tools" || dir == "solver");
             match in_tools {
                 true => tools.push((path, parsed)),
                 false => loose.push(parsed),

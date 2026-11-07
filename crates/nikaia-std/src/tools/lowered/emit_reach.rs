@@ -10,24 +10,44 @@ pub(crate) fn reach_pausing_keys(contracts: &Ledger) -> collections::BTreeSet<St
     pausing
 }
 
-pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
-    let pausing = reach_pausing_keys(contracts);
-    let empty: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
-    if pausing.is_empty() { return empty; }
-    let mut by_last: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    for key in pausing.iter() {
-        let last = reach_last_segment(key);
-        let mut keys = reach_keys_for(&by_last, &last);
-        keys.push(key.to_string());
-        by_last.insert(last, keys);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReachIndex {
+    pub keys: collections::BTreeSet<String>,
+    pub by_last: collections::BTreeMap<String, Vec<String>>,
+}
+
+pub fn reach_pausing_index(contracts: &Ledger) -> ReachIndex { reach_index_of(reach_pausing_keys(contracts)) }
+
+pub fn reach_running_index(contracts: &Ledger) -> ReachIndex {
+    let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in contracts.functions.keys() {
+        let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if reach_runs_code(contract) { running.insert(name.to_string()); }
     }
+    reach_index_of(running)
+}
+
+pub(crate) fn reach_index_of(keys: collections::BTreeSet<String>) -> ReachIndex {
+    let mut by_last: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    for key in keys.iter() {
+        let last = reach_last_segment(key);
+        let mut found = reach_keys_for(&by_last, &last);
+        found.push(key.to_string());
+        by_last.insert(last, found);
+    }
+    ReachIndex { keys, by_last }
+}
+
+pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+    let empty: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    if index.keys.is_empty() { return empty; }
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for item in items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                graph.insert(words.resolve(held).to_string(), reach_edges_of(words, aliases, &pausing, &by_last, body));
+                graph.insert(words.resolve(held).to_string(), reach_edges_of(words, aliases, &index.keys, &index.by_last, body));
             },
             Item::Impl { target, methods, .. } => {
                 let owner = words.resolve(target.name).to_string();
@@ -36,7 +56,7 @@ pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collecti
                         Item::Fn { name, body, .. } => {
                             let name = *name;
                             let own = reach_method_name(words, name);
-                            graph.insert(format!("{}::{}", owner, own), reach_edges_of(words, aliases, &pausing, &by_last, body));
+                            graph.insert(format!("{}::{}", owner, own), reach_edges_of(words, aliases, &index.keys, &index.by_last, body));
                         },
                         _ => { },
                     }
@@ -133,19 +153,7 @@ pub(crate) fn reach_set_for(reaches: &collections::BTreeMap<String, collections:
     found.to_owned()
 }
 
-pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
-    let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for name in contracts.functions.keys() {
-        let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if reach_runs_code(contract) { running.insert(name.to_string()); }
-    }
-    let mut by_last: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    for name in running.iter() {
-        let last = reach_last_segment(name);
-        let mut keys = reach_keys_for(&by_last, &last);
-        keys.push(name.to_string());
-        by_last.insert(last, keys);
-    }
+pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for item in items.iter() {
         match &item.node {
@@ -153,7 +161,7 @@ pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &colle
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let fn_name = words.resolve(held).to_string();
-                if running.contains(&fn_name) { graph.insert(fn_name, reach_edges_of(words, aliases, &running, &by_last, body)); }
+                if index.keys.contains(&fn_name) { graph.insert(fn_name, reach_edges_of(words, aliases, &index.keys, &index.by_last, body)); }
             },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
@@ -164,7 +172,7 @@ pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &colle
                         Item::Fn { name, body, .. } => {
                             let name = *name;
                             let method_key = format!("{}::{}", owner, reach_method_name(words, name));
-                            if running.contains(&method_key) { graph.insert(method_key, reach_edges_of(words, aliases, &running, &by_last, body)); }
+                            if index.keys.contains(&method_key) { graph.insert(method_key, reach_edges_of(words, aliases, &index.keys, &index.by_last, body)); }
                         },
                         _ => { },
                     }

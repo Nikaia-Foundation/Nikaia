@@ -404,7 +404,7 @@ fn sv_fast(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastRun {
 	}
 	let mut dists: Vec[i64] = []
 	let mut preds: Vec[i64] = []
-	for _ in 0..cnf.query.columns as i64 {
+	for _ in 0..<cnf.query.columns as i64 + 1 {
 		dists.push(0)
 		preds.push(-1)
 	}

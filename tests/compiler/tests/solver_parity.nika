@@ -91,11 +91,11 @@ fn main() throws {
 fn sum(n: i64) -> String {
 	let mut text = "(set-logic QF_LIA)\n"
 	let mut terms = ""
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		text = text + f"(declare-const x{i} Int)\n"
 		terms = terms + f" x{i}"
 	}
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		text = text + f"(assert (or (= x{i} (- 1)) (= x{i} 1)))\n"
 	}
 	return text + f"(assert (= (+{terms}) 1))\n(check-sat)\n"
@@ -134,7 +134,7 @@ fn main() throws {
 		("gcd", decl + "(assert (= (+ (* 6 x) (* 9 n)) (+ (* 3 m) 2)))\n(check-sat)\n"),
 		("even-even", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 4 m) 2)))\n(check-sat)\n"),
 	]
-	for n in 2..12 {
+	for n in 2..<13 {
 		files.push((f"sum-{n}", sum(n)))
 	}
 	let mut args: Vec[String] = ["run", "main.nika", "--"]

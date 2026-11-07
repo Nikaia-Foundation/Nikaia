@@ -19,32 +19,61 @@ fn reach_pausing_keys(contracts: ref Ledger) -> collections::BTreeSet[String] {
     return pausing
 }
 
+/// **The keys a graph's edges may reach, and a bare method name to every one
+/// of them that ends in it** (#1279): worked out once per graph from the
+/// ledger, not again for each unit whose edges it draws.
+pub struct ReachIndex {
+    pub keys: collections::BTreeSet[String],
+    pub by_last: collections::BTreeMap[String, Vec[String]],
+}
+
+/// The index of the ledger's functions that may pause (`pausing_edges`).
+pub fn reach_pausing_index(contracts: ref Ledger) -> ReachIndex {
+    return reach_index_of(reach_pausing_keys(contracts))
+}
+
+/// The index of the ledger's functions that run a `sync` code parameter
+/// (`code_cycle_edges`).
+pub fn reach_running_index(contracts: ref Ledger) -> ReachIndex {
+    let mut running: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in contracts.functions.keys() {
+        let contract = contracts.functions.get(name) ?? continue
+        if reach_runs_code(contract) {
+            running.insert(name.clone())
+        }
+    }
+    return reach_index_of(running)
+}
+
+fn reach_index_of(keys: collections::BTreeSet[String]) -> ReachIndex {
+    let mut by_last: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    for key in keys {
+        let last = reach_last_segment(key)
+        let mut found = reach_keys_for(by_last, last)
+        found.push(key.clone())
+        by_last.insert(last, found)
+    }
+    return ReachIndex { keys: keys, by_last: by_last }
+}
+
 /// A function key of one file to the pausing keys it calls, through a call
 /// of a name, a path or a method. A bare method name draws an edge to
 /// **every** pausing key that ends in it, which over-approximates and is
 /// safe: a cycle too many boxes a future that did not need it. Each file of
 /// a package gives its edges, and `pausing_reach` closes them all: a cycle
-/// may pass through several files (`impl S` in two of them).
-pub fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
-    let pausing = reach_pausing_keys(contracts)
+/// may pass through several files (`impl S` in two of them). `index` is
+/// `reach_pausing_index` of the ledger.
+pub fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], index: ref ReachIndex) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let empty: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
-    if pausing.len() == 0 {
+    if index.keys.len() == 0 {
         return empty
-    }
-    // A bare method name to every pausing key that ends in it.
-    let mut by_last: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
-    for key in pausing {
-        let last = reach_last_segment(key)
-        let mut keys = reach_keys_for(by_last, last)
-        keys.push(key.clone())
-        by_last.insert(last, keys)
     }
     let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for item in items {
         match item.node {
             Item::Fn { name, body, .. } => {
                 let held = name ?? continue
-                graph.insert(words.resolve(held).clone(), reach_edges_of(words, aliases, pausing, by_last, body))
+                graph.insert(words.resolve(held).clone(), reach_edges_of(words, aliases, index.keys, index.by_last, body))
             },
             Item::Impl { target, methods, .. } => {
                 let owner = words.resolve(target.name).clone()
@@ -52,7 +81,7 @@ pub fn pausing_edges(words: ref winnow_grammar::InternerContext, aliases: ref co
                     match method.node {
                         Item::Fn { name, body, .. } => {
                             let own = reach_method_name(words, name)
-                            graph.insert(f"{owner}::{own}", reach_edges_of(words, aliases, pausing, by_last, body))
+                            graph.insert(f"{owner}::{own}", reach_edges_of(words, aliases, index.keys, index.by_last, body))
                         },
                         else => {},
                     }
@@ -165,30 +194,17 @@ fn reach_set_for(reaches: ref collections::BTreeMap[String, collections::BTreeSe
 }
 
 /// A code-running function key of one file to the code-running keys it
-/// calls (`code_on_a_cycle`, #1129).
-pub fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
-    let mut running: collections::BTreeSet[String] = collections::BTreeSet()
-    for name in contracts.functions.keys() {
-        let contract = contracts.functions.get(name) ?? continue
-        if reach_runs_code(contract) {
-            running.insert(name.clone())
-        }
-    }
-    let mut by_last: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
-    for name in running {
-        let last = reach_last_segment(name)
-        let mut keys = reach_keys_for(by_last, last)
-        keys.push(name.clone())
-        by_last.insert(last, keys)
-    }
+/// calls (`code_on_a_cycle`, #1129). `index` is `reach_running_index` of the
+/// ledger.
+pub fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], items: ref Vec[Spanned[Item]], index: ref ReachIndex) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for item in items {
         match item.node {
             Item::Fn { name, body, .. } => {
                 let held = name ?? continue
                 let fn_name = words.resolve(held).clone()
-                if running.contains(fn_name) {
-                    graph.insert(fn_name, reach_edges_of(words, aliases, running, by_last, body))
+                if index.keys.contains(fn_name) {
+                    graph.insert(fn_name, reach_edges_of(words, aliases, index.keys, index.by_last, body))
                 }
             },
             Item::Impl { trait_name, target, methods } => {
@@ -200,8 +216,8 @@ pub fn code_cycle_edges(words: ref winnow_grammar::InternerContext, aliases: ref
                     match method.node {
                         Item::Fn { name, body, .. } => {
                             let method_key = f"{owner}::{reach_method_name(words, name)}"
-                            if running.contains(method_key) {
-                                graph.insert(method_key, reach_edges_of(words, aliases, running, by_last, body))
+                            if index.keys.contains(method_key) {
+                                graph.insert(method_key, reach_edges_of(words, aliases, index.keys, index.by_last, body))
                             }
                         },
                         else => {},

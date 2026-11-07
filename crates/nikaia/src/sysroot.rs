@@ -408,18 +408,25 @@ fn without_bodies(source: &str, parsed: &crate::parser::Parsed) -> String {
 fn read_tools_package(
     paths: &[PathBuf],
 ) -> Result<(Vec<usize>, Vec<String>, Vec<crate::parser::Parsed>)> {
-    let mut parsed: Vec<crate::parser::Parsed> = Vec::new();
     let mut sizes: Vec<usize> = Vec::new();
     let mut texts: Vec<String> = Vec::new();
     for path in paths {
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         sizes.push(source.len());
-        let one = crate::parser::parse_unrefined(&source)
-            .map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
         texts.push(source);
-        parsed.push(one);
     }
+    // **Each file parsed on its own thread** (#1277): a parse reads only its
+    // text and makes its own interner; the largest first, the answers in file
+    // order.
+    let mut order: Vec<usize> = (0..paths.len()).collect();
+    order.sort_by_key(|at| std::cmp::Reverse(sizes[*at]));
+    let mut parsed: Vec<crate::parser::Parsed> = in_parallel(&order, None, |at| {
+        crate::parser::parse_unrefined(&texts[at])
+            .map_err(|e| anyhow::anyhow!("{}: {e}", paths[at].display()))
+    })
+    .into_iter()
+    .collect::<Result<_>>()?;
     // **The package's text tiers, once all its files are parsed** (ADR-282
     // D17, #956): a file reads the published fields of the others.
     {
@@ -572,7 +579,7 @@ fn lower_tools_files_cached(
     timer.lap("parse");
     let (described, library, facts_reusable) = tools_library()?;
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
-    let (own, checked) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+    let (own, checked) = crate::contracts::infer_package_parallel(&units, &library);
     timer.lap("ledger");
     // **The package's trust, asked once** (ADR-010 D9, #581): the join over all
     // its files is one answer, and asking it per file reads the package again
@@ -625,6 +632,14 @@ fn lower_tools_files_cached(
             interface, &name, &text, &Host,
         ))
     };
+
+    // **The package's call graphs, worked out once** (#1279): they are the
+    // same for every file, read over all of them against `own`.
+    let graphs = {
+        let views: Vec<_> = parsed.iter().map(crate::check::parsed_view_of).collect();
+        nikaia_std::tools::emit_contracts::emit_contracts_package_graphs(&views, &own)
+    };
+    timer.lap("graphs");
 
     // **Each file checked and lowered on its own, on every core** (#667): a
     // file's lowering reads the package (`beside`, `own`, `provenance`) and
@@ -704,8 +719,18 @@ fn lower_tools_files_cached(
                 std::time::Duration::ZERO,
             );
         }
+        // A file lowered with its tests as functions holds functions the
+        // package's graphs were not drawn over, so its own are drawn.
+        let file_graphs = tests.is_none().then(|| graphs.clone());
         let lowered = crate::emit::emit_std_items_against_at(
-            unit, &beside, &own, &described, build, provenance, facts,
+            unit,
+            &beside,
+            &own,
+            &described,
+            build,
+            provenance,
+            facts,
+            file_graphs,
         )
         .map(|lowered| {
             let rust = format!("{}{wrappers}", lowered.rust);
@@ -920,7 +945,7 @@ impl Phases {
 /// (#667): `order` says which index is started first and nothing else. The
 /// threads are `threads`, else `NIKAIA_LOWER_THREADS` where it is set, else
 /// one per core; at one, the work runs on the calling thread.
-fn in_parallel<T: Send>(
+pub(crate) fn in_parallel<T: Send>(
     order: &[usize],
     threads: Option<usize>,
     work: impl Fn(usize) -> T + Sync,

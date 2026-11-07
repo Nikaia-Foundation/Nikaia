@@ -68,11 +68,11 @@ fn main() throws {
 fn family(n: i64, k: i64, total: i64, status: String, extra: String) -> String {
 	let mut text = f"(set-logic QF_LIA)\n(set-info :status {status})\n"
 	let mut terms = ""
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		text = text + f"(declare-const x{i} Int)\n"
 		terms = terms + f" x{i}"
 	}
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		text = text + f"(assert (or (= x{i} 0) (= x{i} {k})))\n"
 	}
 	return text + extra + f"(assert (= (+{terms}) {total}))\n(check-sat)\n"

@@ -348,6 +348,7 @@ pub fn emit_std_against(
         described,
         &Reads::none(),
         None,
+        None,
     )
     .for_std()
     .program()
@@ -355,6 +356,7 @@ pub fn emit_std_against(
 
 /// The same at a given build, for the test that holds the package to lowering
 /// the same at both settings of `user_parallelism` (ADR-002 D4).
+#[allow(clippy::too_many_arguments)]
 pub fn emit_std_items_against_at(
     parsed: &Parsed,
     beside: &[&Parsed],
@@ -367,6 +369,9 @@ pub fn emit_std_items_against_at(
     // same `beside`, `own`, library, no modules, nothing newly, no reads), so
     // the checker walks the file once and not twice. `None` runs it here.
     checked: Option<crate::check::CheckFacts>,
+    // **The package's call graphs**, worked out once for all its files
+    // (`emit_contracts_package_graphs`, #1279). `None` works them out here.
+    graphs: Option<nikaia_std::tools::emit_contracts::EmitReachGraphs>,
 ) -> Result<Lowered> {
     Emitter::with_contracts(
         parsed,
@@ -377,6 +382,7 @@ pub fn emit_std_items_against_at(
         described,
         &Reads::none(),
         checked,
+        graphs,
     )
     .for_std()
     .items_only()
@@ -418,6 +424,7 @@ pub fn emit_module_body_at(
         described,
         reads,
         checked,
+        None,
     )
     .for_entry(entry)
     .items_only()
@@ -605,6 +612,7 @@ impl<'p> Emitter<'p> {
             &crate::contracts::Ledger::blank(),
             reads,
             None,
+            None,
         )
     }
 
@@ -626,6 +634,8 @@ impl<'p> Emitter<'p> {
         // The facts of a check already run as `propagation_against` would run
         // it (`emit_std_items_against_at`).
         checked: Option<crate::check::CheckFacts>,
+        // The package's call graphs, where they were worked out once.
+        graphs: Option<nikaia_std::tools::emit_contracts::EmitReachGraphs>,
     ) -> Self {
         let seeds_of = {
             let mut all: Vec<&Parsed> = beside.to_vec();
@@ -681,6 +691,7 @@ impl<'p> Emitter<'p> {
                 overflow_removed: build.overflow == crate::bounds::OverflowChecks::Removed,
                 trusted: provenance == crate::contracts::Provenance::Trusted,
             },
+            graphs,
         );
         let nonnegative_bodies = host.nonnegative_locals.take();
         Self {
@@ -1001,6 +1012,7 @@ pub fn branch_starts_first<'p>(
         // This asks whether a branch pauses, which no file a build read can
         // change — so D1's default is the honest answer here.
         &Reads::none(),
+        None,
         None,
     );
     move |stmt| emitter.branch_pauses(stmt)

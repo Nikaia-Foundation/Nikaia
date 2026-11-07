@@ -324,8 +324,9 @@ pub trait LedgerInferHost {
     fn reads_back(&self, condition: &str, readable: &collections::BTreeSet<String>) -> bool;
     fn infer_throws(&self, ledger: &mut Ledger);
     fn infer_touch(&self, ledger: &mut Ledger);
-    fn result_sources(&self, unit: i64, own: &Ledger) -> Vec<ResultSource>;
-    fn places_stored(&self, unit: i64, own: &Ledger) -> Vec<PlacesStored>;
+    fn result_package(&self, own: &Ledger) -> ResultPackage;
+    fn result_sources(&self, unit: i64, own: &Ledger, package: &ResultPackage) -> Vec<ResultSource>;
+    fn places_stored(&self, unit: i64, own: &Ledger, package: &ResultPackage) -> Vec<PlacesStored>;
     fn infer_keeps(&self, ledger: &mut Ledger);
     fn infer_sharing(&self, ledger: &mut Ledger, unit: i64);
     fn infer_maps(&self, ledger: &mut Ledger);
@@ -360,7 +361,7 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     attribute_values(ledger, units, library, &|unit, ty, argument| { host.computed_literal(unit, "an attribute's argument", argument, ty) });
 }
 
-pub(crate) fn ledger_result_sources<H: LedgerInferHost>(ledger: &mut Ledger, units: i64, host: &H) { write_result_sources(ledger, units, &|unit, own| { host.result_sources(unit, own) }, &|unit, own| { host.places_stored(unit, own) }); }
+pub(crate) fn ledger_result_sources<H: LedgerInferHost>(ledger: &mut Ledger, units: i64, host: &H) { write_result_sources(ledger, units, &|own| { host.result_package(own) }, &|unit, own, package| { host.result_sources(unit, own, package) }, &|unit, own, package| { host.places_stored(unit, own, package) }); }
 
 pub(crate) fn ledger_expression_ensures<H: LedgerInferHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], host: &H) {
     for view in units.iter() {

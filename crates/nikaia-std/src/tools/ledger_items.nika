@@ -513,8 +513,10 @@ pub trait LedgerInferHost {
     fn reads_back(ref self, condition: ref String, readable: ref collections::BTreeSet[String]) -> bool sync
     fn infer_throws(ref self, mut ledger: Ledger) sync
     fn infer_touch(ref self, mut ledger: Ledger) sync
-    fn result_sources(ref self, unit: i64, own: ref Ledger) -> Vec[ResultSource] sync
-    fn places_stored(ref self, unit: i64, own: ref Ledger) -> Vec[PlacesStored] sync
+    /// What every unit reads alike in the rounds of `write_result_sources`.
+    fn result_package(ref self, own: ref Ledger) -> ResultPackage sync
+    fn result_sources(ref self, unit: i64, own: ref Ledger, package: ref ResultPackage) -> Vec[ResultSource] sync
+    fn places_stored(ref self, unit: i64, own: ref Ledger, package: ref ResultPackage) -> Vec[PlacesStored] sync
     fn infer_keeps(ref self, mut ledger: Ledger) sync
     fn infer_sharing(ref self, mut ledger: Ledger, unit: i64) sync
     fn infer_maps(ref self, mut ledger: Ledger) sync
@@ -592,7 +594,7 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
 /// The rounds of `write_result_sources`, with the analyses of one unit the
 /// host's.
 fn ledger_result_sources[H: LedgerInferHost](mut ledger: Ledger, units: i64, host: ref H) {
-    write_result_sources(ledger, units, fn(unit, own) { host.result_sources(unit, own) }, fn(unit, own) { host.places_stored(unit, own) })
+    write_result_sources(ledger, units, fn(own) { host.result_package(own) }, fn(unit, own, package) { host.result_sources(unit, own, package) }, fn(unit, own, package) { host.places_stored(unit, own, package) })
 }
 
 /// Every expression function's published `ensures` (ADR-314 D3), written
