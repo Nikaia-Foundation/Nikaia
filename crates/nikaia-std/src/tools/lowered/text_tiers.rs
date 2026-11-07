@@ -2403,14 +2403,26 @@ pub(crate) fn lent_parameter(name: &str, walk: &TierWalk) -> bool {
 
 pub(crate) fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &Type, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     if !plain_string(ask.names, ty) { return; }
-    let name = match value {
-        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
-        _ => return,
-    };
+    let name = match literal_let_named(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     if local.literal < 0 { return; }
     let word = seen(owner, path, walk);
     walk.flows.literal_lets.entry(local.literal).or_insert(collections::BTreeSet::new()).insert(word);
+}
+
+pub(crate) fn literal_let_named(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>) -> Option<String> {
+    match value {
+        Expr::Variable(name, _) => { let name = *name; Some(ask.names.resolve(name).to_string()) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || ask.names.resolve(method) != "to_string" { return None; }
+            match receiver {
+                Expr::Variable(name, _) => { let name = *name; Some(ask.names.resolve(name).to_string()) },
+                _ => None,
+            }
+        },
+        _ => None,
+    }
 }
 
 pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<String> {
@@ -3708,7 +3720,7 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
             if at < given.len() as i64 && nikaia_std::index::get(&given, nikaia_std::index::at(at)).still && !lent_at.contains(nikaia_std::index::AsKey::as_key(&at)) { kept_unseen(arg, ask, walk); }
             at += 1;
         }
-    } else { std_container_args(args, ask, walk); }
+    } else { std_container_args(&callee, args, ask, walk); }
     std_result(&callee, ask)
 }
 
@@ -3733,13 +3745,55 @@ pub(crate) fn from_named_positions(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_
     out
 }
 
-pub(crate) fn std_container_args(args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+pub(crate) fn std_container_args(callee: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let params = std_params(callee, ask);
+    let mut at: i64 = 0;
     for arg in args.iter() {
+        let built = matches!(arg, Expr::ListLit { .. } | Expr::Tuple(_, _));
+        if built && ((at) as usize) < params.len() && std_owns_text_inside(&nikaia_std::index::get(&params, (at) as usize).1) {
+            kept_unseen(arg, ask, walk);
+            owned_literal_lets(arg, ask, walk);
+        }
+        at += 1;
         let whole = source_of(arg, ask, walk);
         if whole.is_some() {
             let found = match whole { Some(__nikaia_value) => __nikaia_value, None => return };
             if a_followed(ask.names, &found.ty) && holds_text(ask.names, &found.ty) { demote_inside(&found.owner, &found.ty, &mut vec![], ask, walk); }
         }
+    }
+}
+
+pub(crate) fn owned_literal_lets(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    match value {
+        Expr::ListLit { items, .. } => { for item in items.iter() { owned_literal_lets(item, ask, walk); } },
+        Expr::Tuple(items, _) => { for item in items.iter() { owned_literal_lets(item, ask, walk); } },
+        _ => {
+            let name = match literal_let_named(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if local.literal >= 0 { walk.flows.owned_lets.insert(local.literal); }
+        },
+    }
+}
+
+pub(crate) fn std_params(callee: &str, ask: &TierAsk<'_, '_, '_, '_, '_>) -> Vec<(String, Ty)> {
+    let contract = match *nikaia_std::index::get(&ask.library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    signature.params.to_owned()
+}
+
+pub(crate) fn std_owns_text_inside(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { args, .. } => args.iter().any(|arg| { std_owns_text(arg) }),
+        Ty::Tuple(parts) => parts.iter().any(|part| { std_owns_text(part) }),
+        _ => false,
+    }
+}
+
+pub(crate) fn std_owns_text(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; name == "String" && !view || std_owns_text_inside(ty) },
+        Ty::Tuple(_) => std_owns_text_inside(ty),
+        _ => false,
     }
 }
 

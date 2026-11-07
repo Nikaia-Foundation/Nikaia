@@ -166,7 +166,7 @@ use std::text
 
 fn drive_exe() -> String throws {
 	for exe in ["target/fast/nikaia", "target/release/nikaia"] {
-		if fs::exists(exe, fs::Root::Anywhere) { return exe.to_string() }
+		if fs::exists(exe, fs::Root::Anywhere) { return exe.clone() }
 	}
 	return ""
 }
@@ -560,7 +560,7 @@ fn drive_launch(dir: String) throws {
 		drive_escalate(f"git push origin {drive_short(sha)}:{branch} failed: {pushed.stderr.trim()}")
 	}
 	let bin = drive_exe()
-	let exe = process::run("realpath", [bin.clone()]).stdout.trim().clone()
+	let exe = process::run("realpath", [bin]).stdout.trim().clone()
 	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
 	let wait = f"'{exe}' run '{script}' -- --ci-wait {sha} '{log}' '{exit}'"
 	let started = process::run("sh", ["-c", f"( {wait} ) < /dev/null > /dev/null 2>&1 &"])
@@ -863,7 +863,7 @@ fn drive_local_tests(paths: Vec[String]) -> String throws {
 	let filters = drive_named_filters(paths)
 	if filters.len() == 0 { return "" }
 	let bin = drive_exe()
-	let exe = process::run("realpath", [bin.clone()]).stdout.trim().clone()
+	let exe = process::run("realpath", [bin]).stdout.trim().clone()
 	let mut args: String = ""
 	for f in filters.clone() { args = args + f" --filter '{f}'" }
 	println(f"LOCAL tests {filters.join(" ")}")
