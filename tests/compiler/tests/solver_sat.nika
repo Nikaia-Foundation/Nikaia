@@ -1,0 +1,300 @@
+// The SAT core (ADR-270 D12, D16, #1283 item 1): pigeonhole 4-into-3 proved
+// and its log accepted by `sv_check`; a learned clause whose hint chain is
+// four clauses long, replayed; a satisfiable random 3-SAT instance's model
+// evaluated on every clause; pigeonhole 6-into-5 with the clause database
+// reduced and the arena compacted on the way, still accepted; a log with one
+// learned clause's hints taken away rejected; a search stopped by its budget.
+// `solver/sv_num.nika`, `sv_row.nika`, `sv_proof.nika`, `sv_check.nika`,
+// `sv_sat.nika` and the `LgLin` struct run beside the driver at the end of
+// this file (the lines after `// driver:`, their `// ` taken off).
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The item of `text` that starts with the line `start`, up to its closing
+// brace.
+fn item(text: String, start: String) -> String {
+	let at = text.find(f"\n{start}") ?? return ""
+	let rest = text[at..]
+	let end = rest.find("\n}\n") ?? return ""
+	return f"{rest[0..<end]}\n}}\n"
+}
+
+// The driver: the comment lines after `// driver:` in `text`, uncommented.
+fn driver(text: String) -> String {
+	let mut out = ""
+	let mut on = false
+	for line in text.lines() {
+		if on {
+			if line.starts_with("// ") {
+				out = out + (line.strip_prefix("// ") ?? "") + "\n"
+			} else {
+				out = out + "\n"
+			}
+		} else if line == "// driver:" {
+			on = true
+		}
+	}
+	return out
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let mut program = "use std::collections\n"
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat"] {
+		program.push_str(fs::read_to_string(
+			f"{repo}/crates/nikaia-std/src/solver/{name}.nika",
+			fs::Root::Anywhere,
+		))
+		program.push_str("\n")
+	}
+	program.push_str(item(
+		fs::read_to_string(
+			f"{repo}/crates/nikaia-std/src/tools/logic_lia.nika",
+			fs::Root::Anywhere,
+		),
+		"pub struct LgLin {",
+	))
+	program.push_str(driver(fs::read_to_string(
+		f"{repo}/tests/compiler/tests/solver_sat.nika",
+		fs::Root::Anywhere,
+	)))
+	fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, program)
+	let out = process::run(nikaia, ["run", "main.nika"]; dir: tmp)
+	println(out.stdout.trim())
+	if out.stdout.trim().len() == 0 {
+		println(out.stderr.trim())
+	}
+	process::run("rm", ["-rf", tmp])
+}
+
+// driver:
+// // A query of `vars` Boolean atoms (each `0 <= 0`, never read by a theory)
+// // and `clauses`.
+// fn query(vars: u32, clauses: Vec[Vec[u32]]) -> SvQuery {
+// 	let mut atoms: Vec[SvAtom] = []
+// 	let mut v: u32 = 0
+// 	while v < vars {
+// 		atoms.push(SvAtom { row: sv_row_constant(0), rel: SvRel::Le })
+// 		v += 1
+// 	}
+// 	return SvQuery { atoms: atoms, clauses: clauses, columns: 0 }
+// }
+//
+// fn pos(v: u32) -> u32 {
+// 	return sv_lit(v, false)
+// }
+//
+// fn neg(v: u32) -> u32 {
+// 	return sv_lit(v, true)
+// }
+//
+// // `p` pigeons into `h` holes, variable `i·h + j` pigeon `i` in hole `j`.
+// fn pigeons(p: u32, h: u32) -> SvQuery {
+// 	let mut clauses: Vec[Vec[u32]] = []
+// 	let mut i: u32 = 0
+// 	while i < p {
+// 		let mut some: Vec[u32] = []
+// 		let mut j: u32 = 0
+// 		while j < h {
+// 			some.push(pos(i * h + j))
+// 			j += 1
+// 		}
+// 		clauses.push(some)
+// 		i += 1
+// 	}
+// 	let mut j: u32 = 0
+// 	while j < h {
+// 		let mut a: u32 = 0
+// 		while a < p {
+// 			let mut b = a + 1
+// 			while b < p {
+// 				clauses.push([neg(a * h + j), neg(b * h + j)])
+// 				b += 1
+// 			}
+// 			a += 1
+// 		}
+// 		j += 1
+// 	}
+// 	return query(p * h, clauses)
+// }
+//
+// // `m` random clauses of three distinct variables of `n`, from `seed`.
+// fn random3(n: u32, m: u32, seed: i64) -> SvQuery {
+// 	let mut state = seed
+// 	let mut clauses: Vec[Vec[u32]] = []
+// 	let mut c: u32 = 0
+// 	while c < m {
+// 		let mut clause: Vec[u32] = []
+// 		let mut vars: Vec[u32] = []
+// 		while vars.len() < 3 {
+// 			state = (state * 1103515245 + 12345) % 2147483648
+// 			let v = ((state / 65536) % (n as i64)) as u32
+// 			if vars.contains(v) {
+// 				continue
+// 			}
+// 			vars.push(v)
+// 			state = (state * 1103515245 + 12345) % 2147483648
+// 			clause.push(sv_lit(v, (state / 65536) % 2 == 1))
+// 		}
+// 		clauses.push(clause)
+// 		c += 1
+// 	}
+// 	return query(n, clauses)
+// }
+//
+// fn answer_text(a: SvSatAnswer) -> String {
+// 	return match a {
+// 		SvSatAnswer::Sat => "sat",
+// 		SvSatAnswer::Unsat => "unsat",
+// 		SvSatAnswer::Unknown => "unknown",
+// 	}
+// }
+//
+// fn work(s: ref SvSatStats) -> String {
+// 	return f"  work: decisions {s.decisions}, propagations {s.propagations}, conflicts {s.conflicts}, learned {s.learned}, deleted {s.deleted}, restarts {s.restarts}, reductions {s.reductions}, compactions {s.compactions}"
+// }
+//
+// fn verdict(q: ref SvQuery, steps: ref Vec[SvStep]) -> String {
+// 	let v = sv_check(q, steps)
+// 	return if v.ok { f"accepted ({v.step} steps)" } else { f"rejected at step {v.step}: {v.reason}" }
+// }
+//
+// // How many clauses of `q` the model of `s` makes true.
+// fn satisfied(q: ref SvQuery, s: ref SvSat) -> i64 {
+// 	let mut n = 0
+// 	for clause in q.clauses {
+// 		let mut ok = false
+// 		for l in clause {
+// 			if s.holds(l) {
+// 				ok = true
+// 			}
+// 		}
+// 		if ok {
+// 			n += 1
+// 		}
+// 	}
+// 	return n
+// }
+//
+// fn lits_text(lits: ref Vec[u32]) -> String {
+// 	let mut parts: Vec[String] = []
+// 	for l in lits {
+// 		let v = l / 2
+// 		parts.push(if l % 2 == 0 { f"x{v}" } else { f"-x{v}" })
+// 	}
+// 	return f"[{parts.join(" ")}]"
+// }
+//
+// // Solves `q` within `budget` conflicts and says what came out.
+// fn run(name: String, q: ref SvQuery, mut s: SvSat, budget: i64) {
+// 	let answer = s.solve(budget)
+// 	println(f"{name}: {answer_text(answer)}")
+// 	println(work(s.stats))
+// 	let mut longest = 0
+// 	for step in s.log.steps {
+// 		match step {
+// 			SvStep::Learn(_, hints) => {
+// 				if hints.len() > longest {
+// 					longest = hints.len()
+// 				}
+// 			},
+// 			else => {},
+// 		}
+// 	}
+// 	match answer {
+// 		SvSatAnswer::Unsat => {
+// 			println(f"  log: {s.log.steps.len()} steps, longest hint chain {longest}")
+// 			println(f"  sv_check: {verdict(q, s.log.steps)}")
+// 		},
+// 		SvSatAnswer::Sat => println(f"  model: {satisfied(q, s)} of {q.clauses.len()} clauses true"),
+// 		SvSatAnswer::Unknown => {},
+// 	}
+// }
+//
+// fn main() {
+// 	let hole = pigeons(4, 3)
+// 	run("pigeonhole 4-into-3", hole, sv_sat_of(hole) ?? return, 100000)
+//
+// 	// Deciding -x0 implies x1, x2, x3 and falsifies the fourth clause: the
+// 	// unit x0 is learned through the whole chain; at level zero it implies
+// 	// x4 and x5, and the last clause is the empty clause's conflict.
+// 	let chain = query(6, [
+// 		[pos(0), pos(1)],
+// 		[pos(0), neg(1), pos(2)],
+// 		[neg(1), neg(2), pos(3)],
+// 		[neg(2), neg(3)],
+// 		[neg(0), pos(4)],
+// 		[neg(4), pos(5)],
+// 		[neg(4), neg(5)],
+// 	])
+// 	let mut s = sv_sat_of(chain) ?? return
+// 	println(f"chain: {answer_text(s.solve(100))}")
+// 	for step in s.log.steps {
+// 		match step {
+// 			SvStep::Learn(lits, hints) => {
+// 				let text = hints.iter().join(" ")
+// 				println(f"  learn {lits_text(lits)} by hints [{text}]")
+// 			},
+// 			else => {},
+// 		}
+// 	}
+// 	println(f"  sv_check: {verdict(chain, s.log.steps)}")
+//
+// 	let random = random3(150, 600, 7)
+// 	run("random 3-SAT, 150 variables, 600 clauses", random, sv_sat_of(random) ?? return, 100000)
+//
+// 	let six = pigeons(6, 5)
+// 	let mut small = sv_sat_of(six) ?? return
+// 	small.reduce_first = 60
+// 	small.reduce_step = 20
+// 	small.restart_unit = 20
+// 	run("pigeonhole 6-into-5, reduced and compacted", six, small, 1000000)
+//
+// 	let mut broken = sv_sat_of(hole) ?? return
+// 	broken.solve(100000)
+// 	let mut cut: Vec[SvStep] = []
+// 	let mut done = false
+// 	for step in broken.log.steps {
+// 		let taken = match step {
+// 			SvStep::Learn(lits, hints) => {
+// 				if !done && hints.len() > 1 {
+// 					done = true
+// 					SvStep::Learn(lits.clone(), [hints[0]])
+// 				} else {
+// 					step.clone()
+// 				}
+// 			},
+// 			else => step.clone(),
+// 		}
+// 		cut.push(taken)
+// 	}
+// 	println(f"pigeonhole 4-into-3, one learned clause's hints cut to one: {verdict(hole, cut)}")
+//
+// 	let seven = pigeons(7, 6)
+// 	run("pigeonhole 7-into-6 within 50 conflicts", seven, sv_sat_of(seven) ?? return, 50)
+// }

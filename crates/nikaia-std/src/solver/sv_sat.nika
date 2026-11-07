@@ -1,0 +1,844 @@
+// crates/nikaia-std/src/solver/sv_sat.nika
+//
+// **The SAT core** (ADR-270 D12, D16, #1283 item 1): conflict-driven clause
+// learning over the literals of `sv_proof.nika` (`2a` atom `a`, `2a + 1` its
+// negation: `variable << 1 | sign`), every clause it derives written to the
+// proof log with the hints `sv_check.nika` replays it by.
+//
+// * **Clauses** live in one `u32` arena, each a header of three words - its
+//   size, `glue << 2 | deleted << 1 | learned`, its entry in the log - and
+//   its literals; a clause is named by the place of its header. The first two
+//   literals are the watched ones.
+// * **Watch lists** per literal hold the clauses watching it, each entry a
+//   clause and a *blocking literal*: where that literal is true the clause is
+//   not read. A binary clause carries its other literal as the blocker and
+//   the high bit in its name, so it is never read from the arena.
+// * **Search**: unit propagation, first-UIP conflict analysis, backjumping
+//   to the second highest level of the learned clause, VSIDS activity in a
+//   heap with saved phases, restarts by the Luby sequence.
+// * **The clause database** is reduced by glue (the number of decision
+//   levels of a learned clause, at its learning): at a restart once enough
+//   conflicts passed, half of the learned clauses of glue above two go, the
+//   worst glue first, and the arena is compacted once half of it is dead.
+// * **The log**: a literal fixed at level zero has a unit clause in the log -
+//   an input, a learned unit, or learned at once from its reason and the
+//   units of the reason's other literals; a learned clause's hints are the
+//   units of the level-zero literals the analysis met, then the reasons it
+//   resolved on in the order they were assigned, then the conflict - each
+//   unit in turn when the clause is assumed false (LRAT).
+//
+// Integers only: activities are `i64`, rescaled before they reach `2^60`.
+
+/// What a search answered.
+pub enum SvSatAnswer {
+	Sat,
+	Unsat,
+	Unknown,
+}
+
+/// What a search did, counted.
+pub struct SvSatStats {
+	pub decisions: i64,
+	pub propagations: i64,
+	pub conflicts: i64,
+	pub learned: i64,
+	pub deleted: i64,
+	pub restarts: i64,
+	pub reductions: i64,
+	pub compactions: i64,
+}
+
+/// What one conflict's analysis learned: the clause (its asserting literal
+/// first, a literal of the backjump level second), its hints, the level it
+/// jumps back to and its glue.
+struct SvLearned {
+	lits: Vec[u32],
+	hints: Vec[u32],
+	level: i64,
+	glue: i64,
+}
+
+/// The solver: its log, its clauses and its assignment.
+pub struct SvSat {
+	pub log: SvLog,
+	pub stats: SvSatStats,
+	/// Whether the log holds the empty clause.
+	pub refuted: bool,
+	/// Conflicts before the first reduction, and how many more before each
+	/// next one.
+	pub reduce_first: i64,
+	pub reduce_step: i64,
+	/// The conflicts of one Luby unit between restarts.
+	pub restart_unit: i64,
+	arena: Vec[u32],
+	/// The words of deleted clauses still in the arena.
+	wasted: i64,
+	learnts: Vec[u32],
+	/// Per literal: the clauses watching it, and their blocking literals.
+	watch_clause: Vec[Vec[u32]],
+	watch_blocker: Vec[Vec[u32]],
+	/// Per variable: `1` true, `-1` false, `0` open; its level; the clause
+	/// that implied it or `-1`; the log entry of its unit clause at level
+	/// zero or `-1`.
+	value: Vec[i64],
+	level: Vec[i64],
+	reason: Vec[i64],
+	unit: Vec[i64],
+	trail: Vec[u32],
+	/// Where each decision level starts on the trail.
+	limits: Vec[i64],
+	/// The next trail entry to propagate.
+	head: i64,
+	activity: Vec[i64],
+	bump: i64,
+	/// The decision heap: variables by activity, the highest on top, and
+	/// each variable's place in it or `-1`.
+	heap: Vec[u32],
+	place: Vec[i64],
+	phase: Vec[bool],
+	seen: Vec[bool],
+	next_reduce: i64,
+}
+
+/// The variable of literal `l`.
+fn sv_sat_var(l: u32) -> i64 {
+	return (l >> 1) as i64
+}
+
+/// The `i`-th term (from zero) of the Luby sequence 1 1 2 1 1 2 4 ...
+fn sv_luby(i: i64) -> i64 {
+	let mut size: i64 = 1
+	let mut seq: i64 = 0
+	while size < i + 1 {
+		seq += 1
+		size = 2 * size + 1
+	}
+	let mut x = i
+	while size - 1 != x {
+		size = (size - 1) / 2
+		seq -= 1
+		x = x % size
+	}
+	let mut out: i64 = 1
+	while seq > 0 {
+		out = out * 2
+		seq -= 1
+	}
+	return out
+}
+
+/// A solver over `vars` variables writing to `log`.
+fn sv_sat(vars: u32, log: SvLog) -> SvSat {
+	let mut s = SvSat {
+		log: log,
+		stats: SvSatStats {
+			decisions: 0,
+			propagations: 0,
+			conflicts: 0,
+			learned: 0,
+			deleted: 0,
+			restarts: 0,
+			reductions: 0,
+			compactions: 0,
+		},
+		refuted: false,
+		reduce_first: 2000,
+		reduce_step: 300,
+		restart_unit: 100,
+		arena: [],
+		wasted: 0,
+		learnts: [],
+		watch_clause: [],
+		watch_blocker: [],
+		value: [],
+		level: [],
+		reason: [],
+		unit: [],
+		trail: [],
+		limits: [],
+		head: 0,
+		activity: [],
+		bump: 65536,
+		heap: [],
+		place: [],
+		phase: [],
+		seen: [],
+		next_reduce: 2000,
+	}
+	let mut v: u32 = 0
+	while v < vars {
+		s.watch_clause.push([])
+		s.watch_clause.push([])
+		s.watch_blocker.push([])
+		s.watch_blocker.push([])
+		s.value.push(0)
+		s.level.push(0)
+		s.reason.push(-1)
+		s.unit.push(-1)
+		s.activity.push(0)
+		s.place.push(-1)
+		s.phase.push(false)
+		s.seen.push(false)
+		s.heap_insert(v)
+		v += 1
+	}
+	return s
+}
+
+/// A solver over `query`'s atoms with every clause of `query` read as an
+/// input of a fresh log; `null` where the atoms leave `u32`.
+fn sv_sat_of(query: ref SvQuery) -> SvSat? {
+	let log = sv_log(query) ?? return null
+	let mut s = sv_sat(log.atoms, log)
+	let mut c: u32 = 0
+	for clause in query.clauses {
+		let id = s.log.input(c)
+		s.add_input(clause, id)
+		c += 1
+	}
+	return s
+}
+
+impl SvSat {
+	/// `1` where literal `l` is true, `-1` where false, `0` where open.
+	fn lit_value(ref self, l: u32) -> i64 {
+		let v = self.value[sv_sat_var(l)]
+		return if l % 2 == 0 { v } else { -v }
+	}
+
+	/// Whether literal `l` is true in the assignment (the model, after
+	/// `Sat`).
+	fn holds(ref self, l: u32) -> bool {
+		return self.lit_value(l) > 0
+	}
+
+	/// Per variable, whether it is true; an open variable counts as false.
+	fn model(ref self) -> Vec[bool] {
+		let mut out: Vec[bool] = []
+		for v in self.value {
+			out.push(v > 0)
+		}
+		return out
+	}
+
+	fn decision_level(ref self) -> i64 {
+		return self.limits.len()
+	}
+
+	/// Adds the clause `lits`, entry `id` of the log, at level zero: a
+	/// literal true there drops the clause, one false there drops out of it
+	/// (the shorter clause learned from the units), what is left is a unit
+	/// to assign, the empty clause, or a clause to watch.
+	fn add_input(ref mut self, lits: ref Vec[u32], id: u32) {
+		if self.refuted {
+			return
+		}
+		let mut sorted = lits.clone()
+		sorted.sort()
+		let mut kept: Vec[u32] = []
+		let mut hints: Vec[u32] = []
+		let mut changed = false
+		let mut i = 0
+		while i < sorted.len() {
+			let l = sorted[i]
+			let before: u32 = if i > 0 { sorted[i - 1] } else { l ^ 1 }
+			i += 1
+			if i > 1 && before == l {
+				changed = true
+				continue
+			}
+			if i > 1 && before == (l ^ 1) {
+				// A tautology: always true.
+				return
+			}
+			let v = self.lit_value(l)
+			if v > 0 {
+				return
+			}
+			if v < 0 {
+				changed = true
+				hints.push(self.unit[sv_sat_var(l)] as u32)
+				continue
+			}
+			kept.push(l)
+		}
+		let mut entry = id
+		if changed {
+			hints.push(id)
+			entry = self.log.learn(kept.clone(), hints)
+			self.stats.learned += 1
+		}
+		if kept.len() == 0 {
+			self.refuted = true
+			return
+		}
+		if kept.len() == 1 {
+			self.assign_unit(kept[0], entry)
+			return
+		}
+		self.attach(kept, entry, 0, false)
+	}
+
+	/// Puts a clause into the arena and watches its first two literals;
+	/// its name.
+	fn attach(ref mut self, lits: Vec[u32], id: u32, glue: i64, learned: bool) -> u32 {
+		let c = self.arena.len() as u32
+		let size = lits.len() as u32
+		self.arena.push(size)
+		let flag: u32 = if learned { 1 } else { 0 }
+		self.arena.push(((glue as u32) << 2) | flag)
+		self.arena.push(id)
+		for l in lits {
+			self.arena.push(l)
+		}
+		if learned {
+			self.learnts.push(c)
+		}
+		self.watch(c)
+		return c
+	}
+
+	/// Watches the first two literals of clause `c`.
+	fn watch(ref mut self, c: u32) {
+		let at = c as i64
+		let a = self.arena[at + 3]
+		let b = self.arena[at + 4]
+		// A binary clause is named with the high bit: 0x80000000.
+		let name = if self.arena[at] == 2 { c | 2147483648 } else { c }
+		self.watch_clause[a as i64].push(name)
+		self.watch_blocker[a as i64].push(b)
+		self.watch_clause[b as i64].push(name)
+		self.watch_blocker[b as i64].push(a)
+	}
+
+	/// The log entry of clause `c`.
+	fn clause_id(ref self, c: i64) -> u32 {
+		return self.arena[c + 2]
+	}
+
+	/// Makes `l` true at the current level, implied by clause `reason` (or
+	/// `-1`). At level zero its unit clause is learned from the reason.
+	fn assign(ref mut self, l: u32, reason: i64) {
+		let v = sv_sat_var(l)
+		self.value[v] = if l % 2 == 0 { 1 } else { -1 }
+		self.level[v] = self.decision_level()
+		self.reason[v] = reason
+		self.trail.push(l)
+		if self.decision_level() == 0 && reason >= 0 {
+			let mut hints: Vec[u32] = []
+			let size = self.arena[reason] as i64
+			let mut k = 0
+			while k < size {
+				let q = self.arena[reason + 3 + k]
+				if q != l {
+					hints.push(self.unit[sv_sat_var(q)] as u32)
+				}
+				k += 1
+			}
+			hints.push(self.clause_id(reason))
+			self.unit[v] = self.log.learn([l], hints) as i64
+			self.stats.learned += 1
+		}
+	}
+
+	/// Makes `l` true at level zero, its unit clause entry `id` of the log.
+	fn assign_unit(ref mut self, l: u32, id: u32) {
+		let v = sv_sat_var(l)
+		if self.value[v] != 0 {
+			if self.lit_value(l) < 0 {
+				// Its negation is a unit already: the two make the empty
+				// clause.
+				self.log.learn([], [self.unit[v] as u32, id])
+				self.stats.learned += 1
+				self.refuted = true
+			}
+			return
+		}
+		self.assign(l, -1)
+		self.unit[v] = id as i64
+	}
+
+	/// Propagates the trail; the conflicting clause, or `-1`.
+	fn propagate(ref mut self) -> i64 {
+		while self.head < self.trail.len() {
+			let p = self.trail[self.head]
+			self.head += 1
+			self.stats.propagations += 1
+			let f = p ^ 1
+			let fl = f as i64
+			let n = self.watch_clause[fl].len()
+			let mut i = 0
+			let mut j = 0
+			let mut conflict: i64 = -1
+			while i < n {
+				let name = self.watch_clause[fl][i]
+				let blocker = self.watch_blocker[fl][i]
+				i += 1
+				if self.lit_value(blocker) > 0 {
+					self.watch_clause[fl][j] = name
+					self.watch_blocker[fl][j] = blocker
+					j += 1
+					continue
+				}
+				if name >= 2147483648 {
+					// Binary: the blocker is the other literal.
+					self.watch_clause[fl][j] = name
+					self.watch_blocker[fl][j] = blocker
+					j += 1
+					let c = (name - 2147483648) as i64
+					if self.lit_value(blocker) < 0 {
+						conflict = c
+						break
+					}
+					self.assign(blocker, c)
+					continue
+				}
+				let c = name as i64
+				let at = c + 3
+				if self.arena[at] == f {
+					self.arena[at] = self.arena[at + 1]
+					self.arena[at + 1] = f
+				}
+				let first = self.arena[at]
+				if first != blocker && self.lit_value(first) > 0 {
+					self.watch_clause[fl][j] = name
+					self.watch_blocker[fl][j] = first
+					j += 1
+					continue
+				}
+				let size = self.arena[c] as i64
+				let mut k = 2
+				let mut moved = false
+				while k < size {
+					let l = self.arena[at + k]
+					if self.lit_value(l) >= 0 {
+						self.arena[at + 1] = l
+						self.arena[at + k] = f
+						self.watch_clause[l as i64].push(name)
+						self.watch_blocker[l as i64].push(first)
+						moved = true
+						break
+					}
+					k += 1
+				}
+				if moved {
+					continue
+				}
+				self.watch_clause[fl][j] = name
+				self.watch_blocker[fl][j] = first
+				j += 1
+				if self.lit_value(first) < 0 {
+					conflict = c
+					break
+				}
+				self.assign(first, c)
+			}
+			while i < n {
+				self.watch_clause[fl][j] = self.watch_clause[fl][i]
+				self.watch_blocker[fl][j] = self.watch_blocker[fl][i]
+				i += 1
+				j += 1
+			}
+			self.watch_clause[fl].truncate(j)
+			self.watch_blocker[fl].truncate(j)
+			if conflict >= 0 {
+				self.head = self.trail.len()
+				return conflict
+			}
+		}
+		return -1
+	}
+
+	/// First-UIP analysis of the conflicting clause `conflict`.
+	fn analyze(ref mut self, conflict: i64) -> SvLearned {
+		let current = self.decision_level()
+		let mut lits: Vec[u32] = [0]
+		let mut zero: Vec[i64] = []
+		let mut chain: Vec[u32] = [self.clause_id(conflict)]
+		let mut path = 0
+		let mut p: u32 = 0
+		let mut resolving = false
+		let mut c = conflict
+		let mut index = self.trail.len() - 1
+		while true {
+			let size = self.arena[c] as i64
+			let mut k = 0
+			while k < size {
+				let q = self.arena[c + 3 + k]
+				k += 1
+				if resolving && q == p {
+					continue
+				}
+				let v = sv_sat_var(q)
+				if self.seen[v] {
+					continue
+				}
+				self.seen[v] = true
+				if self.level[v] == 0 {
+					zero.push(v)
+					continue
+				}
+				self.bump_var(v)
+				if self.level[v] == current {
+					path += 1
+				} else {
+					lits.push(q)
+				}
+			}
+			while !self.seen[sv_sat_var(self.trail[index])] {
+				index -= 1
+			}
+			p = self.trail[index]
+			index -= 1
+			let v = sv_sat_var(p)
+			self.seen[v] = false
+			path -= 1
+			if path == 0 {
+				break
+			}
+			c = self.reason[v]
+			chain.push(self.clause_id(c))
+			resolving = true
+		}
+		lits[0] = p ^ 1
+		// The hints: the level-zero units, the reasons in trail order, the
+		// conflict.
+		let mut hints: Vec[u32] = []
+		for v in zero {
+			hints.push(self.unit[v] as u32)
+			self.seen[v] = false
+		}
+		let mut r = chain.len() - 1
+		while r >= 0 {
+			hints.push(chain[r])
+			r -= 1
+		}
+		// The backjump level and the glue; a literal of that level second.
+		let mut back: i64 = 0
+		let mut levels: Vec[i64] = [current]
+		let mut i = 1
+		while i < lits.len() {
+			let v = sv_sat_var(lits[i])
+			self.seen[v] = false
+			let lv = self.level[v]
+			if !levels.contains(lv) {
+				levels.push(lv)
+			}
+			if lv > back {
+				back = lv
+				let held = lits[1]
+				lits[1] = lits[i]
+				lits[i] = held
+			}
+			i += 1
+		}
+		return SvLearned { lits: lits, hints: hints, level: back, glue: levels.len() }
+	}
+
+	/// Undoes every level above `target`, saving the phases.
+	fn backjump(ref mut self, target: i64) {
+		if self.decision_level() <= target {
+			return
+		}
+		let start = self.limits[target]
+		let mut at = self.trail.len() - 1
+		while at >= start {
+			let l = self.trail[at]
+			let v = sv_sat_var(l)
+			self.value[v] = 0
+			self.reason[v] = -1
+			self.phase[v] = l % 2 == 0
+			if self.place[v] < 0 {
+				self.heap_insert(v as u32)
+			}
+			at -= 1
+		}
+		self.trail.truncate(start)
+		self.limits.truncate(target)
+		self.head = start
+	}
+
+	/// Writes the empty clause, from the conflicting clause `c` at level
+	/// zero and its literals' units.
+	fn refute(ref mut self, c: i64) {
+		let mut hints: Vec[u32] = []
+		let size = self.arena[c] as i64
+		let mut k = 0
+		while k < size {
+			hints.push(self.unit[sv_sat_var(self.arena[c + 3 + k])] as u32)
+			k += 1
+		}
+		hints.push(self.clause_id(c))
+		self.log.learn([], hints)
+		self.stats.learned += 1
+		self.refuted = true
+	}
+
+	/// Searches for at most `budget` conflicts in all.
+	fn solve(ref mut self, budget: i64) -> SvSatAnswer {
+		let mut restart: i64 = 0
+		if self.stats.reductions == 0 {
+			self.next_reduce = self.reduce_first
+		}
+		while true {
+			if self.refuted {
+				return SvSatAnswer::Unsat
+			}
+			let limit = sv_luby(restart) * self.restart_unit
+			let answer = self.search(limit, budget)
+			match answer {
+				SvSatAnswer::Unknown => {},
+				else => return answer,
+			}
+			if self.stats.conflicts >= budget {
+				return SvSatAnswer::Unknown
+			}
+			self.backjump(0)
+			restart += 1
+			self.stats.restarts += 1
+			if self.stats.conflicts >= self.next_reduce {
+				self.reduce()
+			}
+		}
+	}
+
+	/// Searches until `limit` more conflicts (`Unknown`: restart), the
+	/// budget, or an answer.
+	fn search(ref mut self, limit: i64, budget: i64) -> SvSatAnswer {
+		let mut met: i64 = 0
+		while true {
+			let conflict = self.propagate()
+			if conflict >= 0 {
+				self.stats.conflicts += 1
+				met += 1
+				if self.decision_level() == 0 {
+					self.refute(conflict)
+					return SvSatAnswer::Unsat
+				}
+				let learned = self.analyze(conflict)
+				self.backjump(learned.level)
+				let id = self.log.learn(learned.lits.clone(), learned.hints)
+				self.stats.learned += 1
+				if learned.lits.len() == 1 {
+					self.assign_unit(learned.lits[0], id)
+				} else {
+					let first = learned.lits[0]
+					let c = self.attach(learned.lits, id, learned.glue, true)
+					self.assign(first, c as i64)
+				}
+				self.bump = self.bump + self.bump / 19
+				if self.bump > 1152921504606846976 {
+					self.rescale()
+				}
+				if met >= limit || self.stats.conflicts >= self.next_reduce
+					|| self.stats.conflicts >= budget
+				{
+					return SvSatAnswer::Unknown
+				}
+				continue
+			}
+			let next = self.pick() ?? return SvSatAnswer::Sat
+			self.stats.decisions += 1
+			self.limits.push(self.trail.len())
+			self.assign(next, -1)
+		}
+	}
+
+	/// The next decision: the open variable of highest activity in its
+	/// saved phase; `null` where every variable is assigned.
+	fn pick(ref mut self) -> u32? {
+		while self.heap.len() > 0 {
+			let v = self.heap_pop()
+			if self.value[v as i64] == 0 {
+				return if self.phase[v as i64] { v << 1 } else { (v << 1) | 1 }
+			}
+		}
+		return null
+	}
+
+	/// Halves the learned clauses of glue above two, the worst glue (then
+	/// the oldest) first; compacts the arena once half of it is dead.
+	/// Called at level zero, where no clause is a reason analysis reads.
+	fn reduce(ref mut self) {
+		self.stats.reductions += 1
+		self.next_reduce = self.stats.conflicts + self.reduce_first + self.stats.reductions
+			* self.reduce_step
+		// Each learned clause as `glue << 32 | 2^32 - 1 - name`, sorted: the
+		// last ones go first.
+		let mut keys: Vec[i64] = []
+		for c in self.learnts {
+			let glue = (self.arena[c as i64 + 1] >> 2) as i64
+			keys.push(glue * 4294967296 + (4294967295 - c as i64))
+		}
+		keys.sort()
+		let mut going = keys.len() / 2
+		let mut at = keys.len() - 1
+		while at >= 0 && going > 0 {
+			let key = keys[at]
+			at -= 1
+			if key / 4294967296 <= 2 {
+				break
+			}
+			let c = 4294967295 - key % 4294967296
+			self.arena[c + 1] = self.arena[c + 1] | 2
+			self.wasted += self.arena[c] as i64 + 3
+			self.log.delete(self.clause_id(c))
+			self.stats.deleted += 1
+			going -= 1
+		}
+		if self.wasted * 2 > self.arena.len() {
+			self.compact()
+		} else {
+			let mut kept: Vec[u32] = []
+			for c in self.learnts {
+				if (self.arena[c as i64 + 1] & 2) == 0 {
+					kept.push(c)
+				}
+			}
+			self.learnts = kept
+		}
+		self.rewatch()
+	}
+
+	/// Copies the live clauses into a fresh arena. The reasons of level
+	/// zero, all there are when it runs, are not read again.
+	fn compact(ref mut self) {
+		self.stats.compactions += 1
+		let mut fresh: Vec[u32] = []
+		let mut learnts: Vec[u32] = []
+		let mut c: i64 = 0
+		while c < self.arena.len() {
+			let words = self.arena[c] as i64 + 3
+			let info = self.arena[c + 1]
+			if (info & 2) == 0 {
+				if (info & 1) == 1 {
+					learnts.push(fresh.len() as u32)
+				}
+				let mut k = 0
+				while k < words {
+					fresh.push(self.arena[c + k])
+					k += 1
+				}
+			}
+			c += words
+		}
+		self.arena = fresh
+		self.learnts = learnts
+		self.wasted = 0
+		let mut v = 0
+		while v < self.reason.len() {
+			self.reason[v] = -1
+			v += 1
+		}
+	}
+
+	/// Builds every watch list again from the live clauses.
+	fn rewatch(ref mut self) {
+		let mut l = 0
+		while l < self.watch_clause.len() {
+			self.watch_clause[l].truncate(0)
+			self.watch_blocker[l].truncate(0)
+			l += 1
+		}
+		let mut c: i64 = 0
+		while c < self.arena.len() {
+			let words = self.arena[c] as i64 + 3
+			if (self.arena[c + 1] & 2) == 0 {
+				self.watch(c as u32)
+			}
+			c += words
+		}
+	}
+
+	fn bump_var(ref mut self, v: i64) {
+		self.activity[v] += self.bump
+		if self.activity[v] > 1152921504606846976 {
+			self.rescale()
+		}
+		if self.place[v] >= 0 {
+			self.heap_up(self.place[v])
+		}
+	}
+
+	/// Divides every activity and the bump by `2^30`; the order stays.
+	fn rescale(ref mut self) {
+		let mut v = 0
+		while v < self.activity.len() {
+			self.activity[v] = self.activity[v] / 1073741824
+			v += 1
+		}
+		self.bump = self.bump / 1073741824 + 1
+	}
+
+	/// Whether variable `a` goes above `b` in the heap: higher activity,
+	/// then the lower number.
+	fn above(ref self, a: u32, b: u32) -> bool {
+		let x = self.activity[a as i64]
+		let y = self.activity[b as i64]
+		return x > y || (x == y && a < b)
+	}
+
+	fn heap_insert(ref mut self, v: u32) {
+		self.place[v as i64] = self.heap.len()
+		self.heap.push(v)
+		self.heap_up(self.heap.len() - 1)
+	}
+
+	fn heap_pop(ref mut self) -> u32 {
+		let top = self.heap[0]
+		let last = self.heap.len() - 1
+		let moved = self.heap[last]
+		self.heap[0] = moved
+		self.place[moved as i64] = 0
+		self.heap.truncate(last)
+		self.place[top as i64] = -1
+		if last > 0 {
+			self.heap_down(0)
+		}
+		return top
+	}
+
+	fn heap_up(ref mut self, start: i64) {
+		let mut i = start
+		let v = self.heap[i]
+		while i > 0 {
+			let parent = (i - 1) / 2
+			let u = self.heap[parent]
+			if !self.above(v, u) {
+				break
+			}
+			self.heap[i] = u
+			self.place[u as i64] = i
+			i = parent
+		}
+		self.heap[i] = v
+		self.place[v as i64] = i
+	}
+
+	fn heap_down(ref mut self, start: i64) {
+		let mut i = start
+		let v = self.heap[i]
+		let n = self.heap.len()
+		while true {
+			let left = 2 * i + 1
+			if left >= n {
+				break
+			}
+			let right = left + 1
+			let child = if right < n && self.above(self.heap[right], self.heap[left]) {
+				right
+			} else {
+				left
+			}
+			let u = self.heap[child]
+			if !self.above(u, v) {
+				break
+			}
+			self.heap[i] = u
+			self.place[u as i64] = i
+			i = child
+		}
+		self.heap[i] = v
+		self.place[v as i64] = i
+	}
+}
