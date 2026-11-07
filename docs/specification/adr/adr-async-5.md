@@ -716,3 +716,23 @@ Part I 5.3 (a lambda after `async`), 5.4, 7.1 (started and arrived sites), 8.1,
 `task::OverBudget`, admission), 12.2, 12.4, 12.5, 12.6, 12.7; Part III 13.3b,
 17.1's `std::task`, the `@detached` row, C.5, the `NK2101`-`NK2122`, `NK2203`,
 `NK2209` and `NK1132` rows, and `--overlaps`.
+
+### D35 - A task's crash is a failure only where the task can panic (owner, 2026-11-07, #1355).
+
+Whether a function can panic is inferred, as its throw set is (Part I 7.1): a
+`panic`, a run-time check the build leaves in (an index, an overflow, a
+division, a claim checked while the program runs), a call to a function that
+can panic, and a foreign call nothing describes are panic sites; a check the
+compiler proved, and so dropped, is none. The ledger records the answer per
+function as `panics` (`yes`, `no`, or `?` where the walk cannot tell), and `?`
+counts as `yes`: no guarantee is given that was not shown.
+
+An `async` form whose task can panic throws `task::Crashed` where its failure
+arrives (D21, D22): it is in the starting function's throw set, and a function
+that does not say `throws` catches it there or is refused with `NK2605`, the
+ordinary rule, `main` included. A task that cannot panic adds nothing: no
+handler is asked of its caller, a `catch` that could only take `task::Crashed`
+is `NK1134`, and its group keeps no failure slot (ADR-async-2 D6). A program
+is not made to handle a failure that cannot happen, and one that can happen is
+handled; the rule is the same as for every other failure. `task::OverBudget`
+stays as D19 says.
