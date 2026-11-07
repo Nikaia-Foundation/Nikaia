@@ -40,7 +40,10 @@ pub(crate) fn keeps_block(block: &Block, interner: &winnow_grammar::InternerCont
 
 pub(crate) fn keeps_statement(stmt: &Stmt, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     match stmt {
-        Stmt::Assign { value, .. } => { hand_over(value, interner, &holes_of, context, own, library, walk); },
+        Stmt::Assign { value, .. } => {
+            hand_over(value, interner, &holes_of, context, own, library, walk);
+            walk.uses.kept.extend(keeps_viewed_of(value, interner, context, own, library, &walk));
+        },
         Stmt::Return(value) => { if !context.returns_a_view { hand_over_maybe((value).as_ref(), interner, &holes_of, context, own, library, walk); } },
         Stmt::Let { names, value, mutable, ty, .. } => {
             let mutable = *mutable;
@@ -210,6 +213,7 @@ pub(crate) fn keeps_viewed_of(expr: &Expr, interner: &winnow_grammar::InternerCo
             let func = nikaia_std::boxed::open(func);
             found.extend(through_a_view(func, args, interner, context, own, library, walk));
         },
+        Expr::StructLit { .. } => { found.extend(keeps_lent_into_views(expr, interner, context, own)); },
         Expr::Variable(ident, _) => {
             let ident = *ident;
             let viewing = match *nikaia_std::index::get(&walk.views, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return found };
@@ -418,12 +422,12 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                 if field.value.is_none() {
                     let named = interner.resolve(field.name).to_string();
                     keep_viewed_name(&named, walk);
-                    let lent_here = viewing && context.lent.contains(&named);
+                    let lent_here = viewing && keeps_lendable(&named, context);
                     if context.parameters.contains(&named) && !keeps_a_lent_text(&named, context) && !lent_here { walk.uses.kept.insert(named); }
                 } else {
                     let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                     let lent = parameter_named(value, interner, context);
-                    let lent_here = viewing && context.lent.contains(&nikaia_std::index::or(keeps_place_root(value, interner), || "".into()));
+                    let lent_here = viewing && keeps_lendable(&nikaia_std::index::or(keeps_place_root(value, interner), || "".into()), context);
                     if !lent_here && (lent.is_none() || !keeps_a_lent_text(nikaia_std::index::or(lent.as_deref(), || ""), context)) { keep_part(Option::as_ref(&field.value), interner, context, own, library, walk); }
                     keep_lambda(Option::as_ref(&field.value), interner, holes_of, context, walk);
                 }
@@ -768,6 +772,26 @@ pub(crate) fn keeps_a_view_field(of: &str, field: &str, own: &Ledger) -> bool {
     false
 }
 
+pub(crate) fn keeps_lendable(name: &str, context: &KeepsBody<'_, '_>) -> bool { context.lent.contains(name) || name != "self" && context.parameters.contains(name) }
+
+pub(crate) fn keeps_lent_into_views(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger) -> collections::BTreeSet<String> {
+    let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
+    match expr {
+        Expr::StructLit { name, fields, .. } => {
+            let name = *name;
+            let of = interner.resolve(name);
+            for field in fields.iter() {
+                if !keeps_a_view_field(of, interner.resolve(field.name), own) { continue; }
+                let mut root = interner.resolve(field.name).to_string();
+                if field.value.is_some() { root = match keeps_place_root(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, interner) { Some(__nikaia_value) => __nikaia_value, None => continue }; }
+                if keeps_lendable(&root, context) && !context.lent.contains(&root) { found.insert(root); }
+            }
+        },
+        _ => { },
+    }
+    found
+}
+
 pub(crate) fn keeps_place_root(expr: &Expr, interner: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
         Expr::Variable(ident, _) => { let ident = *ident; Some(interner.resolve(ident).to_string()) },
@@ -1068,11 +1092,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple78975| {
-                            let (at, arg) = __nikaia_tuple78975; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81153| {
+                            let (at, arg) = __nikaia_tuple81153; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple79151| {
-                            let (at, arg) = __nikaia_tuple79151;
+                        }).map(|__nikaia_tuple81329| {
+                            let (at, arg) = __nikaia_tuple81329;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

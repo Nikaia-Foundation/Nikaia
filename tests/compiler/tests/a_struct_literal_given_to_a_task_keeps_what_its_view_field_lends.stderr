@@ -1,0 +1,10 @@
+error[NK2105]: You're using `l.tag`, but `l` was passed to `go`, which keeps it.
+   --> tests/a_struct_literal_given_to_a_task_keeps_what_its_view_field_lends.nika:15:5
+    |
+ 15 |     println(f"{go(l)} {l.tag}")
+    |     ^
+    |
+    = note: `l` is an `L`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `l.clone()`.
+

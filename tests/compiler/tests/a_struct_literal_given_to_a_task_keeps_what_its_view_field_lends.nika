@@ -1,0 +1,16 @@
+// A struct literal that leaves the function takes along what its view
+// fields lend (ADR-views-3 D5, #1225): given to a task, it keeps the
+// parameter it views, so the caller may not use it after the call.
+struct L { n: i64, tag: String }
+struct W { own: ref L, k: i64 }
+
+fn go(l: L) -> i64 {
+    let w = W { own: l, k: 1 }
+    let t = spawn fn { w.own.n + w.k }
+    return t.await
+}
+
+fn main() {
+    let l = L { n: 3, tag: "a" }
+    println(f"{go(l)} {l.tag}")
+}
