@@ -1,7 +1,7 @@
 // The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
 // toolchain of the day: no compiler change, no `lower-std`, no rebuild.
 //
-//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--timeout S] DIR|FILE...
+//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--stats] [--timeout S] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
 //   nikaia run scripts/solver.nika -- oracle [--write] FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED
@@ -24,7 +24,9 @@
 // this script, and answers every `.smt2` file: one line per file (`name answer
 // work`), then a row per directory: solved, unknown (overflow and files the
 // reader refuses among them), wrong, PAR-2 over the work budget, certificates
-// checked, models evaluated.
+// checked, models evaluated. `--stats` adds below each file's line the new
+// engine's counters (#1312 item 2): the SAT core's conflicts, the theory's,
+// theory lemmas and those repeating an earlier one, decisions, restarts.
 // The query is the conjunction of a file's assertions with the goal `false`:
 // *proved* is `unsat`, *refuted* is `sat`. A *proved* whose certificate
 // `lg_verify` rejects, a *refuted* whose model `lg_verify_model` rejects, and
@@ -174,15 +176,35 @@ fn solver_answer(
 	path: String,
 	timeout: i64,
 ) -> (String, i64, String) throws {
-	let out = process::run(bin, [engine, path]; within: timeout.seconds())
-	if out.timed_out { return ("unknown (timeout)", -1, "-1") }
-	if !out.ok { return ("unknown (crashed)", -1, "-1") }
-	let line = out.stdout.trim().to_string()
-	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1, "-1")
-	let shown = line[at + 1..].to_string()
+	let (answer, work, shown, _) = solver_answer_stats(bin, engine, path, timeout, false)
+	return (answer, work, shown)
+}
+
+// `solver_answer` and, where `stats`, the counters' line the binary wrote
+// below it (`stats: ...`; `""` without one).
+fn solver_answer_stats(
+	bin: String,
+	engine: String,
+	path: String,
+	timeout: i64,
+	stats: bool,
+) -> (String, i64, String, String) throws {
+	let args: Vec[String] = if stats { ["--stats", engine, path] } else { [engine, path] }
+	let out = process::run(bin, args; within: timeout.seconds())
+	if out.timed_out { return ("unknown (timeout)", -1, "-1", "") }
+	if !out.ok { return ("unknown (crashed)", -1, "-1", "") }
+	// Each text of the returned tuple made with `f"..."`: a `.to_string()`
+	// of a view makes the tuple `EitherText` and the callers fail in rustc
+	// (#1311).
+	let all = out.stdout.trim().to_string()
+	let nl = all.find("\n") ?? all.len()
+	let line = f"{all[0..<nl]}"
+	let counted = if nl < all.len() { f"{all[nl + "\n".len()..]}" } else { "" }
+	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1, "-1", "")
+	let shown = f"{line[at + 1..]}"
 	let slash = shown.find("/") ?? shown.len()
 	let work = text::parse_i64(shown[0..<slash].to_string()) ?? -1
-	return (line[0..<at].to_string(), work, shown)
+	return (f"{line[0..<at]}", work, shown, counted)
 }
 
 fn solver_solved(answer: String) -> bool {
@@ -235,6 +257,7 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	// The CDCL(T) engine by default (#1283); `fm` stays as the cross-check.
 	let mut engine: String = "new"
 	let mut summary_only = false
+	let mut stats = false
 	let mut timeout = 60
 	let mut targets: Vec[String] = []
 	let mut i = 0
@@ -252,6 +275,8 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		}
 		if a == "--summary" {
 			summary_only = true
+		} else if a == "--stats" {
+			stats = true
 		} else {
 			targets.push(a)
 		}
@@ -271,11 +296,12 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	if bin == "" { process::exit(1) }
 	let mut rows: Vec[SolverRow] = []
 	for (group, path) in files {
-		let (answer, work, shown) = solver_answer(
+		let (answer, work, shown, counted) = solver_answer_stats(
 			bin.clone(),
 			engine.clone(),
 			path.clone(),
 			timeout,
+			stats,
 		)
 		let file = path.split("/").last() ?? path
 		let row = SolverRow {
@@ -285,7 +311,10 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 			work: work,
 			shown: shown,
 		}
-		if !summary_only { println(f"{row.name} {row.answer} {row.shown}") }
+		if !summary_only {
+			println(f"{row.name} {row.answer} {row.shown}")
+			if counted != "" { println(f"  {counted}") }
+		}
 		rows.push(row)
 	}
 	let mut groups: Vec[String] = []

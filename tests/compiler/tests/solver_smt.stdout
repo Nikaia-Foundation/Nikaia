@@ -1,5 +1,10 @@
 bits-20.smt2: simplex proved 344; fm proved 402; both proved 344
+  stats: conflicts 19, theory conflicts 19, lemmas 41 (repeated 0), decisions 325, restarts 0
 bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49
+  stats: conflicts 9, theory conflicts 0, lemmas 34 (repeated 0), decisions 29, restarts 0
 threes-10.smt2: simplex proved 1; fm proved 1; both proved 1
+  stats: conflicts 0, theory conflicts 1, lemmas 1 (repeated 0), decisions 0, restarts 0
 branch-depth.smt2: simplex refuted 2; fm refuted 2; both refuted 2
+  stats: conflicts 0, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0
 bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0
+  stats: conflicts 1, theory conflicts 0, lemmas 0 (repeated 0), decisions 0, restarts 0

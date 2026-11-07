@@ -10,8 +10,9 @@
 // Fourier-Motzkin's elimination sees it, over the simplex alone by the GCD
 // test of a tableau row (#1284); `branch-depth` is an equality without a unit coefficient that the
 // elimination extended for ever before it preferred the unit coefficient of
-// the extension. The logic layer's
-// files, `solver/sv_*.nika` and the driver below make one program, as
+// the extension. Under each line the search's counters over both, as
+// `scripts/solver.nika run --stats` prints them (#1312 item 2). The logic
+// layer's files, `solver/sv_*.nika` and the driver below make one program, as
 // `scripts/solver.nika` makes it.
 use std::fs
 use std::process
@@ -49,6 +50,12 @@ fn each(path: String) throws {
 	let fm = sv_line(source, \"new-fm\")
 	let both = sv_line(source, \"new\")
 	println(f\"{name}: simplex {simplex}; fm {fm}; both {both}\")
+	// The search's counters, as `--stats` prints them (#1312 item 2).
+	for line in sv_line_stats(source, \"new\", true).lines() {
+		if line.starts_with(\"stats:\") {
+			println(f\"  {line}\")
+		}
+	}
 }
 
 fn main() throws {
