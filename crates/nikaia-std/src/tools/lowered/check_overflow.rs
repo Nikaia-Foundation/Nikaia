@@ -213,6 +213,12 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         if check_overflow_list_into_nullables(state, given, found, want) || a_collect_into_an_option(world, found, want, given) { return None; }
     }
     if check_wrap_undecided(found, want, literal) {
+        if value.is_none() {
+            if check_overflow_a_number_inside(want) { return Some(FactWrap::Constructor); }
+            let wanted = want.text();
+            state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type this value is, so it can't put it into a `{}`.", wanted), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T = …`."))));
+            return None;
+        }
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
         if check_overflow_leaves_none(&state, world, given) { return None; }
         if check_function_is_branching(given) {
