@@ -1,0 +1,11 @@
+bounds in tests/mut_list_length_kept_proved.nika: 7 indexes, 7 proved; 1 operations, 0 proved
+    10  a[hi]     proved
+    12  s + a[j]  checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    12  a[j]      proved
+    22  a[i]      proved
+    23  a[i]      proved
+    23  a[j]      proved
+    24  a[j]      proved
+    27  a[i]      proved
+  derived  get: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 32
+  derived  swapped: 0 <= i, i <= a.len(), i < a.len(), i <= j, i < j, 0 <= j, j <= a.len(), j < a.len(), proved at the calls on lines 34

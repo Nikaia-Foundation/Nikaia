@@ -236,7 +236,12 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                         scope.not_negative(walk.arena, arg_name)
                     }
                 }
-                if !arg.mutable && has_a_length(ty) {
+                // **A `mut` list's length is a name too where the body
+                // keeps it** (ADR-269 D9, #1375): element writes, `swap`,
+                // `sort` keep it; binding the list again, a method that
+                // grows or shrinks it, or a call that may change it, does not.
+                let kept = !arg.mutable || (!changes_length_in(body, arg_name, walk.state.readers, words) && !rebinds(body, arg_name, words))
+                if kept && has_a_length(ty) {
                     scope.has_length(walk.arena, arg_name, null)
                     params.insert(arg_name.clone())
                     let length = length_of(arg_name)

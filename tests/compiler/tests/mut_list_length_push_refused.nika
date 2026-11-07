@@ -1,0 +1,37 @@
+// #1375 (ADR-269 D9): a `mut` list's length is not a name the prover reads
+// where the body may change it: `push` grows it, a call it is handed `mut`
+// may, and binding the list again gives another one. Each `a.len()` here is
+// refused; `mut_list_length_kept_proved` holds the bodies that keep it.
+fn grown(mut a: Vec[i64], i: i64) -> i64 {
+    assert(0 <= i)
+    assert(i < a.len())
+    a.push(1)
+    return a[i]
+}
+
+fn fill(mut a: Vec[i64]) {
+    a.push(2)
+}
+
+fn handed(mut a: Vec[i64], i: i64) -> i64 {
+    assert(0 <= i)
+    assert(i < a.len())
+    fill(a)
+    return a[i]
+}
+
+fn rebound(mut a: Vec[i64], i: i64) -> i64 {
+    assert(0 <= i)
+    assert(i < a.len())
+    a = [1, 2, 3]
+    return a[i]
+}
+
+fn main() throws {
+    let mut x: Vec[i64] = [5, 3, 9]
+    println(f"{grown(x, 1)}")
+    let mut y: Vec[i64] = [5, 3, 9]
+    println(f"{handed(y, 1)}")
+    let mut z: Vec[i64] = [5, 3, 9]
+    println(f"{rebound(z, 1)}")
+}

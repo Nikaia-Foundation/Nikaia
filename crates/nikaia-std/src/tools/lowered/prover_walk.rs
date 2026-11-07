@@ -164,7 +164,8 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
                     scope.entry.insert(arg_name.to_string(), at_entry);
                     if ty.starts_with('u') { scope.not_negative(&mut walk.arena, &arg_name); }
                 }
-                if !arg.mutable && has_a_length(ty) {
+                let kept = !arg.mutable || !changes_length_in(body, &arg_name, &walk.state.readers, words) && !rebinds(body, &arg_name, words);
+                if kept && has_a_length(ty) {
                     scope.has_length(&mut walk.arena, &arg_name, None);
                     params.insert(arg_name.to_string());
                     let length = length_of(&arg_name);
