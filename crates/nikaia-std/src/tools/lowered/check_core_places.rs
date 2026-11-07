@@ -470,6 +470,8 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
     if value.is_some() && !owned_text {
         let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
         if state.facts.lent_fields.contains(&(id_of(v) as i64)) && check_core_places_a_local_lent(&state, world, v) && check_core_places_viewed_as(&found, &want) { found = want.clone(); }
+        let plain = !matches!(want, Ty::Nullable(_));
+        if plain && state.facts.lent_fields.contains(&(id_of(v) as i64)) && check_core_stmt_element_view(&state, world, v, &found, &want) == 1 { found = want.clone(); }
     }
     if state.lends_where_a_function_type_reads(world, value, &found, &want) { found = want.clone(); }
     let keeper = format!("`{}` keeps its `{}` after this line", name, field);
