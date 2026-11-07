@@ -16,7 +16,7 @@ impl LeftOutTrail {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut s = LeftOutTrail { trail: [1, 2], saved: [] }
 	s.stash()
 	println(f"{s.saved.len()}")

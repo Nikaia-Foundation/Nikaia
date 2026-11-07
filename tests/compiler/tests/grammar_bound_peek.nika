@@ -10,7 +10,7 @@ grammar G {
     entry rule seen -> String = p:peek(text(PRE)) rest:text(any*) eof -> { f"{p}|{rest}" }
 }
 
-fn main() {
+fn main() throws {
     for s in ["12_3x", "x", ""] {
         let input = Bytes(s.bytes().collect())
         let r = G::num(input) catch {

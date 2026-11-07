@@ -29,7 +29,7 @@ fn run(name: &str, source: &str) -> String {
 fn scalars_count_and_for() {
     let out = run(
         "views_scalars_count",
-        r#"fn find(name: String) {
+        r#"fn find(name: String) throws {
     for c in name.scalars {
         if c == 'ä' {
             println("found in a parameter")
@@ -37,7 +37,7 @@ fn scalars_count_and_for() {
     }
 }
 
-fn main() {
+fn main() throws {
     let name = "aä€"
     println(f"{name.scalars.count()}")
     for c in name.scalars {
@@ -57,7 +57,7 @@ fn main() {
 fn scalars_take_and_skip() {
     let out = run(
         "views_scalars_take",
-        r#"fn main() {
+        r#"fn main() throws {
     let name = "aä€"
     for c in name.scalars.take(2) {
         println(f"take {c}")
@@ -79,7 +79,7 @@ fn scalars_take_and_skip() {
 fn graphemes_count_clusters() {
     let out = run(
         "views_graphemes_count",
-        r#"fn main() {
+        r#"fn main() throws {
     let family = "👨‍👩‍👧‍👦"
     println(f"{family.graphemes.count()} {family.scalars.count()}")
     let decomposed = "a\u{308}"
@@ -96,7 +96,7 @@ fn graphemes_count_clusters() {
 fn graphemes_take_skip_and_compare() {
     let out = run(
         "views_graphemes_take",
-        r#"fn main() {
+        r#"fn main() throws {
     let title = "Mädchen und Jungen"
     let mut preview = ""
     for g in title.graphemes.take(10) {
@@ -125,7 +125,7 @@ fn graphemes_take_skip_and_compare() {
 fn graphemes_for_prints_each() {
     let out = run(
         "views_graphemes_for",
-        r#"fn main() {
+        r#"fn main() throws {
     let s = "aä👍🏽!"
     for g in s.graphemes {
         println(g)

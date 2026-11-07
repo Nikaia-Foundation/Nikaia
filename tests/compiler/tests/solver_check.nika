@@ -91,7 +91,7 @@ fn units(atoms: Vec[SvAtom], columns: u32) -> SvQuery {
 	return SvQuery { atoms: atoms, clauses: clauses, columns: columns, reals: [] }
 }
 
-fn report(name: String, query: ref SvQuery, log: ref SvLog) {
+fn report(name: String, query: ref SvQuery, log: ref SvLog) throws {
 	let v = sv_check(query, log.steps)
 	if v.ok {
 		println(f\"{name}: accepted ({log.steps.len()} steps)\")
@@ -215,7 +215,7 @@ fn single(query: ref SvQuery, steps: Vec[SvStep]) -> SvLog {
 	return log
 }
 
-fn main() {
+fn main() throws {
 	println(\"== accepted\")
 	report(\"clauses (input, learn, delete)\", clauses(), clause_log(false))
 	report(\"farkas\", bounds(), farkas_log(1, 1, [neg(0), neg(1)]))

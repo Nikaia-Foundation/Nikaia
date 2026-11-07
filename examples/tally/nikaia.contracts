@@ -10,11 +10,13 @@
 version = 4
 
 [fn."main"]
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
+panics = true
 signature = "()"
 
 [fn."summary"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "(lines: i64, blank: i64; separator: String = \" \") -> String"

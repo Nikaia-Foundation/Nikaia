@@ -6,7 +6,7 @@ impl Counter {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut c = Counter { last: 3 }
     if c.last != null {
         c.forget()

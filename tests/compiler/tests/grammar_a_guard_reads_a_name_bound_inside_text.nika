@@ -7,7 +7,7 @@ grammar G {
 	entry rule plain -> String = s:text(d:Ch+) if(d.len() > 1) ";" -> { s }
 }
 
-fn main() {
+fn main() throws {
 	let r = G::plain("12;") catch {
 		println("error")
 		return

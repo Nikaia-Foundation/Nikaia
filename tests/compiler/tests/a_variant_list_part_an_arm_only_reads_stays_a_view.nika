@@ -2,7 +2,7 @@
 // there to match again after the `match`.
 enum E { A(Vec[String]), N }
 
-fn g(e: E) -> i64 {
+fn g(e: E) -> i64 throws {
     let n = match e {
         E::A(xs) => xs.len(),
         else => 0,
@@ -14,7 +14,7 @@ fn g(e: E) -> i64 {
     return n
 }
 
-fn main() {
+fn main() throws {
     println(g(E::A(["a", "b"])))
     println(g(E::N))
 }

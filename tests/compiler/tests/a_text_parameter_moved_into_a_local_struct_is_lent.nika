@@ -25,7 +25,7 @@ fn events(text: String) -> Vec[Event] {
     return events
 }
 
-fn main() {
+fn main() throws {
     let text = f"one\n two \nthree {3}"
     let found = events(text)
     for e in found {

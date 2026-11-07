@@ -10,7 +10,7 @@ fn mk(k: i64) -> fn(i64) -> i64 {
 	return g
 }
 
-fn main() {
+fn main() throws {
 	let add = fn(x) { x + 3 }
 	let t = keep(add)
 	println(f"{t(1)}")

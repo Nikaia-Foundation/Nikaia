@@ -12,6 +12,6 @@ fn first(s: ref String, n: i64) -> ref String {
     return s
 }
 
-fn main() {
+fn main() throws {
     println(apply(first, "  hi  "))
 }

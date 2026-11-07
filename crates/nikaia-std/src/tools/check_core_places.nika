@@ -631,6 +631,17 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
         if state.facts.lent_fields.contains(id_of(v) as i64) && check_core_places_a_local_lent(state, world, v) && check_core_places_viewed_as(found, want) {
             found = want.clone()
         }
+        // **An element or a field read off a place is a view of it**
+        // (ADR-views-3 D5, #1274), as under a `let` that declares a view:
+        // `W { own: xs[0] }` is `W { own: ref xs[0] }`. A `ref T?` field
+        // wraps it on the widened slot's path below.
+        let plain = match want {
+            Ty::Nullable(_) => false,
+            else => true,
+        }
+        if plain && state.facts.lent_fields.contains(id_of(v) as i64) && check_core_stmt_element_view(state, world, v, found, want) == 1 {
+            found = want.clone()
+        }
     }
     // **A declared function that lends a parameter fits a field whose function
     // type lends it** (ADR-views-3 D2, D14, #1254), as a `let` and an argument do.

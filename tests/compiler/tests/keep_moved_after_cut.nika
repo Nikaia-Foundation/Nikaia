@@ -52,7 +52,7 @@ fn cut_stripped(given: ref Vec[String]) -> String {
     return f"{loops.len()} {out.len()} {loops[0]}"
 }
 
-fn main() {
+fn main() throws {
     let given: Vec[String] = ["let a = b", "x"]
     println(cut_once(given))
     println(cut_twice(given))

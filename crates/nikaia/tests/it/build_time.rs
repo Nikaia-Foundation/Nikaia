@@ -58,7 +58,7 @@ fn lowered(source: &str) -> String {
 fn a_call_is_evaluated_while_the_program_is_built() {
     let source = "fn double(n: i64) -> i64 { return n * 2 }\n\
                   comptime ANSWER = double(21)\n\
-                  fn main() { println(f\"{ANSWER}\") }\n";
+                  fn main() throws { println(f\"{ANSWER}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const ANSWER: i64 = 42;"),
@@ -76,7 +76,7 @@ fn a_recursion_with_a_base_case_is_evaluated() {
                   \x20   return n * factorial(n - 1)\n\
                   }\n\
                   comptime SIX = factorial(3)\n\
-                  fn main() { println(f\"{SIX}\") }\n";
+                  fn main() throws { println(f\"{SIX}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(lowered(source).contains("const SIX: i64 = 6;"));
 }
@@ -91,7 +91,7 @@ fn a_constant_can_read_the_one_above_it() {
     let source = "fn double(n: i64) -> i64 { return n * 2 }\n\
                   comptime ANSWER = double(21)\n\
                   comptime BIG = ANSWER > 40\n\
-                  fn main() { println(f\"{BIG}\") }\n";
+                  fn main() throws { println(f\"{BIG}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(lowered(source).contains("const BIG: bool = true;"));
 }
@@ -124,7 +124,7 @@ fn a_pausing_callee_is_refused() {
 #[test]
 fn a_callee_that_touches_the_world_is_refused() {
     let found: Vec<_> = findings(
-        "fn noisy(n: i64) -> i64 {\n\
+        "fn noisy(n: i64) -> i64 throws {\n\
          \x20   println(\"building\")\n\
          \x20   return n\n\
          }\n\
@@ -191,7 +191,7 @@ fn a_for_over_a_range_is_evaluated() {
                   \x20   return t\n\
                   }\n\
                   comptime SIX = total(4)\n\
-                  fn main() { println(f\"{SIX}\") }\n";
+                  fn main() throws { println(f\"{SIX}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const SIX: i64 = 6;"),
@@ -212,7 +212,7 @@ fn an_inclusive_range_counts_one_further() {
                   \x20   return t\n\
                   }\n\
                   comptime TEN = total(4)\n\
-                  fn main() { println(f\"{TEN}\") }\n";
+                  fn main() throws { println(f\"{TEN}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const TEN: i64 = 10;"),
@@ -237,7 +237,7 @@ fn a_while_is_evaluated_and_nothing_counts_its_turns() {
                   \x20   return steps\n\
                   }\n\
                   comptime STEPS = halvings(64)\n\
-                  fn main() { println(f\"{STEPS}\") }\n";
+                  fn main() throws { println(f\"{STEPS}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const STEPS: i64 = 6;"),
@@ -263,7 +263,7 @@ fn break_and_continue_are_both_read() {
                   \x20   return found\n\
                   }\n\
                   comptime FOUND = first_over(10)\n\
-                  fn main() { println(f\"{FOUND}\") }\n";
+                  fn main() throws { println(f\"{FOUND}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const FOUND: i64 = 12;"),
@@ -285,7 +285,7 @@ fn a_return_inside_a_loop_leaves_the_function() {
                   \x20   return 0\n\
                   }\n\
                   comptime ROOT = first_square_over(50)\n\
-                  fn main() { println(f\"{ROOT}\") }\n";
+                  fn main() throws { println(f\"{ROOT}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const ROOT: i64 = 8;"),
@@ -336,7 +336,7 @@ fn a_table_is_computed_while_the_program_is_built() {
                   \x20   return xs\n\
                   }\n\
                   comptime TABLE: Array[i64, 5] = squares()\n\
-                  fn main() { println(f\"{TABLE[4]}\") }\n";
+                  fn main() throws { println(f\"{TABLE[4]}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const TABLE: [i64; 5] = [0, 1, 4, 9, 16];"),
@@ -358,7 +358,7 @@ fn a_table_is_computed_while_the_program_is_built() {
 #[test]
 fn a_table_written_out_by_hand_is_an_array() {
     let source = "comptime PRIMES: Array[i64, 4] = [2, 3, 5, 7]\n\
-                  fn main() { println(f\"{PRIMES[3]}\") }\n";
+                  fn main() throws { println(f\"{PRIMES[3]}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const PRIMES: [i64; 4] = [2, 3, 5, 7];"),
@@ -371,7 +371,7 @@ fn a_table_written_out_by_hand_is_an_array() {
 /// what it says it is.
 #[test]
 fn a_comptime_that_disagrees_with_its_own_type_is_refused() {
-    let found = findings("comptime X: bool = [2, 3]\nfn main() { println(f\"{X}\") }\n");
+    let found = findings("comptime X: bool = [2, 3]\nfn main() throws { println(f\"{X}\") }\n");
     let refusal = found
         .iter()
         .find(|f| f.code == "NK1166")
@@ -395,7 +395,7 @@ fn a_build_time_index_the_array_does_not_have_is_named() {
                   \x20   return xs[7]\n\
                   }\n\
                   comptime BAD: i64 = out()\n\
-                  fn main() { println(f\"{BAD}\") }\n";
+                  fn main() throws { println(f\"{BAD}\") }\n";
     // **It stops as the program stops** (ADR-321 D1), in the program's words.
     let found = findings(source);
     let refusal = found
@@ -422,7 +422,7 @@ fn a_forbidden_callee_is_also_said_once() {
     let source = "use std::fs\n\
                   fn read() -> i64 { let t = fs::read_to_string(\"x\", fs::Root::Anywhere) catch { \"\" }\nreturn t.len() }\n\
                   comptime N: i64 = read()\n\
-                  fn main() { println(f\"{N}\") }\n";
+                  fn main() throws { println(f\"{N}\") }\n";
     let found = findings(source);
     assert!(
         found.iter().any(|f| f.code == "NK1152"),
@@ -473,7 +473,7 @@ fn a_table_built_with_push_crosses_as_an_array() {
                   \x20   return xs\n\
                   }\n\
                   comptime TABLE: Array[i64, 5] = squares()\n\
-                  fn main() { println(f\"{TABLE[4]}\") }\n";
+                  fn main() throws { println(f\"{TABLE[4]}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const TABLE: [i64; 5] = [0, 1, 4, 9, 16];"),
@@ -496,7 +496,7 @@ fn an_unannotated_table_takes_the_element_type_the_checker_has() {
                   \x20   return xs\n\
                   }\n\
                   comptime TABLE = squares()\n\
-                  fn main() { println(f\"{TABLE[4]}\") }\n";
+                  fn main() throws { println(f\"{TABLE[4]}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const TABLE: [i64; 5] ="),
@@ -519,7 +519,7 @@ fn a_computed_table_of_the_wrong_length_says_both_numbers() {
                   \x20   return xs\n\
                   }\n\
                   comptime TABLE: Array[i64, 3] = squares()\n\
-                  fn main() { println(f\"{TABLE[0]}\") }\n";
+                  fn main() throws { println(f\"{TABLE[0]}\") }\n";
     let found = findings(source);
     let refusal = found
         .iter()
@@ -553,7 +553,7 @@ fn a_constant_declared_a_vec_is_told_the_length_it_computed() {
                   \x20   return xs\n\
                   }\n\
                   comptime TABLE: Vec[i64] = squares()\n\
-                  fn main() { println(f\"{TABLE[0]}\") }\n";
+                  fn main() throws { println(f\"{TABLE[0]}\") }\n";
     let found = findings(source);
     let refusal = found
         .iter()
@@ -579,7 +579,7 @@ fn a_constant_declared_a_vec_is_told_the_length_it_computed() {
 #[test]
 fn an_array_without_a_length_is_told_the_length() {
     let source = "comptime WORDS: Array[ref String] = [\"a\", \"b\"]\n\
-                  fn main() { println(WORDS[0]) }\n";
+                  fn main() throws { println(WORDS[0]) }\n";
     let found = findings(source);
     let refusal = found
         .iter()
@@ -612,7 +612,7 @@ fn an_unevaluable_body_does_not_also_blame_its_declaration() {
                   \x20   return xs\n\
                   }\n\
                   comptime TABLE: Array[i64, 1] = lines()\n\
-                  fn main() { println(f\"{TABLE[0]}\") }\n";
+                  fn main() throws { println(f\"{TABLE[0]}\") }\n";
     let found = findings(source);
     assert!(
         found.iter().any(|f| f.code == "NK1152"),
@@ -636,7 +636,7 @@ fn an_unevaluable_body_does_not_also_blame_its_declaration() {
 #[test]
 fn text_is_computed_while_the_program_is_built() {
     let source = "comptime NAME: ref String = \"nikaia\"\n\
-                  fn main() { println(NAME) }\n";
+                  fn main() throws { println(NAME) }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const NAME: &str = \"nikaia\";"),
@@ -654,7 +654,7 @@ fn an_interpolation_is_built_from_what_the_build_knows() {
     let source = "comptime MAJOR: i64 = 0\n\
                   comptime MINOR: i64 = 1\n\
                   comptime BANNER: ref String = f\"nikaia {MAJOR}.{MINOR}\"\n\
-                  fn main() { println(BANNER) }\n";
+                  fn main() throws { println(BANNER) }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const BANNER: &str = \"nikaia 0.1\";"),
@@ -671,7 +671,7 @@ fn an_interpolation_is_built_from_what_the_build_knows() {
 fn the_escapes_are_the_ones_the_source_wrote() {
     let source = "comptime GREETING: ref String = \"a\\tb\\nc \\\"quoted\\\" {brace}\"\n\
                   comptime JOINED: ref String = \"left\" + \"/\" + \"right\"\n\
-                  fn main() { println(GREETING)\nprintln(JOINED) }\n";
+                  fn main() throws { println(GREETING)\nprintln(JOINED) }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(
@@ -693,7 +693,7 @@ fn a_string_a_body_built_crosses_as_a_view() {
                   \x20   return f\"hello {1}\"\n\
                   }\n\
                   comptime NAME: ref String = greeting()\n\
-                  fn main() { println(NAME) }\n";
+                  fn main() throws { println(NAME) }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const NAME: &str = \"hello 1\";"),
@@ -715,7 +715,7 @@ fn a_string_a_body_built_crosses_as_a_view() {
 fn a_question_about_the_value_is_answered() {
     let source = "comptime SAME: bool = \"\\u{0041}\" == \"A\"\n\
                   comptime N: i64 = \"\\u{0041}\".len()\n\
-                  fn main() { println(f\"{SAME} {N}\") }\n";
+                  fn main() throws { println(f\"{SAME} {N}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("const SAME: bool = true;"), "{rust}");
@@ -730,7 +730,7 @@ fn a_question_about_the_value_is_answered() {
 /// evaluate* rather than inventing one.
 #[test]
 fn an_escape_the_backend_rejects_is_not_invented_here() {
-    let found = findings("comptime X: ref String = \"a\\qb\"\nfn main() { println(X) }\n");
+    let found = findings("comptime X: ref String = \"a\\qb\"\nfn main() throws { println(X) }\n");
     assert!(found.iter().any(|f| f.code == "NK1127"), "{found:#?}");
 }
 
@@ -754,7 +754,7 @@ fn a_method_of_this_program_folds() {
                   comptime ORIGIN: Point = Point { x: 1, y: 2 }\n\
                   comptime BIG: Point = ORIGIN.scaled(10)\n\
                   comptime TOTAL: i64 = BIG.twice_the_sum()\n\
-                  fn main() { println(f\"{TOTAL}\") }\n";
+                  fn main() throws { println(f\"{TOTAL}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     // A `struct` of values that own nothing is already its own view, so it
@@ -787,7 +787,7 @@ fn a_method_the_rule_forbids_is_named_by_its_key() {
                   \x20   }\n\
                   }\n\
                   comptime N: i64 = Reader { n: 1 }.read()\n\
-                  fn main() { println(f\"{N}\") }\n";
+                  fn main() throws { println(f\"{N}\") }\n";
     let found = findings(source);
     let refusal = found
         .iter()
@@ -808,7 +808,7 @@ fn a_method_the_rule_forbids_is_named_by_its_key() {
 fn a_field_a_const_cannot_hold_is_named_and_the_way_out_works() {
     let refused = "struct Bag { items: Vec[i64] }\n\
                    comptime B: Bag = Bag { items: [1, 2, 3] }\n\
-                   fn main() { println(f\"{B.items.len()}\") }\n";
+                   fn main() throws { println(f\"{B.items.len()}\") }\n";
     let found = findings(refused);
     let refusal = found
         .iter()
@@ -831,7 +831,7 @@ fn a_field_a_const_cannot_hold_is_named_and_the_way_out_works() {
                  }\n\
                  comptime B: Bag = Bag { items: [1, 2, 3], label: \"bag\" }\n\
                  comptime TOTAL: i64 = B.total()\n\
-                 fn main() { println(f\"{B.label} {TOTAL}\") }\n";
+                 fn main() throws { println(f\"{B.label} {TOTAL}\") }\n";
     assert!(findings(taken).is_empty(), "{:#?}", findings(taken));
 }
 
@@ -847,7 +847,7 @@ fn a_field_a_const_cannot_hold_is_named_and_the_way_out_works() {
 fn a_constant_may_stand_above_the_one_it_reads() {
     let source = "comptime A: i64 = B * 2\n\
                   comptime B: i64 = 21\n\
-                  fn main() { println(f\"{A}\") }\n";
+                  fn main() throws { println(f\"{A}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("const A: i64 = 42;"), "{rust}");
@@ -866,7 +866,7 @@ fn a_ring_of_constants_is_refused_once_and_named() {
     let found = findings(
         "comptime A: i64 = B\n\
          comptime B: i64 = A\n\
-         fn main() { println(f\"{A}\") }\n",
+         fn main() throws { println(f\"{A}\") }\n",
     );
     let rings: Vec<&nikaia::check::Finding> = found.iter().filter(|f| f.code == "NK1168").collect();
     // **One ring, one error.** Both constants are circular and each would
@@ -900,7 +900,7 @@ fn a_float_crosses_as_the_bits_the_build_had() {
     let source = "fn half(n: f64) -> f64 { return n / 2.0 }\n\
                   comptime R: f64 = 1.5\n\
                   comptime H: f64 = half(R)\n\
-                  fn main() { println(f\"{R} {H}\") }\n";
+                  fn main() throws { println(f\"{R} {H}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("const R: f64 = 1.5;"), "{rust}");
@@ -916,7 +916,7 @@ fn a_float_crosses_as_the_bits_the_build_had() {
 #[test]
 fn a_nested_list_crosses_as_a_nested_array() {
     let source = "comptime GRID: Array[Array[i64, 2], 2] = [[1, 2], [3, 4]]\n\
-                  fn main() { println(f\"{GRID[1][0]}\") }\n";
+                  fn main() throws { println(f\"{GRID[1][0]}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("const GRID: [[i64; 2]; 2] = [[1, 2], [3, 4]];"),
@@ -936,7 +936,7 @@ fn a_struct_field_may_be_a_fixed_array() {
     let source = "struct Row { a: i64, b: i64 }\n\
                   struct Holder { rows: Array[Row, 2] }\n\
                   comptime HELD: Holder = Holder { rows: [Row { a: 1, b: 2 }, Row { a: 3, b: 4 }] }\n\
-                  fn main() { println(f\"{HELD.rows[1].a}\") }\n";
+                  fn main() throws { println(f\"{HELD.rows[1].a}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains(
@@ -961,7 +961,7 @@ fn an_enum_variant_crosses_with_what_it_carries() {
                   comptime A: Shape = Shape::Num(1.5)\n\
                   comptime B: Shape = Shape::Pair(7, \"x\")\n\
                   comptime C: Array[Shape, 2] = [Shape::Empty, Shape::Num(2.0)]\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   match B {\n\
                   \x20       Shape::Pair(n, s) => { println(f\"{n}{s}\") }\n\
                   \x20       else => { println(\"other\") }\n\
@@ -1002,7 +1002,7 @@ fn a_variant_that_owns_memory_is_refused_by_name() {
     let found = findings(
         "enum Shape { Empty, Many(Vec[i64]) }\n\
          comptime M: Shape = Shape::Many([1, 2])\n\
-         fn main() { println(\"hi\") }\n",
+         fn main() throws { println(\"hi\") }\n",
     );
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1167");
@@ -1034,7 +1034,7 @@ fn a_variant_with_named_fields_is_its_enum() {
     let source = "enum Shape { Dot, Spot { x: i64 } }\n\
                   fn make() -> Shape { return Shape::Spot { x: 3 } }\n\
                   comptime S: Shape = Shape::Spot { x: 4 }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   match make() {\n\
                   \x20       Shape::Spot { x } => { println(f\"{x}\") }\n\
                   \x20       else => { println(\"dot\") }\n\
@@ -1058,7 +1058,7 @@ fn a_variant_field_of_the_wrong_type_is_refused() {
     let found = findings(
         "enum Shape { Dot, Spot { x: i64 } }\n\
          fn make() -> Shape { return Shape::Spot { x: \"no\" } }\n\
-         fn main() { match make() { else => { println(\"hi\") } } }\n",
+         fn main() throws { match make() { else => { println(\"hi\") } } }\n",
     );
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1106");
@@ -1085,7 +1085,7 @@ fn build_time_integers_through_a_call() {
                   comptime LEFT: i64 = left(-7, 3)\n\
                   comptime ORDER: bool = below(-2, 1)\n\
                   comptime LOWEST: i64 = lowest()\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   println(f\"{MASKED} {HALVED} {LEFT} {ORDER} {LOWEST}\")\n\
                   }\n";
     assert!(

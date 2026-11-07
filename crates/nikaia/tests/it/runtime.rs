@@ -408,7 +408,7 @@ fn a_manifest_cleanup_deadline_compiles_and_says_where_it_went() {
     )
     .expect("the manifest");
     let input = dir.join("main.nika");
-    std::fs::write(&input, "fn main() { println(\"ran\") }").expect("the source");
+    std::fs::write(&input, "fn main() throws { println(\"ran\") }").expect("the source");
 
     let run = Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .args(["lower", input.to_str().unwrap()])

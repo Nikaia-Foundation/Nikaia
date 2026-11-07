@@ -10,7 +10,7 @@ grammar Lit {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let s: String = Lit::read[String](Bytes("abc".bytes().collect())) catch {
 		println("error")
 		return

@@ -5,7 +5,7 @@ fn as_expected(want: ref Bytes?, got: ref Bytes) -> bool {
     }
 }
 
-fn main() {
+fn main() throws {
     let w: Bytes? = Bytes([120])
     let g: Bytes = Bytes([120])
     println(f"{as_expected(w, g)}")

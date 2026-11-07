@@ -16,7 +16,7 @@ fn lent(p: ref fs::Path) -> i64 {
     return p.parts().len() as i64
 }
 
-fn main() {
+fn main() throws {
     println(f"{count("a/b")} {count("/x/y/z")}")
     println(f"{kept("c/d").display()}")
     println(f"{lent("e/f/g")}")

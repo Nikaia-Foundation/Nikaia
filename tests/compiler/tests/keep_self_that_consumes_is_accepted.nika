@@ -13,7 +13,7 @@ impl Bag {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut bag = Bag { items: [] }
 	bag.add("a")
 	let items = bag.done()

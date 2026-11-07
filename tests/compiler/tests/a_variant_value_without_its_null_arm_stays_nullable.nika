@@ -9,6 +9,6 @@ fn show(r: R) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(show(R::Opaque("x")))
 }

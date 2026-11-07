@@ -27,7 +27,7 @@ fn main() throws {
         "impl H for Keeps {\n    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync {\n        self.held.push(f)\n        return self.held.len()\n    }\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"k\") }\n}\n",
         "impl H for Runs {\n    fn take(ref mut self, f: fn(i64) -> i64 sync) -> i64 sync { return f(self.base) }\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"r\") }\n}\n",
         "fn hand[T: H](mut h: T, n: i64) -> i64 {\n    return h.take(fn(x) { x + n })\n}\n",
-        "fn main() {\n    let mut r = Runs { base: 5 }\n    println(hand(r, 3))\n}\n",
+        "fn main() throws {\n    let mut r = Runs { base: 5 }\n    println(hand(r, 3))\n}\n",
     ]
     let mut reversed: Vec[String] = []
     for at in 0..<items.len() {

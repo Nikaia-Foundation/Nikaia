@@ -2,7 +2,7 @@
 // the other arm is not after it, and a text is copied.
 struct P { name: String }
 
-fn main() {
+fn main() throws {
     let c = true
     let t = P { name: "a" }
     let s: P = if c { t } else { P { name: t.name.clone() } }

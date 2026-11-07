@@ -796,6 +796,32 @@ impl Lock {
     }
 }
 
+/// **Whether a function can panic** (ADR-async-5 D35): not, yes, or nobody
+/// can say, which counts as yes - no guarantee is given that was not shown.
+pub enum Panics {
+    No,
+    Yes,
+    Unknown,
+}
+
+impl Panics {
+    /// Whether a caller may rely on it not panicking.
+    pub fn never(self) -> bool {
+        return self == Panics::No
+    }
+
+    /// Either of two: yes where one is, unknown where one is, else no.
+    pub fn or(self, other: Panics) -> Panics {
+        if self == Panics::Yes || other == Panics::Yes {
+            return Panics::Yes
+        }
+        if self == Panics::Unknown || other == Panics::Unknown {
+            return Panics::Unknown
+        }
+        return Panics::No
+    }
+}
+
 /// **Whether a type may cross a thread** (ADR-005 §1), as a ledger says it.
 pub enum Crosses {
     May,
@@ -835,6 +861,10 @@ impl Threads {
 pub struct Touch {
     pub kind: String,
     pub parameter: String?,
+    /// The resource's name where the body named it with a literal
+    /// (`fs::write("a.txt", …)`, #1354): a caller's call reaches that one
+    /// resource, whatever it passes. `null` with `parameter`.
+    pub named: String?,
     pub write: bool,
 }
 
@@ -843,8 +873,14 @@ impl Touch {
         return self.kind == "lock"
     }
 
-    /// `file(path) write`, as a ledger writes it.
+    /// `file(path) write`, as a ledger writes it; `file('a.txt') write`
+    /// where the body named the resource with a literal.
     pub fn text(ref self) -> String {
+        if self.named != null {
+            let access = if self.write { "write" } else { "read" }
+            let named_text = self.named ?? ""
+            return f"{self.kind}('{named_text}') {access}"
+        }
         return touched(self.kind, self.parameter, self.write)
     }
 }
@@ -1158,6 +1194,9 @@ pub struct FnContract {
     pub keeps: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
+    /// **Whether it can panic** (ADR-async-5 D35, Part III 13.5 `panics`):
+    /// inferred over the call graph; absent from a ledger is `Unknown`.
+    pub panics: Panics,
     pub threads: Threads,
     pub views: Vec[Held],
     pub sharing: Vec[Class],
@@ -1215,6 +1254,7 @@ impl FnContract {
             keeps: [],
             mutates: false,
             touches_a_lock: Lock::No,
+            panics: Panics::Unknown,
             threads: Threads::Undecided,
             views: [],
             sharing: [],

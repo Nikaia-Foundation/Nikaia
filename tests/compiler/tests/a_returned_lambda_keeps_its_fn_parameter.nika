@@ -14,7 +14,7 @@ fn twice(f: fn(i64) -> i64) -> fn(i64) -> i64 {
     return fn(x) { f(f(x)) }
 }
 
-fn main() {
+fn main() throws {
     let p = plus_one(fn(x) { x * 2 })
     println(f"{p(1)}")
     let b = boxed(fn(x) { x * 3 })

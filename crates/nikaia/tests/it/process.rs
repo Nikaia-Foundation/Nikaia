@@ -111,7 +111,7 @@ fn a_program_that_is_not_there_is_caught() {
     let source = "use std::process\n\
                   use std::io\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let out = process::run(\"no-such-program-anywhere\", []) catch {\n\
                   \x20       match error {\n\
                   \x20           io::IoError::NotFound(what) => println(f\"not found: {what}\"),\n\

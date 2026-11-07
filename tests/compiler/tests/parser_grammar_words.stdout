@@ -15,4 +15,4 @@ _@0 | name _x@2 | name _0@5 | digits 1000@8 | name __@14 | _@17 | name x@19
 == gate_full_dry_run.nika
 40 words, 195 names, 0 docs, 74 literals, 407 other, 51 after a line break
 == grammar_failing_action_in_alternative.nika
-35 words, 79 names, 0 docs, 25 literals, 154 other, 39 after a line break
+36 words, 79 names, 0 docs, 25 literals, 154 other, 39 after a line break

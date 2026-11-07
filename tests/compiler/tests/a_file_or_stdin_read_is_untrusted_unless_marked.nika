@@ -1,0 +1,49 @@
+// #649, ADR-365: standard input and every file read while the program runs
+// are untrusted. An `assert` about them is `NK1202`, the guard its help
+// writes proves it, and `trusted: true` at the source makes the claim one
+// the compiler checks as any other (`NK1300` where it is not proved, a
+// check at run time under `unproved-claims = "warn"`). A map keyed by a file
+// gets the keyed hash unless the read says `trusted: true`, and `--trust`
+// names the marker's place.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn said(nikaia: String, tmp: String, label: String, source: String, verb: Vec[String]) throws {
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    let mut args = verb.clone()
+    args.push("p.nika")
+    let out = process::run(nikaia, args; dir: tmp.clone())
+    println(f"-- {label}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        let kept = line.starts_with("error") || line.starts_with("warning[") || line.starts_with("Checked") || line.starts_with("input provenance") || line.starts_with("    ") && line.contains(" is ") || line.starts_with("hash for") || line.contains("= help: Check it where it arrives")
+        if kept {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let head = "use std::io\nuse std::text\n\nfn main() throws {\n"
+    let stdin = "    let n: i64 = text::parse_i64(io::read_to_string().trim()) ?? 0\n"
+    let marked = "    let n: i64 = text::parse_i64(io::read_to_string(trusted: true).trim()) ?? 0\n"
+    let tail = "    assert(n > 0)\n    println(n)\n}\n"
+    said(nikaia, tmp, "an assert on standard input", f"{head}{stdin}{tail}", ["check"])
+    said(nikaia, tmp, "after the guard", f"{head}{stdin}    return if !(n > 0)\n{tail}", ["check"])
+    said(nikaia, tmp, "trusted: true, a claim as any other", f"{head}{marked}{tail}", ["check"])
+    said(nikaia, tmp, "trusted: true, checked at run time", f"{head}{marked}{tail}", ["check", "--unproved-claims=warn"])
+    let file = "use std::fs\nuse std::collections\n\nfn main() throws {\n    let s = fs::read_to_string(\"in.txt\", fs::Root::Anywhere"
+    let rest = ")\n    let mut m = collections::HashMap()\n    for line in s.lines() {\n        m.insert(line.to_string(), 1)\n    }\n    println(m.len())\n}\n"
+    said(nikaia, tmp, "a file read, no marker", f"{file}{rest}", ["lower", "--trust", "-o", "p.rs"])
+    said(nikaia, tmp, "a file read, trusted: true", f"{file}; trusted: true{rest}", ["lower", "--trust", "-o", "p.rs"])
+    said(nikaia, tmp, "trusted: takes a bool", f"{file}; trusted: \"yes\"{rest}", ["check"])
+    said(nikaia, tmp, "trusted: takes a value", f"{file}; trusted: maybe{rest}", ["check"])
+    process::run("rm", ["-rf", tmp])
+}

@@ -34,7 +34,7 @@ const PAGE: &str = "pub struct Page {\n\
 fn a_field_without_a_default_may_not_be_left_out() {
     let source = format!(
         "{PAGE}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let p = Page {{ size: 1 }}\n\
          \x20   println(f\"{{p.size}}\")\n\
          }}\n"
@@ -51,7 +51,7 @@ fn a_default_of_the_wrong_type_is_refused() {
          \x20   label: String,\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let p = Page { label: \"a\" }\n\
          \x20   println(f\"{p.size}\")\n\
          }\n";
@@ -107,7 +107,7 @@ fn a_default_reaches_another_package() {
          \n\
          fn main() {\n\
          }\n";
-    let app = "fn main() {\n\
+    let app = "fn main() throws {\n\
          \x20   let p = lib::Page { cursor: null }\n\
          \x20   println(f\"{p.size}\")\n\
          }\n";

@@ -27,7 +27,7 @@ fn wire_name(f: meta::Field) -> String {
 	return f.attribute(Name)?.value ?? f.name
 }
 
-fn show[T: Struct]() {
+fn show[T: Struct]() throws {
 	for f in T::fields {
 		comptime a = f.name
 		comptime b = shout(f.name)
@@ -37,7 +37,7 @@ fn show[T: Struct]() {
 	}
 }
 
-fn main() {
+fn main() throws {
 	show[Contact]()
 	show[Person]()
 }

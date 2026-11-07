@@ -1,7 +1,7 @@
 // #915: a `mut String` pushed to in a loop, then read through `.trim()` and
 // `trim_start_matches` and copied, stays text of its own.
 
-fn main() {
+fn main() throws {
     let head = "f(test: &T)"
     let mut ty: String = ""
     for _ in ["(test: ", ", test: "] {

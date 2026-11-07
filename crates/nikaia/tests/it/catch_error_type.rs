@@ -20,7 +20,7 @@ fn a_library_call_binds_its_error_type() {
     let source = r#"
 use std::fs
 
-fn main() {
+fn main() throws {
     let t = fs::read_to_string("nope.txt", fs::Root::Anywhere) catch {
         let n: i64 = error
         ""
@@ -43,7 +43,7 @@ fn a_match_over_the_library_error_checks() {
     let source = r#"
 use std::fs
 
-fn main() {
+fn main() throws {
     let t = fs::read_to_string("nope.txt", fs::Root::Anywhere) catch {
         match error {
             io::IoError::NotFound(p) => println(f"no {p.display()}")
@@ -79,7 +79,7 @@ fn load(on: bool) -> i64 throws {
     return 1
 }
 
-fn main() {
+fn main() throws {
     let n = load(true) catch {
         let wrong: bool = error
         0
@@ -120,7 +120,7 @@ fn main() {
         r#"
 use std::fs
 
-fn main() {
+fn main() throws {
     let t = fs::read("a.txt", fs::Root::Anywhere) catch { return }
     println(f"{t.len()}")
 }

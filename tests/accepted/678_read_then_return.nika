@@ -1,6 +1,6 @@
 // #678: a parameter handed to a function that only reads it, then handed back.
 
-fn show(s: String) {
+fn show(s: String) throws {
     println(f"[{s}]")
 }
 
@@ -8,7 +8,7 @@ fn width(s: String) -> i64 {
     return s.len()
 }
 
-fn echo(a: String) -> String {
+fn echo(a: String) -> String throws {
     show(a)
     return a
 }
@@ -21,7 +21,7 @@ fn measured(a: String) -> String {
     return a
 }
 
-fn main() {
+fn main() throws {
     let x = f"v{12}"
     let e = echo(x)
     let m = measured(e)

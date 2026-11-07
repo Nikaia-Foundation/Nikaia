@@ -21,7 +21,7 @@ fn row_after(m: ref collections::BTreeMap[u32, B], e: E) -> i64? {
 	return r
 }
 
-fn main() {
+fn main() throws {
 	let v: Vec[u32] = [1, 2]
 	let l: u32 = 3
 	println(f"{v.contains(l ^ 1)}")

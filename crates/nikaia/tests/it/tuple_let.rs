@@ -42,7 +42,7 @@ fn pair() -> (i64, String) {
     return (7, "seven")
 }
 
-fn main() {
+fn main() throws {
     let (n, word) = pair()
     let (a, b, c) = (1, 2, 3)
     println(f"{n} {word} {a} {b} {c}")
@@ -62,7 +62,7 @@ fn part_one_eight_one_twos_own_line_is_a_program() {
 fn one() -> i64 { return 1 }
 fn two() -> i64 { return 2 }
 
-fn main() {
+fn main() throws {
     let (a, b) = overlap {
         one()
         two()
@@ -85,7 +85,7 @@ fn pair() -> (i64, String) {
 
 fn takes(n: i64) -> i64 { return n }
 
-fn main() {
+fn main() throws {
     let (n, word) = pair()
     let m = takes(word)
     println(f"{n} {m}")
@@ -104,7 +104,7 @@ fn main() {
 #[test]
 fn a_tuple_let_takes_no_type() {
     let found =
-        findings("fn main() {\n    let (a, b): i64 = (1, 2)\n    println(f\"{a}{b}\")\n}\n");
+        findings("fn main() throws {\n    let (a, b): i64 = (1, 2)\n    println(f\"{a}{b}\")\n}\n");
     assert!(found.iter().any(|f| f.code == "NK1136"), "{found:#?}");
 }
 
@@ -113,11 +113,12 @@ fn a_tuple_let_takes_no_type() {
 /// own nested tuple pattern.
 #[test]
 fn a_nested_tuple_is_taken_apart() {
-    let rust =
-        lowered("fn main() {\n    let (a, (b, c)) = (1, (2, 3))\n    println(f\"{a}{b}{c}\")\n}\n");
+    let rust = lowered(
+        "fn main() throws {\n    let (a, (b, c)) = (1, (2, 3))\n    println(f\"{a}{b}{c}\")\n}\n",
+    );
     assert!(rust.contains("let (a, (b, c)) ="), "{rust}");
     let rust = lowered(
-        "fn main() {\n    let places = [(\"a\", (1, 2))]\n    for (name, (line, _)) in places {\n        println(f\"{name}{line}\")\n    }\n}\n",
+        "fn main() throws {\n    let places = [(\"a\", (1, 2))]\n    for (name, (line, _)) in places {\n        println(f\"{name}{line}\")\n    }\n}\n",
     );
     assert!(rust.contains("for (name, (line, _)) in"), "{rust}");
 }
@@ -125,7 +126,7 @@ fn a_nested_tuple_is_taken_apart() {
 /// **Each name takes the type of its own part**, at any depth.
 #[test]
 fn a_nested_part_carries_its_type() {
-    let source = "fn takes(n: i64) -> i64 { return n }\nfn main() {\n    let (a, (b, word)) = (1, (2, \"x\"))\n    println(f\"{takes(word)}{a}{b}\")\n}\n";
+    let source = "fn takes(n: i64) -> i64 { return n }\nfn main() throws {\n    let (a, (b, word)) = (1, (2, \"x\"))\n    println(f\"{takes(word)}{a}{b}\")\n}\n";
     let found = findings(source);
     assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
 }
@@ -136,7 +137,7 @@ fn a_nested_part_carries_its_type() {
 fn a_variant_in_a_head_is_refused() {
     for source in [
         "fn main() {\n    let o: i64? = 1\n    let Some(x) = o\n}\n",
-        "fn main() {\n    let xs: Vec[i64?] = [1]\n    for Some(x) in xs {\n        println(f\"{x}\")\n    }\n}\n",
+        "fn main() throws {\n    let xs: Vec[i64?] = [1]\n    for Some(x) in xs {\n        println(f\"{x}\")\n    }\n}\n",
     ] {
         let found = findings(source);
         let refusal = found.iter().find(|f| f.code == "NK1259");
@@ -158,7 +159,7 @@ fn a_nested_tuple_let_takes_no_type() {
 /// what keeps the note from becoming noise on every unbalanced paren.
 #[test]
 fn an_unrelated_bracket_is_left_alone() {
-    let source = "fn main() {\n    let x = (1 +\n    println(\"x\")\n}\n";
+    let source = "fn main() throws {\n    let x = (1 +\n    println(\"x\")\n}\n";
     let refused = parse_to_ast(source).expect_err("this does not parse either");
     let said = rendered(&refused, source);
     assert!(
@@ -178,6 +179,7 @@ fn rendered(refused: &anyhow::Error, source: &str) -> String {
 /// **One name still binds one name**, which is every `let` in the tree.
 #[test]
 fn the_single_name_form_is_untouched() {
-    let rust = lowered("fn main() {\n    let mut x = 1\n    x += 1\n    println(f\"{x}\")\n}\n");
+    let rust =
+        lowered("fn main() throws {\n    let mut x = 1\n    x += 1\n    println(f\"{x}\")\n}\n");
     assert!(rust.contains("let mut x = 1;"), "{rust}");
 }

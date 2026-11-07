@@ -25,7 +25,7 @@ fn direct(k: String) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(pick("number"))
     println(pick("str"))
     println(pick("char"))

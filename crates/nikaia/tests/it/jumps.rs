@@ -479,7 +479,7 @@ fn a_bare_brace_led_form_is_still_refused_in_a_head() {
 /// ADR-346 D3: a bound handle nobody takes is `NK2109`.
 #[test]
 fn a_forgotten_handle_is_refused() {
-    let (code, message) = one("fn f() {\n\
+    let (code, message) = one("fn f() throws {\n\
          \x20   let h = spawn fn { 1 }\n\
          \x20   println(\"x\")\n\
          }\n");
@@ -494,7 +494,7 @@ fn a_forgotten_handle_from_a_call_is_refused() {
     let (code, message) = one("fn start(c: bool) -> TaskHandle[i64] {\n\
          \x20   return spawn fn { 1 }\n\
          }\n\
-         fn f() {\n\
+         fn f() throws {\n\
          \x20   let h = start(true)\n\
          \x20   println(\"x\")\n\
          }\n");

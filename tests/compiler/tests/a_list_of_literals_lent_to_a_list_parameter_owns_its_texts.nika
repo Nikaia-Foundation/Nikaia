@@ -16,7 +16,7 @@ fn score(lines: ref Vec[String]) -> Score {
     }
     return Score { kinds: kinds }
 }
-fn main() {
+fn main() throws {
     let s = score(["xa", "b"])
     let kinds: Vec[String] = s.kinds.clone()
     print(stats(kinds))

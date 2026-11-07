@@ -23,7 +23,7 @@ fn bytes_of(text: String) -> Bytes {
     return Bytes(all)
 }
 
-fn main() {
+fn main() throws {
     println(G::top(bytes_of("ab + cd   42 ;")) catch { "refused" })
     println(G::words(bytes_of("ab  cde f ;")) catch { "refused" })
     println(G::tight(bytes_of("abc")) catch { "refused" })

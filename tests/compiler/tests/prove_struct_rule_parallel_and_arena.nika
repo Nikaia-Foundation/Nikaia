@@ -126,7 +126,7 @@ impl Loose {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut r = Row { cols: [], ks: [] }
 	r.add(1, 2)
 	r.add(3, 4)

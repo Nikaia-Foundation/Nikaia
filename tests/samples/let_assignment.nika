@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let x = 5;
     let name = "Nikaia";
     println(name);

@@ -1,0 +1,371 @@
+// crates/nikaia-std/src/tools/sv_nl.nika
+//
+// **The non-linear loop** (ADR-270 D28, #1339): the solver's part. The
+// reader turned each non-linear term into a variable (`SvNl`); this loop runs
+// the linear engine on the abstraction, holds each model against the terms'
+// exact meaning (`sv_nl_holds`, sv_lemma.nika) and, where the model breaks
+// one, first tries to mend it (each term set to its value, an argument moved
+// to give the value the model chose) and else adds the lemmas the model
+// violates (`SvLemma`) and runs again. An unsat of the abstraction with its
+// lemmas is the query's: the lemmas are checked by re-deriving them. A model
+// is answered only where it agrees with every term.
+
+use std::collections
+
+/// The loop's answer: the engine's last run, the lemmas the proof needs,
+/// and why it gave up, `budget` or `overflow`, empty where it did not.
+pub struct SvNlRun {
+	pub run: SvEngineRun,
+	pub lemmas: Vec[SvLemma],
+	pub why: String,
+}
+
+/// The rounds the loop runs before it answers `unknown (non-linear,
+/// budget)`.
+fn sv_nl_rounds() -> i64 {
+	return 24
+}
+
+/// The engine `sv_smt_engine_set` on facts with non-linear terms `defs`.
+/// `null` where a setting does not take.
+pub fn sv_nl_engine(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	theory: String,
+	reals: ref collections::BTreeSet[String],
+	settings: String,
+	defs: ref Vec[SvNl],
+) -> SvNlRun? {
+	let mut lemmas: Vec[SvLemma] = []
+	let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut work = 0
+	for _ in 0..<sv_nl_rounds() {
+		let mut scratch = arena.clone()
+		let mut all = facts.clone()
+		for l in lemmas {
+			all.push(sv_lemma_formula(scratch, defs, l) ?? return null)
+		}
+		let run = sv_smt_engine_set(scratch, all, goal, budget, theory.clone(), reals, settings.clone()) ?? return null
+		work += run.work
+		let values = match run.driven {
+			SvDriven::Answer(LgAnswer::Refuted { model }) => sv_nl_rats(model),
+			SvDriven::RealModel(v) => v.clone(),
+			SvDriven::Proved(_, _) => {
+				return SvNlRun { run: sv_nl_worked(run, work), lemmas: lemmas, why: "" }
+			},
+			// The engine's own unknown: on the abstraction alone its reason,
+			// with lemmas the loop's budget spent.
+			else => {
+				let why = if lemmas.len() > 0 { "budget" } else { "" }
+				return SvNlRun { run: sv_nl_worked(run, work), lemmas: lemmas, why: why }
+			},
+		}
+		if sv_nl_holds(defs, values) {
+			return SvNlRun { run: sv_nl_worked(run, work), lemmas: lemmas, why: "" }
+		}
+		match sv_nl_repair(arena, facts, goal, reals, defs, values) {
+			null => {},
+			mended => {
+				let driven = sv_nl_driven(reals, mended)
+					?? return SvNlRun { run: sv_engine_unknown(LgUnknown::Overflow, work), lemmas: lemmas, why: "overflow" }
+				let mut done = sv_nl_worked(run, work)
+				done.driven = driven
+				return SvNlRun { run: done, lemmas: lemmas, why: "" }
+			},
+		}
+		// The first lemma the model violates, of each term: a schema in the
+		// order `sv_nl_candidates` lists them.
+		let mut added = 0
+		let mut served: collections::BTreeSet[i64] = collections::BTreeSet()
+		for l in sv_nl_candidates(defs, values) {
+			if served.contains(l.def) {
+				continue
+			}
+			let mut probe = arena.clone()
+			let id = sv_lemma_formula(probe, defs, l) ?? continue
+			let key = f"{l.schema} {probe.text(id)}"
+			if seen.contains(key) {
+				continue
+			}
+			let truth = sv_real_truth(probe, id, values) ?? true
+			if !truth {
+				seen.insert(key)
+				served.insert(l.def)
+				lemmas.push(l.clone())
+				added += 1
+			}
+		}
+		if added == 0 {
+			break
+		}
+	}
+	return SvNlRun { run: sv_engine_unknown(LgUnknown::NoContradiction, work), lemmas: lemmas, why: "budget" }
+}
+
+/// `run` with the work of every round.
+fn sv_nl_worked(run: ref SvEngineRun, work: i64) -> SvEngineRun {
+	return SvEngineRun {
+		driven: run.driven.clone(),
+		work: work,
+		path: run.path.clone(),
+		carried: run.carried.clone(),
+		stats: run.stats.clone(),
+	}
+}
+
+/// An integer model as rationals.
+fn sv_nl_rats(model: ref LgModel) -> collections::BTreeMap[String, SvRat] {
+	let mut out: collections::BTreeMap[String, SvRat] = collections::BTreeMap()
+	for (name, v) in model.values {
+		out.insert(name.clone(), sv_int(v))
+	}
+	return out
+}
+
+/// A mended model as the engine answers one: integer where no variable is
+/// real. `null` where an integer one is not whole.
+fn sv_nl_driven(reals: ref collections::BTreeSet[String], values: ref collections::BTreeMap[String, SvRat]) -> SvDriven? {
+	if reals.len() > 0 {
+		return SvDriven::RealModel(values.clone())
+	}
+	let mut ints: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for (name, v) in values {
+		if !sv_rat_is_int(v) {
+			return null
+		}
+		ints.insert(name.clone(), v.num)
+	}
+	return SvDriven::Answer(LgAnswer::Refuted { model: LgModel { values: ints } })
+}
+
+/// `values` with each term set to its exact value, in order (an argument's
+/// term before the term that reads it); `null` where one leaves `i64`.
+fn sv_nl_settled(
+	defs: ref Vec[SvNl],
+	values: ref collections::BTreeMap[String, SvRat],
+) -> collections::BTreeMap[String, SvRat]? {
+	let mut out = values.clone()
+	for t in defs {
+		match sv_nl_value(t, out) {
+			SvNlValue::Value(r) => {
+				out.insert(t.name.clone(), r.clone())
+			},
+			SvNlValue::Free => {},
+			SvNlValue::Overflow => {
+				return null
+			},
+		}
+	}
+	return out
+}
+
+/// Whether `values` answer the query: the facts hold, the goal does not,
+/// every term has its meaning and every integer variable a whole value.
+fn sv_nl_answers(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	reals: ref collections::BTreeSet[String],
+	defs: ref Vec[SvNl],
+	values: ref collections::BTreeMap[String, SvRat],
+) -> bool {
+	for (name, v) in values {
+		if !reals.contains(name) && !sv_rat_is_int(v) {
+			return false
+		}
+	}
+	return sv_nl_holds(defs, values) && sv_real_model_holds(arena, facts, goal, values)
+}
+
+/// A model that answers the query near `values`, or `null`: each term set
+/// to its value; else, for one term the model breaks, an argument moved so
+/// the term takes the value the model gave it (a square's root, a factor's
+/// quotient, a power's exponent), then each term set again.
+fn sv_nl_repair(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	reals: ref collections::BTreeSet[String],
+	defs: ref Vec[SvNl],
+	values: ref collections::BTreeMap[String, SvRat],
+) -> collections::BTreeMap[String, SvRat]? {
+	let settled = sv_nl_settled(defs, values)
+	match settled {
+		null => {},
+		s => {
+			if sv_nl_answers(arena, facts, goal, reals, defs, s) {
+				return s.clone()
+			}
+		},
+	}
+	for t in defs {
+		let v = sv_real_named(values, t.name)
+		let a = sv_real_named(values, t.a)
+		let b = sv_real_named(values, t.b)
+		// The moves: an argument's name and its new value.
+		let mut names: Vec[String] = []
+		let mut moved: Vec[SvRat] = []
+		if t.op == "*" && t.a == t.b {
+			match sv_nl_root(v) {
+				null => {},
+				r => {
+					names.push(t.a.clone())
+					moved.push(r.clone())
+					names.push(t.a.clone())
+					moved.push(sv_rat_neg(r) ?? r.clone())
+				},
+			}
+		} else if t.op == "*" {
+			if a.num != 0 {
+				match sv_rat_div(v, a) {
+					null => {},
+					r => {
+						names.push(t.b.clone())
+						moved.push(r.clone())
+					},
+				}
+			}
+			if b.num != 0 {
+				match sv_rat_div(v, b) {
+					null => {},
+					r => {
+						names.push(t.a.clone())
+						moved.push(r.clone())
+					},
+				}
+			}
+		} else if t.op == "/" && v.num != 0 {
+			match sv_rat_div(a, v) {
+				null => {},
+				r => {
+					names.push(t.b.clone())
+					moved.push(r.clone())
+				},
+			}
+			match sv_rat_mul(v, b) {
+				null => {},
+				r => {
+					names.push(t.a.clone())
+					moved.push(r.clone())
+				},
+			}
+		} else if t.op == "pow2" && sv_rat_is_int(v) && v.num > 0 {
+			let mut e = 0
+			let mut p = v.num
+			while p % 2 == 0 {
+				p = p / 2
+				e += 1
+			}
+			if p == 1 {
+				names.push(t.a.clone())
+				moved.push(sv_int(e))
+			}
+		}
+		for i in 0..<names.len() {
+			let mut tried = values.clone()
+			tried.insert(names[i].clone(), moved[i].clone())
+			match sv_nl_settled(defs, tried) {
+				null => {},
+				s => {
+					if sv_nl_answers(arena, facts, goal, reals, defs, s) {
+						return s.clone()
+					}
+				},
+			}
+		}
+	}
+	return null
+}
+
+/// The rational square root of `v`, `null` where it has none.
+fn sv_nl_root(v: ref SvRat) -> SvRat? {
+	if v.num < 0 {
+		return null
+	}
+	let n = sv_nl_isqrt(v.num) ?? return null
+	let d = sv_nl_isqrt(v.den) ?? return null
+	return sv_rat(n, d)
+}
+
+/// The whole square root of `n >= 0`, `null` where it is not whole.
+fn sv_nl_isqrt(n: i64) -> i64? {
+	let mut r: i64 = 0
+	while r <= 3037000499 && r * r < n {
+		r += 1
+		if r > 100000 {
+			return null
+		}
+	}
+	return if r * r == n { r } else { null }
+}
+
+/// The lemmas that may cut the model `values` off, each term's in the
+/// order they are tried: its relations to the other terms of its operator,
+/// then the bounds, signs and points of its own (`sv_nl_engine` keeps the
+/// first the model violates).
+fn sv_nl_candidates(defs: ref Vec[SvNl], values: ref collections::BTreeMap[String, SvRat]) -> Vec[SvLemma] {
+	let mut out: Vec[SvLemma] = []
+	for i in 0..<defs.len() {
+		let t = defs[i].clone()
+		let a = sv_real_named(values, t.a)
+		let b = sv_real_named(values, t.b)
+		for j in 0..<defs.len() {
+			if j != i && defs[j].op == t.op {
+				let mut c = sv_lemma("congruence", i)
+				c.other = j
+				out.push(c.clone())
+				if t.op == "*" || t.op == "pow2" {
+					let mut mono = sv_lemma(if t.op == "*" { "mono" } else { "pow2-mono" }, i)
+					mono.other = j
+					out.push(mono)
+				}
+			}
+		}
+		if t.op == "*" {
+			out.push(sv_lemma("square", i))
+			for k in 0..<3 {
+				let mut z = sv_lemma("zero", i)
+				z.sa = k
+				out.push(z)
+			}
+			for sa in [1, -1] {
+				for sb in [1, -1] {
+					let mut sg = sv_lemma("sign", i)
+					sg.sa = sa
+					sg.sb = sb
+					out.push(sg)
+					let mut tg = sv_lemma("tangent", i)
+					tg.sa = sa
+					tg.sb = sb
+					tg.a = a.clone()
+					tg.b = b.clone()
+					out.push(tg)
+				}
+			}
+			for k in 1..<3 {
+				let mut pt = sv_lemma("point", i)
+				pt.sa = k
+				pt.a = if k == 1 { a.clone() } else { b.clone() }
+				out.push(pt)
+			}
+		} else if t.op == "/" {
+			let mut dp = sv_lemma("divpoint", i)
+			dp.b = b.clone()
+			out.push(dp)
+		} else if t.op == "div" || t.op == "mod" {
+			let mut dv = sv_lemma("division", i)
+			dv.b = b.clone()
+			out.push(dv)
+		} else {
+			out.push(sv_lemma("pow2-neg", i))
+			out.push(sv_lemma("pow2-low", i))
+			out.push(sv_lemma("pow2-pos", i))
+			let mut pp = sv_lemma("pow2-point", i)
+			pp.a = a.clone()
+			out.push(pp)
+		}
+	}
+	return out
+}

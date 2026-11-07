@@ -32,7 +32,7 @@ fn tail2(b: Bytes) -> Bytes {
 	return tail(tail(b))
 }
 
-fn main() {
+fn main() throws {
 	let v: Vec[i64] = [1, 2, 3, 4]
 	println(f"{total(rest2(v))}")
 	println(f"{total(pick(v, v[3..]))}")

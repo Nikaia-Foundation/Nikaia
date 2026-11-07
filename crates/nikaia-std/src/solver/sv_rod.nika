@@ -121,13 +121,18 @@ fn sv_line(source: String, engine: String) -> String {
 fn sv_line_stats(source: String, engine: String, stats: bool) -> String {
 	let status = sv_status(source)
 	let mut reals: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut defs: Vec[SvNl] = []
 	let script = match sv_smtlib_script(source) {
 		SvSmtRead::Script(s, sorts) => {
 			reals = sorts.reals.clone()
+			defs = sorts.nl.clone()
 			s.clone()
 		},
 		SvSmtRead::Failed(SvReadWhy::Overflow(_)) => {
 			return "unknown (overflow) 0"
+		},
+		SvSmtRead::Failed(SvReadWhy::Malformed(why)) => {
+			return f"malformed ({why}) 0"
 		},
 		SvSmtRead::Failed(_) => {
 			return "unknown (unreadable) 0"
@@ -140,6 +145,9 @@ fn sv_line_stats(source: String, engine: String, stats: bool) -> String {
 	// strategy's set changed (`sv_params_set_all`, #1284 item 5).
 	let base = sv_engine_name(engine)
 	let settings = sv_engine_settings(engine)
+	if (base == "new" || base == "new-fm" || base == "new-simplex") && defs.len() > 0 {
+		return sv_nl_line(arena, script.assertions, goal, budget, status, sv_new_theory(base), reals, settings, defs)
+	}
 	if base == "new" || base == "new-fm" || base == "new-simplex" {
 		return sv_new_line(
 			arena,
@@ -155,7 +163,7 @@ fn sv_line_stats(source: String, engine: String, stats: bool) -> String {
 	}
 	// `lg_check` reads every variable as an integer (ADR-270 D27): a real
 	// script read so could be answered wrong.
-	if reals.len() > 0 {
+	if reals.len() > 0 || defs.len() > 0 {
 		return "unknown (theory) 0"
 	}
 	let run = sv_fm_check(arena, script.assertions, goal, budget)
@@ -236,6 +244,69 @@ fn sv_new_line(
 	let path = if run.path == "" { "" } else { f"/{run.path}" }
 	let counted = if stats { f"\nstats: {sv_smt_stats_text(run.stats)}" } else { "" }
 	return f"{answer} {run.work}{path}{counted}"
+}
+
+/// The line of a query with non-linear terms `defs` (ADR-270 D28): a
+/// *proved* is its log replayed against the query `sv_lemma_query` builds
+/// from the facts and the lemmas it re-derives, a model is evaluated on the
+/// facts and held against every term's exact meaning.
+fn sv_nl_line(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	status: String,
+	theory: String,
+	reals: ref collections::BTreeSet[String],
+	settings: String,
+	defs: ref Vec[SvNl],
+) -> String {
+	let nl = sv_nl_engine(arena, facts, goal, budget, theory, reals, settings, defs)
+		?? return f"unknown (settings {settings}) 0"
+	let run = nl.run.clone()
+	if nl.why == "budget" {
+		return f"unknown (non-linear, budget) {run.work}"
+	}
+	if nl.why == "overflow" {
+		return f"unknown (overflow) {run.work}"
+	}
+	let answer = match run.driven {
+		SvDriven::Proved(_, steps) => {
+			match sv_lemma_check(arena, facts, goal, reals, defs, nl.lemmas, steps) {
+				null => "wrong (lemma rejected)",
+				verdict => {
+					if !verdict.ok {
+						f"wrong (log rejected at {verdict.step}: {verdict.reason})"
+					} else if status == "sat" {
+						"wrong (proved, status sat)"
+					} else {
+						"proved"
+					}
+				},
+			}
+		},
+		SvDriven::Answer(LgAnswer::Refuted { model }) => {
+			if !lg_verify_model(arena, facts, goal, model) || !sv_nl_holds(defs, sv_nl_rats(model)) {
+				"wrong (model rejected)"
+			} else if status == "unsat" {
+				"wrong (refuted, status unsat)"
+			} else {
+				"refuted"
+			}
+		},
+		SvDriven::RealModel(values) => {
+			if !sv_real_model_holds(arena, facts, goal, values) || !sv_nl_holds(defs, values) {
+				"wrong (model rejected)"
+			} else if status == "unsat" {
+				"wrong (refuted, status unsat)"
+			} else {
+				"refuted"
+			}
+		},
+		SvDriven::Answer(LgAnswer::Unknown { why }) => sv_unknown(why),
+		SvDriven::Answer(_) => "unknown",
+	}
+	return f"{answer} {run.work}"
 }
 
 /// The program's entry: `ENGINE FILE...`, one line per file. The engine is

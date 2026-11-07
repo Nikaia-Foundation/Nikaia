@@ -1,6 +1,6 @@
 // A list changes in place only where it is a `mut` place, a part of it too
 // (ADR-views-3 D11, #1209).
-fn main() {
+fn main() throws {
     let v: Vec[u32] = [2, 1]
     v.sort()
     let w: Vec[u32] = [2, 1]

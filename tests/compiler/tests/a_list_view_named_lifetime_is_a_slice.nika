@@ -11,7 +11,7 @@ fn typed(a: ref Vec[i64]) -> i64 {
     let w: ref Vec[i64] = a
     return w.len()
 }
-fn main() {
+fn main() throws {
     let v = [1, 2]
     println(f"{twice(v)}")
     println(f"{typed([4, 5, 6])}")

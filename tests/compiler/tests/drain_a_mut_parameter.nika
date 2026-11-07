@@ -6,7 +6,7 @@ fn take_all(mut from: Vec[String], mut into: Vec[String]) -> i64 {
     }
     return count
 }
-fn main() {
+fn main() throws {
     let mut source: Vec[String] = ["a", "b"]
     let mut kept: Vec[String] = []
     let n = take_all(source, kept)

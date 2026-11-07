@@ -1,0 +1,8 @@
+(set-logic QF_LIA)
+(set-info :status unsat)
+(declare-const v0 Int)
+(declare-const v1 Int)
+(assert (<= 0 v0))
+(assert (= v1 v0))
+(assert (not (<= 0 v0)))
+(check-sat)

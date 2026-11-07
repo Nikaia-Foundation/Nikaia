@@ -155,7 +155,7 @@ fn holds(atoms: ref Vec[SvAtom], names: ref Vec[String], values: ref collections
 // Every atom asserted to the exact theory at one level, then a final check;
 // a conflict closed by one learned clause and the log replayed, broken as
 // `how` says where it is not `\"\"`.
-fn run(title: String, names: Vec[String], atoms: Vec[SvAtom], how: String) {
+fn run(title: String, names: Vec[String], atoms: Vec[SvAtom], how: String) throws {
 	let n = atoms.len()
 	let mut clauses: Vec[Vec[u32]] = []
 	let mut a: u32 = 0
@@ -263,7 +263,7 @@ fn main() throws {
 	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
-	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_rod"] {
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_lemma", "sv_nl", "sv_rod"] {
 		let dir = if name == "sv_rod" { "solver" } else { "tools" }
 		paths.push(f"{repo}/crates/nikaia-std/src/{dir}/{name}.nika")
 	}

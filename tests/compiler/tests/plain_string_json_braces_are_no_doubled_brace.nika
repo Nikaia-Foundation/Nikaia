@@ -1,0 +1,12 @@
+// #1361: the closing braces of nested JSON in a plain string are not a
+// doubled-brace escape, so NK1111 stays quiet about them; a real `{{` is still
+// warned, and its help collapses only the escapes.
+
+fn main() throws {
+    let empty = "{\"a\":{}}"
+    let nested = "{\"params\":{\"capabilities\":{}}}"
+    let escaped = "{{\"a\":{}}}"
+    println(empty)
+    println(nested)
+    println(escaped)
+}

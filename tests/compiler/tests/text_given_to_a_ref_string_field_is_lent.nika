@@ -12,7 +12,7 @@ fn first(h: Held) -> String {
     return ""
 }
 
-fn main() {
+fn main() throws {
     let mut text: String = ""
     text.push_str("first line\n")
     text.push_str("second line\n")

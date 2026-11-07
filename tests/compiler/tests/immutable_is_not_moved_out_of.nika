@@ -2,7 +2,7 @@
 
 struct Names { all: Vec[String] }
 
-fn main() {
+fn main() throws {
 	immutable names: Vec[String] = ["a"]
 	let kept = Names { all: names }
 	println(f"{kept.all.len()}")

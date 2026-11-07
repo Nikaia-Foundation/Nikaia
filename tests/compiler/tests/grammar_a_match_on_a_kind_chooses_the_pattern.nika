@@ -14,7 +14,7 @@ grammar Lit {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let b: bool = Lit::read[bool](Bytes("false".bytes().collect())) catch {
 		println("error")
 		return

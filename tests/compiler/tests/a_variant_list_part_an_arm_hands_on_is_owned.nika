@@ -12,7 +12,7 @@ fn g(e: E) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(g(E::A(["a", "b"])))
     println(g(E::N))
 }

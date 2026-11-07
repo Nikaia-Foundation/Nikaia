@@ -7,6 +7,6 @@ fn pick(a: String?, b: String?) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(pick("ada", null))
 }

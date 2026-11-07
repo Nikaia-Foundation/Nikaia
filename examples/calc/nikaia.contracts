@@ -17,7 +17,7 @@ signature = "(input: ?) -> i64"
 
 [fn."main"]
 sync = "inferred"
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
 touches = ["args read", "stderr write", "stdout write"]
 signature = "()"

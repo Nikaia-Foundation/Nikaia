@@ -8,7 +8,7 @@ fn pick(a: String?, b: String?) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(pick("ada", null))
     println(pick("ada", "bob"))
     println(pick(null, "bo"))

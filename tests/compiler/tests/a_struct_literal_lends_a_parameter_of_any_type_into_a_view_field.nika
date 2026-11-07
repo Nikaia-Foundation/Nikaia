@@ -34,7 +34,7 @@ fn back(l: L) -> W {
     return W { own: l, k: 5 }
 }
 
-fn main() {
+fn main() throws {
     let l = L { n: 3, part: In { n: 10 }, tag: "a" }
     let w = back(l)
     println(f"{go(l)} {handed(l)} {read(l)} {piece(l)} {w.own.n + w.k} {l.tag}")

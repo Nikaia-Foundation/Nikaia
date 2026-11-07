@@ -25,7 +25,7 @@ fn kind_of(f: meta::Field) -> String {
 	}
 }
 
-fn show[T: Struct]() {
+fn show[T: Struct]() throws {
 	for f in T::fields {
 		let w = wire_name(f)
 		let k = kind_of(f)
@@ -33,6 +33,6 @@ fn show[T: Struct]() {
 	}
 }
 
-fn main() {
+fn main() throws {
 	show[Contact]()
 }

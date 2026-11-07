@@ -14,7 +14,7 @@ fn two(s: ref String, c: bool) -> i64 {
     return g.name.len()
 }
 
-fn main() {
+fn main() throws {
     let a = "ab"
     println(f"{two(a, true)}")
     println(f"{two(a, false)}")

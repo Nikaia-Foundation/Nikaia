@@ -257,7 +257,7 @@ fn a_non_literal_argument_keeps_the_order() {
 #[test]
 fn two_printlns_keep_their_order() {
     assert!(!overlaps(
-        "fn main() {\n\
+        "fn main() throws {\n\
              println(\"a\")\n\
              println(\"b\")\n\
          }"
@@ -344,7 +344,7 @@ fn two_reads_of_different_files_overlap() {
 fn the_programs_arguments_are_a_resource() {
     assert!(overlaps(
         "use std::cli\n\
-         fn main() {\n\
+         fn main() throws {\n\
              let a = cli::args()\n\
              let b = cli::args()\n\
              println(f\"{a.len()} {b.len()}\")\n\
@@ -354,9 +354,9 @@ fn the_programs_arguments_are_a_resource() {
     // … and `args` is a kind of its own, so reading it does not meet what
     // `println` writes.
     let reason = why("use std::cli\n\
-         fn main() {\n\
+         fn main() throws {\n\
              let a = cli::args()\n\
-             println(\"x\")\n\
+             println(\"x\") catch {}\n\
              println(f\"{a.len()}\")\n\
          }");
     assert!(reason.contains("together"), "{reason}");
@@ -373,7 +373,7 @@ fn the_programs_arguments_are_a_resource() {
 #[test]
 fn the_two_console_handles_keep_their_order() {
     assert!(!overlaps(
-        "fn main() {\n\
+        "fn main() throws {\n\
              println(\"out\")\n\
              eprintln(\"err\")\n\
              println(\"out2\")\n\
@@ -382,10 +382,10 @@ fn the_two_console_handles_keep_their_order() {
 
     // … and the refusal is about the resource rather than about ignorance:
     // both are described, and what they meet on is what is printed.
-    let reason = why("fn main() {\n\
-             println(\"out\")\n\
-             eprintln(\"err\")\n\
-             println(\"out2\")\n\
+    let reason = why("fn main() throws {\n\
+             println(\"out\") catch {}\n\
+             eprintln(\"err\") catch {}\n\
+             println(\"out2\") catch {}\n\
          }");
     assert!(
         reason.contains("which might be the same place") && reason.contains("stderr"),
@@ -416,7 +416,7 @@ fn a_resource_this_compiler_cannot_name_reaches_everything() {
          signature = \"(url: ?) -> ?\"\n";
 
     let library = nikaia::contracts::Ledger::parse(LEDGER).expect("the ledger parses");
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
              net::post(\"https://eins\")\n\
              net::post(\"https://zwei\")\n\
              println(\"x\")\n\
@@ -462,9 +462,9 @@ fn the_std_ledger_names_only_known_resources() {
 #[test]
 fn a_handlers_own_effects_are_part_of_the_statement() {
     const HANDLER_WRITES_STDOUT: &str = "use std::fs\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   fs::write(\"a.txt\", fs::Root::Anywhere, \"x\") catch { println(\"failed\") }\n\
-         \x20   println(\"next\")\n\
+         \x20   println(\"next\") catch {}\n\
          }";
 
     assert!(
@@ -561,11 +561,11 @@ fn a_value_that_is_not_a_bare_call_is_weighed() {
 /// statement is where it can be seen holding on its own.
 #[test]
 fn a_lambdas_own_effects_are_not_in_the_statements_touch_set() {
-    let trailing = "fn lauf(xs: Vec[i64]) {\n\
+    let trailing = "fn lauf(xs: Vec[i64]) throws {\n\
          \x20   xs.sort_by_key fn { println(\"aus dem lambda\")\n return a }\n\
          \x20   println(\"danach\")\n\
          }";
-    let bare = "fn lauf() {\n\
+    let bare = "fn lauf() throws {\n\
          \x20   let f = fn { println(\"aus dem lambda\") }\n\
          \x20   println(\"danach\")\n\
          }";

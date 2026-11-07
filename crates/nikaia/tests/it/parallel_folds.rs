@@ -36,7 +36,7 @@ fn tally_merge(a: Tally, b: Tally) -> Tally {
     return Tally { n: a.n + b.n }
 }
 
-fn main() {
+fn main() throws {
     println(f"{task::cores()}")
     let mut xs: Vec[i64] = []
     for i in 0..<1_000_000 {
@@ -211,7 +211,7 @@ fn lines_in(p: ref Bytes) -> i64 {
     return n
 }
 
-fn report(b: ref Bytes, piece: i64) {
+fn report(b: ref Bytes, piece: i64) throws {
     let lens: Vec[i64] = b.par_pieces('\n'; piece: piece).map(fn(p) { p.len() }).collect()
     let mut total = 0
     let mut empty = 0
@@ -230,7 +230,7 @@ fn report(b: ref Bytes, piece: i64) {
     println(f"{piece}: {lens.len()} {total} {empty} {unended} {kept} {any}")
 }
 
-fn main() {
+fn main() throws {
     let mut text = ""
     for i in 0..<5000 {
         text += f"station{i % 37};{i % 90}.{i % 10}\n"
@@ -339,14 +339,14 @@ fn a_folds_lambdas_are_asked_what_a_walks_are() {
          \x20   return x\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let s = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + slow(x) }, fn(a, b) { a + b })\n\
          \x20   println(f\"{s}\")\n\
          }\n";
     let found = findings(pausing);
     assert!(found.iter().any(|f| f.code == "NK2209"), "{found:#?}");
-    let sharing = "fn main() {\n\
+    let sharing = "fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let mut merges = 0\n\
          \x20   let s = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) {\n\
@@ -403,7 +403,7 @@ fn merge_ref(mut a: Summary, b: ref Summary) {
     a.total += b.total
 }
 
-fn main() {
+fn main() throws {
     let mut xs: Vec[i64] = []
     for i in 0..<100_000 {
         xs.push(i)
@@ -458,7 +458,7 @@ fn merge_ref(mut a: Summary, b: ref Summary) {
     a.total += b.total
 }
 
-fn main() {
+fn main() throws {
     let mut text = ""
     for i in 0..<100_000 {
         text = text + f"{i}\n"
@@ -520,7 +520,7 @@ fn a_step_that_hands_back_something_else_is_refused() {
          \x20   n: i64,\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let s = xs.par_iter().fold(fn { T { n: 0 } }, fn(n, x) { \"a\" }, fn(a, b) { T { n: a.n + b.n } })\n\
          \x20   println(f\"{s.n}\")\n\
@@ -531,7 +531,7 @@ fn a_step_that_hands_back_something_else_is_refused() {
          \x20   n: i64,\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let s = xs.par_iter().fold(fn { T { n: 0 } }, fn(t, x) { T { n: t.n + x } }, fn(a, b) { \"b\" })\n\
          \x20   println(f\"{s.n}\")\n\
@@ -542,18 +542,18 @@ fn a_step_that_hands_back_something_else_is_refused() {
          \x20   n: i64,\n\
          }\n\
          \n\
-         fn look(t: T, x: i64) {\n\
+         fn look(t: T, x: i64) throws {\n\
          \x20   println(f\"{t.n} {x}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let t = xs.par_iter().fold(fn { T { n: 0 } }, look, fn(a, b) { T { n: a.n + b.n } })\n\
          \x20   println(f\"{t.n}\")\n\
          }\n";
     let found = findings(unchanged);
     assert!(found.iter().any(|f| f.code == "NK1102"), "{found:#?}");
-    let fine = "fn main() {\n\
+    let fine = "fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let s = xs.par_iter().fold(fn { 0 }, fn(n, x) { n + x }, fn(a, b) { a + b })\n\
          \x20   println(f\"{s}\")\n\
@@ -611,7 +611,7 @@ fn a_grammars_par_fold_takes_the_options_of_a_fold() {
 /// lambda handing its accumulator to a `mut` parameter** (`&mut *acc`).
 const IN_PLACE_BY_VALUE: &str = "struct Acc { n: i64 }
 fn merge(mut a: Acc, other: Acc) { a.n += other.n }
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 2, 3]
     let r = xs.par_iter().fold(fn { Acc { n: 0 } }, fn(acc, x) { acc.n += x }, merge)
     println(f\"{r.n}\")
@@ -620,7 +620,7 @@ fn main() {
 
 const IN_PLACE_HANDED_ON: &str = "struct Acc { n: i64 }
 fn add(mut a: Acc, x: i64) { a.n += x }
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 2, 3]
     let r = xs.par_iter().fold(fn { Acc { n: 0 } }, fn(acc, x) { add(acc, x) }, fn(a, b) { a.n += b.n })
     println(f\"{r.n}\")
@@ -650,7 +650,7 @@ fn an_in_place_fold_hands_its_arguments_on_as_the_callee_takes_them() {
 /// over the result knows its items.
 #[test]
 fn a_lambdas_returns_give_its_result_type() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, -2, 3]\n\
          \x20   let got = xs.par_iter().fold(fn { let v: Vec[i64] = []; return v }, fn(acc, x) { let mut l = acc; l.push(x); return l }, fn(a, b) { let mut l = a; for x in b { l.push(x) }; return l })\n\
          \x20   let mut sum = 0\n\
@@ -667,7 +667,7 @@ fn a_lambdas_returns_give_its_result_type() {
 /// in a lambda is not asked what the enclosing function declares.
 #[test]
 fn a_lambdas_return_and_last_value_that_disagree_are_refused() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
          \x20   let ys = xs.iter().map(fn(x) { if x > 1 { return \"big\" }; x }).collect()\n\
          \x20   println(f\"{ys.len()}\")\n\
@@ -684,7 +684,7 @@ fn a_lambdas_return_and_last_value_that_disagree_are_refused() {
          \x20   let s = apply(fn(x) { return \"a\" }, 1)\n\
          \x20   return s.len() as i64\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{g()}\")\n\
          }\n";
     let found = findings(outer);

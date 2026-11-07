@@ -25,7 +25,7 @@ fn last_of(count: i64) -> W {
 	return W { own: last, k: xs.len() }
 }
 
-fn main() {
+fn main() throws {
 	let w = make()
 	println(w.own.n + w.k)
 	println(w.own.tag)

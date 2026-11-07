@@ -1455,12 +1455,19 @@ pub fn modules_emit_reading[H: ModulesEmitHost](host: ref H, packages: ref Vec[S
         rust.push_str(body)
         rust.push_str("\n")
     }
-    // **Last, because it names lines** (ADR-300 D9). Only where the program
-    // has an entry point: the table is read by the hook `fn main` installs,
-    // and a package with no `main` is a library whose consumer has one.
-    if host.has_main() {
-        let table = emit_needs_abort_table(rust, host.map_rows(), shown, sources)
-        rust.push_str(table)
+    // **Last, because it names lines** (ADR-300 D9). The table is read by
+    // the hook `fn main` installs. Every package publishes it, `main` or
+    // not, for a program that uses it as a library (ADR-286 D19): its lines
+    // are lines of its own crate's file, and the program's hook reaches them
+    // through the tables of the packages it uses (#1351).
+    let mut beside: Vec[String] = []
+    for package in packages {
+        let name = package?.clone() ?? continue
+        if !beside.contains(name) {
+            beside.push(name)
+        }
     }
+    let table = emit_needs_abort_table(rust, host.map_rows(), shown, sources, beside, host.has_main())
+    rust.push_str(table)
     return rust
 }

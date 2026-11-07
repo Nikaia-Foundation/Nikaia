@@ -1,0 +1,65 @@
+// #1366: a value handed over in a loop whose body has a `break` or a
+// `return` is handed over again when a `continue` of the loop, or the end
+// of its body, can follow the taking: NK2105, not a rustc error.
+
+struct Expr {
+    name: String,
+}
+
+fn uses(e: ref Expr) -> bool {
+    return e.name.len() > 0
+}
+
+// The issue's shape: the `continue` inside the `return` comes first.
+fn through_continue(returned: Expr?) -> bool {
+    for _ in 0..<1 {
+        let value = returned ?? null
+        return uses(value ?? continue)
+    }
+    return false
+}
+
+// The `return` is in another arm than the taking.
+fn conditional_return(x: Expr, c: bool) -> bool {
+    let mut all: Vec[Expr] = []
+    for _ in 0..<2 {
+        if c {
+            all.push(x)
+        }
+        if c {
+            return true
+        }
+    }
+    return all.len() > 0
+}
+
+// The `break` leaves the inner loop only.
+fn inner_break(x: Expr) -> bool {
+    let mut all: Vec[Expr] = []
+    for _ in 0..<2 {
+        for _ in 0..<2 {
+            all.push(x)
+            break
+        }
+    }
+    return all.len() > 0
+}
+
+// The `return` stands in a loop that may run no turn.
+fn return_in_a_later_loop(x: Expr) -> bool {
+    let mut all: Vec[Expr] = []
+    for _ in 0..<2 {
+        all.push(x)
+        for _ in 0..<2 {
+            return true
+        }
+    }
+    return all.len() > 0
+}
+
+fn main() throws {
+    println(through_continue(Expr { name: "a" }))
+    println(conditional_return(Expr { name: "a" }, true))
+    println(inner_break(Expr { name: "a" }))
+    println(return_in_a_later_loop(Expr { name: "a" }))
+}

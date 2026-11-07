@@ -78,7 +78,7 @@ pub fn readings(code: &str) -> Vec<Reading> {
 }
 
 pub(crate) fn wrapped(body: &str) -> String {
-    let mut out: String = String::from("fn main() {\n");
+    let mut out: String = String::from("fn main() throws {\n");
     let mut first = true;
     for line in body.trim_end().split("\n") {
         if !first { out.push('\n'); }

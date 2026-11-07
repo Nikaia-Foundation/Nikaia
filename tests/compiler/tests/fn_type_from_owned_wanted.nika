@@ -9,7 +9,7 @@ fn apply(f: fn(String) -> String, s: String) -> i64 {
     return f(s).len()
 }
 
-fn main() {
+fn main() throws {
     let s = " ab "
     print(f"{apply(first, s)}\n")
 }

@@ -1,0 +1,17 @@
+// An `async` form inside a door's block is refused (Part I 8.1.2, Part III
+// C.6, NK2203, #677): the block waits for the tasks with the lock held. Said
+// once per form, at the outermost.
+fn double(n: i64) -> i64 sync {
+    return n * 2
+}
+
+fn main() {
+    let a = SharedMut(4)
+    a.access fn(x) {
+        async {
+            let t = async double(x)
+            let u = async double(x + 1)
+            let r = t + u
+        }
+    }
+}

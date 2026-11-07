@@ -66,7 +66,7 @@ fn run(purpose: &str, source: &str) -> String {
 
 const THREE_READS: &str = "use std::fs\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let r = overlap {\n\
      \x20       fs::read_to_string(\"eins.txt\", fs::Root::Anywhere) catch { \"\" }\n\
      \x20       fs::read_to_string(\"zwei.txt\", fs::Root::Anywhere) catch { \"\" }\n\
@@ -105,7 +105,7 @@ fn a_branch_that_cannot_pause_is_started_last_and_answered_in_place() {
          \x20   return sum\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let r = overlap {\n\
          \x20       expensive(10)\n\
          \x20       fs::read_to_string(\"eins.txt\", fs::Root::Anywhere) catch { \"\" }\n\
@@ -147,7 +147,7 @@ fn a_block_that_needs_no_reordering_gets_none() {
 #[test]
 fn two_branches_that_meet_on_a_resource_are_refused() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let r = overlap {\n\
          \x20       println(\"x\")\n\
          \x20       println(\"y\")\n\
@@ -212,7 +212,7 @@ fn a_path_in_an_argument_does_not_stop_an_overlap() {
 fn a_branch_that_binds_a_name_is_refused() {
     let found = findings(
         "use std::fs\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let r = overlap {\n\
          \x20       let x = fs::read_to_string(\"eins.txt\", fs::Root::Anywhere) catch { \"\" }\n\
          \x20       fs::read_to_string(\"zwei.txt\", fs::Root::Anywhere) catch { \"\" }\n\
@@ -302,15 +302,16 @@ fn a_branch_is_not_a_task_and_moves_nothing() {
 /// branches than `std` has a vehicle for says so rather than miscompiling.
 #[test]
 fn a_block_too_small_or_too_large_is_refused_with_its_reason() {
-    let parsed = parse_to_ast("fn main() { let r = overlap {\n    1\n}\nprintln(f\"{r}\") }")
-        .expect("the source parses");
+    let parsed =
+        parse_to_ast("fn main() throws { let r = overlap {\n    1\n}\nprintln(f\"{r}\") }")
+            .expect("the source parses");
     let refused = emit::emit_program(&parsed, Default::default()).expect_err("refused");
     let said = format!("{refused:#}");
     assert!(said.contains("at least two branches"), "{said}");
 
     let many: String = (0..9).map(|n| format!("        {n}\n")).collect();
     let parsed = parse_to_ast(&format!(
-        "fn main() {{ let r = overlap {{\n{many}}}\nprintln(f\"{{r.0}}\") }}"
+        "fn main() throws {{ let r = overlap {{\n{many}}}\nprintln(f\"{{r.0}}\") }}"
     ))
     .expect("the source parses");
     let refused = emit::emit_program(&parsed, Default::default()).expect_err("refused");
@@ -354,7 +355,7 @@ fn the_overlap_report_reads_the_verdicts_rather_than_asserting_them() {
     };
 
     let meets =
-        report("fn main() { let r = overlap {\n    println(\"a\")\n    println(\"b\")\n} }");
+        report("fn main() throws { let r = overlap {\n    println(\"a\")\n    println(\"b\")\n} }");
     assert!(
         meets.contains("may not run together") && meets.contains("both touch stdout"),
         "a block the checker refuses is described as refused:\n{meets}"
@@ -400,7 +401,7 @@ fn the_overlap_report_says_what_each_block_was_allowed() {
         "{three}"
     );
     let printing = report(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let r = overlap {\n\
          \x20       println(\"x\")\n\
          \x20       println(\"y\")\n\
@@ -415,7 +416,7 @@ fn the_overlap_report_says_what_each_block_was_allowed() {
         "{printing}"
     );
     assert_eq!(
-        report("fn main() {\n    println(\"x\")\n}"),
+        report("fn main() throws {\n    println(\"x\")\n}"),
         "this program writes no `overlap { … }` block.\n"
     );
 }

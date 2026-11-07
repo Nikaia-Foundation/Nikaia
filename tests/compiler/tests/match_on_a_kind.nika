@@ -28,7 +28,7 @@ fn describe[T](_value: T) -> String {
 	}
 }
 
-fn main() {
+fn main() throws {
 	println(describe("a"))
 	println(describe(1))
 	println(describe([1, 2]))

@@ -5,13 +5,13 @@ fn first(s: String) -> String {
     return s.trim()
 }
 
-fn apply(f: fn(s: String) -> String from s, s: String) -> i64 {
+fn apply(f: fn(s: String) -> String from s, s: String) -> i64 throws {
     let t = f(s)
     print(f"[{t}]\n")
     return t.len()
 }
 
-fn main() {
+fn main() throws {
     let s = " ab "
     print(f"{apply(first, s)}\n")
 }

@@ -158,7 +158,19 @@ pub fn bounds_report_checked(
 	}
 	// **What callers proved** (ADR-391 D4): each derived precondition, with
 	// the lines of the calls that prove it.
-	for row in facts.derived {
+	for row in bounds_report_derived(facts.derived, source) {
+		out.push_str(f"  derived  {row}\n")
+	}
+	return out
+}
+
+/// **Each derived precondition as the reports write it** (ADR-391 D4), from
+/// `derived_rows`: the function, its claims and the lines of the calls that
+/// prove them (`pick: 0 <= at, proved at the calls on lines 17, 18`).
+/// `--bounds` and `--asserts` both list these.
+pub fn bounds_report_derived(derived: ref Vec[String], source: ref String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for row in derived {
 		let parts: Vec[String] = row.split("\t").map(fn(p) { p.to_string() }).collect()
 		if parts.len() != 3 {
 			continue
@@ -167,7 +179,7 @@ pub fn bounds_report_checked(
 		for byte in parts[2].split(" ") {
 			lines.push(bounds_report_line(source, text::parse_i64(byte) ?? 0).to_string())
 		}
-		out.push_str(f"  derived  {parts[0]}: {parts[1]}, proved at the calls on lines {lines.join(", ")}\n")
+		out.push(f"{parts[0]}: {parts[1]}, proved at the calls on lines {lines.join(", ")}")
 	}
 	return out
 }

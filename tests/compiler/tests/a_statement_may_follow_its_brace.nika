@@ -3,7 +3,7 @@ fn pick(x: bool) -> i64 {
     return 0
 }
 
-fn main() {
+fn main() throws {
     if true { println("a") }
     println(pick(true))
     println(pick(false))

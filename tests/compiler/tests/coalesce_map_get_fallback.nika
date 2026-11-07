@@ -47,18 +47,18 @@ fn ask(look: fn(String) -> i64? sync, n: String) -> i64 {
     return look(n) ?? 0
 }
 
-fn ask_value(look: fn(String) -> BuildValue? sync, n: String) {
+fn ask_value(look: fn(String) -> BuildValue? sync, n: String) throws {
     show(look(n))
 }
 
-fn show(v: BuildValue?) {
+fn show(v: BuildValue?) throws {
     match v ?? BuildValue::Text("none") {
         BuildValue::Int(i) => println(i.to_string()),
         BuildValue::Text(t) => println(t),
     }
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
     m.insert("b", 2)
     println((first(null, m, "b") ?? 0).to_string())

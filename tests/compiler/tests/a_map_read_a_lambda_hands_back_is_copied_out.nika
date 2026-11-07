@@ -3,7 +3,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let mut at_of: collections::HashMap[String, i64] = collections::HashMap()
     at_of.insert("x", 1)
     at_of.insert("z", 3)

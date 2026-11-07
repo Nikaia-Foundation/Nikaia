@@ -45,7 +45,7 @@ fn from_is_a_name_everywhere() {
          \x20   return to - from\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let from = 10\n\
          \x20   let m = Move { from: from, to: 42 }\n\
          \x20   println(f\"{step(m.from, m.to)}\")\n\
@@ -72,7 +72,7 @@ fn the_paths_two_names_parse_as_the_page_writes_them() {
             "fn rename(from: ref String, to: ref String) -> i64 {\n\
          \x20   return from.len() + to.len()\n\
          }\n\
-         fn main() { println(f\"{rename(\"a\", \"b\")}\") }"
+         fn main() throws { println(f\"{rename(\"a\", \"b\")}\") }"
         )
         .is_ok()
     );

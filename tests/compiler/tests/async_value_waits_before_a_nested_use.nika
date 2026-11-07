@@ -6,7 +6,7 @@ fn load(n: i64) -> i64 {
 	return n * 2
 }
 
-fn main() {
+fn main() throws {
 	let a = async load(1)
 	let b = load(2)
 	if b > 0 {

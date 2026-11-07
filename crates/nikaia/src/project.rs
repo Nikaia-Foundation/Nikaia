@@ -430,8 +430,17 @@ impl ProjectMembersHost for Manifests {
 }
 
 impl Manifests {
-    /// A refusal of the walk, as the error it was before the move.
-    fn error(&self, thrown: nikaia_std::error::Thrown<ProjectMembersRefusal>) -> anyhow::Error {
+    /// A refusal of the walk, as the error it was before the move; a failed
+    /// write of its note is the `io::IoError` it threw (ADR-392).
+    fn error(
+        &self,
+        thrown: nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError,
+    ) -> anyhow::Error {
+        use nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError as Thrown;
+        let thrown = match thrown {
+            Thrown::ProjectMembersRefusal(thrown) => thrown,
+            Thrown::io_IoError(thrown) => return anyhow!("{}", thrown.split().0),
+        };
         match thrown.split().0 {
             ProjectMembersRefusal::Manifest => self
                 .failed
@@ -1741,8 +1750,9 @@ pub fn explain(
         reads,
         library: crate::contracts::std_ledger(),
     };
-    project_check::project_check_explain(&host, want.comptime, &kinds);
-    Ok(())
+    // A failed write of the report is an error (ADR-392).
+    project_check::project_check_explain(&host, want.comptime, &kinds)
+        .map_err(|error| anyhow!("{error}"))
 }
 
 /// What `project_check_explain` asks of the compiler: the reports, which stay
@@ -1803,6 +1813,13 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                     .iter()
                     .map(|unit| &unit.parsed)
                     .collect::<Vec<_>>(),
+                &program
+                    .units
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, u)| *k != at as usize && u.package == unit.package)
+                    .map(|(_, u)| &u.parsed)
+                    .collect::<Vec<_>>(),
                 &program.contracts,
                 library,
                 self.reads,
@@ -1811,6 +1828,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 // `NO_COLOR` is set (Part III, `--asserts`).
                 std::env::var_os("NO_COLOR").is_none()
                     && std::io::IsTerminal::is_terminal(&std::io::stdout()),
+                settings.build.prove_through_loops,
             ),
             "bounds" => crate::bounds_report::report(
                 &unit.parsed,
@@ -2521,11 +2539,10 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 .unwrap_or_else(|| anyhow!("{error}")));
         }
     };
-    project_tests::project_tests_report_failures(&failed);
-    Ok(project_tests::project_tests_result(
-        total as i64,
-        failed.len() as i64,
-    ))
+    // A failed write of the report is an error (ADR-392).
+    project_tests::project_tests_report_failures(&failed).map_err(|error| anyhow!("{error}"))?;
+    project_tests::project_tests_result(total as i64, failed.len() as i64)
+        .map_err(|error| anyhow!("{error}"))
 }
 
 /// What `project_tests_run` asks of the compiler: the suite, and the error of
@@ -2679,7 +2696,7 @@ fn run_program_tests<'a>(
 pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
     if let Some(stray) = project_tests::project_tests_stray_bounds(root).first() {
         return Err(anyhow!(
-            "tests/{stray}: there is no test program beside it to report the bounds of"
+            "tests/{stray}: there is no test program beside it to report on"
         ));
     }
     block_on(project_tests::program_tests(root)).map_err(|e| anyhow!("{e}"))
@@ -2793,16 +2810,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         self.held(self.ran(&self.exe, command, own, stdin))
     }
 
-    fn bounds(
+    fn explained(
         &self,
-        level: &str,
+        args: &[String],
         entry: &Path,
         own: &Path,
     ) -> HostResult<nikaia_std::bytes::Bytes> {
         let mut command = std::process::Command::new(&self.exe);
-        command
-            .args(["check", "--bounds", "--optimization", level])
-            .arg(entry);
+        command.arg("check").args(args).arg(entry);
         self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
     }
 

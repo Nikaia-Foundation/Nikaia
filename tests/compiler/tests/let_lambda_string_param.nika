@@ -27,7 +27,7 @@ fn ask_val(f: fn(String) -> Val? sync, k: String) -> Val? {
     return f(k)
 }
 
-fn main() {
+fn main() throws {
     // Row 1: the parameter handed on to a function.
     let w = fn(n) { known(n) }
     println(ask(w, "a") ?? 0)

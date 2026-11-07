@@ -59,7 +59,7 @@ fn refused(source: &str) -> bool {
 fn the_declaration_and_the_call_gain_the_reference_together() {
     let rust = lowered(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t: String = f\"hi\"\nprintln(f\"{width(t)}\") }\n",
+         fn main() throws { let t: String = f\"hi\"\nprintln(f\"{width(t)}\") }\n",
     );
     // A `String` the body only reads is a `&str` below (ADR-282 D5), and
     // the caller's `&t` reaches it the way it reached a `&String`.
@@ -73,14 +73,14 @@ fn the_declaration_and_the_call_gain_the_reference_together() {
 fn a_written_ampersand_at_a_lending_call_is_refused() {
     assert!(refused(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t = \"hi\"\nprintln(f\"{width(ref t)}\") }\n"
+         fn main() throws { let t = \"hi\"\nprintln(f\"{width(ref t)}\") }\n"
     ));
 
     // And the same call without it is not refused, which is the half that says
     // the rule is about the `&` and not about the call.
     assert!(!refused(
         "fn width(text: String) -> i64 { return text.len() as i64 }\n\
-         fn main() { let t: String = \"hi\"\nprintln(f\"{width(t)}\") }\n"
+         fn main() throws { let t: String = \"hi\"\nprintln(f\"{width(t)}\") }\n"
     ));
 }
 
@@ -93,7 +93,7 @@ fn a_kept_parameter_keeps_its_owned_argument() {
     let rust = lowered(
         "struct Row { counts: Vec[i64] }\n\
          fn wrap(counts: Vec[i64]) -> Row { return Row { counts: counts } }\n\
-         fn main() { let n: Vec[i64] = [1, 2]\nlet r = wrap(n)\nprintln(f\"{r.counts.len()}\") }\n",
+         fn main() throws { let n: Vec[i64] = [1, 2]\nlet r = wrap(n)\nprintln(f\"{r.counts.len()}\") }\n",
     );
     assert!(rust.contains("fn wrap(counts: Vec<i64>)"), "{rust}");
     assert!(!rust.contains("wrap(&n)"), "{rust}");
@@ -102,7 +102,7 @@ fn a_kept_parameter_keeps_its_owned_argument() {
     assert!(!refused(
         "struct Row { counts: Vec[i64] }\n\
          fn wrap(counts: Vec[i64]) -> Row { return Row { counts: counts } }\n\
-         fn main() { let n: Vec[i64] = [1, 2]\nlet r = wrap(n)\nprintln(f\"{r.counts.len()}\") }\n"
+         fn main() throws { let n: Vec[i64] = [1, 2]\nlet r = wrap(n)\nprintln(f\"{r.counts.len()}\") }\n"
     ));
 }
 
@@ -114,7 +114,7 @@ fn a_kept_parameter_keeps_its_owned_argument() {
 fn a_copy_type_is_not_lent() {
     let rust = lowered(
         "fn twice(n: i64) -> i64 { return n * 2 }\n\
-         fn main() { println(f\"{twice(21)}\") }\n",
+         fn main() throws { println(f\"{twice(21)}\") }\n",
     );
     assert!(rust.contains("fn twice(n: i64)"), "{rust}");
     assert!(!rust.contains("&i64"), "{rust}");
@@ -131,7 +131,7 @@ fn an_own_methods_argument_it_does_not_keep_is_lent() {
          impl Sink {\n\
          \x20   fn measure(ref mut self, text: String) sync { self.n = text.len() as i64 }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut s = Sink { n: 0 }\n\
          \x20   let t = \"abc\"\n\
          \x20   s.measure(t)\n\
@@ -192,7 +192,7 @@ fn a_wrong_argument_is_a_type_error_and_not_this_one() {
     let found = findings(
         "struct Request { path: String }\n\
          fn route(r: Request) -> i64 { return r.path.len() as i64 }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let t = \"hi\"\n\
          \x20   let n = route(ref t)\n\
          \x20   println(f\"{n}\")\n\
@@ -235,7 +235,7 @@ fn an_argument_whose_type_is_not_known_is_still_lent() {
                   \x20   return sum\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let data = \"abcd\"\n\
                   \x20   let entries = if data.len() > 0 { read(data) catch { return } } else { Vec() }\n\
                   \x20   println(f\"{total(entries)}\")\n\
@@ -282,7 +282,7 @@ fn a_parameter_a_method_changes_in_place_is_not_lent() {
     // is about *changing* the receiver and not about calling a method on one.
     let rust = lowered(
         "fn width(xs: Vec[i64]) -> i64 { return xs.len() as i64 }\n\
-         fn main() { let xs = Vec()\nprintln(f\"{width(xs)}\") }\n",
+         fn main() throws { let xs = Vec()\nprintln(f\"{width(xs)}\") }\n",
     );
     // A list the body only reads is a slice below (0.0.373).
     assert!(rust.contains("fn width(xs: &[i64])"), "{rust}");
@@ -341,7 +341,7 @@ fn the_mutates_column_renders_and_parses_back() {
 #[test]
 fn push_str_takes_a_view_and_says_so() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let mut out: String = \"a\"\n\
          \x20   let name = f\"b\"\n\
          \x20   out.push_str(name)\n\
@@ -350,7 +350,7 @@ fn push_str_takes_a_view_and_says_so() {
     );
     assert!(found.is_empty(), "{found:#?}");
     let rust = lowered(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let mut out: String = \"a\"\n\
          \x20   let name = f\"b\"\n\
          \x20   out.push_str(name)\n\
@@ -389,7 +389,7 @@ fn add(given: ref Vec[i64], mut r: R) {
         }
     }
 }
-fn main() {
+fn main() throws {
     let mut r = R { items: [], unknown: false }
     add([1, 1, -2, 3], r)
     println(f\"{r.items.len()} {r.unknown}\")
@@ -409,7 +409,7 @@ fn a_written_ref_at_a_mut_parameter_is_refused() {
          fn put(mut tab: ref Table) { tab.used = 1 }\n";
     let given = |call: &str| {
         format!(
-            "{declared}fn main() {{\n    let mut t = Table {{ used: 0 }}\n    {call}\n    println(f\"{{t.used}}\")\n}}\n"
+            "{declared}fn main() throws {{\n    let mut t = Table {{ used: 0 }}\n    {call}\n    println(f\"{{t.used}}\")\n}}\n"
         )
     };
     let with_ref = findings(&given("put(ref t)"));

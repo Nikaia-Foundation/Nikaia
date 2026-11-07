@@ -21,7 +21,7 @@ fn down[T: H](host: ref T, n: i64, known: fn(ref String) -> i64? sync) -> i64 {
     }
     return (host.ask(known) ?? 0) + down(host, n - 1, known)
 }
-fn main() {
+fn main() throws {
     let p = Plain { base: 1 }
     println(twice(p, fn(name) { if name == "a" { 3 } else { null } }))
     let known: fn(ref String) -> i64? sync = fn(name) { if name == "a" { 3 } else { null } }

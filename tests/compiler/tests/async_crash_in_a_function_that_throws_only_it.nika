@@ -1,0 +1,29 @@
+// A function declared `throws` whose only failure is a task's crash (#1355,
+// ADR-328 D8): its channel is `task::Crashed` alone, so the group's crash
+// reaches the caller, which catches it, and the program goes on.
+
+fn boom(n: i64) -> i64 {
+	if n > 0 {
+		panic("boom")
+	}
+	return 1
+}
+
+fn total(n: i64) -> i64 throws {
+	let a = async boom(n)
+	let b = async boom(0)
+	return a + b
+}
+
+fn main() throws {
+	for n in [0, 1] {
+		let m = total(n) catch {
+			match error {
+				task::Crashed { .. } => println("caught task::Crashed"),
+				else => println(f"caught: {error}"),
+			}
+			0
+		}
+		println(f"after: {m}")
+	}
+}

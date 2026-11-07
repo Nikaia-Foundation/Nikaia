@@ -6,7 +6,7 @@ fn bang(text: String, n: i64) -> String {
     return s
 }
 
-fn main() {
+fn main() throws {
     let parts: Vec[String] = ["a", "b"]
     let mut text = parts.join("-")
     let mut k = 0

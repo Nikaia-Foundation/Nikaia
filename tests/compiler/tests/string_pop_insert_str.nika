@@ -1,7 +1,7 @@
 // `String::pop` and `String::insert_str` (#1180): the last scalar taken off,
 // `null` on an empty text; text put in at a byte position `find` gave.
 
-fn main() {
+fn main() throws {
 	let mut s: String = "fn f() {}&"
 	let last = s.pop() ?? 'x'
 	println(f"{last} {s}")

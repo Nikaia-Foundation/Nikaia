@@ -5,14 +5,14 @@ fn parse(t: String) -> View {
     return View { head: t }
 }
 
-fn advance(mut c: Cursor) {
+fn advance(mut c: Cursor) throws {
     c.input.push_str("!")
     println(c.input)
 }
 
 // ADR-views-3 D9 (#942): with `v` no longer read after the move, `text` is
 // simply handed to the field that owns it.
-fn main() {
+fn main() throws {
     let n = 1
     let text = f"a: {n}"
     let v = parse(text)

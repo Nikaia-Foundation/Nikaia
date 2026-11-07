@@ -17,7 +17,7 @@ impl TakenTrail {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut s = TakenTrail { trail: [1, 2], saved: [] }
 	s.stash()
 	println(f"{s.trail.len()} {s.saved[0].len()}")

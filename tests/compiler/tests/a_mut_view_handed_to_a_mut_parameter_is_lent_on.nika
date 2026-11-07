@@ -7,7 +7,7 @@ fn add(mut all: Vec[String], x: String) {
     all.push(x.clone())
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for _ in 0..<2 {
         let mut all = m.entry("a").or_insert([])

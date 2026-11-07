@@ -19,6 +19,7 @@
 // file - `proofs_ask` searches as it always did and records nothing.
 
 use std::collections
+use std::env
 use std::fs
 use std::hash
 use std::text
@@ -269,7 +270,10 @@ fn proofs_known(mut t: ProofsThread, written: ref String) -> ProofsAsked? {
 pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> ProofsAsked {
     if t.book == null {
         // Nothing is recorded or looked up: no key to make (#727).
-        return proofs_search(lg_normal_of(arena, facts, goal)).asked
+        let normal = lg_normal_of(arena, facts, goal)
+        let asked = proofs_search(normal).asked
+        proofs_dump(normal, asked)
+        return asked
     }
     let written = proofs_written(arena, facts, goal)
     let known = proofs_known(t, written)
@@ -288,10 +292,12 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref TermArena, facts: ref Vec[i64]
         let asked = proofs_read(normal, recorded)
         if asked != null {
             t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: recorded.clone(), asked: asked.clone() })
+            proofs_dump(normal, asked)
             return asked
         }
     }
     let found = proofs_search(normal)
+    proofs_dump(normal, found.asked)
     let entry = found.entry?.clone()
     if entry != null {
         // What a read of this entry comes to: the search checked the same
@@ -342,6 +348,37 @@ fn proofs_read(normal: ref LgNormal, entry: ref ProofsEntry) -> ProofsAsked? {
             return ProofsAsked::Unknown
         }
     }
+}
+
+/// The variable that names the directory each question is dumped to
+/// (#1285 item 3): a development aid, so that `scripts/solver.nika run DIR`
+/// measures the compiler's own questions.
+pub comptime PROOFS_DUMP: ref String = "NIKAIA_DUMP_QUERIES"
+
+/// **The question written to the dump directory**, where `PROOFS_DUMP` names
+/// one: its normal form as SMT-LIB 2 (`lg_smtlib_write`), in a file named by
+/// the book's key, so a question asked twice is one file. Its `:status` is
+/// the answer the compiler took (`unsat` proved, `sat` refuted); an unknown
+/// states none. A file that cannot be written is said and skipped.
+fn proofs_dump(normal: ref LgNormal, asked: ref ProofsAsked) sync {
+    let dir = env::var(PROOFS_DUMP) ?? return
+    let status = match asked {
+        ProofsAsked::Proved => "unsat",
+        ProofsAsked::Refuted(_) => "sat",
+        else => "",
+    }
+    let script = lg_smtlib_write(normal.arena, normal.facts, normal.goal)
+    let mut text = script.clone()
+    let logic = "(set-logic QF_LIA)\n"
+    let rest = script.strip_prefix(logic)
+    if status != "" && rest != null {
+        text = f"{logic}(set-info :status {status})\n{rest}"
+    }
+    let key = hash::sha256_hex(normal.text().bytes().collect())
+    fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { return }
+    let mut file = fs::open(f"{dir}/{key}.smt2", fs::Root::Anywhere; write: true, create: true, truncate: true) catch { return }
+    file.write(text) catch { eprintln(f"{PROOFS_DUMP}: {dir}/{key}.smt2: {error}") }
+    file.close() catch { eprintln(f"{PROOFS_DUMP}: {dir}/{key}.smt2: {error}") }
 }
 
 /// The reference solver's answer, and what to record of it.

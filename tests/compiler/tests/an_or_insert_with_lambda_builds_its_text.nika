@@ -2,7 +2,7 @@ use std::collections
 
 // `or_insert_with`'s lambda hands back the map's value (#977): the text its
 // body ends in is built as text of its own, as `or_insert`'s value is.
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     let mut late = m.entry("b").or_insert_with(fn() { ["z"] })
     late.push("w")

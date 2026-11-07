@@ -2,7 +2,7 @@
 // head stopped at `>>` or `|`, and so did a guard and an `if` or `while` head.
 // Beside a comparison they want parentheses there, as in a `let` (NK1197,
 // `a_bit_operation_in_a_head_wants_parentheses`).
-fn main() {
+fn main() throws {
 	let m: i64 = 8
 	let s = match m >> 1 | 1 {
 		5 => "five",

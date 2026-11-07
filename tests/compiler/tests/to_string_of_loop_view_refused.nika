@@ -18,6 +18,6 @@ fn rests(n: i64) -> Vec[String] {
     return out
 }
 
-fn main() {
+fn main() throws {
     println(rests(1)[0])
 }

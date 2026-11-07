@@ -12,7 +12,7 @@ fn fine(xs: ref Vec[i64]) -> i64 sync {
 	return at(xs, 1)
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, 2, 3]
 	let k = xs[2]
 	print(f"{at(xs, k)}")

@@ -8,6 +8,6 @@ fn describe[T](_value: T) -> String {
 	}
 }
 
-fn main() {
+fn main() throws {
 	println(describe(1))
 }

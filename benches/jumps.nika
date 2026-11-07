@@ -157,7 +157,7 @@ fn skip_with_nesting(n: i64) -> i64 {
 // One loop per run, named by the second argument: an A/B of three pairs at
 // once would print one number for three different questions, and the three have
 // different answers.
-fn main() {
+fn main() throws {
     let count = cli::args().nth(1) ?? "200000"
     let n = text::parse_i64(count) ?? 200000
     let which = cli::args().nth(2) ?? "all"

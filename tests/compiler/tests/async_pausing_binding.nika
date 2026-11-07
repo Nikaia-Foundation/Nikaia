@@ -14,7 +14,7 @@ fn enrich(n: i64) -> i64 {
 	return n + 1
 }
 
-fn main() {
+fn main() throws {
 	let a = async slow(20)
 	println("between")
 	println(f"{a}")

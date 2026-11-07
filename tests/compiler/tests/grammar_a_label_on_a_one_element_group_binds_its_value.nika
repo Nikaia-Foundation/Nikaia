@@ -8,7 +8,7 @@ grammar G {
 	}
 	rule P -> N = "&" -> { N { v: 1 } }
 }
-fn main() {
+fn main() throws {
 	for t in ["&", "?", "?&", "(&", "t123", "x"] {
 		let r = G::top(Bytes(t.bytes().collect())) catch {
 			println("error")

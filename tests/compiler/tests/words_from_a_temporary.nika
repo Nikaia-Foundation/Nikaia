@@ -24,7 +24,7 @@ fn current(text: String) -> String {
 	return text
 }
 
-fn main() {
+fn main() throws {
 	println(current("block 3\ncurrent converter 0"))
 	let w = words_of(focus(), "current")
 	println(w.len())

@@ -18,7 +18,7 @@ impl Jobs {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut jobs = Jobs { pending: [1, 2], seen: 0 }
     jobs.run()
     println(f"{jobs.pending.len()}")

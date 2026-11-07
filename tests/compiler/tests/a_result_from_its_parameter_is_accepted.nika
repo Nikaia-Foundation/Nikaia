@@ -5,7 +5,7 @@ fn first_word(s: String) -> String from s {
     return s[0..<i]
 }
 
-fn main() {
+fn main() throws {
     let line = "hello world"
     println(first_word(line))
 }

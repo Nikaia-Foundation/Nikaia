@@ -11,7 +11,7 @@ fn add(x: i64, y: i64) -> i64 {
 	return x + y
 }
 
-fn main() {
+fn main() throws {
 	let s = add(async load(1), async load(2))
 	let t = async load(3) + async load(4)
 	let (c, d) = (async load(5), async load(6))

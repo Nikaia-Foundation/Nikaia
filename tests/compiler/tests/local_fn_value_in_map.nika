@@ -1,5 +1,5 @@
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 2]
-    let ys: Vec[i64] = xs.iter().map(fn(n) { let g: fn(i64) -> String = fn(k) { "x" }; println(g(n)); n }).collect()
+    let ys: Vec[i64] = xs.iter().map(fn(n) { let g: fn(i64) -> String = fn(k) { "x" }; println(g(n)) catch { return -1 }; n }).collect()
     println(f"{ys.len()}")
 }

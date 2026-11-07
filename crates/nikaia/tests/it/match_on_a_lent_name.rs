@@ -67,7 +67,7 @@ fn a_match_on_a_name_taken_out_of_a_box_runs() {
          \x20   }\n\
          \x20   return -1\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{size(Shape::Maybe(Shape::Many([Shape::Leaf(1), Shape::Leaf(2)])))}\")\n\
          \x20   println(f\"{size(Shape::Maybe(Shape::Leaf(1)))}\")\n\
          \x20   println(f\"{size(Shape::Leaf(1))}\")\n\
@@ -102,7 +102,7 @@ fn a_match_on_a_lent_part_runs() {
          \x20   }\n\
          \x20   return -1\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{size(Outer::Wrap(Inner::Leaf(4)))}\")\n\
          \x20   println(f\"{size(Outer::Wrap(Inner::Name(\"abc\")))}\")\n\
          \x20   println(f\"{size(Outer::Other)}\")\n\
@@ -124,7 +124,7 @@ fn an_indexed_write_on_an_array_runs() {
          \x20   }\n\
          \x20   return xs\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut ys: Array[i64, 3] = [1, 2, 3]\n\
          \x20   ys[1] = 5\n\
          \x20   let xs = squares()\n\

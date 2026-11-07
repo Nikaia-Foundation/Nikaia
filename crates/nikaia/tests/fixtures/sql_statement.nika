@@ -22,13 +22,13 @@ impl Db {
     // The driver. `...args: Self::dsl` is the typed spread of ADR-296 D5: the
     // parameters of whatever statement this call was given, as one value on
     // the stack.
-    pub fn prepare(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl {
+    pub fn prepare(ref self, statement: ref String; ...args: Self::dsl) -> Self::dsl throws {
         println(f"{self.name}: {statement}")
         return args
     }
 }
 
-fn main() {
+fn main() throws {
     let db = Db { name: "people.db" }
 
     let query = dsl mysql {

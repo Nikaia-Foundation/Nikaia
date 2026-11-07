@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let words: Vec[String] = ["a", "b"]
     for mut w in words.drain() {
         w += "!"

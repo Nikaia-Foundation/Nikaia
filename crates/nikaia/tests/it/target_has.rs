@@ -9,7 +9,7 @@ const HAS: &str = "use std::target\n\n\
      comptime CRC: bool = target::has(target::Instruction::Crc32c)\n\
      comptime BMI: bool = target::has(target::Instruction::Bmi2)\n\
      comptime AVX: bool = target::has(target::Instruction::Avx2)\n\n\
-     fn main() {\n    \
+     fn main() throws {\n    \
      println(f\"{CRC} {BMI} {AVX}\")\n    \
      let crc = target::has(target::Instruction::Crc32c)\n    \
      let bmi = target::has(target::Instruction::Bmi2)\n    \

@@ -5,7 +5,7 @@
 use crate::common;
 use std::process::Command;
 
-const SOURCE: &str = "fn main() {\n    let x = 1\n    println(\"{x}\")\n}\n";
+const SOURCE: &str = "fn main() throws {\n    let x = 1\n    println(\"{x}\")\n}\n";
 
 fn said(output: &std::process::Output) -> usize {
     String::from_utf8_lossy(&output.stderr)

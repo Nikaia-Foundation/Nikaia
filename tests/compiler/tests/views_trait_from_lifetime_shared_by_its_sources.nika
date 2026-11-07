@@ -30,7 +30,7 @@ impl Pick for P {
     }
 }
 
-fn main() {
+fn main() throws {
     let s = "  hi  "
     let r = P { n: 1 }.pick(s)
     println(f"[{r}]")

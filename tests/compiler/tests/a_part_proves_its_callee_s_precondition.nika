@@ -6,7 +6,7 @@ fn second(xs: Array[u32]) -> u32 {
     return xs[1]
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[u32] = [1, 2, 3, 4]
     for i in 0..<2 {
         println(f"{second(v[i..<i + 2])} {second(v[1..<3])}")

@@ -9,6 +9,6 @@ fn len(v: F) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(len(F { name: "ada", n: 1 }))
 }

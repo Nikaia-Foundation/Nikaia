@@ -381,7 +381,10 @@ impl EmitState {
         if pausing.is_some() || awaits_a_parameter || decided && !settled { out.push(".await"); }
         if settled { out.push(")"); }
         let code_fails = self.facts.run_code_fails.contains(&node_key(func));
-        if flow.can_throw && !flow.caught && (code_fails || call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func)) { out.push("?"); }
+        if flow.can_throw && !flow.caught && (code_fails || call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func)) {
+            if code_fails { out.push(&self.box_into_channel(world, scope)); }
+            out.push("?");
+        }
         Ok(())
     }
     pub(crate) fn emit_call_awaits_a_parameter(&self, func: &Expr, scope: &EmitScope) -> bool {
@@ -417,7 +420,10 @@ impl EmitState {
                 }
                 out.push(")");
                 if pauses { out.push(".await"); }
-                if fails && flow.can_throw && !flow.caught { out.push("?"); }
+                if fails && flow.can_throw && !flow.caught {
+                    out.push(&self.box_into_channel(world, scope));
+                    out.push("?");
+                }
                 return Ok(true);
             },
             _ => return Ok(false),
@@ -1062,8 +1068,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78560| {
-        let (i, word) = __nikaia_tuple78560;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78730| {
+        let (i, word) = __nikaia_tuple78730;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

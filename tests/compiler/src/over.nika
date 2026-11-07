@@ -1,0 +1,5 @@
+/// An index past the end inside the package stops the program, and the stop
+/// names this line (#1351, `tests/a_stop_inside_the_package_names_its_line.nika`).
+pub fn over_at(xs: ref Vec[i64], i: i64) -> i64 {
+	return xs[i]
+}

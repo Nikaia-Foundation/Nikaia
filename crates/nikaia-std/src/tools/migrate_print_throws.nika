@@ -1,0 +1,498 @@
+// crates/nikaia-std/src/tools/migrate_print_throws.nika
+//
+// **`nikaia migrate print-throws`** (ADR-392, #1360): the one-off rewrite
+// that writes `throws` on every function that can now fail because it
+// prints. `println`, `print`, `eprintln` and `eprint` throw `io::IoError`
+// when a write fails, so a function that calls one says `throws`, and so does every
+// function that calls it, as far as the failure reaches.
+//
+// **Over the tokens, not the tree**, as `migrate views-3` is
+// (`migrate_views3.nika`, whose lexer this reads with): every token, blank
+// and comment stays as written, and the only change is the word `throws`
+// before a body's `{` (or at the end of a trait method's signature).
+//
+// What fails:
+// * a function whose body calls one of the four by name;
+// * a function whose body calls a failing function: `name(…)` a free one,
+//   `.name(…)` or `Type::name(…)` a method, of this file or one `outside`
+//   names;
+// * a trait's method without a body, where a method of that name fails.
+// A call followed by `catch` is handled where it stands and fails nothing.
+// A function that already says `throws` is left as written, and still
+// fails its callers: what it says names no types, and before ADR-392 its set
+// may have been empty.
+
+use std::collections
+
+// One function's declaration, by the indexes of its tokens.
+struct PrintThrowsFn {
+    name: String,
+    // Declared inside an `impl` or a `trait` block.
+    method: bool,
+    public: bool,
+    // The `{` of its body, or -1 where it has none.
+    open: i64,
+    // The body's `}`, or the signature's last token where it has none.
+    close: i64,
+    says_throws: bool,
+}
+
+fn print_throws_is_print(word: ref String) -> bool sync {
+    return word == "println" || word == "print" || word == "eprintln" || word == "eprint"
+}
+
+// **The `}` of each `impl` and `trait` block**: the index of the word whose
+// block it closes, paired with that `}`.
+fn print_throws_blocks(tokens: ref Vec[MigrateToken]) -> Vec[(i64, i64)] sync {
+    let mut out: Vec[(i64, i64)] = []
+    let mut k = 0
+    while k < tokens.len() {
+        let t = tokens[k].text.clone()
+        if tokens[k].kind == MigrateKind::Word && (t == "impl" || t == "trait") {
+            let mut j = k + 1
+            while j < tokens.len() && tokens[j].text != "{" && tokens[j].text != ";" {
+                if tokens[j].kind == MigrateKind::Open {
+                    j = migrate_closing(tokens, j)
+                }
+                j += 1
+            }
+            if j < tokens.len() && tokens[j].text == "{" {
+                out.push((k, migrate_closing(tokens, j)))
+            }
+        }
+        k += 1
+    }
+    return out
+}
+
+// Whether a word ends a signature that has no body: the next item starts.
+fn print_throws_item_word(word: ref String) -> bool sync {
+    return word == "fn" || word == "pub" || word == "let" || word == "impl" || word == "struct" || word == "enum" || word == "trait" || word == "test" || word == "use" || word == "type" || word == "const" || word == "extern"
+}
+
+// **Each function declared in the tokens**: `fn NAME`, its generics, its
+// parameters, then up to the body's `{` at depth 0. A lambda (`fn(…)`,
+// `fn {`) is part of the body it stands in.
+fn print_throws_fns(tokens: ref Vec[MigrateToken]) -> Vec[PrintThrowsFn] sync {
+    let blocks = print_throws_blocks(tokens)
+    let mut out: Vec[PrintThrowsFn] = []
+    let mut k = 0
+    while k + 1 < tokens.len() {
+        let declares = tokens[k].kind == MigrateKind::Word && tokens[k].text == "fn" && tokens[k + 1].kind == MigrateKind::Word && migrate_text_at(tokens, k - 1) != "."
+        if !declares {
+            k += 1
+            continue
+        }
+        let name = tokens[k + 1].text.clone()
+        let mut method = false
+        for (word, end) in blocks {
+            if word < k && k < end {
+                method = true
+            }
+        }
+        let mut public = false
+        let mut back = k - 1
+        while back >= 0 && back >= k - 3 {
+            if tokens[back].text == "pub" {
+                public = true
+            }
+            back -= 1
+        }
+        let mut j = k + 2
+        if migrate_text_at(tokens, j) == "[" {
+            j = migrate_closing(tokens, j) + 1
+        }
+        if migrate_text_at(tokens, j) != "(" {
+            k += 1
+            continue
+        }
+        j = migrate_closing(tokens, j) + 1
+        let mut says_throws = false
+        let mut open = -1
+        let mut close = j - 1
+        while j < tokens.len() {
+            let t = tokens[j].text.clone()
+            let kind = tokens[j].kind
+            if t == "{" {
+                open = j
+                close = migrate_closing(tokens, j)
+                break
+            }
+            if kind == MigrateKind::Close || t == ";" || t.is_empty() || (kind == MigrateKind::Word && print_throws_item_word(t)) {
+                close = j - 1
+                break
+            }
+            if kind == MigrateKind::Word && t == "throws" {
+                says_throws = true
+            }
+            if kind == MigrateKind::Open {
+                j = migrate_closing(tokens, j)
+            }
+            close = j
+            j += 1
+        }
+        out.push(PrintThrowsFn { name, method, public, open, close, says_throws })
+        k = j
+    }
+    return out
+}
+
+// Whether the call whose arguments open at token `paren` is followed by
+// `catch`.
+fn print_throws_caught(tokens: ref Vec[MigrateToken], paren: i64) -> bool sync {
+    let end = migrate_closing(tokens, paren)
+    return migrate_text_at(tokens, end + 1) == "catch"
+}
+
+// The `(` of a call whose name is token `k`, past its type arguments
+// (`show[T]()`), or -1 where no call follows the name.
+fn print_throws_paren(tokens: ref Vec[MigrateToken], k: i64) -> i64 sync {
+    let mut at = k + 1
+    if migrate_text_at(tokens, at) == "[" {
+        at = migrate_closing(tokens, at) + 1
+    }
+    if migrate_text_at(tokens, at) == "(" {
+        return at
+    }
+    return -1
+}
+
+// Whether token `k` is a call of something that fails, not caught where it
+// stands: a print, or a function whose name `free` (called bare) or
+// `methods` (called after `.` or `::`) holds.
+fn print_throws_fails_at(tokens: ref Vec[MigrateToken], k: i64, free: ref collections::BTreeSet[String], methods: ref collections::BTreeSet[String]) -> bool sync {
+    let paren = print_throws_paren(tokens, k)
+    if tokens[k].kind != MigrateKind::Word || paren < 0 {
+        return false
+    }
+    let word = tokens[k].text.clone()
+    let before = migrate_text_at(tokens, k - 1)
+    let called = if before == "." {
+        methods.contains(word)
+    } else if before == "::" {
+        methods.contains(word) || free.contains(word)
+    } else if before == "fn" {
+        false
+    } else {
+        print_throws_is_print(word) || free.contains(word)
+    }
+    return called && !print_throws_caught(tokens, paren)
+}
+
+// Whether a body calls something that fails.
+fn print_throws_body_fails(tokens: ref Vec[MigrateToken], open: i64, close: i64, free: ref collections::BTreeSet[String], methods: ref collections::BTreeSet[String]) -> bool sync {
+    let mut k = open + 1
+    while k < close {
+        if print_throws_fails_at(tokens, k, free, methods) {
+            return true
+        }
+        k += 1
+    }
+    return false
+}
+
+// The names that fail, after the fixpoint: the free functions, and the
+// methods.
+fn print_throws_names(fns: ref Vec[PrintThrowsFn], failing: ref Vec[bool], outside: ref Vec[String]) -> (collections::BTreeSet[String], collections::BTreeSet[String]) sync {
+    let mut free: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut methods: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in outside {
+        let bare = name.strip_prefix(".")
+        if bare != null {
+            methods.insert((bare ?? "").clone())
+        } else {
+            free.insert(name.clone())
+        }
+    }
+    for i in 0..<fns.len() {
+        if failing[i] {
+            if fns[i].method {
+                methods.insert(fns[i].name.clone())
+            } else {
+                free.insert(fns[i].name.clone())
+            }
+        }
+    }
+    return (free, methods)
+}
+
+// **Each lambda's body**: the `fn` of `fn(…) { … }` or `fn { … }`, paired
+// with its body's `{` and `}`.
+fn print_throws_lambdas(tokens: ref Vec[MigrateToken]) -> Vec[(i64, i64, i64)] sync {
+    let mut out: Vec[(i64, i64, i64)] = []
+    for k in 0..<tokens.len() {
+        let next = migrate_text_at(tokens, k + 1)
+        if tokens[k].kind != MigrateKind::Word || tokens[k].text != "fn" || (next != "(" && next != "{") {
+            continue
+        }
+        let mut j = k + 1
+        if next == "(" {
+            j = migrate_closing(tokens, j) + 1
+            while j < tokens.len() && tokens[j].text != "{" {
+                if tokens[j].kind == MigrateKind::Close || tokens[j].text == ";" {
+                    break
+                }
+                if tokens[j].kind == MigrateKind::Open {
+                    j = migrate_closing(tokens, j)
+                }
+                j += 1
+            }
+        }
+        if j < tokens.len() && tokens[j].text == "{" {
+            out.push((k, j, migrate_closing(tokens, j)))
+        }
+    }
+    return out
+}
+
+// **Whether the lambda whose `fn` is token `k` is handed to a method**:
+// trailing (`.for_each fn(v) { … }`) or among the arguments of a `.name(…)`.
+// The methods of `std` a lambda is handed to (`for_each`, `map`, `filter`,
+// …) take one that cannot fail; a task (`async fn { … }`) and a lambda
+// handed to a path (`task::scope fn(s) { … }`, `supervisor::child(fn { … })`)
+// may fail where they are.
+fn print_throws_handed_to_method(tokens: ref Vec[MigrateToken], k: i64) -> bool sync {
+    if migrate_text_at(tokens, k - 2) == "." && tokens[k - 1].kind == MigrateKind::Word {
+        return true
+    }
+    let mut depth = 0
+    let mut j = k - 1
+    while j >= 0 {
+        if tokens[j].kind == MigrateKind::Close {
+            depth += 1
+        } else if tokens[j].kind == MigrateKind::Open {
+            if depth == 0 {
+                if tokens[j].text != "(" {
+                    return false
+                }
+                return j >= 2 && tokens[j - 1].kind == MigrateKind::Word && tokens[j - 2].text == "."
+            }
+            depth -= 1
+        }
+        j -= 1
+    }
+    return false
+}
+
+// The line token `k` stands on, counted from 1.
+fn print_throws_line(tokens: ref Vec[MigrateToken], k: i64) -> i64 sync {
+    let mut line = 1
+    for i in 0..<(k + 1) {
+        for c in tokens[i].gap.chars() {
+            if c == '\n' {
+                line += 1
+            }
+        }
+        if i < k {
+            for c in tokens[i].text.chars() {
+                if c == '\n' {
+                    line += 1
+                }
+            }
+        }
+    }
+    return line
+}
+
+// **Which functions fail**, to the fixpoint: one per declaration, in order.
+// `outside` names the failing functions of the other files read with this
+// one, a method as `.name`.
+fn print_throws_failing(tokens: ref Vec[MigrateToken], fns: ref Vec[PrintThrowsFn], outside: ref Vec[String]) -> Vec[bool] sync {
+    let mut free: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut methods: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in outside {
+        let bare = name.strip_prefix(".")
+        if bare != null {
+            methods.insert((bare ?? "").clone())
+        } else {
+            free.insert(name.clone())
+        }
+    }
+    let mut failing: Vec[bool] = []
+    for _f in fns {
+        failing.push(false)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for i in 0..<fns.len() {
+            if failing[i] {
+                continue
+            }
+            let f = fns[i]
+            let fails = if f.open < 0 {
+                f.method && methods.contains(f.name)
+            } else {
+                print_throws_body_fails(tokens, f.open, f.close, free, methods)
+            }
+            if fails {
+                failing[i] = true
+                changed = true
+                if f.method {
+                    methods.insert(f.name.clone())
+                } else {
+                    free.insert(f.name.clone())
+                }
+            }
+        }
+    }
+    return failing
+}
+
+fn print_throws_tokens(source: ref String) -> Vec[MigrateToken] sync {
+    let mut lexer = MigrateLexer { c: source.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    return lexer.tokens
+}
+
+/// **The failing `pub` functions of one file**, for the files read with it:
+/// a free function by its name, a method as `.name`.
+pub fn migrate_print_throws_exports(source: String, outside: Vec[String]) -> Vec[String] sync {
+    let tokens = print_throws_tokens(source)
+    let fns = print_throws_fns(tokens)
+    let failing = print_throws_failing(tokens, fns, outside)
+    let mut out: Vec[String] = []
+    for i in 0..<fns.len() {
+        if failing[i] && fns[i].public {
+            if fns[i].method {
+                out.push(f".{fns[i].name}")
+            } else {
+                out.push(fns[i].name.clone())
+            }
+        }
+    }
+    return out
+}
+
+/// **A `.nika` file**: `throws` written on each failing function that does
+/// not say it yet, before its body's `{`, or after a trait method's
+/// signature.
+pub fn migrate_print_throws_nika(source: String, outside: Vec[String]) -> String sync {
+    let tokens = print_throws_tokens(source)
+    let fns = print_throws_fns(tokens)
+    let failing = print_throws_failing(tokens, fns, outside)
+    let mut before: collections::BTreeSet[i64] = collections::BTreeSet()
+    let mut after: collections::BTreeSet[i64] = collections::BTreeSet()
+    for i in 0..<fns.len() {
+        if failing[i] && !fns[i].says_throws {
+            if fns[i].open >= 0 {
+                before.insert(fns[i].open)
+            } else {
+                after.insert(fns[i].close)
+            }
+        }
+    }
+    let mut out: String = ""
+    for k in 0..<tokens.len() {
+        if before.contains(k) {
+            out.push_str(" throws")
+        }
+        out.push_str(tokens[k].gap)
+        out.push_str(tokens[k].text)
+        if after.contains(k) {
+            out.push_str(" throws")
+        }
+    }
+    return out
+}
+
+/// **The printing lambdas** (supervisor, 2026-11-07): the line of each
+/// lambda handed to a method whose body calls something that fails, not
+/// caught there, the innermost one where lambdas nest. The tool writes no `throws` and no
+/// `catch` into a lambda: handed to a parameter that cannot fail it would be
+/// refused (NK2606), and a `catch {}` would hide a failure ADR-392 wants seen.
+/// The author handles each: a `for` loop in the throwing function where it
+/// only prints, else a `catch` with a real handler.
+pub fn migrate_print_throws_lambdas(source: String, outside: Vec[String]) -> Vec[i64] sync {
+    let tokens = print_throws_tokens(source)
+    let fns = print_throws_fns(tokens)
+    let failing = print_throws_failing(tokens, fns, outside)
+    let (free, methods) = print_throws_names(fns, failing, outside)
+    let lambdas = print_throws_lambdas(tokens)
+    let mut lines: Vec[i64] = []
+    for k in 0..<tokens.len() {
+        if !print_throws_fails_at(tokens, k, free, methods) {
+            continue
+        }
+        let mut inner = -1
+        let mut width = tokens.len()
+        for (at, open, close) in lambdas {
+            if open < k && k < close && close - open < width {
+                inner = at
+                width = close - open
+            }
+        }
+        if inner >= 0 && print_throws_handed_to_method(tokens, inner) {
+            let line = print_throws_line(tokens, inner)
+            if !lines.contains(line) {
+                lines.push(line)
+            }
+        }
+    }
+    return lines
+}
+
+/// The printing lambdas of a Markdown file's `nika` blocks, by the file's
+/// lines.
+pub fn migrate_print_throws_markdown_lambdas(source: String) -> Vec[i64] sync {
+    let mut out: Vec[i64] = []
+    let mut block: String = ""
+    let mut inside = false
+    let mut start = 0
+    let mut number = 0
+    for line in source.split("\n") {
+        number += 1
+        let fence = line.trim()
+        if inside && fence == "```" {
+            for at in migrate_print_throws_lambdas(block, []) {
+                out.push(start + at)
+            }
+            block = ""
+            inside = false
+            continue
+        }
+        if inside {
+            block.push_str(line)
+            block.push('\n')
+        } else if fence == "```nika" || fence == "```nikaia" {
+            inside = true
+            start = number
+        }
+    }
+    return out
+}
+
+/// **A Markdown file**: each fenced block marked `nika` or `nikaia` is read
+/// alone; the prose, and every other block, stays as written.
+pub fn migrate_print_throws_markdown(source: String) -> String sync {
+    let mut out: String = ""
+    let mut block: String = ""
+    let mut inside = false
+    let mut first = true
+    for line in source.split("\n") {
+        let fence = line.trim()
+        if inside && fence == "```" {
+            out.push_str(migrate_print_throws_nika(block, []))
+            block = ""
+            inside = false
+        }
+        if inside {
+            block.push_str(line)
+            block.push('\n')
+        } else {
+            if !first {
+                out.push('\n')
+            }
+            first = false
+            out.push_str(line)
+            if fence == "```nika" || fence == "```nikaia" {
+                inside = true
+                out.push('\n')
+                first = true
+            }
+        }
+    }
+    // A block the file never closes: its lines as they stood.
+    out.push_str(block.strip_suffix("\n") ?? "")
+    return out
+}

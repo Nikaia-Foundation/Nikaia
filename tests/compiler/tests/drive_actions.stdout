@@ -14,7 +14,7 @@ would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, empty T/unpushed.txt, rm -rf target/suite.lock)
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
 would run: builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
-would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/briefs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
+would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP BATCH DONE
 == cut (exit 0)
@@ -25,7 +25,7 @@ would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, empty T/unpushed.txt, rm -rf target/suite.lock)
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
 would run: builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
-would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/briefs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
+would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP CUT b1: too big -> SUPERVISOR
 == red (exit 0)
@@ -44,7 +44,7 @@ would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, empty T/unpushed.txt, rm -rf target/suite.lock)
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
 would run: builders go on meanwhile; once it has finished (or before a bump, the next suite, the end): handle it; green: git push origin <sha>:develop, drop the tested briefs from T/unpushed.txt, rm -rf target/suite.lock
-would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/briefs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
+would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/qa/qa-task.md (its report path made T/qa/qa-task.md.report.md), rm -f T/qa/qa-task.md.report.md, target/fast/nikaia run scripts/agent.nika -- T/qa/qa-task.md --dir T, its report and run files stay untracked, the suite again and waited for (at most 2 QA rounds)
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP RED aaaa1111 test -> SUPERVISOR
 == red ignored (exit 0)

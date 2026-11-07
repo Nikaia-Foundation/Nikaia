@@ -236,7 +236,7 @@ fn main() throws {
 //
 // // The clauses of `facts` and not `goal`, printed, and held against the
 // // formula on every value of its variables in -2..2.
-// fn show(name: String, arena: ref TermArena, facts: Vec[i64], goal: i64) {
+// fn show(name: String, arena: ref TermArena, facts: Vec[i64], goal: i64) throws {
 // 	println(f"{name}")
 // 	let mut why = lg_why()
 // 	let made = sv_cnf(arena, facts, goal, why)
@@ -320,7 +320,7 @@ fn main() throws {
 // 	println(f"  agree on {agree} of {total} values; the formula holds on {models}")
 // }
 //
-// fn main() {
+// fn main() throws {
 // 	let mut t = TermArena::empty()
 // 	let x = t.var("x")
 // 	let y = t.var("y")

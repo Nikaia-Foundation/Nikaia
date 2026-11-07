@@ -6,7 +6,7 @@ fn total(v: Vec[i64]) -> i64 {
     return t
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[i64] = [3, 4]
     println(v.iter().sum())
     let s = v.iter().sum()

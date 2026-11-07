@@ -218,7 +218,7 @@ fn main() throws {
 // }
 //
 // // Solves `q` within `budget` conflicts and says what came out.
-// fn run(name: String, q: ref SvQuery, mut s: SvSat, budget: i64) {
+// fn run(name: String, q: ref SvQuery, mut s: SvSat, budget: i64) throws {
 // 	let answer = s.solve(budget)
 // 	println(f"{name}: {answer_text(answer)}")
 // 	println(work(s.stats))
@@ -243,7 +243,7 @@ fn main() throws {
 // 	}
 // }
 //
-// fn main() {
+// fn main() throws {
 // 	let hole = pigeons(4, 3)
 // 	run("pigeonhole 4-into-3", hole, sv_sat_of(hole) ?? return, 100000)
 //

@@ -21,7 +21,7 @@ impl Pick for P {
     }
 }
 
-fn main() {
+fn main() throws {
     let t = "hi"
     println(P::pick(t))
     let mut u = "h"

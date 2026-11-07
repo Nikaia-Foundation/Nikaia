@@ -6,7 +6,7 @@ fn apply(f: fn(s: String) -> String, s: String) -> String {
 	return f(s)
 }
 
-fn main() {
+fn main() throws {
 	let g: String = "  hi  "
 	let outer: String = "hi"
 	println(apply(fn(_s) { outer }, g))

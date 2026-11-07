@@ -19,7 +19,7 @@ fn has_arguments(line: String) -> bool {
     return rest.len() > 2
 }
 
-fn main() {
+fn main() throws {
     let own = f"a,b{1}"
     println(first_comma(own))
     println(own)

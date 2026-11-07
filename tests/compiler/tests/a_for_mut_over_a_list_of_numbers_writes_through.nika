@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut counts = [1, 2, 3]
     for mut n in counts {
         n = n * 2

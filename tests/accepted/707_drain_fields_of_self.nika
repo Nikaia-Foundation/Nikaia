@@ -20,7 +20,7 @@ impl Pile {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut p = Pile { items: [], counts: collections::HashMap() }
     p.items.push(f"x{1}")
     p.counts.insert(f"y{2}", 5)

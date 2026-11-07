@@ -16,7 +16,7 @@ fn read(src: String) -> Tree {
     return t
 }
 
-fn main() {
+fn main() throws {
     let parts: Vec[String] = ["ab", "cd"]
     let t = read(parts.join("-"))
     println(f"{t.n[0]} {t.n[1]}")

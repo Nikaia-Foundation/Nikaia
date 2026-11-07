@@ -9,7 +9,7 @@ impl S {
     }
 }
 fn bump(mut s: S) { s.n += 10 }
-fn main() {
+fn main() throws {
     let mut s = S { n: 1 }
     s.apply(bump)
     s.apply(fn(mut t) { t.n += 100 })

@@ -3,7 +3,7 @@
 
 use std::time
 
-fn f(_d: time::Duration) {
+fn f(_d: time::Duration) throws {
 	println("ok")
 }
 
@@ -15,7 +15,7 @@ fn other() -> i64 {
 	return 1
 }
 
-fn main() {
+fn main() throws {
 	f(20.millis())
 	let a = async(within: 2000.millis()) quick() catch { 0 }
 	let b = other()

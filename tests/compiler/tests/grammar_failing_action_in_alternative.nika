@@ -22,7 +22,7 @@ grammar G {
     entry rule own -> i64 = "@" => t:text(digit+) -> { parse(t) } | "@" digit+ -> { -3 }
 }
 
-fn main() {
+fn main() throws {
     for input in ["42", "123"] {
         let v = G::soft(input) catch {
             println(f"soft {input}: {error}")

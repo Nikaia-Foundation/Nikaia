@@ -54,7 +54,7 @@ fn each_is_an_ordinary_name() {
              \x20   {word}: i64,\n\
              }}\n\
              fn takes({word}: i64) -> i64 {{ return {word} }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let {word} = 1\n\
              \x20   let r = Row {{ {word}: {word} }}\n\
              \x20   println(f\"{{takes(r.{word})}}\")\n\
@@ -79,7 +79,7 @@ fn the_three_the_backend_reserves_are_escaped() {
         ("quote", false),
     ] {
         let rust = lowered(&format!(
-            "fn main() {{ let mut {word} = 1\n{word} = {word} + 1\nprintln(f\"{{{word}}}\") }}"
+            "fn main() throws {{ let mut {word} = 1\n{word} = {word} + 1\nprintln(f\"{{{word}}}\") }}"
         ))
         .unwrap_or_else(|e| panic!("`{word}` lowers: {e}"));
         assert_eq!(
@@ -129,7 +129,7 @@ fn a_stray_word_is_told_what_to_write_instead() {
 fn a_declared_word_gets_no_sentence() {
     for word in FREED {
         let found = findings(&format!(
-            "fn main() {{\n    let {word} = 1\n    println(f\"{{{word}}}\")\n}}"
+            "fn main() throws {{\n    let {word} = 1\n    println(f\"{{{word}}}\")\n}}"
         ));
         assert!(found.is_empty(), "`{word}` is declared here: {found:#?}");
     }

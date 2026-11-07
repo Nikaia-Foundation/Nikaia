@@ -18,7 +18,7 @@ fn numbers(l: L) -> Vec[i64] {
     }
 }
 
-fn main() {
+fn main() throws {
     println(text(T::A("a")))
     println(text(T::N).len())
     println(numbers(L::A([1, 2])).len())

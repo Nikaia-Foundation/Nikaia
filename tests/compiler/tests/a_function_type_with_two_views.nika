@@ -32,7 +32,7 @@ fn apply_list_sync(g: fn(ref Vec[i64], ref Vec[i64]) -> ref Vec[i64] sync, a: re
 	return g(a, a).len()
 }
 
-fn main() {
+fn main() throws {
 	println(f"{apply(longer, "abc")}")
 	let xs = [1, 2, 3]
 	println(f"{apply_list(longer_list, xs)}")

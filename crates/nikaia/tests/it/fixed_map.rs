@@ -38,7 +38,7 @@ fn lower(source: &str) -> String {
 /// Three keys: under [`nikaia::fixed::HASHED_FROM`], so the walked shape.
 const SMALL: &str = "comptime ROUTES: Fixed[ref String, i64] = [(\"get\", 1), (\"post\", 2), (\"put\", 3)]\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   println(f\"{ROUTES.get(\"get\") ?? 0}\")\n\
      \x20   println(f\"{ROUTES.get(\"post\") ?? 0}\")\n\
      \x20   println(f\"{ROUTES.get(\"put\") ?? 0}\")\n\
@@ -54,7 +54,7 @@ const LARGE: &str = "comptime WORDS: Fixed[ref String, i64] = [\n\
      \x20   (\"mike\", 13), (\"november\", 14),\n\
      ]\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   println(f\"{WORDS.get(\"alpha\") ?? 0}\")\n\
      \x20   println(f\"{WORDS.get(\"golf\") ?? 0}\")\n\
      \x20   println(f\"{WORDS.get(\"november\") ?? 0}\")\n\
@@ -107,7 +107,7 @@ fn from_the_threshold_the_table_carries_displacements() {
 fn a_key_written_twice_is_refused_once() {
     let source = "comptime ROUTES: Fixed[ref String, i64] = [(\"get\", 1), (\"post\", 2), (\"get\", 3)]\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{ROUTES.len()}\")\n\
          }";
     let codes: Vec<&str> = findings(source)
@@ -126,7 +126,7 @@ fn a_key_written_twice_is_refused_once() {
 fn a_key_that_is_not_text_is_refused_once() {
     let source = "comptime ROUTES: Fixed[i64, i64] = [(1, 1), (2, 2)]\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{ROUTES.len()}\")\n\
          }";
     let codes: Vec<&str> = findings(source)
@@ -193,7 +193,7 @@ fn a_table_holds_a_declared_type_and_the_program_reads_it() {
                   ]\n\
                   comptime SHADES: Fixed[ref String, Shade] = [(\"a\", Shade::Odd), (\"b\", Shade::Even)]\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{TABLE.get(\"y\")?.a ?? 0}\")\n\
                   \x20   println(f\"{TABLE.get(\"x\")?.tags?.len() ?? 0}\")\n\
                   \x20   println(f\"{TABLE.get(\"zz\")?.a ?? -1}\")\n\
@@ -234,7 +234,7 @@ fn a_row_that_owns_memory_is_refused_by_name() {
          \n\
          comptime T: Fixed[ref String, Bad] = [(\"x\", Bad { items: [1, 2] })]\n\
          \n\
-         fn main() { println(f\"{T.len()}\") }\n",
+         fn main() throws { println(f\"{T.len()}\") }\n",
     );
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(found[0].code, "NK1167");

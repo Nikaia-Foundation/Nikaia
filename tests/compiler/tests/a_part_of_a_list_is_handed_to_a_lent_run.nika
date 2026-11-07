@@ -17,7 +17,7 @@ fn clear(mut v: Vec[u32]) {
     zero(v)
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[u32] = [1, 2, 3, 4]
     print(f"{sum(v[1..<4])} ")
     zero(v[1..<3])

@@ -4,7 +4,7 @@
 // YAML 1.2.2 sets no limit; the nested flow sequences are built for this test.
 use yaml
 
-fn run(text: String, keep limits: yaml::Limits) {
+fn run(text: String, keep limits: yaml::Limits) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input; limits: limits) catch {
 		println(f"error {error.line}:{error.column}: {error.message}")
@@ -13,7 +13,7 @@ fn run(text: String, keep limits: yaml::Limits) {
 	println(f"ok, {docs.len()} document(s)")
 }
 
-fn run_default(text: String) {
+fn run_default(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println(f"error {error.line}:{error.column}: {error.message}")
@@ -26,7 +26,7 @@ fn nested(n: i64) -> String {
 	return f"{"[".repeat(n)}{"]".repeat(n)}\n"
 }
 
-fn main() {
+fn main() throws {
 	let d = yaml::default_limits()
 	println(f"defaults: depth {d.depth}, alias nodes {d.alias_nodes}, bytes {d.bytes}")
 	// 128 nested flow sequences are within the default depth, 129 are not

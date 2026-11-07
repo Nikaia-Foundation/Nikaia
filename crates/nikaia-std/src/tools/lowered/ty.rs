@@ -468,6 +468,22 @@ impl Lock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panics {
+    No,
+    Yes,
+    Unknown,
+}
+
+impl Panics {
+    pub fn never(&self) -> bool { *self == Panics::No }
+    pub fn or(&self, other: &Panics) -> Panics {
+        if *self == Panics::Yes || *other == Panics::Yes { return Panics::Yes; }
+        if *self == Panics::Unknown || *other == Panics::Unknown { return Panics::Unknown; }
+        Panics::No
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Crosses {
     May,
     MayNot,
@@ -495,12 +511,20 @@ impl Threads {
 pub struct Touch {
     pub kind: String,
     pub parameter: Option<String>,
+    pub named: Option<String>,
     pub write: bool,
 }
 
 impl Touch {
     pub fn names_a_lock(&self) -> bool { self.kind == "lock" }
-    pub fn text(&self) -> String { touched(&self.kind, (self.parameter).as_deref(), self.write) }
+    pub fn text(&self) -> String {
+        if self.named.is_some() {
+            let access = if self.write { "write" } else { "read" };
+            let named_text = nikaia_std::index::or(self.named.as_deref(), || "");
+            return format!("{}('{}') {}", self.kind, named_text, access);
+        }
+        touched(&self.kind, (self.parameter).as_deref(), self.write)
+    }
 }
 
 pub(crate) fn touched(kind: &str, parameter: Option<&str>, write: bool) -> String {
@@ -712,6 +736,7 @@ pub struct FnContract {
     pub keeps: Vec<String>,
     pub mutates: bool,
     pub touches_a_lock: Lock,
+    pub panics: Panics,
     pub threads: Threads,
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
@@ -727,7 +752,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

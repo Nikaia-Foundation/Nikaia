@@ -1,7 +1,7 @@
 // A comparison whose operands are parenthesised comparisons keeps its
 // parentheses in the Rust it is lowered to (#1293): Rust refuses any chain
 // of comparison operators, `a > 0 != b > 0` among them.
-fn main() {
+fn main() throws {
     let a = 1
     let b = -2
     println(f"{(a > 0) != (b > 0)}")

@@ -35,7 +35,7 @@ impl Calc {
     }
 }
 
-fn main() {
+fn main() throws {
     let c = Calc { base: 10 }
     let exprs = [Expr::Bin(Op::Sub, "abc"), Expr::Bin(Op::Add, "ab"), Expr::Lit(4)]
     println(c.total(exprs))

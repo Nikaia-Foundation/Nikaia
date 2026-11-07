@@ -14,7 +14,7 @@ fn toolchain() -> String throws {
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let nikaia = toolchain()
-    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn size(b: ref Bytes) -> i64 {\n    return b.len()\n}\n\nfn tail(b: ref Bytes) -> ref Bytes {\n    return b[1..]\n}\n\ncomptime NAME: ref String = \"nikaia\"\n\nfn main() {\n    let text: String = \"abc\"\n    println(size(text.bytes))\n    let t = tail(text.bytes)\n    println(t.len())\n    println(size(tail(text.bytes)))\n    println(NAME)\n    println(NAME.len())\n    let names: Vec[String] = [NAME]\n    println(names.len())\n}\n")
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn size(b: ref Bytes) -> i64 {\n    return b.len()\n}\n\nfn tail(b: ref Bytes) -> ref Bytes {\n    return b[1..]\n}\n\ncomptime NAME: ref String = \"nikaia\"\n\nfn main() throws {\n    let text: String = \"abc\"\n    println(size(text.bytes))\n    let t = tail(text.bytes)\n    println(t.len())\n    println(size(tail(text.bytes)))\n    println(NAME)\n    println(NAME.len())\n    let names: Vec[String] = [NAME]\n    println(names.len())\n}\n")
     let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
     print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
     print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))

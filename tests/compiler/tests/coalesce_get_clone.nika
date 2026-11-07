@@ -1,0 +1,32 @@
+// Text made here beside the text a map holds (#1322): the map's text is a view
+// of it, the fallback goes into a slot, and the answer is a view of text.
+use std::collections
+
+fn zero() -> String { return "z" }
+
+fn pick(m: ref collections::BTreeMap[String, String], c: String) -> String {
+	return (m.get(c) ?? zero()).clone()
+}
+
+fn at(m: ref collections::BTreeMap[String, String], c: String) -> String {
+	return (m[c] ?? zero()).clone()
+}
+
+fn bound(m: ref collections::BTreeMap[String, String], c: String) -> String {
+	let x = m.get(c) ?? zero()
+	return x.clone()
+}
+
+fn written(m: ref collections::BTreeMap[String, String], c: String, n: i64) -> String {
+	let x = m[c] ?? f"none {n}"
+	return x.clone()
+}
+
+fn main() throws {
+	let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()
+	m.insert("a", "va")
+	println(f"{pick(m, "a")} {pick(m, "b")}")
+	println(f"{at(m, "a")} {at(m, "b")}")
+	println(f"{bound(m, "a")} {bound(m, "b")}")
+	println(f"{written(m, "a", 1)} {written(m, "b", 2)}")
+}

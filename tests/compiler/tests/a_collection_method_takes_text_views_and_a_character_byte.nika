@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut words: Vec[String] = []
     words.push("a")
     let view: String = "b"

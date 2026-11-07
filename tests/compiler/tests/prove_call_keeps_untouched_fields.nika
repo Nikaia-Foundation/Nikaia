@@ -79,7 +79,7 @@ fn tally(mut b: Book) {
 	b.hits += 1
 }
 
-fn main() {
+fn main() throws {
 	let mut b = Book { rows: [1, 2, 3], hits: 0 }
 	println(f"{b.walk()} {b.deep()} {b.handed()} {b.grows()} {b.hits} {b.rows.len()}")
 }

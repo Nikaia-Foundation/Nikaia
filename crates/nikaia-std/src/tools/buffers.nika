@@ -78,6 +78,22 @@ pub struct BufferPlan {
     /// handed back - put into their keep whole, where no view is found by
     /// address (ADR-283 D15: one that leaves it is copied).
     pub opaque_puts: collections::BTreeSet[i64],
+    /// The buffer `let`s the body changes after they bind (#1276): `xs.push(..)`,
+    /// `text += ".."`. Put into their keep only after the last change, where
+    /// they are written to no more.
+    pub late_puts: collections::BTreeMap[i64, LatePut],
+}
+
+/// A buffer put into its keep after the statement that changes it last
+/// (#1276), by the `let` that binds it.
+pub struct LatePut {
+    /// The statement of the `let`'s own block after which it is put.
+    pub after: i64,
+    /// The name it is bound to.
+    pub name: String,
+    /// Assigned again after it is put (#293), so the name it is put under
+    /// stays `mut`.
+    pub reassigned: bool,
 }
 
 /// What the walk is asked against, which does not change from one function to
@@ -155,6 +171,19 @@ struct BufferWalk {
     /// The last expression of an arm, by the statement whose value it is
     /// (#1289): a call's keep there stands before that statement.
     hoisted: collections::BTreeMap[i64, i64],
+    /// The last change of a local after its `let` (#1276), by that `let`.
+    mutated: collections::BTreeMap[i64, Mutated],
+    /// The statement that is the body's value, where a method call changes
+    /// nothing: `out.trim()` as the last expression reads (#1276).
+    value_tail: i64,
+}
+
+// Where a local is changed last: the statement of its `let`'s own block that
+// holds the change, and the change itself.
+struct Mutated {
+    after: i64,
+    last: i64,
+    name: String,
 }
 
 fn open_scope(mut walk: BufferWalk) {
@@ -243,7 +272,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1 }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -262,6 +291,10 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         }
         walk.path = []
         open_scope(walk)
+        walk.value_tail = -1
+        if walk.result_carries && body.stmts.len() > 0 {
+            walk.value_tail = body.stmts[body.stmts.len() - 1].span.start as i64
+        }
         for stmt in body.stmts {
             walk.statement = stmt.span.start as i64
             buffer_statement(stmt.node, stmt.span, ask, holes_of, unaliased, walk)
@@ -298,7 +331,50 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         },
         else => {}
     }
+    late_puts(walk, plan)
     return plan
+}
+
+// **A buffer the body changes after its `let` is put after the last change**
+// (#1276): put at its `let`, it is a view from there on, and `xs.push(..)` or
+// `text += ".."` cannot write through it. An assignment before that point is
+// no put again either: the buffer is not in the keep yet.
+fn late_puts(walk: ref BufferWalk, mut plan: BufferPlan) {
+    let mut found: Vec[(i64, Mutated)] = []
+    for (at, _) in plan.puts {
+        let changed = walk.mutated.get(at) ?? continue
+        found.push((at.clone(), changed.clone()))
+    }
+    for (at, changed) in found {
+        let mut reassigned = false
+        for (statement, bound) in walk.reassigned {
+            if bound != at || !plan.reputs.contains_key(statement) {
+                continue
+            }
+            if statement <= changed.last {
+                plan.reputs.remove(statement)
+            } else {
+                reassigned = true
+            }
+        }
+        plan.late_puts.insert(at, LatePut { after: changed.after, name: changed.name.clone(), reassigned: reassigned })
+    }
+}
+
+// A change of a local after its `let` (#1276): a method called for its effect
+// or an assignment into it. Its put moves after the statement of the `let`'s
+// own block that holds the change.
+fn note_change(root: ref String, at: i64, mut walk: BufferWalk) {
+    let local = local_of(root, walk) ?? return
+    if local.parameter || local.at <= 0 {
+        return
+    }
+    let depth = local.path.len()
+    let mut after = at
+    if walk.path.len() > depth {
+        after = walk.path[depth].0
+    }
+    walk.mutated.insert(local.at, Mutated { after: after, last: at, name: root.clone() })
 }
 
 fn carries_maybe(ty: ref Type?, ask: ref BufferAsk) -> bool {
@@ -337,6 +413,9 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             let whole = op == null && match target {
                 Expr::Variable(_, _) => true,
                 else => false,
+            }
+            if !whole {
+                note_change(root, at, walk)
             }
             if whole {
                 let bound = local_of(root, walk)
@@ -400,6 +479,15 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             spawns_in(expr, ask, holes_of, walk)
             nested_blocks(expr, at, ask, holes_of, unaliased, walk)
             effects(expr, ask, holes_of, unaliased, walk)
+            match expr {
+                Expr::MethodCall { receiver, .. } => {
+                    let root = root_of(ask.names, receiver)
+                    if root != null && at != walk.value_tail {
+                        note_change(root ?? "", at, walk)
+                    }
+                }
+                else => {}
+            }
         }
         else => {}
     }
@@ -1910,7 +1998,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
     if body.stmts.len() > 0 {
         first = body.stmts[0].span.start as i64
     }
-    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet() }
+    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet(), late_puts: collections::BTreeMap() }
     for (id, found) in walk.sources {
         decide_source(id.clone(), found.source, found.path, walk, plan)
     }
@@ -2237,14 +2325,15 @@ fn element_refusal(keeper: ref String, why: ref String, help: ref String, plan: 
 // else counts as owned, so a view the walk cannot
 // place is left as it was.
 fn untethered_returns(function: ref String, ret_type: ref Type?, body: ref Block, ask: ref BufferAsk) -> UntetheredWalk {
-    let mut walk = UntetheredWalk { owned: collections::BTreeSet(), views: collections::BTreeMap(), carrying: collections::BTreeMap(), lets: collections::BTreeMap(), anchored: collections::BTreeMap(), findings: [] }
+    let mut walk = UntetheredWalk { owned: collections::BTreeSet(), views: collections::BTreeMap(), carrying: collections::BTreeMap(), lets: collections::BTreeMap(), lists: collections::BTreeSet(), anchored: collections::BTreeMap(), findings: [] }
     let written = ret_type ?? return walk
-    let fields = untethered_fields(written, ask)
+    let fields = untethered_fields(written, ask, false)
     let bare = untethered_view(written, ask)
-    if !bare && fields.len() == 0 {
+    let text_fields = untethered_fields(written, ask, true)
+    if !bare && fields.len() == 0 && text_fields.len() == 0 {
         return walk
     }
-    let asked = UntetheredAsk { function: function.clone(), bare: bare, struct_name: ask.names.resolve(written.name).clone(), fields: fields }
+    let asked = UntetheredAsk { function: function.clone(), bare: bare, struct_name: ask.names.resolve(written.name).clone(), fields: fields, text_fields: text_fields }
     untethered_block(body, asked, ask, walk)
     if body.stmts.len() > 0 {
         let last = body.stmts[body.stmts.len() - 1]
@@ -2263,6 +2352,8 @@ struct UntetheredAsk {
     /// The struct the result names, and its fields that are such views.
     struct_name: String,
     fields: collections::BTreeSet[String],
+    /// The fields of the result's struct that are text views (#1275).
+    text_fields: collections::BTreeSet[String],
 }
 
 struct UntetheredWalk {
@@ -2274,6 +2365,10 @@ struct UntetheredWalk {
     carrying: collections::BTreeMap[String, String],
     /// The `let` each owned local is bound by.
     lets: collections::BTreeMap[String, Source],
+    /// The owned locals that are lists declared with their type and bound to
+    /// a value made there (`made_list_local` in `text_tiers.nika`): an element
+    /// of one is text a text view handed back points into (#1275).
+    lists: collections::BTreeSet[String],
     /// The `let`s of the owned locals a view handed back points into: each
     /// moves into the caller's keep.
     anchored: collections::BTreeMap[i64, Source],
@@ -2295,8 +2390,18 @@ fn untethered_view(ty: ref Type, ask: ref BufferAsk) -> bool {
     return true
 }
 
-// The fields of the struct `ty` names, in this unit, that are such views.
-fn untethered_fields(ty: ref Type, ask: ref BufferAsk) -> collections::BTreeSet[String] {
+// A text view: `String` the tier pass made a view (ADR-282).
+fn untethered_text_view(ty: ref Type, ask: ref BufferAsk) -> bool {
+    if !ty.is_view || ty.is_tuple || ty.code != null || ty.is_nullable {
+        return false
+    }
+    let base = last_segment(ask.names.resolve(ty.name))
+    return base == "String" || base == "str"
+}
+
+// The fields of the struct `ty` names, in this unit, that are such views, or
+// text views where `text` is set.
+fn untethered_fields(ty: ref Type, ask: ref BufferAsk, text: bool) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     if ty.is_view || ty.is_tuple {
         return out
@@ -2307,7 +2412,7 @@ fn untethered_fields(ty: ref Type, ask: ref BufferAsk) -> collections::BTreeSet[
             Item::Struct { name, fields, .. } => {
                 if ask.names.resolve(name) == wanted {
                     for field in fields {
-                        if untethered_view(field.ty, ask) {
+                        if (!text && untethered_view(field.ty, ask)) || (text && untethered_text_view(field.ty, ask)) {
                             out.insert(ask.names.resolve(field.name).clone())
                         }
                     }
@@ -2322,10 +2427,10 @@ fn untethered_fields(ty: ref Type, ask: ref BufferAsk) -> collections::BTreeSet[
 fn untethered_block(block: ref Block, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
     for stmt in block.stmts {
         match stmt.node {
-            Stmt::Let { names, value, .. } => {
+            Stmt::Let { names, value, ty, .. } => {
                 untethered_expr(value, stmt.span, asked, ask, walk)
                 if names.len() == 1 {
-                    untethered_let(ask.names.resolve(names[0]).clone(), value, stmt.span, asked, ask, walk)
+                    untethered_let(ask.names.resolve(names[0]).clone(), value, ty, stmt.span, asked, ask, walk)
                 }
             }
             Stmt::Return(value) => {
@@ -2364,11 +2469,16 @@ fn untethered_expr(expr: ref Expr, at: ref Span, asked: ref UntetheredAsk, ask: 
     }
 }
 
-fn untethered_let(name: String, value: ref Expr, span: Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
+fn untethered_let(name: String, value: ref Expr, ty: ref Type?, span: Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
     walk.owned.remove(name)
     walk.views.remove(name)
     walk.carrying.remove(name)
     walk.lets.remove(name)
+    walk.lists.remove(name)
+    if untethered_made_list(value, ty, ask) {
+        walk.lets.insert(name.clone(), Source::Buffer { at: span.start as i64, name: name.clone(), ty: "", span: span.clone() })
+        walk.lists.insert(name.clone())
+    }
     let owned = match value {
         Expr::ListLit { .. } => true,
         Expr::ListRepeat { .. } => true,
@@ -2388,6 +2498,40 @@ fn untethered_let(name: String, value: ref Expr, span: Span, asked: ref Untether
     }
     let root = untethered_root(value, ask, walk) ?? return
     walk.views.insert(name, root)
+}
+
+// A list declared with its type, not a view, bound to a value made there and
+// not read out of a name, a field or an element (as `made_list_local` asks).
+fn untethered_made_list(value: ref Expr, ty: ref Type?, ask: ref BufferAsk) -> bool {
+    let written = ty ?? return false
+    if written.is_view || written.is_nullable || written.is_tuple || !is_a_container_name(ask.names.resolve(written.name)) {
+        return false
+    }
+    return match value {
+        Expr::Variable(_, _) => false,
+        Expr::Field { .. } => false,
+        Expr::SafeField { .. } => false,
+        Expr::Index { .. } => false,
+        else => true,
+    }
+}
+
+// **An element of a list the body made, read whole** where a text view field
+// is handed back (#1275, ADR-283 D23): the list it points into.
+fn untethered_text_root(value: ref Expr, ask: ref BufferAsk, walk: ref UntetheredWalk) -> String? {
+    return match value {
+        Expr::Index { base, index, .. } => match base {
+            Expr::Variable(name, _) => {
+                let named = ask.names.resolve(name).clone()
+                if a_range(index) || !walk.lists.contains(named) {
+                    return null
+                }
+                named
+            },
+            else => null,
+        },
+        else => null,
+    }
 }
 
 // A function of the file that hands back a value of its own: no view in its
@@ -2432,8 +2576,17 @@ fn untethered_struct(value: ref Expr, asked: ref UntetheredAsk, ask: ref BufferA
         Expr::StructLit { name, fields, .. } => (name, fields),
         else => return null,
     }
-    if asked.fields.len() == 0 || ask.names.resolve(name) != asked.struct_name {
+    if (asked.fields.len() == 0 && asked.text_fields.len() == 0) || ask.names.resolve(name) != asked.struct_name {
         return null
+    }
+    for field in fields {
+        let named = ask.names.resolve(field.name).clone()
+        if asked.text_fields.contains(named) && field.value != null {
+            let text_root = untethered_text_root(field.value ?? continue, ask, walk)
+            if text_root != null {
+                return text_root
+            }
+        }
     }
     for field in fields {
         let named = ask.names.resolve(field.name).clone()

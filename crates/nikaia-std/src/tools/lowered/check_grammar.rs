@@ -343,7 +343,7 @@ impl CheckState {
         self.scope.push(scope.to_owned());
         let mut word: String = String::from("bound");
         if what == "A guard" { word = String::from("guard"); }
-        self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet::new(), leaves: false });
+        self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened: -1, held: vec![] });
         let found = check_core_expr(&mut *self, world, host, value, span);
         self.repeats.pop();
         self.scope.pop();

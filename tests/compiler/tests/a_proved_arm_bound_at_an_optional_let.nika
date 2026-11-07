@@ -43,7 +43,7 @@ fn shown(p: Point?) -> String {
     return "none"
 }
 
-fn main() {
+fn main() throws {
     println(by_let("x", "y") ?? "n")
     println(by_let(null, "y") ?? "n")
     println(by_assign("x", "y") ?? "n")

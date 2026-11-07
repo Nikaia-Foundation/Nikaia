@@ -10,7 +10,7 @@ pub(crate) struct Walked {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Seen {
     Path { name: String, span: Span },
-    Call { name: String, wrote: Option<Wrote>, span: Span },
+    Call { name: String, wrote: Option<Wrote>, span: Span, literals: Vec<Option<String>>, trusted: bool },
     Name(String),
     Spawn { span: Span },
     Opaque { span: Span },
@@ -94,7 +94,7 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
         Expr::Dsl { .. } => { found.seen.push(Seen::Opaque { span: span.clone() }); },
         Expr::Overlap(_, _) => { found.seen.push(Seen::Joins { construct: String::from("overlap"), span: span.clone() }); },
         Expr::Select(_, _) => { found.seen.push(Seen::Joins { construct: String::from("select"), span: span.clone() }); },
-        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); a_named_call(func, args, span, names, &root_at, found); },
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); a_named_call(func, args, config, span, names, &root_at, found); },
         _ => { },
     }
     for hole in holes_of(expr) { expression_paths(&hole, span, names, unaliased, holes_of, root_at, found); }
@@ -302,7 +302,7 @@ pub(crate) fn path_name(segments: &[winnow_grammar::Symbol], names: &winnow_gram
 
 pub(crate) fn named_at(name: String, span: &Span) -> Seen { Seen::Path { name, span: span.clone() } }
 
-pub(crate) fn a_named_call(func: &Expr, args: &[Expr], span: &Span, names: &winnow_grammar::InternerContext, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
+pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span, names: &winnow_grammar::InternerContext, root_at: &impl Fn(&str) -> i64, found: &mut Walked) {
     let name = match func {
         Expr::Variable(name, _) => { let name = *name; names.resolve(name).to_string() },
         Expr::Path(segments, _) => written_path(names, segments),
@@ -320,6 +320,13 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], span: &Span, names: &winn
     let at = root_at(&name);
     let mut wrote: Option<Wrote> = None;
     if at >= 0 && at < args.len() as i64 { wrote = written_root(names, nikaia_std::index::get(&args, nikaia_std::index::at(at))); }
-    found.seen.push(Seen::Call { name, wrote, span: span.clone() });
+    let mut literals: Vec<Option<String>> = vec![];
+    for arg in args.iter() {
+        literals.push(match arg {
+            Expr::LitStr { text, .. } => Some(text.to_string()),
+            _ => None,
+        });
+    }
+    found.seen.push(Seen::Call { name, wrote, span: span.clone(), literals, trusted: says_trusted(names, config) });
 }
 

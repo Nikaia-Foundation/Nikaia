@@ -3,7 +3,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let s = f"x=1 y=2 z x=3"
     let mut v: Vec[String] = []
     let mut m: collections::HashMap[String, String] = collections::HashMap()

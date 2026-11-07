@@ -24,7 +24,7 @@ fn nested(s: ref String, n: i64) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(plain("hi", 0))
     println(plain("hi", 5))
     println(tail_plain("hi", 0))

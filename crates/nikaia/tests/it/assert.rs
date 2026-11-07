@@ -134,7 +134,7 @@ fn claims_the_compiler_proves_let_the_program_run() {
                   \x20   return n\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let blank = 2\n\
                   \x20   assert(blank + 1 == 3)\n\
                   \x20   for i in 0..<3 {\n\
@@ -163,7 +163,7 @@ fn a_false_claim_stops_the_program_when_it_runs() {
          \x20   return blank\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(\"before\")\n\
          \x20   println(f\"{twice(1)}\")\n\
          }\n",
@@ -194,7 +194,7 @@ fn a_computed_precondition_fails_at_the_call() {
          \x20   return blank\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(\"before\")\n\
          \x20   println(f\"{twice(1)}\")\n\
          }\n",
@@ -228,7 +228,7 @@ fn a_broken_precondition_names_the_caller() {
          \x20   return percent(done, total)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{report(1, 4)}\")\n\
          \x20   println(f\"{report(1, 0)}\")\n\
          }\n",
@@ -313,11 +313,11 @@ fn an_assert_of_another_shape_is_refused() {
 /// prelude's is the one nothing else declared.
 #[test]
 fn a_program_may_declare_its_own_assert() {
-    let source = "fn assert(ok: bool) {\n\
+    let source = "fn assert(ok: bool) throws {\n\
                   \x20   println(f\"mine: {ok}\")\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   assert(1 == 2)\n\
                   }\n";
     let (ok, stdout, stderr) = outcome("own", source);
@@ -336,7 +336,7 @@ fn asserts_reports_every_claim() {
                   \x20   return n / 2\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let k = half(4)\n\
                   \x20   let four = 4\n\
                   \x20   assert(four == 4)\n\
@@ -361,7 +361,7 @@ fn asserts_reports_every_claim() {
         stdout.contains(
             "asserts in claims.nika: 3 - not proved 0 (refused 0, checked at run time 0, \
              checked by a test 0); checked where the words arrive 0; proved 3 (proved 2, \
-             preconditions proved at every call 1)\n\
+             preconditions proved at every call 1); derived from the callers 1\n\
              \x20 claims.nika:9  assert(four == 4)  proved\n\
              \x20 claims.nika:11  assert(twice > 2)  proved\n\
              \x20 claims.nika:2  assert(n >= 0; message: \"not negative\")  precondition of \

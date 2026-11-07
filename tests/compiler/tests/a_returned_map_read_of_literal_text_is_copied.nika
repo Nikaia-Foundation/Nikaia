@@ -15,7 +15,7 @@ fn word_indexed(m: collections::BTreeMap[String, String], k: String) -> String? 
     return m[k]
 }
 
-fn main() {
+fn main() throws {
     let mut w: collections::BTreeMap[String, String] = collections::BTreeMap()
     w.insert("b", "two")
     println(word(w, "b") ?? "none")

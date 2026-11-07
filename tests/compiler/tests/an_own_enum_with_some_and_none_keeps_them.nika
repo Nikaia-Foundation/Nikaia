@@ -19,7 +19,7 @@ fn pick(o: i64?) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(show(Maybe::Some(4)))
     println(show(Maybe::None))
     println(pick(3))

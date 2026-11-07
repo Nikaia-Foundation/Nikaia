@@ -24,7 +24,7 @@ fn a_block_over_a_grammar_is_its_entry_s_value() {
     std::fs::write(
         dir.join("num.nika"),
         format!(
-            "{NUM}fn main() {{\n    let x = dsl Num {{ 42 }} eod\n    println(f\"{{x + 1}}\")\n}}\n"
+            "{NUM}fn main() throws {{\n    let x = dsl Num {{ 42 }} eod\n    println(f\"{{x + 1}}\")\n}}\n"
         ),
     )
     .expect("write the source");
@@ -46,7 +46,7 @@ fn a_block_over_a_grammar_is_its_entry_s_value() {
 #[test]
 fn the_block_has_the_entry_s_type() {
     let found = findings(&format!(
-        "{NUM}fn main() {{\n    let b: bool = dsl Num {{ 42 }} eod\n    println(f\"{{b}}\")\n}}\n"
+        "{NUM}fn main() throws {{\n    let b: bool = dsl Num {{ 42 }} eod\n    println(f\"{{b}}\")\n}}\n"
     ));
     assert!(
         found
@@ -61,7 +61,7 @@ fn the_block_has_the_entry_s_type() {
 #[test]
 fn text_the_grammar_refuses_is_refused_at_the_block() {
     let found = findings(&format!(
-        "{NUM}fn main() {{\n    let x = dsl Num {{ x }} eod\n    println(f\"{{x}}\")\n}}\n"
+        "{NUM}fn main() throws {{\n    let x = dsl Num {{ x }} eod\n    println(f\"{{x}}\")\n}}\n"
     ));
     assert!(found.iter().any(|f| f.code == "NK1178"), "{found:#?}");
 }
@@ -73,7 +73,7 @@ fn two_blocks_in_one_statement_are_two_values() {
     let dir = common::scratch_dir("dsl-grammar-two");
     std::fs::write(
         dir.join("two.nika"),
-        format!("{NUM}fn main() {{\n    println(f\"{{dsl Num {{ 4 }} eod}} {{dsl Num {{ 2 }} eod}}\")\n}}\n"),
+        format!("{NUM}fn main() throws {{\n    println(f\"{{dsl Num {{ 4 }} eod}} {{dsl Num {{ 2 }} eod}}\")\n}}\n"),
     )
     .expect("write the source");
     let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))

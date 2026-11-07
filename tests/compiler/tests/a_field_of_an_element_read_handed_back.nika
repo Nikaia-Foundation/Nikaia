@@ -17,6 +17,6 @@ fn inner_of(m: collections::BTreeMap[String, Item], k: String) -> Inner? {
 	return s.inner
 }
 
-fn main() {
+fn main() throws {
 	println("unreached")
 }

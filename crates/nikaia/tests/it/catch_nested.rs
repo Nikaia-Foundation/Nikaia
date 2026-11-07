@@ -90,14 +90,14 @@ fn outer(x: i64) -> i64 throws {{
     if x > 100 {{ throw Bad {{ code: 2 }} }}
     x + 1
 }}
-fn show(x: i64) {{
+fn show(x: i64) throws {{
     let v = outer(inner(x)) catch {{
         println(f"caught {{error}}")
         return
     }}
     println(f"{{v}}")
 }}
-fn main() {{
+fn main() throws {{
     show(5)
     show(-1)
     show(500)
@@ -128,7 +128,7 @@ fn read(x: i64) -> i64 throws {{
     }}
     v
 }}
-fn main() {{
+fn main() throws {{
     println(f"{{read(7) catch {{ -1 }}}}")
     println(f"{{read(-7) catch {{ -1 }}}}")
 }}
@@ -146,13 +146,13 @@ fn f(x: i64) -> i64 throws {{
     if x < 0 {{ throw Bad {{ code: x }} }}
     x
 }}
-fn sum(a: i64, b: i64) -> i64 {{
+fn sum(a: i64, b: i64) -> i64 throws {{
     f(a) + f(b) catch {{
         println(f"caught {{error}}")
         0
     }}
 }}
-fn main() {{
+fn main() throws {{
     println(f"{{sum(1, 2)}}")
     println(f"{{sum(-4, 2)}}")
     println(f"{{sum(1, -5)}}")
@@ -173,7 +173,7 @@ fn outer(x: i64) -> i64 throws {{
     if x > 100 {{ throw Bad {{ code: 4 }} }}
     x + 1
 }}
-fn main() {{
+fn main() throws {{
     let v = outer(fs::read_to_string("missing.txt", fs::Root::Anywhere).len()) catch {{
         println("caught")
         return
@@ -196,7 +196,7 @@ impl Error for Bad {
     fn message(ref self) -> String { "bad" }
 }
 fn f() throws { throw Bad {} }
-fn main() {
+fn main() throws {
     f() catch { println(f"caught {error}"); return }
 }
 "#,

@@ -1,0 +1,22 @@
+-- an assert on standard input
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n > 0)`, or `return … if !(n > 0)`. After that line, this `assert` is proved.
+-- after the guard
+Checked p.nika
+-- trusted: true, a claim as any other
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- trusted: true, checked at run time
+Checked p.nika
+warning[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+-- a file read, no marker
+input provenance: untrusted
+    fs::read_to_string is untrusted
+hash for a map keyed by the input: keyed, per-process random seed - key choice cannot be aimed at the table
+-- a file read, trusted: true
+input provenance: trusted
+    fs::read_to_string is trusted: `trusted: true` at p.nika:5
+hash for a map keyed by the input: fast, fixed seed - no adversary chooses these keys
+-- trusted: takes a bool
+error[NK1106]: The option `trusted` of `fs::read_to_string` takes `bool`, but you're passing `ref String`.
+-- trusted: takes a value
+error[NK1117]: `maybe` isn't declared anywhere.

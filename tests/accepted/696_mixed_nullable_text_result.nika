@@ -46,7 +46,7 @@ fn early(a: ref String, c: i64) -> String? {
     return o
 }
 
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     println(part(x, false) ?? "-")
     println(part(x, true) ?? "-")

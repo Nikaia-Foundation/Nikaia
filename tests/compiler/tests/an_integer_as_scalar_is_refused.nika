@@ -6,7 +6,7 @@ fn letter(cp: i64) -> scalar {
     return cp as scalar
 }
 
-fn main() {
+fn main() throws {
     let mut out = String()
     out.push(letter(65))
     out.push(8232 as scalar)

@@ -2,6 +2,6 @@ fn f(grammar_: i64) -> i64 sync {
     return grammar_
 }
 
-fn main() {
+fn main() throws {
     println(f"{f(1)}")
 }

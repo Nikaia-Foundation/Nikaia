@@ -1,0 +1,10 @@
+use compiler_tests
+
+/// The check `derived_take` keeps (ADR-391 D1, see
+/// `prove_derived_precondition_beside.nika`) is there: a count past the end
+/// from `src/derived_beside_caller.nika` stops the program at the index in
+/// `src/derived_beside.nika` (#1351).
+fn main() throws {
+	let xs = [1, 2, 3]
+	println(f"{compiler_tests::derived_take_first(xs, 5)}")
+}

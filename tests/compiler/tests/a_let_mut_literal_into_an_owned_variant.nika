@@ -11,7 +11,7 @@ struct Held {
 	why: String,
 }
 
-fn shown(held: Vec[E]) {
+fn shown(held: Vec[E]) throws {
 	for e in held {
 		match e {
 			E::V(s) => println(s),
@@ -20,7 +20,7 @@ fn shown(held: Vec[E]) {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let c = true
 	let mut held: Vec[E] = []
 	held.push(E::V(f"{1}"))

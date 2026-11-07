@@ -33,7 +33,7 @@ description: >-
     return n
 }
 
-fn main() {
+fn main() throws {
     println(f"{percent(140)}")
 }
 </code></pre>
@@ -112,7 +112,7 @@ fn per_row(rows: int) -&gt; int {
     return percent(50, r)           // r &gt;= 1: proved, no check
 }
 
-fn main() {
+fn main() throws {
     println(f"{per_row(4)}% {share(3, 4)}%")
     // and this call breaks it:
     println(f"{share(1, 0)}%")
@@ -140,7 +140,7 @@ fn main() {
     return a
 }
 
-fn main() {
+fn main() throws {
     assert(fib(10) == 54)
     println(f"{fib(10)}")
 }
@@ -207,7 +207,7 @@ fn price(base: int, member: bool) -&gt; int {
     return p
 }
 
-fn main() {
+fn main() throws {
     println(f"{steps(5)} {price(12, true)}")
 }
 </code></pre>
@@ -312,7 +312,7 @@ fn area(w: int, h: int) -&gt; int {
     return a
 }
 
-fn main() {
+fn main() throws {
     let scores = [3, 5, 9]
     let n = scores.len()
     assert(n == 3)
@@ -352,7 +352,7 @@ fn main() {
     </div>
     <div class="home-code markdown-body home-code-stack">
 <pre><code class="language-nika">/// Divides 100 by a, a few times.
-fn main(a: int; times: int = 4) {
+fn main(a: int; times: int = 4) throws {
     assert(a &gt; 0)
     for i in 0..&lt;times {
         println(f"{i}: {100 / a}")

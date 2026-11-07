@@ -1,0 +1,14 @@
+// A precondition broken for one value of a loop is shown false (NK1207, with
+// the value) though the turn prints after the call: a print fails only by
+// what is outside the program, so it narrows no state (ADR-392, ADR-269 D8).
+fn percent(part: i64, whole: i64) -> i64 {
+    assert(whole > 0)
+    return part * 100 / whole
+}
+
+fn main() throws {
+    for i in 0..<10 {
+        let x = percent(1, i)
+        println(f"{x}")
+    }
+}

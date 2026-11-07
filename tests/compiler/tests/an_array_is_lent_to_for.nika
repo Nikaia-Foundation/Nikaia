@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let names: Array[String, 2] = ["ab", "cd"]
     for x in names {
         println(x)

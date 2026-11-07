@@ -18,7 +18,7 @@ fn single(a: ref Vec[E]) -> ref E? {
     return a[0]
 }
 
-fn main() {
+fn main() throws {
     let a = [E { n: 1 }]
     let b = [E { n: 2 }]
     let e = pick(a, b, false) ?? return

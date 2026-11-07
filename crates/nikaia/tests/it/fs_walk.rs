@@ -100,7 +100,7 @@ fn a_walk_lists_every_file_under_a_directory() {
 fn a_walk_out_of_its_root_is_refused() {
     let source = "use std::fs\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let names = fs::walk(\"..\", fs::Root::Dir(\"tree\")) catch {\n\
                   \x20       println(\"refused\")\n\
                   \x20       return\n\

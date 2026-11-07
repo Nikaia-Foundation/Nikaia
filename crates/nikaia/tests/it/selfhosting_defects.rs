@@ -89,7 +89,7 @@ fn slow(n: i64) -> i64 {
 
 fn double(n: i64) -> i64 sync { return n * 2 }
 
-fn main() {
+fn main() throws {
     let f: fn(i64) -> i64 = slow
     let g: fn(i64) -> i64 sync = double
     println(f"{f(5) + g(5)}")
@@ -121,7 +121,7 @@ fn slow(n: i64) -> i64 {
 
 fn double(n: i64) -> i64 sync { return n * 2 }
 
-fn main() {
+fn main() throws {
     let p = Pair { f: slow, g: double }
     let f = p.f
     let g = p.g
@@ -149,7 +149,7 @@ fn both(f: fn(i64) -> i64, g: fn(i64) -> i64 sync) -> i64 {
     return f(1) + g(2)
 }
 
-fn main() {
+fn main() throws {
     let r = both(fn(x) {
         time::sleep(1.millis())
         return x + 10
@@ -178,12 +178,12 @@ struct Holder {
     g: fn(i64) -> i64,
 }
 
-fn both(f: fn(i64) -> i64, g: fn(i64) -> i64) -> Holder {
+fn both(f: fn(i64) -> i64, g: fn(i64) -> i64) -> Holder throws {
     println(f"{f(1)}")
     return Holder { g: g }
 }
 
-fn main() {
+fn main() throws {
     let h = both(fn(x) {
         time::sleep(1.millis())
         return x + 10
@@ -217,7 +217,7 @@ fn slow(n: i64) -> i64 {
     return n + 1
 }
 
-fn main() {
+fn main() throws {
     let a = [1, 2, 3]
     let b = [4, 5, 6]
     let total = a.map(fn(x) { return slow(x) })[2] * 100 + b.map(fn(x) { return x * 2 })[2]
@@ -248,7 +248,7 @@ fn size[T: Struct](value: T) -> i64 {
     return n
 }
 
-fn main() {
+fn main() throws {
     let r = size(User { name: f"ada", age: 36 }) * 10 + size(Point { x: 1, y: 2, z: 3 })
     println(f"{r}")
 }
@@ -268,7 +268,7 @@ fn two_tasks_in_a_statement_take_each_its_own_handles() {
     let (said, rust) = printed_and_lowered(
         "task-handles-by-task",
         r#"
-fn main() {
+fn main() throws {
     let db = Shared(1)
     let other = Shared(2)
     let _ts = [spawn fn { println(f"{db}") }, spawn fn { println(f"{other}") }]
@@ -279,7 +279,7 @@ fn main() {
     let mut lines: Vec<&str> = said.lines().collect();
     lines.sort();
     assert_eq!(lines, ["1", "1 2", "2"]);
-    assert!(rust.contains("{ let db = db.clone(); nikaia_std::task::TaskHandle::start(async move { println!(\"{}\", db) }) }"), "{rust}");
+    assert!(rust.contains("{ let db = db.clone(); nikaia_std::task::FailingTask::start(async move { let __nikaia_task = { nikaia_std::io::println(format_args!(\"{}\", db))? }; Ok::<_, Box<dyn std::error::Error>>(__nikaia_task) }"), "{rust}");
 }
 
 /// **`throw made()` throws the type `made` returns**, as `throw Bad::No` does:
@@ -306,7 +306,7 @@ fn f(fail: bool) -> i64 throws {
     }
     return 1
 }
-fn main() {
+fn main() throws {
     let a = f(false) catch { 7 }
     let b = f(true) catch { 7 }
     println(f"{a} {b}")
@@ -328,7 +328,7 @@ fn a_reach_off_a_list_element_matches_on_the_reference() {
 fn first(v: ref Vec[String?]) -> String? {
     return v[0]?.clone()
 }
-fn main() {
+fn main() throws {
     let v: Vec[String?] = ["a", null]
     println(first(v) ?? "none")
     let w = v[1]?.clone()
@@ -360,7 +360,7 @@ struct Block {
 fn bump(mut e: Expr) {
     e.n += 1
 }
-fn main() {
+fn main() throws {
     let mut args: Vec[Expr] = [Expr { n: 1 }]
     let i = 0
     bump(args[i])
@@ -417,7 +417,7 @@ fn arg_val(v: ref Vec[Entry?]) -> i64 {
 fn arg_text(v: ref Vec[String?]) -> i64 {
     text_len(v[0] ?? return 0)
 }
-fn main() {
+fn main() throws {
     let v: Vec[Entry?] = [Entry { n: 3, s: "a" }, null]
     let w: Vec[Entry?] = [null]
     let ps: Vec[Pt?] = [Pt { x: 5 }]
@@ -443,7 +443,7 @@ fn a_typed_list_of_nullable_texts_is_lent_whole() {
         "nullable-text-list-lent",
         r#"
 fn n(xs: ref Vec[String?]) -> i64 { xs.len() }
-fn main() {
+fn main() throws {
     let ts: Vec[String?] = ["abc"]
     let us: Vec[String?] = ["a", null, "b"]
     println(f"{n(ts)} {n(us)} {ts[0] ?? "-"}")
@@ -461,7 +461,7 @@ fn a_narrower_integer_widens_into_a_nullable_slot() {
         "widen-some",
         r#"struct R { at: i64? }
 struct S { start: u32 }
-fn main() {
+fn main() throws {
     let s = S { start: 3 }
     let r = R { at: s.start }
     println(f"{r.at ?? 0}")
@@ -479,7 +479,7 @@ fn a_nullable_view_of_a_copy_is_matched_as_the_value() {
     let (said, lowered) = printed_and_lowered(
         "copied-match",
         r#"use std::collections
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, bool] = collections::BTreeMap()
     m.insert("a", true)
     let s = m.get("a")
@@ -500,7 +500,7 @@ fn main() {
 fn a_literal_beside_a_widened_integer_takes_the_common_type() {
     let (printed, _) = printed_and_lowered(
         "literal-common-type",
-        "comptime M: i64 = 15\n\nfn main() {\n    let h: u32 = 0xABCD\n    \
+        "comptime M: i64 = 15\n\nfn main() throws {\n    let h: u32 = 0xABCD\n    \
          let a = (h & (M - 1)) as i64\n    let b = h & M\n    let c = (M - 1) | h\n    \
          let e = h ^ (M + 1)\n    let s: i64 = 5\n    let d: u32 = 3\n    \
          let p = s + 4 + (d >> 1)\n    let w: u64 = 7\n    let x = w + (d + 1)\n    \
@@ -516,7 +516,7 @@ fn a_character_in_the_arms_of_an_if_handed_to_a_byte_is_a_byte() {
     let (printed, _) = printed_and_lowered(
         "char-arms-byte",
         "fn pick(n: i64) -> u8 {\n    return match n { 0 => 'x', else => { 'y' } }\n}\n\n\
-         fn main() {\n    let b = true\n    let mut v: Vec[u8] = []\n    \
+         fn main() throws {\n    let b = true\n    let mut v: Vec[u8] = []\n    \
          v.push(if b { 'a' } else { 'b' })\n    let x: u8 = if b { 'c' } else { 'd' }\n    \
          v.push(x)\n    let w: Vec[u8] = [if b { 'e' } else { 'f' }]\n    \
          println(f\"{v[0]} {v[1]} {w[0]} {pick(0)} {pick(1)}\")\n}\n",
@@ -536,7 +536,7 @@ fn appending_to_a_text_local_takes_any_text() {
     s += "!"
     return s
 }
-fn main() {
+fn main() throws {
     let mut text = ""
     for i in 0..<3 {
         text += f"a{i}\n"
@@ -557,7 +557,7 @@ fn main() {
 fn an_f_string_appended_in_a_loop_prints_each_line() {
     let (said, _) = printed_and_lowered(
         "text-append-loop",
-        "fn main() {\n    let mut text = \"\"\n    for i in 0..<3 {\n        \
+        "fn main() throws {\n    let mut text = \"\"\n    for i in 0..<3 {\n        \
          text += f\"a{i}\\n\"\n    }\n    print(text)\n}\n",
     );
     assert_eq!(said, "a0\na1\na2\n");

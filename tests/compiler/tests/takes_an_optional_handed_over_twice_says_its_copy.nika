@@ -12,7 +12,7 @@ fn keep(t: Node?) -> i64 {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let t: Node? = Node { name: "a" }
 	println(keep(t))
 	println(keep(t))

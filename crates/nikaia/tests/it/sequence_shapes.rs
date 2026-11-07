@@ -82,7 +82,7 @@ fn a_demand_is_met_only_by_a_sequence_that_has_the_word() {
 #[test]
 fn a_range_written_in_place_stays_the_language_belows() {
     let rust = lowered(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let t = [1, 2, 3, 4, 5, 6]\n\
          \x20   for i in 0..<2 { println(f\"{t[i..<i + 2].len()}\") }\n\
          \x20   let kept = 0..<2\n\
@@ -104,7 +104,7 @@ fn a_range_written_in_place_stays_the_language_belows() {
 fn a_let_takes_a_sequence() {
     assert_eq!(
         codes(
-            "fn main() {\n\
+            "fn main() throws {\n\
              \x20   let xs = [1, 2, 3]\n\
              \x20   let s = xs.iter()\n\
              \x20   let t = s\n\
@@ -120,7 +120,7 @@ fn a_let_takes_a_sequence() {
 #[test]
 fn a_loop_takes_it_again_on_the_next_turn() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let s = xs.iter()\n\
          \x20   for x in xs {\n\
@@ -142,7 +142,7 @@ fn a_loop_takes_it_again_on_the_next_turn() {
 fn a_loop_that_revives_or_leaves_is_a_program() {
     assert_eq!(
         codes(
-            "fn main() {\n\
+            "fn main() throws {\n\
              \x20   let xs = [1, 2, 3]\n\
              \x20   let mut s = xs.iter()\n\
              \x20   for x in xs {\n\
@@ -165,7 +165,7 @@ fn a_loop_that_revives_or_leaves_is_a_program() {
 #[test]
 fn a_lambda_takes_it_again_on_the_next_call() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let s = xs.iter()\n\
          \x20   let n = xs.iter().map(fn(x) { s.count() })\n\
@@ -185,7 +185,7 @@ fn a_lambda_takes_it_again_on_the_next_call() {
 fn a_range_is_never_taken() {
     assert_eq!(
         codes(
-            "fn main() {\n\
+            "fn main() throws {\n\
              \x20   let r = 0..<3\n\
              \x20   let t = r\n\
              \x20   for i in 0..<2 { println(f\"{r.count()} {t.count()}\") }\n\
@@ -266,7 +266,7 @@ fn a_map_knows_what_its_elements_are() {
 fn the_arms_of_one_choice_do_not_take_from_each_other() {
     assert_eq!(
         codes(
-            "fn main() {\n\
+            "fn main() throws {\n\
              \x20   let xs = [1, 2, 3]\n\
              \x20   let s = xs.iter()\n\
              \x20   if xs.len() > 2 {\n\
@@ -286,7 +286,7 @@ fn the_arms_of_one_choice_do_not_take_from_each_other() {
     // …and a read **after** the choice is after whichever arm took it.
     assert_eq!(
         codes(
-            "fn main() {\n\
+            "fn main() throws {\n\
              \x20   let xs = [1, 2, 3]\n\
              \x20   let s = xs.iter()\n\
              \x20   if xs.len() > 2 {\n\
@@ -304,7 +304,7 @@ fn the_arms_of_one_choice_do_not_take_from_each_other() {
 fn two_walks_in_one_statement_are_refused() {
     assert_eq!(
         codes(
-            "fn main() {\n\
+            "fn main() throws {\n\
              \x20   let xs = [1, 2]\n\
              \x20   let s = xs.iter()\n\
              \x20   println(f\"{s.count() + s.count()}\")\n\
@@ -323,7 +323,7 @@ fn a_slice_handed_to_a_list_says_what_to_declare() {
         "fn total(xs: ref Vec[i64]) -> i64 {\n\
          \x20   return xs.len()\n\
          }\n\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let part = ref xs[0..<2]\n\
          \x20   println(f\"{total(part)}\")\n\

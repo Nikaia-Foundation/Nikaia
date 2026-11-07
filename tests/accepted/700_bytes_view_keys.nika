@@ -2,7 +2,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let s = f"a;b;a{""}"
     let mut m: collections::HashMap[ref Bytes, i64] = collections::HashMap()
     let b = s.bytes

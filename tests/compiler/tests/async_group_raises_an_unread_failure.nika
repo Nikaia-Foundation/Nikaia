@@ -43,7 +43,7 @@ fn run() -> i64 throws {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	let n = run() catch {
 		println(f"caught at the group's end: {error}")
 		0

@@ -36,7 +36,7 @@ fn printed(run: &Output) -> String {
 
 const READS: &str = "use std::fs\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
 \x20   let m = fs::map(\"d\", fs::Root::Anywhere) catch {\n\
 \x20       println(f\"map: {error}\")\n\
 \x20       return\n\
@@ -136,7 +136,7 @@ grammar Words {\n\
 \x20   entry rule words -> i64 = w:any* -> { w.len() }\n\
 }\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
 \x20   let m = fs::map(\"d\", fs::Root::Anywhere) catch { return }\n\
 \x20   let n = Words::words(m) catch {\n\
 \x20       println(f\"{error}\")\n\

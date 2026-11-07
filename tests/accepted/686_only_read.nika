@@ -4,7 +4,7 @@ fn word(n: i64) -> String {
     return f"w{n}"
 }
 
-fn main() {
+fn main() throws {
     for i in 0..<3 {
         if i >= 1 {
             let key: String? = word(i)

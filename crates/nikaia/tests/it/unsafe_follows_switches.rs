@@ -22,7 +22,7 @@ fn f(b: ref Bytes, xs: ref Vec[i64], i: i64, k: i64, n: i32) -> i64 {
     return xs[i] + j + s + (v.lane(0) as i64) + (m as i64)
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[u8] = []
     v.resize(64, 0)
     for j in 0..<64 { v[j] = j as u8 }
@@ -37,7 +37,7 @@ const VOUCHED: &str = r#"fn f(xs: ref Vec[i64], i: i64) -> i64 {
     return xs[i]
 }
 
-fn main() {
+fn main() throws {
     println(f"{f([1, 2, 3], 1)}")
 }
 "#;

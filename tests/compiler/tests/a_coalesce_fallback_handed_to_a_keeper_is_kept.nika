@@ -16,7 +16,7 @@ fn either(first: String?, other: String) -> Name {
     return store(first ?? other)
 }
 
-fn main() {
+fn main() throws {
     let mut t = " ab ".trim().clone()
     t.push_str("c")
     let n = either(null, t)

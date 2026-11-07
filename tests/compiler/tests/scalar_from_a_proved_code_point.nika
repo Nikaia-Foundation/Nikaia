@@ -16,7 +16,7 @@ fn stated(n: i64) -> scalar {
     return scalar::from(n)
 }
 
-fn main() {
+fn main() throws {
     let mut out = String()
     out.push(scalar::from(0x41))
     out.push(checked(233) ?? '?')

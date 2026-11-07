@@ -8,6 +8,6 @@ pub fn h(s: ref String, c: bool) -> String {
     return y
 }
 
-fn main() {
+fn main() throws {
     println(h("a", true))
 }

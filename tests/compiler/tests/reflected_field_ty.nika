@@ -14,7 +14,7 @@ struct User {
 	home: Point,
 }
 
-fn show[T: Struct](_value: T) {
+fn show[T: Struct](_value: T) throws {
 	for field in T::fields {
 		println(f"{field.name}: {field.ty::name}")
 		if field.ty::kind == meta::Type::Text {
@@ -33,7 +33,7 @@ struct Line {
 
 // Where every field's type is a struct, `field.ty::fields` is walked as
 // `T::fields` is.
-fn show_parts[T: Struct](_value: T) {
+fn show_parts[T: Struct](_value: T) throws {
 	for field in T::fields {
 		for part in field.ty::fields {
 			println(f"{field.name}.{part.name}: {part.ty::name}")
@@ -41,7 +41,7 @@ fn show_parts[T: Struct](_value: T) {
 	}
 }
 
-fn main() {
+fn main() throws {
 	show(User { name: "a", age: 1, tags: [], home: Point { x: 0.0, y: 1.0 } })
 	show(Point { x: 0.0, y: 1.0 })
 	show_parts(Line { from: Point { x: 0.0, y: 1.0 }, to: Point { x: 2.0, y: 3.0 } })

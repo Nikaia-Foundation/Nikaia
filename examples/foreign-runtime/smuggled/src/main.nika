@@ -14,7 +14,7 @@
 // wrote and reviews. That is not a proof of safety: a wrong description would
 // let it through.
 
-fn main() {
+fn main() throws {
     let handle = hyper_shim::local_handle("not Send")
     let crossed = hyper_shim::across_a_thread_unchecked(handle)
     println(f"crossed: {crossed}")

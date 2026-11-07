@@ -1,7 +1,7 @@
 // Owned text is lent to `strip_prefix` and `strip_suffix` as to
 // `starts_with`, and a literal asked of a list of text is a view of text
 // (both reached `rustc` unlent in `tools/*.nika`).
-fn main() {
+fn main() throws {
     let name: String = "now"
     let prefix = f"from({name}::"
     let error: String = "from(now::f)"

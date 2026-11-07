@@ -26,7 +26,7 @@ fn alone(a: ref A) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(one(A { args: [3] }, true))
     println(one(A { args: [] }, true))
     println(one(A { args: [1, 2] }, true))

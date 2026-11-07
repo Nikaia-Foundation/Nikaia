@@ -73,10 +73,15 @@ pub fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &Check
                     let written = world.here.text(named);
                     let owner = world.here.text(target.name);
                     if written == "Cleanup" { state.a_cleanup_shaped(world, &owner, methods, &item.span); }
+                    if written == "Drop" {
+                        state.a_drop_that_throws(world, &owner, methods);
+                        state.inside_a_drop = !world.own.traits.contains_key("Drop");
+                    }
                     if written == "Fatal" { state.a_fatal_type_that_is_no_error(world, &owner, &item.span); }
                     state.a_trait_nothing_declares(&world.here, world, &written, &item.span);
                 }
                 check_program_impl(state, world, host, target, methods);
+                state.inside_a_drop = false;
             },
             Item::Test { body, .. } => { check_program_body(state, world, host, body); },
             Item::Bench { body, .. } => { check_program_body(state, world, host, body); },

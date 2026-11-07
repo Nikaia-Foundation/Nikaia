@@ -40,7 +40,7 @@ fn lowered(source: &str) -> String {
 /// and D2's lowering — `N` elements inline, nothing allocated.
 #[test]
 fn an_array_is_n_elements_inline() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let origin: Array[f64, 3] = [0.0, 1.5, 2.5]\n\
                   \x20   println(f\"{origin[1]}\")\n\
                   }\n";
@@ -57,7 +57,7 @@ fn an_array_is_n_elements_inline() {
 /// whole of that ruling, measured in one file.
 #[test]
 fn the_same_literal_is_a_vec_or_an_array_by_its_use() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let list = [1, 2, 3]\n\
                   \x20   let array: Array[i64, 3] = [1, 2, 3]\n\
                   \x20   println(f\"{list.len()} {array.len()}\")\n\
@@ -74,7 +74,7 @@ fn the_same_literal_is_a_vec_or_an_array_by_its_use() {
 #[test]
 fn a_literal_of_the_wrong_length_is_refused() {
     let found: Vec<_> = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let a: Array[i64, 3] = [1, 2]\n\
          \x20   println(f\"{a[0]}\")\n\
          }\n",
@@ -128,7 +128,7 @@ fn a_signature_with_an_array_is_recorded() {
 /// written type, and a count is one of them.
 #[test]
 fn a_count_is_not_an_undeclared_type() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let a: Array[i64, 2] = [1, 2]\n\
                   \x20   println(f\"{a[0]}\")\n\
                   }\n";
@@ -148,7 +148,7 @@ fn an_array_of_numbers_is_passed_by_value() {
                   \x20   return xs[0] + xs[1] + xs[2]\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{sum([1, 2, 3])}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -163,7 +163,7 @@ fn an_array_of_numbers_is_passed_by_value() {
 fn a_struct_field_holds_one() {
     let source = "struct Vector3 { parts: Array[f64, 3] }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let v = Vector3 { parts: [1.0, 2.0, 3.0] }\n\
                   \x20   println(f\"{v.parts[2]}\")\n\
                   }\n";
@@ -183,7 +183,7 @@ fn a_return_takes_the_declared_array() {
                   \x20   return [0, 0]\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{zeros()[1]}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -200,7 +200,7 @@ fn a_return_takes_the_declared_array() {
 #[test]
 fn an_element_of_the_wrong_type_is_the_lets_own_refusal() {
     let found: Vec<_> = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let a: i64 = 1\n\
          \x20   let b: Array[ref String, 1] = [a]\n\
          \x20   println(f\"{b[0]}\")\n\
@@ -224,7 +224,7 @@ fn an_element_of_the_wrong_type_is_the_lets_own_refusal() {
 /// [Part III C.4](../../../docs/specification/30-nikaia-tooling.md)'s class.
 #[test]
 fn a_vec_of_arrays_takes_its_shape_one_level_down() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let grid: Vec[Array[f64, 2]] = [[1.0, 2.0], [3.0, 4.0]]\n\
                   \x20   println(f\"{grid[0][1]}\")\n\
                   }\n";
@@ -239,7 +239,7 @@ fn a_vec_of_arrays_takes_its_shape_one_level_down() {
 /// **And an array of arrays**, where the walk through is the outer array's own.
 #[test]
 fn an_array_of_arrays_lowers_both_levels() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let deep: Array[Array[i64, 2], 2] = [[1, 2], [3, 4]]\n\
                   \x20   println(f\"{deep[1][0]}\")\n\
                   }\n";
@@ -256,7 +256,7 @@ fn an_array_of_arrays_lowers_both_levels() {
 #[test]
 fn an_inner_literal_of_the_wrong_length_is_refused_wherever_it_stands() {
     let found: Vec<_> = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let bad: Vec[Array[i64, 2]] = [[1, 2], [3]]\n\
          \x20   println(f\"{bad.len()}\")\n\
          }\n",
@@ -272,7 +272,7 @@ fn an_inner_literal_of_the_wrong_length_is_refused_wherever_it_stands() {
 /// opened only where an array is what it holds.
 #[test]
 fn a_plain_list_is_still_a_vec() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let plain: Vec[i64] = [1, 2, 3]\n\
                   \x20   println(f\"{plain.len()}\")\n\
                   }\n";

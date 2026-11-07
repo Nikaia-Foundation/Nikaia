@@ -68,7 +68,7 @@ fn a_passed_function_that_gained_an_error_is_named() {
                   pub fn now(f: fn() throws) throws {\n\
                   \x20   f()\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   now(fail) catch { println(\"caught\") }\n\
                   }\n";
     let found = findings(source, &[("fail", &["Bad"])]);
@@ -87,7 +87,7 @@ const HANDLED: &str = "use std::io\n\n\
                        \x20   return io::read_to_string()\n\
                        }\n\
                        \n\
-                       fn main() {\n\
+                       fn main() throws {\n\
                        \x20   let text = reads() catch { \"nothing\" }\n\
                        \x20   println(text)\n\
                        }\n";
@@ -152,7 +152,7 @@ fn a_call_outside_a_handler_is_not_noted() {
          \x20   return reads()\n\
          }\n\
          \n\
-         fn main() { println(onwards() catch { \"\" }) }\n",
+         fn main() throws { println(onwards() catch { \"\" }) }\n",
         &[("reads", &["io::IoError"])],
     );
     assert!(
@@ -177,7 +177,7 @@ fn every_shape_of_handler_gets_the_same_note() {
              \x20   return io::read_to_string()\n\
              }}\n\
              \n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let text = reads() {handler}\n\
              \x20   println(text)\n\
              }}\n"

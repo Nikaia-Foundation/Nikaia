@@ -30,7 +30,7 @@ fn pair(t: (String?, i64)) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(sum(null, null))
     println(sum(1, null))
     println(sum(null, 2))

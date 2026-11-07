@@ -31,7 +31,7 @@ const PROGRAM: &str = "use std::fs\n\
      \x20   return true\n\
      }\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let p: fs::Path = \"a.txt\"\n\
      \x20   let name = \"b.txt\"\n\
      \x20   let q = owned(name)\n\
@@ -109,7 +109,7 @@ fn a_number_is_not_a_file_name() {
 fn std_fs_takes_a_file_name_and_text_stands_there() {
     let source = "use std::fs\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let dir = \".\"\n\
          \x20   let name: String = \"x.txt\"\n\
          \x20   let p: fs::Path = \"x.txt\"\n\
@@ -146,7 +146,7 @@ fn std_fs_takes_a_file_name_and_text_stands_there() {
 
 const OPERATIONS: &str = "use std::fs\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let p: fs::Path = \"dir/data.csv\"\n\
      \x20   let q: fs::Path = \"dir//data.csv\"\n\
      \x20   let csv = p.ends_with(\".csv\")\n\
@@ -179,7 +179,7 @@ fn a_file_names_operations_are_stds_and_compare_bytes() {
 
 const JOINED: &str = "use std::fs\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let p: fs::Path = \"data.csv\"\n\
      \x20   let n = 3\n\
      \x20   let bak: fs::Path = f\"{p}.{n}.bak\"\n\
@@ -211,7 +211,7 @@ fn an_interpolated_name_is_joined_by_its_bytes() {
 fn a_name_is_printed_as_its_bytes() {
     let source = "use std::fs\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let p: fs::Path = \"data.csv\"\n\
          \x20   println(f\"found: {p}\")\n\
          \x20   print(p)\n\
@@ -220,7 +220,7 @@ fn a_name_is_printed_as_its_bytes() {
          }\n";
     let rust = lowered(source);
     assert!(
-        rust.contains("nikaia_std::fs::path::print(&(p), false, false);"),
+        rust.contains("nikaia_std::fs::path::print(&(p), false, false)?;"),
         "{rust}"
     );
     let dir = common::scratch_dir("file-path-print");
@@ -299,7 +299,7 @@ fn a_name_in_a_text_interpolation_is_refused_at_the_hole() {
 /// not refused** (D4): the use asks for a name, or writes its bytes.
 #[test]
 fn a_name_in_an_interpolation_that_builds_a_name_is_not_refused() {
-    let source = "use std::fs\n\nfn main() {\n\
+    let source = "use std::fs\n\nfn main() throws {\n\
                   \x20   let p: fs::Path = \"a.txt\"\n\
                   \x20   let bak: fs::Path = f\"{p}.bak\"\n\
                   \x20   println(f\"found: {p} and {bak}\")\n\
@@ -314,7 +314,7 @@ fn a_name_in_an_interpolation_that_builds_a_name_is_not_refused() {
 /// says how, and `display()` shows it.
 #[test]
 fn an_io_errors_name_is_a_file_name() {
-    let refused = "use std::fs\nuse std::io\n\nfn main() {\n\
+    let refused = "use std::fs\nuse std::io\n\nfn main() throws {\n\
                    \x20   let text = fs::read_to_string(\"nope.txt\", fs::Root::Dir(\".\")) catch {\n\
                    \x20       match error {\n\
                    \x20           io::IoError::NotFound(p) => f\"no file: {p}\"\n\
@@ -349,7 +349,7 @@ fn to_text_throws_by_the_names_source() {
                 \x20   let bak: fs::Path = f\"{p}.{q}.bak\"\n\
                 \x20   let joined = p.join(\"c\")\n\
                 \x20   return f\"{p.to_text()} {q.to_text()} {bak.to_text()} {joined.to_text()}\"\n\
-                }\n\nfn main() {\n    println(shown())\n}\n";
+                }\n\nfn main() throws {\n    println(shown())\n}\n";
     assert!(codes(made).is_empty(), "{:#?}", refusals(made));
 
     let given = "use std::fs\n\nfn shown(p: ref fs::Path) -> String {\n\
@@ -385,7 +385,7 @@ fn a_name_made_from_text_lowers_to_the_call_that_cannot_fail() {
         "use std::fs\n\nfn shown() -> String {\n\
          \x20   let p: fs::Path = \"a.txt\"\n\
          \x20   return p.to_text()\n\
-         }\n\nfn main() {\n    println(shown())\n}\n",
+         }\n\nfn main() throws {\n    println(shown())\n}\n",
     );
     assert!(rust.contains("nikaia_std::fs::path::text_of("), "{rust}");
     assert!(!rust.contains("nikaia_std::fs::path::to_text("), "{rust}");

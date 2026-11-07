@@ -12,7 +12,7 @@ fn lookup_h(m: ref collections::HashMap[String, String], k: ref String) -> Strin
     return m.get(k)?.clone() ?? "none"
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Ty] = collections::BTreeMap()
     m["a"] = Ty { name: "A" }
     let mut h: collections::HashMap[String, String] = collections::HashMap()

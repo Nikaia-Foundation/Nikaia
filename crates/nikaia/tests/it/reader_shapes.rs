@@ -34,7 +34,7 @@ fn lowered(purpose: &str, source: &str) -> String {
 /// step - the largest single cost of reading a ledger in Nikaia.
 #[test]
 fn the_characters_of_a_text_are_listed_at_their_size() {
-    let source = r#"fn main() {
+    let source = r#"fn main() throws {
     let word = "héllo"
     let c: Vec[scalar] = word.chars().collect()
     println(f"{c.len()} {c[1]}")
@@ -58,7 +58,7 @@ fn shout(text: ref String) -> String {
     return text.to_uppercase()
 }
 
-fn main() {
+fn main() throws {
     let mut lines = [Line::Pair { key: "a", value: "b" }, Line::Skip]
     for one in lines.drain() {
         match one {
@@ -97,7 +97,7 @@ fn first(rows: ref Array[Row]) -> i64 {
     return rows[0].doubled() + rows[1..<2][0].doubled()
 }
 
-fn main() {
+fn main() throws {
     let rows = [Row { value: 1 }, Row { value: 5 }]
     println(f"{first(rows)}")
 }

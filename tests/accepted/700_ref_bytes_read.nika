@@ -22,7 +22,7 @@ fn first(b: ref Bytes) -> ref Bytes {
     return b[0..<1]
 }
 
-fn main() {
+fn main() throws {
     let s = f"a;b;c{1}"
     println(count(s.bytes))
     println(head(s.bytes))

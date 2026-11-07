@@ -2,7 +2,7 @@
 // `ref` parameter and text of its own holds both (ADR-282 D13, D14, #840).
 struct Holder { name: String }
 
-fn pick(h: ref Holder, c: bool, n: i64) -> i64 {
+fn pick(h: ref Holder, c: bool, n: i64) -> i64 throws {
     let mut x = "none"
     if c {
         x = h.name
@@ -13,7 +13,7 @@ fn pick(h: ref Holder, c: bool, n: i64) -> i64 {
     return x.len()
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { name: f"ab{1}" }
     println(pick(h, true, 3))
     println(pick(h, false, 3))

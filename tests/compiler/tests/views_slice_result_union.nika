@@ -11,7 +11,7 @@ fn same(a: Array[i64]) -> Array[i64] {
     return a
 }
 
-fn main() {
+fn main() throws {
     let x: Array[i64, 3] = [1, 2, 3]
     let y: Array[i64, 2] = [4, 5]
     let l = longer(x, y)

@@ -75,6 +75,66 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
     Ok(code)
 }
 
+/// `nikaia migrate print-throws PATH...` (ADR-392, #1360): the exit code.
+/// The rewriting is Nikaia (`tools/migrate_print_throws.nika`). The `.nika`
+/// files named are read together: a failing `pub` function of one fails its
+/// callers in the others, to the fixpoint. A Markdown block is read alone.
+pub fn print_throws(named: &[PathBuf]) -> Result<i32> {
+    use nikaia_std::tools::migrate_print_throws as tool;
+    let mut files = Vec::new();
+    for path in named {
+        match path.is_dir() {
+            true => files_under(path, &mut files)?,
+            false => files.push(path.clone()),
+        }
+    }
+    let mut sources = Vec::new();
+    for file in &files {
+        let source = std::fs::read_to_string(file)
+            .with_context(|| format!("cannot read {}", file.display()))?;
+        sources.push(source);
+    }
+    let is_md = |file: &PathBuf| file.extension().is_some_and(|e| e == "md");
+    let mut outside: Vec<String> = Vec::new();
+    loop {
+        let mut found: Vec<String> = Vec::new();
+        for (file, source) in files.iter().zip(&sources) {
+            if !is_md(file) {
+                found.extend(tool::migrate_print_throws_exports(source, &outside));
+            }
+        }
+        found.sort();
+        found.dedup();
+        if found == outside {
+            break;
+        }
+        outside = found;
+    }
+    for (file, source) in files.iter().zip(&sources) {
+        let migrated = match is_md(file) {
+            true => tool::migrate_print_throws_markdown(source),
+            false => tool::migrate_print_throws_nika(source, &outside),
+        };
+        if &migrated != source {
+            std::fs::write(file, &migrated)
+                .with_context(|| format!("cannot write {}", file.display()))?;
+            println!("migrated {}", file.display());
+        }
+        // A printing lambda is left to its author (supervisor, 2026-11-07).
+        let lambdas = match is_md(file) {
+            true => tool::migrate_print_throws_markdown_lambdas(source),
+            false => tool::migrate_print_throws_lambdas(source, &outside),
+        };
+        for line in lambdas {
+            eprintln!(
+                "{}:{line}: a printing lambda handed to a parameter that cannot fail; handle it or use a for loop",
+                file.display()
+            );
+        }
+    }
+    Ok(0)
+}
+
 enum Package {
     /// Not a source or a test of a package: the file is read alone.
     None,

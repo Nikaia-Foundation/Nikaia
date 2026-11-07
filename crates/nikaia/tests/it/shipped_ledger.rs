@@ -34,7 +34,7 @@ fn said(output: &Output) -> String {
 }
 
 const ENTRY: &str =
-    "use fremd\n\nfn main() {\n    let n = fremd::drei()\n    println(f\"{n + 1}\")\n}\n";
+    "use fremd\n\nfn main() throws {\n    let n = fremd::drei()\n    println(f\"{n + 1}\")\n}\n";
 
 /// A project that depends on the path Rust crate `fremd` and writes `use fremd`.
 fn a_project_with_a_crate(purpose: &str) -> PathBuf {

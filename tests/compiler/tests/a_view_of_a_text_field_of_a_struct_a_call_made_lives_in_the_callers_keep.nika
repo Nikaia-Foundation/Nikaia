@@ -28,14 +28,14 @@ fn ran(n: i64) -> Run {
     return Run { out: f"a{n}\nb{n + 1}", code: n, names: ["x", "y"] }
 }
 
-fn parse(n: i64) -> Tree {
+fn parse(n: i64) -> Tree throws {
     let res = ran(n)
     let copied = res.out.clone()
     println(f"{copied.len()} {res.code} {res.names.len()}")
     return from_dump(res.out)
 }
 
-fn main() {
+fn main() throws {
     let t = parse(1)
     println(t.nodes[0].kind)
     println(t.nodes[1].kind)

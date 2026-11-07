@@ -278,6 +278,12 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         // leaves it (`NK1132`). Its wait point is the block's (`check_async_block`).
         Expr::Async(inner, _, within) => {
             check_core_async_within(state, world, host, within, span)
+            // **Not inside a door** (Part I 8.1.2, `NK2203`): said once, at
+            // the outermost form.
+            let held = state.inside_a_door
+            if state.an_async_inside_a_door(span) {
+                state.inside_a_door = false
+            }
             if state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
@@ -307,6 +313,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             // A lambda's own type is not asked (it is run, not bound).
             let ty = if run { check_core_value_of(state, world, host, inner, span) } else { check_core_expr(state, world, host, inner, span) }
             state.expected = expected?.clone()
+            state.inside_a_door = held
             state.flow.async_depth -= 1
             state.flow.loops = loops
             state.flow.barrier = barrier
@@ -337,6 +344,10 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         // starts at least one task (`NK2111`).
         Expr::AsyncGroup(block, _, within) => {
             check_core_async_within(state, world, host, within, span)
+            let held = state.inside_a_door
+            if state.an_async_inside_a_door(span) {
+                state.inside_a_door = false
+            }
             if state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
@@ -351,6 +362,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             state.flow.async_started = 0
             state.flow.async_group_block = id_of(expr) as i64
             let ty = check_core_block(state, world, host, block)
+            state.inside_a_door = held
             if state.flow.async_started == 0 {
                 state.a_group_with_no_task(span)
             }
@@ -394,6 +406,9 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             }
             if child {
                 state.flow.async_started += 1
+                // A child task's group is the door's block, which waits for
+                // it with the lock held (`NK2203`).
+                state.an_async_inside_a_door(span)
             }
             check_core_ops_spawn(state, world, host, body, written_async, child, span)
         },

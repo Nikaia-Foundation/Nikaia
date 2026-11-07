@@ -13,7 +13,7 @@ fn pick(s: String, n: i64) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(pick(f"base{1}", 0))
     println(pick("x", 1))
     let owned = f"y{2}"

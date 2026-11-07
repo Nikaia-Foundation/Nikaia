@@ -17,7 +17,7 @@ struct Tally {
     total: i64,
 }
 
-fn main() {
+fn main() throws {
     let t = Lines::file("1\n2\n") catch {
         return
     }

@@ -178,7 +178,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
       rule WS = "" -> { }
       entry rule doc(n: i64) -> i64 = d:dec[i64](digit+) eof -> { d + n }
   }
-  fn main() {
+  fn main() throws {
       let input = Bytes("41".bytes().collect())
       let r = G::doc(input, 1) catch {
           println("error")
@@ -272,6 +272,9 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * `for (i, mut x) in v.iter_mut().enumerate()` is refused (`mut` in a tuple pattern); use one read-only enumerate loop and a separate `for mut x in v` loop. (issue-1266)
 * `a..b` includes `b` in Nikaia; write `a..<b` for the half-open range. (issue-1218)
 * A trait method's signature ends at the line end; a `;` after it is a parse error ("Expected `}`"). (issue-1224)
+* A `match`'s catch-all arm is `else => ...`; `_ =>` is refused. (issue-1352)
+* A text position taken from `match s.find(..) { at => .. }` loses its origin (NK1214); write `let at = s.find(..) ?? return null` in a helper. (issue-1339)
+* `i64` has no `checked_div_euclid`/`checked_rem_euclid`; guard `MIN / -1` and use `div_euclid`/`rem_euclid`. (issue-1339)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`

@@ -275,6 +275,30 @@ impl CheckState {
         self.findings.push(check_refusal("NK1117", span, f"`{name}` isn't declared anywhere.", ["A word the language doesn't know is read as a name, and a name has to be declared before it's used."], help))
     }
 
+    /// **`NK1140`: a `drop` cannot fail** (Part I 6.4, for ADR-392). It also
+    /// runs while a panic unwinds or a task is cancelled, where no failure can
+    /// come out, so a `drop` that says `throws` is the trait method that fails
+    /// under a declaration without the word. Teardown that can fail is a
+    /// `Cleanup`. Asked only of the language's `Drop`, not of a trait of the
+    /// name the program declares itself.
+    pub fn a_drop_that_throws(ref mut self, world: ref CheckWorld, target: ref String, methods: ref Vec[Spanned[Item]]) sync {
+        if world.own.traits.contains_key("Drop") {
+            return
+        }
+        for method in methods {
+            match method.node {
+                Item::Fn { name, can_throw, .. } => {
+                    let symbol = name ?? continue
+                    if world.words.resolve(symbol) != "drop" || !can_throw {
+                        continue
+                    }
+                    self.findings.push(check_refusal("NK1140", method.span, f"`{target}::drop` says `throws`, but a `drop` cannot fail.", ["`drop` also runs while a panic unwinds or a task is cancelled, and there no failure can come out (Part I 6.4)."], drop_help(target)))
+                }
+                else => {}
+            }
+        }
+    }
+
     /// **`NK2601`: an `impl Cleanup` is the one method `fn cleanup(ref mut
     /// self)`** ([ADR-297](../../docs/specification/adr/adr-297.md) D1). The
     /// synchronous fallback a type may also have is its own `impl Drop`, which
@@ -317,6 +341,12 @@ impl CheckState {
             self.findings.push(check_refusal("NK2601", span, f"`impl Cleanup for {target}` is missing its `cleanup` method.", [note.clone()], "Add `fn cleanup(ref mut self) { … }`."))
         }
     }
+}
+
+/// What a `drop` that would fail is told (Part I 6.4): catch it there, or
+/// make the teardown a `Cleanup`, which may fail.
+pub fn drop_help(target: ref String) -> String sync {
+    return f"Handle the failure in the body (`… catch {{ }}`), or move teardown that can fail to `impl Cleanup for {target} {{ fn cleanup(ref mut self) throws {{ … }} }}`."
 }
 
 fn a_known_maybe(ty: ref Ty) -> bool sync {

@@ -20,7 +20,7 @@ fn show(b: Box) -> String {
     return out
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { items: [] }
     for i in 0..<3 {
         let v = f"x{i}"

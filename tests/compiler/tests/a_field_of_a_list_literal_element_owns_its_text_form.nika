@@ -18,7 +18,7 @@ fn pad_left(text: String, width: i64) -> String {
     out = out + text
     return out
 }
-fn main() {
+fn main() throws {
     let sites = [Site { line: 7 }, Site { line: 12345 }]
     for site in sites {
         let cell = pad_left(site.line.to_string(), 4)

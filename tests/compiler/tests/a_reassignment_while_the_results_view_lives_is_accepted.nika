@@ -6,7 +6,7 @@ fn longest(a: String, b: String) -> String {
     return b.trim()
 }
 
-fn main() {
+fn main() throws {
     let x = "abc"
     let mut y = f"short"
     let r = longest(x, y)

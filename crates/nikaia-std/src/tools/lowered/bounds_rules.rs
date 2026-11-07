@@ -656,13 +656,15 @@ pub(crate) fn rules_element_inside(walk: &mut BoundsWalk, len: i64, index: &Expr
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn rules_exit(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: Option<&Expr>, throwing: bool, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if !walk.checking || !walk.rule_roots.contains_key("self") { return; }
-    for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "length" { if !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing { if !rules_hands_back(walk, facts, returned, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); } } }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn rules_hands_back(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: Option<&Expr>, b: &str, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
-    let value = match returned { Some(__nikaia_value) => __nikaia_value, None => return false };
-    rules_position(walk, facts, value, b, context, program, words, ask)
+    for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        if rule.kind == "length" { if !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing {
+            if returned.is_none() {
+                walk.rule_failed.insert(at);
+                continue;
+            }
+            if !rules_position(walk, facts, match returned { Some(__nikaia_value) => __nikaia_value, None => continue }, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); }
+        }
+    }
 }
 
 pub(crate) fn rules_same_length(walk: &mut BoundsWalk, facts: &BoundsFacts, rule: &BoundsRule, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {

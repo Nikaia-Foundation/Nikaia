@@ -5,7 +5,7 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let t = f"t{1}"
     for n in 0..<3 {
         let r = longest(if n == 0 { "lit" } else { f"n{n}" }, "ab")

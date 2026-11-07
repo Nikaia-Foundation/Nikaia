@@ -11,6 +11,6 @@ fn v() -> i64 sync {
 	return g[i64](1)
 }
 
-fn main() {
+fn main() throws {
 	println(f"{v()}")
 }

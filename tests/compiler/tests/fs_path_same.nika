@@ -3,7 +3,7 @@
 // text, as they sort together; `a/b` and `a/c`, `ab` and `a/b` are not.
 use std::fs
 
-fn main() {
+fn main() throws {
     let ab: fs::Path = "a/b"
     let doubled: fs::Path = "a//b"
     let dotted: fs::Path = "a/./b"

@@ -60,7 +60,7 @@ fn slot(xs: Vec[int], n: int) -> int {
     return xs[i]
 }
 
-fn main() {
+fn main() throws {
     let xs = [10, 20, 30]
     println(f"{slot(xs, 7)} {slot(xs, -2)}")
 }
@@ -112,7 +112,7 @@ fn double(x: i32) -> i32 {
     return x * 2
 }
 
-fn main() {
+fn main() throws {
     let xs = [4, 8, 15]
     println(f"{sum(xs)} {first(xs)} {percent(7)} {double(21)}")
 }
@@ -176,7 +176,7 @@ fn evens_small(xs: Vec[int]) -> i32 {
     return n
 }
 
-fn main() {
+fn main() throws {
     let xs = [1, 2, 4, 7]
     println(f"{evens(xs)} {evens_small(xs)}")
 }
@@ -212,7 +212,7 @@ fn probe(xs: Vec[i64], h: i64) -> i64 {
     return -1
 }
 
-fn main() {
+fn main() throws {
     let mut xs: Vec[i64] = []
     xs.resize(16384, 1)
     xs[5] = 0
@@ -250,7 +250,7 @@ fn first(xs: Vec[int]) -> int {
     return xs[0]
 }
 
-fn main() {
+fn main() throws {
     let empty: Vec[int] = []
     println(f"{first([3, 4])}")
     println(f"{first(empty)}")
@@ -343,7 +343,7 @@ fn greeting(name: String) -> String {
     return f"Hello, {name}"
 }
 
-fn main() {
+fn main() throws {
     let mut c = Counter { n: 0 }
     println(f"{area(4, 5)} {larger(3, 9)} {ratio(1.0, 4.0)} {total([1, 2])} {bump(c)}")
     println(greeting("Ada"))
@@ -403,7 +403,7 @@ fn last_first(xs: Vec[int]) -> int {
     return s
 }
 
-fn main() {
+fn main() throws {
     println(f"{halved(1, 4, 3)} {last_first([5, 6])}")
 }
 ```
@@ -440,7 +440,7 @@ fn smallest(xs: Vec[int]) -> int {
     return xs[0]
 }
 
-fn main() {
+fn main() throws {
     println(f"{smallest([1, 2, 3])}")
     println(f"{smallest([3, 1, 2])}")
 }

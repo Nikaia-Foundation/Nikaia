@@ -40,7 +40,7 @@ fn refused(name: &str, source: &str) -> String {
 /// of the text, and a position moved by a literal's `.len()`.
 #[test]
 fn a_position_from_find_cuts_its_text() {
-    let source = "fn split(line: ref String) {\n\
+    let source = "fn split(line: ref String) throws {\n\
          \x20   let sep = line.find(\";\") ?? return\n\
          \x20   let name = line[..<sep]\n\
          \x20   let rest = line[sep + 1..]\n\
@@ -49,7 +49,7 @@ fn a_position_from_find_cuts_its_text() {
          \x20   println(f\"{name}|{rest}|{same}|{whole}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   split(\"Hamburg;12.0\")\n\
          \x20   split(\"M\u{fc}nchen;-3.5\")\n\
          \x20   split(\"none\")\n\
@@ -66,7 +66,7 @@ fn a_position_from_find_cuts_its_text() {
 /// written.
 #[test]
 fn a_position_found_from_a_position_cuts() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let line = \"a;b\u{e4};c\"\n\
          \x20   let sep = line.find(\";\") ?? 0\n\
          \x20   let next = line.find(\";\"; from: sep + 1) ?? return\n\
@@ -82,7 +82,7 @@ fn a_position_found_from_a_position_cuts() {
 fn a_made_up_number_is_refused_with_the_view() {
     let err = refused(
         "positions-made-up",
-        "fn main() {\n    let s = \"Hamburg;12.0\"\n    println(s[0..<10])\n}\n",
+        "fn main() throws {\n    let s = \"Hamburg;12.0\"\n    println(s[0..<10])\n}\n",
     );
     assert!(err.contains("NK1214"), "{err}");
     assert!(err.contains("s.bytes[0..<10].text()"), "{err}");
@@ -94,12 +94,12 @@ fn a_made_up_number_is_refused_with_the_view() {
 fn a_counter_and_a_wrong_step_are_refused() {
     let counter = refused(
         "positions-counter",
-        "fn main() {\n    let s = \"abc\"\n    let mut i = 0\n    while i < 2 {\n        println(s[i..<i + 1])\n        i = i + 1\n    }\n}\n",
+        "fn main() throws {\n    let s = \"abc\"\n    let mut i = 0\n    while i < 2 {\n        println(s[i..<i + 1])\n        i = i + 1\n    }\n}\n",
     );
     assert!(counter.contains("NK1214"), "{counter}");
     let step = refused(
         "positions-step",
-        "fn main() {\n    let s = \"a::b\"\n    let at = s.find(\"::\") ?? return\n    println(s[at + 1..])\n}\n",
+        "fn main() throws {\n    let s = \"a::b\"\n    let at = s.find(\"::\") ?? return\n    println(s[at + 1..])\n}\n",
     );
     assert!(step.contains("NK1214"), "{step}");
 }
@@ -109,7 +109,7 @@ fn a_counter_and_a_wrong_step_are_refused() {
 fn a_position_of_another_text_is_refused() {
     let err = refused(
         "positions-other",
-        "fn main() {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.find(\";\") ?? return\n    println(b[..<sep])\n}\n",
+        "fn main() throws {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.find(\";\") ?? return\n    println(b[..<sep])\n}\n",
     );
     assert!(err.contains("NK1214"), "{err}");
     assert!(err.contains("another text"), "{err}");
@@ -123,7 +123,7 @@ fn a_cut_of_bytes_takes_any_number() {
          \x20   println(f\"{part.len()} {s.bytes[1..<3].text()}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   head(\"abcd\") catch {\n\
          \x20       println(\"failed\")\n\
          \x20   }\n\
@@ -138,7 +138,7 @@ fn a_cut_inside_a_scalar_stops_the_program() {
     let (ok, out, err) = nikaia(
         "positions-inside",
         "run",
-        "fn main() {\n    let s = \"x\u{e4}y\"\n    let at = s.find(\"\u{e4}\") ?? return\n    println(s[at + \"a\".len()..])\n}\n",
+        "fn main() throws {\n    let s = \"x\u{e4}y\"\n    let at = s.find(\"\u{e4}\") ?? return\n    println(s[at + \"a\".len()..])\n}\n",
     );
     assert!(!ok, "{out}{err}");
     assert!(err.contains("byte position 2 is inside a scalar"), "{err}");
@@ -150,7 +150,7 @@ fn a_cut_inside_a_scalar_stops_the_program() {
 fn a_position_from_rfind_cuts_its_text() {
     let out = run(
         "positions-rfind",
-        "fn last(name: String) -> String {\n    let colon = name.rfind(\"::\") ?? return name.clone()\n    return name[colon + \"::\".len()..].clone()\n}\n\nfn main() {\n    println(last(\"std::io::Write\"))\n    println(last(\"plain\"))\n}\n",
+        "fn last(name: String) -> String {\n    let colon = name.rfind(\"::\") ?? return name.clone()\n    return name[colon + \"::\".len()..].clone()\n}\n\nfn main() throws {\n    println(last(\"std::io::Write\"))\n    println(last(\"plain\"))\n}\n",
     );
     assert_eq!(out, "Write\nplain\n");
 }
@@ -160,7 +160,7 @@ fn a_position_from_rfind_cuts_its_text() {
 fn the_ends_moved_by_a_literal_cut() {
     let out = run(
         "positions-literal-ends",
-        "fn main() {\n    let t = \"ab-cdx\"\n    println(t[\"ab\".len()..])\n    println(t[..<t.len() - \"x\".len()])\n}\n",
+        "fn main() throws {\n    let t = \"ab-cdx\"\n    println(t[\"ab\".len()..])\n    println(t[..<t.len() - \"x\".len()])\n}\n",
     );
     assert_eq!(out, "-cdx\nab-cd\n");
 }
@@ -170,7 +170,7 @@ fn the_ends_moved_by_a_literal_cut() {
 fn an_rfind_position_of_another_text_is_refused() {
     let err = refused(
         "positions-rfind-other",
-        "fn main() {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.rfind(\";\") ?? return\n    println(b[..<sep])\n}\n",
+        "fn main() throws {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.rfind(\";\") ?? return\n    println(b[..<sep])\n}\n",
     );
     assert!(err.contains("NK1214"), "{err}");
     assert!(err.contains("another text"), "{err}");
@@ -197,7 +197,7 @@ fn a_fallback_that_never_returns_keeps_the_position() {
          \x20   return line[at + 1..]\n\
          }\n\
          \n\
-         fn by_return(line: ref String) {\n\
+         fn by_return(line: ref String) throws {\n\
          \x20   let at = line.find(\";\") ?? return\n\
          \x20   println(line[..<at])\n\
          }\n\
@@ -211,7 +211,7 @@ fn a_fallback_that_never_returns_keeps_the_position() {
     assert_eq!(out, "ab\n1.0\ncd\n");
     let err = refused(
         "positions-fallback-number",
-        "fn main() {\n    let line = \"ab;1.0\"\n    let at = line.find(\";\") ?? 1\n    println(line[..<at])\n}\n",
+        "fn main() throws {\n    let line = \"ab;1.0\"\n    let at = line.find(\";\") ?? 1\n    println(line[..<at])\n}\n",
     );
     assert!(err.contains("NK1214"), "{err}");
 }

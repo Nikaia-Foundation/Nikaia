@@ -24,7 +24,7 @@ fn mixed(s: String, n: i64) -> (String, String) {
     }
 }
 
-fn main() {
+fn main() throws {
     let (k, v) = halves("  x ")
     println(f"[{k}] [{v}]")
     let (a, b) = lits()

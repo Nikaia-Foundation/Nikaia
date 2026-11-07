@@ -20,7 +20,7 @@ fn walk(mut spots: Vec[Spot]) sync {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut spots = [
 		Spot { node: Wrap { inner: [1] }, at: 0 },
 		Spot { node: Wrap { inner: [] }, at: 1 },

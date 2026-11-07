@@ -10,6 +10,6 @@ fn hand(s: String) -> i64 {
     let v = keep(fn(x) { x + s.len() })
     v.len()
 }
-fn main() {
+fn main() throws {
     println(hand("abc"))
 }

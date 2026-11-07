@@ -2,7 +2,7 @@
 // `...` after it (ADR-yaml-1 D7); a `...` belongs to the document before it.
 use yaml
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::documents(input) catch {
 		println("error")
@@ -16,7 +16,7 @@ fn line(text: String) {
 	println(f"{docs.len()}: {parts.join(" ")}")
 }
 
-fn main() {
+fn main() throws {
 	line("")
 	line("...\n")
 	line("a\n")

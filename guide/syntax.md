@@ -137,7 +137,7 @@ What the loop wants to add goes into a list of its own, and that list is added o
 has finished:
 
 ```nika
-fn main() {
+fn main() throws {
     let mut users: Vec[String] = ["ada", "bob", "ada"]
     let mut more: Vec[String] = []
     for u in users {
@@ -158,7 +158,7 @@ For removing elements the standard library has `retain`, which keeps those the f
 accepts. The message names such a method (`retain`, `drain`, `entry`, `swap`) where one fits:
 
 ```nika
-fn main() {
+fn main() throws {
     let mut users: Vec[String] = ["ada", "bob", "ada"]
     users.retain fn(u) { u != "bob" }
     println(users.iter().join(", "))
@@ -330,7 +330,7 @@ fn parse_age(text: String) -> int throws {
     return 42
 }
 
-fn main() {
+fn main() throws {
     let age = parse_age("") catch {
         println(f"{error}")     // inside `catch`, the failure is called `error`
         0                       // …and the block supplies a replacement value
@@ -357,7 +357,7 @@ fn add(a: int, b: int) -> int {
     return a + b
 }
 
-fn main() {
+fn main() throws {
     let first = "the quick brown fox"
     let second = "jumps over the lazy dog"
 
@@ -422,7 +422,7 @@ fn total(first: String, second: String) -> int throws {
     return a + b                         // the second count's error is thrown here
 }
 
-fn main() {
+fn main() throws {
     let n = total("the quick brown fox", "jumps over the lazy dog") catch {
         println(f"caught: {error}")
         0
@@ -471,7 +471,7 @@ or a C library allocates for itself is not counted.
 ## Data that more than one task changes
 
 ```nika
-fn main() {
+fn main() throws {
     let evens = SharedMut(0)
     let odds = SharedMut(0)
     async {
@@ -508,11 +508,11 @@ in a program, and then where the model ends.
 ```nika
 struct Person { name: String, age: int }
 
-fn greet(p: Person) {               // only reads `p`: it is lent
+fn greet(p: Person) throws {               // only reads `p`: it is lent
     println(f"Hello, {p.name}")
 }
 
-fn main() {
+fn main() throws {
     let ada = Person { name: "Ada", age: 36 }
     greet(ada)                      // Hello, Ada
     greet(ada)                      // Hello, Ada: still ours
@@ -565,7 +565,7 @@ pub struct Item { pub name: String, pub count: int }
 // file: src/main.nika
 use std::fs            // a standard-library module: every name from it keeps its prefix
 
-fn main() {
+fn main() throws {
     let item = Item { name: "apples", count: 3 }   // same package: no `use` at all
     println(f"{item.count} {item.name}")
 }

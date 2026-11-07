@@ -12,7 +12,7 @@ fn longer(a: ref String, b: ref String) -> ref String sync {
     return b
 }
 
-fn main() {
+fn main() throws {
     let p = Picker { pick: longer }
     let a = "abc"
     let b = "de"

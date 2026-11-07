@@ -22,7 +22,7 @@ fn codes(source: &str) -> Vec<String> {
 /// values are the bitwise definition's (the reflected polynomial
 /// `0x82F63B78`), computed apart from Nikaia.
 const CRC: &str = "use std::hash\n\n\
-     fn main() {\n    \
+     fn main() throws {\n    \
      println(f\"{hash::crc32c(0, 0x0123456789abcdef)}\")\n    \
      println(f\"{hash::crc32c(0xFFFFFFFF, 0x3837363534333231)}\")\n    \
      let mut w: u64 = 0x9E3779B97F4A7C15\n    \

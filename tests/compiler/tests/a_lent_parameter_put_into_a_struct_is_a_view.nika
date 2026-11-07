@@ -27,7 +27,7 @@ fn seen(config: Config) -> Seen {
 	return Seen { part: config.part, k: 2 }
 }
 
-fn main() {
+fn main() throws {
 	let l = L { n: 3, tag: "a" }
 	println(go(l))
 	println(l.tag)

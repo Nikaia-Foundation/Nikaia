@@ -27,7 +27,7 @@ fn describe(s: Shape?) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     let a = Shape::Named { name: "list", view: true, size: 2 }
     let b = Shape::Named { name: "list", view: true, size: 3 }
     let c = Shape::Named { name: "map", view: false, size: 1 }

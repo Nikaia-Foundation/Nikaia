@@ -170,20 +170,22 @@ pub struct SyncGraph {
 pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: SyncGraph) {
     for item in program.items {
         match item.node {
-            Item::Fn { name, args, body, .. } => {
+            Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let key = key_of_function(name, "", names)
                 let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, body, names), names, own, library, graph.unit)
                 sync_methods(graph.methods[key], own, library, node)
+                declared_sync(is_sync, sync_by, node)
                 graph.nodes.insert(key, node)
             }
             Item::Impl { trait_name, target, methods, .. } => {
                 let owner = names.resolve(target.name).clone()
                 for method in methods {
                     match method.node {
-                        Item::Fn { name, args, body, .. } => {
+                        Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let key = key_of_function(name, owner, names)
                             let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, body, names), names, own, library, graph.unit)
                             sync_methods(graph.methods[key], own, library, node)
+                            declared_sync(is_sync, sync_by, node)
                             declared_by(trait_name, key_of_function(name, "", names), names, own, library, node)
                             graph.nodes.insert(key, node)
                         }
@@ -218,6 +220,23 @@ pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContex
             else => {}
         }
     }
+}
+
+// **A function declared `sync` holds, whatever its body calls** (ADR-288
+// D1, #1285): the check of its body (`unit_violations`, the checker) keeps
+// the promise, and a cleanup it settles - an `fs::File` it closes - is
+// lowered without a pause (ADR-297 D4, #1317), though the library's ledger
+// files that `close` as one that may pause. Read from the body, such a
+// function would take the claim away from every caller, which would then be
+// lowered `async` around a call that never pauses. One that holds only where
+// its code parameters do (`sync_by`) is left to its body.
+fn declared_sync(is_sync: bool, sync_by: ref Vec[winnow_grammar::Symbol], mut node: SyncNode) {
+    if !is_sync || sync_by.len() > 0 {
+        return
+    }
+    node.reach.blocked = false
+    node.reach.calls = collections::BTreeSet()
+    node.reach.through_code = collections::BTreeSet()
 }
 
 fn leaf(blocked: bool) -> SyncNode {

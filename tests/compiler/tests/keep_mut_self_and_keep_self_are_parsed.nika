@@ -51,7 +51,7 @@ fn store(mut into: Vec[String], keep s: String) {
 	into.push(s)
 }
 
-fn main() {
+fn main() throws {
 	let mut bag = Bag { items: [] }
 	bag.add("a")
 	bag.grow(2)

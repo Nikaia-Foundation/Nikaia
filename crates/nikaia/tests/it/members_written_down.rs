@@ -23,7 +23,7 @@ fn a_member_nothing_writes_down_is_refused() {
     for (what, source, message, help) in [
         (
             "a Rust associated function",
-            "fn main() {\n    let t = String::from(\"x\")\n    println(t)\n}\n",
+            "fn main() throws {\n    let t = String::from(\"x\")\n    println(t)\n}\n",
             "`String` has no function called `from`.",
             "Write the text itself, `\"x\"`, or `f\"x\"` for text of its own.",
         ),
@@ -47,7 +47,7 @@ fn a_member_nothing_writes_down_is_refused() {
         ),
         (
             "a Rust method Nikaia does not offer",
-            "fn main() {\n    let s = \"x\".as_str()\n    println(s)\n}\n",
+            "fn main() throws {\n    let s = \"x\".as_str()\n    println(s)\n}\n",
             "`String` has no method called `as_str`.",
             "Leave it out: the text is already what is passed.",
         ),
@@ -80,7 +80,7 @@ fn the_help_names_the_spelling_nikaia_has() {
         "{found:#?}"
     );
     let found = errors(
-        "fn first(xs: ref Vec[i64]) -> bool {\n    let x: i64? = null\n    return x.is_some()\n}\n\nfn main() {\n    println(f\"{first([1])}\")\n}\n",
+        "fn first(xs: ref Vec[i64]) -> bool {\n    let x: i64? = null\n    return x.is_some()\n}\n\nfn main() throws {\n    println(f\"{first([1])}\")\n}\n",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1125"
@@ -95,7 +95,7 @@ fn the_help_names_the_spelling_nikaia_has() {
 fn a_member_that_is_written_down_passes() {
     let found = errors(
         "use std::text\n\nstruct P {\n    x: i64,\n}\n\nimpl P {\n    fn twice(self) -> i64 {\n        return self.x * 2\n    }\n}\n\n\
-         fn main() {\n    let p = P { x: 1 }\n    let n = text::parse_i64(\"3\") ?? 0\n    println(f\"{p.twice()} {\"ab\".len()} {n}\")\n}\n",
+         fn main() throws {\n    let p = P { x: 1 }\n    let n = text::parse_i64(\"3\") ?? 0\n    println(f\"{p.twice()} {\"ab\".len()} {n}\")\n}\n",
     );
     assert!(found.is_empty(), "{found:#?}");
 }
@@ -105,7 +105,7 @@ fn a_member_that_is_written_down_passes() {
 #[test]
 fn a_bare_name_in_a_pattern_is_the_value_matched() {
     let found = errors(
-        "enum E {\n    A(i64),\n    B,\n}\n\nfn f(e: E) -> i64 {\n    return match e {\n        E::A(n) => n,\n        x => {\n            let s: String = x\n            0\n        }\n    }\n}\n\nfn main() {\n    println(f\"{f(E::B)}\")\n}\n",
+        "enum E {\n    A(i64),\n    B,\n}\n\nfn f(e: E) -> i64 {\n    return match e {\n        E::A(n) => n,\n        x => {\n            let s: String = x\n            0\n        }\n    }\n}\n\nfn main() throws {\n    println(f\"{f(E::B)}\")\n}\n",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1103"

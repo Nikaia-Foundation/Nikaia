@@ -14,7 +14,7 @@ fn give(keep x: Box[Vec[i64]]) -> Vec[i64] {
     return x.item
 }
 
-fn main() {
+fn main() throws {
     let b = Box { item: [1] }
     println(f"{take(b):?}")
     println(f"{give(Box { item: [2] }):?}")

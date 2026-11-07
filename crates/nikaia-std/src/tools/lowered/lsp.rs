@@ -20,8 +20,8 @@ impl From<nikaia_std::error::Thrown<LspRefusal>> for __NikaiaThrows_LspRefusal__
 impl From<nikaia_std::error::Thrown<nikaia_std::io::IoError>> for __NikaiaThrows_LspRefusal__io_IoError {
     fn from(error: nikaia_std::error::Thrown<nikaia_std::io::IoError>) -> __NikaiaThrows_LspRefusal__io_IoError { __NikaiaThrows_LspRefusal__io_IoError::io_IoError(error) }
 }
-impl From<io::IoError> for __NikaiaThrows_LspRefusal__io_IoError {
-    fn from(error: io::IoError) -> __NikaiaThrows_LspRefusal__io_IoError { __NikaiaThrows_LspRefusal__io_IoError::io_IoError(nikaia_std::error::Thrown::from(error)) }
+impl From<nikaia_std::io::IoError> for __NikaiaThrows_LspRefusal__io_IoError {
+    fn from(error: nikaia_std::io::IoError) -> __NikaiaThrows_LspRefusal__io_IoError { __NikaiaThrows_LspRefusal__io_IoError::io_IoError(nikaia_std::error::Thrown::from(error)) }
 }
 impl std::fmt::Display for __NikaiaThrows_LspRefusal__io_IoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -32,6 +32,16 @@ impl std::fmt::Display for __NikaiaThrows_LspRefusal__io_IoError {
     }
 }
 impl std::error::Error for __NikaiaThrows_LspRefusal__io_IoError {}
+impl nikaia_std::error::Joined for __NikaiaThrows_LspRefusal__io_IoError {
+    fn joined_by(&mut self, later: Self) {
+        #[allow(unreachable_patterns)]
+        match (self, later) {
+            (__NikaiaThrows_LspRefusal__io_IoError::LspRefusal(first), __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(later)) => nikaia_std::error::Joined::joined_by(first, later),
+            (__NikaiaThrows_LspRefusal__io_IoError::io_IoError(first), __NikaiaThrows_LspRefusal__io_IoError::io_IoError(later)) => nikaia_std::error::Joined::joined_by(first, later),
+            _ => {}
+        }
+    }
+}
 impl __NikaiaThrows_LspRefusal__io_IoError {
     #[allow(dead_code)]
     pub(crate) fn message(&self) -> String { self.to_string() }
@@ -91,9 +101,10 @@ pub async fn lsp_read_message() -> Result<Option<String>, __NikaiaThrows_LspRefu
     Ok(Some(read.to_string()))
 }
 
-pub fn lsp_write_message(body: &json::Value) {
+pub fn lsp_write_message(body: &json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let text = json::to_string(body);
-    print!("Content-Length: {}\r\n\r\n{}", text.len() as i64, text);
+    nikaia_std::io::print(format_args!("Content-Length: {}\r\n\r\n{}", text.len() as i64, text))?;
+    Ok(())
 }
 
 pub fn lsp_object(members: &[(&str, json::Value)]) -> json::Value { json::Value::Object(members.iter().map(|member| { json::Member { key: member.0.to_string(), value: member.1.clone() } }).collect::<Vec<_>>()) }
@@ -102,11 +113,15 @@ pub fn lsp_string(text: &str) -> json::Value { json::Value::Str(text.to_string()
 
 pub fn lsp_number(n: i64) -> json::Value { json::Value::Number(format!("{}", n)) }
 
-pub fn lsp_respond(id: &json::Value, result: json::Value) { lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("result", result)])); }
+pub fn lsp_respond(id: &json::Value, result: json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("result", result)]))?;
+    Ok(())
+}
 
-pub fn lsp_refuse(id: &json::Value, code: i64, message: &str) {
+pub fn lsp_refuse(id: &json::Value, code: i64, message: &str) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let error = lsp_object(&vec![("code", lsp_number(code)), ("message", lsp_string(message))]);
-    lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("error", error)]));
+    lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("error", error)]))?;
+    Ok(())
 }
 
 pub fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1))]))]) }
@@ -122,7 +137,7 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
             Ok(value) => value,
             Err(error) => {
                 let (error, __nikaia_site) = error.split();
-                lsp_refuse(&json::Value::Null, -32700, &format!("the message is not JSON: {}", error.message));
+                lsp_refuse(&json::Value::Null, -32700, &format!("the message is not JSON: {}", error.message))?;
                 continue;
             },
         };
@@ -139,7 +154,7 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
                 if method == "textDocument/didOpen" {
                     open.insert(path.to_string(), nikaia_std::index::or(cargo_json_text((cargo_json_member((document).as_ref(), "text")).as_ref()), || "".into()));
                     uris.insert(path.to_string(), uri.to_string());
-                    marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await;
+                    marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?;
                 } else if method == "textDocument/didChange" {
                     let changes = cargo_json_items((cargo_json_member((params).as_ref(), "contentChanges")).as_ref());
                     if !changes.is_empty() {
@@ -147,25 +162,25 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
                         let changed: Option<json::Value> = Some((*nikaia_std::index::get(&changes, nikaia_std::index::at(last))).clone());
                         open.insert(path.to_string(), nikaia_std::index::or(cargo_json_text((cargo_json_member((changed).as_ref(), "text")).as_ref()), || "".into()));
                     }
-                    marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await;
-                } else if method == "textDocument/didSave" { marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await; } else if method == "textDocument/didClose" {
+                    marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?;
+                } else if method == "textDocument/didSave" { marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?; } else if method == "textDocument/didClose" {
                     open.remove(&path);
                     uris.remove(&path);
                     if marked.contains_key(&uri) {
                         marked.remove(&uri);
-                        lsp_notify_diagnostics(&uri, vec![]);
+                        lsp_notify_diagnostics(&uri, vec![])?;
                     }
                     if !alone {
                         let beside = match lsp_open_beside(&path, &open) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        marked = lsp_publish(host, &beside, &open, &uris, &marked, false).await;
+                        marked = lsp_publish(host, &beside, &open, &uris, &marked, false).await?;
                     }
                 }
             },
             Some(ref asked) => {
-                if method == "initialize" { lsp_respond(asked, lsp_capabilities()); } else if method == "shutdown" {
+                if method == "initialize" { lsp_respond(asked, lsp_capabilities())?; } else if method == "shutdown" {
                     shut_down = true;
-                    lsp_respond(asked, json::Value::Null);
-                } else { lsp_refuse(asked, -32601, &format!("no method `{}`", method)); }
+                    lsp_respond(asked, json::Value::Null)?;
+                } else { lsp_refuse(asked, -32601, &format!("no method `{}`", method))?; }
             },
         }
     }
@@ -223,7 +238,7 @@ pub fn lsp_position(source: &str, at: i64) -> (i64, i64) {
     (line, column)
 }
 
-pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collections::BTreeMap<String, String>, uris: &collections::BTreeMap<String, String>, marked: &collections::BTreeMap<String, String>, alone: bool) -> collections::BTreeMap<String, String> {
+pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collections::BTreeMap<String, String>, uris: &collections::BTreeMap<String, String>, marked: &collections::BTreeMap<String, String>, alone: bool) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let checked: fs::Path = std::path::PathBuf::from(path);
     let package = match nikaia_std::fs::path::parent(&(checked)) {
         None => path.to_string(),
@@ -253,13 +268,13 @@ pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collect
     for (file, list) in by_file.iter() {
         let uri = lsp_uri_of(file, uris);
         if !list.is_empty() { now.insert(uri.to_string(), package.to_string()); }
-        lsp_notify_diagnostics(&uri, list.to_owned());
+        lsp_notify_diagnostics(&uri, list.to_owned())?;
     }
     for (uri, of) in marked.iter() {
         if now.contains_key(uri) || by_file.keys().any(|file| { lsp_uri_of(file, uris) == *uri }) { continue; }
-        if *of == package { lsp_notify_diagnostics(uri, vec![]); } else { now.insert(uri.to_string(), of.to_string()); }
+        if *of == package { lsp_notify_diagnostics(uri, vec![])?; } else { now.insert(uri.to_string(), of.to_string()); }
     }
-    now
+    Ok(now)
 }
 
 pub(crate) fn lsp_open_beside(path: &str, open: &collections::BTreeMap<String, String>) -> Option<String> {
@@ -273,9 +288,10 @@ pub(crate) fn lsp_open_beside(path: &str, open: &collections::BTreeMap<String, S
     None
 }
 
-pub(crate) fn lsp_notify_diagnostics(uri: &str, diagnostics: Vec<json::Value>) {
+pub(crate) fn lsp_notify_diagnostics(uri: &str, diagnostics: Vec<json::Value>) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let params = lsp_object(&vec![("uri", lsp_string(uri)), ("diagnostics", json::Value::Array(diagnostics))]);
-    lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("method", lsp_string("textDocument/publishDiagnostics")), ("params", params)]));
+    lsp_write_message(&lsp_object(&vec![("jsonrpc", lsp_string("2.0")), ("method", lsp_string("textDocument/publishDiagnostics")), ("params", params)]))?;
+    Ok(())
 }
 
 pub(crate) fn lsp_uri_of(path: &str, uris: &collections::BTreeMap<String, String>) -> String {

@@ -11,7 +11,7 @@ fn relabel(mut s: Summary, name: ref String) {
     s.n += 1
 }
 
-fn main() {
+fn main() throws {
     let mut s = Summary { label: "x", n: 1 }
     relabel(s, f"a {1}")
     println(f"{s.label} {s.n}")

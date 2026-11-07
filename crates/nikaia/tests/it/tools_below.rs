@@ -20,7 +20,7 @@ fn project(purpose: &str, word: &str) -> PathBuf {
     .expect("a manifest");
     std::fs::write(
         dir.join("src/main.nika"),
-        format!("fn main() {{\n    println(\"{word}\")\n}}\n"),
+        format!("fn main() throws {{\n    println(\"{word}\")\n}}\n"),
     )
     .expect("a source");
     dir

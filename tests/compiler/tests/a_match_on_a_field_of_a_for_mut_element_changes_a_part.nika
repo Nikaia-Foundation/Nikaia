@@ -4,7 +4,7 @@
 enum Shape { Many { xs: Vec[i64] }, One }
 struct W { node: Shape }
 
-fn main() {
+fn main() throws {
 	let mut all = [W { node: Shape::Many { xs: [1] } }, W { node: Shape::One }]
 	for mut w in all {
 		match w.node {

@@ -1,0 +1,37 @@
+error[NK2105]: `returned` is given to `??` inside a loop, but it was declared outside it.
+   --> tests/a_move_in_a_loop_a_return_may_end_is_refused.nika:16:9
+    |
+ 16 |         let value = returned ?? null
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `returned` is an `Expr?`, so it's handed over itself, not a copy - the next time round the loop it would be handed over again, but it's already gone.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: Hand over a copy each time: `returned?.clone()`.
+error[NK2105]: `x` is passed to `push`, which keeps it inside a loop, but it was declared outside it.
+   --> tests/a_move_in_a_loop_a_return_may_end_is_refused.nika:27:13
+    |
+ 27 |             all.push(x)
+    |             ^^^^^^^^^^^
+    |
+    = note: `x` is an `Expr`, so it's handed over itself, not a copy - the next time round the loop it would be handed over again, but it's already gone.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: Hand over a copy each time: `x.clone()`.
+error[NK2105]: `x` is passed to `push`, which keeps it inside a loop, but it was declared outside it.
+   --> tests/a_move_in_a_loop_a_return_may_end_is_refused.nika:41:13
+    |
+ 41 |             all.push(x)
+    |             ^^^^^^^^^^^
+    |
+    = note: `x` is an `Expr`, so it's handed over itself, not a copy - the next time round the loop it would be handed over again, but it's already gone.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: Hand over a copy each time: `x.clone()`.
+error[NK2105]: `x` is passed to `push`, which keeps it inside a loop, but it was declared outside it.
+   --> tests/a_move_in_a_loop_a_return_may_end_is_refused.nika:52:9
+    |
+ 52 |         all.push(x)
+    |         ^^^^^^^^^^^
+    |
+    = note: `x` is an `Expr`, so it's handed over itself, not a copy - the next time round the loop it would be handed over again, but it's already gone.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: Hand over a copy each time: `x.clone()`.
+

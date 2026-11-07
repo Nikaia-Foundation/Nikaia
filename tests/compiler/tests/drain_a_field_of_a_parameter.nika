@@ -14,7 +14,7 @@ fn emptied(bag: Bag) -> Vec[String] {
     return out
 }
 
-fn main() {
+fn main() throws {
     let words = emptied(Bag { words: ["one", "two"] })
     println(words.len())
     println(words[1])

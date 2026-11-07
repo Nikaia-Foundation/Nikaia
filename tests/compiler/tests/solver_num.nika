@@ -105,7 +105,7 @@ fn dorder(a: ref SvDelta, b: ref SvDelta) -> String {
     return f\"{sv_delta_text(a)} {op} {sv_delta_text(b)}\"
 }
 
-fn main() {
+fn main() throws {
     println(\"== item 1: i64 kept small\")
     println(f\"reduced chain: {chain(true, 40)}\")
     println(f\"unreduced chain: {chain(false, 40)}\")

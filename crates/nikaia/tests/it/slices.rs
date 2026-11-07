@@ -53,7 +53,7 @@ fn a_run_crosses_and_the_program_reads_it() {
                   comptime NS: ref Array[i64] = [10, 20, 30]\n\
                   comptime MAGIC: ref Array[u8] = [0x7F, 0x45, 0x4C, 0x46]\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{ROWS.len()} {NS.len()} {MAGIC.len()}\")\n\
                   \x20   println(f\"{NS[1]}\")\n\
                   \x20   println(f\"{ROWS[0].name}\")\n\
@@ -91,7 +91,7 @@ fn a_field_may_view_a_run() {
                   \x20   settings: [Setting { key: \"host\", value: \"h\" }, Setting { key: \"port\", value: \"8080\" }],\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{MAIN.name} {MAIN.settings.len()}\")\n\
                   \x20   for s in MAIN.settings { println(f\"{s.key}={s.value}\") }\n\
                   }\n";
@@ -112,7 +112,7 @@ fn a_run_this_body_owns_is_refused_by_name() {
     let found = findings(
         "struct Bag { items: ref Array[i64] }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut v: Vec[i64] = []\n\
          \x20   v.push(1)\n\
          \x20   let b = Bag { items: v }\n\
@@ -167,7 +167,7 @@ fn an_action_that_fills_a_view_names_the_vec() {
          \x20       \"[\" name:NAME \"]\" settings:setting* -> { Section { name, settings } }\n\
          }\n\
          \n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1179").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
@@ -194,7 +194,7 @@ fn an_action_that_fills_a_view_names_the_vec() {
 /// at `0`, `[a..]` runs to the end - on text after `find`, and on a list.
 #[test]
 fn a_cut_with_an_open_end() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let line = \"Hamburg;12.0\"\n\
          \x20   let sep = line.find(\";\") ?? return\n\
          \x20   let name = line[..<sep]\n\

@@ -72,7 +72,7 @@ fn a_sync_function_calls_a_sync_parameter() {
          \x20   return f(x)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{apply(fn(n) { n * 2 }, 21)}\")\n\
          }\n",
     )
@@ -99,7 +99,7 @@ fn a_bare_call_nothing_declares_is_refused() {
          \x20   return n * 2\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   frobnicate(1)\n\
          \x20   println(f\"{dobled(2)}\")\n\
          }\n",
@@ -132,7 +132,7 @@ fn a_bare_call_nothing_declares_is_refused() {
 /// the outer one after the loop is still refused.
 #[test]
 fn a_loop_binding_is_not_the_name_it_shadows() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let mut kept: Vec[String] = []\n\
          \x20   let k = f\"b\"\n\
          \x20   kept.push(k)\n\
@@ -187,7 +187,7 @@ fn a_graph_over_a_map_of_lists() {
     let found = findings(
         "use std::collections\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let edges: collections::HashMap[i64, Vec[i64]] = collections::HashMap()\n\
          \x20   for m in edges[1] ?? [] {\n\
          \x20       println(f\"{m}\")\n\
@@ -205,7 +205,7 @@ fn a_graph_over_a_map_of_lists() {
     let leaves = findings(
         "use std::collections\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let edges: collections::HashMap[i64, Vec[i64]] = collections::HashMap()\n\
          \x20   let first = edges[1] ?? panic(\"no edges from 1\")\n\
          \x20   println(f\"{first.len()}\")\n\
@@ -237,7 +237,7 @@ fn a_yes_or_no_match_and_a_field_named_as_its_value() {
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let x = 3\n\
                   \x20   let y = 4\n\
                   \x20   let p = P { x: x, y }\n\
@@ -382,7 +382,7 @@ fn a_fallback_block_that_returns_takes_its_takings_with_it() {
                   \x20   return n + name.len()\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let mut s: collections::BTreeSet[String] = collections::BTreeSet()\n\
                   \x20   println(f\"{f(3, s)} {f(null, s)} {s.len()}\")\n\
                   }\n";
@@ -434,7 +434,7 @@ fn a_long_parameter_list_is_allowed_below() {
                   \x20   return a + b + c + d + e + f + g\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{eight(1, 2, 3, 4, 5, 6, 7, 8)} {seven(1, 2, 3, 4, 5, 6, 7)}\")\n\
                   }\n";
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -465,7 +465,7 @@ fn a_maybe_compared_with_a_value_is_refused() {
          fn after(at: ref String?, now: ref String) -> bool {\n\
          \x20   return at != now\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{same(3, 3)} {after(null, \"a\")}\")\n\
          }\n",
     );
@@ -480,7 +480,7 @@ fn a_maybe_compared_with_a_value_is_refused() {
          fn same(a: i64?, b: i64?) -> bool {\n\
          \x20   return a == b\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{absent(null)} {same(1, 1)}\")\n\
          }\n",
     );
@@ -495,7 +495,7 @@ fn a_maybe_compared_with_a_value_is_refused() {
 #[test]
 fn a_maybe_compared_with_a_number_literal_is_refused() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let n: i64 = 5\n\
          \x20   println(f\"{n.checked_i32() == 5}\")\n\
          \x20   let m: i32? = 5\n\
@@ -514,7 +514,7 @@ fn a_maybe_compared_with_a_number_literal_is_refused() {
     assert!(found[5].message.contains("`i64`"), "{found:#?}");
     // A literal still compares with what is inside, once `??` has opened it.
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let m: i32? = 5\n\
          \x20   println(f\"{(m ?? 0) == 5} {m == null}\")\n\
          }\n",
@@ -542,7 +542,7 @@ fn a_loop_variable_as_the_fallback_of_a_view_of_text_runs() {
          fn g(n: String) -> String {\n\
          \x20   (n.strip_prefix(\"x\") ?? n).clone()\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut v: Vec[String] = Vec()\n\
          \x20   v.push(\"a.len()\")\n\
          \x20   v.push(\"b\")\n\
@@ -574,7 +574,7 @@ fn a_name_as_the_fallback_of_a_list_read_of_text_runs() {
          fn h(opt: String?, n: String) -> String {\n\
          \x20   (opt ?? n).clone()\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut v: Vec[String] = Vec()\n\
          \x20   println(f(v, \"z\"))\n\
          \x20   println(k(v, \"e\"))\n\
@@ -600,7 +600,7 @@ fn text_literals_beside_names_in_a_tuple_of_text_run() {
         "fn take(p: (String, String)) -> i64 {\n\
          \x20   p.0.len() as i64 + p.1.len() as i64\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let name: String = \"A\"\n\
          \x20   let mut pairs: Vec[(String, String)] = Vec()\n\
          \x20   pairs.push((name, \"x\"))\n\
@@ -637,7 +637,7 @@ fn a_with_over_a_by_value_parameter_runs() {
          fn bumped(p: Named) -> Named sync {\n\
          \x20   return p with { n: p.n + 1 }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let g = flipped(Flow { a: true, b: false })\n\
          \x20   let q = bumped(Named { name: \"x\", n: 1 })\n\
          \x20   println(f\"{g.a} {g.b} {q.name} {q.n}\")\n\
@@ -670,7 +670,7 @@ fn a_typed_throw_in_a_trait_impl_is_boxed() {
          \x20       return self.n\n\
          \x20   }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let neg = One { n: -2 }\n\
          \x20   let pos = One { n: 5 }\n\
          \x20   let a = neg.go() catch { 0 }\n\
@@ -695,7 +695,7 @@ fn an_owned_pattern_to_strip_prefix_is_lent() {
          \x20   let back = front.strip_suffix(tail) ?? \"\"\n\
          \x20   return back.clone()\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(rest(\"a=1;a\", \"a\"))\n\
          }\n",
         "1\n",
@@ -733,7 +733,7 @@ fn a_struct_literal_before_a_catch_runs() {
          \x20       return self.n\n\
          \x20   }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let a = One { n: -2 }.go() catch { 0 }\n\
          \x20   let b = One { n: 5 }.go() catch { 0 }\n\
          \x20   println(f\"{a} {b}\")\n\
@@ -754,7 +754,7 @@ fn a_number_beside_a_struct_option_is_refused() {
              \x20   let n = v ?? {fallback}\n\
              \x20   return n\n\
              }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   println(f\"{{probe(null).cents}}\")\n\
              }}\n"
         )
@@ -768,7 +768,7 @@ fn a_number_beside_a_struct_option_is_refused() {
 #[test]
 fn a_lambda_split_over_a_tuple_is_refused() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let pairs: Vec[(String, i64)] = [(\"a\", 1), (\"b\", 2)]\n\
          \x20   let n = pairs.iter().filter(fn(name, v) { v > 1 }).count()\n\
          \x20   println(f\"{n}\")\n\
@@ -816,7 +816,7 @@ fn a_thrown_struct_without_impl_error_is_refused() {
              \x20   }}\n\
              \x20   return n\n\
              }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let v = go(2) catch {{ 0 }}\n\
              \x20   println(f\"{{v}}\")\n\
              }}\n"
@@ -842,12 +842,12 @@ fn a_parameter_moved_into_a_let_mut_stays_owned() {
          \x20   t.push_str(\"!\")\n\
          \x20   return t\n\
          }\n\
-         fn shout(s: String) {\n\
+         fn shout(s: String) throws {\n\
          \x20   let mut t = s\n\
          \x20   t.push_str(\"!\")\n\
          \x20   println(t)\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(take(\"hi\"))\n\
          \x20   shout(\"ho\")\n\
          }\n",
@@ -870,17 +870,17 @@ fn a_mut_argument_used_again_in_a_later_argument() {
          \x20   w.n = w.n * 10 + x\n\
          \x20   return w.n\n\
          }\n\
-         fn trace(x: i64) -> i64 {\n\
+         fn trace(x: i64) -> i64 throws {\n\
          \x20   println(f\"trace {x}\")\n\
          \x20   return x\n\
          }\n\
          fn f(a: i64, mut w: W, v: i64, s: i64) {\n\
          \x20   w.n = w.n * 100 + a + v + s\n\
          }\n\
-         fn h(mut w: W) {\n\
+         fn h(mut w: W) throws {\n\
          \x20   f(trace(1), w, g(w, 2), trace(3))\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut w = W { n: 0 }\n\
          \x20   h(w)\n\
          \x20   f(0, w, g(w, 4), 5)\n\
@@ -912,11 +912,11 @@ fn a_method_receiver_lent_again_in_an_argument() {
          \x20   w.n = w.n * 10 + x\n\
          \x20   return w.n\n\
          }\n\
-         fn trace(x: i64) -> i64 {\n\
+         fn trace(x: i64) -> i64 throws {\n\
          \x20   println(f\"trace {x}\")\n\
          \x20   return x\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut w = W { n: 0 }\n\
          \x20   w.add(g(w, 1))\n\
          \x20   w.put(trace(1), g(w, 2), trace(3))\n\
@@ -946,7 +946,7 @@ fn a_borrowed_self_handed_to_a_mut_parameter() {
          \x20   fn again(ref mut self) { self.put(0, g(self, 7), 0) }\n\
          \x20   fn twice(ref mut self) -> i64 { return g(self, 2) }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut w = W { n: 1 }\n\
          \x20   w.again()\n\
          \x20   println(f\"{w.n}\")\n\
@@ -971,7 +971,7 @@ fn a_mut_receiver_called_in_an_argument_of_its_own_method() {
          \x20   }\n\
          \x20   fn add(ref mut self, k: i64) { self.n = self.n + k }\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut w = W { n: 1 }\n\
          \x20   w.add(w.next())\n\
          \x20   println(f\"{w.n}\")\n\
@@ -999,7 +999,7 @@ fn an_empty_list_beside_a_list_view_is_a_view() {
          \x20   e.push(1)\n\
          \x20   return e.len()\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let f = Field { value: Expr { parts: [1, 2] } }\n\
          \x20   let g = Field { value: null }\n\
          \x20   println(f\"{total(f)} {total(g)} {owned(null)}\")\n\

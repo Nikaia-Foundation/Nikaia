@@ -1,0 +1,9 @@
+// ADR-392, #1360: a `main` that prints and says `throws` builds and runs; the
+// four print functions write as before.
+fn main() throws {
+    println("hello")
+    print("a")
+    print(f"{1 + 1}\n")
+    eprintln("to standard error")
+    eprint("")
+}

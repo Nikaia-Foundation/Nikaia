@@ -1,6 +1,6 @@
 // A `limit:` below one is a broken run-time check: the program stops
 // (#987), and `NAME.stops` declares that stop as the test's outcome (#1260).
-fn main() {
+fn main() throws {
     let xs = [1, 2, 3]
     println(xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; limit: 0))
 }

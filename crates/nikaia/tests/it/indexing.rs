@@ -62,7 +62,7 @@ fn the_write_is_a_set_and_the_read_is_a_get() {
 use std::collections
 
 
-fn main() {
+fn main() throws {
     let mut scores = collections::HashMap()
     scores["Player1"] = 100
     let one = scores["Player1"] ?? 0
@@ -108,7 +108,7 @@ fn a_compound_write_is_still_an_indexed_assignment() {
     let rust = lowered(
         "a compound write",
         r#"
-fn main() {
+fn main() throws {
     let mut xs = Vec()
     xs.push(10)
     xs[0] += 1
@@ -144,7 +144,7 @@ fn main() {
 fn a_slice_of_text_is_converted_where_the_range_is_computed() {
     let rust = lowered(
         "a computed slice of text",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let text = \"hello\"\n\
          \x20   let at = text.find(\"ell\") ?? return\n\
          \x20   println(f\"{text[at..<at + 3]}\")\n\
@@ -165,7 +165,7 @@ fn a_slice_of_text_is_converted_where_the_range_is_computed() {
 fn a_read_at_a_number_is_still_the_element() {
     let rust = lowered(
         "a read at a number",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2, 3]\n\
          \x20   let first: i64 = xs[0]\n\
          \x20   println(f\"{first}\")\n\
@@ -190,7 +190,7 @@ fn a_read_at_a_number_is_still_the_element() {
 fn a_range_that_counts_from_the_end_is_an_access_out_of_bounds() {
     let rust = lowered(
         "a negative range",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs: Vec[i64] = [1, 2, 3, 4]\n\
          \x20   println(f\"{xs[-2..-1].len()}\")\n\
          }\n",
@@ -233,7 +233,7 @@ fn a_field_of_an_element_is_read_without_a_deref() {
     name: String,
 }
 
-fn main() {
+fn main() throws {
     let rows = [Row { a: 1, name: "x" }, Row { a: 2, name: "y" }]
     println(f"{rows[1].a} {rows[0].name}")
 }

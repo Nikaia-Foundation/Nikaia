@@ -1,6 +1,6 @@
 struct Person { name: String, age: int }
 
-fn greet(p: Person) {
+fn greet(p: Person) throws {
     println(f"Hello, {p.name}")
 }
 
@@ -8,7 +8,7 @@ fn older(p: Person, than: int) -> bool {
     return p.age > than
 }
 
-fn greet_all(team: ref Vec[Person]) {
+fn greet_all(team: ref Vec[Person]) throws {
     for p in team {
         if older(p, 30) {
             greet(p)
@@ -16,7 +16,7 @@ fn greet_all(team: ref Vec[Person]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut team: Vec[Person] = []
     team.push(Person { name: "Ada", age: 36 })
     for p in team {

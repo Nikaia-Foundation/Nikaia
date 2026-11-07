@@ -383,8 +383,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
-        if text.contains("{{") || text.contains("}}") {
-            let single = text.replace("{{", "{").replace("}}", "}");
+        let collapsed = collapsed_doubled_braces(text);
+        if collapsed.is_some() {
+            let single = nikaia_std::index::or(collapsed, || "".into());
             self.warn_migration(span, String::from("`{{{{` in a plain string is now two braces."), format!("Braces in a plain string don't need escaping any more: write `\"{}\"`.", single));
             return;
         }

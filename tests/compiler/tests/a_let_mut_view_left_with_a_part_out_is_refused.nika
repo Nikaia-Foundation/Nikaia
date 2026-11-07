@@ -7,7 +7,7 @@ fn keep(names: Vec[String]) -> Vec[Vec[String]] sync {
     out.push(names)
     return out
 }
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, C] = collections::HashMap()
     m.insert("a", C { names: [f"n{1}"], skip: true })
     let keys: Vec[String] = ["a"]

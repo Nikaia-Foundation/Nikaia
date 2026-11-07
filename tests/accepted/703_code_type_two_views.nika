@@ -10,7 +10,7 @@ fn longer(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     println(f"{pick(fn(a, _) { a }, "one", "three")}")
     println(f"{pick(longer, "one", "three")}")
 }

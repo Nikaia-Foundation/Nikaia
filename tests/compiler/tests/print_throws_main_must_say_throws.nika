@@ -1,0 +1,5 @@
+// ADR-392, #1360: `println` throws `io::IoError` when the write fails, so a
+// `main` that prints and does not say `throws` is refused (`NK2605`).
+fn main() {
+    println("hello")
+}

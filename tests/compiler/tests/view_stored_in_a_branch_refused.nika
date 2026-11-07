@@ -21,7 +21,7 @@ fn parse(input: String) -> Vec[N] {
 	return [N { name: input.trim() }]
 }
 
-fn main() {
+fn main() throws {
 	let ns = parse(" hello ")
 	let mut seen: Vec[E] = []
 	let es = many(ns[0], seen)

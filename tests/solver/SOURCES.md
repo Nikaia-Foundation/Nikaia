@@ -11,6 +11,7 @@ its `; EXPECT:` line.
 | `stress/` | D9's four families plus `blank = 2·n`, n = 1..12 (parity 2..12) | `scripts/solver.nika gen`, deterministic; status from z3 5.3.3 | the repository's |
 | `qflia/` | QF_LIA, non-incremental, under 64 KiB | see below | see below |
 | `qflra/` | QF_LRA, non-incremental, under 64 KiB | see below | see below |
+| `compiler/` | the compiler's own questions (D9's set, #1285 item 3): 4884 distinct normal forms the bounds walk and the prover ask over the tools package, 3014 `unsat`, 1854 `sat`, 16 with no status (unknown to both engines); file name the `nikaia.proofs` key | `NIKAIA_DUMP_QUERIES=DIR nikaia lower-std --bounds`, status the compiler's checked answer (Fourier-Motzkin, then the new engine) | the repository's |
 | `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with z3's status (none yet: 300 queries of seed 1 agree, over Fourier-Motzkin and the CDCL(T) engine) | generated | the repository's |
 
 ## `qflia/` and `qflra/`

@@ -29,7 +29,7 @@ fn a_view_from_one_of_two_buffers_is_accepted() {
          fn pick(a: ref String, b: ref String) -> Reading {\n\
          \x20   return Reading { name: a }\n\
          }\n\n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     assert!(!found.iter().any(|f| f.code == "NK2302"), "{found:#?}");
 }
@@ -50,7 +50,7 @@ fn owned_text_handed_to_a_pattern_is_refused() {
     ] {
         let source = format!(
             "fn f(line: ref String, w: String) -> bool {{\n    return line.starts_with({argument})\n}}\n\n\
-             fn main() {{\n    let r = f(\"abc\", \"a\")\n    println(f\"{{r}}\")\n}}\n"
+             fn main() throws {{\n    let r = f(\"abc\", \"a\")\n    println(f\"{{r}}\")\n}}\n"
         );
         let found = findings(&source);
         let refusal = found.iter().find(|f| f.code == "NK1102");
@@ -110,7 +110,7 @@ fn owned_text_and_index_reads_are_lent() {
     let dir = common::scratch_dir("lent-to-views");
     std::fs::write(
         dir.join("main.nika"),
-        "fn main() {\n    let xs: Vec[String] = [\"abc\", \"de\"]\n    let f: fn(ref String, i64) -> i64 sync = fn(a, b) { a.len() + b }\n    let s: String = \"xy\"\n    println(f\"{f(xs[0], 1)} {f(s, 1)} {s}\")\n    let mark = f\"b{1}\"\n    let line = \"ab1c\"\n    println(f\"{line.contains(mark)} {line.starts_with(f\"a{mark}\")}\")\n    for l in xs {\n        println(f\"{l.contains(mark)} {l.ends_with(mark)}\")\n    }\n    println(mark)\n}\n",
+        "fn main() throws {\n    let xs: Vec[String] = [\"abc\", \"de\"]\n    let f: fn(ref String, i64) -> i64 sync = fn(a, b) { a.len() + b }\n    let s: String = \"xy\"\n    println(f\"{f(xs[0], 1)} {f(s, 1)} {s}\")\n    let mark = f\"b{1}\"\n    let line = \"ab1c\"\n    println(f\"{line.contains(mark)} {line.starts_with(f\"a{mark}\")}\")\n    for l in xs {\n        println(f\"{l.contains(mark)} {l.ends_with(mark)}\")\n    }\n    println(mark)\n}\n",
     )
     .expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -140,7 +140,7 @@ fn reads_past_a_jump_and_found_text_run() {
     let dir = common::scratch_dir("past-a-jump");
     std::fs::write(
         dir.join("main.nika"),
-        "use std::collections\n\nstruct Slot {\n    refusal: String?,\n    n: i64,\n}\n\nenum Shape {\n    Named { name: String, n: i64 },\n    Other,\n}\n\nfn has(path: ref String, names: ref Vec[String]) -> bool {\n    for name in names {\n        let p = f\"{name}.\"\n        if path.starts_with(p) {\n            return true\n        }\n    }\n    false\n}\n\nfn main() {\n    let slots: Vec[Slot] = [Slot { refusal: \"a\", n: 1 }, Slot { refusal: null, n: 2 }]\n    for index in 0..<slots.len() {\n        let r = slots[index].refusal ?? continue\n        println(f\"{r} {slots[index].n}\")\n    }\n    let mut m: collections::HashMap[String, Shape] = collections::HashMap()\n    m.insert(\"k\", Shape::Named { name: \"x\", n: 1 })\n    m.insert(\"o\", Shape::Other)\n    let ks: Vec[String] = [\"k\", \"z\", \"o\"]\n    for k in ks {\n        let held = m.get(k) ?? continue\n        match held {\n            Shape::Named { name, .. } => println(name),\n            Shape::Other => println(\"o\"),\n        }\n    }\n    let ns: Vec[String] = [\"a\", \"b\"]\n    println(f\"{has(\"b.c\", ns)}\")\n    let xs: Vec[String] = [\"a\", \"bc\", \"de\"]\n    let a = xs.iter().find_map(fn(s) { if s.len() > 1 { s } else { null } }) ?? \"none\"\n    let b = xs.iter().filter_map(fn(s) { if s.len() > 2 { s } else { null } }).next() ?? \"none\"\n    println(f\"{a} {b}\")\n}\n",
+        "use std::collections\n\nstruct Slot {\n    refusal: String?,\n    n: i64,\n}\n\nenum Shape {\n    Named { name: String, n: i64 },\n    Other,\n}\n\nfn has(path: ref String, names: ref Vec[String]) -> bool {\n    for name in names {\n        let p = f\"{name}.\"\n        if path.starts_with(p) {\n            return true\n        }\n    }\n    false\n}\n\nfn main() throws {\n    let slots: Vec[Slot] = [Slot { refusal: \"a\", n: 1 }, Slot { refusal: null, n: 2 }]\n    for index in 0..<slots.len() {\n        let r = slots[index].refusal ?? continue\n        println(f\"{r} {slots[index].n}\")\n    }\n    let mut m: collections::HashMap[String, Shape] = collections::HashMap()\n    m.insert(\"k\", Shape::Named { name: \"x\", n: 1 })\n    m.insert(\"o\", Shape::Other)\n    let ks: Vec[String] = [\"k\", \"z\", \"o\"]\n    for k in ks {\n        let held = m.get(k) ?? continue\n        match held {\n            Shape::Named { name, .. } => println(name),\n            Shape::Other => println(\"o\"),\n        }\n    }\n    let ns: Vec[String] = [\"a\", \"b\"]\n    println(f\"{has(\"b.c\", ns)}\")\n    let xs: Vec[String] = [\"a\", \"bc\", \"de\"]\n    let a = xs.iter().find_map(fn(s) { if s.len() > 1 { s } else { null } }) ?? \"none\"\n    let b = xs.iter().filter_map(fn(s) { if s.len() > 2 { s } else { null } }).next() ?? \"none\"\n    println(f\"{a} {b}\")\n}\n",
     )
     .expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -166,7 +166,7 @@ fn reads_past_a_jump_and_found_text_run() {
 #[test]
 fn a_field_of_a_get_local_past_a_jump_runs() {
     let dir = common::scratch_dir("get-local-field");
-    std::fs::write(dir.join("main.nika"), "use std::collections\n\nstruct C {\n    signature: String?,\n    n: i64?,\n}\n\nfn f(m: ref collections::HashMap[String, C], k: ref String) -> i64 {\n    let c = m.get(k) ?? return 0\n    let s = c.signature ?? return 1\n    let n = c.n ?? return 2\n    return s.len() + n\n}\n\nfn main() {\n    let mut m: collections::HashMap[String, C] = collections::HashMap()\n    m.insert(\"a\", C { signature: \"xyz\", n: 4 })\n    m.insert(\"b\", C { signature: null, n: 4 })\n    println(f\"{f(m, \"a\")} {f(m, \"b\")} {f(m, \"c\")}\")\n}\n").expect("the source");
+    std::fs::write(dir.join("main.nika"), "use std::collections\n\nstruct C {\n    signature: String?,\n    n: i64?,\n}\n\nfn f(m: ref collections::HashMap[String, C], k: ref String) -> i64 {\n    let c = m.get(k) ?? return 0\n    let s = c.signature ?? return 1\n    let n = c.n ?? return 2\n    return s.len() + n\n}\n\nfn main() throws {\n    let mut m: collections::HashMap[String, C] = collections::HashMap()\n    m.insert(\"a\", C { signature: \"xyz\", n: 4 })\n    m.insert(\"b\", C { signature: null, n: 4 })\n    println(f\"{f(m, \"a\")} {f(m, \"b\")} {f(m, \"c\")}\")\n}\n").expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .arg("run")
@@ -188,7 +188,7 @@ fn a_field_of_a_get_local_past_a_jump_runs() {
 #[test]
 fn a_cloned_get_with_a_fallback_runs() {
     let dir = common::scratch_dir("cloned-get");
-    std::fs::write(dir.join("main.nika"), "use std::collections\n\nenum T {\n    Unknown,\n    Named(String),\n}\n\nfn pick(m: ref collections::BTreeMap[String, T], k: ref String) -> T {\n    return m.get(k)?.clone() ?? T::Unknown\n}\n\nfn show(t: T) -> String {\n    return match t {\n        T::Unknown => \"?\",\n        T::Named(n) => n,\n    }\n}\n\nfn main() {\n    let mut m: collections::BTreeMap[String, T] = collections::BTreeMap()\n    m.insert(\"a\", T::Named(\"x\"))\n    let mut args: Vec[T] = []\n    args.push(m.get(\"a\")?.clone() ?? T::Unknown)\n    let o: String? = \"y\"\n    let w = o?.clone() ?? \"z\"\n    println(f\"{show(pick(m, \"a\"))} {show(pick(m, \"b\"))} {args.len()} {w} {o ?? \"\"}\")\n}\n").expect("the source");
+    std::fs::write(dir.join("main.nika"), "use std::collections\n\nenum T {\n    Unknown,\n    Named(String),\n}\n\nfn pick(m: ref collections::BTreeMap[String, T], k: ref String) -> T {\n    return m.get(k)?.clone() ?? T::Unknown\n}\n\nfn show(t: T) -> String {\n    return match t {\n        T::Unknown => \"?\",\n        T::Named(n) => n,\n    }\n}\n\nfn main() throws {\n    let mut m: collections::BTreeMap[String, T] = collections::BTreeMap()\n    m.insert(\"a\", T::Named(\"x\"))\n    let mut args: Vec[T] = []\n    args.push(m.get(\"a\")?.clone() ?? T::Unknown)\n    let o: String? = \"y\"\n    let w = o?.clone() ?? \"z\"\n    println(f\"{show(pick(m, \"a\"))} {show(pick(m, \"b\"))} {args.len()} {w} {o ?? \"\"}\")\n}\n").expect("the source");
     let run = std::process::Command::new(env!("CARGO_BIN_EXE_nikaia"))
         .current_dir(&dir)
         .arg("run")
@@ -262,7 +262,7 @@ fn resolve(m: ref collections::HashMap[String, C], name: String) -> R? sync {
     return R { key: k.clone(), c: c }
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, C] = collections::HashMap()
     m.insert("a::new", C { sig: "s" })
     let r = resolve(m, "a") ?? return
@@ -333,7 +333,7 @@ fn opt_name(c: ref C) -> String? sync {
     return f"{s.name}{t}"
 }
 
-fn main() {
+fn main() throws {
     let c = C { sig: S { name: "n" }, text: f"t{1}" }
     let r = wrap(c)
     let a = name_of(r) ?? "-"
@@ -376,7 +376,7 @@ fn two(m: ref collections::HashMap[String, C], n: ref collections::HashMap[Strin
     return s.name.clone()
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, C] = collections::HashMap()
     m.insert("a", C { sig: S { name: "n" } })
     let n: collections::HashMap[String, C] = collections::HashMap()
@@ -403,7 +403,7 @@ fn count(s: ref collections::BTreeSet[i64], n: i64) -> i64 sync {
     return hits
 }
 
-fn main() {
+fn main() throws {
     let mut s: collections::BTreeSet[i64] = collections::BTreeSet()
     s.insert(1)
     s.insert(3)
@@ -450,7 +450,7 @@ fn resolve(w: ref W, key: String) -> R? sync {
     return R { key: rest.clone(), c: c }
 }
 
-fn main() {
+fn main() throws {
     let mut w = W { fns: collections::BTreeMap() }
     w.fns.insert("a::new", C { sig: "s" })
     let r = resolve(w, "a::new") ?? return
@@ -481,7 +481,7 @@ fn lookup(m: ref collections::HashMap[String, C], key: String) -> ref C? sync {
     return m[key]
 }
 
-fn resolve(w: ref W, key: String) -> R? sync {
+fn resolve(w: ref W, key: String) -> R? sync throws {
     let a = lookup(w.fns, key) ?? return null
     print(f"{a.sig ?? ""} ")
     let rest = f"{key}"
@@ -489,7 +489,7 @@ fn resolve(w: ref W, key: String) -> R? sync {
     return R { key: f"", c: c }
 }
 
-fn main() {
+fn main() throws {
     let mut w = W { fns: collections::HashMap() }
     w.fns.insert("a::new", C { sig: "s" })
     let r = resolve(w, "a::new") ?? return

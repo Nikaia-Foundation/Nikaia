@@ -48,7 +48,7 @@ const UNPROVED: &str = "fn f(x: i64) -> i64 {\n\
                         \x20   return y\n\
                         }\n\
                         \n\
-                        fn main() {\n\
+                        fn main() throws {\n\
                         \x20   println(f\"{f(1)}\")\n\
                         \x20   println(f\"{f(-1)}\")\n\
                         }\n";
@@ -87,7 +87,7 @@ fn a_precondition_a_call_does_not_prove_is_refused() {
                   \x20   return sum\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{report(3, 4)}\")\n\
                   }\n";
     let out = checked("precondition", source, &[]);
@@ -110,7 +110,7 @@ fn proved_claims_main_tests_and_assumes_are_not_asked() {
                   \x20   return x / 2\n\
                   }\n\
                   \n\
-                  fn main(n: i64) {\n\
+                  fn main(n: i64) throws {\n\
                   \x20   assert(n > 0)\n\
                   \x20   let v = 7\n\
                   \x20   assert(v > 3)\n\
@@ -250,7 +250,7 @@ fn a_rule_is_proved_over_a_literal_of_plain_fields() {
                   \x20   return Pair { xs: xs, used }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{pair().used}\")\n\
                   }\n";
     let out = checked("literal-rule", source, &[]);

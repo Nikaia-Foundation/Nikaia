@@ -473,7 +473,7 @@ pub trait ProjectCheckExplainHost {
 /// fact about a **call**, and the call may stand in a different file from the
 /// function it names. The file name is printed where there is more than one,
 /// because a slot key (`zaehle::counts`) does not say which file it is in.
-pub fn project_check_explain[H: ProjectCheckExplainHost](host: ref H, comptime_asked: bool, kinds: ref Vec[String]) {
+pub fn project_check_explain[H: ProjectCheckExplainHost](host: ref H, comptime_asked: bool, kinds: ref Vec[String]) throws {
     if !comptime_asked && kinds.is_empty() {
         return
     }

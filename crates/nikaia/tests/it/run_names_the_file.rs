@@ -13,7 +13,7 @@ use std::process::Command;
 /// an overflow. When that gap is closed this needs another such program, or
 /// none. (It was a lambda's untyped parameter, which is `NK1245` since #497,
 /// and `String::from` before that, `NK1171` since #509.)
-const REFUSED_BELOW: &str = "fn main() {\n\
+const REFUSED_BELOW: &str = "fn main() throws {\n\
      \x20   let a: u8 = 1\n\
      \x20   let b = a << 9\n\
      \x20   println(f\"{b}\")\n\
@@ -55,7 +55,7 @@ fn a_panic_names_the_file_that_was_run() {
     let input = dir.join("stops.nika");
     std::fs::write(
         &input,
-        "fn main() {\n    let xs = [1, 2, 3]\n    let i = 7\n    println(f\"{xs[i]}\")\n}\n",
+        "fn main() throws {\n    let xs = [1, 2, 3]\n    let i = 7\n    println(f\"{xs[i]}\")\n}\n",
     )
     .expect("write the source");
     let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))

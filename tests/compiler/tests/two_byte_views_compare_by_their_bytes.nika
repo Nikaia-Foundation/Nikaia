@@ -7,7 +7,7 @@ fn differ(a: ref Array[i64], b: ref Array[i64]) -> bool {
     return a != b
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[u8] = [1, 2, 3]
     let w: Vec[u8] = [1, 2, 3]
     let x: Vec[u8] = [1, 2]

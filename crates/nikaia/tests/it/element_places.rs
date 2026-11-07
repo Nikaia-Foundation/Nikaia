@@ -11,7 +11,7 @@ fn a_field_of_an_element_is_changed_in_place() {
          \x20   n: i64,\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut items: Vec[Item] = [Item { tags: [], n: 0 }, Item { tags: [], n: 0 }]\n\
          \x20   items[1].n = 5\n\
          \x20   items[1].tags.push(\"x\")\n\

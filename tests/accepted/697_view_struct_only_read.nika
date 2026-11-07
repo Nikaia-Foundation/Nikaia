@@ -9,12 +9,12 @@ fn tag(s: String) -> Tag {
     return Tag { label: s }
 }
 
-fn shout(v: String) {
+fn shout(v: String) throws {
     let a = tag(v)
     println(a.label)
 }
 
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     shout(x)
     println(x)

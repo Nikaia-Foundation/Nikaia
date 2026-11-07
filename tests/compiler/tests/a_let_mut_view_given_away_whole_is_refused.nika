@@ -7,7 +7,7 @@ fn keep(c: C) -> i64 sync {
     out.push(c)
     return out.len()
 }
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
     m.insert("a", C { names: [f"n{1}"] })
     let mut c = m["a"] ?? return

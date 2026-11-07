@@ -10,6 +10,6 @@ fn h(n: i64) -> i64 sync {
 	return i
 }
 
-fn main() {
+fn main() throws {
 	println(f"{h(5)}")
 }

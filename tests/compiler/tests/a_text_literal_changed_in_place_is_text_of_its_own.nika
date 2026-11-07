@@ -3,7 +3,7 @@
 // `let` it goes into holds text of its own, not `&'static str` (ADR-282 D17).
 use std::collections
 
-fn main() {
+fn main() throws {
     let mut set: collections::BTreeSet[String] = collections::BTreeSet()
     let mut w = "lhs"
     w.push_str("!")

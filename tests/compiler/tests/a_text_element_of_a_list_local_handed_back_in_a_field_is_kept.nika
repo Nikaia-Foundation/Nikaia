@@ -1,0 +1,34 @@
+// #1275, ADR-283 D23: text read whole out of a list the body made, handed
+// back in a `String` field, is a view of the list; the list moves into the
+// caller's keep. Also a tail struct, a struct carried in a local, and the
+// list of a `ref` parameter.
+struct W { name: String, k: i64 }
+
+fn mk(a: String) -> W {
+	let xs: Vec[String] = [a + " world"]
+	return W { name: xs[0], k: 1 }
+}
+
+fn tail_field(a: String) -> W {
+	let xs: Vec[String] = [a + " tail"]
+	W { name: xs[0], k: 2 }
+}
+
+fn carried(a: String) -> W {
+	let xs: Vec[String] = [a + " carried"]
+	let w = W { name: xs[0], k: 3 }
+	return w
+}
+
+fn param(v: ref Vec[String]) -> W {
+	return W { name: v[0], k: 4 }
+}
+
+fn main() throws {
+	let w = mk("hello")
+	println(w.name)
+	println(tail_field("a").name)
+	println(carried("d").name)
+	let v: Vec[String] = ["e"]
+	println(param(v).name)
+}

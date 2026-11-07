@@ -32,7 +32,7 @@ fn program() -> String {
 		ones.push(f"({n} == 1 || {n} == -1)")
 	}
 	let sum = names.join(" + ")
-	return f"fn odd({params.join(", ")}) -> i64 sync {{\n\tif {ones.join(" && ")} {{\n\t\tassert({sum} != 1)\n\t\treturn 1\n\t}}\n\treturn 0\n}}\n\nfn main() {{\n\tprintln(odd(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1))\n}}\n"
+	return f"fn odd({params.join(", ")}) -> i64 sync {{\n\tif {ones.join(" && ")} {{\n\t\tassert({sum} != 1)\n\t\treturn 1\n\t}}\n\treturn 0\n}}\n\nfn main() throws {{\n\tprintln(odd(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1))\n}}\n"
 }
 
 // The book's entries that hold a log, inline or in `nikaia.proofs.d`.

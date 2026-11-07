@@ -20,7 +20,7 @@ fn id(x: u64) -> u64 {
     return x
 }
 
-fn main() {
+fn main() throws {
     println(f"{A[0]} {B[0]}")
     println(f"{BIG} {AFTER} {LOUD} {N}")
 }

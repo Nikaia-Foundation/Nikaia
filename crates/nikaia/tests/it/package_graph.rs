@@ -131,7 +131,7 @@ fn a_trait_method_calling_the_file_next_door_is_not_refused() {
                  \x20   }\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let t = Thing { n: 1 }\n\
                  \x20   println(f\"{t.go()}\")\n\
                  }\n",
@@ -182,7 +182,7 @@ fn a_trait_method_that_really_pauses_in_the_file_next_door_is_still_refused() {
                  \x20   }\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let t = Thing { n: 1 }\n\
                  \x20   println(f\"{t.go()}\")\n\
                  }\n",
@@ -287,7 +287,7 @@ fn what_a_neighbour_reaches_is_what_the_caller_reaches() {
         &[
             (
                 "helper.nika",
-                "pub fn say(n: i64) {\n\
+                "pub fn say(n: i64) throws {\n\
                  \x20   println(f\"{n}\")\n\
                  }\n",
             ),

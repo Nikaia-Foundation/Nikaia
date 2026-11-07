@@ -20,7 +20,7 @@ fn field(mut h: Holder) {
     h.items[h.items.len() - 1] = 7
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[i64] = [1, 2, 3]
     last_set(v, 8)
     last_add(v)

@@ -32,8 +32,11 @@ pub enum Seen {
     Path { name: String, span: Span },
     /// A call by name, as written, beside its statement's span, and what it
     /// hands the parameter called `root` where `root_at` says the callee has
-    /// one (`--trust`, ADR-108 D4).
-    Call { name: String, wrote: Wrote?, span: Span },
+    /// one (`--trust`, ADR-108 D4); and the text of each argument written
+    /// as a text literal, which names the resource a touch's parameter
+    /// stands for (#1354); and whether it writes the marker `trusted: true`
+    /// (ADR-365 D2), which makes a source's bytes the operator's.
+    Call { name: String, wrote: Wrote?, span: Span, literals: Vec[String?], trusted: bool },
     /// A bare name, where the walk was asked for them.
     Name(String),
     /// A `spawn`: its body runs later and elsewhere, and the walk does not
@@ -166,7 +169,7 @@ fn expression_paths(expr: ref Expr, span: ref Span, names: ref winnow_grammar::I
         Expr::Dsl { .. } => found.seen.push(Seen::Opaque { span: span.clone() }),
         Expr::Overlap(_, _) => found.seen.push(Seen::Joins { construct: "overlap", span: span.clone() }),
         Expr::Select(_, _) => found.seen.push(Seen::Joins { construct: "select", span: span.clone() }),
-        Expr::Call { func, args, .. } => a_named_call(func, args, span, names, root_at, found),
+        Expr::Call { func, args, config, .. } => a_named_call(func, args, config, span, names, root_at, found),
         else => {}
     }
     for hole in holes_of(expr) {
@@ -431,7 +434,7 @@ fn named_at(name: String, span: ref Span) -> Seen {
 }
 
 // A call by a name or a path, as written, and what it hands a `root`.
-fn a_named_call(func: ref Expr, args: ref Vec[Expr], span: ref Span, names: ref winnow_grammar::InternerContext, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+fn a_named_call(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span, names: ref winnow_grammar::InternerContext, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
     let name = match func {
         Expr::Variable(name, _) => names.resolve(name).clone(),
         Expr::Path(segments, _) => written_path(names, segments),
@@ -453,5 +456,12 @@ fn a_named_call(func: ref Expr, args: ref Vec[Expr], span: ref Span, names: ref 
     if at >= 0 && at < args.len() {
         wrote = written_root(names, args[at])
     }
-    found.seen.push(Seen::Call { name: name, wrote: wrote, span: span.clone() })
+    let mut literals: Vec[String?] = []
+    for arg in args {
+        literals.push(match arg {
+            Expr::LitStr { text, .. } => text.clone(),
+            else => null,
+        })
+    }
+    found.seen.push(Seen::Call { name: name, wrote: wrote, span: span.clone(), literals: literals, trusted: says_trusted(names, config) })
 }

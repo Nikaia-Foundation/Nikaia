@@ -2,7 +2,7 @@ struct Entry {
     n: i64,
 }
 
-fn main() {
+fn main() throws {
     let two: Vec[Vec[Entry?]] = [[Entry { n: 5 }]]
     let three: Vec[Vec[Vec[Entry?]]] = [[[Entry { n: 1 }]]]
     let ints: Vec[Vec[i64?]] = [[1, 2], [3]]

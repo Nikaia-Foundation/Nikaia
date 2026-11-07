@@ -21,7 +21,7 @@ fn apply(f: fn(a: String) -> String from a, s: String) -> String from s {
     return f(s)
 }
 
-fn main() {
+fn main() throws {
     let a: Array[i64, 3] = [1, 2, 3]
     println(total(a))
     let text: String = "abc"

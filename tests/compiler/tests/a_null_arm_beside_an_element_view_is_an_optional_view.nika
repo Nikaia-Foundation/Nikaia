@@ -17,7 +17,7 @@ fn r(given: ref Vec[E], c: bool) -> ref E? {
     if c { null } else { given[1] }
 }
 
-fn main() {
+fn main() throws {
     let g = [E { n: 1 }, E { n: 2 }]
     println(a(g, false))
     println(a(g, true))

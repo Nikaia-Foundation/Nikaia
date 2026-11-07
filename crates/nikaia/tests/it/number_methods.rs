@@ -46,7 +46,7 @@ const DESCRIBED: &str = "fn lo(a: i64, b: i64) -> i64 {\n\
      \x20   return a.abs()\n\
      }\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   println(f\"{lo(7, 3)} {hi(7, 3)} {floor_half(-7)} {size(-5)}\")\n\
      }\n";
 
@@ -85,7 +85,7 @@ fn the_common_methods_of_a_number_are_described() {
          \x20   return parts.join(\" \")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(calc(7, 4, 2, 5, 1.5, 2.5))\n\
          }\n";
     assert!(codes(source).is_empty(), "{:?}", codes(source));
@@ -121,7 +121,7 @@ fn a_same_width_truncating_name_is_refused_naming_bits_as() {
         ("i32", "truncating_u32", "bits_as_u32"),
     ] {
         let source = format!(
-            "fn f(x: {ty}) {{\n    let y = x.{method}()\n    println(f\"{{y}}\")\n}}\n\nfn main() {{}}\n"
+            "fn f(x: {ty}) throws {{\n    let y = x.{method}()\n    println(f\"{{y}}\")\n}}\n\nfn main() {{}}\n"
         );
         let got = found(&source);
         assert_eq!(got.len(), 1, "{source}: {got:?}");
@@ -131,7 +131,7 @@ fn a_same_width_truncating_name_is_refused_naming_bits_as() {
     }
     for method in ["bits_as_i32()", "bits_as_u32()", "wrapping_neg()"] {
         let source = format!(
-            "fn f(x: u8) {{\n    let y = x.{method}\n    println(f\"{{y}}\")\n}}\n\nfn main() {{}}\n"
+            "fn f(x: u8) throws {{\n    let y = x.{method}\n    println(f\"{{y}}\")\n}}\n\nfn main() {{}}\n"
         );
         let got = found(&source);
         assert_eq!(got.len(), 1, "{source}: {got:?}");
@@ -192,8 +192,9 @@ fn bits_as_and_u8_names_are_width_dependent() {
         ("a: u8", "let t: i32 = a.wrapping_sub(48)"),
         ("a: u8", "let t: u32 = a.saturating_add(10)"),
     ] {
-        let source =
-            format!("fn f({decl}) {{\n    {line}\n    println(f\"{{t}}\")\n}}\n\nfn main() {{}}\n");
+        let source = format!(
+            "fn f({decl}) throws {{\n    {line}\n    println(f\"{{t}}\")\n}}\n\nfn main() {{}}\n"
+        );
         assert!(
             codes(&source).contains(&"NK1215".to_string()),
             "{source}: {:?}",
@@ -223,7 +224,7 @@ fn rotations_are_described_and_lowered_with_any_count() {
     ] {
         assert!(rust.contains(expected), "{expected}:\n{rust}");
     }
-    let narrow = "fn f(a: u8) {\n    let t: u32 = a.rotate_left(1)\n    println(f\"{t}\")\n}\n\nfn main() {}\n";
+    let narrow = "fn f(a: u8) throws {\n    let t: u32 = a.rotate_left(1)\n    println(f\"{t}\")\n}\n\nfn main() {}\n";
     assert!(
         codes(narrow).contains(&"NK1215".to_string()),
         "{:?}",
@@ -254,7 +255,7 @@ const LOW_BITS: &str = "fn keep64(a: u64, n: i64) -> u64 {\n    \
      if n >= 8 {\n        return a\n    }\n    \
      a & ((1 << n) - 1)\n\
      }\n\n\
-     fn main() {\n    \
+     fn main() throws {\n    \
      let a: u64 = 0x0123456789abcdef\n    \
      let b: u32 = 0x89abcdef\n    \
      let c: u8 = 0xa5\n    \
@@ -330,7 +331,7 @@ fn low_bits_at_every_cpu_level() {
 /// rotations exist on the signed types too.
 #[test]
 fn wrapping_shift_counts_and_signed_rotations_are_lowered_as_u32() {
-    let source = "fn main() {\n    \
+    let source = "fn main() throws {\n    \
          let x: u64 = 1\n    \
          let n: i64 = 3\n    \
          let y: i32 = -8\n    \

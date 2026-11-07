@@ -21,7 +21,7 @@ fn a_lambda_that_names_none_is_handed_one() {
         ("xs.iter().map fn { 7 }", "count"),
     ] {
         let source = format!(
-            "fn main() {{\n    let xs = [1, 2, 3]\n    let ys = {walk}\n    println(f\"{{ys.{count}()}}\")\n}}\n"
+            "fn main() throws {{\n    let xs = [1, 2, 3]\n    let ys = {walk}\n    println(f\"{{ys.{count}()}}\")\n}}\n"
         );
         let found = findings(&source);
         assert!(
@@ -31,6 +31,6 @@ fn a_lambda_that_names_none_is_handed_one() {
             "{source}\n{found:#?}"
         );
     }
-    let fine = "fn main() {\n    let xs = [1, 2, 3]\n    let ys = xs.map fn(_) { 7 }\n    println(f\"{ys.len()}\")\n}\n";
+    let fine = "fn main() throws {\n    let xs = [1, 2, 3]\n    let ys = xs.map fn(_) { 7 }\n    println(f\"{ys.len()}\")\n}\n";
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
 }

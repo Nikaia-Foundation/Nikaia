@@ -7,7 +7,7 @@ fn dbl(x: i64) -> i64 {
     return x * 2
 }
 
-fn main() {
+fn main() throws {
     let s = St::Ex("a", fn(x) { x + 1 })
     let t = St::Ex("b", dbl)
     match s {

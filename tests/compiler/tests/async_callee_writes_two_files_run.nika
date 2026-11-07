@@ -1,0 +1,23 @@
+// Two tasks of one group call functions that write two different files, each
+// named by a literal: they meet on nothing and are accepted (Part I 8.1.2, #1354).
+// The group runs only with 99 arguments, so the test writes no file.
+use std::cli
+use std::fs
+
+fn put_a(text: String) {
+	fs::write("a.txt", fs::Root::Anywhere, text) catch { }
+}
+
+fn put_b(text: String) {
+	fs::write("b.txt", fs::Root::Anywhere, text) catch { }
+}
+
+fn main() throws {
+	if cli::args().len() > 99 {
+		async {
+			async put_a("a")
+			async put_b("b")
+		}
+	}
+	println("checked")
+}

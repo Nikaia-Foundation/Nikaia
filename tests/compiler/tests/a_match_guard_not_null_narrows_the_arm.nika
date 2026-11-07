@@ -13,7 +13,7 @@ fn next(n: i64?) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(first("ada", null))
     println(first(null, "bob"))
     println(next(41))

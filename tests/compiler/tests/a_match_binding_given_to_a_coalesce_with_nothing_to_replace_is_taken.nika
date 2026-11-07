@@ -22,7 +22,7 @@ fn keep(n: i64, mut out: Vec[P]) -> bool {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut out: Vec[P] = []
     keep(1, out)
     keep(0, out)

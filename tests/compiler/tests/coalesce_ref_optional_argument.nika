@@ -1,0 +1,42 @@
+// #1340: a `??` over a `ref T?` passed as a `ref` argument, with
+// `continue`, `return` and `null` as the fallback, also through a local
+// bound by `?? null`, borrows nothing more than the view it is.
+
+struct Expr {
+    name: String,
+}
+
+fn uses(e: ref Expr) -> bool {
+    return e.name.len() > 0
+}
+
+fn through_continue(returned: ref Expr?) -> bool {
+    for _ in 0..<1 {
+        let value = returned ?? null
+        return uses(value ?? continue)
+    }
+    return false
+}
+
+fn through_return(returned: ref Expr?) -> bool {
+    let value = returned ?? null
+    return uses(value ?? return false)
+}
+
+fn direct(returned: ref Expr?) -> bool {
+    for _ in 0..<1 {
+        return uses(returned ?? continue)
+    }
+    return uses(returned ?? return false)
+}
+
+fn main() throws {
+    let e = Expr { name: "a" }
+    let some: Expr? = e
+    println(through_continue(some))
+    println(through_continue(null))
+    println(through_return(some))
+    println(through_return(null))
+    println(direct(some))
+    println(direct(null))
+}

@@ -5,7 +5,7 @@
 use compiler_tests
 use std::channel
 
-fn main() {
+fn main() throws {
 	let found = compiler_tests::none_of[String](2)
 	println(f"{found.len()}")
 	let (_tx, _rx) = channel::bounded[i64](4)

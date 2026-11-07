@@ -10,7 +10,7 @@ fn taken(keep ty: compiler_tests::KeepsBesideType) -> String {
 	return ty.name
 }
 
-fn main() {
+fn main() throws {
 	let t = compiler_tests::KeepsBesideType { name: "a", is_slice: false, is_mut: false }
 	let u = compiler_tests::KeepsBesideType { name: "b", is_slice: false, is_mut: false }
 	println(named(t))

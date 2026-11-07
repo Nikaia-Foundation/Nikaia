@@ -24,7 +24,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -34,7 +34,7 @@ fn line(text: String) {
 	println(parts.join(" | "))
 }
 
-fn main() {
+fn main() throws {
 	line("'it''s'")
 	line("['', \"\"]")
 	line("\"a\\tb\\\\c\\\"d\\/e\\nf\"")

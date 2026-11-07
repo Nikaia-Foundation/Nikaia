@@ -1,0 +1,38 @@
+// A buffer the body changes after its `let` and then hands back through the
+// keep is put there after its last change (#1276): text grown by `push_str`
+// and `+=`, in a branch too, and a list filled in a loop.
+
+struct Line { text: String, at: i64 }
+
+struct Picked { xs: Array[i64], at: i64 }
+
+fn line(n: i64) -> Line {
+    let mut text = f"a: {n}"
+    text.push_str("x")
+    return Line { text: text.trim(), at: 0 }
+}
+
+fn grown(n: i64) -> Line {
+    let mut text = f"b: {n}"
+    text += " y "
+    if n > 1 {
+        text.push_str("z ")
+    }
+    return Line { text: text.trim(), at: n }
+}
+
+fn picked(n: i64) -> Picked {
+    let mut xs = []
+    for i in 0..<n {
+        xs.push(i * 10)
+    }
+    return Picked { xs: xs[1..<n], at: 0 }
+}
+
+fn main() throws {
+    println(line(3).text)
+    let g = grown(2)
+    println(f"{g.text} {g.at}")
+    let p = picked(4)
+    println(f"{p.xs.len()} {p.xs[0]} {p.xs[2]}")
+}

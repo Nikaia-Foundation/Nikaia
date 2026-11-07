@@ -7,7 +7,7 @@ grammar Num {
 	rule Digits[T] -> T = d:dec[T](digit+) -> { d }
 }
 
-fn main() {
+fn main() throws {
 	let n: i64 = Num::read[i64](Bytes("4200000000".bytes().collect())) catch {
 		println("error")
 		return

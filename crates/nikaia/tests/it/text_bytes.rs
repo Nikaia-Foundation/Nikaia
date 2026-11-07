@@ -39,7 +39,7 @@ const READS: &str = "fn reads(s: String) throws {\n\
     \x20   println(f\"{first} {part.len()} {n} {semi} {head} {sum}\")\n\
     }\n\
     \n\
-    fn main() {\n\
+    fn main() throws {\n\
     \x20   reads(\"ab;cd;ef\") catch {\n\
     \x20       println(\"failed\")\n\
     \x20   }\n\
@@ -66,7 +66,7 @@ fn every_read_of_a_bytes_works_on_s_bytes() {
 /// `s.bytes.len()` counts bytes, not characters: `"ä"` is two.
 #[test]
 fn the_bytes_of_a_umlaut_are_two() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let s = \"ä\"\n\
          \x20   println(f\"{s.bytes.len()} {s.bytes[0]} {s.bytes[1]}\")\n\
          }\n";
@@ -95,7 +95,7 @@ fn a_function_over_bytes_takes_both() {
          \x20   println(f\"{semis(read)} {semis(s.bytes)} {read.len()} {s.bytes.len()}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   both(\"x\") catch {\n\
          \x20       println(\"failed\")\n\
          \x20   }\n\
@@ -122,7 +122,7 @@ fn s_bytes_kept_beyond_the_text_is_a_copy() {
          \x20   return s.bytes\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let k = keep(\"ä;b\")\n\
          \x20   let b = back(\"abc\")\n\
          \x20   println(f\"{k.b.len()} {k.b[0]} {b.len()} {b[2]}\")\n\
@@ -183,7 +183,7 @@ fn s_bytes_through_a_let_is_copied_where_it_is_kept() {
          \x20   return sum + k.len() + k[0] as i64 + semis(k)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let b = back(\"abc\")\n\
          \x20   let v = listed(\"xy\")\n\
          \x20   let k = keep(\"ä;b\")\n\
@@ -219,7 +219,7 @@ fn clone_makes_a_bytes_of_its_own() {
          \x20   println(f\"{c.len()} {c[0]} {read.len()} {d.len()} {d[0]} {e[2]} {f[3]} {g.len()}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   copies(\"x\") catch {\n\
          \x20       println(\"failed\")\n\
          \x20   }\n\
@@ -249,7 +249,7 @@ fn a_char_literal_compared_with_a_walked_byte_is_a_u8() {
          \x20   return n\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let s = \"a\\nb\\nc\"\n\
          \x20   println(f\"{lines(s, \"a;b;\".bytes[0..<4])}\")\n\
          }\n";
@@ -272,7 +272,7 @@ fn a_word_is_read_in_the_order_its_name_says() {
          \x20   println(f\"{s.bytes.u32_le(4)} {s.bytes.u64_be(0)}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   words(\"w\") catch {\n\
          \x20       println(\"failed\")\n\
          \x20   }\n\

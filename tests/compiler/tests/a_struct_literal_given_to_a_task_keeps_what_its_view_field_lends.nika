@@ -10,7 +10,7 @@ fn go(l: L) -> i64 {
     return t.await
 }
 
-fn main() {
+fn main() throws {
     let l = L { n: 3, tag: "a" }
     println(f"{go(l)} {l.tag}")
 }

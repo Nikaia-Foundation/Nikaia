@@ -1,7 +1,7 @@
 // #939: a shift or a bit operation beside a comparison in a guard, an `if`
 // head or a `while` head is refused with NK1197, as in a `let`, where it used
 // to be a parse error.
-fn main() {
+fn main() throws {
 	let m: i64 = 8
 	let s = match true {
 		true if m == 1 << 3 => "eight",

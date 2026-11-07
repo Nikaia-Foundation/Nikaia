@@ -32,7 +32,7 @@ fn step(n: i64) -> i64 {
 	return w
 }
 
-fn main() {
+fn main() throws {
 	println(f"{width(Size::Small)} {width(Size::Medium)} {width(Size::Large)} {width(Size::Unknown)}")
 	println(f"{step(0)} {step(3)} {step(9)}")
 }

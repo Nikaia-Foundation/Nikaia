@@ -510,7 +510,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             scope.facts.push(fact);
         } else { scope.loose.insert(name.to_string()); }
         if value_at_entry.is_some() { scope.entry.insert(name.to_string(), nikaia_std::index::or(value_at_entry, || 0)); }
-    } else if prover_typed(ty, words, 0) || called && called_whole {
+    } else if prover_let_typed(&walk, ty, &span, words, 0) || called && called_whole {
         scope.ints.insert(name.to_string());
         scope.loose.insert(name.to_string());
     }
@@ -521,7 +521,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
         }
         if called_summed.is_some() { scope.summed.insert(name.to_string(), nikaia_std::index::or(called_summed, || vec![].into())); }
     }
-    if prover_typed(ty, words, 1) && scope.ints.contains(&name) { scope.not_negative(&mut walk.arena, &name); }
+    if prover_let_typed(&walk, ty, &span, words, 1) && scope.ints.contains(&name) { scope.not_negative(&mut walk.arena, &name); }
     match value {
         Expr::ListLit { items, .. } => {
             let known: Option<i64> = Some(items.len() as i64);
@@ -2024,6 +2024,14 @@ pub(crate) fn prover_a_branch(stmt: &Stmt) -> bool {
 pub(crate) fn prover_symbol_text(symbol: Option<&winnow_grammar::Symbol>, words: &winnow_grammar::InternerContext) -> Option<String> {
     let present = match symbol { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(words.resolve(*present).to_string())
+}
+
+pub(crate) fn prover_let_typed(walk: &ProverWalk, ty: Option<&Type>, span: &Span, words: &winnow_grammar::InternerContext, asked: i64) -> bool {
+    if ty.is_some() { return prover_typed(std::convert::identity(ty), words, asked); }
+    let inferred = match walk.state.whole_lets.get(&(span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if asked == 0 { return true; }
+    if asked == 1 { return inferred.starts_with('u'); }
+    false
 }
 
 pub(crate) fn prover_typed(ty: Option<&Type>, words: &winnow_grammar::InternerContext, asked: i64) -> bool {

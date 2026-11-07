@@ -21,7 +21,9 @@ struct Stats {
 
 fn main() throws {
     let path = cli::args().nth(1) ?? "measurements.txt"
-    let data = fs::read_to_string(path, fs::Root::Anywhere)
+    // The measurements are the file `brc.sh` generated: who wrote them is known,
+    // so the map takes the fast hash (ADR-365 D2).
+    let data = fs::read_to_string(path, fs::Root::Anywhere; trusted: true)
     let mut stations: collections::HashMap[String, Stats] = collections::HashMap()
 
     for line in data.lines() {

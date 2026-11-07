@@ -111,7 +111,7 @@ fn count(dna: String, k: i64) -> collections::HashMap[String, Tally] {
 // Two stable sorts give the order the benchmark asks for: by fragment, then by
 // count descending. The second sort keeps the first's order among equal counts,
 // so ties come out alphabetically.
-fn report_frequencies(dna: String, k: i64) {
+fn report_frequencies(dna: String, k: i64) throws {
     let counts = count(dna, k)
 
     let mut rows = Vec()
@@ -133,7 +133,7 @@ fn report_frequencies(dna: String, k: i64) {
 
 // One named fragment, and how often it occurs. `k` is the fragment's own
 // length, so the table is built for exactly the width being asked about.
-fn report_fragment(dna: String, fragment: String) {
+fn report_fragment(dna: String, fragment: String) throws {
     let counts = count(dna, fragment.len())
     // `get` hands back a `Tally?`, because the key may not be there: `?.`
     // reaches into it if it is, and `??` gives the value to use if it is not.
@@ -150,7 +150,9 @@ fn main() throws {
     // cannot be mapped like a file. There is no `await`, yet while the pipe is
     // empty other tasks run. With `user-parallelism = "yes"` in nikaia.toml
     // `[build]` the read may resume on another thread; the output is the same.
-    let text = io::read_to_string() catch {
+    // Standard input is untrusted unless the call says who wrote it: here it is
+    // the benchmark's own fixture, so the counts take the fast hash (ADR-365 D2).
+    let text = io::read_to_string(trusted: true) catch {
         eprintln(f"cannot read standard input: {error}")
         return
     }
