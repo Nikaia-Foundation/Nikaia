@@ -975,6 +975,15 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         state.facts.slot_fallbacks.insert(id_of(expr) as i64, check_core_ops_plain_text(other))
         return inner
     }
+    // **Text made here beside the text a map holds** (#1322): what a map
+    // holds, read, is a view of it (ADR-293 D28), so the answer is a view of
+    // text and the fallback goes into a slot, as above. Never left to the
+    // language below: `index::or(m.get(k), || made.into())` asks it a type
+    // it cannot tell.
+    if nullable && from_a_map && !check_core_ops_variable(value) && check_core_ops_plain_text(inner) && check_core_ops_plain_text(other) && made_in_the_call(fallback) && !state.jumps(world, fallback) {
+        state.facts.slot_fallbacks.insert(id_of(expr) as i64, true)
+        return check_core_ops_view("str")
+    }
     if nullable {
         if from_a_map {
             // **What a map holds has its own sentence** (#297).

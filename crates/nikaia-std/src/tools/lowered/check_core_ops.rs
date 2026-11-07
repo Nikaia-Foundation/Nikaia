@@ -650,6 +650,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         state.facts.slot_fallbacks.insert(id_of(expr) as i64, check_core_ops_plain_text(&other));
         return inner;
     }
+    if nullable && from_a_map && !check_core_ops_variable(value) && check_core_ops_plain_text(&inner) && check_core_ops_plain_text(&other) && made_in_the_call(fallback) && !state.jumps(world, fallback) {
+        state.facts.slot_fallbacks.insert(id_of(expr) as i64, true);
+        return check_core_ops_view("str");
+    }
     if nullable {
         if from_a_map {
             let held = check_core_ops_held(&inner);
