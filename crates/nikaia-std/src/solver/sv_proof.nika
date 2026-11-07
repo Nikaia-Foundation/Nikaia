@@ -1,0 +1,161 @@
+// crates/nikaia-std/src/solver/sv_proof.nika
+//
+// **The proof log** (ADR-270 D5, #1282 item 4): one append-only log every
+// engine, strategy and theory writes into, replayed by `sv_check.nika`
+// without search.
+//
+// A query is its atoms (`row <= 0`, `row < 0` or `row = 0` over integer
+// columns) and its clauses over literals; literal `2a` is atom `a`, `2a + 1`
+// its negation, over the integers `-row + 1 <= 0` for `row <= 0` and
+// `-row <= 0` for `row < 0` (the negation of an equality is no bound). The
+// log numbers what it derives, its *entries*, in the order it derives them:
+// every step makes one entry except an extension, which makes two. An entry
+// is a clause or a bound; a bound carries the literals it assumes, and a
+// Farkas lemma turns those into its clause.
+//
+// The steps:
+//
+// * `Input(c)`: clause `c` of the query, numbered by the checker itself.
+// * `Learn(lits, hints)`: a clause by reverse unit propagation through the
+//   hinted clauses, in order (LRAT); without hints it is refused.
+// * `Delete(id)`: an entry no later step reads.
+// * `Farkas(lits, sources, multipliers, den)`: the clause `lits`, justified by
+//   a combination of bounds - a literal's own bound, or an earlier bound
+//   entry - with integer multipliers over the one denominator `den > 0`,
+//   non-negative on an inequality, ending in `c <= 0` with `c > 0`, `c < 0`
+//   with `c >= 0` or `c = 0` with `c != 0`.
+// * `Combine(sources, multipliers)`: the same combination kept as a bound.
+// * `Round(id, d)`: Chvátal-Gomory: bound `id`, every coefficient divisible
+//   by `d > 0`, divided by `d` and its constant rounded towards the integers;
+//   an equality whose constant `d` does not divide is `1 <= 0` (the GCD test).
+// * `Split(le, ge)`: two new atoms `le <= 0` and `ge <= 0` with `le + ge = 1`
+//   (`L - k <= 0 ∨ k + 1 - L <= 0`) and the clause of both.
+// * `Extend(l, m, q)`: the fresh column `q = ⌊l / m⌋` for `m > 0`, the two
+//   bounds `m·q - l <= 0` and `l - m·q - (m - 1) <= 0`.
+
+/// How a row compares to zero.
+pub enum SvRel {
+	Le,
+	Lt,
+	Eq,
+}
+
+/// `row REL 0`.
+pub struct SvAtom {
+	pub row: SvRow,
+	pub rel: SvRel,
+}
+
+/// A query as the log reads it: its atoms, its clauses over literals, and
+/// how many integer columns it has.
+pub struct SvQuery {
+	pub atoms: Vec[SvAtom],
+	pub clauses: Vec[Vec[u32]],
+	pub columns: u32,
+}
+
+/// What a combination adds: the bound of a literal, assumed, or an earlier
+/// bound entry.
+pub enum SvSrc {
+	Lit(u32),
+	Fact(u32),
+}
+
+pub enum SvStep {
+	Input(u32),
+	Learn(Vec[u32], Vec[u32]),
+	Delete(u32),
+	Farkas(Vec[u32], Vec[SvSrc], Vec[i64], i64),
+	Combine(Vec[SvSrc], Vec[i64]),
+	Round(u32, i64),
+	Split(SvRow, SvRow),
+	Extend(SvRow, i64, u32),
+}
+
+/// The literal of atom `a`, negated where `negated`.
+fn sv_lit(a: u32, negated: bool) -> u32 {
+	return if negated { 2 * a + 1 } else { 2 * a }
+}
+
+/// The steps and what they number: entries, atoms and columns so far.
+pub struct SvLog {
+	pub steps: Vec[SvStep],
+	pub entries: u32,
+	pub atoms: u32,
+	pub columns: u32,
+}
+
+/// An empty log over `query`.
+fn sv_log(query: ref SvQuery) -> SvLog? {
+	let atoms = query.atoms.len().checked_u32() ?? return null
+	return SvLog { steps: [], entries: 0, atoms: atoms, columns: query.columns }
+}
+
+impl SvLog {
+	/// Appends `step`, which makes `made` entries; the id of the first.
+	fn add(ref mut self, step: SvStep, made: u32) -> u32 {
+		let id = self.entries
+		self.steps.push(step)
+		self.entries += made
+		return id
+	}
+
+	fn input(ref mut self, clause: u32) -> u32 {
+		return self.add(SvStep::Input(clause), 1)
+	}
+
+	fn learn(ref mut self, lits: Vec[u32], hints: Vec[u32]) -> u32 {
+		return self.add(SvStep::Learn(lits, hints), 1)
+	}
+
+	fn delete(ref mut self, id: u32) {
+		self.steps.push(SvStep::Delete(id))
+	}
+
+	fn farkas(
+		ref mut self,
+		lits: Vec[u32],
+		sources: Vec[SvSrc],
+		multipliers: Vec[i64],
+		den: i64,
+	) -> u32 {
+		return self.add(SvStep::Farkas(lits, sources, multipliers, den), 1)
+	}
+
+	fn combine(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> u32 {
+		return self.add(SvStep::Combine(sources, multipliers), 1)
+	}
+
+	fn round(ref mut self, id: u32, d: i64) -> u32 {
+		return self.add(SvStep::Round(id, d), 1)
+	}
+
+	/// The split `le <= 0 ∨ ge <= 0`: its clause's id; its atoms are the
+	/// two after `atoms` before the call.
+	fn split(ref mut self, le: SvRow, ge: SvRow) -> u32 {
+		self.atoms += 2
+		return self.add(SvStep::Split(le, ge), 1)
+	}
+
+	/// The extension `q = ⌊l / m⌋`: the id of its first bound, the second
+	/// following; `q` is the column `columns` before the call.
+	fn extend(ref mut self, l: SvRow, m: i64) -> u32 {
+		let q = self.columns
+		self.columns += 1
+		return self.add(SvStep::Extend(l, m, q), 2)
+	}
+}
+
+/// The step's name, as the checker's reasons and an export write it.
+fn sv_step_kind(step: ref SvStep) -> String {
+	return match step {
+		SvStep::Input(_) => "input",
+		SvStep::Learn(_, _) => "learn",
+		SvStep::Delete(_) => "delete",
+		SvStep::Farkas(_, _, _, _) => "farkas",
+		SvStep::Combine(_, _) => "combine",
+		SvStep::Round(_, _) => "round",
+		SvStep::Split(_, _) => "split",
+		SvStep::Extend(_, _, _) => "extend",
+	}
+}
