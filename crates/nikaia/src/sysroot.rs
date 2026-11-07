@@ -572,7 +572,7 @@ fn lower_tools_files_cached(
     timer.lap("parse");
     let (described, library, facts_reusable) = tools_library()?;
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
-    let (own, checked) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+    let (own, checked) = crate::contracts::infer_package_parallel(&units, &library);
     timer.lap("ledger");
     // **The package's trust, asked once** (ADR-010 D9, #581): the join over all
     // its files is one answer, and asking it per file reads the package again
@@ -938,7 +938,7 @@ impl Phases {
 /// (#667): `order` says which index is started first and nothing else. The
 /// threads are `threads`, else `NIKAIA_LOWER_THREADS` where it is set, else
 /// one per core; at one, the work runs on the calling thread.
-fn in_parallel<T: Send>(
+pub(crate) fn in_parallel<T: Send>(
     order: &[usize],
     threads: Option<usize>,
     work: impl Fn(usize) -> T + Sync,

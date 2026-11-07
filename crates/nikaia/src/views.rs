@@ -73,6 +73,46 @@ pub fn result_sources_inferred(
     )
 }
 
+/// What every unit of the package reads alike in the rounds that write the
+/// result sources (#1277, `tools/views.nika`): made once per round set.
+pub fn result_package(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+) -> nikaia_std::tools::views::ResultPackage {
+    nikaia_std::tools::views::result_package(&asked(parsed, own, library))
+}
+
+/// `result_sources` with the package's part made once by the caller.
+pub fn result_sources_in(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    package: &nikaia_std::tools::views::ResultPackage,
+) -> Vec<nikaia_std::tools::views::ResultSource> {
+    nikaia_std::tools::views::result_sources_in(
+        &asked(parsed, own, library),
+        package,
+        &parsed.program.items,
+        &|value: &Expr| own_buffer(parsed, value, own, library),
+    )
+}
+
+/// `places_stored` with the package's part made once by the caller.
+pub fn places_stored_in(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    package: &nikaia_std::tools::views::ResultPackage,
+) -> Vec<nikaia_std::tools::views::PlacesStored> {
+    nikaia_std::tools::views::places_stored_in(
+        &asked(parsed, own, library),
+        package,
+        &parsed.program.items,
+        &|value: &Expr| own_buffer(parsed, value, own, library),
+    )
+}
+
 /// What each function keeps in a `mut` parameter's place (ADR-283 D27,
 /// `tools/views.nika`), by ledger key: `v:s`.
 pub fn places_stored(

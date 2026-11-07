@@ -108,7 +108,8 @@ pub(crate) fn ld_columns(ledger: &Ledger) -> Vec<String> {
     out
 }
 
-pub fn write_result_sources(ledger: &mut Ledger, units: i64, sources: &impl Fn(i64, &Ledger) -> Vec<ResultSource>, stored: &impl Fn(i64, &Ledger) -> Vec<PlacesStored>) {
+pub fn write_result_sources(ledger: &mut Ledger, units: i64, package: &impl Fn(&Ledger) -> ResultPackage, sources: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<ResultSource>, stored: &impl Fn(i64, &Ledger, &ResultPackage) -> Vec<PlacesStored>) {
+    let shared = package(&ledger);
     let mut before = ld_columns(&ledger);
     for round in 0..8 {
         if round > 0 {
@@ -118,12 +119,12 @@ pub fn write_result_sources(ledger: &mut Ledger, units: i64, sources: &impl Fn(i
         }
         let mut fresh: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
         for unit in 0..units {
-            for source in sources(unit, &ledger) {
+            for source in sources(unit, &ledger, &shared) {
                 let contract = match nikaia_std::index::get_mut(&mut ledger.functions, &source.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 contract.borrows = source.borrows;
                 contract.returns = source.returns;
             }
-            for kept in stored(unit, &ledger) { fresh.insert(kept.key, kept.stores); }
+            for kept in stored(unit, &ledger, &shared) { fresh.insert(kept.key, kept.stores); }
         }
         let mut keys: Vec<String> = vec![];
         for (key, _) in ledger.functions.iter() { keys.push(key.to_string()); }

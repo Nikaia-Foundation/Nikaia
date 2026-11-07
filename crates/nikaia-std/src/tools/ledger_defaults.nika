@@ -161,8 +161,10 @@ fn ld_columns(ledger: ref Ledger) -> Vec[String] {
 /// What each function's result points into, and what it keeps in a `mut`
 /// parameter's place (ADR-283 D25, D27, #580): rounds until a round would
 /// write what the one before read (#727, #740), at most eight. `sources` and
-/// `stored` ask the workshop for one unit by its place.
-pub fn write_result_sources(mut ledger: Ledger, units: i64, sources: fn(i64, ref Ledger) -> Vec[ResultSource] sync, stored: fn(i64, ref Ledger) -> Vec[PlacesStored] sync) {
+/// `stored` ask the workshop for one unit by its place; `package` makes what
+/// every unit reads alike once, as the rounds write nothing it reads (#1277).
+pub fn write_result_sources(mut ledger: Ledger, units: i64, package: fn(ref Ledger) -> ResultPackage sync, sources: fn(i64, ref Ledger, ref ResultPackage) -> Vec[ResultSource] sync, stored: fn(i64, ref Ledger, ref ResultPackage) -> Vec[PlacesStored] sync) {
+    let shared = package(ledger)
     let mut before = ld_columns(ledger)
     for round in 0..<8 {
         if round > 0 {
@@ -174,12 +176,12 @@ pub fn write_result_sources(mut ledger: Ledger, units: i64, sources: fn(i64, ref
         }
         let mut fresh: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
         for unit in 0..<units {
-            for source in sources(unit, ledger) {
+            for source in sources(unit, ledger, shared) {
                 let mut contract = ledger.functions[source.key] ?? continue
                 contract.borrows = source.borrows
                 contract.returns = source.returns
             }
-            for kept in stored(unit, ledger) {
+            for kept in stored(unit, ledger, shared) {
                 fresh.insert(kept.key, kept.stores)
             }
         }

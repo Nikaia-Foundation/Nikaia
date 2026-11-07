@@ -3125,7 +3125,7 @@ pub mod view_changes {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, views_stored, views_checked, holds_view, views_the_call_s, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, result_sources_inferred, PlacesStored, places_stored};
+    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_checked, holds_view, views_the_call_s, written_type, local_struct_handed_back, FieldsHeld, fields_held, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, PlacesStored, places_stored, places_stored_in};
 }
 pub mod written {
     #[allow(unused_imports)]

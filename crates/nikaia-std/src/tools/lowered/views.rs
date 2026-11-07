@@ -41,7 +41,15 @@ pub(crate) struct Unit {
     pub(crate) read_by_free: collections::BTreeSet<String>,
 }
 
-pub(crate) fn plain_unit(asked: &Asked<'_, '_, '_>, borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new(), owned_results: owned_result_methods(asked), read_by_free: read_by_free_functions(asked) } }
+pub(crate) fn plain_unit(package: &ResultPackage, borrowing: collections::BTreeSet<String>, fields: collections::BTreeMap<String, Vec<(String, Type)>>) -> Unit { Unit { borrowing, fields, methods: collections::BTreeMap::new(), kept: collections::BTreeSet::new(), readonly: collections::BTreeSet::new(), owned_results: package.owned_results.to_owned(), read_by_free: package.read_by_free.to_owned() } }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResultPackage {
+    pub owned_results: collections::BTreeSet<String>,
+    pub read_by_free: collections::BTreeSet<String>,
+}
+
+pub fn result_package(asked: &Asked<'_, '_, '_>) -> ResultPackage { ResultPackage { owned_results: owned_result_methods(asked), read_by_free: read_by_free_functions(asked) } }
 
 pub(crate) fn read_by_free_functions(asked: &Asked<'_, '_, '_>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -141,7 +149,7 @@ pub(crate) enum Root {
 }
 
 pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<Stored> {
-    let mut unit = plain_unit(asked, borrowing_types(asked.names, items), view_fields(asked.names, items));
+    let mut unit = plain_unit(&result_package(asked), borrowing_types(asked.names, items), view_fields(asked.names, items));
     method_table(asked, items, &mut unit);
     let mut round: Vec<Stored> = vec![];
     let mut growing = true;
@@ -2471,14 +2479,18 @@ pub struct ResultSource {
     pub returns: String,
 }
 
-pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
-    let mut out = result_sources_inferred(asked, items, own_buffer);
+pub fn result_sources(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> { result_sources_in(asked, &result_package(asked), items, own_buffer) }
+
+pub fn result_sources_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
+    let mut out = result_sources_inferred_in(asked, package, items, own_buffer);
     result_from_as_written(asked.names, items, &mut out);
     out
 }
 
-pub fn result_sources_inferred(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
-    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
+pub fn result_sources_inferred(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> { result_sources_inferred_in(asked, &result_package(asked), items, own_buffer) }
+
+pub(crate) fn result_sources_inferred_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<ResultSource> {
+    let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -2499,8 +2511,10 @@ pub struct PlacesStored {
     pub stores: Vec<String>,
 }
 
-pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> {
-    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
+pub fn places_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> { places_stored_in(asked, &result_package(asked), items, own_buffer) }
+
+pub fn places_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool) -> Vec<PlacesStored> {
+    let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, &mut ignored);
@@ -2604,7 +2618,8 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
 }
 
 pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, out: &mut Vec<Finding>) {
-    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items));
+    let package = result_package(asked);
+    let unit = plain_unit(&package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     rsrc_solve(&unit, asked, items, own_buffer, &mut known, out);
 }

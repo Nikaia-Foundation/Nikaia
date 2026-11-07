@@ -108,8 +108,23 @@ struct Unit {
     read_by_free: collections::BTreeSet[String],
 }
 
-fn plain_unit(asked: ref Asked, borrowing: collections::BTreeSet[String], fields: collections::BTreeMap[String, Vec[(String, Type)]]) -> Unit {
-    return Unit { borrowing: borrowing, fields: fields, methods: collections::BTreeMap(), kept: collections::BTreeSet(), readonly: collections::BTreeSet(), owned_results: owned_result_methods(asked), read_by_free: read_by_free_functions(asked) }
+fn plain_unit(package: ref ResultPackage, borrowing: collections::BTreeSet[String], fields: collections::BTreeMap[String, Vec[(String, Type)]]) -> Unit {
+    return Unit { borrowing: borrowing, fields: fields, methods: collections::BTreeMap(), kept: collections::BTreeSet(), readonly: collections::BTreeSet(), owned_results: package.owned_results.clone(), read_by_free: package.read_by_free.clone() }
+}
+
+/// **What every unit of a package reads alike** (#1277): `Unit::owned_results`
+/// and `Unit::read_by_free`, which scan the whole ledger. They read the
+/// signatures, `keeps` and the types' `tethered`, none of which the rounds of
+/// `write_result_sources` write, so one is made per call of it, not one per
+/// unit and round.
+pub struct ResultPackage {
+    pub owned_results: collections::BTreeSet[String],
+    pub read_by_free: collections::BTreeSet[String],
+}
+
+/// The package's `ResultPackage`, from the ledgers alone.
+pub fn result_package(asked: ref Asked) -> ResultPackage {
+    return ResultPackage { owned_results: owned_result_methods(asked), read_by_free: read_by_free_functions(asked) }
 }
 
 // The keys of `Unit::read_by_free`.
@@ -248,7 +263,7 @@ enum Root {
 /// order. `own_buffer` says whether a `let`'s value is a buffer of its own
 /// (ADR-283) - the compiler's `tether` answers it.
 pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
-    let mut unit = plain_unit(asked, borrowing_types(asked.names, items), view_fields(asked.names, items))
+    let mut unit = plain_unit(result_package(asked), borrowing_types(asked.names, items), view_fields(asked.names, items))
     method_table(asked, items, unit)
     // **The methods to their least fixpoint** (#818): a parameter handed to a
     // method on `self` is kept only if that method keeps it. Nothing is kept
@@ -3385,7 +3400,12 @@ pub struct ResultSource {
 /// the ledger's `ref(..)` (#580 step 5): a written `from` as written
 /// (ADR-views-3 D10), else what the body reaches.
 pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
-    let mut out = result_sources_inferred(asked, items, own_buffer)
+    return result_sources_in(asked, result_package(asked), items, own_buffer)
+}
+
+/// `result_sources` with the package's `ResultPackage` made once by the caller.
+pub fn result_sources_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
+    let mut out = result_sources_inferred_in(asked, package, items, own_buffer)
     result_from_as_written(asked.names, items, out)
     return out
 }
@@ -3393,7 +3413,11 @@ pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffe
 /// What each body's ways out reach, whatever its `from` says: what the check
 /// of a written `from` holds it against (`check_result_from.nika`).
 pub fn result_sources_inferred(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
-    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
+    return result_sources_inferred_in(asked, result_package(asked), items, own_buffer)
+}
+
+fn result_sources_inferred_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
+    let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -3425,7 +3449,12 @@ pub struct PlacesStored {
 /// The answer of D27 for every function of the unit that has a `mut`
 /// parameter and a text parameter lent to it.
 pub fn places_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[PlacesStored] {
-    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
+    return places_stored_in(asked, result_package(asked), items, own_buffer)
+}
+
+/// `places_stored` with the package's `ResultPackage` made once by the caller.
+pub fn places_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[PlacesStored] {
+    let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
     rsrc_solve(unit, asked, items, own_buffer, known, ignored)
@@ -3562,7 +3591,8 @@ fn rsrc_returns_text(params: ref Vec[String], reach: ref collections::BTreeSet[S
 
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
 fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
-    let unit = plain_unit(asked, package_borrowing_types(asked, items), view_fields(asked.names, items))
+    let package = result_package(asked)
+    let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     rsrc_solve(unit, asked, items, own_buffer, known, out)
 }
