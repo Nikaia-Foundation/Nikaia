@@ -86,11 +86,11 @@ fn main() throws {
 fn sum(n: i64) -> String {
 	let mut text = "(set-logic QF_LIA)\n"
 	let mut terms = ""
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		text = text + f"(declare-const x{i} Int)\n"
 		terms = terms + f" x{i}"
 	}
-	for i in 1..n {
+	for i in 1..<n + 1 {
 		text = text + f"(assert (or (= x{i} (- 1)) (= x{i} 1)))\n"
 	}
 	return text + f"(assert (= (+{terms}) 1))\n(check-sat)\n"
