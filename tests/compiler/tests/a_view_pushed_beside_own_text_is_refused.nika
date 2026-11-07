@@ -1,0 +1,15 @@
+// #1261: a view pushed into a `Vec[String]` that text of its own also goes
+// into is refused (NK1102), with `.clone()` as the way out (Part I 2.2): the
+// list holds owned text, and the compiler never copies text itself. Before,
+// a shape of this in scripts/drive.nika passed `nikaia check` and rustc
+// refused it.
+fn blocking(dir: String) -> String { dir.trim() + "x" }
+
+fn main() {
+    let names = [" a b ", "c d"]
+    let mut briefs: Vec[String] = []
+    let urgent = names[0].trim()
+    briefs.push(urgent)
+    briefs.push(blocking(" b "))
+    println(briefs.len())
+}
