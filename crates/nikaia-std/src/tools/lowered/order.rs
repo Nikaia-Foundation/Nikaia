@@ -491,7 +491,7 @@ pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar:
     let mut present: Vec<bool> = vec![];
     let mut lines: Vec<String> = vec![];
     for stmt in block.stmts.iter() {
-        let answer = accounted(&stmt.node, names, walking);
+        let answer = accounted_beside(&stmt.node, names, walking);
         let named = match answer {
             Accounted::Operation(ref operation) => operation.callee.to_string(),
             _ => String::from("…"),

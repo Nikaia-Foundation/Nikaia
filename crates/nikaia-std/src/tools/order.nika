@@ -746,7 +746,9 @@ fn one_block_report(key: ref String, block: ref Block, names: ref winnow_grammar
     let mut present: Vec[bool] = []
     let mut lines: Vec[String] = []
     for stmt in block.stmts {
-        let answer = accounted(stmt.node, names, walking)
+        // A branch runs beside the others, and its failure is the block's
+        // to combine (ADR-292 D11): no reason to leave it unaccounted for.
+        let answer = accounted_beside(stmt.node, names, walking)
         let named = match answer {
             Accounted::Operation(operation) => operation.callee.clone(),
             else => "…",

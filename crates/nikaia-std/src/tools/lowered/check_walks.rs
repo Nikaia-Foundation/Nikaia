@@ -232,7 +232,7 @@ impl CheckState {
             }
         }
         let mut operations: Vec<Accounted> = vec![];
-        for stmt in block.stmts.iter() { operations.push(accounted(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
+        for stmt in block.stmts.iter() { operations.push(accounted_beside(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
         let mut mentioned: Vec<collections::BTreeSet<String>> = vec![];
         for stmt in block.stmts.iter() {
             let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();

@@ -338,9 +338,13 @@ impl CheckState {
                 else => {},
             }
         }
+        // **A branch runs beside the others** (ADR-292 D11): a failure in it
+        // is the block's to combine, and what the others did has run by then,
+        // so it is no reason to leave the branch unaccounted for - a `println`
+        // that can fail (ADR-392) still writes stdout.
         let mut operations: Vec[Accounted] = []
         for stmt in block.stmts {
-            operations.push(accounted(stmt.node, world.words, Walking { own: world.own, library: world.library, into: Going::Ours }))
+            operations.push(accounted_beside(stmt.node, world.words, Walking { own: world.own, library: world.library, into: Going::Ours }))
         }
         let mut mentioned: Vec[collections::BTreeSet[String]] = []
         for stmt in block.stmts {
