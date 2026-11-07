@@ -49,8 +49,8 @@ fn main() throws {
     let base = fs::canonical(".", root).display()
     let main_uri = f"file://{base}/pk/src/main.nika"
     let other_uri = f"file://{base}/pk/src/other.nika"
-    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{} } }")
-    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{} }"))
+    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}")
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}"))
     transcript.push_str(opened(main_uri, main_text))
     transcript.push_str(opened(other_uri, "pub fn g() -> i64 {\n    return 2\n}\n"))
     transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))

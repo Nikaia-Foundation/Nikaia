@@ -2777,7 +2777,7 @@ pub mod check_with {
 }
 pub mod check_words {
     #[allow(unused_imports)]
-    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, not_promised_note, is_a_lookup, boxed_member, articles};
+    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, collapsed_doubled_braces, not_promised_note, is_a_lookup, boxed_member, articles};
 }
 pub mod claim_names {
     #[allow(unused_imports)]
