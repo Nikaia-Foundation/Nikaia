@@ -2919,7 +2919,7 @@ fn a_published_parameter_takes_either_kind_from_its_package_and_its_own_from_oth
 #[test]
 fn a_moved_cleanup_point_is_narrated_once() {
     const BEFORE: &str = "struct Handle {\n    name: String,\n}\n\n\
-        impl Drop for Handle {\n    fn drop(ref mut self) throws {\n        println(f\"closing {self.name}\")\n    }\n}\n\n\
+        impl Drop for Handle {\n    fn drop(ref mut self) {\n        println(f\"closing {self.name}\") catch { }\n    }\n}\n\n\
         fn look(h: Handle) -> i64 {\n    return h.name.len()\n}\n\n\
         fn main() throws {\n    let h = Handle { name: f\"a\" }\n    let n = look(h)\n    println(f\"end of main {n}\")\n}\n";
     let dir = a_project(

@@ -2666,7 +2666,7 @@ pub mod check_references {
 }
 pub mod check_refusals {
     #[allow(unused_imports)]
-    pub use super::{left_out_text};
+    pub use super::{drop_help, left_out_text};
 }
 pub mod check_reports {
     #[allow(unused_imports)]

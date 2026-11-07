@@ -911,7 +911,7 @@ fn an_impl_of_a_declared_trait_is_silent() {
 
     let dropped = "struct Handle { name: String }\n\
                    impl Drop for Handle {\n\
-                   \x20   fn drop(ref mut self) throws { println(f\"closing {self.name}\") }\n\
+                   \x20   fn drop(ref mut self) { println(f\"closing {self.name}\") catch { } }\n\
                    }\n\
                    fn main() { let h = Handle { name: \"a\" } }\n";
     assert!(findings(dropped).is_empty(), "{:#?}", findings(dropped));

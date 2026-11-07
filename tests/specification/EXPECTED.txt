@@ -78,7 +78,7 @@
 10-nikaia-light.md #78 refused (a body) [sketch NK1181]  let db = Shared(postgres::connect("…"))
 10-nikaia-light.md #79 fragment (as written)  keep(Shared(connect(url)))                      // an a…
 10-nikaia-light.md #80 fragment (as written) [sketch]  let kasse: SharedMut[i32] = ...
-10-nikaia-light.md #81 lowered (as written) [sketch]  struct FileHandle {
+10-nikaia-light.md #81 lowered (as written)  struct FileHandle {
 10-nikaia-light.md #82 lowered (as written)  use std::fs
 10-nikaia-light.md #83 lowered (as written)  use std::fs
 10-nikaia-light.md #84 refused (as written) [sketch NK1135]  use std::fs

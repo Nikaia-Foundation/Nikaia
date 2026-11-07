@@ -340,6 +340,7 @@ pub struct CheckState {
     pub stamped_condition: Option<i64>,
     pub inside_a_door: bool,
     pub inside_an_action: Option<String>,
+    pub inside_a_drop: bool,
     pub inside_a_sync_function: Option<String>,
     pub moved_into_a_task: Vec<(String, Ty, i64, String)>,
     pub call_keepers: collections::BTreeMap<String, Vec<String>>,

@@ -1,0 +1,15 @@
+// Part I 6.4, ADR-392, #1360: a `drop` cannot fail. It also runs while a
+// panic unwinds or a task is cancelled, so a `drop` that says `throws` is
+// refused (`NK1140`), and the help points at catching or at `impl Cleanup`.
+struct File { name: String }
+
+impl Drop for File {
+    fn drop(mut self) throws {
+        println(f"closing {self.name}")
+    }
+}
+
+fn main() throws {
+    let f = File { name: "a" }
+    println(f.name)
+}

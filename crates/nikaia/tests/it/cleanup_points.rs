@@ -339,13 +339,13 @@ const REFUSED: &str = "struct Flaky {\n\
     \x20       println(f\"{self.name}\")\n\
     \x20   }\n\
     \x20   fn drop(ref mut self) {\n\
-    \x20       println(\"x\")\n\
+    \x20       println(\"x\") catch { }\n\
     \x20   }\n\
     }\n\
     \n\
     fn silent() {\n\
     \x20   let f = Flaky { name: f\"s\" }\n\
-    \x20   println(f.name)\n\
+    \x20   println(f.name) catch { }\n\
     }\n\
     \n\
     fn main() {\n\
