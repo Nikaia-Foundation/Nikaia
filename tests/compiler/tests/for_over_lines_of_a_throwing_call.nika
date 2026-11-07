@@ -1,0 +1,44 @@
+// #1287: a loop over `.lines()` or `.split(..)` of a call's result walks a
+// temporary the loop drops at its end. Its views are copied with `.clone()`
+// where text of its own is kept (ADR-282 D8); `.to_string()` or the bare
+// view there is refused with NK1102 (for_over_lines_of_a_throwing_call_refused),
+// never left to rustc.
+use std::fs
+use std::process
+
+fn names(path: String) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
+        out.push(line.clone())
+    }
+    return out
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let path = f"{tmp}/uses.txt"
+    fs::write(path, fs::Root::Anywhere, "use a\nb\nuse a\n")
+    let mut uses: Vec[String] = []
+    for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
+        if line.starts_with("use ") {
+            if !uses.contains(line.to_string()) { uses.push(line.clone()) }
+        }
+    }
+    println(uses.len())
+    let mut parts: Vec[String] = []
+    for part in fs::read_to_string(path, fs::Root::Anywhere).trim().split("\n") {
+        parts.push(part.clone())
+    }
+    println(parts.len())
+    let mut counted = 0
+    for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
+        if line.starts_with("use ") { counted += 1 }
+    }
+    println(counted)
+    let mut named: Vec[String] = []
+    for name in names(path).iter() {
+        named.push(name.trim().clone())
+    }
+    println(named.len())
+    process::run("rm", ["-r", tmp])
+}

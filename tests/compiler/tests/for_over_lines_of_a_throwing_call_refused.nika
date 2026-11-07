@@ -1,0 +1,26 @@
+// #1287: a view of text a call hands back, kept past the statement, is
+// refused with NK1102 (write `.clone()`, ADR-282 D8), never left to rustc:
+// the `.to_string()` of an element a `for` walks of `.lines()` or
+// `.split(..)` of a call's result, the bare element, and a view of a call's
+// result pushed where it stands.
+use std::fs
+
+fn text() -> String {
+    return f"use a\nb\n{1}"
+}
+
+fn main() throws {
+    let mut uses: Vec[String] = []
+    for line in fs::read_to_string("uses.txt", fs::Root::Anywhere).lines() {
+        if line.starts_with("use ") {
+            if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
+        }
+    }
+    let mut parts: Vec[String] = []
+    for part in fs::read_to_string("uses.txt", fs::Root::Anywhere).split("\n") {
+        parts.push(part)
+    }
+    let mut trimmed: Vec[String] = []
+    trimmed.push(text().trim())
+    println(f"{uses.len()} {parts.len()} {trimmed.len()}")
+}
