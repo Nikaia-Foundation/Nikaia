@@ -71,10 +71,10 @@ fn smt(status: String, names: Vec[String], body: String) -> String {
 fn wide() -> String {
 	let mut names: Vec[String] = []
 	let mut body = ""
-	for i in 1..11 {
+	for i in 1..<12 {
 		names.push(f"x{i}")
 	}
-	for i in 1..10 {
+	for i in 1..<11 {
 		body = body + f"(assert (< x{i} x{i + 1}))\n"
 	}
 	return smt("unsat", names, body + "(assert (< x11 (+ x1 10)))\n")
