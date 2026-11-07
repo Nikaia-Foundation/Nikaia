@@ -128,6 +128,9 @@ struct BoundsChanged {
     /// Of `values`, those changed otherwise than by adding to them: by a
     /// call, or by an assignment of another shape (#711).
     jumps: collections::BTreeSet[String],
+    /// Of `values`, those changed otherwise than by taking from them
+    /// (#1329): a name in `jumps` and not here only falls.
+    drops: collections::BTreeSet[String],
     /// Places written through an element (#781), as `list|at|.fields`:
     /// the same fields of every element of `list` may change.
     elements: collections::BTreeSet[String],
@@ -181,6 +184,13 @@ struct BoundsWalk {
     /// Of `growing`, those an assignment was not proved to grow: a loop that
     /// took one is walked again without it.
     grow_failed: collections::BTreeSet[String],
+    /// **The counters the loops being walked take to only fall** (#1329,
+    /// ADR-361 D5): each is at most what it was when its loop began, while
+    /// every assignment to it adds what is proved not positive. A loop
+    /// takes a counter so that it changes only by taking from it.
+    falling: collections::BTreeSet[String],
+    /// Of `falling`, those an assignment was not proved to lower.
+    fall_failed: collections::BTreeSet[String],
     /// How many values at a loop's start the walk has named.
     entries: i64,
     /// **How many goals the walk has left open** (ADR-361 D2): a loop that
@@ -249,7 +259,7 @@ fn no_proofs() -> BoundsProven {
 }
 
 fn nothing_changed() -> BoundsChanged {
-    return BoundsChanged { values: collections::BTreeSet(), lengths: collections::BTreeSet(), parts: collections::BTreeSet(), jumps: collections::BTreeSet(), elements: collections::BTreeSet() }
+    return BoundsChanged { values: collections::BTreeSet(), lengths: collections::BTreeSet(), parts: collections::BTreeSet(), jumps: collections::BTreeSet(), drops: collections::BTreeSet(), elements: collections::BTreeSet() }
 }
 
 /// **Every index and every operation the walk proves in one body**, a
@@ -303,6 +313,8 @@ pub fn bounds_aggressive(args: ref Vec[FnArg], body: ref Block, nonnegative: col
         at: 0,
         growing: collections::BTreeSet(),
         grow_failed: collections::BTreeSet(),
+        falling: collections::BTreeSet(),
+        fall_failed: collections::BTreeSet(),
         entries: 0,
         open: 0,
         missed: collections::BTreeMap(),
@@ -2228,9 +2240,11 @@ fn bounding_for_stmt(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Sym
         let written = walk.written.clone()
         let poisoned = walk.poisoned.clone()
         // **Walked again without the counters that did not grow**, until
-        // every one left did: each pass takes fewer.
+        // every one left did: each pass takes fewer. One changed only by
+        // taking from it is taken to fall instead (#1329).
+        let falls = bounding_falls(changed, cands)
         while true {
-            let added = bounding_grow(walk, cands)
+            let added = bounding_grow(walk, cands, falls)
             bounding_for(walk, bindings, iter, body, facts, cands, invariant, context, program, words, ask)
             let failed = bounding_grew(walk, cands, added)
             if failed.is_empty() {
@@ -2260,9 +2274,11 @@ fn bounding_while_stmt(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, mu
         let written = walk.written.clone()
         let poisoned = walk.poisoned.clone()
         // **Walked again without the counters that did not grow**, until
-        // every one left did: each pass takes fewer.
+        // every one left did: each pass takes fewer. One changed only by
+        // taking from it is taken to fall instead (#1329).
+        let falls = bounding_falls(changed, cands)
         while true {
-            let added = bounding_grow(walk, cands)
+            let added = bounding_grow(walk, cands, falls)
             bounding_while(walk, cond, body, changed, cands, facts, invariant, context, program, words, ask)
             let failed = bounding_grew(walk, cands, added)
             if failed.is_empty() {
@@ -2776,7 +2792,7 @@ fn bounding_while(mut walk: BoundsWalk, cond: ref Expr, body: ref Block, changed
 fn bounding_candidates(walk: ref BoundsWalk, changed: ref BoundsChanged, facts: ref BoundsFacts) -> Vec[String] {
     let mut out: Vec[String] = []
     for x in changed.values {
-        if changed.jumps.contains(x) || walk.pinned.contains(path_root(x)) {
+        if (changed.jumps.contains(x) && changed.drops.contains(x)) || walk.pinned.contains(path_root(x)) {
             continue
         }
         if !facts.ints.contains(x) && !x.contains(".") {
@@ -2800,30 +2816,42 @@ fn bounding_candidates(walk: ref BoundsWalk, changed: ref BoundsChanged, facts: 
     return out
 }
 
-/// `cands` taken to grow while their loop is walked: those no loop around
-/// it takes already, which this loop answers for.
-fn bounding_grow(mut walk: BoundsWalk, cands: ref Vec[String]) -> Vec[String] {
+/// `cands` taken to grow while their loop is walked, those of `falls` to
+/// fall: those no loop around it takes already, which this loop answers for.
+fn bounding_grow(mut walk: BoundsWalk, cands: ref Vec[String], falls: ref Vec[String]) -> Vec[String] {
     let mut added: Vec[String] = []
     for c in cands {
-        if !walk.growing.contains(c) {
+        if walk.growing.contains(c) || walk.falling.contains(c) {
+            continue
+        }
+        if falls.contains(c) {
+            walk.falling.insert(c.clone())
+            walk.fall_failed.remove(c)
+        } else {
             walk.growing.insert(c.clone())
             walk.grow_failed.remove(c)
-            added.push(c.clone())
         }
+        added.push(c.clone())
     }
     return added
 }
 
-/// The loop is walked: the counters it took to grow that did not.
+/// The loop is walked: the counters it took to grow that did not, and those
+/// it took to fall that did not.
 fn bounding_grew(mut walk: BoundsWalk, cands: ref Vec[String], added: ref Vec[String]) -> Vec[String] {
-    for c in added {
-        walk.growing.remove(c)
-    }
     let mut failed: Vec[String] = []
     for c in cands {
-        if walk.grow_failed.contains(c) {
+        if walk.falling.contains(c) {
+            if walk.fall_failed.contains(c) {
+                failed.push(c.clone())
+            }
+        } else if walk.grow_failed.contains(c) {
             failed.push(c.clone())
         }
+    }
+    for c in added {
+        walk.growing.remove(c)
+        walk.falling.remove(c)
     }
     return failed
 }
@@ -2839,9 +2867,21 @@ fn bounding_without(cands: ref Vec[String], failed: ref Vec[String]) -> Vec[Stri
     return kept
 }
 
+/// Of `cands`, those `changed` changes only by taking from them (#1329).
+fn bounding_falls(changed: ref BoundsChanged, cands: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for c in cands {
+        if changed.jumps.contains(c) {
+            out.push(c.clone())
+        }
+    }
+    return out
+}
+
 /// **What holds again at a loop's start** (`bounding_after_change`), and of
 /// each counter in `cands` that it is at least what it was when the loop
-/// began: what was known of it then is kept about that value.
+/// began (at most, for one taken to fall, #1329): what was known of it then
+/// is kept about that value.
 fn bounding_loop_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: ref BoundsChanged, cands: ref Vec[String]) {
     let mut entries: Vec[(String, String)] = []
     for x in cands {
@@ -2861,7 +2901,7 @@ fn bounding_loop_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: r
     for (x, entry) in entries {
         let now = walk.arena.var(x)
         let then = walk.arena.var(entry)
-        let fact = walk.arena.ge(now, then)
+        let fact = if walk.falling.contains(x) { walk.arena.le(now, then) } else { walk.arena.ge(now, then) }
         bounding_push(walk, facts, fact)
     }
 }
@@ -2873,6 +2913,18 @@ fn bounding_steps_up(name: ref String, op: ref BinaryOp?, value: ref Expr, words
     }
     return match value {
         Expr::Binary { op: added, lhs, rhs, .. } => added == BinaryOp::Add && ((path_of(lhs, words) ?? "") == name || (path_of(rhs, words) ?? "") == name),
+        else => false,
+    }
+}
+
+/// Whether `name = value` or `name op= value` takes from `name` (#1329):
+/// `n -= d`, `n = n - d`.
+fn bounding_steps_down(name: ref String, op: ref BinaryOp?, value: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    if op != null {
+        return bounding_is_op(op, BinaryOp::Sub)
+    }
+    return match value {
+        Expr::Binary { op: taken, lhs, .. } => taken == BinaryOp::Sub && (path_of(lhs, words) ?? "") == name,
         else => false,
     }
 }
@@ -3468,7 +3520,7 @@ fn bounding_for(mut walk: BoundsWalk, bindings: ref Vec[winnow_grammar::Symbol],
             filled = lists
         }
     }
-    let mut outer = BoundsChanged { values: changed.values.clone(), lengths: changed.lengths.clone(), parts: changed.parts.clone(), jumps: changed.jumps.clone(), elements: changed.elements.clone() }
+    let mut outer = BoundsChanged { values: changed.values.clone(), lengths: changed.lengths.clone(), parts: changed.parts.clone(), jumps: changed.jumps.clone(), drops: changed.drops.clone(), elements: changed.elements.clone() }
     for list in filled {
         outer.lengths.remove(list)
     }
@@ -3530,11 +3582,23 @@ fn bounding_reads(walk: ref BoundsWalk, l: i64, h: i64, c: ref String) -> bool {
     return bounding_touches(walk, l, c) || bounding_touches(walk, h, c) || walk.arena.mentions(l, length) || walk.arena.mentions(h, length)
 }
 
+/// Whether an assignment that adds `by` to its name is proved not to raise
+/// it (#1329).
+fn bounding_lowers(mut walk: BoundsWalk, facts: ref BoundsFacts, by: i64?, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let step = by ?? return false
+    let zero = walk.arena.int(0)
+    let goal = walk.arena.le(step, zero)
+    return bounding_proves(walk, facts, goal, ask)
+}
+
 /// `name = value`, or `name op= value`.
 fn bounding_assign(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, op: ref BinaryOp?, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
     if !facts.ints.contains(name) {
         if walk.growing.contains(name) {
             walk.grow_failed.insert(name.clone())
+        }
+        if walk.falling.contains(name) {
+            walk.fall_failed.insert(name.clone())
         }
         bounding_forget(walk, facts, name)
         bounding_built(walk, facts, name, value)
@@ -3577,6 +3641,9 @@ fn bounding_assign(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref Strin
         if !grows {
             walk.grow_failed.insert(name.clone())
         }
+    }
+    if walk.falling.contains(name) && !bounding_lowers(walk, facts, by, ask) {
+        walk.fall_failed.insert(name.clone())
     }
     if by != null {
         bounding_shift(walk, facts, name, by ?? 0)
@@ -4088,6 +4155,7 @@ fn bounding_extend(mut changed: BoundsChanged, other: BoundsChanged) {
     changed.lengths.extend(other.lengths.clone())
     changed.parts.extend(other.parts.clone())
     changed.jumps.extend(other.jumps.clone())
+    changed.drops.extend(other.drops.clone())
     changed.elements.extend(other.elements.clone())
 }
 
@@ -4122,6 +4190,9 @@ fn changed_in_block(block: ref Block, context: ref BoundsContext, words: ref win
                     let name = written ?? ""
                     if !bounding_steps_up(name, op, value, words) {
                         out.jumps.insert(name.clone())
+                    }
+                    if !bounding_steps_down(name, op, value, words) {
+                        out.drops.insert(name.clone())
                     }
                     out.lengths.insert(name.clone())
                     out.values.insert(name)
@@ -4283,6 +4354,7 @@ fn changed_by(expr: ref Expr, context: ref BoundsContext, words: ref winnow_gram
                 if hands_on(callee, at) && !context.simd_loads.contains_key(node_key(func)) {
                     out.lengths.insert(handed.clone())
                     out.jumps.insert(handed.clone())
+                    out.drops.insert(handed.clone())
                     out.values.insert(handed)
                 }
             }
@@ -4314,6 +4386,7 @@ fn changed_by_method(receiver: ref Expr, method: ref String, args: ref Vec[Expr]
             let text = path_of(arg, words) ?? continue
             out.values.insert(text.clone())
             out.jumps.insert(text.clone())
+            out.drops.insert(text.clone())
             out.lengths.insert(text)
         }
     }

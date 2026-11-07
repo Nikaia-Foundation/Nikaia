@@ -1,0 +1,50 @@
+// #1329 (ADR-361 D13): an outer loop's counter is bounded by the outer
+// loop's turns with an inner loop in its body, which does not assign it.
+// `slugs`' `k += 1` (shaped as `modules.nika`'s `modules_test_wrappers`) and
+// `pairs`' `n += 1` are proved at both settings; `from`'s `k += 1`, which
+// starts at a parameter no precondition bounds, stays checked: the inner
+// loop is not what keeps it.
+fn slugs(titles: ref Vec[ref String]) -> i64 sync {
+	let mut k = 0
+	for title in titles {
+		for b in title.bytes() {
+			if b < 48 {
+				return k
+			}
+		}
+		k += 1
+	}
+	return k
+}
+
+fn pairs(xs: ref Vec[i64]) -> i64 sync {
+	let mut i = 0
+	let mut n = 0
+	while i < xs.len() {
+		let mut j = 0
+		while j < xs.len() {
+			j += 1
+		}
+		n += 1
+		i += 1
+	}
+	return n
+}
+
+fn from(titles: ref Vec[ref String], first: i64) -> i64 sync {
+	let mut k = first
+	for title in titles {
+		for b in title.bytes() {
+			if b < 48 {
+				return k
+			}
+		}
+		k += 1
+	}
+	return k
+}
+
+fn main() {
+	let ts = ["ab", "c d"]
+	println(f"{slugs(ts)} {pairs([1, 2])} {from(ts, 2)}")
+}

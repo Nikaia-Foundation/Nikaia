@@ -1,0 +1,6 @@
+bounds in tests/prove_outer_counter_over_inner_loop.nika: 0 indexes, 0 proved; 5 operations, 4 proved
+    15  k += 1  proved
+    26  j += 1  proved
+    28  n += 1  proved
+    29  i += 1  proved
+    42  k += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
