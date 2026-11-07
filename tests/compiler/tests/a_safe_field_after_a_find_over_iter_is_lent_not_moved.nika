@@ -14,7 +14,7 @@ fn note_of(members: ref Vec[Member], key: String) -> String? {
     return members.iter().find(fn(member) { member.key == key })?.note?.clone()
 }
 
-fn main() {
+fn main() throws {
     let members: Vec[Member] = [Member { key: "a", values: [1, 2], note: "first" }, Member { key: "b", values: [3], note: null }]
     println((values_of(members, "a") ?? []).len())
     println((values_of(members, "z") ?? []).len())

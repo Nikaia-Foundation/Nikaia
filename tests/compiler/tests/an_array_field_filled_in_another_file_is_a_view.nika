@@ -4,7 +4,7 @@ use compiler_tests
 // of the package fills it with a piece of a buffer, whichever file of the
 // package the literal stands in (`src/slice_beside.nika` declares the
 // struct, `src/slice_beside_caller.nika` fills it). It was NK1106.
-fn main() {
+fn main() throws {
 	let a: Vec[i64] = [1, 2, 3]
 	println(compiler_tests::slice_tail_second(a))
 }

@@ -4,7 +4,7 @@ fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
 	f(s)
 }
 
-fn main() {
+fn main() throws {
 	let g: String = "  hi  "
 	println(f"[{apply(fn(s) { s.trim() }, g)}]")
 	println(f"[{g}]")

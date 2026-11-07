@@ -92,7 +92,7 @@ fn model_text(m: ref collections::BTreeMap[String, i64]) -> String {
 
 // Every atom asserted as it stands, one level, then a final check; a
 // conflict closed by one learned clause and the log replayed.
-fn scenario(title: String, names: Vec[String], atoms: Vec[SvAtom], bland_after: i64) {
+fn scenario(title: String, names: Vec[String], atoms: Vec[SvAtom], bland_after: i64) throws {
 	let n = atoms.len()
 	let mut clauses: Vec[Vec[u32]] = []
 	let mut a: u32 = 0
@@ -152,7 +152,7 @@ fn scenario(title: String, names: Vec[String], atoms: Vec[SvAtom], bland_after: 
 	}
 }
 
-fn calls() {
+fn calls() throws {
 	let atoms = [le([1], -2), le([1], -5), le([-1], 3)]
 	let query = SvQuery { atoms: atoms, clauses: [[0], [4]], columns: 1, reals: [] }
 	let mut book = sv_book(query) ?? return
@@ -188,7 +188,7 @@ fn calls() {
 // Propagation through a row: x <= 1 and y <= 1 bound the slack of x + y, so
 // x + y <= 4 is implied; its explanation is a Farkas lemma, and the log closed
 // against the negated atom is replayed.
-fn through_a_row() {
+fn through_a_row() throws {
 	let atoms = [le([1], -1), le([0, 1], -1), le([1, 1], -4)]
 	let query = SvQuery { atoms: atoms, clauses: [[0], [2], [5]], columns: 2, reals: [] }
 	let mut book = sv_book(query) ?? return

@@ -106,7 +106,7 @@ fn said_by(checked: ref SvChecked) -> String {
 // The interface's calls one by one on x <= 2, x <= 5, x >= 3 over one
 // column: the conflict of x <= 2 and x >= 3 written as a Farkas lemma, the
 // log closed by one learned clause and replayed.
-fn calls() {
+fn calls() throws {
 	let atoms = [
 		SvAtom { row: row1([1], -2), rel: SvRel::Le },
 		SvAtom { row: row1([1], -5), rel: SvRel::Le },

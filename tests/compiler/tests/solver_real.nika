@@ -113,7 +113,7 @@ fn units(atoms: Vec[SvAtom], columns: u32, reals: Vec[u32]) -> SvQuery {
 	return SvQuery { atoms: atoms, clauses: clauses, columns: columns, reals: reals }
 }
 
-fn report(name: String, query: ref SvQuery, log: ref SvLog) {
+fn report(name: String, query: ref SvQuery, log: ref SvLog) throws {
 	let v = sv_check(query, log.steps)
 	if v.ok {
 		println(f\"{name}: accepted ({log.steps.len()} steps)\")

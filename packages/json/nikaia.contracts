@@ -11,11 +11,13 @@ version = 4
 
 [fn."ConvertError::message"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "(ref self) -> String"
 
 [fn."Error::message"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "(ref self) -> String"
 
@@ -23,6 +25,7 @@ signature = "(ref self) -> String"
 pub = true
 sync = "inferred"
 throws = ["ConvertError"]
+panics = false
 touches = []
 signature = "(v: Value) -> f64"
 
@@ -30,6 +33,7 @@ signature = "(v: Value) -> f64"
 pub = true
 sync = "inferred"
 throws = ["ConvertError"]
+panics = true
 touches = []
 signature = "(v: Value) -> i64"
 
@@ -37,22 +41,26 @@ signature = "(v: Value) -> i64"
 pub = true
 sync = "inferred"
 throws = ["ConvertError"]
+panics = true
 touches = []
 signature = "(v: Value) -> u64"
 
 [fn."at_end"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "(r: Reader) -> bool"
 
 [fn."blanks"]
 sync = "inferred"
+panics = true
 touches = []
 signature = "(mut r: Reader)"
 
 [fn."expect_word"]
 sync = "inferred"
 throws = ["Error"]
+panics = true
 touches = []
 views = ["word: borrowed", "path: borrowed"]
 signature = "(mut r: Reader, word: String, path: String)"
@@ -60,12 +68,14 @@ signature = "(mut r: Reader, word: String, path: String)"
 [fn."fail"]
 sync = "inferred"
 keeps = ["message", "path"]
+panics = true
 touches = []
 signature = "(r: Reader, message: String, path: String) -> Error"
 
 [fn."hex4"]
 sync = "inferred"
 throws = ["Error"]
+panics = true
 touches = []
 views = ["path: borrowed"]
 ensures = ["result >= 0 && result <= 65535"]
@@ -74,17 +84,20 @@ signature = "(mut r: Reader, path: String) -> i64"
 
 [fn."is_digit"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "(c: scalar) -> bool"
 
 [fn."kind_of"]
 sync = "inferred"
+panics = false
 touches = []
 signature = "(v: Value) -> ref String"
 
 [fn."number"]
 sync = "inferred"
 throws = ["Error"]
+panics = true
 touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String) -> Value"
@@ -92,6 +105,7 @@ signature = "(mut r: Reader, path: String) -> Value"
 [fn."number_text"]
 sync = "inferred"
 throws = ["ConvertError"]
+panics = false
 touches = []
 views = ["asked: borrowed"]
 signature = "(v: Value, asked: String) -> String"
@@ -100,18 +114,21 @@ signature = "(v: Value, asked: String) -> String"
 pub = true
 sync = "inferred"
 throws = ["Error"]
+panics = true
 touches = []
 views = ["text: borrowed"]
 signature = "(text: String) -> Value"
 
 [fn."peek"]
 sync = "inferred"
+panics = true
 touches = []
 signature = "(r: Reader) -> scalar"
 
 [fn."string"]
 sync = "inferred"
 throws = ["Error"]
+panics = true
 touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String) -> String"
@@ -119,6 +136,7 @@ signature = "(mut r: Reader, path: String) -> String"
 [fn."to_string"]
 pub = true
 sync = "inferred"
+panics = true
 touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value) -> String"
@@ -126,24 +144,28 @@ signature = "(v: ref Value) -> String"
 [fn."value"]
 sync = "inferred"
 throws = ["Error"]
+panics = true
 touches = []
 views = ["path: borrowed"]
 signature = "(mut r: Reader, path: String, depth: i64) -> Value"
 
 [fn."write_string"]
 sync = "inferred"
+panics = true
 touches = []
 views = ["s: borrowed"]
 signature = "(s: String, mut out: String)"
 
 [fn."write_value"]
 sync = "inferred"
+panics = true
 touches = []
 views = ["v: borrowed"]
 signature = "(v: ref Value, mut out: String)"
 
 [fn."zero_fraction"]
 sync = "inferred"
+panics = false
 touches = []
 views = ["text: borrowed"]
 signature = "(text: String) -> String?"

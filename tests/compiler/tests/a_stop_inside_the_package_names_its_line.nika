@@ -3,7 +3,7 @@ use compiler_tests
 // A stop inside the package's own code names the `.nika` line it stopped
 // at, as a stop in the test file does (ADR-300 D9, #1351).
 
-fn main() {
+fn main() throws {
 	let xs: Vec[i64] = [1]
 	println(f"{compiler_tests::over_at(xs, 5)}")
 }

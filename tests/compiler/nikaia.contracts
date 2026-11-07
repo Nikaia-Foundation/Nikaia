@@ -145,6 +145,14 @@ panics = false
 touches = []
 signature = "[T](_n: i64) -> Vec[T]"
 
+[fn."over_at"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["xs: borrowed"]
+signature = "(xs: ref Vec[i64], i: i64) -> i64"
+
 [fn."places"]
 pub = true
 sync = "inferred"
@@ -196,6 +204,22 @@ touches = []
 views = ["shelf: borrowed", "name: borrowed", "<result>: borrowed"]
 signature = "(shelf: ref Shelf, name: String) -> (String, ref(shelf) Shelved)?"
 
+[fn."slice_tail_first"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["s: borrowed"]
+signature = "(s: SliceTail) -> i64"
+
+[fn."slice_tail_second"]
+pub = true
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref Vec[i64]) -> i64"
+
 [type."Branching"]
 pub = true
 variants = ["Leaf(i64)", "Fork { left: Branching, right: Branching, id: i64 }"]
@@ -237,3 +261,8 @@ fields = ["pub entries: collections::BTreeMap[String, Shelved]"]
 [type."Shelved"]
 pub = true
 fields = ["pub n: i64", "pub s: String"]
+
+[type."SliceTail"]
+pub = true
+fields = ["pub xs: ref Array[i64]"]
+tethered = ["xs"]
