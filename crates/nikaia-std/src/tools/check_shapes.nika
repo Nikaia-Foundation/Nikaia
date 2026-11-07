@@ -35,11 +35,19 @@ pub fn roots_in_a_binding(expr: ref Expr) -> bool sync {
 /// **Whether a read lends what it finds out of a binding** (#1194): `get`,
 /// `first` and `last` answer an `Option<&T>` into their receiver, so a member
 /// reached through one off a binding is a part of that binding, as through
-/// `m[k]`. The names are the emitter's `emit_place_already_lent`.
+/// `m[k]`. So does `find` over `xs.iter()` (#1163): it answers an
+/// `Option<&T>` into `xs`. The names are the emitter's
+/// `emit_place_already_lent`.
 pub fn shapes_lends_from_a_binding(world: ref CheckWorld, expr: ref Expr) -> bool sync {
     return match expr {
         Expr::MethodCall { receiver, method, .. } => {
             let name = world.words.resolve(method)
+            if name == "find" {
+                return match receiver {
+                    Expr::MethodCall { receiver: inner, method: iter, .. } => world.words.resolve(iter) == "iter" && roots_in_a_binding(inner),
+                    else => false,
+                }
+            }
             (name == "get" || name == "first" || name == "last") && roots_in_a_binding(receiver)
         },
         else => false,

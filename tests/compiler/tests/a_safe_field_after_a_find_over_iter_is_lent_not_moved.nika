@@ -1,0 +1,24 @@
+// #1163: `xs.iter().find(..)` answers an `Option<&T>` into `xs`, so a `?.`
+// reach off it lends the member, as off `get`, and never moves it.
+struct Member {
+    key: String,
+    values: Vec[i64],
+    note: String?,
+}
+
+fn values_of(members: ref Vec[Member], key: String) -> Vec[i64]? {
+    return members.iter().find(fn(member) { member.key == key })?.values?.clone()
+}
+
+fn note_of(members: ref Vec[Member], key: String) -> String? {
+    return members.iter().find(fn(member) { member.key == key })?.note?.clone()
+}
+
+fn main() {
+    let members: Vec[Member] = [Member { key: "a", values: [1, 2], note: "first" }, Member { key: "b", values: [3], note: null }]
+    println((values_of(members, "a") ?? []).len())
+    println((values_of(members, "z") ?? []).len())
+    println(note_of(members, "a") ?? "none")
+    println(note_of(members, "b") ?? "none")
+    println(members.len())
+}
