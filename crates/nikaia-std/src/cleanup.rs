@@ -144,6 +144,15 @@ macro_rules! cleaned {
                     failed: vec![(what, message)],
                 })
             }
+
+            /// **The same where nothing may pause** (#1317): a value whose
+            /// cleanup is `sync` - an `fs::File`'s is a plain system call -
+            /// closed in a function that is not `async`. The cleanup is ready
+            /// the first time it is asked ([`crate::rt::exec::settled`]).
+            #[track_caller]
+            pub fn close_sync(self) -> Result<(), Failure> {
+                crate::rt::exec::settled(self.close())
+            }
         }
 
         impl<T: $trait> std::ops::Deref for $cleaned<T> {
@@ -362,6 +371,38 @@ pub async fn settle_with<K: Kind, T, F: Future<Output = T>>(body: F) -> T {
         eprintln!("nikaia: {failure}");
     }
     value
+}
+
+/// **The settle points of a function that is not `async`** (#1317): the
+/// checker lets one stand only where every value that may die there has a
+/// `sync` cleanup, so the work is ready the first time it is asked
+/// ([`crate::rt::exec::settled`]). The body is the `async` block the pausing
+/// form takes, and it does not pause either.
+#[track_caller]
+pub fn settle_after_sync<K: Kind, T, E, F>(body: F, origin: Origin) -> Result<T, E>
+where
+    F: Future<Output = Result<T, E>>,
+    E: From<Thrown<Failure>> + crate::error::Joined,
+{
+    crate::rt::exec::settled(settle_after::<K, T, E, F>(body, origin))
+}
+
+/// [`settle_with`], where nothing may pause.
+#[track_caller]
+pub fn settle_with_sync<K: Kind, T, F: Future<Output = T>>(body: F) -> T {
+    crate::rt::exec::settled(settle_with::<K, T, F>(body))
+}
+
+/// [`settle_at`], where nothing may pause.
+#[track_caller]
+pub fn settle_at_sync<K: Kind>(origin: Origin) -> Result<(), Thrown<Failure>> {
+    crate::rt::exec::settled(settle_at::<K>(origin))
+}
+
+/// [`settle_quietly`], where nothing may pause.
+#[track_caller]
+pub fn settle_quietly_sync<K: Kind>() {
+    crate::rt::exec::settled(settle_quietly::<K>())
 }
 
 /// **A task's own queues**, swapped in while it is polled so that what it

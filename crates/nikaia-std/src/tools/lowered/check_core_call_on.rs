@@ -890,7 +890,12 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         _ => false,
     };
     let walks_a_pausing_step = seq_pauses && walks && !chained;
-    let pauses = !contract.sync_claim.is_sync() || walks_a_pausing_step;
+    let mut sync_close = false;
+    if key == "cleanup::close" {
+        let held: Option<CheckCleanup> = state.cleanup_of(world, on);
+        sync_close = !nikaia_std::index::or(held.as_ref().map(|__nikaia_it| __nikaia_it.pauses), || true);
+    }
+    let pauses = !contract.sync_claim.is_sync() && !sync_close || walks_a_pausing_step;
     state.method_pauses(node, pauses);
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract);
     if walks_a_pausing_step && hands_back_a_sequence { state.facts.pausing_walks.insert(node); }
@@ -900,7 +905,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     };
     if seq_throws && walks && !hands_back_a_sequence { state.a_walk_of_a_failing_sequence(world, method, span); }
     let written: String = format!("{}", world.words.resolve(method));
-    state.a_pausing_method_in_a_sync_body(key, contract, span);
+    if !sync_close { state.a_pausing_method_in_a_sync_body(key, contract, span); }
     state.a_call_that_may_pause(&written, pauses, contract.sync_claim.is_unpromised() && !walks_a_pausing_step, span);
     state.a_pausing_call_in_an_action(&written, contract, span);
     if !known_text { state.may_fail_here(world, host, key, contract, span); }

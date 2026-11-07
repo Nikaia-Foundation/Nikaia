@@ -254,6 +254,19 @@ touches = []
 throws = ["cleanup::Failure"]
 signature = "()"
 
+# The same where every value that may die there has a `sync` cleanup (#1317):
+# it does not pause, so a `sync` function may reach it.
+[fn."cleanup::settle_sync"]
+sync = true
+touches = []
+signature = "()"
+
+[fn."cleanup::settle_failing_sync"]
+sync = true
+touches = []
+throws = ["cleanup::Failure"]
+signature = "()"
+
 # **`close()`**, on any value with a cleanup (ADR-297 D4): the cleanup now, its
 # failure this call's, and nothing owed afterwards.
 # Run the value's cleanup now, and hand back its failure as this call's.

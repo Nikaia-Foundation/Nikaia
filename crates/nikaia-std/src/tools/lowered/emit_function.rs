@@ -675,19 +675,24 @@ impl EmitState {
                     Some(failing) => {
                         let mut inner = EmitOut::empty();
                         self.emit_function_body(world, walk, &mut inner, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?;
-                        let mut settle_fn: &'static str = "nikaia_std::cleanup::settle_with";
+                        let mut settle_fn: String = String::from("nikaia_std::cleanup::settle_with");
                         let mut rest: &'static str = "_, _";
                         if failing {
-                            settle_fn = "nikaia_std::cleanup::settle_after";
+                            settle_fn = String::from("nikaia_std::cleanup::settle_after");
                             rest = "_, _, _";
+                        }
+                        let mut awaits: &'static str = ".await";
+                        if pausing == "" {
+                            settle_fn = format!("{}_sync", settle_fn);
+                            awaits = "";
                         }
                         let kind = emit_settle_kind(host.overlaps_user_code());
                         out.push(&format!("{{ {}::<{}, {}>(async ", settle_fn, kind, rest));
                         out.append(&inner);
                         if failing {
                             let origin = nikaia_std::index::or(key.rsplit("::").next(), || "");
-                            out.push(&format!(", &{}).await }}", rust_string(origin)));
-                        } else { out.push(").await }"); }
+                            out.push(&format!(", &{}){} }}", rust_string(origin), awaits));
+                        } else { out.push(&format!("){} }}", awaits)); }
                     },
                     None => {
                         let group = self.emit_async_body_group(body);

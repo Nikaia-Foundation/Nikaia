@@ -811,16 +811,18 @@ impl CheckState {
     /// (ADR-297 D2): its body becomes a settle point's, and the settle is a
     /// call every analysis reads - one that pauses, and one that fails where
     /// the function says `throws` and the cleanup can fail. The settle the
-    /// function reaches, where a function is being walked.
-    pub fn a_settle_in_this_function(ref mut self, fails: bool) -> String? sync {
+    /// function reaches, where a function is being walked. **A cleanup that
+    /// says `sync` settles without a pause** (#1317): `cleanup::settle_sync`.
+    pub fn a_settle_in_this_function(ref mut self, fails: bool, pauses: bool) -> String? sync {
         let current = (self.current ?? return null).clone()
         let failing = fails && self.flow.throwing
         let before = self.facts.settle_fns.get(current) ?? false
         self.facts.settle_fns.insert(current, before || failing)
+        let tail = if pauses { "" } else { "_sync" }
         if failing {
-            return "cleanup::settle_failing"
+            return f"cleanup::settle_failing{tail}"
         }
-        return "cleanup::settle"
+        return f"cleanup::settle{tail}"
     }
 }
 

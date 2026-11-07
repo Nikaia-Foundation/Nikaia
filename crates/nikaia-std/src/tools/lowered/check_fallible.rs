@@ -5,6 +5,7 @@
 pub struct CheckCleanup {
     pub owner: String,
     pub fails: bool,
+    pub pauses: bool,
 }
 
 pub(crate) fn check_base(name: &str) -> String {
@@ -33,6 +34,12 @@ pub(crate) fn check_cleanup_fails(ledger: &Ledger, owner: &str) -> bool {
     let key = format!("{}::cleanup", owner);
     let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return false };
     !contract.fails_with.is_empty()
+}
+
+pub(crate) fn check_cleanup_is_sync(ledger: &Ledger, owner: &str) -> bool {
+    let key = format!("{}::cleanup", owner);
+    let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    contract.sync_claim == Sync::Asserted
 }
 
 impl CheckState {
@@ -168,7 +175,8 @@ impl CheckState {
                 if owner.is_some() {
                     let found = match owner { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let fails = check_cleanup_fails(world.own, &found) || check_cleanup_fails(world.library, &found);
-                    return Some(CheckCleanup { owner: found, fails });
+                    let pauses = !check_cleanup_is_sync(world.own, &found) && !check_cleanup_is_sync(world.library, &found);
+                    return Some(CheckCleanup { owner: found, fails, pauses });
                 }
                 held = args.to_owned();
                 for field in self.fields_of_base(world, &base) { held.push(field); }
@@ -183,6 +191,7 @@ impl CheckState {
         let mut any = false;
         let mut owner: String = String::from("");
         let mut fails = false;
+        let mut pauses = false;
         for inner in held.iter() {
             let found = self.cleanup_within(world, inner, seen);
             if found.is_some() {
@@ -192,10 +201,11 @@ impl CheckState {
                     owner = one.owner.to_string();
                 }
                 fails = fails || one.fails;
+                pauses = pauses || one.pauses;
             }
         }
         if !any { return None; }
-        Some(CheckCleanup { owner, fails })
+        Some(CheckCleanup { owner, fails, pauses })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

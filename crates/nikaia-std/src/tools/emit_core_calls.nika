@@ -1216,6 +1216,12 @@ impl EmitState {
         } else {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
             out.push(f".{written}")
+            // **A `close()` that does not pause** (#1317): the value's cleanup
+            // says `sync`, and the runtime runs it without an `.await`.
+            let closes = self.facts.method_callees[on_node]?.clone() ?? ""
+            if closes == "cleanup::close" && !self.method_pauses(on_node) {
+                out.push("_sync")
+            }
             if self.emit_call_method_proved(world, host, receiver, on_node, name, args, scope) {
                 out.push("__unchecked")
             }

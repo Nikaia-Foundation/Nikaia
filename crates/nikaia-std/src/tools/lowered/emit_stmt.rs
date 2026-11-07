@@ -92,7 +92,13 @@ impl EmitState {
                 None => None,
             })?;
             let kind = emit_settle_kind(host.overlaps_user_code());
-            let settle = if fails { format!("nikaia_std::cleanup::settle_at::<{}>(&{}).await?", kind, rust_string(&scope.origin)) } else { format!("nikaia_std::cleanup::settle_quietly::<{}>().await", kind) };
+            let mut tail: &'static str = "_sync";
+            let mut awaits: &'static str = "";
+            if self.lowered_pausing(&scope.function) {
+                tail = "";
+                awaits = ".await";
+            }
+            let settle = if fails { format!("nikaia_std::cleanup::settle_at{}::<{}>(&{}){}?", tail, kind, rust_string(&scope.origin), awaits) } else { format!("nikaia_std::cleanup::settle_quietly{}::<{}>(){}", tail, kind, awaits) };
             out.push("{ let __nikaia_block = ");
             out.append(&inner);
             out.push(&format!("; {}; __nikaia_block }}", settle));

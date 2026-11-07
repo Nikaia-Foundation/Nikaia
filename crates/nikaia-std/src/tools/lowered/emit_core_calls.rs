@@ -812,6 +812,11 @@ impl EmitState {
         } else {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
             out.push(&format!(".{}", written));
+            let closes = nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+            if closes == "cleanup::close" && !self.method_pauses(on_node) { out.push("_sync"); }
             if self.emit_call_method_proved(world, host, receiver, on_node, &name, args, scope) { out.push("__unchecked"); }
         }
         let mut declared = false;
@@ -1057,8 +1062,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78208| {
-        let (i, word) = __nikaia_tuple78208;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78560| {
+        let (i, word) = __nikaia_tuple78560;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

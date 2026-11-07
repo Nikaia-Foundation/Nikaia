@@ -13,6 +13,9 @@ use std::collections
 pub struct CheckCleanup {
     pub owner: String,
     pub fails: bool,
+    /// Whether the cleanup may pause: not where its contract says `sync`
+    /// (`fs::File`'s, #1317), which a function that is not `async` can run.
+    pub pauses: bool,
 }
 
 /// What stands after the last `::` of a name.
@@ -56,6 +59,15 @@ fn check_cleanup_fails(ledger: ref Ledger, owner: ref String) -> bool {
     let key = f"{owner}::cleanup"
     let contract = ledger.functions[key] ?? return false
     return contract.fails_with.len() > 0
+}
+
+/// Whether the cleanup of `owner`, in a ledger, **says** `sync` (#1317): a
+/// cleanup only found not to pause is still the trait's, which may (ADR-288
+/// D25, ADR-297 D3).
+fn check_cleanup_is_sync(ledger: ref Ledger, owner: ref String) -> bool {
+    let key = f"{owner}::cleanup"
+    let contract = ledger.functions[key] ?? return false
+    return contract.sync_claim == Sync::Asserted
 }
 
 impl CheckState {
@@ -244,7 +256,8 @@ impl CheckState {
                 if owner != null {
                     let found = owner ?? return null
                     let fails = check_cleanup_fails(world.own, found) || check_cleanup_fails(world.library, found)
-                    return CheckCleanup { owner: found, fails: fails }
+                    let pauses = !check_cleanup_is_sync(world.own, found) && !check_cleanup_is_sync(world.library, found)
+                    return CheckCleanup { owner: found, fails: fails, pauses: pauses }
                 }
                 held = args.clone()
                 for field in self.fields_of_base(world, base) {
@@ -262,6 +275,7 @@ impl CheckState {
         let mut any = false
         let mut owner: String = ""
         let mut fails = false
+        let mut pauses = false
         for inner in held {
             let found = self.cleanup_within(world, inner, seen)
             if found != null {
@@ -271,12 +285,13 @@ impl CheckState {
                     owner = one.owner.clone()
                 }
                 fails = fails || one.fails
+                pauses = pauses || one.pauses
             }
         }
         if !any {
             return null
         }
-        return CheckCleanup { owner: owner, fails: fails }
+        return CheckCleanup { owner: owner, fails: fails, pauses: pauses }
     }
 
     /// **Whether a type's teardown does something**, and what says so (ADR-297

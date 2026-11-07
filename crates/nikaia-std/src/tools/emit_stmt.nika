@@ -137,10 +137,18 @@ impl EmitState {
             let mut inner = EmitOut::empty()
             self.emit_stmt_block_plain(world, walk, inner, host, block, depth, flow, scope, tail, opening?.clone())
             let kind = emit_settle_kind(host.overlaps_user_code())
+            // **Outside an `async fn` the settle point does not pause**
+            // (#1317): every cleanup that may run there says `sync`.
+            let mut tail: String = "_sync"
+            let mut awaits: String = ""
+            if self.lowered_pausing(scope.function) {
+                tail = ""
+                awaits = ".await"
+            }
             let settle = if fails {
-                f"nikaia_std::cleanup::settle_at::<{kind}>(&{rust_string(scope.origin)}).await?"
+                f"nikaia_std::cleanup::settle_at{tail}::<{kind}>(&{rust_string(scope.origin)}){awaits}?"
             } else {
-                f"nikaia_std::cleanup::settle_quietly::<{kind}>().await"
+                f"nikaia_std::cleanup::settle_quietly{tail}::<{kind}>(){awaits}"
             }
             out.push("{ let __nikaia_block = ")
             out.append(inner)

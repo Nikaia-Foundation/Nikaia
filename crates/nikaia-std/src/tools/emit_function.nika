@@ -1110,6 +1110,14 @@ impl EmitState {
                             settle_fn = "nikaia_std::cleanup::settle_after"
                             rest = "_, _, _"
                         }
+                        // **A function that is not `async` settles without a
+                        // pause** (#1317): the checker let it stand only where
+                        // every cleanup that may run there says `sync`.
+                        let mut awaits: String = ".await"
+                        if pausing == "" {
+                            settle_fn = f"{settle_fn}_sync"
+                            awaits = ""
+                        }
                         let kind = emit_settle_kind(host.overlaps_user_code())
                         out.push(f"{{ {settle_fn}::<{kind}, {rest}>(async ")
                         out.append(inner)
@@ -1117,9 +1125,9 @@ impl EmitState {
                         // is (ADR-280 D29).
                         if failing {
                             let origin = key.rsplit("::").next() ?? ""
-                            out.push(f", &{rust_string(origin)}).await }}")
+                            out.push(f", &{rust_string(origin)}){awaits} }}")
                         } else {
-                            out.push(").await }")
+                            out.push(f"){awaits} }}")
                         }
                     },
                     null => {

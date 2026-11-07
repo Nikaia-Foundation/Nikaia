@@ -540,13 +540,14 @@ pub fn check_span_at(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_settle_in_this_function(&mut self, fails: bool) -> Option<String> {
+    pub fn a_settle_in_this_function(&mut self, fails: bool, pauses: bool) -> Option<String> {
         let current = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string();
         let failing = fails && self.flow.throwing;
         let before = nikaia_std::index::or(self.facts.settle_fns.get(&current), || false);
         self.facts.settle_fns.insert(current, before || failing);
-        if failing { return Some(String::from("cleanup::settle_failing")); }
-        Some(String::from("cleanup::settle"))
+        let tail = if pauses { "" } else { "_sync" };
+        if failing { return Some(format!("cleanup::settle_failing{}", tail)); }
+        Some(format!("cleanup::settle{}", tail))
     }
 }
 
