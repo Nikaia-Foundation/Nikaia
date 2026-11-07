@@ -250,6 +250,7 @@ impl EmitState {
                         let st = out.mark()
                         out.push(f"{head ?? ""}vec![{value.buf}; {count.buf}];")
                         out.record(block.stmts[i].span, st)
+                        out.push(self.emit_stmt_late_puts(walk, scope.function, block.stmts[i + 1].span.start as i64))
                         out.push("\n")
                         pos += 2
                         continue
@@ -270,6 +271,7 @@ impl EmitState {
             if ending && here.is_value() {
                 out.push(" };")
             }
+            out.push(self.emit_stmt_late_puts(walk, scope.function, block.stmts[i].span.start as i64))
             out.push("\n")
             pos += 1
         }
@@ -459,7 +461,9 @@ impl EmitState {
         // D9), and the binding is where it now lives.
         let mut put: String? = null
         let keep = plan.puts.get(at)
-        if keep != null {
+        // **A buffer changed after its `let` is put later** (#1276), by
+        // `emit_stmt_late_puts`.
+        if keep != null && !plan.late_puts.contains_key(at) {
             put = emit_stmt_put_call(keep ?? return emit_stmt_kept_none(), plan.opaque_puts.contains(at))
         }
         // **A binding a task takes with it is packed with the task's keep**
@@ -472,6 +476,25 @@ impl EmitState {
             holding = plan.widths.get(bound) ?? 1
         }
         return EmitStmtKept { put: put, packed: packed, holding: holding }
+    }
+
+    /// **The buffers put into their keep after the statement at `statement`**
+    /// (#1276): each changed there last, put under its own name from here on.
+    fn emit_stmt_late_puts(ref self, walk: ref EmitWalk, function: ref String, statement: i64) -> String {
+        let key = self.keep_plan_key(walk, function) ?? return ""
+        let plan = self.keep_plans.get(key) ?? return ""
+        let mut written = ""
+        for (at, late) in plan.late_puts {
+            if late.after != statement {
+                continue
+            }
+            let keep = plan.puts.get(at) ?? continue
+            let put = emit_stmt_put_call(keep, plan.opaque_puts.contains(at))
+            let local = self.emit_stmt_local(late.name)
+            let mut_word = if late.reassigned { "mut " } else { "" }
+            written = f"{written} let {mut_word}{local} = {put}{local});"
+        }
+        return written
     }
 
     /// The keep a kept buffer assigned again goes into, with the call (#293).
