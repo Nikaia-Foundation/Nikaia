@@ -135,6 +135,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         state.facts.future_lambdas.insert(id);
                         if runs { state.facts.run_lambdas.insert(id); }
                     }
+                    if runs && fails && declared_here { state.facts.failing_lambdas.insert(id); }
                     if !runs {
                         state.facts.kept_lambdas.insert(id, (pauses, fails));
                         state.a_kept_lambdas_result(id, (result).as_ref(), pauses, fails);

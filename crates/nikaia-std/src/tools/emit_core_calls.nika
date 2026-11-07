@@ -567,6 +567,9 @@ impl EmitState {
         // the function around it.
         let code_fails = self.facts.run_code_fails.contains(node_key(func))
         if flow.can_throw && !flow.caught && (code_fails || call_can_fail(world.words, self.own_contracts, world.library, self.described, func)) {
+            if code_fails {
+                out.push(self.box_into_channel(world, scope))
+            }
             out.push("?")
         }
     }
@@ -622,6 +625,7 @@ impl EmitState {
                     out.push(".await")
                 }
                 if fails && flow.can_throw && !flow.caught {
+                    out.push(self.box_into_channel(world, scope))
                     out.push("?")
                 }
                 return true

@@ -171,7 +171,7 @@ fn lambdas_and_the_constructor_are_untouched() {
     runs(
         "lambda",
         "fn main() throws {\n\
-         \x20   let f: fn() = fn { println(\"lambda\") }\n\
+         \x20   let f: fn() throws = fn { println(\"lambda\") }\n\
          \x20   f()\n\
          }\n",
         "lambda\n",

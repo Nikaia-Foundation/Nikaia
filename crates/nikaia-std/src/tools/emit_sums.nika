@@ -219,35 +219,41 @@ impl EmitState {
             }
             out.push(f"        }}\n    }}\n}}\nimpl{decl} std::error::Error for {name}{params} {{}}\n")
             // **A scope's tasks fail in it** (ADR-346 D7): the first failure is
-            // the scope's, and one channel crosses the pool as itself.
-            if crashed {
-                // A later failure of the first one's member joins its list; one
-                // of another member joins it in the box, so nothing is lost.
-                out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n")
+            // the scope's, and one channel crosses the pool as itself. **An
+            // `overlap` joins its branches' failures in it too** (ADR-292 D8),
+            // whatever the members: a function that prints fails with
+            // `io::IoError` beside its own (ADR-392), so the channel of an
+            // `overlap` in it is a sum without `task::Crashed` (#1360).
+            // A later failure of the first one's member joins its list; one
+            // of another member joins it in the box, so nothing is lost.
+            out.push(f"impl{decl} nikaia_std::error::Joined for {name}{params} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n")
+            for member in members {
+                let variant = sum_variant(member)
+                let held = self.sum_member_held(world, member, params)
+                if held.starts_with("nikaia_std::error::Thrown<") {
+                    out.push(f"            ({name}::{variant}(first), {name}::{variant}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n")
+                }
+            }
+            // Boxing asks for `'static`: only a sum without parameters. And
+            // for `Send` and `Sync`, which a scope's channel has and a
+            // supervisor's `Handed` has not: only a scope's.
+            if params == "" && crashed {
                 for member in members {
                     let variant = sum_variant(member)
                     let held = self.sum_member_held(world, member, params)
                     if held.starts_with("nikaia_std::error::Thrown<") {
-                        out.push(f"            ({name}::{variant}(first), {name}::{variant}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n")
-                    }
-                }
-                // Boxing asks for `'static`: only a sum without parameters.
-                if params == "" {
-                    for member in members {
-                        let variant = sum_variant(member)
-                        let held = self.sum_member_held(world, member, params)
-                        if held.starts_with("nikaia_std::error::Thrown<") {
-                            for other in members {
-                                let other_held = self.sum_member_held(world, other, params)
-                                if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
-                                    let other_variant = sum_variant(other)
-                                    out.push(f"            ({name}::{variant}(first), {name}::{other_variant}(later)) => first.joined_by_other(later),\n")
-                                }
+                        for other in members {
+                            let other_held = self.sum_member_held(world, other, params)
+                            if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
+                                let other_variant = sum_variant(other)
+                                out.push(f"            ({name}::{variant}(first), {name}::{other_variant}(later)) => first.joined_by_other(later),\n")
                             }
                         }
                     }
                 }
-                out.push("            _ => {}\n        }\n    }\n}\n")
+            }
+            out.push("            _ => {}\n        }\n    }\n}\n")
+            if crashed {
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
             // `error.message()` on an error, one of several (ADR-280 D30).
@@ -326,6 +332,33 @@ impl EmitState {
             return f"<{static_params}>"
         }
         return f"<{params}>"
+    }
+
+    /// **A call through a function value hands its failure back in the box**
+    /// (a `fn() throws` is always lowered so, `emit_core_types`), while the
+    /// function around it fails in the channel its set names (ADR-351 D1-D4):
+    /// what the value carries is that set or a part of it, so the box is
+    /// opened into the channel before the `?`. Nothing where the channel is
+    /// the box itself.
+    pub fn box_into_channel(ref self, world: ref EmitWorld, scope: ref EmitScope) -> String {
+        if scope.channel == "Box<dyn std::error::Error>" || scope.function == "" {
+            return ""
+        }
+        let contract = self.own_contracts.functions.get(scope.function) ?? return ""
+        let mut arms: String = ""
+        for member in contract.fails_with {
+            let kind = self.name_of_error(world, member)
+            if kind == 0 {
+                return ""
+            }
+            let held = if kind == 2 { library_error_path(member, self.is_std) } else { member.clone() }
+            arms = f"{arms}if nikaia_std::error::holds::<{held}>(&*error) {{ return nikaia_std::error::reopened::<{held}>(error).into(); }} "
+        }
+        if arms == "" {
+            return ""
+        }
+        let channel = scope.channel.clone()
+        return f".map_err(|error: Box<dyn std::error::Error>| -> {channel} {{ {arms}unreachable!(\"a function value failed outside its set\") }})"
     }
 
     /// The failure channel of the function `key`.

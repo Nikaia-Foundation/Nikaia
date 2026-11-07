@@ -467,10 +467,10 @@ fn a_scope_with_a_pausing_task_is_awaited_and_polls_it() {
                   fn main() throws {\n\
                   \x20   let data = [1, 2, 3]\n\
                   \x20   task::scope fn(s) {\n\
-                  \x20       s.spawn fn { println(f\"{data.len()}\") }\n\
+                  \x20       s.spawn fn { println(f\"{data.len()}\") catch { } }\n\
                   \x20       s.spawn fn {\n\
                   \x20           time::sleep(5.millis())\n\
-                  \x20           println(f\"{data[0]}\")\n\
+                  \x20           println(f\"{data[0]}\") catch { }\n\
                   \x20       }\n\
                   \x20   }\n\
                   }";

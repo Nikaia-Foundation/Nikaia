@@ -32,6 +32,16 @@ impl std::fmt::Display for __NikaiaThrows_ProjectMembersRefusal__io_IoError {
     }
 }
 impl std::error::Error for __NikaiaThrows_ProjectMembersRefusal__io_IoError {}
+impl nikaia_std::error::Joined for __NikaiaThrows_ProjectMembersRefusal__io_IoError {
+    fn joined_by(&mut self, later: Self) {
+        #[allow(unreachable_patterns)]
+        match (self, later) {
+            (__NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(first), __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(later)) => nikaia_std::error::Joined::joined_by(first, later),
+            (__NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(first), __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(later)) => nikaia_std::error::Joined::joined_by(first, later),
+            _ => {}
+        }
+    }
+}
 impl __NikaiaThrows_ProjectMembersRefusal__io_IoError {
     #[allow(dead_code)]
     pub(crate) fn message(&self) -> String { self.to_string() }

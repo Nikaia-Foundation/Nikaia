@@ -179,9 +179,9 @@ fn a_path_takes_a_named_trailing_lambda() {
          \x20       body(&Scope)\n\
          \x20   }\n\
          }\n",
-        "fn work(total: i64) throws {\n\
+        "fn work(total: i64) {\n\
          \x20   task::scope fn(s) {\n\
-         \x20       s.spawn fn { println(f\"{total}\") }\n\
+         \x20       s.spawn fn { println(f\"{total}\") catch { } }\n\
          \x20   }\n\
          }\n",
     );

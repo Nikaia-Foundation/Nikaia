@@ -316,6 +316,17 @@ impl EmitState {
         } else if copied {
             out.push(f"{{ let mut {names[0]} = *__nikaia_slot; (|| ")
         }
+        // **Code whose type says `throws` hands back a `Result`** (#1360), as
+        // a kept lambda does.
+        if !copied && self.facts.failing_lambdas.contains(node_key(node)) {
+            out.push("{ let __nikaia_done = ")
+            self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, EmitTail::Value)
+            out.push("; Ok(__nikaia_done) }")
+            if a_task {
+                out.push(")")
+            }
+            return
+        }
         self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return)
         if copied && pauses {
             out.push(f".await; *__nikaia_slot = {names[0]}; }}")
@@ -1323,7 +1334,12 @@ impl EmitState {
             if scope.caught_sum != null && scope.caught_member != null {
                 let sum = (scope.caught_sum ?? "").clone()
                 let member = (scope.caught_member ?? "").clone()
-                if sum == "" {
+                // **Into the function's own channel where it is another
+                // one** (#1360): a function that prints fails with
+                // `io::IoError` beside what it caught, so its sum is not the
+                // callee's, and the envelope converts into either.
+                let own: String = (self.sum_of(scope.function) ?? "").clone()
+                if sum == "" || own != sum {
                     held = f"{held}.into()"
                 } else {
                     held = f"{self.sum_root()}{sum}::{sum_variant(member)}({held})"

@@ -397,7 +397,13 @@ impl EmitState {
                 let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
                 changed.extend(mutable.iter().cloned());
                 let inner = EmitScope { changed: changed, ..EmitScope::plain() };
-                self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), &inner, &EmitTail::Return)?;
+                if self.facts.failing_lambdas.contains(&node_key(arg)) {
+                    let plain = EmitFlow::plain().at(inside.statement);
+                    let failing = EmitFlow { can_throw: true, ..plain };
+                    out.push("{ let __nikaia_done = ");
+                    self.emit_core_block(world, walk, out, host, body, depth, failing, &inner, &EmitTail::Value)?;
+                    out.push("; Ok(__nikaia_done) }");
+                } else { self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), &inner, &EmitTail::Return)?; }
                 if !runs { out.push(")"); }
             },
             _ => { },

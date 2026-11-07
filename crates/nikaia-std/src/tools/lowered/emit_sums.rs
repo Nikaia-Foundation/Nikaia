@@ -112,31 +112,29 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => e.fmt(f),\n", name, variant));
             }
             out.push(&format!("        }}\n    }}\n}}\nimpl{} std::error::Error for {}{} {{}}\n", decl, name, params));
-            if crashed {
-                out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n", decl, name, params));
+            out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n", decl, name, params));
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                let held = self.sum_member_held(world, member, &params);
+                if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
+            }
+            if params == "" && crashed {
                 for member in members.iter() {
                     let variant = sum_variant(member);
                     let held = self.sum_member_held(world, member, &params);
-                    if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
-                }
-                if params == "" {
-                    for member in members.iter() {
-                        let variant = sum_variant(member);
-                        let held = self.sum_member_held(world, member, &params);
-                        if held.starts_with("nikaia_std::error::Thrown<") {
-                            for other in members.iter() {
-                                let other_held = self.sum_member_held(world, other, &params);
-                                if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
-                                    let other_variant = sum_variant(other);
-                                    out.push(&format!("            ({}::{}(first), {}::{}(later)) => first.joined_by_other(later),\n", name, variant, name, other_variant));
-                                }
+                    if held.starts_with("nikaia_std::error::Thrown<") {
+                        for other in members.iter() {
+                            let other_held = self.sum_member_held(world, other, &params);
+                            if other != member && other_held.starts_with("nikaia_std::error::Thrown<") {
+                                let other_variant = sum_variant(other);
+                                out.push(&format!("            ({}::{}(first), {}::{}(later)) => first.joined_by_other(later),\n", name, variant, name, other_variant));
                             }
                         }
                     }
                 }
-                out.push("            _ => {}\n        }\n    }\n}\n");
-                out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params));
             }
+            out.push("            _ => {}\n        }\n    }\n}\n");
+            if crashed { out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params)); }
             out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n", decl, name, params));
             out.push(&format!("impl{} nikaia_std::error::Full for {}{} {{\n    fn full(&self) -> String {{\n        match self {{\n", decl, name, params));
             for member in members.iter() {
@@ -178,6 +176,20 @@ impl EmitState {
     pub(crate) fn channel_params(&self, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
         if elided && !borrows { return format!("<{}>", static_params); }
         format!("<{}>", params)
+    }
+    pub fn box_into_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, scope: &EmitScope) -> String {
+        if scope.channel == "Box<dyn std::error::Error>" || scope.function == "" { return String::from(""); }
+        let contract = match self.own_contracts.functions.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let mut arms: String = String::from("");
+        for member in contract.fails_with.iter() {
+            let kind = self.name_of_error(world, member);
+            if kind == 0 { return String::from(""); }
+            let held = if kind == 2 { library_error_path(member, self.is_std) } else { member.to_string() };
+            arms = format!("{}if nikaia_std::error::holds::<{}>(&*error) {{ return nikaia_std::error::reopened::<{}>(error).into(); }} ", arms, held, held);
+        }
+        if arms == "" { return String::from(""); }
+        let channel = scope.channel.to_string();
+        format!(".map_err(|error: Box<dyn std::error::Error>| -> {} {{ {}unreachable!(\"a function value failed outside its set\") }})", channel, arms)
     }
     pub fn error_channel(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, elided: bool, params: &str, static_params: &str, borrows: bool) -> String {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };

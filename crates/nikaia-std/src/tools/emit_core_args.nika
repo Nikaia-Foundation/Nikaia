@@ -687,7 +687,18 @@ impl EmitState {
                 let mut changed: Vec[winnow_grammar::Symbol] = scope.changed.clone()
                 changed.extend(mutable.clone())
                 let inner = EmitScope::plain() with { changed: changed }
-                self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), inner, EmitTail::Return)
+                // **Code whose type says `throws` hands back a `Result`**
+                // (#1360), as a kept lambda does: a failing call in the body
+                // leaves through its `?`, and the value goes inside the `Ok`.
+                if self.facts.failing_lambdas.contains(node_key(arg)) {
+                    let plain = EmitFlow::plain().at(inside.statement)
+                    let failing = plain with { can_throw: true }
+                    out.push("{ let __nikaia_done = ")
+                    self.emit_core_block(world, walk, out, host, body, depth, failing, inner, EmitTail::Value)
+                    out.push("; Ok(__nikaia_done) }")
+                } else {
+                    self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), inner, EmitTail::Return)
+                }
                 if !runs {
                     out.push(")")
                 }

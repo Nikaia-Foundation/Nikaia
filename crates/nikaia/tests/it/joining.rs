@@ -199,7 +199,7 @@ fn a_branch_travels_in_the_functions_own_channel() {
     );
     let rust = lowered(&source);
     assert!(
-        rust.contains("Ok::<_, nikaia_std::error::Thrown<LoadError>>("),
+        rust.contains("Ok::<_, crate::__NikaiaThrows_LoadError__io_IoError>("),
         "{rust}"
     );
     assert!(
