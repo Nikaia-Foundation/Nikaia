@@ -1,0 +1,416 @@
+// crates/nikaia-std/src/solver/sv_strategy.nika
+//
+// **The strategy layer** (ADR-270 D14, #1284 item 4): which pipeline a
+// query gets, under which parameters, and what crosses from one engine to
+// the next.
+//
+// * **Features, read in one pass** over the query (`sv_features`): its
+//   columns and real columns, atoms, clauses, disjunctions, non-zeros, the
+//   share of interval atoms (one column) and difference atoms (`x - y`),
+//   the largest coefficient and constant, and its Boolean size (the
+//   literals of its clauses). `sv_strategy_pick` chooses the pipeline from
+//   them.
+// * **Every heuristic is a named parameter** of one set, `SvParams`, whose
+//   `version` names it; `sv_params_set` changes one by name (the tuning of
+//   `scripts/solver.nika tune` does so, #1284 item 5).
+// * **Work is counted in expensive steps**: one theory check of the search,
+//   or `walk.moves_per_unit` moves of the walk; the budget's `cases` bounds
+//   their sum.
+// * **Signals during the search switch it**: a search that ends unknown
+//   (an overflow, the budget) hands over to the walk on what is left, and a
+//   walk run first that finds nothing hands over to the search.
+// * **What crosses a switch**: from the search to the walk the learned
+//   clauses (the theory lemmas among them, each with its proof step in the
+//   log) and the level-zero units (the derived bounds); from the walk to
+//   the search the atoms' truth where the walk came closest, as the SAT
+//   core's phases. The log is the search's own and stays whole: the walk
+//   writes nothing to it, and its model is an answer only after
+//   `lg_consistent_answer` has evaluated the query (D3).
+
+/// The parameter set (ADR-270 D14). A field is a heuristic; `version`
+/// changes whenever a default does.
+pub struct SvParams {
+	pub version: String,
+	/// The pipeline: `"search"`, or `"walk-first"` (a walk on
+	/// `walk_first` per mille of the budget, then the search).
+	pub pipeline: String,
+	/// The search's theory: `"both"`, `"fm"` or `"simplex"`.
+	pub theory: String,
+	/// Whether the fast paths (`sv_fast.nika`) and the preprocessing
+	/// (`sv_pre.nika`) run before the search.
+	pub fast: bool,
+	pub pre: bool,
+	/// Whether a search that ends unknown hands over to the walk.
+	pub walk_after: bool,
+	pub walk_first: i64,
+	pub walk: SvWalkParams,
+	/// The simplex's: pivots before Bland's rule, pivots before a check
+	/// gives up, the GCD test, the cut (`"gmi"`, `"cg"`, `"none"`) and the
+	/// cuts in a row before a split.
+	pub bland_after: i64,
+	pub pivot_limit: i64,
+	pub gcd_test: bool,
+	pub cut_kind: String,
+	pub cut_rounds: i64,
+	/// The pick's thresholds: a query of unit clauses only whose atoms
+	/// average at least `dense_width` columns, of which at most
+	/// `dense_share` per mille are interval or difference atoms, looks
+	/// satisfiable to a walk and gets `walk-first`.
+	pub dense_width: i64,
+	pub dense_share: i64,
+}
+
+/// The set's defaults.
+pub fn sv_params() -> SvParams {
+	return SvParams {
+		version: "sv-params-1",
+		pipeline: "search",
+		theory: "both",
+		fast: true,
+		pre: true,
+		walk_after: true,
+		walk_first: 250,
+		walk: sv_walk_params(),
+		bland_after: 64,
+		pivot_limit: 100000,
+		gcd_test: true,
+		cut_kind: "gmi",
+		cut_rounds: 8,
+		dense_width: 4,
+		dense_share: 100,
+	}
+}
+
+/// Sets parameter `name` to `value`; `false` where there is no such
+/// parameter or the value is not one it takes.
+pub fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
+	if name == "pipeline" {
+		if value != "search" && value != "walk-first" {
+			return false
+		}
+		p.pipeline = value.clone()
+		return true
+	}
+	if name == "theory" {
+		if value != "both" && value != "fm" && value != "simplex" {
+			return false
+		}
+		p.theory = value.clone()
+		return true
+	}
+	if name == "cut_kind" {
+		if value != "gmi" && value != "cg" && value != "none" {
+			return false
+		}
+		p.cut_kind = value.clone()
+		return true
+	}
+	if name == "fast" || name == "pre" || name == "walk_after" || name == "gcd_test" {
+		if value != "true" && value != "false" {
+			return false
+		}
+		let on = value == "true"
+		if name == "fast" {
+			p.fast = on
+		} else if name == "pre" {
+			p.pre = on
+		} else if name == "walk_after" {
+			p.walk_after = on
+		} else {
+			p.gcd_test = on
+		}
+		return true
+	}
+	let n = text::parse_i64(value) ?? return false
+	if n < 0 {
+		return false
+	}
+	if name == "walk_first" && n <= 1000 {
+		p.walk_first = n
+	} else if name == "moves_per_unit" && n > 0 {
+		p.walk.moves_per_unit = n
+	} else if name == "noise" && n <= 1000 {
+		p.walk.noise = n
+	} else if name == "tenure" {
+		p.walk.tenure = n
+	} else if name == "bound" && n > 0 {
+		p.walk.bound = n
+	} else if name == "seed" {
+		p.walk.seed = n
+	} else if name == "bland_after" {
+		p.bland_after = n
+	} else if name == "pivot_limit" && n > 0 {
+		p.pivot_limit = n
+	} else if name == "cut_rounds" {
+		p.cut_rounds = n
+	} else if name == "dense_width" {
+		p.dense_width = n
+	} else if name == "dense_share" && n <= 1000 {
+		p.dense_share = n
+	} else {
+		return false
+	}
+	return true
+}
+
+/// Sets each `name=value` of `settings`, comma-separated; `false` at the
+/// first one that does not take.
+pub fn sv_params_set_all(mut p: SvParams, settings: String) -> bool {
+	for part in settings.split(",") {
+		if part.len() == 0 {
+			continue
+		}
+		let (name, value) = part.split_once("=") ?? return false
+		if !sv_params_set(p, name.to_string(), value.to_string()) {
+			return false
+		}
+	}
+	return true
+}
+
+/// A query's features (ADR-270 D14), read in one pass.
+pub struct SvFeatures {
+	pub columns: i64,
+	pub reals: i64,
+	pub atoms: i64,
+	pub clauses: i64,
+	pub disjunctions: i64,
+	pub nonzeros: i64,
+	/// Per mille of the theory atoms: over one column, and `x - y`.
+	pub interval: i64,
+	pub difference: i64,
+	pub max_coefficient: i64,
+	pub max_constant: i64,
+	/// The literals of all clauses.
+	pub boolean: i64,
+}
+
+/// The size of `n`, `i64::MAX` for the one `i64` without a negation.
+fn sv_strategy_size(n: i64) -> i64 {
+	if n >= 0 {
+		return n
+	}
+	return n.checked_neg() ?? 9223372036854775807
+}
+
+/// The features of `cnf`'s query: its theory atoms (a definition's atom
+/// counts as Boolean structure, not as an atom) and its clauses.
+pub fn sv_features(cnf: ref SvCnf) -> SvFeatures {
+	let mut f = SvFeatures {
+		columns: cnf.query.columns as i64,
+		reals: cnf.query.reals.len(),
+		atoms: 0,
+		clauses: cnf.query.clauses.len(),
+		disjunctions: 0,
+		nonzeros: 0,
+		interval: 0,
+		difference: 0,
+		max_coefficient: 0,
+		max_constant: 0,
+		boolean: 0,
+	}
+	let mut ones = 0
+	let mut twos = 0
+	let mut a = 0
+	while a < cnf.query.atoms.len() {
+		if a < cnf.definition.len() && cnf.definition[a] {
+			a += 1
+			continue
+		}
+		f.atoms += 1
+		let width = cnf.query.atoms[a].row.ks.len()
+		f.nonzeros += width
+		for k in cnf.query.atoms[a].row.ks {
+			let size = sv_strategy_size(k)
+			if size > f.max_coefficient {
+				f.max_coefficient = size
+			}
+		}
+		let constant = sv_strategy_size(cnf.query.atoms[a].row.constant)
+		if constant > f.max_constant {
+			f.max_constant = constant
+		}
+		if width == 1 {
+			ones += 1
+		}
+		if width == 2 {
+			let k0 = cnf.query.atoms[a].row.ks[0]
+			let k1 = cnf.query.atoms[a].row.ks[1]
+			if (k0 == 1 && k1 == -1) || (k0 == -1 && k1 == 1) {
+				twos += 1
+			}
+		}
+		a += 1
+	}
+	for clause in cnf.query.clauses {
+		f.boolean += clause.len()
+		if clause.len() > 1 {
+			f.disjunctions += 1
+		}
+	}
+	if f.atoms > 0 {
+		f.interval = ones * 1000 / f.atoms
+		f.difference = twos * 1000 / f.atoms
+	}
+	return f
+}
+
+/// The features as one line.
+pub fn sv_features_shown(f: ref SvFeatures) -> String {
+	return f"columns {f.columns} reals {f.reals} atoms {f.atoms} clauses {f.clauses} disjunctions {f.disjunctions} nonzeros {f.nonzeros} interval {f.interval}‰ difference {f.difference}‰ coefficient {f.max_coefficient} constant {f.max_constant} boolean {f.boolean}"
+}
+
+/// **The pick** (ADR-270 D14): the parameters `base` with the pipeline the
+/// features `f` call for.
+///
+/// * A real column: the simplex alone, no walk (the walk is over the
+///   integers, D27).
+/// * Unit clauses only, wide atoms (at least `dense_width` columns each on
+///   average), few interval or difference atoms: a random-looking system a
+///   walk tends to satisfy, so `walk-first`; the search follows on what the
+///   walk left.
+/// * Else the search, and the walk after it where it ends unknown.
+pub fn sv_strategy_pick(f: ref SvFeatures, base: ref SvParams) -> SvParams {
+	let mut p = base.clone()
+	if f.reals > 0 {
+		p.pipeline = "search"
+		p.theory = "simplex"
+		p.walk_after = false
+		return p
+	}
+	let wide = f.atoms > 0 && f.nonzeros >= f.atoms * base.dense_width
+	if f.disjunctions == 0 && wide && f.interval + f.difference <= base.dense_share {
+		p.pipeline = "walk-first"
+	}
+	return p
+}
+
+/// The pipeline `p` names, for a line: `walk-first`, `search` and its
+/// theory, `+walk` where the walk follows an unknown search.
+pub fn sv_params_shown(p: ref SvParams) -> String {
+	let first = if p.pipeline == "walk-first" { "walk-first, " } else { "" }
+	let after = if p.walk_after { "+walk" } else { "" }
+	return f"{first}search/{p.theory}{after}"
+}
+
+/// The simplex of `names` under `p`.
+fn sv_strategy_simplex(names: Vec[String], p: ref SvParams) -> SvSimplex {
+	let mut sx = sv_simplex(names)
+	sx.bland_after = p.bland_after
+	sx.pivot_limit = p.pivot_limit
+	sx.gcd_test = p.gcd_test
+	sx.cut_kind = p.cut_kind.clone()
+	sx.cut_rounds = p.cut_rounds
+	return sx
+}
+
+/// Path `path` with `label` after it, joined by `+` where both are there.
+fn sv_strategy_path(path: String, label: String) -> String {
+	if path == "" {
+		return label.clone()
+	}
+	if label == "" {
+		return path.clone()
+	}
+	return f"{path}+{label}"
+}
+
+/// The values of a walk as the logic layer names them: each column's name.
+fn sv_strategy_values(cnf: ref SvCnf, values: ref Vec[i64]) -> collections::BTreeMap[String, i64] {
+	let mut named: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	let mut col = 0
+	while col < values.len() && col < cnf.names.len() {
+		named.insert(cnf.names[col].clone(), values[col])
+		col += 1
+	}
+	return named
+}
+
+/// A walk's values as an answer: a *refuted* where `lg_consistent_answer`
+/// refutes the query under them (D3), else `null`.
+fn sv_strategy_model(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	cnf: ref SvCnf,
+	walk: ref SvWalkRun,
+) -> LgAnswer? {
+	if !walk.found {
+		return null
+	}
+	let answer = lg_consistent_answer(
+		arena,
+		facts,
+		goal,
+		true,
+		sv_strategy_values(cnf, walk.values),
+	)
+	return match answer {
+		LgAnswer::Refuted { .. } => answer,
+		else => null,
+	}
+}
+
+/// **The pipeline** `p` on `cnf`, within `budget`: the walk first where
+/// `p` says so, the search, the walk after an unknown search.
+pub fn sv_strategy_run(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	cnf: ref SvCnf,
+	p: ref SvParams,
+) -> SvEngineRun {
+	let real = cnf.query.reals.len() > 0
+	let mut spent = 0
+	let mut phases: Vec[bool] = []
+	let mut first = ""
+	if p.pipeline == "walk-first" && !real {
+		let units = budget.cases / 1000 * p.walk_first + budget.cases % 1000 * p.walk_first / 1000
+		let none: Vec[Vec[u32]] = []
+		let moves = units.checked_mul(p.walk.moves_per_unit) ?? 0
+		let walk = sv_walk(cnf.query, none, p.walk, moves)
+		spent = sv_walk_units(walk.moves, p.walk)
+		match sv_strategy_model(arena, facts, goal, cnf, walk) {
+			null => {},
+			answer => {
+				return SvEngineRun {
+					driven: SvDriven::Answer(answer),
+					work: spent,
+					path: "walk",
+					carried: [],
+				}
+			},
+		}
+		phases = walk.phases.clone()
+		first = "walk"
+	}
+	let mut left = budget.clone()
+	left.cases = budget.cases - spent
+	let mut run = sv_smt_search_cnf(arena, facts, goal, left, cnf, p, phases)
+	run.work += spent
+	if first != "" {
+		run.path = sv_strategy_path(first, run.path)
+	}
+	if !p.walk_after || real {
+		return run
+	}
+	match run.driven {
+		SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::OutsideTheTheory }) => return run,
+		SvDriven::Answer(LgAnswer::Unknown { .. }) => {},
+		else => return run,
+	}
+	let rest = budget.cases - run.work
+	if rest <= 0 {
+		return run
+	}
+	let moves = rest.checked_mul(p.walk.moves_per_unit) ?? return run
+	let walk = sv_walk(cnf.query, run.carried, p.walk, moves)
+	let answer = sv_strategy_model(arena, facts, goal, cnf, walk) ?? return run
+	return SvEngineRun {
+		driven: SvDriven::Answer(answer),
+		work: run.work + sv_walk_units(walk.moves, p.walk),
+		path: sv_strategy_path(run.path, "walk"),
+		carried: [],
+	}
+}

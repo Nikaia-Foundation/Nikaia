@@ -553,72 +553,54 @@ fn sv_smt_engine_sorted(
 	theory: String,
 	reals: ref collections::BTreeSet[String],
 ) -> SvEngineRun {
-	let run = sv_smt_search_sorted(arena, facts, goal, budget, theory, reals)
-	return sv_smt_walk_after(arena, facts, goal, budget, reals, run, sv_walk_params())
+	return sv_smt_engine_set(arena, facts, goal, budget, theory, reals, "")
+		?? sv_engine_unknown(LgUnknown::NoContradiction, 0)
 }
 
-/// The walk after a search that ended unknown (#1284 item 3, ADR-270 D14):
-/// on the budget the search left, with the clauses it learned carried
-/// over. Its values are an answer only where `lg_consistent_answer`
-/// refutes the query under them (D3); else the search's run stands. A
-/// query with a real column gets no walk (D27).
-fn sv_smt_walk_after(
-	arena: ref TermArena,
-	facts: ref Vec[i64],
-	goal: i64,
-	budget: ref LgBudget,
-	reals: ref collections::BTreeSet[String],
-	run: SvEngineRun,
-	params: SvWalkParams,
-) -> SvEngineRun {
-	match run.driven {
-		SvDriven::Answer(LgAnswer::Unknown { why: LgUnknown::OutsideTheTheory }) => return run,
-		SvDriven::Answer(LgAnswer::Unknown { .. }) => {},
-		else => return run,
-	}
-	let left = budget.cases - run.work
-	if left <= 0 {
-		return run
-	}
-	let mut why = lg_why()
-	let cnf = sv_cnf_sorted(arena, facts, goal, reals, why) ?? return run
-	let moves = left.checked_mul(params.moves_per_unit) ?? return run
-	let walk = sv_walk(cnf.query, run.carried, params, moves)
-	if !walk.found {
-		return run
-	}
-	let mut values: collections::BTreeMap[String, i64] = collections::BTreeMap()
-	let mut col = 0
-	while col < walk.values.len() && col < cnf.names.len() {
-		values.insert(cnf.names[col].clone(), walk.values[col])
-		col += 1
-	}
-	let answer = lg_consistent_answer(arena, facts, goal, true, values)
-	match answer {
-		LgAnswer::Refuted { .. } => {},
-		else => return run,
-	}
-	let path = if run.path == "" { "walk" } else { f"{run.path}+walk" }
-	return SvEngineRun {
-		driven: SvDriven::Answer(answer),
-		work: run.work + sv_walk_units(walk.moves, params),
-		path: path,
-		carried: [],
-	}
-}
-
-/// The search of `sv_smt_engine_sorted`, without the walk after it.
-fn sv_smt_search_sorted(
+/// `sv_smt_engine_sorted` with the parameters `settings` (`name=value`,
+/// comma-separated, `sv_params_set_all`) changed before and after the
+/// strategy's pick: a threshold moves the pick, a `pipeline` or `theory`
+/// overrides it. `null` where a setting does not take.
+fn sv_smt_engine_set(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
 	goal: i64,
 	budget: ref LgBudget,
 	theory: String,
 	reals: ref collections::BTreeSet[String],
-) -> SvEngineRun {
+	settings: String,
+) -> SvEngineRun? {
+	let mut base = sv_params()
+	if !sv_params_set_all(base, settings.clone()) {
+		return null
+	}
 	let mut why = lg_why()
-	let cnf = sv_cnf_sorted(arena, facts, goal, reals, why)
-		?? return sv_engine_unknown(why.unknown.clone(), 0)
+	let read = sv_cnf_sorted(arena, facts, goal, reals, why)
+	if read == null {
+		return sv_engine_unknown(why.unknown.clone(), 0)
+	}
+	let cnf = read ?? return null
+	let mut p = sv_strategy_pick(sv_features(cnf), base)
+	sv_params_set_all(p, settings)
+	if theory != "both" {
+		p.theory = theory
+	}
+	return sv_strategy_run(arena, facts, goal, budget, cnf, p)
+}
+
+/// The search of the strategy's pipeline (`sv_strategy.nika`) on `cnf`
+/// under `p`: the fast paths, the preprocessing, the CDCL(T) search over
+/// `p.theory`, its SAT core starting from `phases` where they are given.
+fn sv_smt_search_cnf(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	cnf: ref SvCnf,
+	p: ref SvParams,
+	phases: ref Vec[bool],
+) -> SvEngineRun {
+	let theory = p.theory.clone()
 	let real = cnf.query.reals.len() > 0
 	if real && theory == "fm" {
 		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
@@ -630,7 +612,7 @@ fn sv_smt_search_sorted(
 		ids.push(book.input(c))
 		c += 1
 	}
-	let fast = sv_fast(book, cnf, ids)
+	let fast = if p.fast { sv_fast(book, cnf, ids) } else { sv_fast_skip() }
 	match fast.end {
 		SvFastEnd::Unsat => return SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
@@ -646,7 +628,7 @@ fn sv_smt_search_sorted(
 		},
 		SvFastEnd::Skip => {},
 	}
-	let pre = sv_pre(book, cnf, ids)
+	let pre = if p.pre { sv_pre(book, cnf, ids) } else { sv_pre_none() }
 	if pre.unsat {
 		return SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
@@ -683,8 +665,15 @@ fn sv_smt_search_sorted(
 	for lemma in pre.lemmas {
 		sat.add_input(lemma.lits, lemma.id)
 	}
+	// What crosses from a walk run first (ADR-270 D14): each atom's truth
+	// where it came closest.
+	let mut v = 0
+	while v < phases.len() && v < vars as i64 {
+		sat.set_phase(v, phases[v])
+		v += 1
+	}
 	let mut run = if real {
-		let mut sx = sv_simplex(cnf.names.clone())
+		let mut sx = sv_strategy_simplex(cnf.names.clone(), p)
 		sx.reals = cnf.query.reals.clone()
 		sv_smt_run(sx, sat,
 			theory_atom,
@@ -706,7 +695,7 @@ fn sv_smt_search_sorted(
 			budget,
 		)
 	} else if theory == "simplex" {
-		sv_smt_run(sv_simplex(cnf.names.clone()), sat,
+		sv_smt_run(sv_strategy_simplex(cnf.names.clone(), p), sat,
 			theory_atom,
 			known,
 			cnf,
@@ -716,7 +705,9 @@ fn sv_smt_search_sorted(
 			budget,
 		)
 	} else {
-		sv_smt_run(sv_both(cnf.names.clone()), sat,
+		let mut both = sv_both(cnf.names.clone())
+		both.simplex = sv_strategy_simplex(cnf.names.clone(), p)
+		sv_smt_run(both, sat,
 			theory_atom,
 			known,
 			cnf,
