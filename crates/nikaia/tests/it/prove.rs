@@ -99,7 +99,7 @@ fn a_guard_proves_the_claim_after_it_and_no_check_is_emitted() {
          \x20   return speed\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{limit(300)} {limit(100)}\")\n\
          }\n",
     );
@@ -130,7 +130,7 @@ fn branches_lets_ranges_and_guards_are_facts() {
                   \x20   return x / d\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{f(12, 3)}\")\n\
                   }\n";
     assert!(codes(source).is_empty(), "{:#?}", findings(source));
@@ -150,7 +150,7 @@ fn a_claim_nothing_shows_is_checked_when_the_program_runs() {
                   \x20   return y\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{f(1)}\")\n\
                   }\n";
     assert_eq!(
@@ -205,7 +205,7 @@ fn a_parameter_claim_is_a_precondition_the_caller_proves() {
          \x20   return percent(done, total)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{percent(1, 4)} {report(3, 4)} {report(3, 0)}\")\n\
          }\n",
     );
@@ -228,7 +228,7 @@ fn a_parameter_claim_is_a_precondition_the_caller_proves() {
          \x20   return sum\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{report(3, 4)}\")\n\
          }\n",
     );
@@ -264,7 +264,7 @@ fn a_caller_the_prover_does_not_see_reaches_the_checked_entry() {
                   \x20   return n / 2\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let c = Counter { total: 1 }\n\
                   \x20   let g = half\n\
                   \x20   println(f\"{half(4)} {g(6)} {c.add(2)}\")\n\
@@ -364,7 +364,7 @@ fn a_length_is_a_variable_of_the_proof() {
                   \x20   return first(xs)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let xs = [3, 4]\n\
                   \x20   assert(xs.len() == 2)\n\
                   \x20   println(f\"{first(xs)} {head_or(xs, 0)}\")\n\
@@ -389,7 +389,7 @@ fn a_length_is_a_variable_of_the_proof() {
          \x20   return r\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{use_it([1])}\")\n\
          }\n",
     );
@@ -413,7 +413,7 @@ fn a_lambda_sees_the_facts_around_it_and_not_through_its_parameters() {
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{scale([1], 2).len()}\")\n\
                   }\n";
     assert!(
@@ -430,7 +430,7 @@ fn a_lambda_sees_the_facts_around_it_and_not_through_its_parameters() {
                     \x20   }\n\
                     }\n\
                     \n\
-                    fn main() {\n\
+                    fn main() throws {\n\
                     \x20   println(f\"{f(1).len()}\")\n\
                     }\n";
     assert!(
@@ -502,7 +502,7 @@ fn a_claim_false_every_time_it_is_reached_is_refused_with_values() {
                   \x20   return m\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let blank = 2\n\
                   \x20   assert(blank + 1 == 4)\n\
                   \x20   println(f\"{twice(3)}\")\n\
@@ -539,7 +539,7 @@ fn a_call_that_always_breaks_a_precondition_is_refused() {
          \x20   return part * 100 / whole\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let none = 0\n\
          \x20   println(f\"{percent(1, none)}\")\n\
          }\n",
@@ -565,12 +565,14 @@ fn an_options_claim_is_a_precondition_the_caller_proves() {
                   \n";
     let (out, rust) = ran(
         "prove-option-precondition",
-        &format!("{callee}fn main() {{\n    println(f\"{{tipped(1; t: 5)}} {{tipped(1)}}\")\n}}\n"),
+        &format!(
+            "{callee}fn main() throws {{\n    println(f\"{{tipped(1; t: 5)}} {{tipped(1)}}\")\n}}\n"
+        ),
     );
     assert_eq!(out, "6 1\n");
     assert_eq!(call_checks(&rust), 0, "{rust}");
     let found = shown_false(&format!(
-        "{callee}fn main() {{\n    println(f\"{{tipped(1; t: 50)}}\")\n}}\n"
+        "{callee}fn main() throws {{\n    println(f\"{{tipped(1; t: 50)}}\")\n}}\n"
     ));
     assert_eq!(found.len(), 1, "{found:#?}");
     assert_eq!(
@@ -584,7 +586,7 @@ fn an_options_claim_is_a_precondition_the_caller_proves() {
          \x20   return a + t\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{tipped(1)}\")\n\
          }\n",
     );
@@ -606,7 +608,7 @@ fn a_claim_that_can_hold_is_not_refused() {
                   \x20   return f(n)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{f(1)} {g(2)}\")\n\
                   }\n";
     assert!(shown_false(source).is_empty());
@@ -632,7 +634,7 @@ fn a_callee_precondition_is_carried_back_through_the_call() {
                   \x20   return half(y + 1)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{twice(1)} {half(5)}\")\n\
                   }\n";
     let found = shown_false(source);
@@ -663,7 +665,7 @@ fn a_callee_precondition_is_carried_back_through_the_call() {
          \x20   return percent(1, x - 2)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{half(4)} {half(102)}\")\n\
          }\n",
     );
@@ -683,7 +685,7 @@ fn a_recursive_call_is_not_carried_back() {
                   \x20   return down(n - 1)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{down(3)}\")\n\
                   }\n";
     assert!(shown_false(source).is_empty());
@@ -704,7 +706,7 @@ fn a_claim_false_for_a_value_that_reaches_it_is_refused_with_values() {
                   \x20   return part * 100 / whole\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   for i in 0..<10 {\n\
                   \x20       println(f\"{percent(1, i)}\")\n\
                   \x20   }\n\
@@ -761,7 +763,7 @@ fn a_value_the_facts_allow_but_nothing_shows_reaches_is_not_refused() {
                   \x20   return x % 2 == 1\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   for i in 0..<10 {\n\
                   \x20       break if i == 0\n\
                   \x20       println(f\"{percent(1, i - 1)}\")\n\
@@ -808,7 +810,7 @@ fn a_claim_carried_back_to_the_entry_is_a_precondition() {
                   \x20   return m\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{f(5, 1)} {f(0, 2)} {g(3)} {h(7)} {h(0 - 1)}\")\n\
                   }\n";
     assert!(
@@ -836,7 +838,7 @@ fn a_computed_precondition_names_both_ends() {
                   \x20   return y\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{f(0, 1)}\")\n\
                   }\n";
     let found = shown_false(source);
@@ -886,7 +888,7 @@ fn a_claim_shown_at_every_exit_is_a_postcondition() {
                   \x20   return d\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let a = clamp(0 - 5)\n\
                   \x20   assert(a >= 0)\n\
                   \x20   let b = wrong(5)\n\
@@ -916,7 +918,7 @@ fn a_claim_shown_at_every_exit_is_a_postcondition() {
 #[test]
 fn an_exit_that_shows_nothing_makes_no_postcondition() {
     use nikaia::prove::Held::{AtRunTime, Proved};
-    let source = "fn open_end(n: i64) -> i64 {\n\
+    let source = "fn open_end(n: i64) -> i64 throws {\n\
                   \x20   if n > 0 {\n\
                   \x20       assert(n > 0)\n\
                   \x20       return n\n\
@@ -925,12 +927,12 @@ fn an_exit_that_shows_nothing_makes_no_postcondition() {
                   \x20   return 0 - 1\n\
                   }\n\
                   \n\
-                  fn caller(x: i64) {\n\
+                  fn caller(x: i64) throws {\n\
                   \x20   let a = open_end(x)\n\
                   \x20   assert(a > 0)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   caller(2)\n\
                   }\n";
     let held = held(source);
@@ -951,7 +953,7 @@ fn a_call_inside_a_lets_value_is_read_with_what_its_callee_ensures() {
                   \x20   return 10 + a\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let e = 10 + example(2)\n\
                   \x20   assert(e == 22)\n\
                   \x20   let f = example(example(1)) - 1\n\
@@ -964,7 +966,7 @@ fn a_call_inside_a_lets_value_is_read_with_what_its_callee_ensures() {
                    \x20   return 10 + a\n\
                    }\n\
                    \n\
-                   fn main() {\n\
+                   fn main() throws {\n\
                    \x20   let b = 2 * example(2)\n\
                    \x20   assert(b > 30)\n\
                    \x20   println(f\"{b}\")\n\
@@ -982,7 +984,7 @@ fn a_call_inside_a_lets_value_is_read_with_what_its_callee_ensures() {
 /// than the claim called something other than a comparison of whole numbers.
 #[test]
 fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
-    let source = "fn quotient(n: i64, m: i64) {\n\
+    let source = "fn quotient(n: i64, m: i64) throws {\n\
                   \x20   let b = n / m\n\
                   \x20   assert(b > 10)\n\
                   \x20   println(f\"{b}\")\n\
@@ -999,7 +1001,7 @@ fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
 /// value**, truncated toward zero as Part I 2.2 folds it (#632 step 1).
 #[test]
 fn a_quotient_of_two_literals_is_its_value() {
-    let refuted = "fn main() {\n\
+    let refuted = "fn main() throws {\n\
                    \x20   let b = 4 / 12\n\
                    \x20   assert(b > 10)\n\
                    \x20   println(f\"{b}\")\n\
@@ -1014,7 +1016,7 @@ fn a_quotient_of_two_literals_is_its_value() {
         found[0].notes.iter().any(|n| n.contains("`b` is 0")),
         "{found:#?}"
     );
-    let proved = "fn main() {\n\
+    let proved = "fn main() throws {\n\
                   \x20   let q = -7 / 2\n\
                   \x20   let r = -7 % 2\n\
                   \x20   let s = 48 / 4\n\
@@ -1040,7 +1042,7 @@ fn a_quotient_of_two_literals_is_its_value() {
 fn an_integer_comptime_binding_is_its_value() {
     // A value the checker folds; one a call computes is compiled and run
     // (ADR-321 D1), and is `comptime_compiled.rs`'s.
-    let in_a_body = "fn main() {\n\
+    let in_a_body = "fn main() throws {\n\
                      \x20   comptime B: i64 = 4 / 12\n\
                      \x20   assert(B > 10)\n\
                      \x20   println(f\"{B}\")\n\
@@ -1053,7 +1055,7 @@ fn an_integer_comptime_binding_is_its_value() {
     );
     let an_item = "comptime LIMIT: i64 = 6 * 7\n\
                    \n\
-                   fn main() {\n\
+                   fn main() throws {\n\
                    \x20   assert(LIMIT == 42)\n\
                    \x20   assert(LIMIT / 5 == 8)\n\
                    \x20   println(f\"{LIMIT}\")\n\
@@ -1146,7 +1148,7 @@ const EXAMPLE: &str = "fn positive(whole: i64) -> i64 {\n\
 fn a_call_with_known_arguments_a_claim_needs_is_run() {
     use nikaia::prove::Held::Proved;
     let proved = format!(
-        "{FIB}fn main() {{\n\
+        "{FIB}fn main() throws {{\n\
          \x20   assert(fib(10) == 55)\n\
          \x20   println(\"ok\")\n\
          }}\n"
@@ -1157,7 +1159,7 @@ fn a_call_with_known_arguments_a_claim_needs_is_run() {
         held_building(&proved)
     );
     let refused = format!(
-        "{FIB}fn main() {{\n\
+        "{FIB}fn main() throws {{\n\
          \x20   assert(fib(10) == 54)\n\
          \x20   println(\"ok\")\n\
          }}\n"
@@ -1185,7 +1187,7 @@ fn a_call_with_known_arguments_a_claim_needs_is_run() {
 fn the_value_of_example_is_known_by_running_it() {
     use nikaia::prove::Held::Proved;
     let proved = format!(
-        "{EXAMPLE}fn main() {{\n\
+        "{EXAMPLE}fn main() throws {{\n\
          \x20   assert(example(2) == 12)\n\
          \x20   let e = example(2) - 1\n\
          \x20   assert(e == 11)\n\
@@ -1198,7 +1200,7 @@ fn the_value_of_example_is_known_by_running_it() {
         "{held:#?}"
     );
     let refused = format!(
-        "{EXAMPLE}fn main() {{\n\
+        "{EXAMPLE}fn main() throws {{\n\
          \x20   let b = 4 / example(2)\n\
          \x20   assert(1 == 1)\n\
          \x20   assert(b > 10)\n\
@@ -1230,7 +1232,7 @@ fn a_callee_that_reads_the_arguments_or_does_io_is_not_run() {
     use nikaia::prove::Held::AtRunTime;
     let source = "use std::cli\n\
                   \n\
-                  fn noisy(n: i64) -> i64 {\n\
+                  fn noisy(n: i64) -> i64 throws {\n\
                   \x20   println(\"computing\")\n\
                   \x20   let mut m = n\n\
                   \x20   m = m + 1\n\
@@ -1241,7 +1243,7 @@ fn a_callee_that_reads_the_arguments_or_does_io_is_not_run() {
                   \x20   return cli::args().len() + n\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let a = noisy(2)\n\
                   \x20   assert(a == 3)\n\
                   \x20   let c = counted(1)\n\
@@ -1272,7 +1274,7 @@ fn a_callee_that_overflows_for_its_argument_is_refused() {
                   \x20   return n * n\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   assert(sq(100000) > 0)\n\
                   \x20   println(\"ok\")\n\
                   }\n";
@@ -1300,7 +1302,7 @@ fn a_callee_that_overflows_for_its_argument_is_refused() {
 fn a_program_whose_claims_are_decided_runs_nothing_at_build_time() {
     use nikaia::prove::Held::AtRunTime;
     let decided = format!(
-        "{EXAMPLE}fn main() {{\n\
+        "{EXAMPLE}fn main() throws {{\n\
          \x20   let x = example(2)\n\
          \x20   assert(1 == 1)\n\
          \x20   let y = x + 1\n\
@@ -1321,7 +1323,7 @@ fn a_program_whose_claims_are_decided_runs_nothing_at_build_time() {
          \x20   s = s + 10\n\
          \x20   return s\n\
          }}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let x = looped(2)\n\
          \x20   assert(x == 12)\n\
          \x20   assert(x > 11)\n\
@@ -1404,7 +1406,7 @@ fn a_callees_body_answers_an_open_claim() {
     assert!(nikaia::prove::second_queries() > before);
     // Decided without a summary: no second query.
     let decided = format!(
-        "{EXAMPLE}fn main() {{\n    let x = 3\n    assert(x > 2)\n    let y = example(x)\n    println(f\"{{y}}\")\n}}\n"
+        "{EXAMPLE}fn main() throws {{\n    let x = 3\n    assert(x > 2)\n    let y = example(x)\n    println(f\"{{y}}\")\n}}\n"
     );
     let before = nikaia::prove::second_queries();
     assert!(
@@ -1458,7 +1460,7 @@ fn a_divisor_a_summary_pins_is_its_value_and_the_note_says_so() {
 /// sides both push joins it.
 #[test]
 fn a_mutable_lists_length_is_followed() {
-    let source = "fn f(c: bool) -> i64 {\n    let mut v: Vec[i64] = []\n    v.resize(8, 0)\n    v.push(1)\n    assert(v.len() == 9)\n    if c {\n        v.push(2)\n    } else {\n        v.push(3)\n    }\n    assert(v.len() == 10)\n    v.truncate(4)\n    assert(v.len() == 4)\n    for i in 0..<3 {\n        v[i] = 1\n    }\n    assert(v.len() == 4)\n    v.clear()\n    assert(v.len() == 0)\n    v.push(5)\n    return v[0]\n}\n\nfn main() {\n    println(f\"{f(true)}\")\n}\n";
+    let source = "fn f(c: bool) -> i64 {\n    let mut v: Vec[i64] = []\n    v.resize(8, 0)\n    v.push(1)\n    assert(v.len() == 9)\n    if c {\n        v.push(2)\n    } else {\n        v.push(3)\n    }\n    assert(v.len() == 10)\n    v.truncate(4)\n    assert(v.len() == 4)\n    for i in 0..<3 {\n        v[i] = 1\n    }\n    assert(v.len() == 4)\n    v.clear()\n    assert(v.len() == 0)\n    v.push(5)\n    return v[0]\n}\n\nfn main() throws {\n    println(f\"{f(true)}\")\n}\n";
     assert_eq!(codes(source), Vec::<&str>::new());
 }
 

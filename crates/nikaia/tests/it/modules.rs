@@ -96,7 +96,7 @@ fn two_files_of_a_package_are_one_program() {
             ("utils.nika", UTILS),
             (
                 "main.nika",
-                "fn main() {\n\
+                "fn main() throws {\n\
                  \x20   println(f\"{double(21)} {answer()}\")\n\
                  }\n",
             ),
@@ -121,7 +121,7 @@ fn a_file_nothing_names_is_still_part_of_the_package() {
             ("extra.nika", "pub fn seven() -> i64 {\n    return 7\n}\n"),
             (
                 "main.nika",
-                "fn main() {\n\x20   println(f\"{seven()}\")\n}\n",
+                "fn main() throws {\n\x20   println(f\"{seven()}\")\n}\n",
             ),
         ],
     );
@@ -143,7 +143,7 @@ fn a_private_name_is_visible_across_the_files_of_its_package() {
             ("utils.nika", UTILS),
             (
                 "main.nika",
-                "fn main() {\n\x20   println(f\"{secret()}\")\n}\n",
+                "fn main() throws {\n\x20   println(f\"{secret()}\")\n}\n",
             ),
         ],
     );
@@ -231,7 +231,10 @@ fn the_ledger_of_a_program_is_deterministic() {
         &[
             ("z.nika", "pub fn two() -> i32 { return 2 }\n"),
             ("a.nika", "pub fn one() -> i32 { return 1 }\n"),
-            ("main.nika", "fn main() { println(f\"{one()}{two()}\") }\n"),
+            (
+                "main.nika",
+                "fn main() throws { println(f\"{one()}{two()}\") }\n",
+            ),
         ],
     );
 
@@ -252,7 +255,7 @@ fn two_files_may_reach_into_each_other() {
         &[
             ("a.nika", "pub fn one() -> i32 { return 1 }\n"),
             ("b.nika", "pub fn two() -> i32 { return one() + 1 }\n"),
-            ("main.nika", "fn main() { println(f\"{two()}\") }\n"),
+            ("main.nika", "fn main() throws { println(f\"{two()}\") }\n"),
         ],
     );
 
@@ -379,7 +382,7 @@ fn a_warning_about_the_generated_file_does_not_reach_the_user() {
             ("plain.nika", "pub fn seven() -> i64 {\n    return 7\n}\n"),
             (
                 "main.nika",
-                "fn main() {\n\x20   println(f\"{seven()}\")\n}\n",
+                "fn main() throws {\n\x20   println(f\"{seven()}\")\n}\n",
             ),
             // **A manifest, so `nikaia lower` reads the package** (ADR-286 D1).
             // Without one the entry is compiled on its own, `seven` is
@@ -455,7 +458,7 @@ fn a_type_another_file_declares_can_be_named_and_built() {
             ),
             (
                 "main.nika",
-                "fn main() {\n\
+                "fn main() throws {\n\
                  \x20   let made: Conn = make()\n\
                  \x20   let built = Conn { id: 35 }\n\
                  \x20   println(f\"{label(made)} {label(built)}\")\n\
@@ -488,7 +491,7 @@ fn a_constant_another_file_declares_can_be_read() {
             ),
             (
                 "main.nika",
-                "fn main() {\n\
+                "fn main() throws {\n\
                  \x20   let n = LIMIT + 2\n\
                  \x20   println(f\"{n} {first()} {NAMES[1]}\")\n\
                  }\n",
@@ -575,7 +578,7 @@ fn a_shared_in_a_foreign_field_keeps_the_atomic_count() {
             ),
             (
                 "main.nika",
-                "fn main() {\n\
+                "fn main() throws {\n\
                  \x20   let c = Shared(Conn { id: 1 })\n\
                  \x20   let p = Pool { db: c }\n\
                  \x20   println(f\"{p.db.id}\")\n\
@@ -636,7 +639,7 @@ fn a_shared_handed_to_a_foreign_function_keeps_the_atomic_count() {
             ),
             (
                 "main.nika",
-                "fn main() {\n\
+                "fn main() throws {\n\
                  \x20   let c = Shared(Conn { id: 1 })\n\
                  \x20   println(f\"{hold(c)}\")\n\
                  }\n",
@@ -684,7 +687,7 @@ fn a_program_that_imports_nothing_may_still_use_a_map() {
         "no-import",
         &[(
             "main.nika",
-            "use std::collections\n\nfn main() {\n\
+            "use std::collections\n\nfn main() throws {\n\
              \x20   let mut m = collections::HashMap()\n\
              \x20   m.insert(\"a\", 1)\n\
              \x20   println(f\"{m.len()}\")\n\
@@ -770,7 +773,7 @@ fn a_comptime_calls_across_a_file_boundary() {
                  comptime LABEL: ref String = banner(\"nikaia\")\n\
                  comptime CHAINED: i64 = through(5)\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   println(f\"{TOTAL} {LABEL} {CHAINED}\")\n\
                  }\n",
             ),
@@ -824,7 +827,7 @@ fn a_constant_a_foreign_body_reads_comes_from_its_own_file() {
             ),
             (
                 "src/main.nika",
-                "comptime X: i64 = scaled(2)\n\nfn main() { println(f\"{X}\") }\n",
+                "comptime X: i64 = scaled(2)\n\nfn main() throws { println(f\"{X}\") }\n",
             ),
             (
                 "src/globals.nika",

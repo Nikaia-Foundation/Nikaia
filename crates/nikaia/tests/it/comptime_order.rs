@@ -19,14 +19,15 @@ fn codes(source: &str) -> Vec<String> {
 
 #[test]
 fn an_item_level_constant_may_read_one_declared_below_it() {
-    let source = "comptime D = C + 1\ncomptime C = 1\n\nfn main() {\n    println(f\"{D}\")\n}\n";
+    let source =
+        "comptime D = C + 1\ncomptime C = 1\n\nfn main() throws {\n    println(f\"{D}\")\n}\n";
     assert!(codes(source).is_empty(), "{:?}", codes(source));
 }
 
 #[test]
 fn an_item_level_ring_is_nk1168() {
     let source =
-        "comptime A = B + 1\ncomptime B = A + 1\n\nfn main() {\n    println(f\"{A}\")\n}\n";
+        "comptime A = B + 1\ncomptime B = A + 1\n\nfn main() throws {\n    println(f\"{A}\")\n}\n";
     assert!(
         codes(source).contains(&"NK1168".to_string()),
         "{:?}",
@@ -36,14 +37,13 @@ fn an_item_level_ring_is_nk1168() {
 
 #[test]
 fn a_body_level_forward_reference_is_nk1117_alone() {
-    let source =
-        "fn main() {\n    comptime D = C + 1\n    comptime C = 1\n    println(f\"{D}\")\n}\n";
+    let source = "fn main() throws {\n    comptime D = C + 1\n    comptime C = 1\n    println(f\"{D}\")\n}\n";
     assert_eq!(codes(source), vec!["NK1117".to_string()]);
 }
 
 #[test]
 fn a_body_constant_may_read_an_item_constant() {
     let source =
-        "comptime C = 1\n\nfn main() {\n    comptime D = C + 1\n    println(f\"{D}\")\n}\n";
+        "comptime C = 1\n\nfn main() throws {\n    comptime D = C + 1\n    println(f\"{D}\")\n}\n";
     assert!(codes(source).is_empty(), "{:?}", codes(source));
 }

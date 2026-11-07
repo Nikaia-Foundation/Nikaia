@@ -97,7 +97,7 @@ fn total(xs: Vec[i64]) -> i64 {
     return sum
 }
 
-fn main() {
+fn main() throws {
     println(f\"{total([1, 2, 3])}\")
 }
 ";
@@ -118,7 +118,7 @@ fn a_loop_over_the_lists_own_length_is_proved() {
 #[test]
 fn a_list_that_shrinks_in_the_loop_keeps_its_check() {
     let source = "\
-fn main() {
+fn main() throws {
     let mut xs = [1, 2, 3]
     let mut sum = 0
     for i in 0..<xs.len() {
@@ -145,7 +145,7 @@ fn pick(xs: Vec[i64], i: i64) -> i64 {
     return xs[i]
 }
 
-fn main() {
+fn main() throws {
     let xs = [10, 20, 30]
     println(f\"{pick(xs, 1)} {pick(xs, 3)} {pick(xs, 0 - 1)}\")
 }
@@ -168,7 +168,7 @@ fn pick(xs: Vec[i64], i: i64, j: i64, wide: bool) -> i64 {
     return xs[i]
 }
 
-fn main() {
+fn main() throws {
     let xs = [10, 20, 30]
     println(f\"{pick(xs, 5, 0, false)}\")
 }
@@ -199,7 +199,7 @@ fn merge(a: Vec[i64], b: Vec[i64], mut out: Vec[i64]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut out: Vec[i64] = []
     merge([1, 4, 9], [2, 3, 10, 11], out)
     println(f\"{out.len()} {out[0]} {out[6]}\")
@@ -230,7 +230,7 @@ fn multiply(x: ref Vec[u32], y: ref Vec[u32], mut out: Vec[u32]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let x: Vec[u32] = [4294967295, 7]
     let y: Vec[u32] = [3, 1]
     let mut out: Vec[u32] = []
@@ -248,7 +248,7 @@ fn main() {
 #[test]
 fn a_counter_changed_in_the_body_is_not_trusted_past_the_change() {
     let source = "\
-fn main() {
+fn main() throws {
     let xs = [1, 2, 3]
     let mut i = 0
     let mut sum = 0
@@ -327,7 +327,7 @@ fn the_command_line_carries_the_option_to_the_lowering() {
 #[test]
 fn a_value_that_shrinks_the_list_is_reached_before_the_write() {
     let source = "\
-fn main() {
+fn main() throws {
     let mut xs = [1, 2, 3]
     xs[2] = xs.pop() ?? 0
     println(f\"{xs.len()}\")
@@ -356,7 +356,7 @@ fn pick(xs: Vec[i64], k: i64) -> i64 {
     return 0
 }
 
-fn main() {
+fn main() throws {
     println(f\"{pick([1, 2], 7)}\")
 }
 ";
@@ -379,7 +379,7 @@ fn eight(t: String, i: i64) -> i64 {
     return 0
 }
 
-fn main() {
+fn main() throws {
     println(f\"{ld(\"abc\", 1)} {ld(\"abc\", 2)} {eight(\"abcdefghij\", 2)} {eight(\"abc\", 0)}\")
 }
 ";
@@ -409,7 +409,7 @@ fn at(t: String, i: i64) -> u8 {
     return b[i]
 }
 
-fn main() {
+fn main() throws {
     println(f\"{at(\"abc\", 3)}\")
 }
 ";
@@ -431,7 +431,7 @@ fn half(t: String, i: i64) -> u32 {
     return 0
 }
 
-fn main() {
+fn main() throws {
     println(f\"{word(\"abcdefghij\", 2)} {word(\"abcdefghij\", 3)} {half(\"abcd\", 0)} {half(\"abcd\", 1)}\")
 }
 ";
@@ -486,7 +486,7 @@ fn at(t: String, i: i64) -> u64 {
     return b.u64_le(i)
 }
 
-fn main() {
+fn main() throws {
     println(f\"{at(\"abcdefghij\", 2)}\")
 }
 ";
@@ -526,7 +526,7 @@ pub fn put(mut cs: Vec[Cell], i: i64) {
     cs[i].n = 7
 }
 
-fn main() {
+fn main() throws {
     let mut cs: Vec[Cell] = [Cell { n: 1 }, Cell { n: 2 }]
     for i in 0..<cs.len() { cs[i].n += 10 }
     bump(cs)

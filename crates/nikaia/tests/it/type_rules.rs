@@ -60,7 +60,7 @@ fn ring() -> Ring {
     return Ring { slots: slots, used: 0 }
 }
 
-fn main() {
+fn main() throws {
     let p = Piece { start: 1, end: 3 }
     let mut q = Piece { start: p.start, end: p.end + 2 }
     q.widen(WIDEN)
@@ -214,7 +214,7 @@ fn a_rule_is_an_assert_over_the_fields() {
         ),
     ] {
         let source = format!(
-            "struct P {{\n    a: Vec[i64],\n    {rule}\n}}\nfn main() {{\n    let p = P {{ a: [1] }}\n    print(f\"{{p.a.len()}}\")\n}}\n"
+            "struct P {{\n    a: Vec[i64],\n    {rule}\n}}\nfn main() throws {{\n    let p = P {{ a: [1] }}\n    print(f\"{{p.a.len()}}\")\n}}\n"
         );
         let refused = match parse_to_ast(&source) {
             Ok(_) => panic!("`{rule}` is not a rule"),
@@ -266,7 +266,7 @@ impl Ring {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut slots: Vec[i64] = []
     slots.resize(CAP, 7)
     let mut r = Ring { slots: slots }
@@ -399,7 +399,7 @@ fn a_rule_over_a_pub_field_is_no_fact_in_a_dependency() {
             "app",
             "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
             "main.nika",
-            "use lib\n\nfn main() {\n    let mut r = lib::ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n}\n".to_string(),
+            "use lib\n\nfn main() throws {\n    let mut r = lib::ring()\n    let gone = r.slots.pop() ?? 0\n    print(f\"{gone} {r.at(3)}\")\n}\n".to_string(),
         ),
     ] {
         std::fs::create_dir_all(dir.join(name).join("src")).expect("make src");
@@ -441,7 +441,7 @@ fn a_field_changed_outside_leaves_the_rule_no_fact() {
 /// A generic struct states no rule yet, so none is a fact: `NK1288`.
 #[test]
 fn a_generic_struct_states_no_rule() {
-    let source = "struct P[T] {\n    a: Vec[T],\n    assert(a.len() > 0)\n}\nfn main() {\n    let p = P { a: [1] }\n    print(f\"{p.a.len()}\")\n}\n";
+    let source = "struct P[T] {\n    a: Vec[T],\n    assert(a.len() > 0)\n}\nfn main() throws {\n    let p = P { a: [1] }\n    print(f\"{p.a.len()}\")\n}\n";
     let refused = match parse_to_ast(source) {
         Ok(_) => panic!("a generic struct's rule is refused"),
         Err(e) => format!("{e:#}"),
@@ -465,7 +465,7 @@ impl Count {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut c = Count { n: 0 }
     c.down()
     print(f"{c.n}")
@@ -513,7 +513,7 @@ impl Table {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut slots: Vec[i64] = []
     slots.resize(16, 0)
     let mut t = Table { slots: slots, used: 0 }

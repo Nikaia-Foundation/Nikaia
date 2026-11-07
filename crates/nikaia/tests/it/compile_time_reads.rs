@@ -69,7 +69,7 @@ fn one(source: &str, reads: &Reads) -> Finding {
 
 const READS_IT: &str = "comptime CONFIG: ref String = asset(\"config.txt\")\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   print(CONFIG)\n\
      }";
 
@@ -204,7 +204,7 @@ fn a_path_that_leaves_the_root_is_refused() {
         let source = format!(
             "comptime A: ref String = asset(\"{path}\")\n\
              \n\
-             fn main() {{ print(A) }}"
+             fn main() throws {{ print(A) }}"
         );
         let found = one(&source, &reads(&dir));
         assert_eq!(found.code, "NK1175");
@@ -230,7 +230,7 @@ fn a_path_the_build_works_out_is_refused_even_when_it_would_have_been_allowed() 
     let source = "comptime NAME: ref String = \"config.txt\"\n\
          comptime A: ref String = asset(NAME)\n\
          \n\
-         fn main() { print(A) }";
+         fn main() throws { print(A) }";
     let found = one(source, &reads(&dir));
     assert_eq!(found.code, "NK1176");
     assert_eq!(
@@ -250,7 +250,7 @@ fn bytes_that_are_not_text_are_refused() {
     std::fs::write(dir.join("reads.txt"), "bin.dat\n").expect("write the list");
     let source = "comptime A: ref String = asset(\"bin.dat\")\n\
          \n\
-         fn main() { print(A) }";
+         fn main() throws { print(A) }";
     let found = one(source, &reads(&dir));
     assert_eq!(found.code, "NK1175");
     assert!(found.notes[0].contains("UTF-8"), "{:#?}", found.notes);
@@ -264,7 +264,7 @@ fn bytes_that_are_not_text_are_refused() {
 #[test]
 fn asset_outside_a_comptime_names_the_run_time_read() {
     let dir = scratch("reads-outside", &[("config.txt", "x")], &["config.txt"]);
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let text = asset(\"config.txt\")\n\
          \x20   print(text)\n\
          }";

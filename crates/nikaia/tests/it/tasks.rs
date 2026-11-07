@@ -83,7 +83,7 @@ fn run(purpose: &str, source: &str) -> String {
 fn a_task_nobody_joins_still_runs() {
     let printed = run(
         "tasks-unjoined",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   spawn fn { println(\"I am running in the background!\") }\n\
          \x20   println(\"main is done\")\n\
          }",
@@ -138,7 +138,7 @@ fn two_tasks_are_in_flight_before_either_finishes() {
 
     let source = "use std::fs\n\
          \n\
-         fn size(path: ref String) -> i64 {\n\
+         fn size(path: ref String) -> i64 throws {\n\
          \x20   let text = fs::read_to_string(path, fs::Root::Anywhere) catch { return 0 }\n\
          \x20   println(f\"read {path}\")\n\
          \x20   return text.len()\n\
@@ -189,7 +189,7 @@ fn two_tasks_are_in_flight_before_either_finishes() {
 #[test]
 fn data_a_task_took_and_the_program_used_again_is_refused() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let message: String = f\"Hello\"\n\
          \x20   spawn fn { println(message) }\n\
          \x20   println(message)\n\
@@ -221,7 +221,7 @@ fn data_a_task_took_and_the_program_used_again_is_refused() {
 /// *did* write.
 #[test]
 fn a_task_that_names_an_argument_is_refused() {
-    let found = findings("fn main() { spawn fn(x) { println(f\"{x}\") } }");
+    let found = findings("fn main() throws { spawn fn(x) { println(f\"{x}\") } }");
     assert!(found.iter().any(|f| f.code == "NK2103"), "{found:?}");
     let first = found
         .iter()
@@ -242,7 +242,7 @@ fn a_task_that_names_an_argument_is_refused() {
 #[test]
 fn a_shared_handle_into_a_task_is_not_refused() {
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let counts = Shared(Vec())\n\
          \x20   spawn fn { println(f\"{counts.len()}\") }\n\
          \x20   println(f\"{counts.len()}\")\n\
@@ -332,7 +332,7 @@ fn a_task_that_never_finishes_is_abandoned_at_the_deadline() {
          \x20   }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   spawn fn { forever() }\n\
          \x20   println(\"main is done\")\n\
          }",

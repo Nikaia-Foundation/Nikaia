@@ -54,7 +54,7 @@ pub comptime LIMIT: i64 = 4 * 1024
 comptime DOUBLE = MAX * 2
 comptime YES = true
 
-fn main() {
+fn main() throws {
     let b = before()
     println(f"{MAX} {LIMIT} {DOUBLE} {YES} {b}")
 }
@@ -107,8 +107,10 @@ fn an_item_that_cannot_fold_is_refused() {
 /// same spelling below, wherever it stands.
 #[test]
 fn the_two_places_agree_about_what_a_constant_is() {
-    let as_item = lowered("comptime N: i64 = 2 * 3\n\nfn main() {\n    println(f\"{N}\")\n}\n");
-    let in_a_body = lowered("fn main() {\n    comptime N: i64 = 2 * 3\n    println(f\"{N}\")\n}\n");
+    let as_item =
+        lowered("comptime N: i64 = 2 * 3\n\nfn main() throws {\n    println(f\"{N}\")\n}\n");
+    let in_a_body =
+        lowered("fn main() throws {\n    comptime N: i64 = 2 * 3\n    println(f\"{N}\")\n}\n");
     assert!(
         as_item.contains("const N: i64 = 6;") && in_a_body.contains("const N: i64 = 6;"),
         "the same `const`, one level apart:\n--- item ---\n{as_item}\n--- body ---\n{in_a_body}"
@@ -119,9 +121,10 @@ fn the_two_places_agree_about_what_a_constant_is() {
 /// it is the reason the item form carries a flag the statement form does not.
 #[test]
 fn pub_reaches_the_language_below() {
-    let public = lowered("pub comptime N: i64 = 1\n\nfn main() {\n    println(f\"{N}\")\n}\n");
+    let public =
+        lowered("pub comptime N: i64 = 1\n\nfn main() throws {\n    println(f\"{N}\")\n}\n");
     assert!(public.contains("pub const N: i64 = 1;"), "{public}");
-    let private = lowered("comptime N: i64 = 1\n\nfn main() {\n    println(f\"{N}\")\n}\n");
+    let private = lowered("comptime N: i64 = 1\n\nfn main() throws {\n    println(f\"{N}\")\n}\n");
     assert!(
         private.contains("const N: i64 = 1;") && !private.contains("pub const N"),
         "{private}"
@@ -156,7 +159,7 @@ fn a_function_called_only_at_build_time_is_not_warned_unused() {
          \x20   return t\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{A} {f()}\")\n\
          }\n";
     let rust = lowered(source);
@@ -186,7 +189,7 @@ fn an_open_constant_written_out_at_its_uses_is_used() {
     let source = "comptime SLOTS = 32768\n\
          comptime IDLE = 7\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   comptime STEP = 2\n\
          \x20   let mut at: i64 = 0\n\
          \x20   while at < SLOTS {\n\

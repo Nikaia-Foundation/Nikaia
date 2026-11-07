@@ -84,7 +84,7 @@ fn asking_a_view_whether_it_is_empty_does_not_pause() {
          \x20   return text.is_empty()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let empty = blank(\"\")\n\
          \x20   println(f\"{empty}\")\n\
          }",
@@ -113,7 +113,7 @@ fn walking_a_set_does_not_pause() {
          \x20   return out\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut s: collections::BTreeSet[String] = collections::BTreeSet()\n\
          \x20   s.insert(\"a\")\n\
          \x20   let v = copied(s)\n\
@@ -173,7 +173,7 @@ fn a_pausing_main_is_driven_by_the_executor() {
 #[test]
 fn a_main_that_cannot_pause_is_called_directly() {
     let dir = common::scratch_dir("pausing-plain-main");
-    let rust = lower(&dir, "fn main() {\n\x20   println(f\"{1 + 1}\")\n}");
+    let rust = lower(&dir, "fn main() throws {\n\x20   println(f\"{1 + 1}\")\n}");
 
     assert!(!rust.contains("async fn __nikaia_main"), "{rust}");
     assert!(!rust.contains("block_on"), "{rust}");
@@ -286,7 +286,7 @@ fn a_lambda_that_pauses_is_handed_to_the_pausing_counterpart() {
          \x20   return text.len()\n\
          }\n\
          \n\
-         fn main(xs: Vec[i64]) {\n\
+         fn main(xs: Vec[i64]) throws {\n\
          \x20   let mut ys = xs\n\
          \x20   ys.sort_by_key fn (n) { size() }\n\
          \x20   println(f\"{ys.len()}\")\n\
@@ -332,7 +332,7 @@ fn a_call_in_a_match_arm_makes_its_function_pause() {
          \x20   return [slow(), 2]\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{pick(R::A)} {listed().len()}\")\n\
          }",
     );
@@ -356,7 +356,7 @@ fn a_method_of_a_run_is_resolved_and_does_not_pause() {
          \x20   return xs.len()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let v = [R { k: 1 }, R { k: 2 }]\n\
          \x20   println(f\"{count(v)}\")\n\
          }",

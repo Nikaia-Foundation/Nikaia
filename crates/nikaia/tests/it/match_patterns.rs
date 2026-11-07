@@ -43,7 +43,7 @@ fn a_tuple_pattern_reads_the_pair() {
                   \x20       else => \"elsewhere\",\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { println(f\"{describe((0, 0))}\") }\n";
+                  fn main() throws { println(f\"{describe((0, 0))}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("(0, 0) => \"origin\""),
@@ -61,7 +61,7 @@ fn an_or_pattern_is_one_arm() {
                   \x20       else => \"elsewhere\",\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { println(f\"{describe((0, 1))}\") }\n";
+                  fn main() throws { println(f\"{describe((0, 1))}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("(0, y) | (y, 0) =>"),
@@ -128,7 +128,7 @@ fn a_statement_arm_that_hands_back_a_value_drops_it() {
                   \x20       else => {},\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()\n f(1, m)\n println(f\"{m.len()}\") }\n";
+                  fn main() throws { let mut m: collections::BTreeMap[i64, i64] = collections::BTreeMap()\n f(1, m)\n println(f\"{m.len()}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("1 => { seen.insert(k, 2); },"),
@@ -146,7 +146,7 @@ fn a_guard_is_written_if() {
                   \x20       else => \"elsewhere\",\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { println(f\"{describe((1, 1))}\") }\n";
+                  fn main() throws { println(f\"{describe((1, 1))}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("(x, y) if x == y =>"),
@@ -210,7 +210,7 @@ fn a_range_pattern_includes_both_ends() {
                   \x20       else => \"other\",\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { println(f\"{band(204)}\") }\n";
+                  fn main() throws { println(f\"{band(204)}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("200..=299 =>"),
@@ -249,7 +249,7 @@ fn a_pattern_nests_and_a_struct_may_leave_the_rest() {
                   \x20       Event::Quit => 0,\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { println(f\"{at(Event::Quit)}\") }\n";
+                  fn main() throws { println(f\"{at(Event::Quit)}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("Event::Click(Point { x, .. }) => { let x = *x; x }"),
@@ -269,7 +269,7 @@ fn a_struct_pattern_may_name_no_field_at_all() {
                   \x20       Event::Quit => 0,\n\
                   \x20   }\n\
                   }\n\
-                  fn main() { println(f\"{any(Event::Quit)}\") }\n";
+                  fn main() throws { println(f\"{any(Event::Quit)}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
         lowered(source).contains("Event::Click(Point { .. }) => 1"),
@@ -291,7 +291,7 @@ fn an_or_pattern_covers_each_variant_it_names() {
          \x20       Op::Times => \"times\",\n\
          \x20   }}\n\
          }}\n\
-         fn main() {{ println(f\"{{word(Op::Plus)}}\") }}\n"
+         fn main() throws {{ println(f\"{{word(Op::Plus)}}\") }}\n"
     );
     assert!(findings(&source).is_empty(), "{:#?}", findings(&source));
 
@@ -454,7 +454,7 @@ fn a_pattern_of_another_type_is_refused() {
         format!(
             "enum Color {{ Red, Green }}\n\
              enum Shape {{ Dot, Line }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let c = Color::Red\n\
              \x20   let s = \"x\"\n\
              \x20   let n: i64 = 5\n\

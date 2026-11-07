@@ -56,7 +56,8 @@ fn the_awkward_characters_are_characters() {
 /// `chars()` read as one - `examples/json/src/main.nika` decodes its escapes that way.
 #[test]
 fn a_character_literal_is_a_pattern() {
-    let source = "fn f(c: scalar) { match c { 'n' => { println(\"newline\") } else => { } } }";
+    let source =
+        "fn f(c: scalar) throws { match c { 'n' => { println(\"newline\") } else => { } } }";
     let parsed = parse_to_ast(source).expect("parses");
     let Item::Fn { body, .. } = &parsed.program.items[0].node else {
         panic!("expected a function");
@@ -80,7 +81,7 @@ fn a_character_literal_is_a_pattern() {
 /// `format!` with an argument nobody wrote.
 #[test]
 fn a_unicode_escape_is_not_a_hole() {
-    let emitted = emit(r#"fn main() { println("\u{0041}") }"#);
+    let emitted = emit(r#"fn main() throws { println("\u{0041}") }"#);
     assert!(emitted.contains(r#"println!("\u{0041}")"#), "{emitted}");
     assert!(!emitted.contains("0041)"), "{emitted}");
 }
@@ -89,7 +90,7 @@ fn a_unicode_escape_is_not_a_hole() {
 #[test]
 fn an_escape_does_not_swallow_the_interpolation_after_it() {
     let emitted = emit(
-        r#"fn main() { let x = 1
+        r#"fn main() throws { let x = 1
 println(f"\u{0041}{x}\n") }"#,
     );
     assert!(
@@ -103,7 +104,7 @@ println(f"\u{0041}{x}\n") }"#,
 #[test]
 fn print_is_a_macro_like_println() {
     let emitted = emit(
-        r#"fn main() { print("a")
+        r#"fn main() throws { print("a")
 eprint("b") }"#,
     );
     assert!(emitted.contains(r#"print!("a")"#), "{emitted}");
@@ -115,13 +116,15 @@ eprint("b") }"#,
 /// quotes, as in any other expression.
 #[test]
 fn a_hole_may_hold_a_string_literal() {
-    let emitted =
-        emit(r#"fn f(s: ref String) -> i32 { return 1 } fn main() { println(f"{f("a")}") }"#);
+    let emitted = emit(
+        r#"fn f(s: ref String) -> i32 { return 1 } fn main() throws { println(f"{f("a")}") }"#,
+    );
     assert!(emitted.contains(r#"f("a")"#), "{emitted}");
 
     // The inner string's own escapes are its own.
-    let escaped =
-        emit(r#"fn f(s: ref String) -> i32 { return 1 } fn main() { println(f"{f("a\nb")}") }"#);
+    let escaped = emit(
+        r#"fn f(s: ref String) -> i32 { return 1 } fn main() throws { println(f"{f("a\nb")}") }"#,
+    );
     assert!(escaped.contains(r#"f("a\nb")"#), "{escaped}");
 }
 
@@ -143,7 +146,7 @@ fn a_plain_string_is_text_and_a_brace_is_part_of_it() {
 /// is a transcription detail and not a rule anybody writes.
 #[test]
 fn a_plain_string_printed_keeps_its_braces() {
-    let emitted = emit(r#"fn main() { print("{}") }"#);
+    let emitted = emit(r#"fn main() throws { print("{}") }"#);
     assert!(emitted.contains(r#"print!("{{}}")"#), "{emitted}");
 }
 
@@ -151,7 +154,7 @@ fn a_plain_string_printed_keeps_its_braces() {
 /// would hand `println!` a `\u` with nothing after it.
 #[test]
 fn an_escape_is_not_a_brace_to_double() {
-    let emitted = emit(r#"fn main() { println("\u{0041}") }"#);
+    let emitted = emit(r#"fn main() throws { println("\u{0041}") }"#);
     assert!(emitted.contains(r#"println!("\u{0041}")"#), "{emitted}");
 }
 
@@ -340,7 +343,7 @@ fn refused(source: &str) -> Option<nikaia::check::Finding> {
 /// ([Part III C.2](../../../docs/specification/30-nikaia-tooling.md)).
 #[test]
 fn an_escape_the_set_does_not_name_is_refused_here() {
-    let found = refused("fn main() { println(\"a\\qb\") }").expect("refused");
+    let found = refused("fn main() throws { println(\"a\\qb\") }").expect("refused");
     assert!(found.message.contains("`\\q`"), "{}", found.message);
     // **The set is in the message**, because the page and the message print
     // the same list and a set written twice is a set that disagrees with
@@ -367,7 +370,7 @@ fn an_escape_the_set_does_not_name_is_refused_here() {
 /// ([C.4](../../../docs/specification/30-nikaia-tooling.md)).
 #[test]
 fn the_whole_set_is_accepted() {
-    let source = "fn main() { println(\"\\n \\r \\t \\0 \\\\ \\\" \\x41 \\u{1F600}\") }";
+    let source = "fn main() throws { println(\"\\n \\r \\t \\0 \\\\ \\\" \\x41 \\u{1F600}\") }";
     assert!(refused(source).is_none());
     // And it lowers, because the language below reads the same bytes back.
     assert!(emit(source).contains("\\u{1F600}"));
@@ -378,9 +381,9 @@ fn the_whole_set_is_accepted() {
 #[test]
 fn a_character_and_an_interpolation_are_asked_too() {
     assert!(refused("fn main() { let c = '\\q' }").is_some());
-    assert!(refused("fn main() { println(f\"x\\qy\") }").is_some());
+    assert!(refused("fn main() throws { println(f\"x\\qy\") }").is_some());
     // A string inside a hole is its own literal, and its escapes are its own.
-    assert!(refused("fn main() { println(f\"{greet(\"a\")}\") }\nfn greet(s: ref String) -> String { return s.clone() }").is_none());
+    assert!(refused("fn main() throws { println(f\"{greet(\"a\")}\") }\nfn greet(s: ref String) -> String { return s.clone() }").is_none());
 }
 
 /// **A malformed `\x` or `\u{…}` is refused with the form it should have had**,
@@ -391,9 +394,9 @@ fn a_character_and_an_interpolation_are_asked_too() {
 #[test]
 fn a_malformed_numeric_escape_is_told_the_form() {
     for source in [
-        "fn main() { println(\"a\\x80b\") }",
-        "fn main() { println(\"a\\u{ZZ}b\") }",
-        "fn main() { println(\"a\\u{\") }",
+        "fn main() throws { println(\"a\\x80b\") }",
+        "fn main() throws { println(\"a\\u{ZZ}b\") }",
+        "fn main() throws { println(\"a\\u{\") }",
     ] {
         let found = refused(source).unwrap_or_else(|| panic!("refused: {source}"));
         assert!(
@@ -469,7 +472,7 @@ fn the_refusal_and_the_decoder_read_one_set() {
 /// so the help is the way out that exists: join the elements first.
 #[test]
 fn a_list_in_a_hole_is_refused_with_the_join_that_writes_it() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                   \x20   let data = [1, 2, 3]\n\
                   \x20   println(f\"Reading: {data}\")\n\
                   }\n";
@@ -499,7 +502,7 @@ fn a_list_in_a_hole_is_refused_with_the_join_that_writes_it() {
 fn a_map_or_a_set_in_a_hole_is_refused_too() {
     let source = "use std::collections\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let m: collections::HashMap[String, i64] = collections::HashMap()\n\
                   \x20   let s: collections::HashSet[i64] = collections::HashSet()\n\
                   \x20   println(f\"{m} and {s}\")\n\
@@ -537,7 +540,7 @@ fn no_text_form(source: &str) -> nikaia::check::Finding {
 #[test]
 fn a_range_in_a_hole_is_refused() {
     let found = no_text_form(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs = [0..5]\n\
          \x20   let d = xs[0]\n\
          \x20   println(f\"{d}\")\n\
@@ -554,7 +557,7 @@ fn a_range_in_a_hole_is_refused() {
 #[test]
 fn a_tuple_in_a_hole_is_refused() {
     let found = no_text_form(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let t = (1, \"a\")\n\
          \x20   println(f\"{t}\")\n\
          }\n",
@@ -576,7 +579,7 @@ fn a_struct_in_a_hole_is_refused_with_its_fields() {
          \x20   y: i64,\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let p = Point { x: 1, y: 2 }\n\
          \x20   println(f\"{p}\")\n\
          \x20   println(f\"{p:?}\")\n\
@@ -606,7 +609,7 @@ fn an_enum_in_a_hole_is_refused() {
          \x20   Green,\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let c = Colour::Green\n\
          \x20   println(f\"{c}\")\n\
          }\n",
@@ -657,7 +660,7 @@ fn an_error_a_number_a_bool_a_char_and_text_in_a_hole_run() {
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let e = Late { minutes: 3 }\n\
                   \x20   let n = 7\n\
                   \x20   let x = 1.5\n\
@@ -680,7 +683,7 @@ fn an_error_a_number_a_bool_a_char_and_text_in_a_hole_run() {
 fn the_tree_holds_the_parts_of_an_interpolation() {
     use nikaia::ast::{Expr, FPart, Item, Stmt};
     let parsed = nikaia::parser::parse_to_ast(
-        "fn main() { let n = 3\nprintln(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
+        "fn main() throws { let n = 3\nprintln(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
     )
     .expect("it parses");
     let Item::Fn { body, .. } = &parsed.program.items[0].node else {
@@ -700,7 +703,7 @@ fn the_tree_holds_the_parts_of_an_interpolation() {
         })
         .collect();
     // Each hole is found again by the byte its `{` stands at (D2).
-    assert_eq!((holes[0].2, holes[1].2), (34, 43), "{holes:?}");
+    assert_eq!((holes[0].2, holes[1].2), (41, 50), "{holes:?}");
     let holes: Vec<_> = holes.into_iter().map(|(e, s, _)| (e, s)).collect();
     assert_eq!(holes.len(), 2, "{parts:?}");
     assert!(
@@ -722,7 +725,7 @@ fn the_tree_holds_the_parts_of_an_interpolation() {
     // **And the emitter builds the format string from them** (D5).
     let emitted = emit(
         "fn g(s: ref String) -> String { return s.clone() }\n\
-         fn main() { let n = 3\nprintln(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
+         fn main() throws { let n = 3\nprintln(f\"a {n:>4} b {g(\"x\")} {{c}}\") }",
     );
     assert!(emitted.contains(r#"a {:>4} b {} {{c}}"#), "{emitted}");
 }
@@ -737,9 +740,9 @@ fn a_broken_hole_is_refused_by_the_parser() {
         let finding = nikaia::diagnostics::refused_finding(&refused).expect("a finding");
         nikaia::diagnostics::render_finding(finding, "app.nika", source)
     };
-    let escaped = said("fn main() { println(f\"{g(\\\"a\\\")}\") }");
+    let escaped = said("fn main() throws { println(f\"{g(\\\"a\\\")}\") }");
     assert!(escaped.contains("plain quotes"), "{escaped}");
-    let unclosed = said("fn main() { let n = 1\n    println(f\"x {n\") }");
+    let unclosed = said("fn main() throws { let n = 1\n    println(f\"x {n\") }");
     assert!(unclosed.contains("is never closed"), "{unclosed}");
     let stray = said("fn main() { println(f\"x } y\") }");
     assert!(stray.contains("has no `{` before it"), "{stray}");
@@ -754,12 +757,12 @@ fn a_broken_hole_is_refused_by_the_parser() {
 /// mismatch of types.
 #[test]
 fn a_character_literal_is_a_byte_only_when_it_is_ascii() {
-    let rust = emit("fn main() {\n    let a: u8 = 'a'\n    println(f\"{a}\")\n}\n");
+    let rust = emit("fn main() throws {\n    let a: u8 = 'a'\n    println(f\"{a}\")\n}\n");
     assert!(rust.contains("b'a'"), "{rust}");
-    let rust = emit("fn main() {\n    let a: scalar = 'a'\n    println(f\"{a}\")\n}\n");
+    let rust = emit("fn main() throws {\n    let a: scalar = 'a'\n    println(f\"{a}\")\n}\n");
     assert!(rust.contains("'a'") && !rust.contains("b'a'"), "{rust}");
 
-    let found = findings("fn main() {\n    let e: u8 = 'é'\n    println(f\"{e}\")\n}\n");
+    let found = findings("fn main() throws {\n    let e: u8 = 'é'\n    println(f\"{e}\")\n}\n");
     assert!(!found.iter().any(|f| f.code == "NK1103"), "{found:#?}");
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1212").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
@@ -777,7 +780,7 @@ fn a_character_literal_is_a_byte_only_when_it_is_ascii() {
 #[test]
 fn a_non_ascii_character_in_an_if_arm_into_a_byte_is_refused() {
     let found = findings(
-        "fn main() {\n    let b = true\n    let e: u8 = if b { 'é' } else { 'a' }\n    println(f\"{e}\")\n}\n",
+        "fn main() throws {\n    let b = true\n    let e: u8 = if b { 'é' } else { 'a' }\n    println(f\"{e}\")\n}\n",
     );
     assert!(found.iter().any(|f| f.code == "NK1212"), "{found:#?}");
 }
@@ -797,21 +800,21 @@ fn codes(source: &str) -> Vec<String> {
 /// with the `\u{…}` of that number and the `u8` annotation.
 #[test]
 fn a_high_byte_escape_is_only_a_byte() {
-    let source = "fn main() {\n    let b: u8 = '\\xFF'\n    println(f\"{b}\")\n}\n";
+    let source = "fn main() throws {\n    let b: u8 = '\\xFF'\n    println(f\"{b}\")\n}\n";
     assert!(codes(source).is_empty(), "{:#?}", findings(source));
     assert!(emit(source).contains("b'\\xff'"), "{}", emit(source));
     // Below `\x80` it is either.
-    let either = "fn main() {\n    let b: u8 = '\\x41'\n    let s: scalar = '\\x41'\n    println(f\"{b}{s}\")\n}\n";
+    let either = "fn main() throws {\n    let b: u8 = '\\x41'\n    let s: scalar = '\\x41'\n    println(f\"{b}{s}\")\n}\n";
     assert!(codes(either).is_empty(), "{:#?}", findings(either));
     assert!(emit(either).contains("b'A'"), "{}", emit(either));
 
     for (source, annotation) in [
         (
-            "fn main() {\n    let s: scalar = '\\xFF'\n    println(f\"{s}\")\n}\n",
+            "fn main() throws {\n    let s: scalar = '\\xFF'\n    println(f\"{s}\")\n}\n",
             "let b: u8 = '\\xFF'",
         ),
         (
-            "fn main() {\n    let s = '\\xff'\n    println(f\"{s}\")\n}\n",
+            "fn main() throws {\n    let s = '\\xff'\n    println(f\"{s}\")\n}\n",
             "let s: u8",
         ),
     ] {
@@ -833,20 +836,21 @@ fn a_high_byte_escape_is_only_a_byte() {
 /// `scalar` where none does, and refused (`NK1200`) where they ask both.
 #[test]
 fn a_character_binding_is_typed_by_its_uses() {
-    let bytes = "fn main() {\n    let line = \"ab;cd\"\n    let c = ';'\n    let at = line.bytes.find(c) ?? -1\n    let first = line.bytes[0] == c\n    println(f\"{at} {first}\")\n}\n";
+    let bytes = "fn main() throws {\n    let line = \"ab;cd\"\n    let c = ';'\n    let at = line.bytes.find(c) ?? -1\n    let first = line.bytes[0] == c\n    println(f\"{at} {first}\")\n}\n";
     assert!(codes(bytes).is_empty(), "{:#?}", findings(bytes));
     assert!(emit(bytes).contains("let c = b';'"), "{}", emit(bytes));
-    let param = "fn main() {\n    let c = 'a'\n    println(f\"{half(c)}\")\n}\nfn half(b: u8) -> u8 {\n    return b / 2\n}\n";
+    let param = "fn main() throws {\n    let c = 'a'\n    println(f\"{half(c)}\")\n}\nfn half(b: u8) -> u8 {\n    return b / 2\n}\n";
     assert!(codes(param).is_empty(), "{:#?}", findings(param));
     assert!(emit(param).contains("let c = b'a'"), "{}", emit(param));
-    let scalar = "fn main() {\n    let c = 'a'\n    println(f\"{c}\")\n}\n";
+    let scalar = "fn main() throws {\n    let c = 'a'\n    println(f\"{c}\")\n}\n";
     assert!(codes(scalar).is_empty(), "{:#?}", findings(scalar));
     assert!(emit(scalar).contains("let c = 'a'"), "{}", emit(scalar));
     // A high byte bound by a `let` and used as a byte is one.
-    let high = "fn main() {\n    let c = '\\xFF'\n    let b: u8 = c\n    println(f\"{b}\")\n}\n";
+    let high =
+        "fn main() throws {\n    let c = '\\xFF'\n    let b: u8 = c\n    println(f\"{b}\")\n}\n";
     assert!(codes(high).is_empty(), "{:#?}", findings(high));
 
-    let both = "fn main() {\n    let line = \"ab;cd\"\n    let c = ';'\n    let at = line.bytes.find(c) ?? -1\n    println(f\"{at} {c}\")\n}\n";
+    let both = "fn main() throws {\n    let line = \"ab;cd\"\n    let c = ';'\n    let at = line.bytes.find(c) ?? -1\n    println(f\"{at} {c}\")\n}\n";
     let found = findings(both);
     let refused: Vec<_> = found
         .iter()
@@ -869,7 +873,7 @@ fn a_character_binding_is_typed_by_its_uses() {
 #[test]
 fn a_shared_mut_in_a_hole_is_refused() {
     let found = no_text_form(
-        "fn count(n: SharedMut[i32]) {\n\
+        "fn count(n: SharedMut[i32]) throws {\n\
          \x20   println(f\"{n}\")\n\
          }\n\
          fn main() { }\n",

@@ -323,7 +323,7 @@ fn a_bytes_is_read_as_a_run_of_bytes() {
          \x20   println(f\"{first} {part.len()} {semi} {next} {text}\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   report(\"x\") catch {\n\
          \x20       println(\"failed\")\n\
          \x20   }\n\
@@ -375,7 +375,7 @@ fn every_read_of_a_bytes_is_callable_on_a_cut() {
          \x20   println(lens.len())\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let b = \"hello\\nworld\\n\".bytes.clone()\n\
          \x20   reads(b) catch { println(\"failed\") }\n\
          }\n";

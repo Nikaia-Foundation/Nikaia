@@ -72,7 +72,7 @@ fn run(binary: &Path, words: &[&str]) -> (i32, String, String) {
 }
 
 const MULTIPLY: &str = "/// Multiplies a positive number.\n\
-fn main(a: i64; times: i64 = 4, be_loud: bool = false) {\n\
+fn main(a: i64; times: i64 = 4, be_loud: bool = false) throws {\n\
 \x20   assert(a > 0)\n\
 \x20   let b = times * a\n\
 \x20   if be_loud {\n\
@@ -145,7 +145,7 @@ fn the_words_are_the_parameters() {
 fn every_kind_of_word() {
     let (dir, prog) = built(
         "kinds",
-        "fn main(name: String, o: i64?, xs: Vec[u8]; scale: f64 = 1.5, label: String? = null) {\n\
+        "fn main(name: String, o: i64?, xs: Vec[u8]; scale: f64 = 1.5, label: String? = null) throws {\n\
          \x20   println(f\"{name} {o ?? 0} {xs.len()} {scale} {label ?? \"-\"}\")\n\
          }\n",
     );
@@ -165,7 +165,7 @@ fn every_kind_of_word() {
 fn an_optional_subject_may_be_left_out() {
     let (dir, prog) = built(
         "maybe",
-        "fn main(a: i64, name: String?) {\n\
+        "fn main(a: i64, name: String?) throws {\n\
          \x20   println(f\"{a} {name ?? \"null\"}\")\n\
          }\n",
     );
@@ -186,7 +186,7 @@ fn an_optional_subject_may_be_left_out() {
 fn an_optional_subject_before_the_rest() {
     let (dir, prog) = built(
         "maybe-rest",
-        "fn main(a: i64, n: i64?, xs: Vec[String]) {\n\
+        "fn main(a: i64, n: i64?, xs: Vec[String]) throws {\n\
          \x20   println(f\"{a} {n ?? -1} {xs.len()}\")\n\
          }\n",
     );
@@ -206,7 +206,7 @@ fn an_optional_subject_before_the_rest() {
 /// where the words arrive, and its line names the `assert` it came from.
 #[test]
 fn a_carried_back_precondition_is_checked_where_the_words_arrive() {
-    let source = "fn main(a: i64) {\n\
+    let source = "fn main(a: i64) throws {\n\
                   \x20   let b = 4 * example(a)\n\
                   \x20   println(f\"{b}\")\n\
                   }\n\
@@ -231,7 +231,7 @@ fn a_carried_back_precondition_is_checked_where_the_words_arrive() {
 #[test]
 fn asserts_reports_mains_precondition() {
     let dir = common::scratch_dir("main-parameters-asserts");
-    let source = "fn main(a: i64) {\n\
+    let source = "fn main(a: i64) throws {\n\
                   \x20   assert(a > 0)\n\
                   \x20   let b = 4 * (10 + a)\n\
                   \x20   assert(b > 40)\n\
@@ -257,7 +257,7 @@ fn asserts_reports_mains_precondition() {
 /// and in the help - and the default the prover proves it for.
 #[test]
 fn an_options_precondition_is_checked_where_the_words_arrive() {
-    let source = "fn main(total: i64; tip: i64 = 0) {\n\
+    let source = "fn main(total: i64; tip: i64 = 0) throws {\n\
                   \x20   assert(tip <= 30)\n\
                   \x20   println(f\"{total + total * tip / 100}\")\n\
                   }\n";
@@ -290,7 +290,7 @@ fn an_options_precondition_is_checked_where_the_words_arrive() {
 /// D2 (#651): a usage error says the type with the article its sound takes.
 #[test]
 fn a_usage_error_says_a_u8_and_an_i64() {
-    let source = "fn main(a: u8; n: i64 = 0) {\n\
+    let source = "fn main(a: u8; n: i64 = 0) throws {\n\
                   \x20   println(f\"{a} {n}\")\n\
                   }\n";
     let (dir, prog) = built("article", source);

@@ -98,7 +98,7 @@ fn an_owned_text_is_looked_up_in_an_array_of_views() {
          \x20   return NAMES.contains(name)\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(known(1))\n\
          \x20   println(known(0))\n\
          }\n";

@@ -32,7 +32,7 @@ fn find_searches_from_a_position() {
          \x20   return line[0..<sep].clone()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let line = \"Hamburg;12.0;x\"\n\
          \x20   let sep = line.find(\";\") ?? -1\n\
          \x20   let next = line.find(\";\"; from: sep + 1) ?? -1\n\

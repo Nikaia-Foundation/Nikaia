@@ -66,7 +66,7 @@ fn a_call_is_compiled_and_run_while_the_program_is_built() {
                   comptime FIB_10: i64 = fib(10)\n\
                   comptime FIB_20 = fib(20)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{FIB_10} {FIB_20}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -86,7 +86,7 @@ fn an_overflow_stops_the_build_where_it_would_stop_the_program() {
                   \n\
                   comptime C = sq(100000)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{C}\")\n\
                   }\n";
     let found = findings(source);
@@ -119,7 +119,7 @@ fn a_function_of_std_runs_inside_a_callee() {
                   \n\
                   comptime S = seven()\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{S}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -130,14 +130,14 @@ fn a_function_of_std_runs_inside_a_callee() {
 /// prints may not run while the program is built.
 #[test]
 fn a_callee_that_prints_is_refused_before_it_is_compiled() {
-    let source = "fn loud() -> i64 {\n\
+    let source = "fn loud() -> i64 throws {\n\
                   \x20   println(\"hi\")\n\
                   \x20   return 1\n\
                   }\n\
                   \n\
                   comptime L = loud()\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{L}\")\n\
                   }\n";
     let found = findings(source);
@@ -158,7 +158,7 @@ fn an_unchanged_comptime_is_answered_from_what_was_kept() {
                   \n\
                   comptime T = twice(4321)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{T}\")\n\
                   }\n";
     assert!(lowered(source).contains("const T: i64 = 8642;"));
@@ -240,7 +240,7 @@ fn a_loop_that_does_not_end_is_stopped_by_the_budget() {
                   \n\
                   comptime SPUN = spin()\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{SPUN}\")\n\
                   }\n";
     let stopped = the_one(findings_bounded(source, 1_000_000, 4 << 30));
@@ -270,12 +270,13 @@ fn a_recursion_past_the_budget_is_refused_and_one_inside_it_passes() {
                }\n\
                \n";
     let within =
-        format!("{fib}comptime F = fib(20)\n\nfn main() {{\n    println(f\"{{F}}\")\n}}\n");
+        format!("{fib}comptime F = fib(20)\n\nfn main() throws {{\n    println(f\"{{F}}\")\n}}\n");
     assert!(
         findings_bounded(&within, 1_000_000, 4 << 30).is_empty(),
         "fib(20) takes some 22 000 steps"
     );
-    let past = format!("{fib}comptime F = fib(50)\n\nfn main() {{\n    println(f\"{{F}}\")\n}}\n");
+    let past =
+        format!("{fib}comptime F = fib(50)\n\nfn main() throws {{\n    println(f\"{{F}}\")\n}}\n");
     let stopped = the_one(findings_bounded(&past, 1_000_000, 4 << 30));
     assert_eq!(
         stopped.message,
@@ -293,7 +294,7 @@ fn a_recursion_without_a_base_case_meets_the_call_depth() {
                   \n\
                   comptime D = down(0)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{D}\")\n\
                   }\n";
     let stopped = the_one(findings(source));
@@ -317,7 +318,7 @@ fn a_list_that_grows_without_end_is_stopped_by_the_memory_bound() {
                   \n\
                   comptime G = grow()\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{G}\")\n\
                   }\n";
     let stopped = the_one(findings_bounded(source, 10_000_000_000, 100_000_000));
@@ -346,7 +347,7 @@ fn a_method_runs_at_build_time_whoever_declares_it() {
                   comptime LOUD = \"abc\".to_uppercase()\n\
                   comptime S = Point { x: 3, y: 4 }.sum()\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{LOUD} {S}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -364,7 +365,7 @@ fn a_callee_in_another_file_runs_and_a_stop_there_is_named() {
         "comptime T = triple(14)\n\
          comptime C = sq(100000)\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{T} {C}\")\n\
          }\n",
     )
@@ -450,7 +451,7 @@ fn a_file_the_build_reads_is_handed_to_a_compiled_call() {
          \n\
          comptime N = twice(asset(\"data.txt\"))\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{N}\")\n\
          }\n",
     );
@@ -463,7 +464,7 @@ fn a_file_the_build_reads_is_handed_to_a_compiled_call() {
          \n\
          comptime N = twice(asset(\"other.txt\"))\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{N}\")\n\
          }\n",
     );
@@ -519,7 +520,7 @@ fn an_earlier_struct_or_variant_is_carried_into_a_later_run() {
                   comptime S = shade_of(4)\n\
                   comptime W = weight(S)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{BIG} {W}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -557,7 +558,7 @@ fn a_program_with_a_grammar_compiles_its_other_comptimes() {
                   comptime T = triple(14)\n\
                   comptime C = sq(100000)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{T} {C}\")\n\
                   }\n";
     // The overflow is the compiled run's answer: the interpreter computed it.
@@ -583,7 +584,7 @@ fn an_options_default_is_compiled_and_recorded() {
              \x20   return f\"{{label}} {{times}} {{base}}\"\n\
              }}\n\
              \n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   println(shout(\"go\"))\n\
              }}\n"
         )
@@ -619,7 +620,7 @@ fn a_comptime_names_its_own_step_budget() {
                \x20   return fib(n - 1) + fib(n - 2)\n\
                }\n\
                \n";
-    let main = "\nfn main() {\n    println(f\"{F}\")\n}\n";
+    let main = "\nfn main() throws {\n    println(f\"{F}\")\n}\n";
     let lowered_bound = format!("{fib}comptime(steps: 100) F = fib(20)\n{main}");
     let stopped = the_one(findings(&lowered_bound));
     assert_eq!(
@@ -633,7 +634,7 @@ fn a_comptime_names_its_own_step_budget() {
         findings_bounded(&raised, 1_000, 4 << 30)
     );
     let inside = format!(
-        "{fib}fn main() {{\n    comptime(steps: 100) F = fib(20)\n    println(f\"{{F}}\")\n}}\n"
+        "{fib}fn main() throws {{\n    comptime(steps: 100) F = fib(20)\n    println(f\"{{F}}\")\n}}\n"
     );
     let stopped = the_one(findings(&inside));
     assert_eq!(
@@ -655,7 +656,7 @@ fn a_comptime_names_its_own_memory_bound() {
                 \n\
                 comptime(ram: 64Mi, steps: 10G) G = grow()\n\
                 \n\
-                fn main() {\n\
+                fn main() throws {\n\
                 \x20   println(f\"{G}\")\n\
                 }\n";
     let stopped = the_one(findings(grow));
@@ -670,7 +671,7 @@ fn a_comptime_names_its_own_memory_bound() {
 #[test]
 fn a_bound_with_another_name_or_no_number_is_refused() {
     let found = findings(
-        "fn one() -> i64 {\n    return 1\n}\n\ncomptime(stpes: 5) X = one()\n\nfn main() {\n    println(f\"{X}\")\n}\n",
+        "fn one() -> i64 {\n    return 1\n}\n\ncomptime(stpes: 5) X = one()\n\nfn main() throws {\n    println(f\"{X}\")\n}\n",
     );
     let wrong: Vec<_> = found.iter().filter(|f| f.code == "NK1109").collect();
     assert_eq!(wrong.len(), 1, "{found:#?}");
@@ -682,7 +683,7 @@ fn a_bound_with_another_name_or_no_number_is_refused() {
     assert!(found.iter().all(|f| f.code != "NK1152"), "{found:#?}");
 
     let found = findings(
-        "fn one() -> i64 {\n    return 1\n}\n\ncomptime(steps: one()) X = one()\n\nfn main() {\n    println(f\"{X}\")\n}\n",
+        "fn one() -> i64 {\n    return 1\n}\n\ncomptime(steps: one()) X = one()\n\nfn main() throws {\n    println(f\"{X}\")\n}\n",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1102"
@@ -706,7 +707,7 @@ fn a_comptime_a_call_computed_is_its_value_to_the_prover() {
                   \x20   return positive(whole)\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   comptime B: i64 = 4 / example(2)\n\
                   \x20   assert(B > 10)\n\
                   \x20   println(f\"{B}\")\n\
@@ -741,7 +742,7 @@ const DIVIDED: &str = "fn example(n: i64) -> i64 {\n\
                        \n\
                        comptime B = 4 / example(2)\n\
                        \n\
-                       fn main() {\n\
+                       fn main() throws {\n\
                        \x20   println(f\"{B}\")\n\
                        }\n";
 
@@ -769,7 +770,7 @@ fn a_check_with_no_workshop_refuses_a_comptime_that_calls() {
     // An initialiser of literals alone is still folded (D1's last paragraph).
     assert!(
         findings_without_a_workshop(
-            "comptime K = 4 * 1024\n\nfn main() {\n    println(f\"{K}\")\n}\n"
+            "comptime K = 4 * 1024\n\nfn main() throws {\n    println(f\"{K}\")\n}\n"
         )
         .is_empty()
     );
@@ -814,7 +815,7 @@ fn an_options_default_that_calls_is_compiled_or_refused() {
                   \x20   return f\"{label} {times}\"\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(shout(\"go\"))\n\
                   }\n";
     let found = findings_without_a_workshop(source);

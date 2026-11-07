@@ -118,7 +118,7 @@ fn an_attribute_changes_nothing_the_program_does() {
          \x20   created_at: i64,\n\
          }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let u = User {{ created_at: 7 }}\n\
          \x20   println(f\"{{u.created_at}}\")\n\
          }}\n"
@@ -173,7 +173,7 @@ fn a_json_name_generator_reads_the_attributes() {
          \x20   name: String,\n\
          }}\n\
          \n\
-         fn wire[T: Struct](value: T) {{\n\
+         fn wire[T: Struct](value: T) throws {{\n\
          \x20   for field in T::fields {{\n\
          \x20       let wire = field.attribute(Name)?.value ?? field.name\n\
          \x20       let tags = field.attributes(Tag)\n\
@@ -181,7 +181,7 @@ fn a_json_name_generator_reads_the_attributes() {
          \x20   }}\n\
          }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   wire(User {{ created_at: 1, name: \"x\" }})\n\
          }}\n"
     );
@@ -199,14 +199,14 @@ fn a_reflected_field_answers_its_default() {
          \x20   step: i64,\n\
          }\n\
          \n\
-         fn defaults[T: Struct](value: T) {\n\
+         fn defaults[T: Struct](value: T) throws {\n\
          \x20   for field in T::fields {\n\
          \x20       let d = field.default ?? 0\n\
          \x20       println(f\"{field.name} {d}\")\n\
          \x20   }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   defaults(Page { step: 2 })\n\
          }\n";
     assert_eq!(run_file("attributes-default", source), "size 50\nstep 0\n");
@@ -227,7 +227,7 @@ fn what_cannot_be_read_is_refused() {
     );
     assert_eq!(codes(&read), vec!["NK1235"]);
     let loud = with(
-        "fn loud() -> String {\n\
+        "fn loud() -> String throws {\n\
          \x20   println(\"side effect\")\n\
          \x20   return \"x\"\n\
          }\n\
@@ -293,13 +293,13 @@ fn attributes_cross_into_another_package() {
          \x20   item_id: i64,\n\
          }\n\
          \n\
-         fn wire[T: Struct](value: T) {\n\
+         fn wire[T: Struct](value: T) throws {\n\
          \x20   for field in T::fields {\n\
          \x20       println(field.attribute(lib::Name)?.value ?? field.name)\n\
          \x20   }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   wire(Item { item_id: 1 })\n\
          \x20   wire(lib::User { created_at: 1, name: \"x\" })\n\
          }\n";
@@ -351,17 +351,17 @@ fn a_types_and_a_variants_attributes_are_read() {
          \x20   Sub,\n\
          }\n\
          \n\
-         fn table[T: Struct](value: T) {\n\
+         fn table[T: Struct](value: T) throws {\n\
          \x20   println(T::attribute(Tag)?.text ?? \"none\")\n\
          }\n\
          \n\
-         fn ops[T: Enum](value: T) {\n\
+         fn ops[T: Enum](value: T) throws {\n\
          \x20   for variant in T::variants {\n\
          \x20       println(variant.attribute(Tag)?.text ?? variant.name)\n\
          \x20   }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   table(User { name: \"x\" })\n\
          \x20   ops(Op::Add)\n\
          }\n";
@@ -397,13 +397,13 @@ fn a_computed_argument_is_read_as_its_value() {
          \x20   created_at: i64,\n\
          }}\n\
          \n\
-         fn wire[T: Struct](value: T) {{\n\
+         fn wire[T: Struct](value: T) throws {{\n\
          \x20   for field in T::fields {{\n\
          \x20       println(field.attribute(Name)?.value ?? field.name)\n\
          \x20   }}\n\
          }}\n\
          \n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   wire(User {{ created_at: 1 }})\n\
          }}\n"
     );

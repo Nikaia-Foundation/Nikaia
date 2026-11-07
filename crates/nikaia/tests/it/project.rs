@@ -39,7 +39,7 @@ fn a_project(purpose: &str, manifest: &str, entry: &str) -> PathBuf {
     dir
 }
 
-const HELLO: &str = "fn main() {\n    println(\"Hallo Welt, Nikaia!\")\n}\n";
+const HELLO: &str = "fn main() throws {\n    println(\"Hallo Welt, Nikaia!\")\n}\n";
 
 fn nikaia(args: &[&str], dir: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -140,7 +140,7 @@ fn a_project_builds_runs_and_notices_an_edit() {
 
     std::fs::write(
         dir.join("src/main.nika"),
-        "fn main() {\n    println(\"zweiter Versuch\")\n}\n",
+        "fn main() throws {\n    println(\"zweiter Versuch\")\n}\n",
     )
     .expect("edit");
 
@@ -223,7 +223,7 @@ fn editing_a_second_file_rather_than_the_entry_reaches_the_binary() {
     let dir = a_project(
         "project-modules",
         "[package]\nname = \"multi\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    println(doubled(21))\n}\n",
+        "fn main() throws {\n    println(doubled(21))\n}\n",
     );
     std::fs::write(
         dir.join("src/utils.nika"),
@@ -271,7 +271,7 @@ fn a_backend_error_is_reported_against_the_nika_line() {
     let dir = a_project(
         "project-backend-error",
         "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    let n: i64 = 1\n    let unused = n + 1\n    println(f\"{n}\")\n}\n",
+        "fn main() throws {\n    let n: i64 = 1\n    let unused = n + 1\n    println(f\"{n}\")\n}\n",
     );
     let rustc = rustc_denying_warnings(&dir, "refused");
 
@@ -887,7 +887,7 @@ fn the_explain_modes_reach_a_project_build() {
     let dir = a_project(
         "project-explain",
         "[package]\nname = \"explained\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    \
+        "fn main() throws {\n    \
              let c = Shared(Conn { id: 1 })\n    \
              println(f\"{hold(c)}\")\n\
          }\n",
@@ -983,7 +983,7 @@ fn a_package_reached_through_two_parents_is_one_package() {
     .expect("the library");
     std::fs::write(
         dir.join("app/src/main.nika"),
-        "use deep\nuse lib\n\nfn main() {\n\
+        "use deep\nuse lib\n\nfn main() throws {\n\
          \x20   let id = deep::make(7)\n\
          \x20   println(f\"{lib::show(id)}\")\n}\n",
     )
@@ -1057,7 +1057,7 @@ fn a_package_is_depended_on_by_path() {
                 "app/src/main.nika",
                 "use http\n\
                  \n\
-                 fn main() {\n    \
+                 fn main() throws {\n    \
                      let r = http::Request { path: \"/index\" }\n    \
                      println(http::route(r))\n\
                  }\n",
@@ -1110,13 +1110,13 @@ fn a_packages_type_is_constructed_and_its_handler_chain_runs() {
                  impl Server {\n    \
                      pub fn new() -> Server { return Server { routes: 0 } }\n\
                  \n    \
-                     pub fn route(ref self, path: ref String, handler: fn(Request) -> Response) -> Server {\n        \
+                     pub fn route(ref self, path: ref String, handler: fn(Request) -> Response) -> Server throws {\n        \
                          let answered = handler(Request { path: path.clone() })\n        \
                          println(f\"{path} {answered.status} {answered.body}\")\n        \
                          return Server { routes: self.routes + 1 }\n    \
                      }\n\
                  \n    \
-                     pub fn listen(ref self, at: ref String) {\n        \
+                     pub fn listen(ref self, at: ref String) throws {\n        \
                          println(f\"listening on {at} with {self.routes}\")\n    \
                      }\n\
                  }\n",
@@ -1167,7 +1167,7 @@ fn a_name_a_package_does_not_publish_is_refused() {
             ),
             (
                 "app/src/main.nika",
-                "use http\n\nfn main() {\n    println(f\"{http::secret()}\")\n}\n",
+                "use http\n\nfn main() throws {\n    println(f\"{http::secret()}\")\n}\n",
             ),
         ],
     );
@@ -1189,7 +1189,7 @@ fn a_name_a_package_does_not_publish_is_refused() {
     // blanket refusal.
     std::fs::write(
         dir.join("app/src/main.nika"),
-        "use http\n\nfn main() {\n    println(f\"{http::answer()}\")\n}\n",
+        "use http\n\nfn main() throws {\n    println(f\"{http::answer()}\")\n}\n",
     )
     .expect("the program");
     let ran = nikaia(&["run"], &dir.join("app"));
@@ -1221,7 +1221,7 @@ fn arithmetic_in_a_package_aborts_like_the_programs_own() {
             ),
             (
                 "app/src/main.nika",
-                "use maths\n\nfn main() {\n    println(f\"{maths::grow(2000000000)}\")\n}\n",
+                "use maths\n\nfn main() throws {\n    println(f\"{maths::grow(2000000000)}\")\n}\n",
             ),
         ],
     );
@@ -1283,7 +1283,7 @@ fn a_package_trait_is_implemented_by_a_body_that_calls_that_package() {
                  \x20   }\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let f = Fixed { n: 1 }\n\
                  \x20   println(f\"{f.greet()}\")\n\
                  }\n",
@@ -1333,7 +1333,7 @@ fn the_rules_that_come_with_a_path_dependency() {
             ),
             (
                 "app/src/main.nika",
-                "use http\n\nfn main() {\n    println(f\"{http::ok()}\")\n}\n",
+                "use http\n\nfn main() throws {\n    println(f\"{http::ok()}\")\n}\n",
             ),
         ],
     );
@@ -1397,7 +1397,7 @@ fn the_rules_that_come_with_a_path_dependency() {
     let program = std::fs::read_to_string(app.join("src/main.nika")).expect("the program");
     std::fs::write(
         app.join("src/main.nika"),
-        "use http\n\nfn main() {\n    println(f\"{deeper::two()}\")\n}\n",
+        "use http\n\nfn main() throws {\n    println(f\"{deeper::two()}\")\n}\n",
     )
     .expect("reaching past http");
     let ran = nikaia(&["build"], &app);
@@ -1473,7 +1473,7 @@ fn a_field_a_package_does_not_publish_is_refused() {
             ),
             (
                 "app/src/main.nika",
-                "use http\n\nfn main() {\n    \
+                "use http\n\nfn main() throws {\n    \
                      let r = http::get(7)\n    \
                      println(f\"{r.method}\")\n\
                  }\n",
@@ -1494,7 +1494,7 @@ fn a_field_a_package_does_not_publish_is_refused() {
     // Building it from outside is the same rule, and the one that was silent.
     std::fs::write(
         app.join("src/main.nika"),
-        "use http\n\nfn main() {\n    \
+        "use http\n\nfn main() throws {\n    \
              let r = http::Request { id: 7, method: 2 }\n    \
              println(f\"{r.id}\")\n\
          }\n",
@@ -1513,7 +1513,7 @@ fn a_field_a_package_does_not_publish_is_refused() {
     // fields private and offer functions, which is Part I 9.3's whole point.
     std::fs::write(
         app.join("src/main.nika"),
-        "use http\n\nfn main() {\n    \
+        "use http\n\nfn main() throws {\n    \
              let r = http::get(7)\n    \
              println(f\"{r.id} {http::method_of(r)}\")\n\
          }\n",
@@ -1552,7 +1552,7 @@ fn every_abort_names_the_nikaia_line() {
             "an overflow",
             "fn double(n: i32) -> i32 {\n    return n * 2\n}\n\
              \n\
-             fn main() {\n    \
+             fn main() throws {\n    \
                  let start = 2000000000\n    \
                  println(f\"{double(start)}\")\n\
              }\n",
@@ -1562,7 +1562,7 @@ fn every_abort_names_the_nikaia_line() {
             "a conversion",
             "fn narrow(n: i64) -> i32 {\n    return n as i32\n}\n\
              \n\
-             fn main() {\n    \
+             fn main() throws {\n    \
                  let big = 5000000000\n    \
                  println(f\"{narrow(big)}\")\n\
              }\n",
@@ -1572,7 +1572,7 @@ fn every_abort_names_the_nikaia_line() {
             "a negative index",
             "fn pick(xs: ref Vec[i64], at: i64) -> i64 {\n    return xs[at]\n}\n\
              \n\
-             fn main() {\n    \
+             fn main() throws {\n    \
                  let mut xs = Vec()\n    \
                  xs.push(1)\n    \
                  let zero = 0\n    \
@@ -1584,7 +1584,7 @@ fn every_abort_names_the_nikaia_line() {
             "an index past the end",
             "fn pick(xs: ref Vec[i64], at: i64) -> i64 {\n    return xs[at]\n}\n\
              \n\
-             fn main() {\n    \
+             fn main() throws {\n    \
                  let mut xs = Vec()\n    \
                  xs.push(1)\n    \
                  let far = 5\n    \
@@ -1635,7 +1635,7 @@ fn an_abort_with_no_nikaia_line_keeps_rusts_own_report() {
     // for the f-string rather than from a statement.
     std::fs::write(
         dir.join("src/main.nika"),
-        "use std::cli\n\nfn main() {\n    \
+        "use std::cli\n\nfn main() throws {\n    \
              println(f\"{cli::args().nth(40)}\")\n\
          }\n",
     )
@@ -1692,7 +1692,7 @@ fn a_package_may_be_given_another_name() {
                 "app/src/main.nika",
                 "use http as h\n\
                  \n\
-                 fn main() {\n    \
+                 fn main() throws {\n    \
                      let made: h::Request = h::get(7)\n    \
                      let built = h::Request { id: 35 }\n    \
                      println(f\"{h::id_of(made)} {built.id}\")\n\
@@ -1760,7 +1760,7 @@ fn a_warning_reaches_the_user_once_and_in_nikaia_terms() {
         "[package]\nname = \"noisy\"\nversion = \"0.1.0\"\n",
         // `unused_assignments`: the value `null` is written and never read,
         // which is exactly Part I 2.3's own example.
-        "fn main() {\n    \
+        "fn main() throws {\n    \
          let mut maybe: String? = null\n    \
          maybe = \"World\"\n    \
          let shown = maybe ?? \"x\"\n    \
@@ -2096,7 +2096,7 @@ fn a_trait_a_package_publishes_can_be_implemented_and_called() {
                  \x20   }\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let f = Fixed { n: 1 }\n\
                  \x20   println(f\"{handler::render(f.handle())}\")\n\
                  }\n",
@@ -2152,7 +2152,7 @@ fn a_hand_edited_dependency_ledger_is_repaired_before_it_is_read() {
             ),
             (
                 "app/src/main.nika",
-                "use lib\n\nfn main() {\n    println(f\"{lib::hello()}\")\n}\n",
+                "use lib\n\nfn main() throws {\n    println(f\"{lib::hello()}\")\n}\n",
             ),
         ],
     );
@@ -2293,7 +2293,7 @@ fn a_grammar_at_build_time_reaches_a_project_build() {
          comptime SETTINGS: Array[Setting, 2] = \
          Cfg::file(\"host = example.com\\nport = 8080  # the usual one\\n\")\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   for s in SETTINGS {\n\
          \x20       println(f\"{s.key}={s.value}\")\n\
          \x20   }\n\
@@ -2358,7 +2358,7 @@ fn a_shape_walk_reaches_across_the_files_of_a_package() {
         "struct User { name: ref String, age: i64 }\n\
          struct Point { x: i64, y: i64 }\n\
          \n\
-         fn describe[T: Struct](value: T) {\n\
+         fn describe[T: Struct](value: T) throws {\n\
          \x20   for field in T::fields {\n\
          \x20       println(f\"{field.name} = {field.of(value)}\")\n\
          \x20   }\n\
@@ -2413,7 +2413,7 @@ fn a_head_the_next_file_declares_is_not_refused() {
     let dir = a_project(
         "project-head",
         "[package]\nname = \"shades\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let s = Shade::Even\n\
          \x20   match s {\n\
          \x20       Shade::Even => { println(\"even\") }\n\
@@ -2437,7 +2437,7 @@ fn a_head_the_next_file_declares_is_not_refused() {
     // crate*.
     std::fs::write(
         dir.join("src/main.nika"),
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   println(f\"{nowhere::wobble}\")\n\
          }\n",
     )
@@ -2552,7 +2552,7 @@ fn a_bound_takes_a_path_across_a_package() {
                  \x20   return h.handle().text\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let f = Fixed { n: 1 }\n\
                  \x20   println(dispatch(f))\n\
                  }\n",
@@ -2605,7 +2605,7 @@ fn a_bound_a_package_declares_is_checked_at_a_consumers_call() {
             package,
             (
                 "app/src/main.nika",
-                "use handler\n\n                 struct Bare {\n                 \x20   n: i64,\n                 }\n                 \n                 fn main() {\n                 \x20   println(handler::dispatch(Bare { n: 1 }))\n                 }\n",
+                "use handler\n\n                 struct Bare {\n                 \x20   n: i64,\n                 }\n                 \n                 fn main() throws {\n                 \x20   println(handler::dispatch(Bare { n: 1 }))\n                 }\n",
             ),
         ],
     );
@@ -2632,7 +2632,7 @@ fn a_bound_a_package_declares_is_checked_at_a_consumers_call() {
             package,
             (
                 "app/src/main.nika",
-                "use handler\n\n                 struct Fixed {\n                 \x20   n: i64,\n                 }\n                 \n                 impl handler::Handler for Fixed {\n                 \x20   fn handle(ref self) -> handler::Answer {\n                 \x20       return handler::Answer { text: \"handled\" }\n                 \x20   }\n                 }\n                 \n                 fn main() {\n                 \x20   println(handler::dispatch(Fixed { n: 1 }))\n                 }\n",
+                "use handler\n\n                 struct Fixed {\n                 \x20   n: i64,\n                 }\n                 \n                 impl handler::Handler for Fixed {\n                 \x20   fn handle(ref self) -> handler::Answer {\n                 \x20       return handler::Answer { text: \"handled\" }\n                 \x20   }\n                 }\n                 \n                 fn main() throws {\n                 \x20   println(handler::dispatch(Fixed { n: 1 }))\n                 }\n",
             ),
         ],
     );
@@ -2676,7 +2676,7 @@ fn an_enum_a_package_declares_is_matched_completely_by_a_consumer() {
             ),
             (
                 "app/src/main.nika",
-                "use verdict\n\n                 fn main() {\n                 \x20   let word = \"ja\"\n                 \x20   match verdict::of(word) {\n                 \x20       verdict::Answer::Yes => { println(\"yes\") }\n                 \x20       verdict::Answer::No => { println(\"no\") }\n                 \x20   }\n                 \x20   let again = \"nein\"\n                 \x20   if verdict::of(again) == verdict::Answer::No {\n                 \x20       println(\"compared\")\n                 \x20   }\n                 }\n",
+                "use verdict\n\n                 fn main() throws {\n                 \x20   let word = \"ja\"\n                 \x20   match verdict::of(word) {\n                 \x20       verdict::Answer::Yes => { println(\"yes\") }\n                 \x20       verdict::Answer::No => { println(\"no\") }\n                 \x20   }\n                 \x20   let again = \"nein\"\n                 \x20   if verdict::of(again) == verdict::Answer::No {\n                 \x20       println(\"compared\")\n                 \x20   }\n                 }\n",
             ),
         ],
     );
@@ -2739,7 +2739,7 @@ fn an_impl_a_package_wrote_answers_a_consumers_bound() {
                  \x20   return h.handle().text\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let s = handler::Static { what: \"from the package\" }\n\
                  \x20   println(dispatch(s))\n\
                  }\n",
@@ -2787,7 +2787,7 @@ fn a_type_that_implements_nothing_is_refused_at_a_path_bound() {
                  \x20   return h.handle().text\n\
                  }\n\
                  \n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   println(dispatch(Bare { n: 1 }))\n\
                  }\n",
             ),
@@ -2861,7 +2861,7 @@ fn a_packages_own_bound_and_its_own_types_are_answered_in_its_own_namespace() {
             (
                 "app/src/main.nika",
                 "use handler\n\n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let s = handler::Static { what: \"its own\" }\n\
                  \x20   println(handler::dispatch(s))\n\
                  }\n",
@@ -2896,7 +2896,7 @@ fn a_published_parameter_takes_either_kind_from_its_package_and_its_own_from_oth
             ),
             (
                 "app/src/main.nika",
-                "use tags\n\nfn main() {\n\
+                "use tags\n\nfn main() throws {\n\
                  \x20   let t = tags::tag(f\"app\")\n\
                  \x20   println(f\"{t.label()} {tags::both(\"  x  \")}\")\n}\n",
             ),
@@ -2919,9 +2919,9 @@ fn a_published_parameter_takes_either_kind_from_its_package_and_its_own_from_oth
 #[test]
 fn a_moved_cleanup_point_is_narrated_once() {
     const BEFORE: &str = "struct Handle {\n    name: String,\n}\n\n\
-        impl Drop for Handle {\n    fn drop(ref mut self) {\n        println(f\"closing {self.name}\")\n    }\n}\n\n\
+        impl Drop for Handle {\n    fn drop(ref mut self) throws {\n        println(f\"closing {self.name}\")\n    }\n}\n\n\
         fn look(h: Handle) -> i64 {\n    return h.name.len()\n}\n\n\
-        fn main() {\n    let h = Handle { name: f\"a\" }\n    let n = look(h)\n    println(f\"end of main {n}\")\n}\n";
+        fn main() throws {\n    let h = Handle { name: f\"a\" }\n    let n = look(h)\n    println(f\"end of main {n}\")\n}\n";
     let dir = a_project(
         "project-cleanup-moved",
         "[package]\nname = \"keeper\"\nversion = \"0.1.0\"\n",
@@ -3074,7 +3074,7 @@ fn a_literal_handed_to_a_foreign_generic_is_text_of_its_own() {
         "project-foreign-generic",
         "[package]\nname = \"described\"\nversion = \"0.1.0\"\n\n\
          [dependencies]\nlabels = { type = \"rust\", path = \"labels\" }\n",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let said = labels::describe(\"a literal\")\n\
          \x20   println(f\"said: {said}\")\n\
          }\n",
@@ -3138,7 +3138,7 @@ fn a_file_of_a_project_is_lowered_with_the_projects_dependencies() {
             ),
             (
                 "app/src/main.nika",
-                "use http\n\nfn main() {\n    println(http::ok(\"/\"))\n}\n",
+                "use http\n\nfn main() throws {\n    println(http::ok(\"/\"))\n}\n",
             ),
         ],
     );
@@ -3260,7 +3260,11 @@ fn a_file_outside_a_project_runs_as_a_program_of_its_own() {
         said(&again)
     );
 
-    std::fs::write(&file, "fn main() {\n    println(\"zweiter Versuch\")\n}\n").expect("edit");
+    std::fs::write(
+        &file,
+        "fn main() throws {\n    println(\"zweiter Versuch\")\n}\n",
+    )
+    .expect("edit");
     let edited = run_file(&file, &dir);
     assert_eq!(
         String::from_utf8_lossy(&edited.stdout).trim(),
@@ -3336,7 +3340,7 @@ fn nikaia_run_becomes_the_program() {
     let file = dir.join("waits.nika");
     std::fs::write(
         &file,
-        "use std::time\n\nfn main() {\n    println(\"started\")\n    time::sleep(30000.millis())\n}\n",
+        "use std::time\n\nfn main() throws {\n    println(\"started\")\n    time::sleep(30000.millis())\n}\n",
     )
     .expect("source");
 
@@ -3390,7 +3394,7 @@ fn another_packages_sync_is_what_its_source_promised() {
             (
                 "app/src/main.nika",
                 "use lib\n\nfn total() -> i64 sync {\n    return lib::plus(1)\n}\n\n\
-                 fn main() {\n    println(total())\n}\n",
+                 fn main() throws {\n    println(total())\n}\n",
             ),
         ],
     );
@@ -3411,7 +3415,7 @@ fn another_packages_sync_is_what_its_source_promised() {
     std::fs::write(
         dir.join("app/src/main.nika"),
         "use lib\n\nfn total() -> i64 {\n    return lib::plus(1)\n}\n\n\
-         fn main() {\n    println(total())\n}\n",
+         fn main() throws {\n    println(total())\n}\n",
     )
     .expect("a plain caller");
     let ran = nikaia(&["run"], &dir.join("app"));
@@ -3431,7 +3435,7 @@ fn another_packages_sync_is_what_its_source_promised() {
     std::fs::write(
         dir.join("app/src/main.nika"),
         "use lib\n\nfn total() -> i64 sync {\n    return lib::plus(1)\n}\n\n\
-         fn main() {\n    println(total())\n}\n",
+         fn main() throws {\n    println(total())\n}\n",
     )
     .expect("the sync caller again");
     let promised = nikaia(&["run"], &dir.join("app"));
@@ -3455,7 +3459,7 @@ fn a_build_names_what_its_pub_functions_could_promise() {
         pub fn waits() -> i64 {\n    time::sleep(1.millis())\n    return 1\n}\n\n\
         pub fn promised(x: i64) -> i64 sync {\n    return x\n}\n\n\
         fn mine(x: i64) -> i64 {\n    return x\n}\n\n\
-        fn main() {\n    println(parse(1) + apply(fn(v) { v * 2 }, 3) + waits() + promised(1) + mine(1))\n}\n";
+        fn main() throws {\n    println(parse(1) + apply(fn(v) { v * 2 }, 3) + waits() + promised(1) + mine(1))\n}\n";
     let dir = a_project("could-promise", "[package]\nname = \"p\"\n", BEFORE);
     let lower = || {
         Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -3525,7 +3529,7 @@ fn a_build_warns_when_a_pub_function_loses_its_sync() {
     const PURE: &str = "use std::time\n\n\
         fn read_section(x: i64) -> i64 {\n    return x * 2\n}\n\n\
         pub fn parse(x: i64) -> i64 {\n    return read_section(x) + 1\n}\n\n\
-        fn main() {\n    println(parse(1))\n}\n";
+        fn main() throws {\n    println(parse(1))\n}\n";
     let dir = a_project("loses-sync", "[package]\nname = \"p\"\n", PURE);
     let first = nikaia(&["build"], &dir);
     assert!(first.status.success(), "{}", said(&first));
@@ -3579,7 +3583,7 @@ fn a_type_holding_one_from_another_file_compares() {
         "project-compares-across-files",
         "[package]\nname = \"probe\"\nversion = \"0.1.0\"\n",
         "struct Placed {\n    at: Point,\n    label: String,\n}\n\n\
-         fn main() {\n    let a = Placed { at: Point { x: 1, y: 2 }, label: \"a\" }\n    \
+         fn main() throws {\n    let a = Placed { at: Point { x: 1, y: 2 }, label: \"a\" }\n    \
          let b = Placed { at: Point { x: 1, y: 2 }, label: \"a\" }\n    \
          let c = Placed { at: Point { x: 3, y: 2 }, label: \"a\" }\n    \
          println(f\"{a == b} {a == c}\")\n}\n",
@@ -3613,7 +3617,7 @@ fn two_projects_of_one_name_run_their_own_programs() {
             .expect("manifest");
             std::fs::write(
                 root.join("src/main.nika"),
-                format!("fn main() {{\n    println(\"{word}\")\n}}\n"),
+                format!("fn main() throws {{\n    println(\"{word}\")\n}}\n"),
             )
             .expect("source");
             root

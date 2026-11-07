@@ -179,7 +179,7 @@ fn a_path_takes_a_named_trailing_lambda() {
          \x20       body(&Scope)\n\
          \x20   }\n\
          }\n",
-        "fn work(total: i64) {\n\
+        "fn work(total: i64) throws {\n\
          \x20   task::scope fn(s) {\n\
          \x20       s.spawn fn { println(f\"{total}\") }\n\
          \x20   }\n\
@@ -390,7 +390,7 @@ fn a_lambda_handed_a_value_of_no_known_type_is_refused() {
                 impl Tally {\n\
                 \x20   fn bump(ref mut self) sync { self.n += 1 }\n\
                 }\n\
-                fn main() {\n\
+                fn main() throws {\n\
                 \x20   let mut counts{ty} = collections::HashMap()\n\
                 \x20   counts.entry(\"a\").and_modify fn (t) { t.bump() }.or_insert_with fn { Tally { n: 1 } }\n\
                 \x20   println(f\"{counts.len()}\")\n\

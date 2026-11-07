@@ -38,7 +38,7 @@ fn lowered(source: &str) -> String {
 #[test]
 fn an_index_makes_a_bare_number_an_i64() {
     let rust = lowered(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let mut rows: Vec[Vec[i64]] = [[], []]\n\
          \x20   let i = 1\n\
          \x20   rows[i].push(7)\n\
@@ -79,7 +79,7 @@ fn two_uses_that_disagree_are_refused_in_this_languages_words() {
          \x20   return n\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let k = 5\n\
          \x20   println(f\"{narrow(k)} {wide(k)}\")\n\
          }\n",
@@ -139,7 +139,7 @@ fn a_number_where_no_number_fits_is_refused_at_the_use() {
             "argument",
             "NK1102",
             "`f` expects `s` to be `String`, but you're passing a number.",
-            "fn f(s: String) {\n    println(s)\n}\n\nfn main() {\n    let n = 12\n    f(n)\n}\n",
+            "fn f(s: String) throws {\n    println(s)\n}\n\nfn main() throws {\n    let n = 12\n    f(n)\n}\n",
         ),
         (
             "field",
@@ -151,7 +151,7 @@ fn a_number_where_no_number_fits_is_refused_at_the_use() {
             "return",
             "NK1104",
             "You're returning a number, but the function is declared to return `String`.",
-            "fn g() -> String {\n    let n = 3\n    return n + 1\n}\n\nfn main() {\n    println(g())\n}\n",
+            "fn g() -> String {\n    let n = 3\n    return n + 1\n}\n\nfn main() throws {\n    println(g())\n}\n",
         ),
         (
             "bool",
@@ -172,7 +172,8 @@ fn a_number_where_no_number_fits_is_refused_at_the_use() {
 /// `u8` and passes.
 #[test]
 fn a_number_type_still_decides_the_number() {
-    let source = "fn main() {\n    let n = 12\n    let x: u8 = n\n    println(f\"{x}\")\n}\n";
+    let source =
+        "fn main() throws {\n    let n = 12\n    let x: u8 = n\n    println(f\"{x}\")\n}\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("let n: u8 = 12"), "{rust}");
@@ -196,7 +197,7 @@ fn a_lists_elements_are_refused_as_a_names_number_is() {
             "an overflow",
             "NK1116",
             "This comes to 4000000000, which doesn't fit in an `i32`.",
-            "fn main() {\n    let xs = [2000000000, 2000000000]\n    println(f\"{xs[0] + xs[1]}\")\n}\n",
+            "fn main() throws {\n    let xs = [2000000000, 2000000000]\n    println(f\"{xs[0] + xs[1]}\")\n}\n",
         ),
         (
             "two uses",
@@ -204,7 +205,7 @@ fn a_lists_elements_are_refused_as_a_names_number_is() {
             "You're using the elements of `xs` as `u8`s and here as `i32`s.",
             "fn a(xs: Vec[u8]) -> i64 {\n    return xs.len()\n}\n\n\
              fn b(xs: Vec[i32]) -> i64 {\n    return xs.len()\n}\n\n\
-             fn main() {\n    let xs = [1, 2]\n    println(f\"{a(xs)} {b(xs)}\")\n}\n",
+             fn main() throws {\n    let xs = [1, 2]\n    println(f\"{a(xs)} {b(xs)}\")\n}\n",
         ),
     ] {
         let found = findings(source);
@@ -221,10 +222,11 @@ fn a_lists_elements_are_refused_as_a_names_number_is() {
 fn a_lists_decided_type_is_written() {
     let rust = lowered(
         "fn total(xs: Vec[u8]) -> i64 {\n    return xs.len()\n}\n\n\
-         fn main() {\n    let ys = [1, 2, 3]\n    println(f\"{total(ys)}\")\n}\n",
+         fn main() throws {\n    let ys = [1, 2, 3]\n    println(f\"{total(ys)}\")\n}\n",
     );
     assert!(rust.contains("let ys: Vec<u8> = vec![1, 2, 3];"), "{rust}");
-    let rust = lowered("fn main() {\n    let xs = [1, 3000000000]\n    println(f\"{xs[1]}\")\n}\n");
+    let rust =
+        lowered("fn main() throws {\n    let xs = [1, 3000000000]\n    println(f\"{xs[1]}\")\n}\n");
     assert!(rust.contains("vec![1, 3000000000i64]"), "{rust}");
 }
 
@@ -239,7 +241,7 @@ fn a_maps_open_values_are_refused_as_a_lists_elements_are() {
             "two reads",
             "NK1200",
             "You're using the values of `m` as `u8`s and here as `i64`s.",
-            "use std::collections\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+            "use std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    \
              m.insert(\"a\", 1)\n    let x: u8 = m[\"a\"] ?? 0\n    let y: i64 = m[\"a\"] ?? 0\n    \
              println(f\"{x} {y}\")\n}\n",
         ),
@@ -248,7 +250,7 @@ fn a_maps_open_values_are_refused_as_a_lists_elements_are() {
             "NK1200",
             "You're using the values of `m` as `u8`s and here as `i64`s.",
             "use std::collections\n\nfn total(m: collections::HashMap[String, u8]) -> i64 {\n    \
-             return m.len()\n}\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+             return m.len()\n}\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    \
              m.entry(\"a\").or_insert(1)\n    println(f\"{total(m)}\")\n    let n: i64 = 5\n    \
              m[\"b\"] = n\n}\n",
         ),
@@ -257,14 +259,14 @@ fn a_maps_open_values_are_refused_as_a_lists_elements_are() {
             "NK1200",
             "You're using the keys of `m` as `u8`s and here as `u32`s.",
             "use std::collections\n\nfn a(m: collections::BTreeMap[u8, String]) -> i64 {\n    \
-             return m.len()\n}\n\nfn main() {\n    let mut m = collections::BTreeMap()\n    \
+             return m.len()\n}\n\nfn main() throws {\n    let mut m = collections::BTreeMap()\n    \
              m[1] = \"one\"\n    println(f\"{a(m)}\")\n    let k: u32 = 2\n    m.insert(k, \"two\")\n}\n",
         ),
         (
             "an overflow",
             "NK1116",
             "`3000000000` doesn't fit in an `i32`.",
-            "use std::collections\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+            "use std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    \
              m.insert(\"a\", 3000000000)\n    let x: i32 = m[\"a\"] ?? 0\n    println(f\"{x}\")\n}\n",
         ),
     ] {
@@ -282,7 +284,7 @@ fn a_maps_open_values_are_refused_as_a_lists_elements_are() {
 fn a_maps_text_keys_are_refused_as_an_annotated_maps_are() {
     let walk = |made: &str| {
         let source = format!(
-            "use std::collections\n\nfn main() {{\n    let mut m{made}\n    m.insert(\"a\", 1)\n    \
+            "use std::collections\n\nfn main() throws {{\n    let mut m{made}\n    m.insert(\"a\", 1)\n    \
              for (k, v) in m {{\n        println(f\"{{k.text()}} {{v}}\")\n    }}\n}}\n"
         );
         findings(&source)
@@ -301,7 +303,7 @@ fn a_maps_text_keys_are_refused_as_an_annotated_maps_are() {
 #[test]
 fn a_maps_decided_number_is_written_on_its_literals() {
     let rust = lowered(
-        "use std::collections\n\nfn main() {\n    let mut m = collections::HashMap()\n    \
+        "use std::collections\n\nfn main() throws {\n    let mut m = collections::HashMap()\n    \
          m.entry(3000000000).or_insert(1)\n    println(f\"{m[2] ?? 0}\")\n}\n",
     );
     assert!(rust.contains("entry(3000000000i64)"), "{rust}");
@@ -314,14 +316,14 @@ fn a_maps_decided_number_is_written_on_its_literals() {
 #[test]
 fn a_choice_between_numbers_is_an_open_number() {
     let rust = lowered(
-        "fn main() {\n    let c = true\n    let taken = if c { 1 } else { 0 }\n    let x: u8 = taken\n    println(f\"{x}\")\n}\n",
+        "fn main() throws {\n    let c = true\n    let taken = if c { 1 } else { 0 }\n    let x: u8 = taken\n    println(f\"{x}\")\n}\n",
     );
     assert!(
         rust.contains("let taken: u8 = if c { 1 } else { 0 };"),
         "{rust}"
     );
     let found = findings(
-        "fn pick(k: i64) -> String {\n    let n = match k {\n        1 => 10,\n        else => 20,\n    }\n    return n\n}\n\nfn main() {\n    println(pick(1))\n}\n",
+        "fn pick(k: i64) -> String {\n    let n = match k {\n        1 => 10,\n        else => 20,\n    }\n    return n\n}\n\nfn main() throws {\n    println(pick(1))\n}\n",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1104"
@@ -331,7 +333,7 @@ fn a_choice_between_numbers_is_an_open_number() {
     ); // A branch that leaves comes to nothing: the `if` is the other branch's
     // number.
     let found = findings(
-        "fn pick(c: bool) -> i64 {\n    let x = if c { return 1 } else { 2 }\n    let s: String = x\n    0\n}\n\nfn main() {\n    println(f\"{pick(true)}\")\n}\n",
+        "fn pick(c: bool) -> i64 {\n    let x = if c { return 1 } else { 2 }\n    let s: String = x\n    0\n}\n\nfn main() throws {\n    println(f\"{pick(true)}\")\n}\n",
     );
     assert!(
         found.iter().any(|f| f.code == "NK1103"
@@ -353,7 +355,7 @@ fn a_range_between_literals_binds_an_open_number() {
     );
     assert!(
         findings(
-            "fn main() {\n    let mut cut: Vec[u8] = []\n    for k in 0..<5 {\n        let b: u8 = k\n        cut.push(b)\n    }\n    println(f\"{cut.len()}\")\n}\n"
+            "fn main() throws {\n    let mut cut: Vec[u8] = []\n    for k in 0..<5 {\n        let b: u8 = k\n        cut.push(b)\n    }\n    println(f\"{cut.len()}\")\n}\n"
         )
         .is_empty()
     );
@@ -374,7 +376,7 @@ fn a_walk_over_a_list_of_numbers_binds_an_open_number() {
     );
     assert!(
         findings(
-            "fn main() {\n    let mut c: Vec[u8] = []\n    for z in [1, 2] {\n        let b: u8 = z\n        c.push(b)\n    }\n    println(f\"{c.len()}\")\n}\n"
+            "fn main() throws {\n    let mut c: Vec[u8] = []\n    for z in [1, 2] {\n        let b: u8 = z\n        c.push(b)\n    }\n    println(f\"{c.len()}\")\n}\n"
         )
         .is_empty()
     );
@@ -390,11 +392,11 @@ fn a_walk_over_a_list_of_numbers_binds_an_open_number() {
 fn a_mutable_number_is_followed_until_a_branch_or_a_loop() {
     for (source, message) in [
         (
-            "fn main() {\n    let mut m = 1000000000\n    m = m + 1\n    println(m * 3)\n}\n",
+            "fn main() throws {\n    let mut m = 1000000000\n    m = m + 1\n    println(m * 3)\n}\n",
             "This comes to 3000000003, which doesn't fit in an `i32`.",
         ),
         (
-            "fn main() {\n    let mut m: i32 = 5\n    m = 1000000000\n    m += 1000000000\n    println(m + 2000000000)\n}\n",
+            "fn main() throws {\n    let mut m: i32 = 5\n    m = 1000000000\n    m += 1000000000\n    println(m + 2000000000)\n}\n",
             "This comes to 4000000000, which doesn't fit in an `i32`.",
         ),
     ] {
@@ -407,9 +409,9 @@ fn a_mutable_number_is_followed_until_a_branch_or_a_loop() {
         );
     }
     for source in [
-        "fn f(c: bool) {\n    let mut m = 1000000000\n    if c {\n        m = 1\n    }\n    println(m * 3)\n}\n\nfn main() {\n    f(true)\n}\n",
-        "fn f(n: i64) {\n    let mut m = 1000000000\n    for i in 0..<n {\n        m = m / 10\n    }\n    println(m * 3)\n}\n\nfn main() {\n    f(3)\n}\n",
-        "fn main() {\n    let mut m = 1000000000\n    let mut first = true\n    for i in 0..<2 {\n        if !first {\n            println(m * 3)\n        }\n        m = 1\n        first = false\n    }\n}\n",
+        "fn f(c: bool) throws {\n    let mut m = 1000000000\n    if c {\n        m = 1\n    }\n    println(m * 3)\n}\n\nfn main() throws {\n    f(true)\n}\n",
+        "fn f(n: i64) throws {\n    let mut m = 1000000000\n    for i in 0..<n {\n        m = m / 10\n    }\n    println(m * 3)\n}\n\nfn main() throws {\n    f(3)\n}\n",
+        "fn main() throws {\n    let mut m = 1000000000\n    let mut first = true\n    for i in 0..<2 {\n        if !first {\n            println(m * 3)\n        }\n        m = 1\n        first = false\n    }\n}\n",
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");
@@ -424,23 +426,23 @@ fn a_mutable_number_is_followed_until_a_branch_or_a_loop() {
 fn a_compound_shift_and_a_negation_that_overflow_are_refused() {
     for (source, message) in [
         (
-            "fn main() {\n    let mut n = 1\n    n <<= 40\n    println(n)\n}\n",
+            "fn main() throws {\n    let mut n = 1\n    n <<= 40\n    println(n)\n}\n",
             "This shifts an `i32` by 40 places, and it has 32 bits.",
         ),
         (
-            "fn main() {\n    let mut b: u8 = 1\n    b <<= 8\n    println(b)\n}\n",
+            "fn main() throws {\n    let mut b: u8 = 1\n    b <<= 8\n    println(b)\n}\n",
             "This shifts a `u8` by 8 places, and it has 8 bits.",
         ),
         (
-            "fn main() {\n    let n = -2147483648\n    println(-n)\n}\n",
+            "fn main() throws {\n    let n = -2147483648\n    println(-n)\n}\n",
             "This comes to 2147483648, which doesn't fit in an `i32`.",
         ),
         (
-            "fn main() {\n    let mut n = 5\n    n = -2147483648\n    println(-n)\n}\n",
+            "fn main() throws {\n    let mut n = 5\n    n = -2147483648\n    println(-n)\n}\n",
             "This comes to 2147483648, which doesn't fit in an `i32`.",
         ),
         (
-            "fn main() {\n    let n: i64 = -9223372036854775807 - 1\n    println(-n)\n}\n",
+            "fn main() throws {\n    let n: i64 = -9223372036854775807 - 1\n    println(-n)\n}\n",
             "This comes to 9223372036854775808, which doesn't fit in an `i64`.",
         ),
     ] {
@@ -452,9 +454,9 @@ fn a_compound_shift_and_a_negation_that_overflow_are_refused() {
         );
     }
     for source in [
-        "fn main() {\n    let mut n: i64 = 1\n    n <<= 40\n    println(n)\n}\n",
-        "fn main() {\n    let n = -2147483647\n    println(-n)\n}\n",
-        "fn main() {\n    let mut n = -2147483648\n    n = 5\n    println(-n)\n}\n",
+        "fn main() throws {\n    let mut n: i64 = 1\n    n <<= 40\n    println(n)\n}\n",
+        "fn main() throws {\n    let n = -2147483647\n    println(-n)\n}\n",
+        "fn main() throws {\n    let mut n = -2147483648\n    n = 5\n    println(-n)\n}\n",
     ] {
         let found = findings(source);
         assert!(found.is_empty(), "{source}: {found:#?}");

@@ -53,7 +53,7 @@ fn a_chain_of_three_is_two_calls() {
     let rust = lowered(
         "a chain",
         r#"
-fn main() {
+fn main() throws {
     println("p" + "q" + "r")
 }
 "#,
@@ -77,7 +77,7 @@ fn a_number_keeps_its_operator() {
     let rust = lowered(
         "arithmetic",
         r#"
-fn main() {
+fn main() throws {
     let a: i64 = 2
     let b: i64 = 3
     println(f"{a + b}")
@@ -108,7 +108,7 @@ fn greet(name: String) -> String {
     return "User: " + name
 }
 
-fn main() {
+fn main() throws {
     println(greet(f"Ada"))
 }
 "#,
@@ -126,7 +126,7 @@ fn a_plus_over_two_unknowns_is_not_a_concatenation() {
     let rust = lowered(
         "two unknowns",
         r#"
-fn main() {
+fn main() throws {
     let mut xs = Vec()
     xs.push(1)
     let n = xs.len() + xs.len()
@@ -150,7 +150,7 @@ fn the_lowering_is_the_trait_and_not_a_format() {
     let rust = lowered(
         "no format",
         r#"
-fn main() {
+fn main() throws {
     let s = f"left-"
     println(s + "right")
 }

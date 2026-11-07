@@ -37,7 +37,7 @@ fn a_computed_default_is_evaluated_once_and_recorded() {
          \x20   return f\"{label} {timeout} {tries} {name}\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(wait(\"x\"))\n\
          \x20   println(wait(\"y\"; tries: 1))\n\
          }\n";
@@ -50,7 +50,7 @@ fn a_computed_default_is_evaluated_once_and_recorded() {
 /// D7: a default whose callee touches the world is `NK1152`, as a `comptime`'s.
 #[test]
 fn a_default_that_cannot_run_at_build_time_is_refused() {
-    let source = "fn loud() -> i64 {\n\
+    let source = "fn loud() -> i64 throws {\n\
          \x20   println(\"side effect\")\n\
          \x20   return 1\n\
          }\n\
@@ -59,7 +59,7 @@ fn a_default_that_cannot_run_at_build_time_is_refused() {
          \x20   return t\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{a()}\")\n\
          }\n";
     assert_eq!(codes(source), vec!["NK1152".to_string()]);
@@ -76,7 +76,7 @@ fn a_default_that_needs_itself_is_a_ring() {
          \x20   return t + 1\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{f()}\")\n\
          }\n";
     assert_eq!(codes(source), vec!["NK1168".to_string()]);
@@ -105,7 +105,7 @@ fn a_default_that_owns_memory_is_refused_at_the_default() {
          \x20   return xs.len()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{f()}\")\n\
          }\n";
     assert_eq!(
@@ -117,7 +117,7 @@ fn a_default_that_owns_memory_is_refused_at_the_default() {
 /// D7: a refused default is pointed at, not the body's first statement.
 #[test]
 fn a_refused_default_is_pointed_at() {
-    let source = "fn loud() -> i64 {\n\
+    let source = "fn loud() -> i64 throws {\n\
          \x20   println(\"x\")\n\
          \x20   return 1\n\
          }\n\
@@ -126,7 +126,7 @@ fn a_refused_default_is_pointed_at() {
          \x20   return x + t\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{f(1)}\")\n\
          }\n";
     assert_eq!(
@@ -148,7 +148,7 @@ const A_STRUCT: &str = "struct Point {\n\
      \x20   return f\"{label} {at.x} {at.y}\"\n\
      }\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   println(show(\"p\"))\n\
      \x20   println(show(\"q\"; at: Point { x: 5, y: 6 }))\n\
      }\n";
@@ -191,7 +191,7 @@ fn a_struct_default_with_a_field_that_owns_memory_is_refused() {
          \x20   return b.items.len()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{f()}\")\n\
          }\n";
     assert_eq!(
@@ -222,7 +222,7 @@ fn a_computed_default_reaches_another_package() {
          \n\
          fn main() {\n\
          }\n";
-    let app = "fn main() {\n\
+    let app = "fn main() throws {\n\
          \x20   println(lib::show(\"p\"))\n\
          }\n";
     for (package, source, manifest) in [
@@ -271,7 +271,7 @@ fn a_duration_default_reaches_another_package() {
          \n\
          fn main() {\n\
          }\n";
-    let app = "fn main() {\n\
+    let app = "fn main() throws {\n\
          \x20   println(lib::wait(\"w\"))\n\
          }\n";
     for (package, source, manifest) in [
@@ -319,7 +319,7 @@ fn a_refused_default_offers_an_optional_not_a_let() {
          \x20   return xs.len()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{count(\"a\")}\")\n\
          }\n";
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -350,7 +350,7 @@ fn a_duration_comptime_is_written_as_its_constructor() {
          \n\
          comptime T: time::Duration = 90.seconds()\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{T.in_minutes()} {T.in_seconds()}\")\n\
          }\n";
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -374,7 +374,7 @@ fn a_duration_default_is_recorded() {
          \x20   return f\"{label} {timeout.in_millis()}\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(wait(\"a\"))\n\
          \x20   println(wait(\"b\"; timeout: 2.seconds()))\n\
          }\n";
@@ -406,7 +406,7 @@ fn a_view_of_a_list_takes_a_list_default() {
          \x20   return f\"{label} {xs.len()}\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(total(\"a\"))\n\
          \x20   println(lit(\"b\"))\n\
          \x20   println(total(\"c\"; xs: [10, 20]))\n\
@@ -427,7 +427,7 @@ fn a_text_view_option_lends_an_owned_string() {
          \x20   return f\"{n}{sep}\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let v = \"-\"\n\
          \x20   println(joined(1; sep: v))\n\
          \x20   println(v)\n\

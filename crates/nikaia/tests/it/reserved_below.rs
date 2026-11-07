@@ -108,7 +108,7 @@ fn calls(x: i64) -> i64 {{
     return {word}(x)
 }}
 
-fn main() {{
+fn main() throws {{
     let {word} = 1
     let b = Box {{ {word}: {word} }}
     let total = holds(b.{word}) + calls(2)
@@ -209,7 +209,7 @@ struct Event {
     at: i64,
 }
 
-fn main() {
+fn main() throws {
     let e = Event { type: f"click", at: 7 }
     println(f"{e.type} {e.at}")
 }
@@ -255,35 +255,35 @@ fn every_declaring_position_asks() {
     let positions = [
         (
             "a struct",
-            "struct crate {\n    at: i64,\n}\n\nfn main() {\n    println(\"x\")\n}\n",
+            "struct crate {\n    at: i64,\n}\n\nfn main() throws {\n    println(\"x\")\n}\n",
         ),
         (
             "an enum",
-            "enum crate {\n    One,\n}\n\nfn main() {\n    println(\"x\")\n}\n",
+            "enum crate {\n    One,\n}\n\nfn main() throws {\n    println(\"x\")\n}\n",
         ),
         (
             "a variant",
-            "enum Kind {\n    crate,\n}\n\nfn main() {\n    println(\"x\")\n}\n",
+            "enum Kind {\n    crate,\n}\n\nfn main() throws {\n    println(\"x\")\n}\n",
         ),
         (
             "a function",
-            "fn crate() -> i64 {\n    return 1\n}\n\nfn main() {\n    println(f\"{crate()}\")\n}\n",
+            "fn crate() -> i64 {\n    return 1\n}\n\nfn main() throws {\n    println(f\"{crate()}\")\n}\n",
         ),
         (
             "a field",
-            "struct Row {\n    crate: i64,\n}\n\nfn main() {\n    println(\"x\")\n}\n",
+            "struct Row {\n    crate: i64,\n}\n\nfn main() throws {\n    println(\"x\")\n}\n",
         ),
         (
             "a parameter",
-            "fn takes(crate: i64) -> i64 {\n    return crate\n}\n\nfn main() {\n    println(f\"{takes(1)}\")\n}\n",
+            "fn takes(crate: i64) -> i64 {\n    return crate\n}\n\nfn main() throws {\n    println(f\"{takes(1)}\")\n}\n",
         ),
         (
             "a `let`",
-            "fn main() {\n    let crate = 1\n    println(f\"{crate}\")\n}\n",
+            "fn main() throws {\n    let crate = 1\n    println(f\"{crate}\")\n}\n",
         ),
         (
             "a `for` binding",
-            "fn main() {\n    let mut xs = Vec()\n    xs.push(1)\n    for crate in xs {\n        println(f\"{crate}\")\n    }\n}\n",
+            "fn main() throws {\n    let mut xs = Vec()\n    xs.push(1)\n    for crate in xs {\n        println(f\"{crate}\")\n    }\n}\n",
         ),
     ];
     for (what, source) in positions {

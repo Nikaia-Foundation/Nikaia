@@ -68,7 +68,7 @@ const SHAPES: &str = "struct Point { x: i64, y: i64 }\n\
 #[test]
 fn a_shape_bound_does_not_reach_the_language_below() {
     let rust = lower(&format!(
-        "{SHAPES}\nfn main() {{ println(describe(Point {{ x: 1, y: 2 }})) }}"
+        "{SHAPES}\nfn main() throws {{ println(describe(Point {{ x: 1, y: 2 }})) }}"
     ));
     assert!(rust.contains("fn describe<T>("), "{rust}");
     assert!(!rust.contains("Struct"), "{rust}");
@@ -83,7 +83,7 @@ fn a_shape_bound_does_not_reach_the_language_below() {
 fn an_enum_does_not_answer_for_a_struct_bound() {
     let found = one(&format!(
         "{SHAPES}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   println(describe(Op::Add))\n\
          }}"
     ));
@@ -115,7 +115,7 @@ fn an_enum_does_not_answer_for_a_struct_bound() {
 fn a_type_part_one_offers_does_not_answer_for_a_shape_bound() {
     let source = format!(
         "{SHAPES}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let n: i64 = 7\n\
          \x20   println(describe(n))\n\
          }}"
@@ -134,7 +134,7 @@ fn a_type_part_one_offers_does_not_answer_for_a_shape_bound() {
 fn a_struct_does_not_answer_for_an_enum_bound() {
     let found = one(&format!(
         "{SHAPES}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   println(name_it(Point {{ x: 1, y: 2 }}))\n\
          }}"
     ));
@@ -154,7 +154,7 @@ fn a_struct_does_not_answer_for_an_enum_bound() {
 fn a_type_this_compiler_has_not_classified_is_not_refused() {
     let source = format!(
         "{SHAPES}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   println(describe(xs))\n\
          }}"
@@ -186,7 +186,7 @@ fn a_program_that_declares_the_trait_keeps_it() {
          \x20   return value.label()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(describe(Point { x: 1, y: 2 }))\n\
          }";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -214,14 +214,14 @@ fn a_program_that_declares_the_trait_keeps_it() {
 fn the_shape_the_bound_reaches_is_built() {
     let source = "struct Point { x: i64, y: i64 }\n\
          \n\
-         fn describe[T: Struct](value: T) -> ref String {\n\
+         fn describe[T: Struct](value: T) -> ref String throws {\n\
          \x20   for field in T::fields {\n\
          \x20       println(field.name)\n\
          \x20   }\n\
          \x20   return \"done\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(describe(Point { x: 1, y: 2 }))\n\
          }";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -236,14 +236,14 @@ fn the_shape_the_bound_reaches_is_built() {
 fn the_other_shape_is_refused_by_name() {
     let found = one("struct Point { x: i64 }\n\
          \n\
-         fn tell[T: Struct](value: T) -> ref String {\n\
+         fn tell[T: Struct](value: T) -> ref String throws {\n\
          \x20   for v in T::variants {\n\
          \x20       println(\"x\")\n\
          \x20   }\n\
          \x20   return \"done\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(tell(Point { x: 1 }))\n\
          }");
     assert_eq!(found.code, "NK1171");
@@ -258,14 +258,14 @@ fn the_other_shape_is_refused_by_name() {
 /// note names it rather than warning them off.
 #[test]
 fn the_shape_without_a_bound_names_the_bound() {
-    let found = one("fn plain[T](value: T) -> ref String {\n\
+    let found = one("fn plain[T](value: T) -> ref String throws {\n\
          \x20   for field in T::fields {\n\
          \x20       println(field.name)\n\
          \x20   }\n\
          \x20   return \"done\"\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(plain(7))\n\
          }");
     assert_eq!(found.code, "NK1171");

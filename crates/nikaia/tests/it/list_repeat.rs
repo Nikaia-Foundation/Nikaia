@@ -112,11 +112,11 @@ fn a_count_that_is_not_the_arrays_length_is_refused() {
 /// **And so is a count the build does not know**, named as written.
 #[test]
 fn a_count_the_build_does_not_know_is_refused_for_an_array() {
-    let source = "fn fill(n: i64) {\n\
+    let source = "fn fill(n: i64) throws {\n\
                   \x20   let b: Array[u8, 4] = [0; n]\n\
                   \x20   println(f\"{b[0]}\")\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   fill(4)\n\
                   }\n";
     let found: Vec<_> = findings(source)
@@ -131,12 +131,12 @@ fn a_count_the_build_does_not_know_is_refused_for_an_array() {
 /// **With no use it is a `Vec`**, and its count is any whole number.
 #[test]
 fn with_no_use_it_is_a_vec() {
-    let source = "fn fill(n: i64) {\n\
+    let source = "fn fill(n: i64) throws {\n\
                   \x20   let v = [0; n]\n\
                   \x20   let s: String = v\n\
                   \x20   println(s)\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   fill(4)\n\
                   }\n";
     // A number with no use is open (ADR-285 D34), as in `[0, 1]`; the
@@ -151,7 +151,7 @@ fn with_no_use_it_is_a_vec() {
                 \x20   let first: i64 = v[0]\n\
                 \x20   return first + v.len()\n\
                 }\n\
-                fn main() {\n\
+                fn main() throws {\n\
                 \x20   println(f\"{fill(4)}\")\n\
                 }\n";
     assert!(findings(kept).is_empty(), "{:#?}", findings(kept));
@@ -164,7 +164,7 @@ fn with_no_use_it_is_a_vec() {
                 \x20   let v = [0; n]\n\
                 \x20   return v.len()\n\
                 }\n\
-                fn main() {\n\
+                fn main() throws {\n\
                 \x20   println(f\"{fill(4)}\")\n\
                 }\n";
     assert!(findings(fine).is_empty(), "{:#?}", findings(fine));
@@ -177,7 +177,7 @@ fn a_value_that_does_not_copy_is_refused() {
     let source = "fn names(name: String) -> Vec[String] {\n\
                   \x20   return [name; 3]\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{names(f\"a\").len()}\")\n\
                   }\n";
     let found: Vec<_> = findings(source)
@@ -216,7 +216,7 @@ fn values_that_copy_check() {
                  \x20   x: i64,\n\
                  \x20   y: f64,\n\
                  }\n\
-                 fn main() {\n\
+                 fn main() throws {\n\
                  \x20   let ps = [Point { x: 1, y: 2.0 }; 3]\n\
                  \x20   println(f\"{ps[2].x}\")\n\
                  }\n";
@@ -231,7 +231,7 @@ fn a_program_with_both_runs() {
     let source = "fn fill(n: i64) -> Vec[i64] {\n\
                   \x20   return [7; n]\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let zeros = [0; 181]\n\
                   \x20   let sevens = fill(3)\n\
                   \x20   let buf: Array[u8, 16] = [9; 16]\n\

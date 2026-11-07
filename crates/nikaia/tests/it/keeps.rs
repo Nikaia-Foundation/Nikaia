@@ -182,7 +182,7 @@ fn mutual_recursion_that_only_reads_keeps_nothing() {
 fn a_parameter_a_task_names_is_kept() {
     assert_eq!(
         keeps(
-            "fn start(text: String, n: i64) -> i64 {\n\
+            "fn start(text: String, n: i64) -> i64 throws {\n\
              \x20   let h = spawn fn { println(f\"{text}\") }\n\
              \x20   return n + 1\n\
              }",
@@ -196,7 +196,7 @@ fn a_parameter_a_task_names_is_kept() {
     // goes, so the column never asks `keep` for one (v11, #1213).
     assert_eq!(
         keeps(
-            "fn start(text: String, n: i64) -> i64 {\n\
+            "fn start(text: String, n: i64) -> i64 throws {\n\
              \x20   let h = spawn fn { println(f\"{text}\") }\n\
              \x20   return n\n\
              }",
@@ -634,8 +634,8 @@ fn lowered_and_run(purpose: &str, source: &str) -> Result<String, String> {
 /// and only reads the result through a local.
 const A_VIEW_ONLY_READ: &str = "struct Tag {\n    label: ref String,\n}\n\n\
 fn tag(s: ref String) -> Tag {\n    return Tag { label: s }\n}\n\n\
-fn shout(v: String) {\n    let a = tag(v)\n    println(a.label)\n}\n\n\
-fn main() {\n    let x = f\"x{1}\"\n    shout(x)\n    println(x)\n}\n";
+fn shout(v: String) throws {\n    let a = tag(v)\n    println(a.label)\n}\n\n\
+fn main() throws {\n    let x = f\"x{1}\"\n    shout(x)\n    println(x)\n}\n";
 
 /// **A call whose result points into an argument keeps it only where the
 /// result leaves** (#697, ADR-094 D2): a `Tag` bound to a local that is only

@@ -53,7 +53,7 @@ const SYNC_OVERLAP: &str = "fn twice(n: i64) -> i64 {\n\
                             \x20   return n * 2\n\
                             }\n\
                             \n\
-                            fn main() {\n\
+                            fn main() throws {\n\
                             \x20   let pair = overlap {\n\
                             \x20       twice(3)\n\
                             \x20       twice(4)\n\
@@ -65,7 +65,7 @@ const SYNC_OVERLAP: &str = "fn twice(n: i64) -> i64 {\n\
 const SYNC_SELECT: &str = "fn a() -> i64 { return 1 }\n\
                            fn b() -> i64 { return 2 }\n\
                            \n\
-                           fn main() {\n\
+                           fn main() throws {\n\
                            \x20   select {\n\
                            \x20       x = a() => { println(f\"{x}\") }\n\
                            \x20       y = b() => { println(f\"{y}\") }\n\
@@ -313,7 +313,7 @@ fn the_block_keeps_every_failure_and_the_first_still_wins() {
 fn a_handler_on_the_block_gets_the_blocks_outcome() {
     let source = format!(
         "{OWN_ERROR}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let pair = overlap {{\n\
          \x20       load(\"a\")\n\
          \x20       load(\"b\")\n\
@@ -344,7 +344,7 @@ fn a_handler_on_the_block_gets_the_blocks_outcome() {
 fn a_handler_on_the_block_matches_the_branches_variants() {
     let source = format!(
         "{OWN_ERROR}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let pair = overlap {{\n\
          \x20       load(\"a\")\n\
          \x20       load(\"b\")\n\
@@ -382,7 +382,7 @@ fn rustc_says_nothing_about_the_generated_file() {
         // opened as a block wrapped around the handler.
         format!(
             "{OWN_ERROR}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let got = load(\"a\") catch {{\n\
              \x20       println(f\"caught: {{error}}\")\n\
              \x20       return\n\
@@ -402,7 +402,7 @@ fn rustc_says_nothing_about_the_generated_file() {
          \x20   throw Boom::Now\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let got = always() catch { return }\n\
          \x20   println(f\"{got}\")\n\
          }\n"

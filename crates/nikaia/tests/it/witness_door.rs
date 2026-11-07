@@ -259,7 +259,7 @@ fn an_after_on_a_type_of_the_programs_own_is_an_ordinary_option() {
                   impl Slot {\n\
                   \x20   fn set(ref self, v: i64; after: i64 = 0) -> i64 { return v + after }\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let s = Slot { n: 1 }\n\
                   \x20   println(f\"{s.set(2; after: 3)}\")\n\
                   }\n";

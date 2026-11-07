@@ -81,7 +81,7 @@ struct Noted {
 }
 
 impl Cleanup for Noted {
-    fn cleanup(ref mut self) {
+    fn cleanup(ref mut self) throws {
         println(f"cleanup {self.name}")
     }
 }
@@ -162,7 +162,7 @@ fn f() -> i64 throws {
     return 1
 }
 
-fn main() {
+fn main() throws {
     let v = f() catch {
         match error {
             process::Exit::Code(c) => c + 10
@@ -422,7 +422,7 @@ fn f() -> i64 throws {
     return 1
 }
 
-fn main() {
+fn main() throws {
     let m = Meters(5)
     let p = Pos { x: 1, y: 2 }
     let d = Done
@@ -467,7 +467,7 @@ fn a_short_exit_ends_main_with_its_code() {
 fn several_variants_refuse_the_short_form() {
     for source in [
         "enum Shape { Circle(i64), Square(i64) }\nfn main() {\n    let s = Shape(1)\n}\n",
-        "enum Shape { Circle(i64), Square(i64) }\nfn main() {\n    let s = Shape::Circle(1)\n    let n = match s { Shape(r) => r, else => 0 }\n    println(f\"{n}\")\n}\n",
+        "enum Shape { Circle(i64), Square(i64) }\nfn main() throws {\n    let s = Shape::Circle(1)\n    let n = match s { Shape(r) => r, else => 0 }\n    println(f\"{n}\")\n}\n",
     ] {
         let refused = match parse_to_ast(source) {
             Ok(_) => panic!("the short form of two variants parses"),
@@ -631,7 +631,7 @@ struct Noted {
 }
 
 impl Cleanup for Noted {
-    fn cleanup(ref mut self) {
+    fn cleanup(ref mut self) throws {
         println(f"cleanup {self.name}")
     }
 }
@@ -652,12 +652,12 @@ const LEFT_TO_THE_OS_PLAIN: &str = r#"struct Noted {
 }
 
 impl Cleanup for Noted {
-    fn cleanup(ref mut self) {
+    fn cleanup(ref mut self) throws {
         println(f"cleanup {self.name}")
     }
 }
 
-fn main() {
+fn main() throws {
     let held = Noted { name: f"plain" }
     let mut many: Vec[String] = []
     for i in 0..1000 {

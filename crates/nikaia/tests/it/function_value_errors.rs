@@ -29,7 +29,7 @@ const JOB: &str = "enum Bad { Oops }\n\
                    fn fail() throws {\n\
                    \x20   throw Bad::Oops\n\
                    }\n\
-                   fn quiet() {\n\
+                   fn quiet() throws {\n\
                    \x20   print(\"fine\")\n\
                    }\n";
 
@@ -38,7 +38,7 @@ const JOB: &str = "enum Bad { Oops }\n\
 #[test]
 fn a_call_through_a_field_fails_with_what_was_stored() {
     let source = format!(
-        "{JOB}fn main() {{\n\
+        "{JOB}fn main() throws {{\n\
          \x20   let job = Job {{ run: fail }}\n\
          \x20   job.run() catch {{\n\
          \x20       match error {{\n\
@@ -74,7 +74,7 @@ fn an_uncaught_call_through_the_field_needs_throws() {
 #[test]
 fn the_kept_arm_lowers_without_an_else() {
     let source = format!(
-        "{JOB}fn main() {{\n\
+        "{JOB}fn main() throws {{\n\
          \x20   let job = Job {{ run: fail }}\n\
          \x20   job.run() catch {{\n\
          \x20       match error {{\n\
@@ -96,7 +96,7 @@ fn the_kept_arm_lowers_without_an_else() {
 #[test]
 fn a_catch_over_a_field_nothing_failing_reaches_is_nk1134() {
     let source = format!(
-        "{JOB}fn main() {{\n\
+        "{JOB}fn main() throws {{\n\
          \x20   let job = Job {{ run: quiet }}\n\
          \x20   job.run() catch {{ print(\"never\") }}\n\
          }}\n"
@@ -110,7 +110,7 @@ fn a_catch_over_a_field_nothing_failing_reaches_is_nk1134() {
 #[test]
 fn a_call_through_a_variable_fails_with_what_it_was_given() {
     let source = format!(
-        "{JOB}fn main() {{\n\
+        "{JOB}fn main() throws {{\n\
          \x20   let run = fail\n\
          \x20   run() catch {{\n\
          \x20       match error {{\n\
@@ -135,7 +135,7 @@ fn a_list_of_functions_fails_with_the_union() {
          fn worse() throws {{\n\
          \x20   throw Worse::Boom\n\
          }}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let all: Vec[fn() throws] = [fail, worse]\n\
          \x20   for run in all {{\n\
          \x20       run() catch {{\n\
@@ -155,14 +155,14 @@ fn a_list_of_functions_fails_with_the_union() {
 #[test]
 fn a_parameter_fails_with_what_its_callers_hand_it() {
     let source = format!(
-        "{JOB}fn guard(run: fn() throws) {{\n\
+        "{JOB}fn guard(run: fn() throws) throws {{\n\
          \x20   run() catch {{\n\
          \x20       match error {{\n\
          \x20           Bad::Oops => print(\"oops\")\n\
          \x20       }}\n\
          \x20   }}\n\
          }}\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   guard(fail)\n\
          \x20   guard(quiet)\n\
          }}\n"
@@ -175,7 +175,7 @@ fn a_parameter_fails_with_what_its_callers_hand_it() {
 #[test]
 fn a_list_of_quiet_functions_is_nk1134() {
     let source = format!(
-        "{JOB}fn main() {{\n\
+        "{JOB}fn main() throws {{\n\
          \x20   let all: Vec[fn() throws] = [quiet, quiet]\n\
          \x20   for run in all {{\n\
          \x20       run() catch {{ print(\"never\") }}\n\
@@ -190,7 +190,7 @@ fn a_list_of_quiet_functions_is_nk1134() {
 #[test]
 fn a_catch_over_a_variable_nothing_failing_reaches_is_nk1134() {
     let source = format!(
-        "{JOB}fn main() {{\n\
+        "{JOB}fn main() throws {{\n\
          \x20   let run: fn() throws = quiet\n\
          \x20   run() catch {{ print(\"never\") }}\n\
          }}\n"

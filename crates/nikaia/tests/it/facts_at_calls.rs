@@ -85,7 +85,7 @@ impl Table {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut slots: Vec[Slot] = []
     slots.resize(16384, Slot { key: 0, count: 0 })
     let mut t = Table { slots: slots }
@@ -118,7 +118,7 @@ fn a_sign_mask_and_its_xor_stay_inside_their_type() {
     return (abs ^ s) - s
 }
 
-fn main() {
+fn main() throws {
     println(f\"{tenths(0, 5)} {tenths(16, 5)}\")
 }
 ";
@@ -161,7 +161,7 @@ impl T {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut t = T { n: 1 }
     println(f\"{t.sum([1, 2, 3])}\")
 }
@@ -208,7 +208,7 @@ impl T {
     }
 }
 
-fn main() {
+fn main() throws {
     let t = T { n: 0 }
     let b = Bytes([97, 59, 98, 98, 59])
     if b.len() > 20 {
@@ -236,7 +236,7 @@ fn bytes_compare_with_a_cut_of_bytes() {
     let dir = common::scratch_dir("facts-at-calls-bytes-cut");
     std::fs::write(
         dir.join("main.nika"),
-        "fn main() {
+        "fn main() throws {
     let a = Bytes([1, 2, 3])
     let b = Bytes([0, 1, 2, 3, 4])
     println(f\"{a == b[1..<4]} {b[1..<4] == a} {a == b[0..<3]}\")

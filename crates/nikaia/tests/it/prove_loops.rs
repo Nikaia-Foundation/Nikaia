@@ -35,7 +35,7 @@ fn at_run_time(h: &Held) -> bool {
 /// ADR-361 §1, the owner's program: both claims about `b` are proved.
 #[test]
 fn the_owners_program_is_proved_through_its_loop() {
-    let source = "fn main(a: int) {\n\
+    let source = "fn main(a: int) throws {\n\
                   \x20   assert(a > 0)\n\
                   \x20   assert(a <= 10)\n\
                   \x20   let mut i = 0\n\
@@ -280,7 +280,7 @@ fn a_claim_a_for_makes_false_is_not_proved() {
 }
 
 /// A package whose one claim is proved through its loop.
-const LOOPED: &str = "fn main() {\n\
+const LOOPED: &str = "fn main() throws {\n\
                       \x20   let mut total = 0\n\
                       \x20   for i in 0..<10 {\n\
                       \x20       total = total + 2\n\

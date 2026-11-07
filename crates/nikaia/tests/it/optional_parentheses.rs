@@ -110,7 +110,7 @@ fn the_call_still_needs_its_parentheses() {
          \x20   println(\"init\")\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   init\n\
          \x20   println(\"main\")\n\
          }\n",
@@ -136,7 +136,7 @@ fn pub_functions_and_methods_take_it_too() {
          \n\
          fn answer -> i64 sync { 42 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   hello()\n\
          \x20   let c = Counter::start()\n\
          \x20   println(f\"{answer()} {c.n}\")\n\
@@ -170,7 +170,7 @@ fn a_trait_signature_takes_it_too() {
 fn lambdas_and_the_constructor_are_untouched() {
     runs(
         "lambda",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let f: fn() = fn { println(\"lambda\") }\n\
          \x20   f()\n\
          }\n",

@@ -28,7 +28,7 @@ fn run(name: &str, source: &str) -> String {
 fn and_modify_on_a_map_of_numbers_changes_the_number() {
     let source = r#"use std::collections
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
     let k = f"a"
     m.entry(k.clone()).and_modify(fn(v) { v += 1 }).or_insert(1)
@@ -52,7 +52,7 @@ fn main() {
 fn a_literal_key_for_entry_is_built_into_text() {
     let source = r#"use std::collections
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
     m.insert("a", 1)
     m.entry("d").and_modify(fn(v) { v += 1 }).or_insert(1)

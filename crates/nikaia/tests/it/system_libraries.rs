@@ -10,7 +10,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 const PROGRAM: &str = "extern(library: \"LIB\") {\n    fn abs(n: i32) -> i32\n}\n\n\
-     fn main() {\n    println(f\"{unsafe { abs(-3) }}\")\n}\n";
+     fn main() throws {\n    println(f\"{unsafe { abs(-3) }}\")\n}\n";
 
 /// A project of one program, with `entries` as its `[library]` tables.
 fn project(purpose: &str, library: &str, entries: &str) -> std::path::PathBuf {
@@ -194,7 +194,7 @@ fn a_program_links_what_its_package_names() {
     .expect("a manifest");
     std::fs::write(
         program.join("src/main.nika"),
-        "use cmath\n\nfn main() {\n    println(f\"{cmath::positive(-3)}\")\n}\n",
+        "use cmath\n\nfn main() throws {\n    println(f\"{cmath::positive(-3)}\")\n}\n",
     )
     .expect("a source");
     let out = build(&program, Some(&pc));

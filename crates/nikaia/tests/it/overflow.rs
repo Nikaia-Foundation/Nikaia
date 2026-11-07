@@ -48,7 +48,7 @@ fn add(a: i32, b: i32) -> i32 {
     return a + b
 }
 
-fn main() {
+fn main() throws {
     println(f\"{add(2147483647, 1)}\")
 }
 ";
@@ -244,7 +244,7 @@ fn the_same_arithmetic_with_an_operator_aborts() {
              return seed * 31 + c\n\
          }\n\
          \n\
-         fn main() {\n    \
+         fn main() throws {\n    \
              println(f\"{hash(2147483647, 7)}\")\n\
          }\n",
     );
@@ -283,7 +283,7 @@ fn shrink(big: i64) -> i32 {
     return big as i32
 }
 
-fn main() {
+fn main() throws {
     println(f\"{shrink(5000000000)}\")
 }
 ";
@@ -295,7 +295,7 @@ fn floored(x: f64) -> i32 {
     return x as i32
 }
 
-fn main() {
+fn main() throws {
     println(f\"{floored(1e20)}\")
 }
 ";
@@ -403,7 +403,7 @@ fn truncating_says_by_name_what_a_conversion_no_longer_does_quietly() {
              return n as f64\n\
          }\n\
          \n\
-         fn main() {\n    \
+         fn main() throws {\n    \
              println(f\"{shrink(5000000000)} {floored(1e20)} {counted(\"hello\")} {widened(7)} {imprecise(9007199254740993)}\")\n\
          }\n",
     );
@@ -466,7 +466,7 @@ fn a_length_is_an_i64_and_the_conversions_are_emitted() {
     let dir = common::scratch_dir("length-i64");
     let rust = lower(
         &dir,
-        "fn main() {\n    \
+        "fn main() throws {\n    \
              let mut xs = Vec()\n    \
              xs.push(10)\n    \
              xs.push(20)\n    \
@@ -507,7 +507,7 @@ fn a_negative_index_aborts_as_an_access_out_of_bounds() {
     let dir = common::scratch_dir("negative-index");
     let _ = lower(
         &dir,
-        "fn main() {\n    \
+        "fn main() throws {\n    \
              let mut xs = Vec()\n    \
              xs.push(1)\n    \
              let pos = 0\n    \
@@ -557,7 +557,7 @@ fn a_count_is_written_as_an_i64_and_the_conversion_is_emitted() {
     let dir = common::scratch_dir("count-parameter");
     let rust = lower(
         &dir,
-        "fn main() {\n    \
+        "fn main() throws {\n    \
              let indent: i64 = 2\n    \
              let pad = \"  \".repeat(indent)\n    \
              let rule = \"-\".repeat(3)\n    \
@@ -588,7 +588,7 @@ fn a_negative_count_says_what_it_is_rather_than_wrapping() {
     let dir = common::scratch_dir("negative-count");
     let rust = lower(
         &dir,
-        "fn main() {\n    \
+        "fn main() throws {\n    \
              let n: i64 = 0 - 1\n    \
              println(\"x\".repeat(n))\n\
          }\n",
@@ -650,7 +650,7 @@ fn checked_names_answer_null_where_the_operator_would_abort() {
              return (n - 1).checked_i64() ?? -1\n\
          }\n\
          \n\
-         fn main() {\n    \
+         fn main() throws {\n    \
              println(f\"{sum(2147483647, 1) ?? -1} {sum(1, 2) ?? -1} {half(7, 0) ?? 0} {half(7, 2) ?? 0}\")\n    \
              println(f\"{small(5000000000) ?? -1} {small(-5) ?? 0} {count(18446744073709551615)} {count(4)}\")\n    \
              let m: i64 = -9223372036854775807 - 1\n    \
@@ -714,7 +714,7 @@ fn a_named_method_on_a_written_number_takes_the_type_its_use_asks() {
         "fn f() -> i32 {\n    return (-7).wrapping_add(2)\n}\n\
          fn g() -> i64 {\n    return 7.wrapping_mul(3)\n}\n\
          fn h(n: u64) -> u64 {\n    return n + 1\n}\n\
-         fn main() {\n    \
+         fn main() throws {\n    \
              let x: i64 = 7.wrapping_add(1)\n    \
              println(f\"{f()} {g()} {x} {h(5.saturating_add(1))} {7.checked_mul(3) ?? 0}\")\n\
          }\n",
@@ -736,7 +736,7 @@ fn both(big: i64, small: u8) -> i32 {
     return (big as i32) + (small as i32)
 }
 
-fn main() {
+fn main() throws {
     println(f\"{both(5000000000, 1)}\")
 }
 ";

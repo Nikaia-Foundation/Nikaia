@@ -7,7 +7,7 @@ use std::process::Command;
 fn run(purpose: &str, call: &str, extra: &str) -> String {
     let source = format!(
         "struct Alt {{\n    action: String?,\n}}\n\nstruct Rule {{\n    alts: Vec[Alt],\n}}\n\n{extra}\n\
-         fn main() {{\n    let r = Rule {{ alts: [Alt {{ action: \"go\" }}] }}\n    print({call})\n}}\n"
+         fn main() throws {{\n    let r = Rule {{ alts: [Alt {{ action: \"go\" }}] }}\n    print({call})\n}}\n"
     );
     let dir = crate::common::scratch_dir(&format!("match-element-{purpose}"));
     std::fs::write(dir.join("program.nika"), source).expect("write the source");

@@ -37,7 +37,7 @@ const APP: &str = "use lib\n\
                    \x20   return lib::percent(a, b)\n\
                    }\n\
                    \n\
-                   fn main() {\n\
+                   fn main() throws {\n\
                    \x20   let c = lib::clamp(0 - 3)\n\
                    \x20   assert(c >= 0)\n\
                    \x20   let total = 4\n\
