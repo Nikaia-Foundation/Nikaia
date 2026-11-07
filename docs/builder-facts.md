@@ -81,4 +81,8 @@ together with the specification section and an example test.
 * `cargo test -p nikaia-std --lib emit_core_args::` matches no test, because lowered modules have no unit tests; skip it for a `tools/*.nika` change. (issue-1290)
 * Typing a path expression `T::X` (variant, method value, `T::fields`, integer limits) is in `check_core_expr_path` in `tools/check_core_expr.nika`. (issue-1294)
 * Nikaia's integer types are only `int`, `i32`, `i64`, `u8`, `u32` and `u64` (Part I 2.2); `integer_named` in `check_names.nika` tests for the fixed widths, and `int` is rewritten to `i64` only in emitted types (`emit_core_types.nika`), not in paths. (issue-1294)
+* A lifetime or borrow probe needs a non-`Copy` element type (give the struct a `String` field), or the emitter copies the element and the defect does not show. (issue-1228)
+* The cycle's first `lower-std` with `$S/old/nikaia` can fail on files nobody changed; the new binary's `lower-std` is the one that counts, and that failure goes in the report. (issue-1228)
+* A `from` fix for text must also be probed with a struct type: the trait lowers only text `from` as a view, so a fix in `keeps.nika` breaks the struct case. (issue-1250)
+* A text `+` is a `Binary` node that the emitter recognises by `facts.concatenations.contains(span.start as i64)`, using the operator span, not `node_key`. (issue-1251)
 
