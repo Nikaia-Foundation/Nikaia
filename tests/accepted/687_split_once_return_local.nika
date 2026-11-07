@@ -13,7 +13,7 @@ fn count(s: String) -> String {
     return f"all {v.len()} {m.len()}"
 }
 
-fn main() {
+fn main() throws {
     println(count(f"x=1 y=2 z x=3"))
     println(count(f"x=1 y=2"))
 }

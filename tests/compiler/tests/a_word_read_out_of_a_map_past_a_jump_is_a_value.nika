@@ -15,7 +15,7 @@ fn same(b: ref collections::BTreeMap[String, Tier], word: ref String) -> String 
     let other = b[word] ?? return "none"
     return tier_word(other)
 }
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Tier] = collections::BTreeMap()
     m["x"] = Tier::High
     println(f"{same(m, "x")} {same(m, "y")}")

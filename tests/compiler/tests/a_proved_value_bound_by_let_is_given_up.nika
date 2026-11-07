@@ -51,7 +51,7 @@ fn copied(n: i64) -> String {
     f"{s} {b ?? "-"}"
 }
 
-fn main() {
+fn main() throws {
     for n in [3, 0] {
         println(declared(n))
         println(inferred(n))

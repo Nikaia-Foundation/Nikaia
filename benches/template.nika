@@ -29,7 +29,7 @@ fn table(rows: Vec[Row]) -> String {
     } eod
 }
 
-fn main() {
+fn main() throws {
     let count = cli::args().nth(1) ?? "2000"
     let n = text::parse_i32(count) ?? 2000
 

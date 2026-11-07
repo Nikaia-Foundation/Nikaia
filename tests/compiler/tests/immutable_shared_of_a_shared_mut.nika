@@ -3,7 +3,7 @@
 
 struct Counter { hits: SharedMut[i64] }
 
-fn main() {
+fn main() throws {
 	immutable s = Shared(Counter { hits: SharedMut(1) })
 	println("bound")
 }

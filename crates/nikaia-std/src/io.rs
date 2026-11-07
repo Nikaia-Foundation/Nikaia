@@ -165,6 +165,54 @@ impl std::fmt::Display for IoError {
 
 impl std::error::Error for IoError {}
 
+/// **`println`, `print`, `eprintln` and `eprint`**
+/// ([ADR-392](../../../docs/specification/adr/adr-392.md)): a failed write to
+/// standard output or standard error is an [`IoError`], never a panic (Rust's
+/// `println!` panics on a closed pipe). The program's text arrives as
+/// `format_args!`, which the emitter writes from the call's argument.
+pub fn println(args: std::fmt::Arguments<'_>) -> Result<(), IoError> {
+    written(std::io::stdout().lock(), args, true, STDOUT)
+}
+
+/// [`println`] without the line end.
+pub fn print(args: std::fmt::Arguments<'_>) -> Result<(), IoError> {
+    written(std::io::stdout().lock(), args, false, STDOUT)
+}
+
+/// [`println`] to standard error.
+pub fn eprintln(args: std::fmt::Arguments<'_>) -> Result<(), IoError> {
+    written(std::io::stderr().lock(), args, true, STDERR)
+}
+
+/// [`print`] to standard error.
+pub fn eprint(args: std::fmt::Arguments<'_>) -> Result<(), IoError> {
+    written(std::io::stderr().lock(), args, false, STDERR)
+}
+
+const STDOUT: &str = "standard output";
+const STDERR: &str = "standard error";
+
+/// One print: the text, then the line end where asked, under one lock, so two
+/// tasks' lines do not interleave.
+fn written(
+    mut to: impl std::io::Write,
+    args: std::fmt::Arguments<'_>,
+    newline: bool,
+    what: &str,
+) -> Result<(), IoError> {
+    let wrote = match newline {
+        true => to.write_fmt(format_args!("{args}\n")),
+        false => to.write_fmt(args),
+    };
+    wrote.map_err(|error| print_error(error, what))
+}
+
+/// A failed write's error: the stream's name and what the operating system
+/// said, `standard output: Broken pipe (os error 32)`.
+pub(crate) fn print_error(error: std::io::Error, what: &str) -> IoError {
+    IoError::Other(format!("{what}: {error}"))
+}
+
 /// All of standard input, as text.
 ///
 /// UTF-8 validated, for the reason `fs::read_to_string` validates: a parser

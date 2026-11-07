@@ -2,7 +2,7 @@
 // help says: a number among the parts is read as the number and text as a
 // view, through `filter`, `map` and the chains between; a tuple the walk made
 // is the lambda's own, and so are its parts.
-fn main() {
+fn main() throws {
     let pairs: Vec[(String, i64)] = [("a", 1), ("b", 2)]
     let n = pairs.iter().filter(fn(pair) {
         let (name, v) = pair

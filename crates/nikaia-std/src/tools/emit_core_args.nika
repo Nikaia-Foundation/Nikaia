@@ -2012,8 +2012,18 @@ impl EmitState {
 
     /// `println(..)` and its three: a file's name is written as its bytes
     /// (ADR-319 D4), an `f".."` is a format string, a plain string has its braces
-    /// escaped (ADR-309 D4), anything else goes through `{}`.
+    /// escaped (ADR-309 D4), anything else goes through `{}`. **A failed write
+    /// is an `io::IoError`** (ADR-392): each is `std`'s fallible writer, given
+    /// `format_args!`, and its failure leaves as any call's does: `emit_call`
+    /// writes the `?` where the function can throw and the call is not the
+    /// guarded half of a `catch`.
     fn emit_call_print[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, text: ref String, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **What the ledger says decides it**: an entry that cannot fail (a
+        // ledger before ADR-392) is Rust's macro, as it was.
+        let fails = call_fails_state(world.library, text) == 2
+        // The `?` is the caller's (`emit_call`), as for any call that can fail.
+        let callee = if fails { f"nikaia_std::io::{text}(format_args!" } else { f"{text}!" }
+        let ending = if fails { ")" } else { "" }
         if args.len() == 1 {
             let given = args[0]
             let key = node_key(given)
@@ -2027,25 +2037,28 @@ impl EmitState {
                     else => self.emit_expr(world, walk, out, host, given, depth, flow, scope),
                 }
                 out.push(f"), {to_err}, {newline})")
+                if !fails {
+                    out.push(".unwrap_or(())")
+                }
                 return
             }
             match given {
                 Expr::LitInterpolated { parts, .. } => {
-                    out.push(f"{text}!(")
+                    out.push(f"{callee}(")
                     self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)
-                    out.push(")")
+                    out.push(f"){ending}")
                     return
                 },
                 Expr::LitStr { text: literal, .. } => {
-                    out.push(f"{text}!(\"{rust_format_escape(literal)}\")")
+                    out.push(f"{callee}(\"{rust_format_escape(literal)}\"){ending}")
                     return
                 },
                 else => {},
             }
         }
-        out.push(f"{text}!(\"{{}}\", ")
+        out.push(f"{callee}(\"{{}}\", ")
         self.emit_core_args(world, walk, out, host, text, args, [], depth, flow, scope)
-        out.push(")")
+        out.push(f"){ending}")
     }
 
     /// A call by a path: the same constructor written with its module in front

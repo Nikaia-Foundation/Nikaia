@@ -58,7 +58,7 @@ user-parallelism = "no"    # the default; "yes" for the multi-threaded runtime
 
 ```nika
 // src/main.nika
-fn main() {
+fn main() throws {
     println("Hello, Nikaia!")
 }
 ```

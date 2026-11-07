@@ -119,7 +119,7 @@ fn walked_chars(text: String) -> i64 sync {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, 5, -2]
 	println(f"{every(xs)} {some(xs)} {same(xs)} {ranged(5)}")
 	println(f"{unbounded_start(xs, 1)} {small(xs)} {reset(xs)} {inner(xs)} {doubled(xs)} {small_ranged(3)}")

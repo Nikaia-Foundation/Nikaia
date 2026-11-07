@@ -34,11 +34,11 @@ pub trait CliTestHost {
 #[allow(clippy::too_many_arguments)]
 pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_parallelism: &str, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, stderr: bool, filters: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
     if !blocks && !outputs && !own && !filters.is_empty() {
-        println!("no tests: no test's name holds any of the `--filter` texts {}", filters.join(", "));
+        nikaia_std::io::println(format_args!("no tests: no test's name holds any of the `--filter` texts {}", filters.join(", ")))?;
         return Ok(1);
     }
     if !blocks && !outputs && !own {
-        println!("no tests: nothing in this package is a `test \"…\" {{ … }}` block, and `tests/` holds no `NAME.stdout` and no `NAME.out/`");
+        nikaia_std::io::println(format_args!("no tests: nothing in this package is a `test \"…\" {{ … }}` block, and `tests/` holds no `NAME.stdout` and no `NAME.out/`"))?;
         return Ok(0);
     }
     let settings: Vec<String> = match both_settings {

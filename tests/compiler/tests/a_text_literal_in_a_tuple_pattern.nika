@@ -21,7 +21,7 @@ fn nested(a: String, n: i64, m: i64) -> String {
     return match ((a, n), m) { (("out", 1), 2) => "deep", ((_, _), _) => "flat" }
 }
 
-fn main() {
+fn main() throws {
     println(k1("out", 1))
     println(k1("in", 1))
     println(k1(null, 1))

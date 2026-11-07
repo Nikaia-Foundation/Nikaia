@@ -24,7 +24,7 @@ fn mk(v: String) -> Tag {
     return tag(v)
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { items: [] }
     let x = f"x{1}"
     println(x)

@@ -8,7 +8,7 @@ fn early(b: ref Box) -> i64 {
     return b.count + 1
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { name: "box", count: 2, inner: Inner { x: 7, tag: "t" } }
     // `&&`
     if b.name != null && b.name.len() == 3 {

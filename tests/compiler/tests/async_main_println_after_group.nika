@@ -1,5 +1,5 @@
 // A main-line println after the group's end runs after its task (Part I 8.1.2, #1259).
-fn main() {
+fn main() throws {
 	async {
 		async fn { println("x") }
 		async fn { 1 + 1 }

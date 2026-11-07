@@ -29,7 +29,7 @@ fn copied(n: i64) -> String {
     return made(n).to_string()
 }
 
-fn main() {
+fn main() throws {
     let mut parts: Vec[String] = []
     parts.push(f" a{1} ")
     let doc = Doc { parts: parts }

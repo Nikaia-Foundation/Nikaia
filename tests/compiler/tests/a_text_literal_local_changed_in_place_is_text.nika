@@ -21,7 +21,7 @@ pub fn modules_probe_a() -> String {
     return out
 }
 
-fn main() {
+fn main() throws {
     println(modules_probe_a())
     println(maybe(true) ?? "no")
     println(join_a(null))

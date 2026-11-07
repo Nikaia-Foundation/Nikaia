@@ -40,7 +40,7 @@ fn variant_at_the_field(v: H) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(len(F { name: "abc", n: 1 }))
     println(len(F { name: null, n: 1 }))
     println(renamed(F { name: "abcd", n: 1 }))

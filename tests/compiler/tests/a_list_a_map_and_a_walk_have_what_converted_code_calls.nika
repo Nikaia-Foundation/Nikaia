@@ -23,7 +23,7 @@ fn named_in_an_arm(params: ref Vec[(String, i64)], index: i64) -> bool {
     return (match params.get(index) { (name, n) => n > 0 && name.len() > 1, null => false })
 }
 
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [10, 20, 30]
     println(f"{xs.get(1) ?? -1} {xs.get(5) ?? -1}")
     let names: Vec[String] = ["a", "b", "c"]

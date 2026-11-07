@@ -4,7 +4,7 @@ fn size(names: ref Vec[String], total: i64) -> i64 {
 	return names.len() as i64 + total
 }
 
-fn main() {
+fn main() throws {
 	let total = 2
 	let names: Vec[String] = ["a", "b"]
 	let sum = async size(names, total) + async size(names, total * 2)

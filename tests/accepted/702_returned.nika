@@ -25,7 +25,7 @@ fn make(n: i64) -> Tag {
     return tag(v)
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { items: [] }
     b.items.push(make(1))
     b.items.push(make(2))

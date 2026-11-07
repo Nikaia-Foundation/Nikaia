@@ -7,7 +7,7 @@ fn tidy(mut xs: Array[Point]) {
     xs.sort()
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[Point] = [Point { x: 2 }, Point { x: 1 }]
     v.sort()
     tidy(v)

@@ -15,10 +15,10 @@ fn fail() throws {
 fn worse() throws {
     throw Boom::Bang
 }
-fn quiet() {
+fn quiet() throws {
     println("quiet")
 }
-fn main() {
+fn main() throws {
     let job = Job { run: fail, name: "first" }
     let other = job with { run: worse }
     other.run() catch {

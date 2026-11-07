@@ -9,14 +9,14 @@ fn apply(f: fn(s: String) -> i64, s: String) -> i64 {
     return f(s)
 }
 
-fn twice(f: fn(s: String) -> i64) -> i64 {
+fn twice(f: fn(s: String) -> i64) -> i64 throws {
     let g: String = "hey ".trim().to_string()
     let n = f(g)
     println(g)
     return n + f(g)
 }
 
-fn main() {
+fn main() throws {
     let g = "hi ".trim().to_string()
     let f: fn(s: String) -> i64 sync = fn(s) { s.len() }
     println(f(g))

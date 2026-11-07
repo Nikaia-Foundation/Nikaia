@@ -20,7 +20,7 @@ fn keep(v: String, mut b: Box) {
     put(tag(v), b)
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { items: [] }
     keep(f"x{1}", b)
     println(f"{b.items.len()} {b.items[0].label}")

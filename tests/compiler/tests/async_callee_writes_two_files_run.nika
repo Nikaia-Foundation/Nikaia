@@ -12,7 +12,7 @@ fn put_b(text: String) {
 	fs::write("b.txt", fs::Root::Anywhere, text) catch { }
 }
 
-fn main() {
+fn main() throws {
 	if cli::args().len() > 99 {
 		async {
 			async put_a("a")

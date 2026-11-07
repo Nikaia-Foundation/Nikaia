@@ -24,7 +24,7 @@ fn tail_returned(head: String) -> String {
     return st.trim()
 }
 
-fn main() {
+fn main() throws {
     println(f"[{tail("  x  ")}]")
     println(tail_untyped("  x  "))
     println(tail_returned("  x  "))

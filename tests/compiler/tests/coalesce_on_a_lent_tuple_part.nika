@@ -22,7 +22,7 @@ fn field(s: Named) -> String { s.name ?? ".." }
 
 fn made(t: String) -> Named { Named { name: t, n: 1 } }
 
-fn main() {
+fn main() throws {
     println(first(("xy", 1)))
     println(first((null, 2)))
     println(bound((f"a{1}", 1)))

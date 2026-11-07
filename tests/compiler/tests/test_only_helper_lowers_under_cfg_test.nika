@@ -17,7 +17,7 @@ fn root() -> String throws {
 
 // Prints the line before the first `fn NAME(` of the file, `plain` when
 // that line is blank.
-fn show(file: String, text: String, name: String) {
+fn show(file: String, text: String, name: String) throws {
     let mut previous = ""
     for line in text.lines() {
         if line.contains(f" fn {name}(") || line.starts_with(f"fn {name}(") {

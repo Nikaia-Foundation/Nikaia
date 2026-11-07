@@ -12,7 +12,7 @@ fn names() -> Names {
     return Names { all: [GREETING] }
 }
 
-fn main() {
+fn main() throws {
     let first = names()
     println(f"{first.all.len()} {first.all[0]}")
     let mixed: Vec[String] = [GREETING, "there"]

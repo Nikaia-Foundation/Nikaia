@@ -14,7 +14,7 @@ fn bump_get(mut s: collections::BTreeMap[String, String]) {
     sg += "?"
 }
 
-fn main() {
+fn main() throws {
     let mut s: collections::BTreeMap[String, String] = collections::BTreeMap()
     s.insert("a", "p")
     s.insert("b", "q")

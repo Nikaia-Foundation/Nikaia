@@ -15,7 +15,7 @@ fn same(v: String, w: String) -> bool {
     return a.label == b.label
 }
 
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     let y = f"y{2}"
     println(f"{same(x, x)} {same(x, y)} {x} {y}")

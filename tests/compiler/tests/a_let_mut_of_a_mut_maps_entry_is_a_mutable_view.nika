@@ -13,7 +13,7 @@ fn add(mut m: collections::HashMap[String, Entry], keys: ref Vec[String]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, Entry] = collections::HashMap()
     m["a"] = Entry { names: [] }
     add(m, ["a", "missing"])

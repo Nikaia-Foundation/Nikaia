@@ -4,13 +4,13 @@
 
 use std::time
 
-fn slow() -> i64 {
+fn slow() -> i64 throws {
 	time::sleep(200.millis())
 	println("not reached: the task was cancelled")
 	return 7
 }
 
-fn main() {
+fn main() throws {
 	let h = async(detached) fn { slow() }
 	let v = h.join(within: 10.millis(), on_timeout: task::OnTimeout::Cancel) catch {
 		match error {

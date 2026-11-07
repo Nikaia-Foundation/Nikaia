@@ -12,7 +12,7 @@ fn unanswered(names: Vec[String], ledger: ref Ledger, word: String) -> Vec[Strin
 	}).collect()
 }
 
-fn main() {
+fn main() throws {
 	let mut ledger = Ledger { functions: collections::BTreeMap() }
 	ledger.functions.insert(f"c::{"a"}", 1)
 	let names: Vec[String] = ["a", "b"]

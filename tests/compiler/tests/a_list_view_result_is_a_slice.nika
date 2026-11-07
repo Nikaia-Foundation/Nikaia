@@ -19,7 +19,7 @@ fn apply(g: fn(ref Vec[i64]) -> ref Vec[i64], v: ref Vec[i64]) -> i64 {
 	return g(v).len()
 }
 
-fn main() {
+fn main() throws {
 	let v = [1, 2]
 	println(f"{f(v).len()}")
 	let w = [P::Seq([P::Leaf(1), P::Leaf(2)])]

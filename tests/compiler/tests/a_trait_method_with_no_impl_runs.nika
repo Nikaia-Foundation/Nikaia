@@ -7,7 +7,7 @@ trait H {
 fn look[T: H](host: ref T, names: ref collections::BTreeMap[String, i64]) -> i64 {
     return host.ask(fn(n) { names.get(n) }) ?? 0
 }
-fn main() {
+fn main() throws {
     let mut names: collections::BTreeMap[String, i64] = collections::BTreeMap()
     names.insert("a", 4)
     println(names.len())

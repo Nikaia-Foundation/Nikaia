@@ -14,7 +14,7 @@ fn parse(t: String) -> String {
     return t.trim()
 }
 
-fn main() {
+fn main() throws {
     let text = f"a {1}"
     let v = parse(text)
     let mut c = Cursor { input: text, pos: 0 }

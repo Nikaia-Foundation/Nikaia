@@ -18,7 +18,7 @@ fn either(ask: Ask, name: String) -> i64 {
     return found
 }
 
-fn main() {
+fn main() throws {
     let mut a: collections::BTreeMap[String, i64] = collections::BTreeMap()
     a.insert("j", 4)
     let mut b: collections::BTreeMap[String, i64] = collections::BTreeMap()

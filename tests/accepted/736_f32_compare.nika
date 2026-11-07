@@ -10,7 +10,7 @@ fn half(v: f32) -> f32 {
     return v / 2.0
 }
 
-fn main() {
+fn main() throws {
     let a: f32 = 0.5
     let b: f32 = 0.5
     let c: f32 = 1.25

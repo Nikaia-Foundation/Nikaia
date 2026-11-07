@@ -3,7 +3,7 @@ struct Window { xs: Array[i64] }
 
 fn window(a: Array[i64]) -> Window { return Window { xs: a[1..] } }
 
-fn main() {
+fn main() throws {
 	let v = [1, 2, 3]
 	let w = window(v)
 	print(w.xs.len())

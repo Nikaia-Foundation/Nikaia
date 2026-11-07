@@ -1,5 +1,5 @@
 // Two tasks of one group both write one lock: NK2104, naming the lock (Part II 12.2, #985).
-fn main() {
+fn main() throws {
 	let seen = SharedMut(0)
 	async {
 		async seen.update fn(mut v) { v += 1 }

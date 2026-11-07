@@ -1,6 +1,6 @@
 // A pausing lambda kept under a declared `fn` type hands back that type's
 // integer literals, not rustc's default `i32` (#1029).
-fn main() {
+fn main() throws {
     let k1: fn(i64) -> i64 = fn(x) { 5 }
     let k2: fn(i64) -> i64 = fn(x) {
         match x {

@@ -17,7 +17,7 @@ grammar Escape {
 	rule Hex -> i64 = x:any -> { hex_value(x) }
 }
 
-fn main() {
+fn main() throws {
 	let b = Bytes("\\u41".bytes().collect())
 	println(Escape::top(b) catch { "error" })
 }

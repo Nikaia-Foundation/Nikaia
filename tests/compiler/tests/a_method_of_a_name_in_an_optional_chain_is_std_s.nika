@@ -3,7 +3,7 @@
 // compares the bytes, where Rust's `Path` would compare whole components.
 use std::fs
 
-fn main() {
+fn main() throws {
     let p: fs::Path = "data2/a.nika"
     let extension = p.extension()?.text_of() ?? ""
     let ends = p.parent()?.ends_with("a2") ?? false

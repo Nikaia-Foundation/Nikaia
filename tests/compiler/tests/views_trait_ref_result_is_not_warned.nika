@@ -10,6 +10,6 @@ fn first(s: String) -> ref String {
     return s.trim()
 }
 
-fn main() {
+fn main() throws {
     println(first("  word  "))
 }

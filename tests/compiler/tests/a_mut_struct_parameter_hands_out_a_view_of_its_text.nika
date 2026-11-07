@@ -16,7 +16,7 @@ fn next_item(mut c: Cursor) -> String? {
     return rest[0].trim()
 }
 
-fn main() {
+fn main() throws {
     let mut text: String = ""
     for word in ["a: 1", "  b: two", "- x"] {
         text.push_str(word)

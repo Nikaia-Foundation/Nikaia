@@ -8,10 +8,10 @@ struct Keep { held: Vec[fn(i64) -> i64] }
 impl H for Keep {
     fn take(ref mut self, f: fn(i64) -> i64) { self.held.push(f) }
 }
-fn hand[T: H](mut h: T, s: String) {
+fn hand[T: H](mut h: T, s: String) throws {
     h.take(fn(x) { x + s.len() })
     println(s)
 }
-fn main() {
+fn main() throws {
     hand(Keep { held: [] }, "ab")
 }

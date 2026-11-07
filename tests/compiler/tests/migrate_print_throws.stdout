@@ -54,4 +54,12 @@ fn main() {
     println!("hi");
 }
 ```
-check: Checked TMP/a.nika
+check: error[NK2606]: This lambda can fail, but the parameter it's passed to doesn't say `throws`.
+   --> TMP/a.nika:33:5
+    |
+ 33 |     items.iter().for_each fn(v) { print(f"{v} ") }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.
+    = help: Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.
+1 other error

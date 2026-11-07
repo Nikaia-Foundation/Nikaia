@@ -14,7 +14,7 @@ fn hex(ds: ref Vec[i64]) -> i64 {
     return n
 }
 
-fn main() {
+fn main() throws {
     let ds: Vec[i64] = [1, 2, 3, 4]
     let n = hex(ds)
     assert(n >= 0 && n <= 0xFFFF)

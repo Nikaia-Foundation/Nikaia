@@ -19,7 +19,7 @@ fn pick(a: i64, b: i64) -> i64 {
 	return cp
 }
 
-fn main() {
+fn main() throws {
 	println(f"{pick(3, 4)}")
 	println(f"{pick(7, 4)}")
 }

@@ -2,7 +2,7 @@ use std::collections
 
 comptime NAMES: Array[ref String, 3] = ["b", "a", "b"]
 
-fn main() {
+fn main() throws {
     let mut s: collections::BTreeSet[String] = collections::BTreeSet()
     s.extend(NAMES)
     let mut v: Vec[String] = Vec()

@@ -1,6 +1,6 @@
 // A `return` belongs to the nearest function-like body (#830): one in a
 // `spawn`'s task is the task's, not the enclosing lambda's result.
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 7]
     let ys = xs.iter().map(fn(n) {
         let h = spawn fn {

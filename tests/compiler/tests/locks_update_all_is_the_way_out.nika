@@ -10,7 +10,7 @@ fn apply(f: fn(i64) -> i64 sync, n: i64) -> i64 sync {
     return f(n)
 }
 
-fn main() {
+fn main() throws {
     let a = SharedMut(100)
     let b = SharedMut(100)
     update_all(a, b) fn(mut from, mut to) {

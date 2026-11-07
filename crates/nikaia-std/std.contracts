@@ -200,7 +200,8 @@ signature = "(ref self) -> bool"
 # Write text to standard error, with no line break after it.
 [fn."eprint"]
 pub = true
-panics = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stderr write"]
 locks = true
@@ -209,7 +210,8 @@ signature = "(text: ?)"
 # Write text to standard error, and end the line.
 [fn."eprintln"]
 pub = true
-panics = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stderr write"]
 locks = true
@@ -531,7 +533,8 @@ signature = "(cond: bool; message: ref String = \"\")"
 # Write text to standard output, with no line break after it.
 [fn."print"]
 pub = true
-panics = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stdout write"]
 locks = true
@@ -540,7 +543,8 @@ signature = "(text: ?)"
 # Write text to standard output, and end the line.
 [fn."println"]
 pub = true
-panics = true
+panics = false
+throws = ["io::IoError"]
 sync = true
 touches = ["stdout write"]
 locks = true

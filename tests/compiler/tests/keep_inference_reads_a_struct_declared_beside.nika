@@ -15,7 +15,7 @@ fn taken(keep ty: compiler_tests::KeepsBesideType) -> String {
 	return ty.name
 }
 
-fn main() {
+fn main() throws {
 	let t = compiler_tests::KeepsBesideType { name: "slice", is_slice: true, is_mut: false }
 	let p = compiler_tests::keeps_beside_pointer(t) ?? return
 	match p {

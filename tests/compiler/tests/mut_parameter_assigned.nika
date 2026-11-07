@@ -32,7 +32,7 @@ fn refill(mut xs: Vec[i64]) {
     xs.push(9)
 }
 
-fn main() {
+fn main() throws {
     let mut n = 1
     bump(n)
     let mut m = 0

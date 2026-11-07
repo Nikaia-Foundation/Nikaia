@@ -15,7 +15,7 @@ fn toolchain() -> String throws {
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let nikaia = toolchain()
-    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn total(xs: ref Array[i64]) -> i64 {\n    let mut s = 0\n    for x in xs {\n        s = s + x\n    }\n    return s\n}\n\nfn size(b: ref Bytes) -> i64 {\n    return b.len()\n}\n\ncomptime GREETING: ref String = \"hi\"\n\nfn same(s: ref String) -> ref String {\n    return s\n}\n\nfn apply(f: fn(ref String) -> ref String, s: ref String) -> ref String {\n    return f(s)\n}\n\nfn main() {\n    let a: Array[i64, 3] = [1, 2, 3]\n    println(total(a))\n    let text: String = \"abc\"\n    println(size(text.bytes))\n    let g: String = \"hi\"\n    println(GREETING)\n    println(apply(same, g))\n}\n")
+    fs::write(f"{tmp}/a.nika", fs::Root::Anywhere, "fn total(xs: ref Array[i64]) -> i64 {\n    let mut s = 0\n    for x in xs {\n        s = s + x\n    }\n    return s\n}\n\nfn size(b: ref Bytes) -> i64 {\n    return b.len()\n}\n\ncomptime GREETING: ref String = \"hi\"\n\nfn same(s: ref String) -> ref String {\n    return s\n}\n\nfn apply(f: fn(ref String) -> ref String, s: ref String) -> ref String {\n    return f(s)\n}\n\nfn main() throws {\n    let a: Array[i64, 3] = [1, 2, 3]\n    println(total(a))\n    let text: String = \"abc\"\n    println(size(text.bytes))\n    let g: String = \"hi\"\n    println(GREETING)\n    println(apply(same, g))\n}\n")
     let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/a.nika"])
     print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
     print(fs::read_to_string(f"{tmp}/a.nika", fs::Root::Anywhere))

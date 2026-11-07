@@ -12,7 +12,7 @@ grammar Lit {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let x: f64? = Lit::maybe[f64](Bytes("null".bytes().collect())) catch {
 		println("error")
 		return

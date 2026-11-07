@@ -11,6 +11,6 @@ impl Store {
 	}
 }
 
-fn main() {
+fn main() throws {
 	println(f"{Store { n: 1 }.load()}")
 }

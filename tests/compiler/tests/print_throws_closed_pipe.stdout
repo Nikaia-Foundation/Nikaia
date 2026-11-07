@@ -1,0 +1,6 @@
+looping: status 1
+Error: standard output: Broken pipe (os error 32)
+  (raised below Nikaia; no site recorded)
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+caught: status 0
+caught

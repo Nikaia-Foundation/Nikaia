@@ -12,7 +12,7 @@ grammar Words {
     entry rule three -> String = w:maybe eof -> { w ?? "none" }
 }
 
-fn main() {
+fn main() throws {
     for s in ["abc", "_", "-"] {
         let input = Bytes(s.bytes().collect())
         let r = Words::one(input) catch {

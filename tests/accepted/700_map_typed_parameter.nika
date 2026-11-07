@@ -16,7 +16,7 @@ fn count(m: collections::BTreeMap[u8, String]) -> i64 {
     return m.len()
 }
 
-fn main() {
+fn main() throws {
     let mut m = collections::HashMap()
     m["a"] = 1
     m["b"] = 2

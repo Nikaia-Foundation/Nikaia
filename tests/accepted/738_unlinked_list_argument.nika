@@ -2,7 +2,7 @@
 // parameter: its elements stay text of its own, and the parameter takes
 // what it keeps as text of its own (#738 item 3, ADR-282 D16, D19).
 fn fill(a: String, mut into: Vec[String]) { into.push(a) }
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = "a b".split(" ").map(fn(p) { p.clone() }).collect()
     let s = f"y{2}"
     fill(s.clone(), v)

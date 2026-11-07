@@ -37,7 +37,7 @@ fn picked(split: bool) -> Vec[String] {
     return out
 }
 
-fn main() {
+fn main() throws {
     let stages: Vec[String] = ["split", "shout"]
     let mut lines: Vec[String] = ["a", "b"]
     if stages.contains("split") {

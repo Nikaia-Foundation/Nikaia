@@ -5,7 +5,7 @@ grammar G {
     entry rule top -> u32 = alpha1 at:here -> { at }
 }
 
-fn main() {
+fn main() throws {
     let at = G::top("abc") catch { 0 }
     println(f"{at}")
 }

@@ -7,6 +7,6 @@ fn what(pause: P?) -> String? {
     return what
 }
 
-fn main() {
+fn main() throws {
     println(what(P { site: (1, "x") }) ?? "none")
 }

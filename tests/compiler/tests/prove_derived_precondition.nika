@@ -12,7 +12,7 @@ fn pick(arms: ref Vec[i64], at: i64) -> i64 {
 	return sum
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, 2, 3]
 	println(f"{pick(xs, 2)}")
 	println(f"{pick(xs, xs.len())}")

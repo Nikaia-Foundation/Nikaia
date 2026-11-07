@@ -767,7 +767,7 @@ impl EmitState {
                             }
                         }
                     }
-                    if !unless.is_empty() { out.push(&format!("{}Err(crate::{}::{}(error)) if {} => return Err(error.into()),\n", pad, held_sum, sum_variant(member), unless)); } else { out.push(&format!("{}Err(crate::{}::{}(error)) => return Err(error.into()),\n", pad, held_sum, sum_variant(member))); }
+                    if !unless.is_empty() { out.push(&format!("{}Err({}{}::{}(error)) if {} => return Err(error.into()),\n", pad, self.sum_root(), held_sum, sum_variant(member), unless)); } else { out.push(&format!("{}Err({}{}::{}(error)) => return Err(error.into()),\n", pad, self.sum_root(), held_sum, sum_variant(member))); }
                 }
             }
         }
@@ -849,7 +849,7 @@ impl EmitState {
             if scope.caught_sum.is_some() && scope.caught_member.is_some() {
                 let sum = nikaia_std::index::or(scope.caught_sum.as_deref(), || "").to_string();
                 let member = nikaia_std::index::or(scope.caught_member.as_deref(), || "").to_string();
-                if sum == "" { held = format!("{}.into()", held); } else { held = format!("crate::{}::{}({})", sum, sum_variant(&member), held); }
+                if sum == "" { held = format!("{}.into()", held); } else { held = format!("{}{}::{}({})", self.sum_root(), sum, sum_variant(&member), held); }
             }
             out.push(&format!("return Err({})", held));
             return Ok(());

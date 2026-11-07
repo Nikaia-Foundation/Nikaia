@@ -29,7 +29,7 @@ fn firsts(pairs: ref Vec[Pair]) -> Vec[String] {
     return out
 }
 
-fn main() {
+fn main() throws {
     let v = [Item::Fn { name: "a", public: true }, Item::Fn { name: null, public: true }, Item::Enum { name: "e", public: true }, Item::Other]
     println(names(v).join(","))
     let p = [Pair::A("x".to_uppercase(), 1), Pair::A(null, 2), Pair::B("y".to_uppercase(), 3), Pair::C]

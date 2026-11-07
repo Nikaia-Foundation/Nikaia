@@ -7,7 +7,7 @@ fn word(a: String?, m: collections::BTreeMap[String, String], k: String) -> Stri
     return a ?? m.get(k)
 }
 
-fn main() {
+fn main() throws {
     let mut w: collections::BTreeMap[String, String] = collections::BTreeMap()
     w.insert("b", "two")
     println(word(null, w, "b") ?? "none")

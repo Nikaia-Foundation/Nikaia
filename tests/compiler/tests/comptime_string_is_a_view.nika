@@ -8,7 +8,7 @@ fn shout(s: String) -> String {
 	s.to_uppercase()
 }
 
-fn main() {
+fn main() throws {
 	comptime LOCAL: String = "local"
 	println(shout(GREETING))
 	let owned: String = GREETING.to_string()

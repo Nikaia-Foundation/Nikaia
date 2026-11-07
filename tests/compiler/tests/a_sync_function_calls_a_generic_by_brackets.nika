@@ -28,7 +28,7 @@ fn field() -> String sync {
 
 comptime W: ref String = turn[Contact]()
 
-fn main() {
+fn main() throws {
 	println(f"{number()}")
 	println(field())
 	println(W)

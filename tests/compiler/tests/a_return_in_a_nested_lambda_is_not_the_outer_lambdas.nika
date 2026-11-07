@@ -4,7 +4,7 @@ fn name(g: fn(i64) -> String, k: i64) -> String {
     return g(k)
 }
 
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 7]
     let ys = xs.iter().map(fn(n) {
         let s = name(fn(k) {
@@ -13,7 +13,7 @@ fn main() {
             }
             "neg"
         }, n)
-        println(s)
+        println(s) catch {}
         if n > 5 {
             return n * 2
         }

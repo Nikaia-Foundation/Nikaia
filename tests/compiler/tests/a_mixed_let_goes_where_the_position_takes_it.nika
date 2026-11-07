@@ -19,7 +19,7 @@ fn n(s: ref String, c: bool) -> i64 {
     return h.len()
 }
 
-fn main() {
+fn main() throws {
     let a = "hi"
     println(r(a, true))
     println(n(a, false))

@@ -55,14 +55,18 @@ impl EmitState {
         }
         out
     }
+    pub fn sum_root(&self) -> String {
+        if self.is_std { return String::from(""); }
+        String::from("crate::")
+    }
     pub fn sum_member_held(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, params: &str) -> String {
         if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params, self.is_std); }
         sum_member_type(&self.declared_errors, world.library, member, "", self.is_std)
     }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
-        for members in self.sums.keys() {
-            let name = match self.sums.get(members) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        for (members, name) in self.sums.iter() {
+            if self.is_std && !self.sums_written.contains(name) { continue; }
             let mut borrows = false;
             for member in members.iter() { if self.borrows_named(world, member) { borrows = true; } }
             let mut decl: String = String::from("");
@@ -71,7 +75,8 @@ impl EmitState {
                 decl = format!("<{}>", sum_input_lifetime());
                 params = format!("<{}>", sum_input_lifetime());
             }
-            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\nenum {}{} {{\n", name, decl));
+            let shared = if self.is_std { "pub " } else { "" };
+            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\n{}enum {}{} {{\n", shared, name, decl));
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
@@ -82,7 +87,10 @@ impl EmitState {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
                 out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
-                if self.name_of_error(world, member) == 2 { out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(nikaia_std::error::Thrown::from(error)) }}\n}}\n", decl, member, name, params, member, name, params, name, variant)); }
+                if self.name_of_error(world, member) == 2 {
+                    let bare = library_error_path(member, self.is_std);
+                    out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(nikaia_std::error::Thrown::from(error)) }}\n}}\n", decl, bare, name, params, bare, name, params, name, variant));
+                }
             }
             let mut crashed = false;
             let mut timed_out = false;
@@ -157,7 +165,7 @@ impl EmitState {
             let mut any = false;
             for member in thrown.iter() { if self.borrows_named(world, member) { any = true; } }
             if any { shown = self.channel_params(elided, params, static_params, borrows); }
-            return format!("crate::{}{}", nikaia_std::index::or(sum, || ""), shown);
+            return format!("{}{}{}", self.sum_root(), nikaia_std::index::or(sum, || ""), shown);
         }
         let kind = self.named_error_of(world, thrown);
         if kind == 0 { return String::from("Box<dyn std::error::Error>"); }
@@ -175,5 +183,24 @@ impl EmitState {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };
         self.channel_of(world, &contract.fails_with, elided, params, static_params, borrows)
     }
+}
+
+pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut declared: Vec<collections::BTreeSet<String>> = vec![];
+    for unit in units.iter() { declared.push(declared_errors(unit.words, unit.items)); }
+    for (members, name) in sums.iter() {
+        if units.len() < 2 {
+            out.insert(name.to_string());
+            continue;
+        }
+        let mut owner: i64 = -1;
+        for member in members.iter() {
+            if owner >= 0 { break; }
+            for at in 0..declared.len() as i64 { if owner < 0 && (*nikaia_std::index::get(&declared, (at) as usize)).contains(member) { owner = at; } }
+        }
+        if owner <= 0 { out.insert(name.to_string()); }
+    }
+    out
 }
 

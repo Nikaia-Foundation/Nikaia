@@ -22,7 +22,7 @@ fn upper(s: String) -> String {
     return s.replace("(", "").trim().to_uppercase()
 }
 
-fn main() {
+fn main() throws {
     println(first("(sat) "))
     println(trimmed("  x  "))
     println(lowered(" (SAT) "))

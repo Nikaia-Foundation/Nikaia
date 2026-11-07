@@ -5,7 +5,7 @@ fn lengths(l: String) -> Vec[i64] {
 	return [l.len(), 0]
 }
 
-fn main() {
+fn main() throws {
 	let lines = ["a;bb", "ccc"]
 	// A `Seq` of views (`split`): the parts keep their text kind.
 	let parts = lines.iter().flat_map(fn(l) { l.split(";") }).map(fn(p) { p.len() }).collect()

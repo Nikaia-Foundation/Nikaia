@@ -11,7 +11,7 @@ fn before(text: String, name: String) -> String {
     return "absent"
 }
 
-fn main() {
+fn main() throws {
     let text = "alpha\n  beta  \ngamma\n"
     println(before(text, "gamma"))
     println(f"[{before(text, "alpha")}]")

@@ -10,7 +10,7 @@ grammar Names {
     entry rule count -> i64 = ns:ident+ eof -> { ns.len() }
 }
 
-fn parse(words: ref winnow_grammar::InternerContext, source: String) -> Vec[winnow_grammar::Symbol] {
+fn parse(words: ref winnow_grammar::InternerContext, source: String) -> Vec[winnow_grammar::Symbol] throws {
     let input = Bytes(source.bytes().collect())
     return Names::names(input; words: words) catch {
         println(f"{source}: refused")
@@ -18,7 +18,7 @@ fn parse(words: ref winnow_grammar::InternerContext, source: String) -> Vec[winn
     }
 }
 
-fn main() {
+fn main() throws {
     let words = winnow_grammar::InternerContext()
     let first = parse(words, "ab cd ab")
     let second = parse(words, "cd ef")

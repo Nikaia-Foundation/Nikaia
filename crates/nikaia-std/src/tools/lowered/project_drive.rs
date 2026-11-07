@@ -253,7 +253,7 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
                 let module = nikaia_std::fs::path::join(&(made), std::path::Path::new(&(package.replace('-', "_"))));
                 project_drive_make_dir(&module)?;
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&("__init__.py"))), text)?;
-                println!("binding: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(module), std::path::Path::new(&("__init__.py"))))));
+                nikaia_std::io::println(format_args!("binding: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(module), std::path::Path::new(&("__init__.py")))))))?;
             },
         }
     }
@@ -265,7 +265,7 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
                 project_drive_make_dir(&module)?;
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&(format!("{}.c", package)))), text)?;
                 host.write_if_changed(&nikaia_std::fs::path::join(&(module), std::path::Path::new(&("binding.gyp"))), &cx_node_gyp(&package))?;
-                println!("binding: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(module), std::path::Path::new(&(format!("{}.c", package)))))));
+                nikaia_std::io::println(format_args!("binding: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(module), std::path::Path::new(&(format!("{}.c", package))))))))?;
             },
         }
     }
@@ -276,7 +276,7 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
             Err(error) => { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(format!("copying {}: {}", nikaia_std::fs::path::display(&(built)), error)), &"project_drive_c_library")); },
         };
     }
-    println!("library: {}", nikaia_std::fs::path::display(&(made)));
+    nikaia_std::io::println(format_args!("library: {}", nikaia_std::fs::path::display(&(made))))?;
     Ok(())
 }
 

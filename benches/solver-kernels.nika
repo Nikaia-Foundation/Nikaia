@@ -215,7 +215,7 @@ fn bignum(n: i64) -> i64 {
     return (checksum % 1000000007) as i64
 }
 
-fn main() {
+fn main() throws {
     let count = cli::args().nth(1) ?? "1000"
     let n = text::parse_i64(count) ?? 1000
     let which = cli::args().nth(2) ?? "all"

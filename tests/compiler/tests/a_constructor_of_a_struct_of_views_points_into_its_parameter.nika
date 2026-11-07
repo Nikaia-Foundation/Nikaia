@@ -28,7 +28,7 @@ impl Words {
     fn first(ref self) -> String { return self.input.split(" ").collect()[0] }
 }
 
-fn main() {
+fn main() throws {
     let text = "  one\n  two  \n"
     let mut p = Parser(text.trim())
     while true {

@@ -7,5 +7,5 @@ fn twice(mut s: S, f: fn(mut S)) {
 }
 fn main() {
     let mut s = S { n: 1 }
-    twice(s, fn(t) { println(f"{t.n}") })
+    twice(s, fn(t) { println(f"{t.n}") catch {} })
 }

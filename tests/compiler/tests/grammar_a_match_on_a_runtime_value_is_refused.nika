@@ -8,7 +8,7 @@ grammar R {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let input = Bytes("42".bytes().collect())
 	let n = R::read(input, 1) catch {
 		println("error")

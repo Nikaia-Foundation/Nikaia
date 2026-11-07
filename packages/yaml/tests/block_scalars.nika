@@ -25,7 +25,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println(f"error {error.line}:{error.column}")
@@ -35,7 +35,7 @@ fn line(text: String) {
 	println(parts.join(" | "))
 }
 
-fn main() {
+fn main() throws {
 	// chomping without trailing empty lines (examples 8.4, 8.5)
 	line("a: |\n  x\n  y\nb: |-\n  x\n  y\nc: |+\n  x\n  y\n")
 	// and with them; a less indented comment ends the scalar

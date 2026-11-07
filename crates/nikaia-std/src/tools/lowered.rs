@@ -2910,7 +2910,10 @@ pub mod emit_state {
     pub use super::{EmitPair, EmitKeptCall, EmitWorld, EmitState, EmitWalk};
 }
 pub mod emit_stmt {}
-pub mod emit_sums {}
+pub mod emit_sums {
+    #[allow(unused_imports)]
+    pub use super::{emit_sums_written};
+}
 pub mod emit_tables {
     #[allow(unused_imports)]
     pub use super::{emit_tables_names_outside, emit_tables_names_borrowing, emit_tables_borrowing_structs_beside, emit_tables_view_slots, EmitTablesItems, emit_tables_items, emit_tables_structs_beside, emit_tables_declared_errors, emit_tables_tethered, emit_tables_read_view_slots, emit_tables_described_maps, emit_tables_package_borrowing};

@@ -7,7 +7,7 @@ impl Error for Bad {
 fn fail() throws {
     throw Bad::Oops
 }
-fn guard(run: fn() throws) {
+fn guard(run: fn() throws) throws {
     run() catch { println("caught") }
 }
 fn fail_at(n: i64) throws {
@@ -15,10 +15,10 @@ fn fail_at(n: i64) throws {
         throw Bad::Oops
     }
 }
-fn guard_at(run: fn(i64) throws) {
+fn guard_at(run: fn(i64) throws) throws {
     run(1) catch { println("caught at") }
 }
-fn main() {
+fn main() throws {
     guard(fail)
     guard_at(fail_at)
 }

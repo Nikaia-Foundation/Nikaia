@@ -5,7 +5,7 @@ fn first(mut state: State) -> i64 {
     let u = state.flow.unrolling ?? return 0
     return u.names.len()
 }
-fn main() {
+fn main() throws {
     let mut s = State { flow: Flow { unrolling: Unroll { names: ["a"] } } }
     println(first(s).to_string())
 }

@@ -23,6 +23,6 @@ fn tail(head: String) -> String {
     return name
 }
 
-fn main() {
+fn main() throws {
     print(tail("impl<T> Foo<T> {"))
 }

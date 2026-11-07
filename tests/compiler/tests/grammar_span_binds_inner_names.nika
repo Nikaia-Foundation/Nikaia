@@ -13,7 +13,7 @@ grammar Spans {
     entry rule inner -> String = "(" s:span(LT t:span(n:raw_ident "." m:raw_ident) GT) ")" eof -> { f"{n}.{m} {t.start}..{t.end} in {s.start}..{s.end}" }
 }
 
-fn show(which: String, source: String) {
+fn show(which: String, source: String) throws {
     let input = Bytes(source.bytes().collect())
     let r = match which {
         "one" => Spans::one(input),
@@ -28,7 +28,7 @@ fn show(which: String, source: String) {
     println(f"{which} {source}: {r}")
 }
 
-fn main() {
+fn main() throws {
     show("one", "ab")
     show("two", "<ab")
     show("three", "<abc>")

@@ -23,7 +23,7 @@ fn total(cs: ref Vec[i64]) -> i64 throws {
     return s
 }
 
-fn main() {
+fn main() throws {
     let cs: Vec[i64] = [1, 2, 3, 4]
     let r = total(cs) catch { 0 }
     println(f"{r}")

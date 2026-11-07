@@ -11,7 +11,7 @@ fn digest(text: String) -> String {
     return hash::sha256_hex(data)
 }
 
-fn main() {
+fn main() throws {
     println(digest(""))
     println(digest("abc"))
     println(digest("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"))

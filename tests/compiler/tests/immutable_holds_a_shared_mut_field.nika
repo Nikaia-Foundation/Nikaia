@@ -5,7 +5,7 @@ use std::collections
 
 struct Config { name: String, cache: SharedMut[collections::HashMap[String, i64]] }
 
-fn main() {
+fn main() throws {
 	let config = Config { name: "a", cache: SharedMut(collections::HashMap()) }
 	immutable c = config
 	println(c.name)

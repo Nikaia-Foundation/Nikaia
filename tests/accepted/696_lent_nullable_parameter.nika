@@ -20,7 +20,7 @@ fn first(keep a: String?, b: String) -> String {
     return a ?? b
 }
 
-fn main() {
+fn main() throws {
     let x: String? = f"x{1}"
     let y: String? = null
     let z = f"z{2}"

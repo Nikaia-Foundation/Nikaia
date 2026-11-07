@@ -21,7 +21,7 @@ grammar O {
 	entry rule top -> String = n:"-"? d:digit+ eof -> { f"{n ?? "+"}{d}" }
 }
 
-fn main() {
+fn main() throws {
 	let a = G::top("ab") catch {
 		println("error")
 		return

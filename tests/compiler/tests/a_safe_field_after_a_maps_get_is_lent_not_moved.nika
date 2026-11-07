@@ -44,7 +44,7 @@ fn ends(deps: ref Vec[Dep]) -> String {
     return f"{first} to {last}"
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Dep] = collections::BTreeMap()
     m.insert("a", dep("a", "a/y", 2))
     m.insert("b", dep("b", null, 3))

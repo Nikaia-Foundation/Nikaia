@@ -20,7 +20,7 @@ fn trimmed_by_match(binary: String) -> String {
     return binary
 }
 
-fn main() {
+fn main() throws {
     println(trimmed("it-0123456789"))
     println(trimmed("it-01x"))
     println(trimmed("plain"))

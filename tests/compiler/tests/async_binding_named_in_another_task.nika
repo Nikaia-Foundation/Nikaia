@@ -11,7 +11,7 @@ fn enrich(n: i64) -> i64 {
 	return n + 1
 }
 
-fn main() {
+fn main() throws {
 	let a = async load(1)
 	let b = async enrich(a)
 	println(f"{b}")

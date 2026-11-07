@@ -24,7 +24,7 @@ grammar Names {
     entry rule counted -> Counted = ns:ident+ eof -> { Counted { count: ns.len() } }
 }
 
-fn main() {
+fn main() throws {
     let words = winnow_grammar::InternerContext()
     let named = Names::named(Bytes("ab".bytes().collect()); words: words) catch {
         println("refused")

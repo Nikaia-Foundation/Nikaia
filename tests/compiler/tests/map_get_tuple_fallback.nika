@@ -1,5 +1,5 @@
 use std::collections
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, (String, i64)] = collections::HashMap()
     m.insert("a", ("x", 1))
     let (s, n) = m.get("a") ?? ("", 0)
@@ -10,7 +10,7 @@ fn main() {
     println(n2)
     second()
 }
-fn second() {
+fn second() throws {
     let mut m: collections::HashMap[String, (String, String)] = collections::HashMap()
     m.insert("a", ("x", "y"))
     let (p, q) = m.get("a") ?? ("", "")

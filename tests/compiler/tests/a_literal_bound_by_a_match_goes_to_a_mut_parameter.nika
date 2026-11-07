@@ -1,9 +1,9 @@
-fn add(mut s: String) {
+fn add(mut s: String) throws {
     s.push_str("!")
     println(s)
 }
 
-fn main() {
+fn main() throws {
     let mut s: String = "hi"
     match s {
         t => add(t),

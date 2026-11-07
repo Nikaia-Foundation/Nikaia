@@ -29,11 +29,11 @@ grammar G {
 	rule Props -> Props = "&" x:text(Word) -> { Props { a: x } }
 }
 
-fn show(r: ref Pair) {
+fn show(r: ref Pair) throws {
 	println(f"{r.a} {r.b}")
 }
 
-fn main() {
+fn main() throws {
 	for t in ["12 34", "&12 34"] {
 		let b = Bytes(t.bytes().collect())
 		let r = G::top(b) catch {

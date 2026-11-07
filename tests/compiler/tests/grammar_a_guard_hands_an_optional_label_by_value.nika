@@ -28,7 +28,7 @@ fn fits(k: ref Node, t: Node?) -> bool sync {
 	return k.start < 10 && held.node != null
 }
 
-fn main() {
+fn main() throws {
 	let input = Bytes("a;b".bytes().collect())
 	let r = G::doc(input) catch {
 		println("error")

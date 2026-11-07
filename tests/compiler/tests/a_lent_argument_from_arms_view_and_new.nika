@@ -32,7 +32,7 @@ fn pick_text_match(t: String, k: i64) -> i64 {
     })
 }
 
-fn main() {
+fn main() throws {
     let t = P { name: "a" }
     println(pick(t, true))
     println(pick(t, false))

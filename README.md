@@ -123,7 +123,7 @@ fn per_row(rows: int) -> int {
     return percent(50, r)           // r >= 1: proved, no check
 }
 
-fn main() {
+fn main() throws {
     println(f"{per_row(4)}% {share(3, 4)}%")
     // and this call breaks it:
     println(f"{share(1, 0)}%")
@@ -159,7 +159,7 @@ line](guide/command-line.md).
 
 ```nika
 // src/main.nika
-fn main() {
+fn main() throws {
     println("Hello, Nikaia!")
 }
 ```

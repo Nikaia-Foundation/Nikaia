@@ -44,7 +44,7 @@ fn from(titles: ref Vec[ref String], first: i64) -> i64 sync {
 	return k
 }
 
-fn main() {
+fn main() throws {
 	let ts = ["ab", "c d"]
 	println(f"{slugs(ts)} {pairs([1, 2])} {from(ts, 2)}")
 }

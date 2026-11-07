@@ -3,7 +3,7 @@
 // The last block prints each event with its span.
 use yaml
 
-fn show(text: String) {
+fn show(text: String) throws {
 	println(f"# {text.replace("\n", "\\n")}")
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::documents(input) catch {
@@ -15,7 +15,7 @@ fn show(text: String) {
 	}
 }
 
-fn spans(text: String) {
+fn spans(text: String) throws {
 	println(f"# spans of {text.replace("\n", "\\n")}")
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::documents(input) catch {
@@ -27,7 +27,7 @@ fn spans(text: String) {
 	}
 }
 
-fn main() {
+fn main() throws {
 	show("")
 	show("a\n")
 	show("--- a\n...\n")

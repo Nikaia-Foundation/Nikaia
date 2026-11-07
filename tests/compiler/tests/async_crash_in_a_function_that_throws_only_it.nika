@@ -15,7 +15,7 @@ fn total(n: i64) -> i64 throws {
 	return a + b
 }
 
-fn main() {
+fn main() throws {
 	for n in [0, 1] {
 		let m = total(n) catch {
 			match error {

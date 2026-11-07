@@ -27,14 +27,14 @@ fn wire_name(f: meta::Field) -> String? {
 comptime P: String? = pick(true)
 comptime Q: String? = pick(false)
 
-fn show[T: Struct]() {
+fn show[T: Struct]() throws {
 	for f in T::fields {
 		comptime W: String? = wire_name(f)
 		println(W ?? "-")
 	}
 }
 
-fn main() {
+fn main() throws {
 	println(P ?? "-")
 	println(Q ?? "-")
 	show[Contact]()

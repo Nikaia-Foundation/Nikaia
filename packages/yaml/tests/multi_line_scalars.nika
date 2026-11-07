@@ -23,7 +23,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -33,7 +33,7 @@ fn line(text: String) {
 	println(parts.join(" | "))
 }
 
-fn main() {
+fn main() throws {
 	line("a\n  b\n  c\n")
 	line("  a\n b\n")
 	line("k: a\n  b\n\n  c\nl: d\n")

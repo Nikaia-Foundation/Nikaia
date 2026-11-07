@@ -4,7 +4,7 @@ fn first_comma(line: String) -> i64 {
     return line.find(",") ?? -1
 }
 
-fn main() {
+fn main() throws {
     let lines = [f"a,b{1}", f"ab,{2}", "none"]
     for l in lines {
         println(first_comma(l))

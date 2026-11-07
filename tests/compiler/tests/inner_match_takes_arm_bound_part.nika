@@ -21,7 +21,7 @@ fn detail_of(r: Ran) -> String {
 	}
 }
 
-fn main() {
+fn main() throws {
 	println(detail_of(Ran::Hit(Wall::Refused { detail: "refused" })))
 	println(detail_of(Ran::Hit(Wall::Other)))
 	println(detail_of(Ran::Miss))

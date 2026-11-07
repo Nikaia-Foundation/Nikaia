@@ -12,7 +12,7 @@ fn words_of(text: String, key: String) -> Vec[String] {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	let tail = "b c"
 	let words = ("a " + tail).split(" ").collect()
 	println(words.len())

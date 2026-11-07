@@ -7,6 +7,6 @@ fn names_the_crate(line: String, word: String) -> bool {
 	return first == word
 }
 
-fn main() {
+fn main() throws {
 	println(f"{names_the_crate("serde 1.0.200", "serde")}")
 }

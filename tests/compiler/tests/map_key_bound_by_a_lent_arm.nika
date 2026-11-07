@@ -40,7 +40,7 @@ fn pick(entries: ref collections::BTreeMap[Vec[i64], Entry], library: bool) -> i
     }
 }
 
-fn main() {
+fn main() throws {
     let mut entries: collections::BTreeMap[Vec[i64], Entry] = collections::BTreeMap()
     entries.insert([1, 2], Entry { name: "len", answer: Answer::Yes })
     println(pick(entries, true))

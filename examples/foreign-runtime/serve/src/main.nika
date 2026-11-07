@@ -17,7 +17,7 @@
 // It checks that this works at all. Nothing in the source shows that the calls
 // start threads, and nothing in the language lets it say so.
 
-fn main() {
+fn main() throws {
     let served = hyper_shim::serve_once(18080)
     println(f"served: {served}")
 

@@ -11,7 +11,7 @@ impl Box {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let b = Box { name: "hi" }
 	println(b.show())
 	println(b.show())

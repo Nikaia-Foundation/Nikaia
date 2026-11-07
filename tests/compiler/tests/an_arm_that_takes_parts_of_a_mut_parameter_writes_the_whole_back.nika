@@ -67,7 +67,7 @@ fn show(e: ref E) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut e = E::Add(E::Num(1), E::Add(E::Num(2), E::Num(3)))
     wrap_nums(e)
     println(show(e))

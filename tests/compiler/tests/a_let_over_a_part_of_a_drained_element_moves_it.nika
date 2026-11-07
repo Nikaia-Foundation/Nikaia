@@ -13,7 +13,7 @@ fn widen(mut rows: Vec[Row]) -> Vec[Row] {
     return kept
 }
 
-fn main() {
+fn main() throws {
     let rows = widen([Row { cells: [1], tag: 7 }, Row { cells: [], tag: 8 }])
     for row in rows { println(f"{row.tag}: {row.cells.len()} cells, last {row.cells[row.cells.len() - 1]}") }
 }

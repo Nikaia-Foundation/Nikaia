@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut pairs: Vec[(i64, i64)] = [(1, 10), (2, 20)]
     for mut (a, b) in pairs {
         a += 1

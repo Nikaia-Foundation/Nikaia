@@ -19,7 +19,7 @@ fn passed(l: ref L) -> i64 {
 	return show(W { own: l, k: 2 })
 }
 
-fn main() {
+fn main() throws {
 	let l = L { n: 3 }
 	let w = W { own: l, k: 1 }
 	println(f"{w.own.n} {w.k}")

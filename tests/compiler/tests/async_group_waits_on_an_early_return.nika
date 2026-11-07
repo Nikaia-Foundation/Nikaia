@@ -1,12 +1,12 @@
 // The function's body is the group of the `async e` in it (ADR-async-5 D9,
 // #988): an early `return` leaves only after its task has ended.
 
-fn work(n: i64) -> i64 {
+fn work(n: i64) -> i64 throws {
 	println(f"task {n} ran")
 	return n
 }
 
-fn pick(early: bool) -> i64 {
+fn pick(early: bool) -> i64 throws {
 	async work(1)
 	if early {
 		return 0
@@ -14,7 +14,7 @@ fn pick(early: bool) -> i64 {
 	return 2
 }
 
-fn main() {
+fn main() throws {
 	println(f"{pick(true)}")
 	println(f"{pick(false)}")
 }

@@ -7,11 +7,11 @@ struct Keep { held: Vec[fn(i64) -> i64] }
 impl H for Keep {
     fn take(ref mut self, f: fn(i64) -> i64) { self.held.push(f) }
 }
-fn hand[T: H](mut h: T, n: i64) {
+fn hand[T: H](mut h: T, n: i64) throws {
     h.take(fn(x) { x + n })
     println(n)
 }
-fn main() {
+fn main() throws {
     let mut k = Keep { held: [] }
     hand(k, 3)
     println(k.held.len())

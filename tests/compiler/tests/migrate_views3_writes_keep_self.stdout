@@ -17,7 +17,7 @@ impl Cart {
     }
 }
 
-fn main() {
+fn main() throws {
     let cart = Cart { items: ["a", "b"] }
     println(cart.count())
     println(cart.first())

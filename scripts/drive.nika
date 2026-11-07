@@ -315,7 +315,7 @@ fn drive_rewrite(report: String, log: String) -> String {
 	return out.join("\n")
 }
 
-fn drive_say(dry: bool, line: String) {
+fn drive_say(dry: bool, line: String) throws {
 	if dry { println(f"would run: {line}") }
 }
 

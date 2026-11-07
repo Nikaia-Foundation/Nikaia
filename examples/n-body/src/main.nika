@@ -175,7 +175,7 @@ fn solar_system() -> System {
     return System { bodies: bodies }
 }
 
-fn main() {
+fn main() throws {
     // `??` is for a value that may be absent: `nth` returns one. Parsing is
     // different, it can fail, so its fallback is a `catch` whose block gives
     // the value to use instead.

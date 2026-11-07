@@ -33,7 +33,7 @@ fn first_of(v: Vec[u32]) -> u32? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, u32] = collections::BTreeMap()
     m.insert("a", 1)
     let mut n: collections::BTreeMap[String, String] = collections::BTreeMap()

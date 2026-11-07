@@ -18,7 +18,7 @@ fn by_position(lines: Vec[String]) -> Vec[(String, String)] {
 	}).collect()
 }
 
-fn main() {
+fn main() throws {
 	for (n, p) in pairs(["head", "a=x.rlib", "b=y.rlib"]) {
 		println(f"{n} {p}")
 	}

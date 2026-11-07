@@ -6,7 +6,7 @@ fn pair(s: String, mut v: Vec[ref String]) {
     v.push(parts.1)
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[ref String] = []
     pair(f"k={1}", v)
     pair("name=ada", v)

@@ -48,7 +48,7 @@ fn uneven(m: i64) -> i64 sync {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, -5, 2]
 	println(f"{whiles(xs)} {twice(xs)} {small(3)} {uneven(2)}")
 }

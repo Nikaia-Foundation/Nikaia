@@ -1201,9 +1201,9 @@ impl EmitState {
                         }
                     }
                     if unless.len() > 0 {
-                        out.push(f"{pad}Err(crate::{held_sum}::{sum_variant(member)}(error)) if {unless} => return Err(error.into()),\n")
+                        out.push(f"{pad}Err({self.sum_root()}{held_sum}::{sum_variant(member)}(error)) if {unless} => return Err(error.into()),\n")
                     } else {
-                        out.push(f"{pad}Err(crate::{held_sum}::{sum_variant(member)}(error)) => return Err(error.into()),\n")
+                        out.push(f"{pad}Err({self.sum_root()}{held_sum}::{sum_variant(member)}(error)) => return Err(error.into()),\n")
                     }
                 }
             }
@@ -1326,7 +1326,7 @@ impl EmitState {
                 if sum == "" {
                     held = f"{held}.into()"
                 } else {
-                    held = f"crate::{sum}::{sum_variant(member)}({held})"
+                    held = f"{self.sum_root()}{sum}::{sum_variant(member)}({held})"
                 }
             }
             out.push(f"return Err({held})")

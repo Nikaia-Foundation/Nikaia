@@ -12,7 +12,7 @@ fn relay(mut tally: Tally, name: String) {
     note(tally, name)
 }
 
-fn main() {
+fn main() throws {
     let mut tally = Tally { names: [], count: 0 }
     relay(tally, "a")
     relay(tally, "b")

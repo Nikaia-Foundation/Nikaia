@@ -22,7 +22,7 @@ fn returned(a: String?, b: String?) -> String {
     return match (a, b) { (_, s) if s != null => s, (_, _) => "rest" }
 }
 
-fn main() {
+fn main() throws {
     println(listed([1, 2]).len())
     println(named(3))
     println(named(0))

@@ -28,7 +28,7 @@ fn put(mut shape: Shape) {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut s = Shape::Cast { inner: "a", ty: Kind::Named("b") }
 	put(s)
 	match s {

@@ -2,6 +2,6 @@ fn f(grammar: i64) -> i64 sync {
     return grammar
 }
 
-fn main() {
+fn main() throws {
     print(f(1))
 }

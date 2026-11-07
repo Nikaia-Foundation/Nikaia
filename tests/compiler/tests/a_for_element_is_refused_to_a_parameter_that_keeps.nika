@@ -4,7 +4,7 @@ fn enrol(p: Person, mut into: Vec[Person]) {
     into.push(p)
 }
 
-fn main() {
+fn main() throws {
     let mut team: Vec[Person] = []
     team.push(Person { name: "Ada", age: 36 })
     let mut club: Vec[Person] = []

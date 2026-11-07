@@ -10,7 +10,7 @@ fn slow() -> i64 {
 	return 7
 }
 
-fn main() {
+fn main() throws {
 	let h = async(handle) fn { slow() }
 	let v = h.join(within: 10.millis()) catch {
 		match error {

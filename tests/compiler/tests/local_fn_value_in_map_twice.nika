@@ -1,7 +1,7 @@
-fn main() {
+fn main() throws {
     let xs: Vec[i64] = [1, 2]
-    let ys: Vec[i64] = xs.iter().map(fn(n) { let g: fn(i64) -> String = fn(k) { f"x{k}" }; println(g(n)); println(g(n + 10)); n }).collect()
+    let ys: Vec[i64] = xs.iter().map(fn(n) { let g: fn(i64) -> String = fn(k) { f"x{k}" }; println(g(n)) catch {}; println(g(n + 10)) catch {}; n }).collect()
     let sg: fn(i64) -> String sync = fn(k) { f"s{k}" }
-    let ws: Vec[i64] = xs.iter().map(fn(n) { println(sg(n)); n }).collect()
+    let ws: Vec[i64] = xs.iter().map(fn(n) { println(sg(n)) catch {}; n }).collect()
     println(f"{ys.len()} {ws.len()}")
 }

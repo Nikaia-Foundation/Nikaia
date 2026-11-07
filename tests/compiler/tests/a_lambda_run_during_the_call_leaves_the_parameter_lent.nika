@@ -1,11 +1,11 @@
 // #1025: a lambda handed to a position the callee does not keep runs during
 // the call, so the `String` parameter it names stays lent and usable after.
 fn twice(f: fn(i64) -> i64) -> i64 { f(1) + f(2) }
-fn hand(s: String) -> i64 {
+fn hand(s: String) -> i64 throws {
     let n = twice(fn(x) { x + s.len() })
     println(s)
     n
 }
-fn main() {
+fn main() throws {
     println(hand("abc"))
 }

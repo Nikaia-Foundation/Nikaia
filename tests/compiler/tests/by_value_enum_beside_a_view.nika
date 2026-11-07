@@ -40,7 +40,7 @@ fn word_of(input: String) -> N {
 	return N { name: input.trim() }
 }
 
-fn main() {
+fn main() throws {
 	let n = word_of(" hello ")
 	let e = opening(K::A, n)
 	let b = bare(K::B)

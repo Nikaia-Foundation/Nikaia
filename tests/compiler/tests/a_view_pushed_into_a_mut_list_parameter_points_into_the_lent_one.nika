@@ -12,7 +12,7 @@ fn collect(block: ref Block, mut out: Vec[ref Expr]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let block = Block { exprs: [Expr { n: 1, name: "a" }, Expr { n: 2, name: "b" }, Expr { n: 3, name: "c" }] }
     let mut out: Vec[ref Expr] = []
     collect(block, out)

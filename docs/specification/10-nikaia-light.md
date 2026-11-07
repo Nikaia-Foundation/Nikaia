@@ -429,7 +429,7 @@ fn fnv(key: String) -> u64 {
     return hash
 }
 
-fn main() {
+fn main() throws {
     let h = fnv("hello")
     println(f"{h >> 32} {(h & 0xff) == 0x0b}")
 }
@@ -1184,7 +1184,7 @@ element, and a change reaches the list:
 ```nika
 struct P { pub n: i64 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[P] = [P { n: 1 }, P { n: 2 }]
     for mut p in v {
         p.n = p.n + 1                // changes `v`
@@ -2310,7 +2310,7 @@ fn adder(n: i64) -> fn(i64) -> i64 sync {
     return fn(x) { x + n }
 }
 
-fn main() {
+fn main() throws {
     let b = Button { label: "ok", on_click: fn(x) { x * 2 } }
     let add = adder(3)
     println(f"{b.on_click(4)} {add(1)}")
@@ -2351,7 +2351,7 @@ program is started with ([ADR-360](adr/adr-360.md)).
 
 ```nika
 /// Multiplies a positive number.
-fn main(a: int; times: int = 4, verbose: bool = false) {
+fn main(a: int; times: int = 4, verbose: bool = false) throws {
     assert(a > 0)
     let b = times * a
     if verbose {
@@ -2634,7 +2634,7 @@ struct FileHandle {
 }
 
 impl Drop for FileHandle {
-    fn drop(mut self) {
+    fn drop(mut self) throws {
         println("Closing file descriptor...")
         // Native close call would go here
     }
@@ -3932,7 +3932,7 @@ fn helper() -> i64 { return 41 }
 
 ```nika
 // file: src/main.nika
-fn main() {
+fn main() throws {
     let r = Row { id: helper() + 1 }   // no `use`, and no prefix
     println(f"{r.id}")
 }

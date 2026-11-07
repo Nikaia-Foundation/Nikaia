@@ -46,6 +46,7 @@ pub struct EmitState {
     pub code_cycle_graph: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub declared_errors: collections::BTreeSet<String>,
     pub sums: collections::BTreeMap<Vec<String>, String>,
+    pub sums_written: collections::BTreeSet<String>,
     pub dsl_drivers: collections::BTreeSet<String>,
     pub foreign_params: collections::BTreeMap<String, Vec<Type>>,
     pub opaque_handles: collections::BTreeMap<String, String>,

@@ -2,7 +2,7 @@
 // characters) and the byte offset where reading stopped.
 use yaml
 
-fn fails(text: String) {
+fn fails(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println(f"{error.line}:{error.column} at byte {error.offset}")
@@ -11,7 +11,7 @@ fn fails(text: String) {
 	println(f"parsed {docs.len()}")
 }
 
-fn main() {
+fn main() throws {
 	// a tab used as indentation (suite 4EJS)
 	fails("a:\n\t- x\n")
 	// an unclosed flow sequence

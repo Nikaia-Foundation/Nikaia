@@ -9,7 +9,7 @@ fn twice(v: f32) -> f32 {
     return v * 2.0
 }
 
-fn main() {
+fn main() throws {
     let a: f32 = 0.5
     let b = a
     let s = Box2 { w: a }

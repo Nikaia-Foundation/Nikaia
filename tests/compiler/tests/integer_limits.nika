@@ -3,7 +3,7 @@ fn widest(x: i64) -> i64 {
     return x
 }
 
-fn main() {
+fn main() throws {
     println(f"{i64::MIN} {i64::MAX}")
     println(f"{i32::MIN} {i32::MAX}")
     println(f"{u8::MIN} {u8::MAX}")

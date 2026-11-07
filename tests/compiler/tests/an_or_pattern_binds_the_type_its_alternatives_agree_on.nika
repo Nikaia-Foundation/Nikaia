@@ -10,7 +10,7 @@ fn count(shape: ref Shape) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     let a = Shape::Text { lines: ["x", "y"] }
     let b = Shape::Code { lines: ["z"] }
     let c = Shape::Blank

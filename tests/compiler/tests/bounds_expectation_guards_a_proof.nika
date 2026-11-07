@@ -30,7 +30,7 @@ fn main() throws {
 	fs::write(
 		f"{tmp}/tests/counter.nika",
 		fs::Root::Anywhere,
-		"fn k() -> i64 sync {\n\tlet mut i = 0\n\tlet mut s = 0\n\twhile i < 10 {\n\t\ts += 1\n\t\ti += 1\n\t}\n\treturn s\n}\n\nfn main() {\n\tprintln(f\"{k()}\")\n}\n",
+		"fn k() -> i64 sync {\n\tlet mut i = 0\n\tlet mut s = 0\n\twhile i < 10 {\n\t\ts += 1\n\t\ti += 1\n\t}\n\treturn s\n}\n\nfn main() throws {\n\tprintln(f\"{k()}\")\n}\n",
 	)
 	fs::write(f"{tmp}/tests/counter.stdout", fs::Root::Anywhere, "10\n")
 	let off = "bounds in tests/counter.nika: 0 indexes, 0 proved; 1 operations, 1 proved\n     5  s += 1  proved\n"

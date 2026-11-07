@@ -30,7 +30,7 @@ fn count_lent(m: ref collections::HashMap[String, i64], s: String?) -> i64 {
     return count_of(m, s)
 }
 
-fn main() {
+fn main() throws {
     println(f"{is_set("lit")} {shown("lit")} {handed_on("lit")}")
     let local: String? = "x"
     println(f"{is_set(local)} {shown(local)} {handed_on(local)}")

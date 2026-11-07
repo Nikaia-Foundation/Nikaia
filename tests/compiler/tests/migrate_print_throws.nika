@@ -2,7 +2,9 @@
 // function that prints, on a trait's method whose impl prints, and on every
 // caller the failure reaches, a caller of a function that already said
 // `throws` too; a function that only computes, a comment and a Markdown
-// block of another language stay as written. The migrated file checks.
+// block of another language stay as written. The migrated file checks but
+// for one place the tool does not move: a lambda that prints, handed to a
+// parameter that does not say `throws` (`for_each`), is NK2606.
 use std::fs
 use std::process
 

@@ -35,7 +35,7 @@ fn first(xs: Vec[i64]) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     let j = Json::Array([Json::Text("ab"), Json::Num(3)])
     println(longest(j))
     println(longest(j))

@@ -10,7 +10,7 @@ fn shout(s: String) -> String {
     return s.to_uppercase()
 }
 
-fn main() {
+fn main() throws {
     let path: String = "a::b"
     let last: String = (path.rsplit_once("::") ?? ("", path.clone())).1.clone()
     println(last)

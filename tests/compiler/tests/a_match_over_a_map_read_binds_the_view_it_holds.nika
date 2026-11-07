@@ -11,7 +11,7 @@ fn named(here: ref collections::HashMap[String, String], key: String) -> String 
     return canonical
 }
 
-fn main() {
+fn main() throws {
     let mut here: collections::HashMap[String, String] = collections::HashMap()
     here.insert("a", "b")
     println(named(here, "a"))

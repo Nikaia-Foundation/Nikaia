@@ -6,7 +6,7 @@ fn maybe(x: i64) -> String? {
     return if x > 0 { null } else { "m" }
 }
 
-fn main() {
+fn main() throws {
     let r: String = "d"
     let a = maybe(1) ?? r
     let b = maybe(1) ?? r

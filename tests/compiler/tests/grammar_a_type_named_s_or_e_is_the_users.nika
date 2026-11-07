@@ -9,7 +9,7 @@ grammar G {
 	rule One -> S = Digit -> { S { a: 1 } }
 	entry rule top -> E = s:One "+" t:One eof -> { E { b: s.a + t.a } }
 }
-fn main() {
+fn main() throws {
 	let r = G::top("1+2") catch {
 		println("error")
 		return

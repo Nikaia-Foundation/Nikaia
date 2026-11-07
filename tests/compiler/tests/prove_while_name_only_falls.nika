@@ -51,7 +51,7 @@ fn uneven(pieces: ref Vec[i64], d: i64) -> i64 sync {
 	return last
 }
 
-fn main() {
+fn main() throws {
 	let xs = [4, 5, 1]
 	println(f"{shrink(xs)} {rise(xs, 2)} {both([1, 2])} {uneven(xs, 1)}")
 }

@@ -58,7 +58,7 @@ fn fields(v: ref Vec[Entry?]) -> i64 {
     let e = v[0] ?? return 0
     e.s.len() + e.n
 }
-fn main() {
+fn main() throws {
     let sh: Vec[Shape?] = [Shape::Line("abc"), Shape::Dot]
     println(shaped(sh))
     println(fields([Entry { n: 1, s: "xy" }]))

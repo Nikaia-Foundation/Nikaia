@@ -6,7 +6,7 @@ fn outer(mut v: Vec[String]) {
     let s = f"y{2}"
     fill(s, v)
 }
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = Vec()
     fill("lit", v)
     outer(v)

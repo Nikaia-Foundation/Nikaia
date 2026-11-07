@@ -7,7 +7,7 @@ grammar G {
 	entry rule plain -> String = (d:Ch ",")* ";" -> { f"{d}" }
 }
 
-fn main() {
+fn main() throws {
 	let r = G::plain("1,2,;") catch {
 		println("error")
 		return

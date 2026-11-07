@@ -6,7 +6,7 @@ grammar Obj {
 	entry rule read[S: Struct] -> S = v:dec[i64](digit+) eof -> { v }
 }
 
-fn main() {
+fn main() throws {
 	let n: i64 = Obj::read[i64](Bytes("42".bytes().collect())) catch {
 		println("error")
 		return

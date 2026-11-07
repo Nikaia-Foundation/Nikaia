@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut cells: Array[i64, 3] = [1, 2, 3]
     for mut c in cells {
         c = c + 100

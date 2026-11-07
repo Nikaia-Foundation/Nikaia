@@ -11,7 +11,7 @@ fn zero(mut xs: Array[u32]) {
     for i in 0..<xs.len() { xs[i] = 0 }
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[u32] = [1, 2, 3, 4]
     print(f"{sum(v[1..<4])} ")
     zero(v[1..<3])

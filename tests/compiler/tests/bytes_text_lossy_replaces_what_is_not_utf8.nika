@@ -3,7 +3,7 @@ fn shown(b: ref Bytes) -> String {
     return b.text_lossy()
 }
 
-fn main() {
+fn main() throws {
     let b = Bytes([0x41, 0xff, 0x42])
     let t = b.text_lossy()
     println(f"{t} {t.len()}")

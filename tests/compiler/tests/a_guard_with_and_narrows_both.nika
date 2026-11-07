@@ -7,7 +7,7 @@ fn both(a: String?, b: String?) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(both("ab", "cde"))
     println(both("", "cde"))
     println(both("ab", null))

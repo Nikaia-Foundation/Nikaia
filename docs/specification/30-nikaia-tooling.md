@@ -579,7 +579,7 @@ extern {
     fn strlen(s: ref Array[u8]) -> usize
 }
 
-fn main() {
+fn main() throws {
     let text = "hello\0"
     let n = unsafe { strlen(text) }
     println(f"{n}")
@@ -619,7 +619,7 @@ extern {
     fn free(b: Block)
 }
 
-fn main() {
+fn main() throws {
     let mut room: Block? = null
     let rc = unsafe { posix_memalign(room, 64, 128) }
     println(f"{rc}")
@@ -1008,7 +1008,7 @@ span ([ADR-150](adr/adr-150.md) D2, D5):
 ```nika
 use std::time
 
-fn main() {
+fn main() throws {
     let timeout = 90.seconds()          // also millis, micros, minutes, hours
     time::sleep(timeout)
     println(f"{timeout.in_minutes()}")  // 1: whole units, cut off
@@ -1618,7 +1618,7 @@ use sqlite                                    // a driver package, not `std`
 
 comptime APP = asset("schema.sql")            // the schema, read while building
 
-fn query_data() {
+fn query_data() throws {
     // Transparently starts the required sidecar (thread or worker). The
     // connection is typed by the schema it was opened for (ADR-299), so a
     // statement checked against another schema is refused at `execute`.

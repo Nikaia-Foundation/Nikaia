@@ -19,7 +19,7 @@ fn returned(t: ref P) -> String { return "<" + t.name + ">" }
 
 fn deep(q: ref Q) -> String { return q.inner.name + q.inner.name }
 
-fn main() {
+fn main() throws {
     let p = P { name: "ab" }
     println(f(p))
     println(let_bound(p))

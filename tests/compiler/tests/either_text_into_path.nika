@@ -7,7 +7,7 @@ fn to_path(h: ref Holder, c: bool) -> fs::Path {
     return p
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { name: f"abc{1}" }
     let a = to_path(h, true)
     let b = to_path(h, false)

@@ -10,7 +10,7 @@ fn add(mut v: Vec[Entry?], at: i64) {
     x.names.push("n")
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[Entry?] = [Entry { names: [] }, null]
     add(v, 0)
     add(v, 1)

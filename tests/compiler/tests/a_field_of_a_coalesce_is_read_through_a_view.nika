@@ -31,7 +31,7 @@ fn row_e(m: collections::BTreeMap[String, Con], key: String) -> String? {
     label.clone()
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Con] = collections::BTreeMap()
     m.insert("k", Con { signature: Sig { name: "one", config: [Slot { default: "dflt" }] }, label: "lbl" })
     println(row_a(m, "k") ?? "none")

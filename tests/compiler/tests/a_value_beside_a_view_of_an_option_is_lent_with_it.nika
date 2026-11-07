@@ -39,7 +39,7 @@ fn area(s: ref Shape?) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     let some: BinaryOp? = BinaryOp::Sub
     let none: BinaryOp? = null
     let shape: Shape? = null

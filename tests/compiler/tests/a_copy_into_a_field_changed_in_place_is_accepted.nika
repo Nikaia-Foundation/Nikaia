@@ -10,7 +10,7 @@ fn make(text: String) -> Cursor {
 	return c
 }
 
-fn main() {
+fn main() throws {
 	let t = f" a {1} "
 	let c = make(t)
 	println(f"{c.input} {c.pos}")

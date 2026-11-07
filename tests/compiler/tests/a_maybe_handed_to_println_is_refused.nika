@@ -5,7 +5,7 @@ fn find_nickname(name: String) -> String? {
     return null
 }
 
-fn main() {
+fn main() throws {
     println(find_nickname("Ada") ?? "no nickname")
     println(find_nickname("Rust"))
 }

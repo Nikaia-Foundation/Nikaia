@@ -26,7 +26,7 @@ fn show(t: ref Term) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     let a = Term::Atom { kind: Kind::Num(3), name: "x" }
     let b = Term::Group { inner: Kind::Neg, count: 2 }
     println(f"{show(a)} {show(b)}")

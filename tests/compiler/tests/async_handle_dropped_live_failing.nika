@@ -29,7 +29,7 @@ fn run() -> i64 throws {
 	return v + 1
 }
 
-fn main() {
+fn main() throws {
 	let n = run() catch {
 		println(f"caught at the group's end: {error}")
 		100

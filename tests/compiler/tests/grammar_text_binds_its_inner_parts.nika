@@ -21,7 +21,7 @@ fn bytes_of(text: String) -> Bytes {
     return Bytes(all)
 }
 
-fn main() {
+fn main() throws {
     println(G::top("ab  cd ef ;") catch { "refused" })
     println(G::top(bytes_of("gh ij;")) catch { "refused" })
     println(G::nested("ab - cd / ef") catch { "refused" })

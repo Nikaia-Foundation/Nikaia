@@ -13,7 +13,7 @@ fn pauses(k: i64) -> String {
     s
 }
 
-fn main() {
+fn main() throws {
     let g: fn(i64) -> String = fn(k) { f"y{k}" }
     println(twice(g, 1))
     let h: fn(i64) -> String = fn(k) { pauses(k) }

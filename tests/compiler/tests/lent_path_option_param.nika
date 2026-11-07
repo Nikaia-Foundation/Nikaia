@@ -27,7 +27,7 @@ fn first(p: ref fs::Path?) -> String {
     return f"{q.display()}"
 }
 
-fn main() {
+fn main() throws {
     let abc: fs::Path = "a/b/c"
     let local: fs::Path? = abc.strip_prefix("a")
     println(shown(local))

@@ -18,7 +18,7 @@ fn longer(a: Array[i64], b: Array[i64]) -> Array[i64] {
     return b
 }
 
-fn main() {
+fn main() throws {
     let a: Array[i64, 3] = [1, 2, 3]
     let v: Vec[i64] = [4, 5, 6]
     println(total(a))

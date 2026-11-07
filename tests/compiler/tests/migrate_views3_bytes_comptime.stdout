@@ -9,7 +9,7 @@ fn tail(b: Bytes) -> Bytes {
 
 comptime NAME: String = "nikaia"
 
-fn main() {
+fn main() throws {
     let text: String = "abc"
     println(size(text.bytes))
     let t = tail(text.bytes)

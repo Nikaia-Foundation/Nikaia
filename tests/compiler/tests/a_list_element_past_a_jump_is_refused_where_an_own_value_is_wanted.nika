@@ -20,7 +20,7 @@ fn kept(v: ref Vec[String?]) -> i64 {
 fn given(v: ref Vec[Entry?]) -> i64 {
     by_val(v[0] ?? return 0).n
 }
-fn main() {
+fn main() throws {
     let v: Vec[Entry?] = [Entry { n: 3, s: "a" }]
     println(f"{typed(v)} {chained(v, v)} {given(v)}")
 }

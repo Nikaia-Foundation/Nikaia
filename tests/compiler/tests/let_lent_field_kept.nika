@@ -8,7 +8,7 @@ fn kept(h: ref Holder) -> i64 {
     return x.len()
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { name: f"ab{1}" }
     println(f"{kept(h)}")
 }

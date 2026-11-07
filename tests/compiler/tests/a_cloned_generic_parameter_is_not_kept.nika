@@ -17,6 +17,6 @@ fn id[T](x: T) -> T {
     return x.clone()
 }
 
-fn main() {
+fn main() throws {
     println(f"{id(3)} {hold(Item { n: 4 }).item.n}")
 }

@@ -20,7 +20,7 @@ fn keepit(a: String, b: String) -> String {
     return a
 }
 
-fn main() {
+fn main() throws {
     println(pick(f"xy{1}", "lit"))
     println(pick(f"x{1}", "lit"))
     println(keepit(f"y{1}", "lit"))

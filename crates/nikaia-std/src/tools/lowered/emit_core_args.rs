@@ -1349,6 +1349,9 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_print<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let fails = call_fails_state(world.library, text) == 2;
+        let callee = if fails { format!("nikaia_std::io::{}(format_args!", text) } else { format!("{}!", text) };
+        let ending = if fails { ")" } else { "" };
         if args.len() == 1 {
             let given = nikaia_std::index::get(&args, 0);
             let key = node_key(&given);
@@ -1362,25 +1365,26 @@ impl EmitState {
                     _ => { self.emit_expr(world, walk, out, host, &given, depth, flow, scope)?; },
                 }
                 out.push(&format!("), {}, {})", to_err, newline));
+                if !fails { out.push(".unwrap_or(())"); }
                 return Ok(());
             }
             match given {
                 Expr::LitInterpolated { parts, .. } => {
-                    out.push(&format!("{}!(", text));
+                    out.push(&format!("{}(", callee));
                     self.emit_core_format_string(world, walk, out, host, parts, depth, flow, scope)?;
-                    out.push(")");
+                    out.push(&format!("){}", ending));
                     return Ok(());
                 },
                 Expr::LitStr { text: literal, .. } => {
-                    out.push(&format!("{}!(\"{}\")", text, rust_format_escape(literal)));
+                    out.push(&format!("{}(\"{}\"){}", callee, rust_format_escape(literal), ending));
                     return Ok(());
                 },
                 _ => { },
             }
         }
-        out.push(&format!("{}!(\"{{}}\", ", text));
+        out.push(&format!("{}(\"{{}}\", ", callee));
         self.emit_core_args(world, walk, out, host, text, args, &vec![], depth, flow, scope)?;
-        out.push(")");
+        out.push(&format!("){}", ending));
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

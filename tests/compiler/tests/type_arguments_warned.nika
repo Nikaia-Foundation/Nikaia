@@ -5,6 +5,6 @@ fn id[T](x: T) -> T {
     return x
 }
 
-fn main() {
+fn main() throws {
     println(id[i64](3))
 }

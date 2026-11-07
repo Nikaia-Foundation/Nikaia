@@ -55,11 +55,11 @@ fn nested(x: i32, t: String, o: String?) -> (i32, String?) {
         else => { (4, t.clone()) },
     }
 }
-fn show(label: String, r: (i32, String?)) {
+fn show(label: String, r: (i32, String?)) throws {
     let (a, b) = r
     println(f"{label} {a} {b ?? "none"}")
 }
-fn main() {
+fn main() throws {
     show("a", row_a("x"))
     show("a", row_a(null))
     show("b", row_b(true, "y"))

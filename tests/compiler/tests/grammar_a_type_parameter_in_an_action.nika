@@ -11,7 +11,7 @@ grammar Num {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let small: u8 = Num::read[u8](Bytes("42".bytes().collect())) catch {
 		println("error")
 		return

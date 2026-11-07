@@ -4,7 +4,7 @@ struct Bag {
     items: collections::BTreeMap[String, Vec[i64]],
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
     m.insert("b", [3])
     m.insert("a", [1, 2])

@@ -14,7 +14,7 @@ fn sum(v: Vec[i64]) -> i64 {
     return total
 }
 
-fn main() {
+fn main() throws {
     let f = count
     let mut a = collections::HashMap()
     a["x"] = 1

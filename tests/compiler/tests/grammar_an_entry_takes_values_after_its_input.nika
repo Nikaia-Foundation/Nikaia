@@ -17,7 +17,7 @@ grammar Fixed {
     entry rule dots(limit: i64) -> i64 = d:text("."{0, limit - 1}) "!" eof -> { d.len() as i64 }
 }
 
-fn main() {
+fn main() throws {
     println(Fixed::number("042", 3) catch { -1 })
     println(Fixed::number("042", 2) catch { -1 })
     println(Fixed::number("-07", 2; signed: true) catch { -1 })

@@ -9,7 +9,7 @@ fn put(path: String, text: String) {
 	fs::write(path, fs::Root::Anywhere, text) catch { }
 }
 
-fn main() {
+fn main() throws {
 	if cli::args().len() > 99 {
 		async {
 			async put("a.txt", "a")

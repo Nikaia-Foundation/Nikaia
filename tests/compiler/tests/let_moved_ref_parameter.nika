@@ -4,7 +4,7 @@ fn back(p: ref P) -> Vec[i64] {
     let k = p.items
     return k
 }
-fn main() {
+fn main() throws {
     let p = P { items: [1, 2, 3] }
     let v = back(p)
     print(v.len())

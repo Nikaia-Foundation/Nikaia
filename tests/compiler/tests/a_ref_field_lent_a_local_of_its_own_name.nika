@@ -18,7 +18,7 @@ fn go(a: ref N) -> i64 {
     return show(W { a: a, b: b })
 }
 
-fn main() {
+fn main() throws {
     let x = N { v: 1 }
     println(f"{go(x)}")
 }

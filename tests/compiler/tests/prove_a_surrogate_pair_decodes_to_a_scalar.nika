@@ -30,7 +30,7 @@ fn decode(a: i64, b: i64) -> scalar throws {
 	return scalar::from(cp)
 }
 
-fn main() {
+fn main() throws {
 	let c = decode(65, 0) catch { 'x' }
 	println(f"{c}")
 }

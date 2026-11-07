@@ -1,6 +1,6 @@
 // #707: a list `drain` took away is given a value again before it is read.
 
-fn main() {
+fn main() throws {
     let mut b: Vec[String] = []
     b.push(f"x{1}")
     let mut n = 0

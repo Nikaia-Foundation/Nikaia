@@ -10,7 +10,7 @@ fn back(s: String) -> (String?, i64) {
     return (s, 2)
 }
 
-fn main() {
+fn main() throws {
     println(pair(("xy", 1)))
     let t: (String?, i64) = ("ab", 3)
     println(t.0 ?? "-")

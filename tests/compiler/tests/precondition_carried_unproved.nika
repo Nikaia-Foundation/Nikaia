@@ -11,7 +11,7 @@ fn hb(x: ref Vec[u8]) -> i64 sync {
 	return h(x)
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, 2, 3]
 	let mut u: Vec[u8] = []
 	u.resize(xs[2], 0)

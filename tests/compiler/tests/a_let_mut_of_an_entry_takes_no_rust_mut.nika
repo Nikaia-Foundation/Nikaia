@@ -10,7 +10,7 @@ fn put(mut classes: collections::BTreeMap[String, collections::BTreeMap[i64, Cla
     class.n = class.n + 1
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     let k: String = "a"
     for _ in 0..<2 {

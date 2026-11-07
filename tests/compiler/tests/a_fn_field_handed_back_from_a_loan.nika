@@ -15,7 +15,7 @@ fn pick(h: ref H) -> fn(i64) -> i64 {
 	return h.f
 }
 
-fn main() {
+fn main() throws {
 	let h = H { n: 4, f: inc }
 	println(f"{num(h)}")
 	let p = pick(h)

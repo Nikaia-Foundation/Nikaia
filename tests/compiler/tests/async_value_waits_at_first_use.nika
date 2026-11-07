@@ -6,7 +6,7 @@ fn load(n: i64) -> i64 {
 	return n * 10
 }
 
-fn main() {
+fn main() throws {
 	let a = async load(4)
 	println("the window's statement")
 	println(f"a is {a}")
