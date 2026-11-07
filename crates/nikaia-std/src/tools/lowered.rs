@@ -179,6 +179,14 @@ mod calls_lowered {
 #[allow(unused_imports)]
 pub use calls_lowered::*;
 
+mod cargo_json_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/cargo_json.rs");
+}
+#[allow(unused_imports)]
+pub use cargo_json_lowered::*;
+
 mod cexport_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2329,7 +2337,7 @@ pub mod bounds_body {
 }
 pub mod bounds_derived {
     #[allow(unused_imports)]
-    pub use super::{derived_order, derived_note, derived_rows};
+    pub use super::{DerivedClaim, DerivedFunction, Derived, no_derived, derived_of, derived_order, derived_note, derived_written, derived_rows, derived_callees};
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
@@ -2378,6 +2386,10 @@ pub mod build_values {
 pub mod calls {
     #[allow(unused_imports)]
     pub use super::{Callee, callee_of, callee_named};
+}
+pub mod cargo_json {
+    #[allow(unused_imports)]
+    pub use super::{cargo_json_lines, cargo_json_member, cargo_json_text, cargo_json_bool, cargo_json_number, cargo_json_items, cargo_json_an_artifact, cargo_json_filenames, cargo_json_path, cargo_json_extension};
 }
 pub mod cexport {
     #[allow(unused_imports)]
@@ -2735,7 +2747,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -2767,7 +2779,7 @@ pub mod describe {
 }
 pub mod diagnostics {
     #[allow(unused_imports)]
-    pub use super::{DiagnosticsRead, DiagnosticsChild, DiagnosticsPlaced, diagnostics_placed};
+    pub use super::{DiagnosticsRead, DiagnosticsChild, diagnostics_read_json, diagnostics_libraries_in, diagnostics_executable_in, DiagnosticsPlaced, diagnostics_placed};
 }
 pub mod diffs {
     #[allow(unused_imports)]
@@ -3290,7 +3302,7 @@ pub mod sysroot_cache {
 }
 pub mod sysroot_package {
     #[allow(unused_imports)]
-    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble};
+    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble, sysroot_package_with_dependencies};
 }
 pub mod template {
     #[allow(unused_imports)]
@@ -3355,4 +3367,9 @@ pub mod views {
 pub mod written {
     #[allow(unused_imports)]
     pub use super::{written_expression, written_pattern};
+}
+pub mod json {
+    #[allow(unused_imports)]
+    use super::{scalar, IntoEither, IntoEitherMaybe, TextQuoted};
+    include!("lowered/json/lowered.rs");
 }

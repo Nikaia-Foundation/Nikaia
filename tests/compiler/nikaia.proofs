@@ -3,7 +3,11 @@
 # question in normal form, and `proved` with its certificate,
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
+738bd87d9452ece0d9d9cc02e3880fed6c12bd125b36e9f1310e2da2e2e95042 refuted v0=4611686018427387904,v1=4611686018427387905,v2=0,v3=0
 7456374f27e9e8db15ece5555cbaa49c5f83acf1c3eddc004421740e598da135 proved R(h0,h1,c1:1:0:1)
+7e4979c0da161be7e22c13f2fab83e9c973cd9931ba46139ee65eefdf0866971 proved R(h0,h6,c1:1:0:1)
+a478a8eb26a37d45cf805d682548dffb9c2968d4bfaf1104f1808f3db730b5b5 refuted v0=0,v1=1,v2=0,v3=0
 bee6b663f086a47e98abff130009c55e97f777f1875b4988e95ca8c92ab8ee43 refuted v0=1,v1=4611686018427387904
 da4ac6d16865db8de5bf29e3a70afb38a9c8183dd354b6b747c02f023c9c1f27 refuted v0=1,v1=1
 e7c811e7a52a344c67cebd157701a7449a86e12797c52223d60f840ab4476115 refuted v0=-4611686018427387904
+f0cc76838a7c29ec182f0673a48e666c5d1fb81d4e51ad0779a6c287f3ecd4d7 proved R(h6)

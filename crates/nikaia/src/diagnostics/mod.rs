@@ -20,8 +20,6 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
-
 use crate::ast::Span;
 use crate::emit::SourceMap;
 
@@ -288,55 +286,19 @@ pub fn translate(rustc_json: &str, map: &SourceMap, source: &str) -> Vec<Diagnos
 /// [ADR-005](../../../../docs/specification/adr/adr-005.md) D7 now enumerates
 /// `E0277` among.
 pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Diagnostic> {
-    // **Read here, placed in Nikaia** (`tools/diagnostics.nika`, ADR-294,
-    // #125): this side reads the JSON and asks the emitter's map where the
-    // primary byte came from; what the message becomes is decided there.
-    use nikaia_std::tools::diagnostics::{DiagnosticsChild, DiagnosticsRead};
-    let mut read = Vec::new();
-    for line in json.lines() {
-        let Ok(value) = serde_json::from_str::<Value>(line) else {
-            continue;
-        };
-        // Cargo's own lines ("compiler-artifact", "build-finished") carry no
-        // diagnostic; the one that does carries it under `message`.
-        let value = match value["reason"].as_str() {
-            Some("compiler-message") => value["message"].clone(),
-            Some(_) => continue,
-            None => value,
-        };
-        let primary = value["spans"].as_array().and_then(|spans| {
-            spans
-                .iter()
-                .find(|s| s["is_primary"].as_bool() == Some(true))
-        });
-        let located = primary
-            .and_then(|s| s["byte_start"].as_u64())
-            .and_then(|offset| map.locate(offset as usize));
-        read.push(DiagnosticsRead {
-            level: value["level"].as_str().unwrap_or_default().to_string(),
-            message: value["message"].as_str().unwrap_or_default().to_string(),
-            generated_line: primary
-                .and_then(|s| s["line_start"].as_u64())
-                .map(|l| l as i64),
-            label: primary
-                .and_then(|s| s["label"].as_str())
-                .map(str::to_string),
-            located: located.is_some(),
-            unit: located.map_or(0, |(unit, _)| unit as i64),
-            span: located.map_or(Span::from(0..0), |(_, span)| span),
-            children: value["children"]
-                .as_array()
-                .map(|children| {
-                    children
-                        .iter()
-                        .map(|c| DiagnosticsChild {
-                            level: c["level"].as_str().map(str::to_string),
-                            message: c["message"].as_str().map(str::to_string),
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-        });
+    // **Read and placed in Nikaia** (`tools/diagnostics.nika`, ADR-294,
+    // #125, #1163): this side only asks the emitter's map where the primary
+    // byte came from.
+    let mut read = nikaia_std::tools::diagnostics::diagnostics_read_json(json);
+    for one in &mut read {
+        if let Some((unit, span)) = one
+            .byte_start
+            .and_then(|offset| map.locate(offset as usize))
+        {
+            one.located = true;
+            one.unit = unit as i64;
+            one.span = span;
+        }
     }
     nikaia_std::tools::diagnostics::diagnostics_placed(&read, sources)
         .into_iter()

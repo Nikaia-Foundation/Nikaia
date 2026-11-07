@@ -509,7 +509,8 @@ fn main() {
 /// ADR-306 D5: a field of an element is written through the element's place,
 /// and a position proved inside is that place without its check, as it is
 /// read - a local list and a `mut` parameter alike. One nothing proves keeps
-/// its check, and stops at the index.
+/// its check, and stops at the index: `put` is `pub`, so its callers bound
+/// nothing (ADR-391 D1).
 #[test]
 fn a_field_of_an_element_proved_inside_is_written_without_its_check() {
     let source = "\
@@ -521,7 +522,7 @@ fn bump(mut cs: Vec[Cell]) {
     for i in 0..<cs.len() { cs[i].n = cs[i].n + 1 }
 }
 
-fn put(mut cs: Vec[Cell], i: i64) {
+pub fn put(mut cs: Vec[Cell], i: i64) {
     cs[i].n = 7
 }
 

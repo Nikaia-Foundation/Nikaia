@@ -1,0 +1,19 @@
+/// A private function another file of the package calls too (ADR-391 D1):
+/// this file's call proves `at <= xs.len()`, the call in
+/// `src/derived_beside_caller.nika` does not, so `xs[k]` keeps its check
+/// (`nikaia check --bounds src/derived_beside.nika`,
+/// `tests/prove_derived_precondition_beside.nika`).
+fn derived_take(xs: ref Vec[i64], at: i64) -> i64 {
+	let mut k = 0
+	let mut last = 0
+	while k < at {
+		last = xs[k]
+		k += 1
+	}
+	return last
+}
+
+/// The last element, read through `derived_take` with the list's length.
+pub fn derived_take_all(xs: ref Vec[i64]) -> i64 {
+	return derived_take(xs, xs.len())
+}

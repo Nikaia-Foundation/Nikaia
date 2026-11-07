@@ -1,0 +1,59 @@
+/// Which functions take a bound from their callers (ADR-391 D1): only a
+/// private one called by name, every call of which the walk answers.
+/// `sum_to` is called on three lines and derives `at <= xs.len()`;
+/// `as_value` is also handed on as a value, `from_closure` is called inside
+/// a closure, and `down` calls itself: none of them derives anything, and
+/// their indexes keep the check.
+fn sum_to(xs: ref Vec[i64], at: i64) -> i64 {
+	let mut k = 0
+	let mut sum = 0
+	while k < at {
+		sum += xs[k]
+		k += 1
+	}
+	return sum
+}
+
+fn as_value(xs: ref Vec[i64], at: i64) -> i64 {
+	let mut k = 0
+	let mut last = 0
+	while k < at {
+		last = xs[k]
+		k += 1
+	}
+	return last
+}
+
+fn from_closure(xs: ref Vec[i64], at: i64) -> i64 {
+	let mut k = 0
+	let mut last = 0
+	while k < at {
+		last = xs[k]
+		k += 1
+	}
+	return last
+}
+
+fn down(xs: ref Vec[i64], at: i64) -> i64 {
+	if at <= 0 {
+		return 0
+	}
+	return xs[at - 1] + down(xs, at - 1)
+}
+
+fn apply(f: fn(ref Vec[i64], i64) -> i64, xs: ref Vec[i64]) -> i64 {
+	return f(xs, 1)
+}
+
+fn main() {
+	let xs = [1, 2, 3, 4]
+	println(f"{sum_to(xs, 1)}")
+	println(f"{sum_to(xs, 2)}")
+	println(f"{sum_to(xs, xs.len())}")
+	println(f"{as_value(xs, 2)} {apply(as_value, xs)}")
+	let ys = [5, 6, 7]
+	println(f"{from_closure(ys, 3)}")
+	let later: fn(i64) -> i64 = fn(n) { from_closure(ys, n) }
+	println(f"{later(2)}")
+	println(f"{down(xs, xs.len())}")
+}

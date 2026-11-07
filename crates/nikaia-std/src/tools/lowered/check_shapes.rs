@@ -23,6 +23,12 @@ pub fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
         Expr::MethodCall { receiver, method, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let name = world.words.resolve(method);
+            if name == "find" {
+                return match receiver {
+                    Expr::MethodCall { receiver: inner, method: iter, .. } => { let inner = nikaia_std::boxed::open(inner); let iter = *iter; world.words.resolve(iter) == "iter" && roots_in_a_binding(inner) },
+                    _ => false,
+                };
+            }
             (name == "get" || name == "first" || name == "last") && roots_in_a_binding(receiver)
         },
         _ => false,

@@ -8,3 +8,5 @@ bounds in tests/prove_while_counter_relative.nika: 1 indexes, 1 proved; 8 operat
     34  i += 1  proved
     43  n += 1  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
     45  i += 1  proved
+  derived  small: 0 <= n, proved at the calls on lines 53
+  derived  uneven: 0 <= m, proved at the calls on lines 53

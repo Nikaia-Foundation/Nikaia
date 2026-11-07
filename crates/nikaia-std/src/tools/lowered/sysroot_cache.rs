@@ -187,13 +187,37 @@ pub async fn sysroot_drift(files: &[(String, String)], dir: &std::path::Path) ->
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn sysroot_stale(dir: &std::path::Path, kept: &[String]) -> Vec<String> {
+    let mut stale: Vec<String> = sysroot_generated(dir).iter().filter(|&name| { !kept.contains(name) }).map(|name| { name.to_string() }).collect::<Vec<_>>();
+    stale.sort();
+    stale
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn sysroot_generated(dir: &std::path::Path) -> Vec<String> {
+    let mut names: Vec<String> = vec![];
     let listed = match fs::read_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(SYSROOT_TOOLS_FILES))), &fs::Root::Anywhere) {
         Ok(value) => value,
         Err(_error) => { vec![] },
     };
-    let mut stale: Vec<String> = listed.iter().map(|name| { format!("{}/{}", SYSROOT_TOOLS_FILES, nikaia_std::fs::path::text_of(&(name))) }).filter(|name| { !nikaia_std::list::contains(&kept, &name) }).collect::<Vec<_>>();
-    stale.sort();
-    stale
+    for entry in listed.iter() {
+        let name = format!("{}/{}", SYSROOT_TOOLS_FILES, nikaia_std::fs::path::text_of(&(entry)));
+        let meta = match fs::metadata(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))), &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { continue; },
+        };
+        if !meta.is_dir() {
+            names.push(name);
+            continue;
+        }
+        names.push(format!("{}/{}", name, SYSROOT_TOOLS_PACKAGE));
+        let theirs = match fs::read_dir(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name)))), std::path::Path::new(&(SYSROOT_TOOLS_FILES))), &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { vec![] },
+        };
+        for file in theirs.iter() { names.push(format!("{}/{}/{}", name, SYSROOT_TOOLS_FILES, nikaia_std::fs::path::text_of(&(file)))); }
+    }
+    names
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

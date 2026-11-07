@@ -1,0 +1,19 @@
+/// A private function's parameter bound is taken from its callers
+/// (ADR-391 D1, D3): both calls hand `pick` an `at` of at most
+/// `arms.len()`, so `arms[before]` needs no check, and `--bounds` names
+/// the derived precondition with the lines of its calls (D4).
+fn pick(arms: ref Vec[i64], at: i64) -> i64 {
+	let mut before = 0
+	let mut sum = 0
+	while before < at {
+		sum = arms[before]
+		before += 1
+	}
+	return sum
+}
+
+fn main() {
+	let xs = [1, 2, 3]
+	println(f"{pick(xs, 2)}")
+	println(f"{pick(xs, xs.len())}")
+}

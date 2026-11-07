@@ -302,3 +302,20 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
     package
 }
 
+pub(crate) const SYSROOT_PACKAGE_HANDED: &[&str] = &["scalar", "IntoEither", "IntoEitherMaybe", "TextQuoted"];
+
+pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> {
+    let mut index = nikaia_std::index::get(&package, 0).1.to_string();
+    let mut files: Vec<(String, String)> = vec![];
+    for at in 1..package.len() as i64 { files.push((*nikaia_std::index::get(&package, (at) as usize)).clone()); }
+    let handed = SYSROOT_PACKAGE_HANDED.iter().join(", ");
+    for (name, theirs) in dependencies.iter() {
+        index.push_str(&format!("pub mod {} {{\n    #[allow(unused_imports)]\n    use super::{{{}}};\n    include!(\"{}/{}/{}\");\n}}\n", name, handed, SYSROOT_TOOLS_FILES, name, SYSROOT_TOOLS_PACKAGE));
+        for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_TOOLS_FILES, name, file), text.to_string())); }
+    }
+    files.sort();
+    let mut all: Vec<(String, String)> = vec![(nikaia_std::index::get(&package, 0).0.to_string(), index)];
+    all.extend(files);
+    all
+}
+
