@@ -468,6 +468,22 @@ impl Lock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panics {
+    No,
+    Yes,
+    Unknown,
+}
+
+impl Panics {
+    pub fn never(&self) -> bool { *self == Panics::No }
+    pub fn or(&self, other: &Panics) -> Panics {
+        if *self == Panics::Yes || *other == Panics::Yes { return Panics::Yes; }
+        if *self == Panics::Unknown || *other == Panics::Unknown { return Panics::Unknown; }
+        Panics::No
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Crosses {
     May,
     MayNot,
@@ -720,6 +736,7 @@ pub struct FnContract {
     pub keeps: Vec<String>,
     pub mutates: bool,
     pub touches_a_lock: Lock,
+    pub panics: Panics,
     pub threads: Threads,
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
@@ -735,7 +752,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

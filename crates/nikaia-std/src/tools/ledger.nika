@@ -412,6 +412,17 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         } else {
             entry.touches_a_lock = Lock::No
         }
+    } else if key == "panics" {
+        // **Whether it can panic** (ADR-async-5 D35): `"?"`, and anything
+        // else, is the absence of a guarantee.
+        let said = value.trim()
+        if said == "true" {
+            entry.panics = Panics::Yes
+        } else if said == "false" {
+            entry.panics = Panics::No
+        } else {
+            entry.panics = Panics::Unknown
+        }
     } else if key == "threads" {
         let said = value.trim()
         if said == "true" {

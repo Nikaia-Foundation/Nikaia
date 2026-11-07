@@ -2332,6 +2332,7 @@ signature = "[K, V](self: ref collections::HashMap[K, V]) -> Seq[ref K] sync siz
 # How many pairs the map holds.
 [fn."collections::HashMap::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::HashMap[?, ?]) -> i64"
@@ -2420,6 +2421,7 @@ signature = "[T](mut self: ref collections::HashSet[T], value: ?) -> bool"
 # How many values the set holds.
 [fn."collections::HashSet::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::HashSet[?]) -> i64"
@@ -2486,6 +2488,7 @@ signature = "[T](self: ref collections::BTreeSet[T], value: ?) -> bool"
 # How many values the set holds.
 [fn."collections::BTreeSet::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeSet[?]) -> i64"
@@ -2582,6 +2585,7 @@ signature = "[K, V](self: ref collections::BTreeMap[K, V]) -> Seq[(ref K, ref V)
 # How many pairs the map holds.
 [fn."collections::BTreeMap::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref collections::BTreeMap[?, ?]) -> i64"
@@ -2796,6 +2800,7 @@ signature = "(ref self) -> Seq[scalar] sync ends"
 # than one byte. `chars().count()` is the other question.
 [fn."String::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> i64"
@@ -2873,6 +2878,7 @@ signature = "(self: ref Vec[?]) -> bool"
 # How many elements the list holds.
 [fn."Vec::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Vec[?]) -> i64"
@@ -2949,6 +2955,7 @@ signature = "[K, V](self: ref Fixed[K, V], key: ?) -> bool"
 # How many pairs the table holds.
 [fn."Fixed::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "[K, V](self: ref Fixed[K, V]) -> i64"
@@ -2963,6 +2970,7 @@ signature = "[K, V](self: ref Fixed[K, V]) -> bool"
 # How many elements the array holds. It is the length in its type.
 [fn."Array::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref Array[?, ?]) -> i64"
@@ -3933,6 +3941,7 @@ signature = "(self: ref String) -> Seq[scalar] sync ends"
 # than one byte. `chars().count()` is the other question.
 [fn."str::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(self: ref String) -> i64"
@@ -4340,6 +4349,7 @@ signature = "(self: ref String) -> Seq[ref(self) String] sync ends"
 # back whatever the subtraction comes to.
 [fn."text::digit_value"]
 pub = true
+panics = false
 sync = true
 touches = []
 ensures = ["result == c - 48"]
@@ -4355,6 +4365,7 @@ signature = "(c: scalar) -> i32"
 # it with a grammar, where `dec[i64](digit+)` reports where it went wrong.
 [fn."text::parse_i64"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4365,6 +4376,7 @@ signature = "(text: ref String) -> i64?"
 # it.
 [fn."text::parse_i32"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4375,6 +4387,7 @@ signature = "(text: ref String) -> i32?"
 # unsigned number takes no `-`, not even `-0`.
 [fn."text::parse_u32"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4384,6 +4397,7 @@ signature = "(text: ref String) -> u32?"
 # none or one a `u8` does not hold, as `parse_u32` reads it.
 [fn."text::parse_u8"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -4393,6 +4407,7 @@ signature = "(text: ref String) -> u8?"
 # none or one a `u64` does not hold, as `parse_u32` reads it.
 [fn."text::parse_u64"]
 pub = true
+panics = true
 sync = true
 touches = []
 views = ["text: borrowed"]
@@ -5987,6 +6002,7 @@ signature = "(self: ref Head) -> bool"
 # After `net::Connection::read`, **zero means the peer closed**.
 [fn."Bytes::len"]
 pub = true
+panics = false
 sync = true
 touches = []
 signature = "(ref self) -> i64"

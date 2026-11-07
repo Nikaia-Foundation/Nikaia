@@ -1699,6 +1699,14 @@ mod order_lowered {
 #[allow(unused_imports)]
 pub use order_lowered::*;
 
+mod panics_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/panics.rs");
+}
+#[allow(unused_imports)]
+pub use panics_lowered::*;
+
 mod parse_errors_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3055,6 +3063,10 @@ pub mod order {
     #[allow(unused_imports)]
     pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, accounted_beside, OneCall, diverts_within, overlap_report};
 }
+pub mod panics {
+    #[allow(unused_imports)]
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, panics_worth_proving};
+}
 pub mod parse_errors {
     #[allow(unused_imports)]
     pub use super::{Failure, ParseReading, RESERVED_WORDS, a_parse_error, unclosed_block_comment};
@@ -3334,7 +3346,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, lent_mut, unlent_each, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
+    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, lent_mut, unlent_each, parse, split_args, a_view_of, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
 }
 pub mod type_rules {
     #[allow(unused_imports)]

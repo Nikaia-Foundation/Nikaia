@@ -522,6 +522,8 @@ pub trait LedgerInferHost {
     fn infer_maps(ref self, mut ledger: Ledger) sync
     fn infer_locks(ref self, mut ledger: Ledger) sync
     fn infer_tether(ref self, mut ledger: Ledger) sync
+    /// Whether each function can panic (ADR-async-5 D35).
+    fn infer_panics(ref self, mut ledger: Ledger) sync
     /// A default a run's sub-program already computed (#468).
     fn known_default(ref self, unit: i64, key: ref String, at: i64) -> String? sync
     /// `expr` of unit `unit`, computed as a `ty` and written as a literal:
@@ -584,6 +586,9 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     host.infer_locks(ledger)
     // **Last of the columns, and it reads none of the above** (ADR-283 D5).
     host.infer_tether(ledger)
+    // **Whether each function can panic** (ADR-async-5 D35): after the
+    // others, since the bounds walk it asks reads what callees ensure.
+    host.infer_panics(ledger)
     // **What a result points into, written** (ADR-283 D25, #580), again, so
     // a callee of another unit is read as written once its unit has been.
     ledger_result_sources(ledger, units.len(), host)

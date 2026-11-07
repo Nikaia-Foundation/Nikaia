@@ -211,6 +211,13 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         Lock::Holds => out.push_str("locks = true\n"),
         Lock::Undecided => out.push_str("locks = \"?\"\n"),
     }
+    // **Whether it can panic** (ADR-async-5 D35): absent is `"?"`, said
+    // only where the inference answered.
+    match contract.panics {
+        Panics::No => out.push_str("panics = false\n"),
+        Panics::Yes => out.push_str("panics = true\n"),
+        Panics::Unknown => {}
+    }
     // Claims about what a body does that no signature shows (ADR-290 D6).
     match contract.threads {
         Threads::Undecided => {}
