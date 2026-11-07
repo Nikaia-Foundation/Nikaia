@@ -28,8 +28,8 @@ holds a resource gets its `drop` method called, so a file is closed exactly ther
 struct File { name: String }
 
 impl Drop for File {
-    fn drop(mut self) throws {
-        println(f"closing {self.name}")
+    fn drop(mut self) {
+        println(f"closing {self.name}") catch { }   // a drop cannot fail
     }
 }
 

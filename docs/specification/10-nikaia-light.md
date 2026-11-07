@@ -2626,7 +2626,11 @@ A struct that manages an external resource (a file handle, a socket, a C
 pointer) may implement the `Drop` trait. The `drop` method is called when the
 value is destroyed. `drop` is **synchronous**: it runs straight through and
 never pauses. It is for teardown that is pure memory work or a cheap native
-call.
+call. `drop` **cannot fail**: it is the one teardown that also runs while a
+panic unwinds or a task is cancelled, where no failure can come out, so a
+`drop` that says `throws` is refused, and a call in it that can fail (a
+`println`, [ADR-392](adr/adr-392.md)) is caught there. Teardown that can fail
+is a `Cleanup`, below.
 
 ```nika
 struct FileHandle {
@@ -2634,8 +2638,8 @@ struct FileHandle {
 }
 
 impl Drop for FileHandle {
-    fn drop(mut self) throws {
-        println("Closing file descriptor...")
+    fn drop(mut self) {
+        eprintln(f"closing descriptor {self.fd}") catch { }   // nowhere to report it
         // Native close call would go here
     }
 }
