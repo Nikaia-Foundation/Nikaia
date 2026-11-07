@@ -11,7 +11,7 @@ fn uses(e: ref Expr) -> bool {
 }
 
 fn through_continue(returned: ref Expr?) -> bool {
-    for _ in 0..1 {
+    for _ in 0..<1 {
         let value = returned ?? null
         return uses(value ?? continue)
     }
@@ -24,7 +24,7 @@ fn through_return(returned: ref Expr?) -> bool {
 }
 
 fn direct(returned: ref Expr?) -> bool {
-    for _ in 0..1 {
+    for _ in 0..<1 {
         return uses(returned ?? continue)
     }
     return uses(returned ?? return false)
