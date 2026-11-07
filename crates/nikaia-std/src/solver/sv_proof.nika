@@ -7,7 +7,9 @@
 // A query is its atoms (`row <= 0`, `row < 0` or `row = 0` over integer
 // columns) and its clauses over literals; literal `2a` is atom `a`, `2a + 1`
 // its negation, over the integers `-row + 1 <= 0` for `row <= 0` and
-// `-row <= 0` for `row < 0` (the negation of an equality is no bound). The
+// `-row <= 0` for `row < 0` (the negation of an equality is no bound). A
+// row over a real column (ADR-270 D27) negates to `-row < 0` and
+// `-row <= 0`, and no `Round`, `Split` or `Extend` touches it. The
 // log numbers what it derives, its *entries*, in the order it derives them:
 // every step makes one entry except an extension, which makes two. An entry
 // is a clause or a bound; a bound carries the literals it assumes, and a
@@ -51,12 +53,54 @@ pub struct SvAtom {
 	pub rel: SvRel,
 }
 
-/// A query as the log reads it: its atoms, its clauses over literals, and
-/// how many integer columns it has.
+/// A query as the log reads it: its atoms, its clauses over literals, how
+/// many columns it has, and which of them are real, ascending (ADR-270
+/// D27); every other column, and every column an extension adds, is an
+/// integer.
 pub struct SvQuery {
 	pub atoms: Vec[SvAtom],
 	pub clauses: Vec[Vec[u32]],
 	pub columns: u32,
+	pub reals: Vec[u32],
+}
+
+/// Whether `row` mentions a real column of `reals` (ADR-270 D27): such a
+/// row gets no integer step - its strict bound stays strict, and no
+/// rounding, split or extension touches it.
+fn sv_row_real(row: ref SvRow, reals: ref Vec[u32]) -> bool {
+	if reals.len() == 0 {
+		return false
+	}
+	for c in row.cols {
+		if reals.contains(c) {
+			return true
+		}
+	}
+	return false
+}
+
+/// The bound literal `l` of `atom` assumes: the atom itself, or its
+/// negation - over the integers `-row + 1 <= 0` for `row <= 0` and
+/// `-row <= 0` for `row < 0`, over a real row (`real`) `-row < 0` and
+/// `-row <= 0`; `null` on a negated equality or where the negation
+/// overflows.
+fn sv_lit_bound(atom: ref SvAtom, l: u32, real: bool) -> SvBound? {
+	if l % 2 == 0 {
+		return SvBound { row: atom.row.clone(), rel: atom.rel, assumed: [l] }
+	}
+	let le = match atom.rel {
+		SvRel::Le => true,
+		SvRel::Lt => false,
+		SvRel::Eq => return null,
+	}
+	if real {
+		let negated = sv_row_scale(atom.row, -1) ?? return null
+		let rel = if le { SvRel::Lt } else { SvRel::Le }
+		return SvBound { row: negated, rel: rel, assumed: [l] }
+	}
+	let shift: i64 = if le { 1 } else { 0 }
+	let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1)) ?? return null
+	return SvBound { row: negated, rel: SvRel::Le, assumed: [l] }
 }
 
 /// What a combination adds: the bound of a literal, assumed, or an earlier
@@ -174,6 +218,8 @@ pub struct SvBook {
 	/// Per literal, the bound entry the preprocessing of `sv_pre.nika`
 	/// derived from it, which the theories assert in its place.
 	pub pre: collections::BTreeMap[u32, u32],
+	/// The query's real columns (ADR-270 D27).
+	pub reals: Vec[u32],
 }
 
 /// A book over `query`, its clauses not yet put in.
@@ -184,6 +230,7 @@ fn sv_book(query: ref SvQuery) -> SvBook? {
 		atoms: query.atoms.clone(),
 		bounds: collections::BTreeMap(),
 		pre: collections::BTreeMap(),
+		reals: query.reals.clone(),
 	}
 }
 
@@ -214,16 +261,12 @@ impl SvBook {
 			return null
 		}
 		let atom = self.atoms[at].clone()
-		if l % 2 == 0 {
-			return SvBound { row: atom.row, rel: atom.rel, assumed: [l] }
-		}
-		let shift: i64 = match atom.rel {
-			SvRel::Le => 1,
-			SvRel::Lt => 0,
-			SvRel::Eq => return null,
-		}
-		let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1)) ?? return null
-		return SvBound { row: negated, rel: SvRel::Le, assumed: [l] }
+		return sv_lit_bound(atom, l, sv_row_real(atom.row, self.reals))
+	}
+
+	/// Whether `row` mentions a real column (ADR-270 D27).
+	fn real(ref self, row: ref SvRow) -> bool {
+		return sv_row_real(row, self.reals)
 	}
 
 	/// The bound literal `l` asserts as a theory reads it, with its source:
@@ -312,6 +355,10 @@ impl SvBook {
 	/// rounded up (Chvátal-Gomory); `id` itself where the gcd is one.
 	fn round(ref mut self, id: u32) -> u32? {
 		let b = (self.bounds.get(id) ?? return null).clone()
+		// No integer step on a real row (ADR-270 D27).
+		if self.real(b.row) {
+			return null
+		}
 		let g = sv_row_content(b.row) ?? return null
 		if g <= 1 {
 			return id
@@ -322,11 +369,17 @@ impl SvBook {
 	}
 
 	/// A theory lemma from a combination that ends in `c <= 0` with
-	/// `c > 0`: the clause of the negations of what it assumed. `null`, and
-	/// nothing written, where the combination is no contradiction.
+	/// `c > 0`, or `c < 0` with `c >= 0`: the clause of the negations of
+	/// what it assumed. `null`, and nothing written, where the combination
+	/// is no contradiction.
 	fn farkas(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> SvClause? {
 		let b = self.sum(sources, multipliers) ?? return null
-		if b.row.cols.len() > 0 || b.row.constant <= 0 {
+		let strict = match b.rel {
+			SvRel::Lt => true,
+			else => false,
+		}
+		let floor: i64 = if strict { 0 } else { 1 }
+		if b.row.cols.len() > 0 || b.row.constant < floor {
 			return null
 		}
 		let mut lits: Vec[u32] = []
@@ -342,6 +395,10 @@ impl SvBook {
 
 	/// The split `le <= 0 ∨ ge <= 0`: its clause, over the two atoms it adds.
 	fn split(ref mut self, le: SvRow, ge: SvRow) -> SvClause? {
+		// No integer step on a real row (ADR-270 D27).
+		if self.real(le) || self.real(ge) {
+			return null
+		}
 		let first = self.atoms.len().checked_u32() ?? return null
 		self.atoms.push(SvAtom { row: le.clone(), rel: SvRel::Le })
 		self.atoms.push(SvAtom { row: ge.clone(), rel: SvRel::Le })
@@ -352,6 +409,9 @@ impl SvBook {
 	/// The fresh column `q = ⌊l / m⌋` and its two bounds `m·q - l <= 0` and
 	/// `l - m·q - (m - 1) <= 0`, entries `first` and `first + 1`.
 	fn extend(ref mut self, l: SvRow, m: i64) -> SvExtended? {
+		if self.real(l) {
+			return null
+		}
 		let q = self.log.columns
 		let mq = SvRow { cols: [q], ks: [m], constant: 0 }
 		let below = sv_row_sum(-1, l, 1, mq) ?? return null
@@ -410,5 +470,9 @@ fn sv_rounded(b: ref SvBound, d: i64) -> SvBound? {
 		},
 	}
 	let cols = if ks.len() == 0 { [] } else { b.row.cols.clone() }
-	return SvBound { row: SvRow { cols: cols, ks: ks, constant: constant }, rel: rel, assumed: b.assumed.clone() }
+	return SvBound {
+		row: SvRow { cols: cols, ks: ks, constant: constant },
+		rel: rel,
+		assumed: b.assumed.clone(),
+	}
 }

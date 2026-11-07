@@ -140,6 +140,7 @@ fn sv_sat(vars: u32, log: SvLog) -> SvSat {
 			atoms: [],
 			bounds: collections::BTreeMap(),
 			pre: collections::BTreeMap(),
+			reals: [],
 		},
 	)
 }
@@ -765,6 +766,37 @@ impl SvSat {
 		}
 		self.attach(ordered, id, 2, true)
 		return -1
+	}
+
+	/// The live learned clauses (a theory's lemmas among them), each its
+	/// literals, and a unit per literal fixed at level zero: what crosses
+	/// a switch of the strategy (ADR-270 D14, `sv_strategy.nika`).
+	fn carried(ref self) -> Vec[Vec[u32]] {
+		let mut out: Vec[Vec[u32]] = []
+		let top = if self.limits.len() > 0 { self.limits[0] } else { self.trail.len() }
+		for i in 0..<top {
+			out.push([self.trail[i]])
+		}
+		for c in self.learnts {
+			let at = c as i64
+			if (self.arena[at + 1] & 2) != 0 {
+				continue
+			}
+			let mut lits: Vec[u32] = []
+			for i in 0..<self.arena[at] as i64 {
+				lits.push(self.arena[at + 3 + i])
+			}
+			out.push(lits)
+		}
+		return out
+	}
+
+	/// The phase variable `v` is first decided in: a walk's truth of its
+	/// atom (`sv_walk.nika`) handed to the search.
+	fn set_phase(ref mut self, v: i64, phase: bool) {
+		if v >= 0 && v < self.phase.len() {
+			self.phase[v] = phase
+		}
 	}
 
 	/// The next decision: the open variable of highest activity in its

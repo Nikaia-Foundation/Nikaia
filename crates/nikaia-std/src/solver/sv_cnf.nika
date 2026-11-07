@@ -11,7 +11,9 @@
 //   kept once: a row whose first coefficient is negative is the negation of
 //   the other relation on the negated row (`r <= 0` is `¬(-r < 0)`), so
 //   `x <= y` and `y < x` are one atom and its negation. A row without
-//   columns is decided on the spot.
+//   columns is decided on the spot. A row over a real variable
+//   (`sv_cnf_sorted`, ADR-270 D27) keeps `row < 0` strict: no `+1`, no
+//   rounding, only the exact division by the gcd of all its numbers.
 // * **Clauses**: what holds at the top - a conjunction, a negated
 //   disjunction - is split into its parts, a disjunction there is one
 //   clause, and only a junction nested below a disjunction gets a
@@ -55,6 +57,8 @@ struct SvTseitin {
 	/// The literal each junction node of the arena was given.
 	defined: collections::BTreeMap[i64, i64],
 	definitions: i64,
+	/// The names of the real variables (ADR-270 D27).
+	real_names: collections::BTreeSet[String],
 }
 
 /// The negation of a literal under way.
@@ -72,6 +76,20 @@ fn sv_cnf_not(l: i64) -> i64 {
 /// is outside linear integer arithmetic or a number leaves `i64` (`why`
 /// says which).
 fn sv_cnf(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why: LgWhy) -> SvCnf? {
+	let none: collections::BTreeSet[String] = collections::BTreeSet()
+	return sv_cnf_sorted(arena, facts, goal, none, why)
+}
+
+/// `sv_cnf` where the variables named in `reals` are real (ADR-270 D27):
+/// an atom over one of them keeps its strict relation, and the query
+/// records their columns.
+fn sv_cnf_sorted(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	reals: ref collections::BTreeSet[String],
+	mut why: LgWhy,
+) -> SvCnf? {
 	let mut t = SvTseitin {
 		atoms: [],
 		definition: [],
@@ -80,6 +98,7 @@ fn sv_cnf(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why: LgWhy) 
 		known: collections::BTreeMap(),
 		defined: collections::BTreeMap(),
 		definitions: 0,
+		real_names: reals.clone(),
 	}
 	for fact in facts {
 		t.assert(arena, fact, true, why) ?? return null
@@ -93,8 +112,16 @@ fn sv_cnf(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why: LgWhy) 
 		at += 1
 	}
 	let columns = t.vars.names.len().checked_u32() ?? return null
+	let mut real_cols: Vec[u32] = []
+	let mut c: u32 = 0
+	while c < columns {
+		if t.real_names.contains(t.vars.names[c as i64]) {
+			real_cols.push(c)
+		}
+		c += 1
+	}
 	return SvCnf {
-		query: SvQuery { atoms: t.atoms, clauses: t.clauses, columns: columns },
+		query: SvQuery { atoms: t.atoms, clauses: t.clauses, columns: columns, reals: real_cols },
 		names: t.vars.names,
 		definition: t.definition,
 	}
@@ -117,6 +144,9 @@ impl SvTseitin {
 			let other = self.atom(negated, !strict) ?? return null
 			return sv_cnf_not(other)
 		}
+		if self.real(row) {
+			return self.real_atom(row, strict)
+		}
 		let mut le = row
 		if strict {
 			le.constant = le.constant.checked_add(1) ?? return null
@@ -131,6 +161,39 @@ impl SvTseitin {
 		}
 		let a = self.atoms.len().checked_u32() ?? return null
 		self.atoms.push(SvAtom { row: normal, rel: SvRel::Le })
+		self.definition.push(false)
+		self.known.insert(key, a)
+		return sv_lit(a, false) as i64
+	}
+
+	/// Whether `row` mentions a real variable.
+	fn real(ref self, row: ref SvRow) -> bool {
+		if self.real_names.len() == 0 {
+			return false
+		}
+		for c in row.cols {
+			if self.real_names.contains(self.vars.names[c as i64]) {
+				return true
+			}
+		}
+		return false
+	}
+
+	/// The literal of `row < 0` (`strict`) or `row <= 0` over a real
+	/// variable, its first coefficient positive: no `+1` and no rounding
+	/// (ADR-270 D19, D27), the row only divided exactly by the gcd of its
+	/// coefficients and its constant.
+	fn real_atom(ref mut self, row: SvRow, strict: bool) -> i64? {
+		let normal = sv_row_reduced(row)
+		let rel = if strict { SvRel::Lt } else { SvRel::Le }
+		let key = f"{sv_row_text(normal)} {sv_rel_text(rel)}"
+		let missing: u32 = 4294967295
+		let known: u32 = self.known.get(key) ?? missing
+		if known != missing {
+			return sv_lit(known, false) as i64
+		}
+		let a = self.atoms.len().checked_u32() ?? return null
+		self.atoms.push(SvAtom { row: normal, rel: rel })
 		self.definition.push(false)
 		self.known.insert(key, a)
 		return sv_lit(a, false) as i64

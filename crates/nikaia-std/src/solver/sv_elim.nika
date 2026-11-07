@@ -184,6 +184,11 @@ fn sv_eliminate(
 	mut solved: Vec[SvSolved],
 	mut book: SvBook,
 ) -> SvChecked {
+	// Every bound here is `row <= 0` over the integers, divided and rounded:
+	// a query with a real column is outside it (ADR-270 D27).
+	if book.reals.len() > 0 {
+		return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+	}
 	let mut skipped: Vec[SvRow] = []
 	let mut rounds = 0
 	while rounds < 4096 {

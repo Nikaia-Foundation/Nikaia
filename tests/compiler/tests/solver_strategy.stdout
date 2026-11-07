@@ -1,0 +1,10 @@
+problem__003.smt2: columns 10 reals 0 atoms 20 clauses 20 disjunctions 0 nonzeros 134 interval 0‰ difference 0‰ coefficient 66 constant 39 boolean 20
+  picks walk-first, search/both+walk; refuted 2/walk
+choice.smt2: columns 2 reals 0 atoms 3 clauses 2 disjunctions 1 nonzeros 4 interval 666‰ difference 333‰ coefficient 1 constant 10 boolean 3
+  picks search/both+walk; refuted 3
+real.smt2: columns 2 reals 2 atoms 4 clauses 4 disjunctions 0 nonzeros 6 interval 500‰ difference 0‰ coefficient 1 constant 2 boolean 4
+  picks search/simplex; refuted 2
+parameters sv-params-1
+  noise=50,walk_first=500: true, noise 50, walk_first 500
+  noise=2000: false, noise 50, walk_first 500
+  speed=3: false, noise 50, walk_first 500

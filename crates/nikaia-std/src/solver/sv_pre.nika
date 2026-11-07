@@ -52,6 +52,11 @@ struct SvPreSide {
 /// `ids`; nothing where a step leaves `i64`.
 fn sv_pre(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvPre {
 	let mut out = sv_pre_none()
+	// The elimination and the fixed columns round over the integers: a
+	// query with a real column is left as it is (ADR-270 D27).
+	if book.reals.len() > 0 {
+		return out
+	}
 	// The unit clauses of theory atoms: their literals and input entries.
 	let mut unit_lits: Vec[u32] = []
 	let mut unit_ids: Vec[u32] = []

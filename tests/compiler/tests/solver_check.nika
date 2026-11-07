@@ -81,7 +81,7 @@ fn units(atoms: Vec[SvAtom], columns: u32) -> SvQuery {
 		clauses.push([pos(a)])
 		a += 1
 	}
-	return SvQuery { atoms: atoms, clauses: clauses, columns: columns }
+	return SvQuery { atoms: atoms, clauses: clauses, columns: columns, reals: [] }
 }
 
 fn report(name: String, query: ref SvQuery, log: ref SvLog) {
@@ -101,7 +101,7 @@ fn clauses() -> SvQuery {
 		[neg(0), pos(1)],
 		[neg(0), neg(1)],
 	]
-	return SvQuery { atoms: [le([1], 0), le([0, 1], 0)], clauses: clauses, columns: 2 }
+	return SvQuery { atoms: [le([1], 0), le([0, 1], 0)], clauses: clauses, columns: 2, reals: [] }
 }
 
 fn clause_log(drop_hint: bool) -> SvLog {

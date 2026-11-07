@@ -1,0 +1,458 @@
+// crates/nikaia-std/src/solver/sv_walk.nika
+//
+// **Local search for models** (ADR-270 D8 step 6, D16, #1284 item 3): a walk
+// over integer assignments of a query's columns that scores the clauses its
+// atoms leave false, after the local search for linear integer arithmetic
+// of Cai et al. (LS-LIA, 2022).
+//
+// * **A move** changes one column by the least amount that makes a false
+//   literal of a false clause true - its *critical move*: for `row <= 0`
+//   with value `v` and coefficient `k`, the `Δ` of least size with
+//   `v + k·Δ <= 0`; for an equality the exact `Δ` where `k` divides; for a
+//   negated equality one step either way.
+// * **The score** of a move is how much the weight of the false clauses
+//   changes. Each step picks a false clause at random and takes its best
+//   critical move where that one lowers the score; else every false clause
+//   weighs one more (the clause weighting that leads a walk off a plateau)
+//   and the step takes the best move anyway, or with probability `noise` a
+//   random one. A column just moved is not moved back for `tenure` steps
+//   unless the move lowers the score.
+// * **Numbers** are `i64`, every step checked (D11): a move whose row value
+//   would leave `i64`, or whose column would leave `±bound`, is not made.
+// * **Randomness** is a seeded linear congruential generator: the same
+//   query and parameters walk the same way on every machine (D16: no random
+//   seed).
+//
+// The walk is integer-only: a query with a real column (ADR-270 D27) gets
+// no walk. What it finds is values per column; they are an answer only
+// after `lg_consistent_answer` has evaluated the query under them (D3).
+// Clauses the search learned (theory lemmas among them) may be handed in:
+// each holds in every model of the query, so a walk may weigh them.
+
+/// The walk's parameters, a part of the strategy's one set
+/// (`sv_strategy.nika`).
+pub struct SvWalkParams {
+	/// The moves a walk may make per unit of work it is counted as.
+	pub moves_per_unit: i64,
+	/// The chance, per mille, that a step without an improving move takes
+	/// a random critical move instead of the best.
+	pub noise: i64,
+	/// How many steps a moved column is not moved back.
+	pub tenure: i64,
+	/// The largest size a column's value may take.
+	pub bound: i64,
+	/// The generator's seed.
+	pub seed: i64,
+}
+
+/// A linear congruential generator: the same seed, the same numbers.
+pub struct SvRandom {
+	pub state: i64,
+}
+
+impl SvRandom {
+	/// The next 15 bits.
+	fn draw(ref mut self) -> i64 {
+		self.state = (self.state * 1103515245 + 12345) % 2147483648
+		return (self.state / 65536) % 32768
+	}
+
+	/// A number in `0..<n`, for `0 < n < 2^30`.
+	fn below(ref mut self, n: i64) -> i64 {
+		let hi = self.draw()
+		let lo = self.draw()
+		return (hi * 32768 + lo) % n
+	}
+}
+
+/// The generator of `seed`, its state kept in `0..<2^31`.
+fn sv_random(seed: i64) -> SvRandom {
+	let s = seed % 2147483648
+	return SvRandom { state: if s < 0 { s + 2147483648 } else { s } }
+}
+
+/// What a walk found: whether every clause holds, the value of each column
+/// there, the moves it made, the fewest false clauses it saw, and each
+/// atom's truth at that point (the phases a search may start from).
+pub struct SvWalkRun {
+	pub found: bool,
+	pub values: Vec[i64],
+	pub moves: i64,
+	pub least: i64,
+	pub phases: Vec[bool],
+}
+
+/// A critical move: column `col` changed by `delta`.
+struct SvMove {
+	col: i64,
+	delta: i64,
+}
+
+/// The walk under way.
+struct SvWalk {
+	atoms: Vec[SvAtom],
+	clauses: Vec[Vec[u32]],
+	values: Vec[i64],
+	/// Per atom: its row's value and whether the atom holds.
+	row_value: Vec[i64],
+	holds: Vec[bool],
+	/// Per column: the atoms over it and its coefficient in each.
+	col_atoms: Vec[Vec[i64]],
+	col_ks: Vec[Vec[i64]],
+	/// Per literal: the clauses that hold it.
+	lit_clauses: Vec[Vec[i64]],
+	/// Per clause: its true literals, its weight, its place in `unsat` or
+	/// `-1`.
+	true_count: Vec[i64],
+	weight: Vec[i64],
+	unsat_at: Vec[i64],
+	unsat: Vec[i64],
+	/// Per clause, a scoring's change of its true literals; the clauses it
+	/// touched.
+	scratch: Vec[i64],
+	touched: Vec[i64],
+	/// Per column, the step it last moved at.
+	moved_at: Vec[i64],
+}
+
+/// Whether value `v` of a row satisfies `rel`.
+fn sv_walk_holds(v: i64, rel: SvRel) -> bool {
+	return match rel {
+		SvRel::Le => v <= 0,
+		SvRel::Lt => v < 0,
+		SvRel::Eq => v == 0,
+	}
+}
+
+/// The `Δ` of least size with `v + k·Δ <= 0`, `k != 0`; `0` where `v <= 0`
+/// already; `null` where a step leaves `i64`.
+fn sv_walk_to_le(v: i64, k: i64) -> i64? {
+	if v <= 0 {
+		return 0
+	}
+	if k > 0 {
+		let up = v.checked_add(k - 1) ?? return null
+		return -(up / k)
+	}
+	let m = k.checked_neg() ?? return null
+	let up = v.checked_add(m - 1) ?? return null
+	return up / m
+}
+
+/// The critical move on a column of coefficient `k` making the literal on
+/// an atom of value `v` and relation `rel` true: the atom itself where
+/// `positive`, else its negation (over the integers `row >= 1` for `row <=
+/// 0`, `row >= 0` for `row < 0`, `row != 0` for `row = 0`). `0` where no
+/// move does it (an equality `k` does not divide), `null` on an overflow.
+fn sv_walk_delta(v: i64, k: i64, rel: SvRel, positive: bool, mut rng: SvRandom) -> i64? {
+	return match rel {
+		SvRel::Le => if positive {
+			sv_walk_to_le(v, k)
+		} else {
+			sv_walk_to_le((1 as i64).checked_sub(v) ?? return null, k.checked_neg() ?? return null)
+		},
+		SvRel::Lt => if positive {
+			sv_walk_to_le(v.checked_add(1) ?? return null, k)
+		} else {
+			sv_walk_to_le(v.checked_neg() ?? return null, k.checked_neg() ?? return null)
+		},
+		SvRel::Eq => if positive {
+			let target = v.checked_neg() ?? return null
+			if target % k == 0 { target / k } else { 0 }
+		} else if v != 0 {
+			0
+		} else if rng.below(2) == 0 {
+			1
+		} else {
+			-1
+		},
+	}
+}
+
+impl SvWalk {
+	/// Whether literal `l` holds.
+	fn lit_holds(ref self, l: u32) -> bool {
+		let h = self.holds[(l / 2) as i64]
+		return if l % 2 == 0 { h } else { !h }
+	}
+
+	/// Clause `c` false from now on.
+	fn falsify(ref mut self, c: i64) {
+		self.unsat_at[c] = self.unsat.len()
+		self.unsat.push(c)
+	}
+
+	/// Clause `c` true from now on.
+	fn satisfy(ref mut self, c: i64) {
+		let at = self.unsat_at[c]
+		let last = self.unsat[self.unsat.len() - 1]
+		self.unsat[at] = last
+		self.unsat_at[last] = at
+		self.unsat.pop()
+		self.unsat_at[c] = -1
+	}
+
+	/// The change in the weight of the false clauses that `m` makes;
+	/// `null` where a row value would leave `i64`.
+	fn score(ref mut self, m: ref SvMove) -> i64? {
+		let mut i = 0
+		let mut overflow = false
+		while i < self.col_atoms[m.col].len() {
+			let a = self.col_atoms[m.col][i]
+			let step = self.col_ks[m.col][i].checked_mul(m.delta)
+			let now = match step {
+				null => null,
+				else => self.row_value[a].checked_add(step ?? 0),
+			}
+			if now == null {
+				overflow = true
+				break
+			}
+			let h = sv_walk_holds(now ?? 0, self.atoms[a].rel)
+			if h != self.holds[a] {
+				let up = if h { 1 } else { -1 }
+				for c in self.lit_clauses[2 * a] {
+					if self.scratch[c] == 0 {
+						self.touched.push(c)
+					}
+					self.scratch[c] += up
+				}
+				for c in self.lit_clauses[2 * a + 1] {
+					if self.scratch[c] == 0 {
+						self.touched.push(c)
+					}
+					self.scratch[c] -= up
+				}
+			}
+			i += 1
+		}
+		let mut change = 0
+		for c in self.touched {
+			let before = self.true_count[c]
+			let after = before + self.scratch[c]
+			if before == 0 && after > 0 {
+				change -= self.weight[c]
+			}
+			if before > 0 && after == 0 {
+				change += self.weight[c]
+			}
+			self.scratch[c] = 0
+		}
+		self.touched.clear()
+		if overflow {
+			return null
+		}
+		return change
+	}
+
+	/// Makes move `m`, whose row values `score` checked.
+	fn apply(ref mut self, m: ref SvMove) {
+		self.values[m.col] += m.delta
+		let mut i = 0
+		while i < self.col_atoms[m.col].len() {
+			let a = self.col_atoms[m.col][i]
+			self.row_value[a] += self.col_ks[m.col][i] * m.delta
+			let h = sv_walk_holds(self.row_value[a], self.atoms[a].rel)
+			if h != self.holds[a] {
+				self.holds[a] = h
+				let (made, lost) = if h { (2 * a, 2 * a + 1) } else { (2 * a + 1, 2 * a) }
+				// `.clone()`: a `for` over a field of `self` that calls a
+				// `ref mut self` method is a rustc error (#1300).
+				for c in self.lit_clauses[made].clone() {
+					self.true_count[c] += 1
+					if self.true_count[c] == 1 {
+						self.satisfy(c)
+					}
+				}
+				for c in self.lit_clauses[lost].clone() {
+					self.true_count[c] -= 1
+					if self.true_count[c] == 0 {
+						self.falsify(c)
+					}
+				}
+			}
+			i += 1
+		}
+	}
+}
+
+/// A walk that found nothing and made no move.
+fn sv_walk_none() -> SvWalkRun {
+	return SvWalkRun { found: false, values: [], moves: 0, least: -1, phases: [] }
+}
+
+/// The walk's start: every column zero, every row valued; `null` where a
+/// constant or a clause's literal is outside the atoms.
+fn sv_walk_start(query: ref SvQuery, carried: ref Vec[Vec[u32]]) -> SvWalk? {
+	let atoms = query.atoms.len()
+	let mut w = SvWalk {
+		atoms: query.atoms.clone(),
+		clauses: query.clauses.clone(),
+		values: [],
+		row_value: [],
+		holds: [],
+		col_atoms: [],
+		col_ks: [],
+		lit_clauses: [],
+		true_count: [],
+		weight: [],
+		unsat_at: [],
+		unsat: [],
+		scratch: [],
+		touched: [],
+		moved_at: [],
+	}
+	for clause in carried {
+		w.clauses.push(clause.clone())
+	}
+	let columns = query.columns as i64
+	for _ in 0..<columns {
+		w.values.push(0)
+		w.col_atoms.push([])
+		w.col_ks.push([])
+		w.moved_at.push(-1000000)
+	}
+	let mut a = 0
+	while a < atoms {
+		let row = query.atoms[a].row.clone()
+		let mut i = 0
+		while i < row.cols.len() {
+			let col = row.cols[i] as i64
+			if col >= columns {
+				return null
+			}
+			w.col_atoms[col].push(a)
+			w.col_ks[col].push(row.ks[i])
+			i += 1
+		}
+		w.row_value.push(row.constant)
+		w.holds.push(sv_walk_holds(row.constant, query.atoms[a].rel))
+		w.lit_clauses.push([])
+		w.lit_clauses.push([])
+		a += 1
+	}
+	let mut c = 0
+	while c < w.clauses.len() {
+		let mut count = 0
+		for l in w.clauses[c] {
+			if (l / 2) as i64 >= atoms {
+				return null
+			}
+			w.lit_clauses[l as i64].push(c)
+			if w.lit_holds(l) {
+				count += 1
+			}
+		}
+		w.true_count.push(count)
+		w.weight.push(1)
+		w.unsat_at.push(-1)
+		w.scratch.push(0)
+		if count == 0 {
+			w.falsify(c)
+		}
+		c += 1
+	}
+	return w
+}
+
+/// **The walk** on `query` with the clauses `carried` beside its own, at
+/// most `moves` moves under `params`. Integer columns only: a query with a
+/// real column gets no walk (ADR-270 D27).
+pub fn sv_walk(
+	query: ref SvQuery,
+	carried: ref Vec[Vec[u32]],
+	params: ref SvWalkParams,
+	moves: i64,
+) -> SvWalkRun {
+	if query.reals.len() > 0 || moves <= 0 {
+		return sv_walk_none()
+	}
+	let mut w = sv_walk_start(query, carried) ?? return sv_walk_none()
+	let mut rng = sv_random(params.seed)
+	let mut least = w.unsat.len()
+	let mut phases = w.holds.clone()
+	let mut step = 0
+	let mut candidates: Vec[SvMove] = []
+	let mut scores: Vec[i64] = []
+	while step < moves && w.unsat.len() > 0 {
+		step += 1
+		let c = w.unsat[rng.below(w.unsat.len())]
+		candidates.clear()
+		scores.clear()
+		let mut best = -1
+		// `.clone()`: a `for` over a field that calls a `ref mut` method of
+		// its owner is a rustc error (#1300).
+		for l in w.clauses[c].clone() {
+			let a = (l / 2) as i64
+			let positive = l % 2 == 0
+			let mut i = 0
+			while i < w.atoms[a].row.cols.len() {
+				let col = w.atoms[a].row.cols[i] as i64
+				let k = w.atoms[a].row.ks[i]
+				i += 1
+				let delta = sv_walk_delta(w.row_value[a], k, w.atoms[a].rel, positive, rng)
+					?? continue
+				if delta == 0 {
+					continue
+				}
+				let next = w.values[col].checked_add(delta) ?? continue
+				if next > params.bound || next < -params.bound {
+					continue
+				}
+				let m = SvMove { col: col, delta: delta }
+				let s = w.score(m) ?? continue
+				if s >= 0 && step - w.moved_at[col] <= params.tenure {
+					continue
+				}
+				candidates.push(m)
+				scores.push(s)
+				if best < 0 || s < scores[best] {
+					best = candidates.len() - 1
+				}
+			}
+		}
+		if best >= 0 && scores[best] < 0 {
+			w.moved_at[candidates[best].col] = step
+			w.apply(candidates[best])
+		} else {
+			for f in w.unsat {
+				w.weight[f] += 1
+			}
+			if best >= 0 {
+				let pick = if rng.below(1000) < params.noise {
+					rng.below(candidates.len())
+				} else {
+					best
+				}
+				w.moved_at[candidates[pick].col] = step
+				w.apply(candidates[pick])
+			}
+		}
+		if w.unsat.len() < least {
+			least = w.unsat.len()
+			phases = w.holds.clone()
+		}
+	}
+	return SvWalkRun {
+		found: w.unsat.len() == 0,
+		values: w.values.clone(),
+		moves: step,
+		least: least,
+		phases: phases,
+	}
+}
+
+/// The walk's parameters as the strategy's set starts them
+/// (`sv_strategy.nika`).
+pub fn sv_walk_params() -> SvWalkParams {
+	return SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 }
+}
+
+/// The work a walk of `moves` moves is counted as: one unit per
+/// `moves_per_unit` moves begun.
+pub fn sv_walk_units(moves: i64, params: ref SvWalkParams) -> i64 {
+	if moves <= 0 || params.moves_per_unit <= 0 {
+		return 0
+	}
+	return (moves - 1) / params.moves_per_unit + 1
+}

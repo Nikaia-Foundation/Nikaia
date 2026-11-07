@@ -22,7 +22,7 @@
 // interval path scans the units once per column, the difference path keeps
 // its distances in an `Array` up to the dense width (eight columns, D10),
 // in a `Vec` above it. Anything else - a choice, a wider atom, a step that
-// leaves `i64` - is left to the loop (`Skip`).
+// leaves `i64`, a real column (ADR-270 D27) - is left to the loop (`Skip`).
 
 /// What a fast path decided: refuted (the log holds the empty clause), a
 /// model by name, or nothing.
@@ -381,7 +381,9 @@ fn sv_fast_difference[T: SvDist](
 /// **The fast paths** on `cnf`, its clauses' input entries `ids` in `book`:
 /// a decision on the interval or the difference path, or `Skip`.
 fn sv_fast(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFastRun {
-	if !sv_fast_choice_free(cnf) {
+	// Both paths round over the integers: a query with a real column is the
+	// loop's (ADR-270 D27).
+	if book.reals.len() > 0 || !sv_fast_choice_free(cnf) {
 		return sv_fast_skip()
 	}
 	let shape = sv_fast_shape(book, cnf)

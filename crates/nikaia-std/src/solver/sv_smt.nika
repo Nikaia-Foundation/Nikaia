@@ -23,6 +23,13 @@
 // gcd of the `v_j - v_0` (as the enumeration driver of #1282 derived it): an
 // extension, a split, a Farkas lemma per alternative, and a unit clause the
 // SAT core starts from.
+//
+// Real columns (ADR-270 D27): `sv_smt_engine_sorted` takes the names the
+// script declares `Real`. A query with a real column runs the simplex alone
+// (its integer steps skip real rows), no fast path, no preprocessing and no
+// congruence on a real column; Fourier-Motzkin answers it *unknown*
+// (theory). Its model is rationals, checked by `sv_real_model_holds`, as
+// `lg_verify_model` reads only integers.
 
 /// How the new engine answered a query.
 pub enum SvDriven {
@@ -30,14 +37,20 @@ pub enum SvDriven {
 	Proved(SvQuery, Vec[SvStep]),
 	/// A model or an unknown, as `lg_check` gives them.
 	Answer(LgAnswer),
+	/// A model of a query with a real column, by name, rationals,
+	/// `sv_real_model_holds` checked (ADR-270 D27).
+	RealModel(collections::BTreeMap[String, SvRat]),
 }
 
 /// The new engine's answer, its work (the theory checks it ran, or a fast
-/// path's rounds) and the fast path that answered (`""`: the loop).
+/// path's rounds) and the fast path that answered (`""`: the loop); after a
+/// search that ended *unknown*, the clauses it learned over the query's atoms
+/// and its level-zero literals, which cross to the walk (ADR-270 D14).
 pub struct SvEngineRun {
 	pub driven: SvDriven,
 	pub work: i64,
 	pub path: String,
+	pub carried: Vec[Vec[u32]],
 }
 
 fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
@@ -45,6 +58,7 @@ fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
 		driven: SvDriven::Answer(LgAnswer::Unknown { why: why }),
 		work: work,
 		path: "",
+		carried: [],
 	}
 }
 
@@ -166,6 +180,13 @@ impl SvTh for SvBoth {
 			return self.exact.model()
 		}
 		return self.simplex.model()
+	}
+
+	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] {
+		if self.by_exact {
+			return self.exact.real_values()
+		}
+		return self.simplex.real_values()
 	}
 
 	fn shared(ref self) -> Vec[u32] {
@@ -475,6 +496,9 @@ fn sv_smt_congruence(
 		return true
 	}
 	let x = column as u32
+	if book.reals.contains(x) {
+		return true
+	}
 	let l = SvRow { cols: [x], ks: [1], constant: v0.checked_neg() ?? return true }
 	let q = book.log.columns
 	let t = sv_row_sum(1, l, -d, SvRow { cols: [q], ks: [1], constant: 0 }) ?? return true
@@ -516,9 +540,71 @@ fn sv_smt_engine(
 	budget: ref LgBudget,
 	theory: String,
 ) -> SvEngineRun {
+	let none: collections::BTreeSet[String] = collections::BTreeSet()
+	return sv_smt_engine_sorted(arena, facts, goal, budget, theory, none)
+}
+
+/// `sv_smt_engine` where the names in `reals` are real (ADR-270 D27).
+fn sv_smt_engine_sorted(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	theory: String,
+	reals: ref collections::BTreeSet[String],
+) -> SvEngineRun {
+	return sv_smt_engine_set(arena, facts, goal, budget, theory, reals, "")
+		?? sv_engine_unknown(LgUnknown::NoContradiction, 0)
+}
+
+/// `sv_smt_engine_sorted` with the parameters `settings` (`name=value`,
+/// comma-separated, `sv_params_set_all`) changed before and after the
+/// strategy's pick: a threshold moves the pick, a `pipeline` or `theory`
+/// overrides it. `null` where a setting does not take.
+fn sv_smt_engine_set(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	theory: String,
+	reals: ref collections::BTreeSet[String],
+	settings: String,
+) -> SvEngineRun? {
+	let mut base = sv_params()
+	if !sv_params_set_all(base, settings.clone()) {
+		return null
+	}
 	let mut why = lg_why()
-	let cnf = sv_cnf(arena, facts, goal, why)
-		?? return sv_engine_unknown(why.unknown.clone(), 0)
+	let read = sv_cnf_sorted(arena, facts, goal, reals, why)
+	if read == null {
+		return sv_engine_unknown(why.unknown.clone(), 0)
+	}
+	let cnf = read ?? return null
+	let mut p = sv_strategy_pick(sv_features(cnf), base)
+	sv_params_set_all(p, settings)
+	if theory != "both" {
+		p.theory = theory
+	}
+	return sv_strategy_run(arena, facts, goal, budget, cnf, p)
+}
+
+/// The search of the strategy's pipeline (`sv_strategy.nika`) on `cnf`
+/// under `p`: the fast paths, the preprocessing, the CDCL(T) search over
+/// `p.theory`, its SAT core starting from `phases` where they are given.
+fn sv_smt_search_cnf(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	cnf: ref SvCnf,
+	p: ref SvParams,
+	phases: ref Vec[bool],
+) -> SvEngineRun {
+	let theory = p.theory.clone()
+	let real = cnf.query.reals.len() > 0
+	if real && theory == "fm" {
+		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
+	}
 	let mut book = sv_book(cnf.query) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
 	let mut ids: Vec[u32] = []
 	let mut c: u32 = 0
@@ -526,26 +612,29 @@ fn sv_smt_engine(
 		ids.push(book.input(c))
 		c += 1
 	}
-	let fast = sv_fast(book, cnf, ids)
+	let fast = if p.fast { sv_fast(book, cnf, ids) } else { sv_fast_skip() }
 	match fast.end {
 		SvFastEnd::Unsat => return SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
 			work: fast.work,
 			path: fast.path.clone(),
+			carried: [],
 		},
 		SvFastEnd::Sat(values) => return SvEngineRun {
 			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, values)),
 			work: fast.work,
 			path: fast.path.clone(),
+			carried: [],
 		},
 		SvFastEnd::Skip => {},
 	}
-	let pre = sv_pre(book, cnf, ids)
+	let pre = if p.pre { sv_pre(book, cnf, ids) } else { sv_pre_none() }
 	if pre.unsat {
 		return SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
 			work: 0,
 			path: "pre",
+			carried: [],
 		}
 	}
 	let shown = sv_smt_pre_shown(pre)
@@ -576,7 +665,26 @@ fn sv_smt_engine(
 	for lemma in pre.lemmas {
 		sat.add_input(lemma.lits, lemma.id)
 	}
-	let mut run = if theory == "fm" {
+	// What crosses from a walk run first (ADR-270 D14): each atom's truth
+	// where it came closest.
+	let mut v = 0
+	while v < phases.len() && v < vars as i64 {
+		sat.set_phase(v, phases[v])
+		v += 1
+	}
+	let mut run = if real {
+		let mut sx = sv_strategy_simplex(cnf.names.clone(), p)
+		sx.reals = cnf.query.reals.clone()
+		sv_smt_run(sx, sat,
+			theory_atom,
+			known,
+			cnf,
+			arena,
+			facts,
+			goal,
+			budget,
+		)
+	} else if theory == "fm" {
 		sv_smt_run(sv_theory(cnf.names.clone()), sat,
 			theory_atom,
 			known,
@@ -587,7 +695,7 @@ fn sv_smt_engine(
 			budget,
 		)
 	} else if theory == "simplex" {
-		sv_smt_run(sv_simplex(cnf.names.clone()), sat,
+		sv_smt_run(sv_strategy_simplex(cnf.names.clone(), p), sat,
 			theory_atom,
 			known,
 			cnf,
@@ -597,7 +705,9 @@ fn sv_smt_engine(
 			budget,
 		)
 	} else {
-		sv_smt_run(sv_both(cnf.names.clone()), sat,
+		let mut both = sv_both(cnf.names.clone())
+		both.simplex = sv_strategy_simplex(cnf.names.clone(), p)
+		sv_smt_run(both, sat,
 			theory_atom,
 			known,
 			cnf,
@@ -659,12 +769,170 @@ fn sv_smt_run[T: SvTh](
 			driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.clone()),
 			work: s.checks,
 			path: "",
+			carried: [],
 		},
-		SvSmtEnd::Sat => SvEngineRun {
-			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, s.th.model())),
-			work: s.checks,
-			path: "",
+		SvSmtEnd::Sat => {
+			if cnf.query.reals.len() == 0 {
+				return SvEngineRun {
+					driven: SvDriven::Answer(lg_consistent_answer(
+						arena,
+						facts,
+						goal,
+						true,
+						s.th.model(),
+					)),
+					work: s.checks,
+					path: "",
+					carried: [],
+				}
+			}
+			let values = s.th.real_values()
+			if !sv_real_model_holds(arena, facts, goal, values) {
+				return sv_engine_unknown(LgUnknown::NoContradiction, s.checks)
+			}
+			SvEngineRun {
+				driven: SvDriven::RealModel(values),
+				work: s.checks,
+				path: "",
+				carried: [],
+			}
 		},
-		SvSmtEnd::Unknown(why) => sv_engine_unknown(why.clone(), s.checks),
+		SvSmtEnd::Unknown(why) => {
+			// What crosses a switch (ADR-270 D14): the learned clauses and the
+			// level-zero units over the query's own atoms.
+			let mut run = sv_engine_unknown(why.clone(), s.checks)
+			let atoms = cnf.query.atoms.len()
+			for c in s.sat.carried() {
+				let mut inside = true
+				for l in c {
+					if (l / 2) as i64 >= atoms {
+						inside = false
+					}
+				}
+				if inside {
+					run.carried.push(c.clone())
+				}
+			}
+			run
+		},
 	}
+}
+
+/// A term's value under rational `values`, a name missing from them zero;
+/// `null` where it has none (a Boolean, a quotient of a non-integer) or a
+/// step leaves `i64`.
+fn sv_real_value(
+	arena: ref TermArena,
+	id: i64,
+	values: ref collections::BTreeMap[String, SvRat],
+) -> SvRat? {
+	let node = arena.at(id)
+	return match node {
+		SolverTerm::Int(n) => sv_int(n),
+		// Through `sv_real_named`, not `values[name]`: #1304.
+		SolverTerm::Var(name) => sv_real_named(values, name),
+		SolverTerm::Add(a, b) => {
+			let x = sv_real_value(arena, a, values) ?? return null
+			let y = sv_real_value(arena, b, values) ?? return null
+			sv_rat_add(x, y) ?? return null
+		},
+		SolverTerm::Sub(a, b) => {
+			let x = sv_real_value(arena, a, values) ?? return null
+			let y = sv_real_value(arena, b, values) ?? return null
+			sv_rat_sub(x, y) ?? return null
+		},
+		SolverTerm::Neg(a) => {
+			let x = sv_real_value(arena, a, values) ?? return null
+			sv_rat_neg(x) ?? return null
+		},
+		SolverTerm::Mul(a, b) => {
+			let x = sv_real_value(arena, a, values) ?? return null
+			let y = sv_real_value(arena, b, values) ?? return null
+			sv_rat_mul(x, y) ?? return null
+		},
+		SolverTerm::Quot(a, d) => {
+			// Truncated toward zero, as Part I 2.2 divides (ADR-359 D5).
+			let x = sv_real_value(arena, a, values) ?? return null
+			if !sv_rat_is_int(x) {
+				return null
+			}
+			sv_int(x.num.checked_div(d) ?? return null)
+		},
+		else => null,
+	}
+}
+
+/// The value `values` give `name`, zero where they give none.
+fn sv_real_named(values: ref collections::BTreeMap[String, SvRat], name: String) -> SvRat {
+	return values[name] ?? sv_int(0)
+}
+
+/// A Boolean term's value under rational `values`; `null` where it has none.
+fn sv_real_truth(
+	arena: ref TermArena,
+	id: i64,
+	values: ref collections::BTreeMap[String, SvRat],
+) -> bool? {
+	let node = arena.at(id)
+	return match node {
+		SolverTerm::Bool(x) => x,
+		SolverTerm::Not(a) => {
+			let x = sv_real_truth(arena, a, values) ?? return null
+			!x
+		},
+		SolverTerm::And(parts) => {
+			let mut all = true
+			for part in parts {
+				let x = sv_real_truth(arena, part, values) ?? return null
+				all = all && x
+			}
+			all
+		},
+		SolverTerm::Or(parts) => {
+			let mut any = false
+			for part in parts {
+				let x = sv_real_truth(arena, part, values) ?? return null
+				any = any || x
+			}
+			any
+		},
+		SolverTerm::Le(a, b) => (sv_real_order(arena, a, b, values) ?? return null) <= 0,
+		SolverTerm::Lt(a, b) => (sv_real_order(arena, a, b, values) ?? return null) < 0,
+		SolverTerm::Ge(a, b) => (sv_real_order(arena, a, b, values) ?? return null) >= 0,
+		SolverTerm::Gt(a, b) => (sv_real_order(arena, a, b, values) ?? return null) > 0,
+		SolverTerm::Eq(a, b) => (sv_real_order(arena, a, b, values) ?? return null) == 0,
+		SolverTerm::Ne(a, b) => (sv_real_order(arena, a, b, values) ?? return null) != 0,
+		else => null,
+	}
+}
+
+/// The order of terms `a` and `b` under `values`, as `sv_rat_cmp` gives it.
+fn sv_real_order(
+	arena: ref TermArena,
+	a: i64,
+	b: i64,
+	values: ref collections::BTreeMap[String, SvRat],
+) -> i64? {
+	let x = sv_real_value(arena, a, values) ?? return null
+	let y = sv_real_value(arena, b, values) ?? return null
+	return sv_rat_cmp(x, y)
+}
+
+/// Whether rational `values` make every fact true and the goal false: the
+/// check of a real query's model (ADR-270 D27), as `lg_verify_model` is of
+/// an integer one.
+fn sv_real_model_holds(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	values: ref collections::BTreeMap[String, SvRat],
+) -> bool {
+	for fact in facts {
+		let held = sv_real_truth(arena, fact, values) ?? return false
+		if !held {
+			return false
+		}
+	}
+	let at_goal = sv_real_truth(arena, goal, values) ?? return false
+	return !at_goal
 }
