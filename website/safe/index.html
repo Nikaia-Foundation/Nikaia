@@ -47,7 +47,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3>A failure that ends only its task</h3>
-        <p>A panic in a task ends that task: whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. The compiler works out which functions can panic, so only a task that can is a failure: the function that starts it says <code>throws</code>, catches the crash or gives the task a fallback, or it is refused. A task that cannot panic asks for nothing. A panic in <code>main</code> ends the program.</p>
+        <p>A panic in a task ends only that task. Whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. The compiler works out which functions can panic, so only a task that can panic is a failure, and the function that starts it says <code>throws</code>, catches the crash or gives the task a fallback, or it is refused. A task that cannot panic asks for nothing. A panic in <code>main</code> ends the program.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D35 →</a>
       </div>
     </div>
@@ -62,7 +62,7 @@ description: >-
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows: it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows, and it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
         <p>A claim about a value from outside, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words on the command line are checked against <code>main</code>'s preconditions before the body runs.</p>

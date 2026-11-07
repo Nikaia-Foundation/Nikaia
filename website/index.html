@@ -34,7 +34,7 @@ description: >-
         runs, and says where its checks stop.
       </p>
       <p class="hero-lead">
-        Nikaia is a programming language for applications: backends, web services, and
+        Nikaia is a programming language for applications such as backends, web services and
         software that has to be fast and correct at the same time. That is its home.
       </p>
       <p class="hero-lead">
@@ -42,7 +42,7 @@ description: >-
         young and come with rough edges.
       </p>
       <p class="hero-lead">
-        Nikaia is built around an ambitious goal: safety, performance, and readability without
+        Nikaia sets out to give safety, performance and readability together, without
         having to trade one for another.
       </p>
       <div class="hero-actions">
@@ -62,8 +62,8 @@ description: >-
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Why a new language</p>
     <h2 class="home-heading">One language that holds together what usually pulls apart.</h2>
-    <p class="safe-lead home-intro">Every software project weighs three things against each other:
-    that the program is correct, that it is fast, and that it is ready in time. The way software
+    <p class="safe-lead home-intro">Every software project weighs three things against each other,
+    namely that the program is correct, that it is fast, and that it is ready in time. The way software
     has been built makes these pull in different directions. A check costs speed, so it is left
     out where speed counts. Showing that code is right costs time, so it waits until after the
     release. Code that is quick to write is often code whose mistakes show up only in production.
@@ -71,12 +71,12 @@ description: >-
     becomes the part that gives way, again and again, in the places where a failure costs the
     most.</p>
     <p class="safe-lead home-intro">That pressure is growing. Far more flaws are found every
-    month, and attacks often begin before a fix is out, so fixing later is no longer enough: a
+    month, and attacks often begin before a fix is out, so fixing later is no longer enough, and a
     mistake has to be found before the program ships. And the flaws are rarely new ideas. A path
     that leaves its directory, a write past the end of a buffer, memory damaged while it is
-    cleaned up, state one request leaves for the next: they are mistakes in how input, memory and
+    cleaned up, state one request leaves for the next. These are mistakes in how input, memory and
     state are handled, the work Nikaia's compiler takes over and checks.
-    <a href="{{ "/good/why-now.html" | relative_url }}">Why now: the figures →</a></p>
+    <a href="{{ "/good/why-now.html" | relative_url }}">Why now, in figures →</a></p>
     <p class="safe-lead home-intro">Nikaia is built so that safety does not have to be traded
     for speed or for time. The compiler does the checking, so a check costs the person writing
     the code little time, and a check the compiler has proved can be left out of the machine
@@ -92,13 +92,13 @@ description: >-
     <h2 class="home-heading">When people and AI write code together</h2>
     <p class="safe-lead home-intro">More and more code is written with a model, or by an agent
     that changes a program on its own. Such code reads well, and its mistakes are often the kind
-    review finds hardest: two tasks that change the same value, an error that nobody handles, a
+    review finds hardest, such as two tasks that change the same value, an error that nobody handles, a
     call outside what a function expects. Nikaia's compiler looks for these before the program
     runs, and where it cannot tell what a call touches, as in a Rust crate or a C library, it
     says so instead of refusing.</p>
     <p class="safe-lead home-intro">Its messages say what is wrong and what to write instead,
     so an agent can read the error, change the code and build again, and the person reviews a
-    program the compiler has already checked. No model has Nikaia in its training data yet:
+    program the compiler has already checked. No model has Nikaia in its training data yet, so
     generating it means putting the specification in the model's context. The compiler is
     pre-alpha. <a href="{{ "/manifesto.html#8-a-language-for-the-age-of-generated-code" | relative_url }}">The longer argument →</a></p>
   </div>
@@ -304,7 +304,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
         <span class="safe-chip safe-chip-build">The manifesto</span>
         <h3><a href="{{ "/good/#why" | relative_url }}">Why Nikaia exists</a></h3>
         <p>Good and fast are not opposites. Nikaia is named for Nika, and <em>nik</em> means good.</p>
-<p class="safe-note">&ldquo;Good wins.&rdquo; Not over anyone: it denies that good and fast are opposites, and that being decent to the person writing the code has to be paid for at runtime.</p>
+<p class="safe-note">&ldquo;Good wins.&rdquo; Not over anyone. It denies that good and fast are opposites, and that being decent to the person writing the code has to be paid for at runtime.</p>
         <a class="safe-more" href="{{ "/good/#why" | relative_url }}">Read more →</a>
       </div>
     </div>
@@ -376,7 +376,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Get involved</p>
     <h2 class="home-heading">Build Nikaia with us.</h2>
-    <p class="safe-lead home-intro">Nikaia is built in the open, and there is room to help at every size: a single fix, a whole issue, or a part of the language you look after.</p>
+    <p class="safe-lead home-intro">Nikaia is built in the open, and there is room to help at every size, from a single fix to a whole issue or a part of the language you look after.</p>
     <div class="next next-two">
       <a class="next-card" href="https://github.com/Nikaia-Foundation/Nikaia/pulls">
         <p class="fit-tag">Pull requests</p>
