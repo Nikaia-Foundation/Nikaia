@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_simplex.nika
+// crates/nikaia-std/src/tools/sv_simplex.nika
 //
 // **The simplex theory** (ADR-270 D12, D11, #1283 item 3): the general
 // simplex of Dutertre and de Moura behind the theory interface of
@@ -36,6 +36,8 @@
 // and a tableau row holding such a variable, gets no GCD test, no cut and no
 // branch, and a strict bound on it stays `F <= c - δ`. A final check's model
 // replaces `δ` by a positive rational small enough for every bound.
+
+use std::collections
 
 /// One side of a variable's bounds: the variable lies at most (upper) or at
 /// least (lower) at `value`, from `src`, whose row is `scale·(F - value)`
@@ -346,7 +348,7 @@ impl SvSimplex {
 	}
 
 	/// The variable of a reading's form, `-1` where there is none yet.
-	fn find_var(ref self, form: ref SvRow) -> i64 {
+	pub fn find_var(ref self, form: ref SvRow) -> i64 {
 		if form.cols.len() == 1 && form.ks[0] == 1 {
 			let v: i64? = self.col_var.get(form.cols[0])
 			return v ?? -1

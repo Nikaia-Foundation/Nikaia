@@ -2003,6 +2003,134 @@ mod surface_lowered {
 #[allow(unused_imports)]
 pub use surface_lowered::*;
 
+mod sv_ask_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_ask.rs");
+}
+#[allow(unused_imports)]
+pub use sv_ask_lowered::*;
+
+mod sv_check_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_check.rs");
+}
+#[allow(unused_imports)]
+pub use sv_check_lowered::*;
+
+mod sv_cnf_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_cnf.rs");
+}
+#[allow(unused_imports)]
+pub use sv_cnf_lowered::*;
+
+mod sv_elim_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_elim.rs");
+}
+#[allow(unused_imports)]
+pub use sv_elim_lowered::*;
+
+mod sv_fast_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_fast.rs");
+}
+#[allow(unused_imports)]
+pub use sv_fast_lowered::*;
+
+mod sv_num_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_num.rs");
+}
+#[allow(unused_imports)]
+pub use sv_num_lowered::*;
+
+mod sv_pre_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_pre.rs");
+}
+#[allow(unused_imports)]
+pub use sv_pre_lowered::*;
+
+mod sv_proof_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_proof.rs");
+}
+#[allow(unused_imports)]
+pub use sv_proof_lowered::*;
+
+mod sv_row_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_row.rs");
+}
+#[allow(unused_imports)]
+pub use sv_row_lowered::*;
+
+mod sv_sat_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_sat.rs");
+}
+#[allow(unused_imports)]
+pub use sv_sat_lowered::*;
+
+mod sv_simplex_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_simplex.rs");
+}
+#[allow(unused_imports)]
+pub use sv_simplex_lowered::*;
+
+mod sv_smt_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_smt.rs");
+}
+#[allow(unused_imports)]
+pub use sv_smt_lowered::*;
+
+mod sv_smtlib_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_smtlib.rs");
+}
+#[allow(unused_imports)]
+pub use sv_smtlib_lowered::*;
+
+mod sv_strategy_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_strategy.rs");
+}
+#[allow(unused_imports)]
+pub use sv_strategy_lowered::*;
+
+mod sv_theory_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_theory.rs");
+}
+#[allow(unused_imports)]
+pub use sv_theory_lowered::*;
+
+mod sv_walk_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/sv_walk.rs");
+}
+#[allow(unused_imports)]
+pub use sv_walk_lowered::*;
+
 mod sync_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3054,6 +3182,67 @@ pub mod spelling {
 pub mod surface {
     #[allow(unused_imports)]
     pub use super::{Arg, Function, Surface, empty, read_items, resolve, offered, candidates, imported};
+}
+pub mod sv_ask {
+    #[allow(unused_imports)]
+    pub use super::{SV_ASK_COMPARE, SV_LOG_PREFIX, sv_ask, sv_log_verified, sv_log_text, sv_log_of};
+}
+pub mod sv_check {
+    #[allow(unused_imports)]
+    pub use super::{SvBound, SvEntry, SvVerdict};
+}
+pub mod sv_cnf {
+    #[allow(unused_imports)]
+    pub use super::{SvCnf};
+}
+pub mod sv_elim {}
+pub mod sv_fast {
+    #[allow(unused_imports)]
+    pub use super::{SvFastEnd, SvFastRun};
+}
+pub mod sv_num {
+    #[allow(unused_imports)]
+    pub use super::{SvUnknown, sv_fits32, sv_reduced, sv_max_abs, sv_dense_combine, sv_dense_eliminate, sv_pick_column, SvRat, sv_rat_text, SvDelta, sv_delta_sub, sv_delta_text};
+}
+pub mod sv_pre {
+    #[allow(unused_imports)]
+    pub use super::{SvPre};
+}
+pub mod sv_proof {
+    #[allow(unused_imports)]
+    pub use super::{SvRel, SvAtom, SvQuery, SvSrc, SvStep, SvLog, SvBook, SvClause, SvAsserted, SvExtended};
+}
+pub mod sv_row {
+    #[allow(unused_imports)]
+    pub use super::{SvRow, SvTerm, sv_row_pick, sv_row_eval, SvVars};
+}
+pub mod sv_sat {
+    #[allow(unused_imports)]
+    pub use super::{SvSatAnswer, SvSatStats, SvSat, sv_sat, sv_sat_of};
+}
+pub mod sv_simplex {
+    #[allow(unused_imports)]
+    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvViolation};
+}
+pub mod sv_smt {
+    #[allow(unused_imports)]
+    pub use super::{SvDriven, SvEngineRun, SvSmtStats, sv_smt_stats_text, SvBoth, SvSmt, SvSmtEnd};
+}
+pub mod sv_smtlib {
+    #[allow(unused_imports)]
+    pub use super::{SvReadWhy, SvSorts, SvSmtRead, sv_smtlib_script, sv_smtlib_read};
+}
+pub mod sv_strategy {
+    #[allow(unused_imports)]
+    pub use super::{SvParams, sv_params, sv_params_set, sv_params_set_all, SvFeatures, sv_features, sv_features_shown, sv_strategy_pick, sv_params_shown, sv_strategy_run};
+}
+pub mod sv_theory {
+    #[allow(unused_imports)]
+    pub use super::{SvHeld, SvChecked, SvSolved, SvTheory, SvTh};
+}
+pub mod sv_walk {
+    #[allow(unused_imports)]
+    pub use super::{SvWalkParams, SvRandom, SvWalkRun, sv_walk, sv_walk_params, sv_walk_units};
 }
 pub mod sync {
     #[allow(unused_imports)]

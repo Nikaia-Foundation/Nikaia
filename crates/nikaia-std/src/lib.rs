@@ -246,8 +246,14 @@ pub mod runtime {
 /// **And `unused_parens`**: `let code = read.code ?? return ..` over a `let`
 /// of a `Type` lowers to `match (*read.code) { .. }` (`declared.nika`'s
 /// `written_ty`, ADR-views-3 D14).
+///
+/// **And `manual_is_multiple_of` and `manual_clear`**: the solver's
+/// `l % 2 == 0` (a literal's sign) and `watch.truncate(0)` lower as written
+/// (`sv_sat.nika`, `sv_check.nika`, #1285).
 #[allow(
     clippy::map_identity,
+    clippy::manual_is_multiple_of,
+    clippy::manual_clear,
     unused_parens,
     clippy::unnecessary_operation,
     unused_assignments,

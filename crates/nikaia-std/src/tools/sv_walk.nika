@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_walk.nika
+// crates/nikaia-std/src/tools/sv_walk.nika
 //
 // **Local search for models** (ADR-270 D8 step 6, D16, #1284 item 3): a walk
 // over integer assignments of a query's columns that scores the clauses its

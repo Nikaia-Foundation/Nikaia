@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_smt.nika
+// crates/nikaia-std/src/tools/sv_smt.nika
 //
 // **The CDCL(T) engine** (ADR-270 D12, #1283 item A): the clauses of
 // `sv_cnf.nika` searched by the SAT core of `sv_sat.nika`, a theory behind
@@ -30,6 +30,8 @@
 // congruence on a real column; Fourier-Motzkin answers it *unknown*
 // (theory). Its model is rationals, checked by `sv_real_model_holds`, as
 // `lg_verify_model` reads only integers.
+
+use std::collections
 
 /// How the new engine answered a query.
 pub enum SvDriven {
@@ -80,7 +82,7 @@ fn sv_smt_stats_none() -> SvSmtStats {
 }
 
 /// The counters as `--stats` prints them.
-fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
+pub fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
 	return f"conflicts {st.conflicts}, theory conflicts {st.theory_conflicts}, lemmas {st.lemmas} (repeated {st.repeated}), decisions {st.decisions}, restarts {st.restarts}"
 }
 

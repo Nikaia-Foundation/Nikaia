@@ -1,5 +1,5 @@
 // The local search for models (ADR-270 D14, #1284 item 3,
-// `solver/sv_walk.nika`): a walk over integer assignments that scores the
+// `tools/sv_walk.nika`): a walk over integer assignments that scores the
 // clauses its atoms leave false. Each line shows the walk on a file's query
 // - whether every clause held at its end, the moves it made, whether a walk
 // from the same seed makes the same moves to the same values, and what
@@ -119,7 +119,8 @@ fn main() throws {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
 	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_rod"] {
-		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+		let dir = if name == "sv_rod" { "solver" } else { "tools" }
+		paths.push(f"{repo}/crates/nikaia-std/src/{dir}/{name}.nika")
 	}
 	let mut uses: Vec[String] = []
 	let mut body = ""

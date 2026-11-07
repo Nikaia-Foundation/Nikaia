@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_num.nika
+// crates/nikaia-std/src/tools/sv_num.nika
 //
 // **The solver's numbers** (ADR-270 D11, #1282 items 1-2): `i64` only, kept
 // small by construction, never wrapped. Every sum and product goes through
@@ -74,7 +74,7 @@ fn sv_mul_add(a: i64, x: i64, b: i64, y: i64) -> i64? {
 
 /// Whether `k` lies in the 32-bit range, where one product fits 63 bits and
 /// one combination `a·x + b·y` cannot overflow (D11's fast path).
-fn sv_fits32(k: i64) -> bool {
+pub fn sv_fits32(k: i64) -> bool {
 	return k >= -2147483648 && k <= 2147483647
 }
 
@@ -93,7 +93,7 @@ fn sv_content(ks: ref Vec[i64]) -> i64? {
 /// `ks` divided by their gcd. The division is exact, so it holds for an
 /// equality and for a bound `Σ <= 0` alike; a vector whose gcd no `i64`
 /// holds stays as it is.
-fn sv_reduced(ks: Vec[i64]) -> Vec[i64] {
+pub fn sv_reduced(ks: Vec[i64]) -> Vec[i64] {
 	let g = sv_content(ks) ?? return ks
 	if g <= 1 {
 		return ks
@@ -106,7 +106,7 @@ fn sv_reduced(ks: Vec[i64]) -> Vec[i64] {
 }
 
 /// The largest absolute value of `ks`; `null` where it is `2^63`.
-fn sv_max_abs(ks: ref Vec[i64]) -> i64? {
+pub fn sv_max_abs(ks: ref Vec[i64]) -> i64? {
 	let mut most: i64 = 0
 	for k in ks {
 		let a = k.checked_abs() ?? return null
@@ -119,7 +119,7 @@ fn sv_max_abs(ks: ref Vec[i64]) -> i64? {
 
 /// `a·x + b·y` entry by entry, divided by its gcd; `null` where an entry
 /// leaves `i64`. The two vectors have one length (a dense row, D10).
-fn sv_dense_combine(a: i64, x: ref Vec[i64], b: i64, y: ref Vec[i64]) -> Vec[i64]? {
+pub fn sv_dense_combine(a: i64, x: ref Vec[i64], b: i64, y: ref Vec[i64]) -> Vec[i64]? {
 	if x.len() != y.len() {
 		return null
 	}
@@ -153,7 +153,7 @@ fn sv_cancelling(xj: i64, yj: i64) -> Vec[i64]? {
 /// the result divided by its gcd. Between two bounds `Σ <= 0` the
 /// multipliers must both be positive, so `x[j]` and `y[j]` have opposite
 /// signs; the caller asks so, an equality may take either sign.
-fn sv_dense_eliminate(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]? {
+pub fn sv_dense_eliminate(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]? {
 	let ab = sv_cancelling(x[j], y[j]) ?? return null
 	return sv_dense_combine(ab[0], x, ab[1], y)
 }
@@ -162,7 +162,7 @@ fn sv_dense_eliminate(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]? {
 /// (D11: a unit coefficient first, then the smallest product of the two
 /// multipliers); `-1` where no column is non-zero in both. `opposite` asks
 /// for columns of opposite signs only, as two bounds need.
-fn sv_pick_column(x: ref Vec[i64], y: ref Vec[i64], width: i64, opposite: bool) -> i64 {
+pub fn sv_pick_column(x: ref Vec[i64], y: ref Vec[i64], width: i64, opposite: bool) -> i64 {
 	let mut best: i64 = -1
 	let mut best_cost: i64 = 0
 	let mut j = 0
@@ -301,7 +301,7 @@ fn sv_rat_ceil(a: ref SvRat) -> i64 {
 	return sv_ceil_div(a.num, a.den) ?? 0
 }
 
-fn sv_rat_text(a: ref SvRat) -> String {
+pub fn sv_rat_text(a: ref SvRat) -> String {
 	if a.den == 1 {
 		return f"{a.num}"
 	}
@@ -324,7 +324,7 @@ fn sv_delta_add(a: ref SvDelta, b: ref SvDelta) -> SvDelta? {
 	return SvDelta { c: c, k: k }
 }
 
-fn sv_delta_sub(a: ref SvDelta, b: ref SvDelta) -> SvDelta? {
+pub fn sv_delta_sub(a: ref SvDelta, b: ref SvDelta) -> SvDelta? {
 	let c = sv_rat_sub(a.c, b.c) ?? return null
 	let k = sv_rat_sub(a.k, b.k) ?? return null
 	return SvDelta { c: c, k: k }
@@ -345,7 +345,7 @@ fn sv_delta_cmp(a: ref SvDelta, b: ref SvDelta) -> i64 {
 	return sv_rat_cmp(a.k, b.k)
 }
 
-fn sv_delta_text(a: ref SvDelta) -> String {
+pub fn sv_delta_text(a: ref SvDelta) -> String {
 	if a.k.num == 0 {
 		return sv_rat_text(a.c)
 	}

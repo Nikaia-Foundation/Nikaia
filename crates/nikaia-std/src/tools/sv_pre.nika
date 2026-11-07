@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_pre.nika
+// crates/nikaia-std/src/tools/sv_pre.nika
 //
 // **Preprocessing** (ADR-270 D12, #1283 item 5), run once before the CDCL
 // loop over what holds at level zero, every rewrite a step of the log:
@@ -22,6 +22,8 @@
 // A literal rewritten by 3 is asserted by the theories as the bound
 // entry it became (`SvBook.pre`, `SvBook.asserted`): a lemma that cites it
 // still names the literal, through the entry's assumptions.
+
+use std::collections
 
 /// What the preprocessing did: refuted the query (the log ends in the empty
 /// clause), the lemmas of the tightening for the SAT core, and how many

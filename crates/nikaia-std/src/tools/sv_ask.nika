@@ -1,0 +1,294 @@
+// crates/nikaia-std/src/tools/sv_ask.nika
+//
+// **The compiler's questions to the solvers** (ADR-270 D8, #1285 item 2):
+// every question the prover and the bounds walk ask (`proofs_search`) comes
+// here. Fourier-Motzkin (`lg_check`) answers first; the new engine
+// (`sv_smt_engine`) is asked only where Fourier-Motzkin answers *unknown*, so
+// a question costs Fourier-Motzkin's work and the new engine's only on the few
+// it gives up on (D8: Fourier-Motzkin stays an engine the strategy keeps for
+// small dense problems).
+//
+// **The new engine's proof is its log** (D5, D19): `sv_log_text` writes it as
+// one word of `nikaia.proofs`, `sv_log_of` reads it back, and
+// `sv_log_verified` replays it with `sv_check` against the query the normal
+// form gives (D20), so the book needs no more trust than the checker.
+//
+// **The debug mode** (`NIKAIA_SOLVER_COMPARE` set): both engines run on every
+// question and must agree where both answer; a disagreement, or a log or a
+// model that does not check, stops the compiler.
+//
+// The log's text: `sv:` and its steps, comma-separated. A step is a letter and
+// its fields, `/`-separated; a list is its items `.`-separated (empty for
+// none); a row is `cols:ks:constant`; a source `l` (a literal) or `e` (an
+// entry) and its number.
+//
+//     i<id>  l<lits>/<hints>  d<id>  f<lits>/<srcs>/<ks>/<k>  c<srcs>/<ks>
+//     r<entry>/<d>  s<row>/<row>  x<row>/<m>/<entry>
+
+use std::collections
+use std::env
+use std::text
+
+/// The variable that turns on the debug mode.
+pub comptime SV_ASK_COMPARE: ref String = "NIKAIA_SOLVER_COMPARE"
+
+/// What a log's text starts with, in `nikaia.proofs`; a certificate of
+/// `lg_certificate_text` starts with `R` or `S`.
+pub comptime SV_LOG_PREFIX: ref String = "sv:"
+
+/// **Whether `facts` imply `goal`**: Fourier-Motzkin's answer where it has
+/// one, else the new engine's: a proof is its log (`SvDriven::Proved`), a
+/// model or an unknown an `LgAnswer` as `lg_check` gives them. Nothing here
+/// is checked yet: the caller checks what it keeps.
+pub fn sv_ask(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget) -> SvDriven sync {
+	let fm = lg_check(arena, facts, goal, budget)
+	if env::var(SV_ASK_COMPARE) != null {
+		return sv_ask_compared(arena, facts, goal, budget, fm)
+	}
+	return match fm {
+		LgAnswer::Unknown { .. } => sv_smt_engine(arena, facts, goal, budget, "both").driven,
+		else => SvDriven::Answer(fm),
+	}
+}
+
+/// The debug mode: the new engine run beside Fourier-Motzkin's answer `fm`,
+/// each answer checked, the two compared; the answer `sv_ask` gives.
+fn sv_ask_compared(arena: ref TermArena, facts: ref Vec[i64], goal: i64, budget: ref LgBudget, fm: LgAnswer) -> SvDriven sync {
+	let new = sv_smt_engine(arena, facts, goal, budget, "both").driven
+	let fm_kind = sv_ask_fm_kind(arena, facts, goal, fm)
+	let new_kind = sv_ask_new_kind(arena, facts, goal, new)
+	if fm_kind != "unknown" && new_kind != "unknown" && fm_kind != new_kind {
+		panic(f"sv_ask: Fourier-Motzkin says {fm_kind}, the new engine {new_kind}, on {lg_normal_of(arena, facts, goal).text()}")
+	}
+	return match fm {
+		LgAnswer::Unknown { .. } => new,
+		else => SvDriven::Answer(fm),
+	}
+}
+
+/// What Fourier-Motzkin's answer comes to once checked: `proved`,
+/// `refuted` or `unknown`; one that does not check stops the compiler.
+fn sv_ask_fm_kind(arena: ref TermArena, facts: ref Vec[i64], goal: i64, fm: ref LgAnswer) -> String {
+	match fm {
+		LgAnswer::Proved { certificate } => {
+			let why = lg_verify(arena, facts, goal, certificate)
+			if why != null {
+				panic(f"sv_ask: Fourier-Motzkin's certificate does not check ({why.debug()})")
+			}
+			return "proved"
+		},
+		LgAnswer::Refuted { model } => {
+			if !lg_verify_model(arena, facts, goal, model) {
+				panic("sv_ask: Fourier-Motzkin's model does not check")
+			}
+			return "refuted"
+		},
+		LgAnswer::Unknown { .. } => return "unknown",
+	}
+}
+
+/// What the new engine's answer comes to once checked, as
+/// `sv_ask_fm_kind`; its log is replayed through its text, as the book
+/// reads it.
+fn sv_ask_new_kind(arena: ref TermArena, facts: ref Vec[i64], goal: i64, new: ref SvDriven) -> String {
+	match new {
+		SvDriven::Proved(_, steps) => {
+			let read = sv_log_of(sv_log_text(steps)) ?? panic("sv_ask: the new engine's log does not read back")
+			if !sv_log_verified(arena, facts, goal, read) {
+				panic("sv_ask: the new engine's log does not check")
+			}
+			return "proved"
+		},
+		SvDriven::Answer(LgAnswer::Refuted { model }) => {
+			if !lg_verify_model(arena, facts, goal, model) {
+				panic("sv_ask: the new engine's model does not check")
+			}
+			return "refuted"
+		},
+		SvDriven::RealModel(values) => {
+			if !sv_real_model_holds(arena, facts, goal, values) {
+				panic("sv_ask: the new engine's model does not check")
+			}
+			return "refuted"
+		},
+		else => return "unknown",
+	}
+}
+
+/// **Whether `log` refutes the query of `facts` and `goal`'s negation**:
+/// the clauses `sv_cnf` makes of them, the log replayed by `sv_check`.
+pub fn sv_log_verified(arena: ref TermArena, facts: ref Vec[i64], goal: i64, log: ref Vec[SvStep]) -> bool {
+	let mut why = lg_why()
+	let cnf = sv_cnf(arena, facts, goal, why) ?? return false
+	return sv_check(cnf.query, log).ok
+}
+
+/// **The log as the book writes it**: `SV_LOG_PREFIX` and its steps.
+pub fn sv_log_text(log: ref Vec[SvStep]) -> String {
+	let mut steps: Vec[String] = []
+	for step in log {
+		steps.push(sv_step_text(step))
+	}
+	return f"{SV_LOG_PREFIX}{steps.join(",")}"
+}
+
+fn sv_step_text(step: ref SvStep) -> String {
+	return match step {
+		SvStep::Input(id) => f"i{id}",
+		SvStep::Learn(lits, hints) => f"l{sv_u32s_text(lits)}/{sv_u32s_text(hints)}",
+		SvStep::Delete(id) => f"d{id}",
+		SvStep::Farkas(lits, srcs, ks, k) => f"f{sv_u32s_text(lits)}/{sv_srcs_text(srcs)}/{sv_i64s_text(ks)}/{k}",
+		SvStep::Combine(srcs, ks) => f"c{sv_srcs_text(srcs)}/{sv_i64s_text(ks)}",
+		SvStep::Round(entry, d) => f"r{entry}/{d}",
+		SvStep::Split(a, b) => f"s{sv_row_word(a)}/{sv_row_word(b)}",
+		SvStep::Extend(row, m, entry) => f"x{sv_row_word(row)}/{m}/{entry}",
+	}
+}
+
+fn sv_u32s_text(items: ref Vec[u32]) -> String {
+	let mut words: Vec[String] = []
+	for item in items {
+		words.push(f"{item}")
+	}
+	return words.join(".")
+}
+
+fn sv_i64s_text(items: ref Vec[i64]) -> String {
+	let mut words: Vec[String] = []
+	for item in items {
+		words.push(f"{item}")
+	}
+	return words.join(".")
+}
+
+fn sv_srcs_text(srcs: ref Vec[SvSrc]) -> String {
+	let mut words: Vec[String] = []
+	for src in srcs {
+		words.push(match src {
+			SvSrc::Lit(l) => f"l{l}",
+			SvSrc::Fact(e) => f"e{e}",
+		})
+	}
+	return words.join(".")
+}
+
+fn sv_row_word(row: ref SvRow) -> String {
+	return f"{sv_u32s_text(row.cols)}:{sv_i64s_text(row.ks)}:{row.constant}"
+}
+
+/// **`sv_log_text` read back**, or nothing for text it did not write.
+pub fn sv_log_of(text: ref String) -> Vec[SvStep]? {
+	let body = text.strip_prefix(SV_LOG_PREFIX) ?? return null
+	let mut steps: Vec[SvStep] = []
+	if body.len() == 0 {
+		return steps
+	}
+	for word in body.split(",") {
+		steps.push(sv_step_of(word) ?? return null)
+	}
+	return steps
+}
+
+fn sv_step_of(word: ref String) -> SvStep? {
+	for letter in ["i", "l", "d", "f", "c", "r", "s", "x"] {
+		let rest = word.strip_prefix(letter) ?? continue
+		let fields: Vec[ref String] = rest.split("/").collect()
+		return sv_step_from(letter, fields)
+	}
+	return null
+}
+
+/// A step of kind `kind` (its letter) from its `/`-separated fields.
+fn sv_step_from(kind: ref String, fields: ref Vec[ref String]) -> SvStep? {
+	if kind == "i" && fields.len() == 1 {
+		return SvStep::Input(sv_u32_of(fields[0]) ?? return null)
+	}
+	if kind == "l" && fields.len() == 2 {
+		return SvStep::Learn(sv_u32s_of(fields[0]) ?? return null, sv_u32s_of(fields[1]) ?? return null)
+	}
+	if kind == "d" && fields.len() == 1 {
+		return SvStep::Delete(sv_u32_of(fields[0]) ?? return null)
+	}
+	if kind == "f" && fields.len() == 4 {
+		return SvStep::Farkas(
+			sv_u32s_of(fields[0]) ?? return null,
+			sv_srcs_of(fields[1]) ?? return null,
+			sv_i64s_of(fields[2]) ?? return null,
+			text::parse_i64(fields[3]) ?? return null,
+		)
+	}
+	if kind == "c" && fields.len() == 2 {
+		return SvStep::Combine(sv_srcs_of(fields[0]) ?? return null, sv_i64s_of(fields[1]) ?? return null)
+	}
+	if kind == "r" && fields.len() == 2 {
+		return SvStep::Round(sv_u32_of(fields[0]) ?? return null, text::parse_i64(fields[1]) ?? return null)
+	}
+	if kind == "s" && fields.len() == 2 {
+		return SvStep::Split(sv_row_from(fields[0]) ?? return null, sv_row_from(fields[1]) ?? return null)
+	}
+	if kind == "x" && fields.len() == 3 {
+		return SvStep::Extend(
+			sv_row_from(fields[0]) ?? return null,
+			text::parse_i64(fields[1]) ?? return null,
+			sv_u32_of(fields[2]) ?? return null,
+		)
+	}
+	return null
+}
+
+fn sv_u32_of(word: ref String) -> u32? {
+	let n = text::parse_i64(word) ?? return null
+	return n.checked_u32()
+}
+
+fn sv_u32s_of(word: ref String) -> Vec[u32]? {
+	let mut out: Vec[u32] = []
+	if word.len() == 0 {
+		return out
+	}
+	for item in word.split(".") {
+		out.push(sv_u32_of(item) ?? return null)
+	}
+	return out
+}
+
+fn sv_i64s_of(word: ref String) -> Vec[i64]? {
+	let mut out: Vec[i64] = []
+	if word.len() == 0 {
+		return out
+	}
+	for item in word.split(".") {
+		out.push(text::parse_i64(item) ?? return null)
+	}
+	return out
+}
+
+fn sv_srcs_of(word: ref String) -> Vec[SvSrc]? {
+	let mut out: Vec[SvSrc] = []
+	if word.len() == 0 {
+		return out
+	}
+	for item in word.split(".") {
+		let lit = item.strip_prefix("l")
+		if lit != null {
+			out.push(SvSrc::Lit(sv_u32_of(lit) ?? return null))
+			continue
+		}
+		let fact = item.strip_prefix("e") ?? return null
+		out.push(SvSrc::Fact(sv_u32_of(fact) ?? return null))
+	}
+	return out
+}
+
+fn sv_row_from(word: ref String) -> SvRow? {
+	let parts: Vec[ref String] = word.split(":").collect()
+	if parts.len() != 3 {
+		return null
+	}
+	let cols = sv_u32s_of(parts[0]) ?? return null
+	let ks = sv_i64s_of(parts[1]) ?? return null
+	if cols.len() != ks.len() {
+		return null
+	}
+	return SvRow { cols: cols, ks: ks, constant: text::parse_i64(parts[2]) ?? return null }
+}

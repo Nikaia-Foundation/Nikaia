@@ -3,7 +3,7 @@
 // on an equality, combine, extension, rounding with the GCD test, split), and
 // broken ones rejected with their reasons: a negative multiplier, a missing
 // hint, a split leaving out an alternative, a rounding by zero, and more.
-// `solver/sv_num.nika`, `sv_row.nika`, `sv_proof.nika`, `sv_check.nika` and
+// `tools/sv_num.nika`, `sv_row.nika`, `sv_proof.nika`, `sv_check.nika` and
 // the `LgLin` struct are run beside a driver.
 use std::fs
 use std::process
@@ -278,7 +278,7 @@ fn main() throws {
 	let nikaia = toolchain()
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let mut program = "use std::collections\n"
-	for file in ["crates/nikaia-std/src/solver/sv_num.nika", "crates/nikaia-std/src/solver/sv_row.nika", "crates/nikaia-std/src/solver/sv_proof.nika", "crates/nikaia-std/src/solver/sv_check.nika"] {
+	for file in ["crates/nikaia-std/src/tools/sv_num.nika", "crates/nikaia-std/src/tools/sv_row.nika", "crates/nikaia-std/src/tools/sv_proof.nika", "crates/nikaia-std/src/tools/sv_check.nika"] {
 		program.push_str(fs::read_to_string(f"{repo}/{file}", fs::Root::Anywhere))
 		program.push_str("\n")
 	}

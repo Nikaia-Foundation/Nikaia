@@ -6,7 +6,7 @@
 // explained by a Farkas lemma; one problem runs under Bland's rule from the
 // start and under the smallest-coefficient rule alone; coefficients near
 // 2^40 answer *unknown (overflow)*, never a wrong answer. The logic layer's
-// files, `solver/sv_*.nika` and the driver below make one program, as
+// files, `tools/sv_*.nika` and the driver below make one program, as
 // `scripts/solver.nika` makes it.
 use std::fs
 use std::process
@@ -234,7 +234,8 @@ fn main() throws {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
 	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_rod"] {
-		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+		let dir = if name == "sv_rod" { "solver" } else { "tools" }
+		paths.push(f"{repo}/crates/nikaia-std/src/{dir}/{name}.nika")
 	}
 	let mut uses: Vec[String] = []
 	let mut body = ""

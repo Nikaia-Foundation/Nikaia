@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_row.nika
+// crates/nikaia-std/src/tools/sv_row.nika
 //
 // **Sparse rows over `u32` variables** (ADR-270 D10, #1282 item 3). A row is
 // `Σ ks[i]·x[cols[i]] + constant`: two parallel arrays, the columns
@@ -11,6 +11,8 @@
 //
 // Atoms of `logic_lia.nika` (`LgLin`, names to coefficients) become rows
 // through `SvVars`, which numbers the names in the order they are first met.
+
+use std::collections
 
 /// `Σ ks[i]·x[cols[i]] + constant`, `cols` ascending, no zero in `ks`.
 pub struct SvRow {
@@ -173,7 +175,7 @@ fn sv_row_eliminate(r: ref SvRow, s: ref SvRow, col: u32) -> SvRow? {
 /// The column to eliminate between `r` and `s`: one both hold (of opposite
 /// signs where `opposite`), a unit coefficient first, then the smallest
 /// product of the multipliers; `null` where there is none.
-fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
+pub fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
 	let mut best: u32? = null
 	let mut best_cost: i64 = 0
 	let mut i = 0
@@ -202,7 +204,7 @@ fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
 
 /// The row's value where column `c` is `values[c]`; `null` where a column
 /// has no value or a step leaves `i64`.
-fn sv_row_eval(r: ref SvRow, values: ref Vec[SvRat]) -> SvRat? {
+pub fn sv_row_eval(r: ref SvRow, values: ref Vec[SvRat]) -> SvRat? {
 	let mut sum = sv_int(r.constant)
 	let mut i = 0
 	while i < r.cols.len() {

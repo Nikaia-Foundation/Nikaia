@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_sat.nika
+// crates/nikaia-std/src/tools/sv_sat.nika
 //
 // **The SAT core** (ADR-270 D12, D16, #1283 item 1): conflict-driven clause
 // learning over the literals of `sv_proof.nika` (`2a` atom `a`, `2a + 1` its
@@ -28,6 +28,8 @@
 //   unit in turn when the clause is assumed false (LRAT).
 //
 // Integers only: activities are `i64`, rescaled before they reach `2^60`.
+
+use std::collections
 
 /// What a search answered.
 pub enum SvSatAnswer {
@@ -132,7 +134,7 @@ fn sv_luby(i: i64) -> i64 {
 }
 
 /// A solver over `vars` variables writing to `log`.
-fn sv_sat(vars: u32, log: SvLog) -> SvSat {
+pub fn sv_sat(vars: u32, log: SvLog) -> SvSat {
 	return sv_sat_book(
 		vars,
 		SvBook {
@@ -207,7 +209,7 @@ fn sv_sat_book(vars: u32, book: SvBook) -> SvSat {
 
 /// A solver over `query`'s atoms with every clause of `query` read as an
 /// input of a fresh log; `null` where the atoms leave `u32`.
-fn sv_sat_of(query: ref SvQuery) -> SvSat? {
+pub fn sv_sat_of(query: ref SvQuery) -> SvSat? {
 	let log = sv_log(query) ?? return null
 	let mut s = sv_sat(log.atoms, log)
 	let mut c: u32 = 0
@@ -228,12 +230,12 @@ impl SvSat {
 
 	/// Whether literal `l` is true in the assignment (the model, after
 	/// `Sat`).
-	fn holds(ref self, l: u32) -> bool {
+	pub fn holds(ref self, l: u32) -> bool {
 		return self.lit_value(l) > 0
 	}
 
 	/// Per variable, whether it is true; an open variable counts as false.
-	fn model(ref self) -> Vec[bool] {
+	pub fn model(ref self) -> Vec[bool] {
 		let mut out: Vec[bool] = []
 		for v in self.value {
 			out.push(v > 0)
@@ -598,7 +600,7 @@ impl SvSat {
 	}
 
 	/// Searches for at most `budget` conflicts in all.
-	fn solve(ref mut self, budget: i64) -> SvSatAnswer {
+	pub fn solve(ref mut self, budget: i64) -> SvSatAnswer {
 		let mut restart: i64 = 0
 		if self.stats.reductions == 0 {
 			self.next_reduce = self.reduce_first
