@@ -154,6 +154,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * `String: Plus<EitherText>` from rustc means a tiers defect made a `String` parameter mixed; the checker never allows that itself, so fix the tiers, not `concat.rs`. (issue-1210)
 * A buffer put into `KeepAt::Param` needs an `Escape::Returned` entry in `plan.escapes`, or the ledger never marks the function as taking a keep and `__keep` is missing. (issue-1218)
 * `migrate views-3` works on tokens and runs `migrate_views3_code` twice (once to drop `ref`, once to write `keep`), so a rewrite keyed on `ref` must still hold on the already-rewritten text. (issue-1224)
+* In `keeps.nika`, a value handed back goes through `hand_over`/`reached_of`, so anything added there also keeps on `return`, which D8 forbids; put store-only escapes on `Stmt::Assign` instead. (issue-1225)
+* Thread-locals in proofs, comptime and project make a parallel check safe only in lower-std (`infer_package_parallel`), never in project builds. (issue-1277)
+* `lower_tools_files_cached` re-parses files with `test` blocks (`with_tests_as_functions`), so package-wide values computed from `parsed` do not cover those files' test functions. (issue-1279)
 
 ### Grammar
 
