@@ -318,6 +318,7 @@ impl EmitState {
             let made = match arg {
                 Expr::Call { .. } => true,
                 Expr::MethodCall { method, .. } => owns_its_text(emit_text(world, method)),
+                Expr::Binary { .. } => self.emit_core_a_concatenation(arg),
                 else => false,
             }
             if !made {
@@ -333,6 +334,16 @@ impl EmitState {
         }
     }
 
+    /// **A `+` that joins text makes a text of its own** (#1251), which dies
+    /// at the `;` as a call's result does: `("a " + tail).split(" ")` kept in
+    /// a `let` is held like `f().split(" ")`.
+    fn emit_core_a_concatenation(ref self, at: ref Expr) -> bool {
+        return match at {
+            Expr::Binary { span, .. } => self.facts.concatenations.contains(span.start as i64),
+            else => false,
+        }
+    }
+
     /// Walks down the receivers of a chain; at its base, binds the base first
     /// where a method on the way views what it is called on.
     fn emit_core_hold_chain_base[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: ref Expr, whole: i64, viewed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
@@ -342,7 +353,7 @@ impl EmitState {
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)
             },
             else => {
-                if !viewed || node_key(at) == whole || !emit_read_a_call(at) {
+                if !viewed || node_key(at) == whole || !(emit_read_a_call(at) || self.emit_core_a_concatenation(at)) {
                     return
                 }
                 // A statement written twice (a scratch pass, then the real one)

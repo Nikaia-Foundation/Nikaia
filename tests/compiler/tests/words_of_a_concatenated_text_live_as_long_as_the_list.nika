@@ -1,0 +1,27 @@
+// #1251: words split from a text joined with `+` in the same expression
+// borrow a text that lives as long as the list, as after
+// `let line = "a " + tail`.
+fn words_of(text: String, key: String) -> Vec[String] {
+	for line in text.split("\n") {
+		let w = line.trim().split(" ").collect()
+		if w.len() > 1 && w[0] == key {
+			return w
+		}
+	}
+	let n: Vec[String] = []
+	return n
+}
+
+fn main() {
+	let tail = "b c"
+	let words = ("a " + tail).split(" ").collect()
+	println(words.len())
+	let trimmed = ("  x " + tail + " ").trim().split(" ").collect()
+	println(trimmed[0])
+	println(trimmed.len())
+	let found = words_of("other 1\ncurrent " + tail, "current")
+	println(found.len())
+	println(found[2])
+	let line = "a " + tail
+	println(line)
+}

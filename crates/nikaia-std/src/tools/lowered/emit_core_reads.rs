@@ -240,6 +240,7 @@ impl EmitState {
             let made = match arg {
                 Expr::Call { .. } => true,
                 Expr::MethodCall { method, .. } => { let method = *method; owns_its_text(&emit_text(world, method)) },
+                Expr::Binary { .. } => self.emit_core_a_concatenation(&arg),
                 _ => false,
             };
             if !made { continue; }
@@ -253,6 +254,12 @@ impl EmitState {
         }
         Ok(())
     }
+    pub(crate) fn emit_core_a_concatenation(&self, at: &Expr) -> bool {
+        match at {
+            Expr::Binary { span, .. } => self.facts.concatenations.contains(&(span.start as i64)),
+            _ => false,
+        }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -264,7 +271,7 @@ impl EmitState {
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)?;
             },
             _ => {
-                if !viewed || node_key(at) == whole || !emit_read_a_call(at) { return Ok(()); }
+                if !viewed || node_key(at) == whole || !(emit_read_a_call(at) || self.emit_core_a_concatenation(at)) { return Ok(()); }
                 let key = node_key(at);
                 walk.held.remove(&key);
                 let name = format!("__nikaia_held_{}", walk.held.len() as i64);
