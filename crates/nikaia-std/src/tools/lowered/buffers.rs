@@ -115,6 +115,7 @@ pub(crate) struct BufferWalk {
     pub(crate) holders: collections::BTreeMap<i64, String>,
     pub(crate) hoisted: collections::BTreeMap<i64, i64>,
     pub(crate) mutated: collections::BTreeMap<i64, Mutated>,
+    pub(crate) value_tail: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,7 +202,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         Item::Fn { ret_type, .. } => carries_maybe((ret_type).as_ref(), ask),
         _ => false,
     };
-    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new(), mutated: collections::BTreeMap::new() };
+    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new(), mutated: collections::BTreeMap::new(), value_tail: -1 };
     open_scope(&mut walk);
     for arg in args.iter() {
         let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false, number: false, parts: vec![] };
@@ -219,6 +220,8 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         while walk.frames.len() > 1 { close_scope(&mut walk); }
         walk.path = vec![];
         open_scope(&mut walk);
+        walk.value_tail = -1;
+        if walk.result_carries && !body.stmts.is_empty() { walk.value_tail = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).span.start as i64; }
         for stmt in body.stmts.iter() {
             walk.statement = stmt.span.start as i64;
             buffer_statement(&stmt.node, &stmt.span, ask, holes_of, unaliased, &mut walk);
@@ -372,7 +375,7 @@ pub(crate) fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
                 Expr::MethodCall { receiver, .. } => {
                     let receiver = nikaia_std::boxed::open(receiver);
                     let root = root_of(ask.names, receiver);
-                    if root.is_some() { note_change(nikaia_std::index::or(root.as_deref(), || ""), at, walk); }
+                    if root.is_some() && at != walk.value_tail { note_change(nikaia_std::index::or(root.as_deref(), || ""), at, walk); }
                 },
                 _ => { },
             }

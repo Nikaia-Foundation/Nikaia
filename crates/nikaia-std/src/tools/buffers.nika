@@ -173,6 +173,9 @@ struct BufferWalk {
     hoisted: collections::BTreeMap[i64, i64],
     /// The last change of a local after its `let` (#1276), by that `let`.
     mutated: collections::BTreeMap[i64, Mutated],
+    /// The statement that is the body's value, where a method call changes
+    /// nothing: `out.trim()` as the last expression reads (#1276).
+    value_tail: i64,
 }
 
 // Where a local is changed last: the statement of its `let`'s own block that
@@ -269,7 +272,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1 }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -288,6 +291,10 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         }
         walk.path = []
         open_scope(walk)
+        walk.value_tail = -1
+        if walk.result_carries && body.stmts.len() > 0 {
+            walk.value_tail = body.stmts[body.stmts.len() - 1].span.start as i64
+        }
         for stmt in body.stmts {
             walk.statement = stmt.span.start as i64
             buffer_statement(stmt.node, stmt.span, ask, holes_of, unaliased, walk)
@@ -475,7 +482,7 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             match expr {
                 Expr::MethodCall { receiver, .. } => {
                     let root = root_of(ask.names, receiver)
-                    if root != null {
+                    if root != null && at != walk.value_tail {
                         note_change(root ?? "", at, walk)
                     }
                 }
