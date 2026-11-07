@@ -11,6 +11,11 @@
 //   emitted per atom as `Σ k·x rel c` with integer coefficients. A product of
 //   two non-constant terms is refused (non-linear); a number out of `i64` is
 //   an overflow (D11).
+// * **Reals** (D27): a constant declared `Real` is a variable like an `Int`
+//   one, its sort kept beside the script (`SvSorts`); a decimal `d.d` is the
+//   rational it writes, `(/ a b ...)` divides by constants only (by a
+//   variable is non-linear, by zero unsupported). Each atom is cleared of its
+//   denominators as above, so its coefficients stay integers.
 // * **Substitution**: `let`, `(! t :named n)` and `define-fun` (with or
 //   without parameters) are read by value - a bound term is read once, where
 //   it is bound, and its value used wherever its name is.
@@ -73,6 +78,9 @@ struct SvSmtReader {
 	arena: TermArena,
 	/// The constants declared `Int`.
 	ints: collections::BTreeSet[String],
+	/// The constants declared `Real`, and the fresh `ite` variables of real
+	/// value (ADR-270 D27).
+	reals: collections::BTreeSet[String],
 	/// The constants declared `Bool`, each the variable `|sv!|b:name`.
 	bools: collections::BTreeSet[String],
 	/// The names `let` and a function's parameters bind, innermost last.
@@ -159,6 +167,25 @@ fn sv_overflow(what: String) -> SvGot {
 	return SvGot::Failed(SvReadWhy::Overflow(what))
 }
 
+/// The decimal `a`, `digits.digits`, as the rational `n / 10^k` it is, or
+/// an overflow (ADR-270 D11).
+fn sv_decimal(a: String) -> SvGot {
+	let mut parts: Vec[String] = []
+	for part in a.split(".") {
+		parts.push(part.to_string())
+	}
+	if parts.len() != 2 || !sv_is_numeral(parts[0]) || !sv_is_numeral(parts[1]) {
+		return SvGot::Failed(SvReadWhy::Unsupported(f"the numeral {a}"))
+	}
+	let n = text::parse_i64(parts[0] + parts[1]) ?? return sv_overflow(f"the decimal {a}")
+	let mut den: i64 = 1
+	for _ in 0..<parts[1].len() {
+		den = den.checked_mul(10) ?? return sv_overflow(f"the decimal {a}")
+	}
+	let r = sv_rat(n, den) ?? return sv_overflow(f"the decimal {a}")
+	return SvGot::Val(SvVal::Lin(sv_lin_constant(r)))
+}
+
 impl SvSmtReader {
 	fn fresh_name(ref mut self, kind: String) -> String {
 		self.fresh += 1
@@ -181,7 +208,7 @@ impl SvSmtReader {
 				return SvGot::Val(v.clone())
 			},
 		}
-		if self.ints.contains(name) {
+		if self.ints.contains(name) || self.reals.contains(name) {
 			return SvGot::Val(SvVal::Lin(sv_lin_var(name)))
 		}
 		if self.bools.contains(name) {
@@ -210,7 +237,24 @@ impl SvSmtReader {
 				?? return SvGot::Failed(SvReadWhy::Overflow(f"the numeral {a}"))
 			return SvGot::Val(SvVal::Lin(sv_lin_constant(sv_int(n))))
 		}
+		if a.contains(".") {
+			return sv_decimal(a)
+		}
 		return self.symbol(lg_unquoted(a))
+	}
+
+	/// Whether the linear form `a` is real-valued: a real variable, or a
+	/// coefficient or constant that is not an integer.
+	fn is_real(ref self, a: ref SvLin) -> bool {
+		if !sv_rat_is_int(a.c) {
+			return true
+		}
+		for (name, k) in a.terms {
+			if self.reals.contains(name) || !sv_rat_is_int(k) {
+				return true
+			}
+		}
+		return false
 	}
 
 	fn term(ref mut self, sexp: ref LgSexp) -> SvGot {
@@ -424,7 +468,11 @@ impl SvSmtReader {
 			))),
 			(SvVal::Lin(a), SvVal::Lin(b)) => {
 				let name = self.fresh_name("ite")
-				self.ints.insert(name.clone())
+				if self.is_real(a) || self.is_real(b) {
+					self.reals.insert(name.clone())
+				} else {
+					self.ints.insert(name.clone())
+				}
 				let v = sv_lin_var(name)
 				let then = match self.compare("=", v, a) {
 					SvGot::Val(SvVal::Formula(id)) => id,
@@ -590,6 +638,23 @@ impl SvSmtReader {
 				}
 				return SvGot::Val(SvVal::Lin(acc))
 			}
+			// Division by constants only (ADR-270 D27); by zero is outside what
+			// the reader covers (SMT-LIB leaves its value open).
+			if op == "/" && n >= 2 {
+				let mut acc = lins[0].clone()
+				for at in 1..<n {
+					let next = lins[at].clone()
+					if next.terms.len() > 0 {
+						return SvGot::Failed(SvReadWhy::Unsupported(f"a non-linear division: {lg_show(sexp)}"))
+					}
+					if next.c.num == 0 {
+						return SvGot::Failed(SvReadWhy::Unsupported(f"a division by zero: {lg_show(sexp)}"))
+					}
+					let inverse = sv_rat_div(sv_int(1), next.c) ?? return sv_overflow(lg_show(sexp))
+					acc = sv_lin_scale(acc, inverse) ?? return sv_overflow(lg_show(sexp))
+				}
+				return SvGot::Val(SvVal::Lin(acc))
+			}
 			if (op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=") && n >= 2 {
 				let mut links: Vec[i64] = []
 				for at in 0..<(n - 1) {
@@ -632,6 +697,10 @@ impl SvSmtReader {
 	fn declare(ref mut self, name: String, sort: String) -> SvReadWhy? {
 		if sort == "Int" {
 			self.ints.insert(name.clone())
+			return null
+		}
+		if sort == "Real" {
+			self.reals.insert(name.clone())
 			return null
 		}
 		if sort == "Bool" {
@@ -722,14 +791,22 @@ fn sv_smtlib_levels(items: ref Vec[LgSexp]) -> i64? {
 	return null
 }
 
+/// The sorts of a script's variables the logic layer's terms do not carry:
+/// the names of the real ones (ADR-270 D27). Every other variable is an
+/// integer.
+pub struct SvSorts {
+	pub reals: collections::BTreeSet[String],
+}
+
 /// A script, or why not: its assertions in a fresh arena, the reader's
-/// facts after them.
-enum SvSmtRead {
-	Script(LgScript),
+/// facts after them, and its variables' sorts.
+pub enum SvSmtRead {
+	Script(LgScript, SvSorts),
 	Failed(SvReadWhy),
 }
 
-fn sv_smtlib_script(source: String) -> SvSmtRead {
+/// Read a script with its variables' sorts.
+pub fn sv_smtlib_script(source: String) -> SvSmtRead {
 	let commands = match lg_parse(source) {
 		LgParsedSexps::Done(read) => read.clone(),
 		LgParsedSexps::Failed(why) => {
@@ -757,6 +834,7 @@ fn sv_smtlib_script(source: String) -> SvSmtRead {
 	let mut reader = SvSmtReader {
 		arena: TermArena::empty(),
 		ints: collections::BTreeSet(),
+		reals: collections::BTreeSet(),
 		bools: collections::BTreeSet(),
 		bound_names: [],
 		bound_values: [],
@@ -859,7 +937,10 @@ fn sv_smtlib_script(source: String) -> SvSmtRead {
 	for id in reader.side {
 		assertions.push(id)
 	}
-	return SvSmtRead::Script(LgScript { arena: reader.arena, assertions: assertions })
+	return SvSmtRead::Script(
+		LgScript { arena: reader.arena, assertions: assertions },
+		SvSorts { reals: reader.reals },
+	)
 }
 
 /// The reason a script was refused, as one line.
@@ -873,10 +954,11 @@ fn sv_read_why_text(why: ref SvReadWhy) -> String {
 }
 
 /// Read a script of the measuring rod: the same `LgScript` as
-/// `lg_smtlib_read` gives, over the forms the header names.
+/// `lg_smtlib_read` gives, over the forms the header names. A real
+/// variable reads as an integer one here: `sv_smtlib_script` keeps the sorts.
 pub fn sv_smtlib_read(source: String) -> LgRead {
 	return match sv_smtlib_script(source) {
-		SvSmtRead::Script(s) => LgRead::Script(s.clone()),
+		SvSmtRead::Script(s, _) => LgRead::Script(s.clone()),
 		SvSmtRead::Failed(why) => LgRead::Failed(match why {
 			SvReadWhy::Syntax(s) => LgReadError::Syntax(s.clone()),
 			SvReadWhy::Undeclared(s) => LgReadError::Undeclared(s.clone()),

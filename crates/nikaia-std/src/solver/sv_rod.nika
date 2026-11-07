@@ -101,9 +101,19 @@ fn sv_new_theory(engine: String) -> String {
 /// (why)` or `wrong (why)`, then the work.
 fn sv_line(source: String, engine: String) -> String {
 	let status = sv_status(source)
-	let script = match sv_smtlib_read(source) {
-		LgRead::Script(s) => s.clone(),
-		LgRead::Failed(_) => {
+	let script = match sv_smtlib_script(source) {
+		SvSmtRead::Script(s, sorts) => {
+			// No engine honours the Real sort yet (ADR-270 D27, #1299 item 4):
+			// a real script read as an integer one could be answered wrong.
+			if sorts.reals.len() > 0 {
+				return "unknown (theory) 0"
+			}
+			s.clone()
+		},
+		SvSmtRead::Failed(SvReadWhy::Overflow(_)) => {
+			return "unknown (overflow) 0"
+		},
+		SvSmtRead::Failed(_) => {
 			return "unknown (unreadable) 0"
 		},
 	}
