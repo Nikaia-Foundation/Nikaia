@@ -2223,7 +2223,7 @@ pub(crate) fn rsrc_seed(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
+pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<&Type>, trait_name: Option<&winnow_grammar::Symbol>, declared_result: &RsrcTraitResult, at: &Span, item: &Item, own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>, report: bool) -> bool {
     match item {
         Item::Fn { name, receiver, args, config, ret_type, body, ret_from, .. } => {
             let name = *name;
@@ -2305,13 +2305,65 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
                 let of = of_what((owner).as_deref(), &function);
                 let mut plain_ways: Vec<ResultSrcWay> = vec![];
                 for way in flow.ways.iter() { plain_ways.push(ResultSrcWay { span: Span { start: way.span.start, end: way.span.end }, reach: rsrc_plain(&way.reach) }); }
-                rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, !ret_from.is_empty(), at, out);
+                let mut trait_from: Vec<String> = vec![];
+                for position in declared_result.from.iter() {
+                    let position = nikaia_std::num::value(position);
+                    if position < 0 { trait_from.push(self_name.to_string()); } else if position < args.len() as i64 { trait_from.push(asked.names.resolve(nikaia_std::index::get(&args, nikaia_std::index::at(position)).name).to_string()); }
+                }
+                rsrc_report(asked, &of, &sources, &declared_views, &plain_ways, &rsrc_plain(&reach), (receiver).as_ref(), trait_name, declared_result, &trait_from, !ret_from.is_empty(), at, out);
             }
             return changed;
         },
         _ => { },
     }
     false
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RsrcTraitResult {
+    pub(crate) found: bool,
+    pub(crate) view: bool,
+    pub(crate) from: Vec<i64>,
+}
+
+pub(crate) fn rsrc_trait_result(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], trait_name: Option<&winnow_grammar::Symbol>, method: &Item) -> RsrcTraitResult {
+    let wanted = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return RsrcTraitResult { found: false, view: false, from: vec![] } };
+    let mut function: String = String::from("");
+    match method {
+        Item::Fn { name, .. } => {
+            let name = *name;
+            function = function_name(asked.names, name);
+        },
+        _ => { },
+    }
+    for item in items.iter() {
+        match &item.node {
+            Item::Trait { name, methods, .. } => {
+                let name = *name;
+                if asked.names.resolve(name) == asked.names.resolve(*wanted) {
+                    for declared in methods.iter() {
+                        if asked.names.resolve(declared.node.name) == function {
+                            let mut from: Vec<i64> = vec![];
+                            for source in declared.node.ret_from.iter() {
+                                let source = *source;
+                                let written = asked.names.resolve(source).to_string();
+                                if written == "self" { from.push(-1); }
+                                for position in 0..declared.node.args.len() as i64 { if asked.names.resolve(nikaia_std::index::get(&declared.node.args, nikaia_std::index::at(position)).name) == written { from.push(position); } }
+                            }
+                            let mut view = !declared.node.ret_from.is_empty();
+                            match &declared.node.ret_type {
+                                None => { },
+                                Some(result) => { if result.is_view { view = true; } },
+                            }
+                            return RsrcTraitResult { found: true, view, from };
+                        }
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    RsrcTraitResult { found: false, view: false, from: vec![] }
 }
 
 pub(crate) fn rsrc_either_text(asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> bool {
@@ -2334,7 +2386,7 @@ pub(crate) fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, written_from: bool, at: &Span, out: &mut Vec<Finding>) {
+pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String], declared_views: &[String], ways: &[ResultSrcWay], reach: &collections::BTreeSet<String>, receiver: Option<&Receiver>, trait_name: Option<&winnow_grammar::Symbol>, declared_result: &RsrcTraitResult, trait_from: &[String], written_from: bool, at: &Span, out: &mut Vec<Finding>) {
     for way in ways.iter() {
         for each in way.reach.iter() {
             if each.starts_with('!') {
@@ -2350,6 +2402,29 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
     let mut named: Vec<String> = vec![];
     for source in sources.iter() { if reach.contains(source) { named.push(source.to_string()); } }
     if trait_name.is_none() || written_from { return; }
+    if declared_result.found && !declared_result.view {
+        for source in named.iter() {
+            let message = format!("{} implements a trait method whose result is text of its own, but this hands back a view of `{}`'s data.", of, source);
+            let note: String = String::from("The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-3 D14).");
+            let help = format!("Hand back a copy with `.clone()`, or write `from {}` on the trait's result.", source);
+            out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
+            return;
+        }
+        return;
+    }
+    if declared_result.found && !trait_from.is_empty() {
+        let written = trait_from.join(" | ");
+        for source in named.iter() {
+            if !nikaia_std::list::contains(&trait_from, &source) {
+                let message = format!("{} implements a trait method that hands back views of `{}` only, but this hands back a view of `{}`'s data.", of, written, source);
+                let note = format!("Whoever calls it through the trait reads the trait's declaration, which says `from {}`.", written);
+                let help: String = String::from("Hand back a view of what the trait names, or a copy with `.clone()`.");
+                out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
+                return;
+            }
+        }
+        return;
+    }
     let mut allowed: String = String::from("");
     if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = (*nikaia_std::index::get(&declared_views, 0)).to_string(); } else if declared_views.len() > 1 { return; }
     for source in named.iter() {
@@ -2537,6 +2612,7 @@ pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], 
 pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &impl Fn(&Expr) -> bool, known: &mut collections::BTreeMap<String, ResultSrcKnown>, out: &mut Vec<Finding>) {
     let nothing: Option<Type> = None;
     let no_trait: Option<winnow_grammar::Symbol> = None;
+    let no_result = RsrcTraitResult { found: false, view: false, from: vec![] };
     for item in items.iter() {
         match &item.node {
             Item::Fn { .. } => { rsrc_seed(unit, asked, (nothing).as_ref(), &item.node, known); },
@@ -2553,10 +2629,10 @@ pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanne
         let mut grew = false;
         for item in items.iter() {
             match &item.node {
-                Item::Fn { .. } => { if rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &item.span, &item.node, own_buffer, known, out, false) { grew = true; } },
+                Item::Fn { .. } => { if rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &no_result, &item.span, &item.node, own_buffer, known, out, false) { grew = true; } },
                 Item::Impl { target, methods, .. } => {
                     let subject: Option<Type> = Some(target.clone());
-                    for method in methods.iter() { if rsrc_function(unit, asked, (subject).as_ref(), (no_trait).as_ref(), &method.span, &method.node, own_buffer, known, out, false) { grew = true; } }
+                    for method in methods.iter() { if rsrc_function(unit, asked, (subject).as_ref(), (no_trait).as_ref(), &no_result, &method.span, &method.node, own_buffer, known, out, false) { grew = true; } }
                 },
                 _ => { },
             }
@@ -2575,14 +2651,15 @@ pub(crate) fn rsrc_solve(unit: &Unit, asked: &Asked<'_, '_, '_>, items: &[Spanne
     for item in items.iter() {
         match &item.node {
             Item::Fn { args, ret_type, .. } => {
-                let grew = rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &item.span, &item.node, own_buffer, known, out, true);
+                let grew = rsrc_function(unit, asked, (nothing).as_ref(), (no_trait).as_ref(), &no_result, &item.span, &item.node, own_buffer, known, out, true);
                 rsrc_function_types(unit, asked, args, (ret_type).as_ref(), &item.span, out);
             },
             Item::Impl { trait_name, target, methods, .. } => {
                 let trait_name = *trait_name;
                 let subject: Option<Type> = Some(target.clone());
                 for method in methods.iter() {
-                    let grew = rsrc_function(unit, asked, (subject).as_ref(), (trait_name).as_ref(), &method.span, &method.node, own_buffer, known, out, true);
+                    let declared_result = rsrc_trait_result(asked, items, (trait_name).as_ref(), &method.node);
+                    let grew = rsrc_function(unit, asked, (subject).as_ref(), (trait_name).as_ref(), &declared_result, &method.span, &method.node, own_buffer, known, out, true);
                     match &method.node {
                         Item::Fn { args, ret_type, .. } => { rsrc_function_types(unit, asked, args, (ret_type).as_ref(), &method.span, out); },
                         _ => { },

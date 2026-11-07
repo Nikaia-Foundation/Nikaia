@@ -149,7 +149,9 @@ pub(crate) fn result_from_of_signature(view: &ParsedView<'_, '_, '_, '_, '_, '_>
         Some(r) => !r.is_keep,
     };
     if of_subject { return; }
-    let help = if parameters.is_empty() { String::from("Hand back text of its own: declare the result without `ref`.") } else { format!("Write `from` and the parameters it points into after the result type, e.g. `from {}`.", *nikaia_std::index::get(&parameters, 0)) };
-    out.push(check_refusal("NK1336", &method.span, format!("`{}` hands back a view, but has no body to tell whose data it points into, and no `from`.", function), vec![String::from("Where there is no body to infer it from - a trait's method, a foreign function - the result names its source (ADR-views-3 D8).")], Some(help)));
+    let mut choices: Vec<String> = parameters.iter().map(|name| { format!("`from {}`", name) }).collect::<Vec<_>>();
+    if parameters.len() > 1 { choices.push(format!("`from {}`", parameters.join(" | "))); }
+    let help = if parameters.is_empty() { String::from("Hand back text of its own: declare the result without `ref`.") } else { format!("Write one of {} after the result type, or declare it without `ref` to hand back text of its own.", choices.join(", ")) };
+    out.push(check_refusal("NK1336", &method.span, format!("`{}` hands back a view, but has no body to tell whose data it points into, and no `from`.", function), vec![String::from("Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-3 D8, D14).")], Some(help)));
 }
 

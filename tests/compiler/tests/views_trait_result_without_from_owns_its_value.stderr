@@ -1,0 +1,17 @@
+error[NK2302]: `P.name` implements a trait method whose result is text of its own, but this hands back a view of `self`'s data.
+   --> tests/views_trait_result_without_from_owns_its_value.nika:15:5
+    |
+ 15 |     fn name(self) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-3 D14).
+    = help: Hand back a copy with `.clone()`, or write `from self` on the trait's result.
+error[NK2302]: `P.pick` implements a trait method that hands back views of `a` only, but this hands back a view of `self`'s data.
+   --> tests/views_trait_result_without_from_owns_its_value.nika:18:5
+    |
+ 18 |     fn pick(self, a: String) -> String {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Whoever calls it through the trait reads the trait's declaration, which says `from a`.
+    = help: Hand back a view of what the trait names, or a copy with `.clone()`.
+2 views kept past the call that was given it

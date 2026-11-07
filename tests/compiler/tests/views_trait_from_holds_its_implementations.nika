@@ -1,0 +1,28 @@
+// Without a body, `from` alone makes a trait method's result a view of what it
+// names (ADR-views-3 D14, #1224): an implementation that writes no `from` of
+// its own is held to the trait's, by position, whatever it names its
+// parameters, and lowers as a view of it.
+trait Pick {
+    fn pick(self, s: String, t: String) -> String from s
+    fn name(self) -> String from self
+}
+
+struct First {
+    n: String,
+}
+
+impl Pick for First {
+    fn pick(self, word: String, other: String) -> String {
+        return word.trim()
+    }
+    fn name(self) -> String {
+        return self.n
+    }
+}
+
+fn main() {
+    let f = First { n: "first" }
+    let t: String = "  hello  "
+    println(f"[{f.pick(t, "x")}]")
+    println(f.name())
+}

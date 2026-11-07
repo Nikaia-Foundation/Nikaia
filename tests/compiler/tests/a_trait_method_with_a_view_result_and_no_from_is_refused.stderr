@@ -20,8 +20,8 @@ error[NK1336]: `pick` hands back a view, but has no body to tell whose data it p
  4 |     fn pick(a: ref String, b: ref String) -> ref String
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: Where there is no body to infer it from - a trait's method, a foreign function - the result names its source (ADR-views-3 D8).
-   = help: Write `from` and the parameters it points into after the result type, e.g. `from a`.
+   = note: Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-3 D8, D14).
+   = help: Write one of `from a`, `from b`, `from a | b` after the result type, or declare it without `ref` to hand back text of its own.
 warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
   --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:8:5
    |

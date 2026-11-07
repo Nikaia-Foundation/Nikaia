@@ -1,0 +1,36 @@
+migrated TMP/a.nika
+TMP/a.nika:4: `either` hands back a view but says of no parameter whose data it points into: write one of `from a`, `from b`, `from a | b` after its result type, or drop `ref` to hand back text of its own (ADR-views-3 D14)
+trait Named {
+    fn name(self) -> String from self
+    fn first(a: String, n: i64) -> String from a
+    fn either(a: String, b: String) -> ref String
+    fn made(self) -> String
+    fn told(self, a: String) -> String from a
+}
+
+struct P {
+    n: String,
+}
+
+impl Named for P {
+    fn name(self) -> String {
+        return self.n
+    }
+    fn first(a: String, n: i64) -> String {
+        return a
+    }
+    fn either(a: String, b: String) -> String {
+        return a
+    }
+    fn made(self) -> String {
+        return "m"
+    }
+    fn told(self, a: String) -> String {
+        return a
+    }
+}
+
+fn main() {
+    let p = P { n: "x" }
+    println(p.name())
+}

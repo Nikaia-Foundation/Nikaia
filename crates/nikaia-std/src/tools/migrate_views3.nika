@@ -569,6 +569,137 @@ fn migrate_from_of_a_declaration(tokens: ref Vec[MigrateToken], k: i64, mut suff
     suffix[last] = f"{suffix[last]} from {sources.join(" | ")}"
 }
 
+/// **A trait method's `ref` result, written as D14 says** (ADR-views-3 D14,
+/// #1224): without a body, `from` alone makes a result a view, so dropping
+/// the `ref` of `fn name(self) -> ref String` would make it own its value.
+/// The migration writes the `from` the old declaration meant, which is what
+/// every implementation's body is held to today (`views.nika`,
+/// `rsrc_report`): a lent receiver, `-> String from self`; else the one
+/// parameter written `ref`. `k` is the `fn` of a method inside a `trait`.
+/// The answer is the last token of the result type, its `ref`, the sources
+/// to write after it, and, where the old declaration names several parameters or
+/// none, no sources but the choices, for the refusal; `-1` where `k` is no
+/// body-less method with a `ref` result and no `from`.
+fn migrate_trait_result(tokens: ref Vec[MigrateToken], k: i64) -> (i64, i64, String, Vec[String]) sync {
+    let none: (i64, i64, String, Vec[String]) = (-1, -1, "", [])
+    if k + 1 >= tokens.len() || tokens[k + 1].kind != MigrateKind::Word {
+        return none
+    }
+    let mut open = k + 2
+    if migrate_text_at(tokens, open) == "[" {
+        open = migrate_closing(tokens, open) + 1
+    }
+    if migrate_text_at(tokens, open) != "(" {
+        return none
+    }
+    let close = migrate_closing(tokens, open)
+    if migrate_text_at(tokens, close + 1) != "->" || migrate_text_at(tokens, close + 2) != "ref" || migrate_text_at(tokens, close + 3) == "mut" || (migrate_text_at(tokens, close + 3) == "(" && tokens[close + 3].gap == "") {
+        return none
+    }
+    let last = migrate_type_end(tokens, close + 3)
+    let mut after = last + 1
+    while migrate_text_at(tokens, after) == "sync" || migrate_text_at(tokens, after) == "throws" {
+        after += 1
+    }
+    if migrate_text_at(tokens, after) == "from" || migrate_text_at(tokens, after) == "{" {
+        return none
+    }
+    let mut lent_self = false
+    let mut sources: Vec[String] = []
+    let mut depth = 0
+    for j in open + 1..<close {
+        match tokens[j].kind {
+            MigrateKind::Open => { depth += 1 },
+            MigrateKind::Close => { depth -= 1 },
+            else => {},
+        }
+        let first = j == open + 1 || (depth == 0 && tokens[j - 1].text == ",")
+        if first && j == open + 1 {
+            let receiver = migrate_text_at(tokens, j)
+            if receiver == "self" || ((receiver == "ref" || receiver == "mut") && migrate_text_at(tokens, j + 1) == "self") || (receiver == "ref" && migrate_text_at(tokens, j + 1) == "mut" && migrate_text_at(tokens, j + 2) == "self") {
+                lent_self = true
+            }
+        }
+        if first && tokens[j].kind == MigrateKind::Word && migrate_text_at(tokens, j + 1) == ":" && migrate_text_at(tokens, j + 2) == "ref" && migrate_text_at(tokens, j + 3) != "mut" {
+            sources.push(tokens[j].text.clone())
+        }
+    }
+    if lent_self {
+        return (last, close + 2, "self", [])
+    }
+    if sources.len() == 1 {
+        return (last, close + 2, sources[0].clone(), [])
+    }
+    let mut choices: Vec[String] = []
+    for source in sources {
+        choices.push(f"`from {source}`")
+    }
+    if sources.len() > 1 {
+        choices.push(f"`from {sources.join(" | ")}`")
+    }
+    return (last, close + 2, "", choices)
+}
+
+/// **The end of each `trait` block**, per token: the index of its closing
+/// `}` where `k` is the word `trait`, else -1.
+fn migrate_trait_end(tokens: ref Vec[MigrateToken], k: i64) -> i64 sync {
+    if tokens[k].kind != MigrateKind::Word || tokens[k].text != "trait" || k + 1 >= tokens.len() || tokens[k + 1].kind != MigrateKind::Word {
+        return -1
+    }
+    let mut j = k + 2
+    while j < tokens.len() && tokens[j].text != "{" && tokens[j].text != ";" {
+        if tokens[j].kind == MigrateKind::Open {
+            j = migrate_closing(tokens, j)
+        }
+        j += 1
+    }
+    if j >= tokens.len() || tokens[j].text != "{" {
+        return -1
+    }
+    return migrate_closing(tokens, j)
+}
+
+/// **What the migration of `code` could not write** (ADR-views-3 D14,
+/// #1224): each trait method whose `ref` result names no source the old
+/// declaration fixes, with its line and the `from`s to choose from. Its `ref`
+/// stays, and the checker refuses it (`NK1336`) until one is written.
+pub fn migrate_views3_unwritten(code: String) -> Vec[String] sync {
+    let mut lexer = MigrateLexer { c: code.chars().collect(), at: 0, tokens: [] }
+    lexer.run()
+    let tokens = lexer.tokens
+    let mut out: Vec[String] = []
+    let mut in_trait = -1
+    let mut guarded = -1
+    for k in 0..<tokens.len() {
+        if tokens[k].kind == MigrateKind::Word && tokens[k].text == "extern" && k > guarded {
+            guarded = migrate_extern_end(tokens, k)
+        }
+        if k > in_trait && k > guarded {
+            in_trait = migrate_trait_end(tokens, k)
+        }
+        if k < in_trait && k > guarded && tokens[k].kind == MigrateKind::Word && tokens[k].text == "fn" {
+            let (last, _, from, choices) = migrate_trait_result(tokens, k)
+            if last >= 0 && from.is_empty() {
+                let mut line = 1
+                let mut at = 0
+                for c in code.chars() {
+                    if at >= tokens[k].at {
+                        break
+                    }
+                    if c == '\n' {
+                        line += 1
+                    }
+                    at += 1
+                }
+                let name = tokens[k + 1].text.clone()
+                let help = if choices.is_empty() { "or drop `ref` to hand back text of its own" } else { f"write one of {choices.join(", ")} after its result type, or drop `ref` to hand back text of its own" }
+                out.push(f"{line}: `{name}` hands back a view but says of no parameter whose data it points into: {help} (ADR-views-3 D14)")
+            }
+        }
+    }
+    return out
+}
+
 fn migrate_ordinal_of(items: ref Vec[i64], wanted: i64) -> i64 sync {
     for at in 0..<items.len() {
         if items[at] == wanted {
@@ -630,6 +761,11 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool],
         suffix.push("")
     }
     let in_params = migrate_in_params(tokens)
+    let mut in_trait = -1
+    let mut kept_ref: Vec[bool] = []
+    for _t in tokens {
+        kept_ref.push(false)
+    }
     let mut brackets: Vec[bool] = []
     let mut until = -1
     let mut k = 0
@@ -649,12 +785,25 @@ pub fn migrate_views3_code(code: String, keep_at: Vec[i64], by_value: Vec[bool],
         if !guarded[k] && kind == MigrateKind::Word && t == "fn" {
             migrate_from_of_a_declaration(tokens, k, suffix)
         }
+        if k > in_trait && !guarded[k] {
+            in_trait = migrate_trait_end(tokens, k)
+        }
+        if k < in_trait && !guarded[k] && kind == MigrateKind::Word && t == "fn" {
+            let (last, ref_at, from, _) = migrate_trait_result(tokens, k)
+            if last >= 0 && !from.is_empty() {
+                suffix[last] = f"{suffix[last]} from {from}"
+            } else if last >= 0 {
+                // No source the old declaration fixes: its `ref` stays
+                // (`migrate_views3_unwritten` names the choices).
+                kept_ref[ref_at] = true
+            }
+        }
         if kind == MigrateKind::Open {
             brackets.push(t == "[")
         } else if kind == MigrateKind::Close && brackets.len() > 0 {
             brackets.pop()
         }
-        if kind == MigrateKind::Word && t == "ref" && !guarded[k] {
+        if kind == MigrateKind::Word && t == "ref" && !guarded[k] && !kept_ref[k] {
             let next = migrate_text_at(tokens, k + 1)
             let after = migrate_text_at(tokens, k + 2)
             let named = k >= 3 && migrate_text_at(tokens, k - 1) == ":" && tokens[k - 2].kind == MigrateKind::Word && (migrate_text_at(tokens, k - 3) == "(" || migrate_text_at(tokens, k - 3) == ",")

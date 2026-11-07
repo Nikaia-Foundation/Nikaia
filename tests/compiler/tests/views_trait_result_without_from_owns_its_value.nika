@@ -1,0 +1,26 @@
+// Without a body, a trait method's result that writes no `from` owns its value
+// (ADR-views-3 D14, #1224): an implementation that hands back a view is
+// refused, as one that hands back a view of a parameter its trait's `from`
+// does not name is, instead of failing in the Rust it lowers to.
+trait Named {
+    fn name(self) -> String
+    fn pick(self, a: String) -> String from a
+}
+
+struct P {
+    n: String,
+}
+
+impl Named for P {
+    fn name(self) -> String {
+        return self.n
+    }
+    fn pick(self, a: String) -> String {
+        return self.n
+    }
+}
+
+fn main() {
+    let p = P { n: "x" }
+    println(p.name())
+}
