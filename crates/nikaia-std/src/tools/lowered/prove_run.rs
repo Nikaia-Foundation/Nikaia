@@ -14,6 +14,7 @@ pub enum ProveClaimRun {
 pub struct ProveComptimes {
     pub by_name: collections::BTreeMap<String, i64>,
     pub at: collections::BTreeMap<i64, i64>,
+    pub whole_lets: collections::BTreeMap<i64, String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,8 +23,8 @@ pub struct ProveWalked {
     pub answers: ProverAnswers,
 }
 
-pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new() };
+pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>) -> ProveComptimes {
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.to_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
@@ -97,6 +98,7 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
     let mut state = ProverState::fresh();
     state.pinned = pinned.to_owned();
     state.comptime_at = comptimes.at.to_owned();
+    state.whole_lets = comptimes.whole_lets.to_owned();
     state.not_run = not_run.to_owned();
     state.stopped = stopped.to_owned();
     state.loops_recorded = recorded.to_owned();

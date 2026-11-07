@@ -689,17 +689,23 @@ pub fn value_node(expr: &Expr) -> i64 {
 /// **Checked as the build checks it**: with the program's other files and
 /// what the build may read and compile, so that a `comptime` a call computes
 /// and a call run for a claim (ADR-359 D7, D11) answer here as they did there.
+///
+/// **With the preconditions derived from the callers** (ADR-391 D4): the
+/// `--bounds` walk over `package` (the package's other files) and
+/// `through_loops` finds them, each listed with the calls that prove it.
 #[allow(clippy::too_many_arguments)]
 pub fn claims_report(
     parsed: &Parsed,
     source: &str,
     path: &str,
     beside: &[&Parsed],
+    package: &[&Parsed],
     own: &Ledger,
     library: &Ledger,
     reads: &Reads,
     refuses: bool,
     colour: bool,
+    through_loops: bool,
 ) -> String {
     let checked = check_against(
         parsed,
@@ -710,11 +716,21 @@ pub fn claims_report(
         &Newly::new(),
         reads,
     );
+    let derived = crate::bounds_report::derived(
+        parsed,
+        package,
+        source,
+        &checked,
+        own,
+        library,
+        through_loops,
+    );
     nikaia_std::tools::check_facts::check_claims_report(
         &checked.facts.claims,
         source,
         path,
         &checked.facts.published,
+        &derived,
         colour,
         refuses,
     )

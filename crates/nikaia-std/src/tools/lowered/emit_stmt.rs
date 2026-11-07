@@ -171,6 +171,7 @@ impl EmitState {
                         let st = out.mark();
                         out.push(&format!("{}vec![{}; {}];", nikaia_std::index::or(head, || ""), value.buf, count.buf));
                         out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
+                        out.push(&self.emit_stmt_late_puts(&walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64));
                         out.push("\n");
                         pos += 2;
                         continue;
@@ -187,6 +188,7 @@ impl EmitState {
             self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, &here, flow, scope)?;
             out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
             if ending && here.is_value() { out.push(" };"); }
+            out.push(&self.emit_stmt_late_puts(&walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
             out.push("\n");
             pos += 1;
         }
@@ -339,11 +341,26 @@ impl EmitState {
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() };
         let mut put: Option<String> = None;
         let keep = plan.puts.get(&at);
-        if keep.is_some() { put = Some(emit_stmt_put_call(match keep { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() }, plan.opaque_puts.contains(&at))); }
+        if keep.is_some() && !plan.late_puts.contains_key(&at) { put = Some(emit_stmt_put_call(match keep { Some(__nikaia_value) => __nikaia_value, None => return emit_stmt_kept_none() }, plan.opaque_puts.contains(&at))); }
         let packed = nikaia_std::index::or(plan.tethered.get(bound), || -1) == at;
         let mut holding: Option<i64> = None;
         if plan.element_keepers.contains(bound) { holding = Some(nikaia_std::index::or(plan.widths.get(bound), || 1)); }
         EmitStmtKept { put, packed, holding }
+    }
+    pub(crate) fn emit_stmt_late_puts(&self, walk: &EmitWalk, function: &str, statement: i64) -> String {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+        let mut written = String::from("");
+        for (at, late) in plan.late_puts.iter() {
+            let at = nikaia_std::num::value(at);
+            if late.after != statement { continue; }
+            let keep = match plan.puts.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let put = emit_stmt_put_call(&keep, plan.opaque_puts.contains(&at));
+            let local = self.emit_stmt_local(&late.name);
+            let mut_word = if late.reassigned { "mut " } else { "" };
+            written = format!("{} let {}{} = {}{});", written, mut_word, local, put, local);
+        }
+        written
     }
     pub(crate) fn emit_stmt_reput(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };

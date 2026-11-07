@@ -43,6 +43,13 @@ has no heading here; `CLAUDE.md` draws the line.
 **Tasks: a callee's write of a file named by a literal reaches the caller's task (#1354)**
 - Two async tasks that write one file through a function they call are refused with NK2104, naming the file; a touch named by a parameter is mapped onto the literal the call passes, and the ledger writes it as `file('a.txt') write` (Part III 13.5).
 - A task's uncaught failure no longer makes the statements beside it unaccounted for: what runs beside it has already run.
+## [0.0.1352] — 2026-11-07
+
+**Builders' changes (#1340, #1351, #1352, #1366)**
+- Fix: `a ?? null` on a `ref T?` stays a view, so `value ?? continue` passed as a `ref` argument lowers without an extra borrow (#1340).
+- A stop inside a package's own code names its `.nika` file and line. Every package's generated crate now carries its abort table, keyed by its generated file, and a program's panic hook reaches the tables of the packages it uses, so an index past the end in `src/over.nika` says `src/over.nika:4: the program stopped: ...` instead of Rust's raw panic; `nikaia test` writes such a path relative to the tested package, so a `NAME.stops` can expect it (#1351).
+- A name used only in a match arm's guard counts as used: a task takes a value its body reads only in a guard (NK2101), and the other name walks see it too (#1352)
+- Fix: a value moved inside a loop that has a `break` or `return` is NK2105 when a next turn can still follow the move (a `continue`, or the end of the body), instead of a rustc "use of moved value"; assigning back a moved field in a loop (`o.r = f(o.r)`) is no longer refused (#1366).
 
 ## [0.0.1351] — 2026-11-06
 

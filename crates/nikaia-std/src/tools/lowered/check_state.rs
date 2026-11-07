@@ -131,6 +131,7 @@ pub struct CheckWayOut {
     pub choices: Vec<(i64, i64)>,
     pub span: Span,
     pub loop_frame: i64,
+    pub in_loop: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,17 +164,36 @@ pub struct CheckRepeats {
     pub frame: i64,
     pub what: String,
     pub revived: collections::BTreeSet<String>,
+    pub revived_parts: collections::BTreeSet<String>,
     pub leaves: bool,
+    pub opened: i64,
+    pub held: Vec<CheckHeldTaking>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckHeldTaking {
+    pub path: String,
+    pub ty: Ty,
+    pub to: String,
+    pub span: Span,
+    pub choices: Vec<(i64, i64)>,
+    pub from: i64,
+    pub bound: i64,
+    pub loops: Vec<i64>,
 }
 
 impl CheckRepeats {
-    pub fn a_loop(words: &winnow_grammar::InternerContext, frame: i64, body: &Block) -> CheckRepeats {
-        let mut found = CheckRepeats { frame, what: String::from("loop"), revived: collections::BTreeSet::new(), leaves: false };
+    pub fn a_loop(words: &winnow_grammar::InternerContext, frame: i64, opened: i64, body: &Block) -> CheckRepeats {
+        let mut found = CheckRepeats { frame, what: String::from("loop"), revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened, held: vec![] };
         what_a_loop_does(words, body, &mut found);
         found
     }
-    pub fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: String::from("lambda"), revived: collections::BTreeSet::new(), leaves: false } }
-    pub fn takes_again(&self, name: &str) -> bool { !(self.leaves || self.revived.contains(name)) }
+    pub fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: String::from("lambda"), revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened: -1, held: vec![] } }
+    pub fn takes_again(&self, path: &str) -> bool { !(self.leaves || self.revives(path)) }
+    pub fn revives(&self, path: &str) -> bool {
+        let root: String = nikaia_std::index::or(path.split('.').next(), || "").to_string();
+        self.revived.contains(&root) || self.revived_parts.iter().any(|part| { AsRef::<str>::as_ref(&(path)) == AsRef::<str>::as_ref(&(part)) || path.starts_with(&format!("{}.", part)) })
+    }
 }
 
 pub(crate) fn what_a_loop_does(words: &winnow_grammar::InternerContext, block: &Block, found: &mut CheckRepeats) {
@@ -187,12 +207,28 @@ pub(crate) fn what_a_loop_does(words: &winnow_grammar::InternerContext, block: &
                         let name = *name;
                         found.revived.insert(words.resolve(name).to_string());
                     },
+                    Expr::Field { .. } => {
+                        let part = nikaia_std::index::or(a_part_assigned(words, target), || "".into());
+                        if part != "" { found.revived_parts.insert(part); }
+                    },
                     _ => { },
                 }
             },
             _ => { },
         }
         for inner in blocks_of_stmt(&stmt.node) { what_a_loop_does(words, inner, found); }
+    }
+}
+
+pub(crate) fn a_part_assigned(words: &winnow_grammar::InternerContext, target: &Expr) -> Option<String> {
+    match target {
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let held = match a_part_assigned(words, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some(format!("{}.{}", held, words.resolve(name)))
+        },
+        _ => None,
     }
 }
 

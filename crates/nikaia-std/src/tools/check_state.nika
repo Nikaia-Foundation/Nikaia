@@ -260,6 +260,9 @@ pub struct CheckWayOut {
     /// For a `break` or a `continue`: the frame the loop it leaves begins at,
     /// -1 for the others (ADR-views-1 D2).
     pub loop_frame: i64,
+    /// The loop it stands in directly, by where that loop opens; -1 outside
+    /// any (#1366).
+    pub in_loop: i64,
 }
 
 /// A `??` whose left side may be lent rather than taken.
@@ -321,26 +324,60 @@ pub struct CheckRepeats {
     /// The names the body assigns, any of which it may give a new sequence
     /// before the next turn takes it - a loop only.
     pub revived: collections::BTreeSet[String],
+    /// The fields it assigns, as `o.r`: a part handed over and given a new
+    /// value before the next turn (#1366) - a loop only.
+    pub revived_parts: collections::BTreeSet[String],
     /// Whether a `break` or a `return` is anywhere in the body, which may end
     /// the loop on the turn that took it - a loop only. Over-approximated, in
-    /// the direction that refuses less.
+    /// the direction that refuses less: what such a body takes is held until
+    /// the loop ends, and asked then (`held`).
     pub leaves: bool,
+    /// Where the loop opens, which names it in a way out; -1 for the others.
+    pub opened: i64,
+    /// What the body hands over that a `break` or a `return` may keep from
+    /// being handed over again (#1366).
+    pub held: Vec[CheckHeldTaking],
+}
+
+/// **A value handed over in a loop that may end on the same turn** (#1366):
+/// whether a next turn can follow the taking is known once the loop has been
+/// seen, from the ways out after it.
+pub struct CheckHeldTaking {
+    pub path: String,
+    pub ty: Ty,
+    pub to: String,
+    pub span: Span,
+    /// The choices the taking stands in.
+    pub choices: Vec[(i64, i64)],
+    /// The first way out after it, as an index into `ways_out`.
+    pub from: i64,
+    /// The frame its root is bound in: a loop that opens there or before it
+    /// does not hand it over again.
+    pub bound: i64,
+    /// The loops around it, by where they open.
+    pub loops: Vec[i64],
 }
 
 impl CheckRepeats {
-    pub fn a_loop(words: ref winnow_grammar::InternerContext, frame: i64, body: ref Block) -> CheckRepeats {
-        let mut found = CheckRepeats { frame: frame, what: "loop", revived: collections::BTreeSet(), leaves: false }
+    pub fn a_loop(words: ref winnow_grammar::InternerContext, frame: i64, opened: i64, body: ref Block) -> CheckRepeats {
+        let mut found = CheckRepeats { frame: frame, what: "loop", revived: collections::BTreeSet(), revived_parts: collections::BTreeSet(), leaves: false, opened: opened, held: [] }
         what_a_loop_does(words, body, found)
         return found
     }
 
     pub fn a_lambda(frame: i64) -> CheckRepeats {
-        return CheckRepeats { frame: frame, what: "lambda", revived: collections::BTreeSet(), leaves: false }
+        return CheckRepeats { frame: frame, what: "lambda", revived: collections::BTreeSet(), revived_parts: collections::BTreeSet(), leaves: false, opened: -1, held: [] }
     }
 
-    /// Whether the body takes `name` again on its next turn.
-    pub fn takes_again(ref self, name: ref String) -> bool {
-        return !(self.leaves || self.revived.contains(name))
+    /// Whether the body takes `path` again on its next turn.
+    pub fn takes_again(ref self, path: ref String) -> bool {
+        return !(self.leaves || self.revives(path))
+    }
+
+    /// Whether the body gives `path`, or what it is part of, a new value.
+    pub fn revives(ref self, path: ref String) -> bool {
+        let root: String = (path.split(".").next() ?? "").clone()
+        return self.revived.contains(root) || self.revived_parts.iter().any(fn(part) { path == part || path.starts_with(f"{part}.") })
     }
 }
 
@@ -358,6 +395,12 @@ fn what_a_loop_does(words: ref winnow_grammar::InternerContext, block: ref Block
                     Expr::Variable(name, _) => {
                         found.revived.insert(words.resolve(name).clone())
                     }
+                    Expr::Field { .. } => {
+                        let part = a_part_assigned(words, target) ?? ""
+                        if part != "" {
+                            found.revived_parts.insert(part)
+                        }
+                    }
                     else => {}
                 }
             }
@@ -366,6 +409,19 @@ fn what_a_loop_does(words: ref winnow_grammar::InternerContext, block: ref Block
         for inner in blocks_of_stmt(stmt.node) {
             what_a_loop_does(words, inner, found)
         }
+    }
+}
+
+/// The field an assignment writes, as `o.r`; `null` where it is not a name
+/// and a chain of fields.
+fn a_part_assigned(words: ref winnow_grammar::InternerContext, target: ref Expr) -> String? {
+    return match target {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { base, name, .. } => {
+            let held = a_part_assigned(words, base) ?? return null
+            f"{held}.{words.resolve(name)}"
+        },
+        else => null,
     }
 }
 

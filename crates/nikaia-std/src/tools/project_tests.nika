@@ -76,6 +76,9 @@ pub struct ProgramTest {
     pub bounds: Bytes?,
     /// `NAME.loops.bounds`: the same at `prove-through-loops:on`.
     pub loops_bounds: Bytes?,
+    /// `NAME.asserts`: its `check --asserts` report (ADR-269 D7), where
+    /// there is one.
+    pub asserts: Bytes?,
     /// `NAME.stdin`, what the program reads on standard input; nothing where
     /// there is none (#1347).
     pub stdin: Bytes,
@@ -238,16 +241,17 @@ pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
         let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
         let bounds = project_tests_optional(dir.join(f"{name}.bounds"))
         let loops_bounds = project_tests_optional(dir.join(f"{name}.loops.bounds"))
+        let asserts = project_tests_optional(dir.join(f"{name}.asserts"))
         let stops = project_tests_optional(dir.join(f"{name}.stops"))
         let stdin = project_tests_optional(dir.join(f"{name}.stdin")) ?? Bytes([])
-        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, loops_bounds: loops_bounds, stdin: stdin })
+        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, loops_bounds: loops_bounds, asserts: asserts, stdin: stdin })
     }
     return tests
 }
 
-/// The `.bounds` and `.loops.bounds` files in the package's `tests/` with no
-/// test program beside them (#1069), by file name: each is an error, not an
-/// expectation nothing checks.
+/// The `.bounds`, `.loops.bounds` and `.asserts` files in the package's
+/// `tests/` with no test program beside them (#1069), by file name: each is
+/// an error, not an expectation nothing checks.
 pub fn project_tests_stray_bounds(root: ref fs::Path) -> Vec[String] {
     let dir = root.join("tests")
     let mut stray: Vec[String] = []
@@ -256,6 +260,11 @@ pub fn project_tests_stray_bounds(root: ref fs::Path) -> Vec[String] {
         let beside = project_tests_is_file(dir.join(f"{stem}.nika")) || (!short.is_empty() && project_tests_is_file(dir.join(f"{short}.nika")))
         if !beside {
             stray.push(f"{stem}.bounds")
+        }
+    }
+    for stem in project_tests_stems(dir, ".asserts", false) {
+        if !project_tests_is_file(dir.join(f"{stem}.nika")) {
+            stray.push(f"{stem}.asserts")
         }
     }
     return stray
@@ -294,12 +303,33 @@ pub fn project_tests_bounds_report(printed: String, written: String) -> Bytes {
     return report.bytes.clone()
 }
 
-/// **A test program's outcome with its `--bounds` reports compared**
-/// (#1069): `off` and `on` are what `check --bounds` printed for it at
-/// `prove-through-loops:off` and `:on`, its path written `tests/NAME.nika`.
-/// Each report its `.bounds` or `.loops.bounds` expects must be that file,
-/// byte for byte, or the test fails.
-pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, off: String, on: String) -> ProjectTestsOutcome {
+/// **The part of `check --asserts`'s output about the test program**
+/// (ADR-269 D7): the report whose first line names `written`, and the rows
+/// under it.
+pub fn project_tests_asserts_report(printed: String, written: String) -> Bytes {
+    let head = f"asserts in {written}: "
+    let mut report: String = ""
+    let mut inside = false
+    for line in printed.lines() {
+        if inside && !line.starts_with(" ") {
+            break
+        }
+        if inside || line.starts_with(head) {
+            inside = true
+            report.push_str(line)
+            report.push_str("\n")
+        }
+    }
+    return report.bytes.clone()
+}
+
+/// **A test program's outcome with its `--bounds` and `--asserts` reports
+/// compared** (#1069): `off` and `on` are what `check --bounds` printed for
+/// it at `prove-through-loops:off` and `:on`, `asserts` what `check
+/// --asserts` printed, its path written `tests/NAME.nika`. Each report its
+/// `.bounds`, `.loops.bounds` or `.asserts` expects must be that file, byte
+/// for byte, or the test fails.
+pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, off: String, on: String, asserts: String) -> ProjectTestsOutcome {
     let written = f"tests/{program.name}.nika"
     let mut bounds: Vec[(String, Bytes, Bytes)] = []
     match program.bounds {
@@ -309,6 +339,10 @@ pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref Proje
     match program.loops_bounds {
         null => {},
         want => bounds.push((f"{program.name}.loops.bounds", want.clone(), project_tests_bounds_report(on, written))),
+    }
+    match program.asserts {
+        null => {},
+        want => bounds.push((f"{program.name}.asserts", want.clone(), project_tests_asserts_report(asserts, written))),
     }
     let right = bounds.iter().all(fn(entry) { entry.1 == entry.2 })
     return ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.clone(), stderr: outcome.stderr.clone(), files: outcome.files.clone(), bounds: bounds }
@@ -537,9 +571,9 @@ pub trait ProjectTestsProgramHost {
     /// with `own` as the test's directory and `stdin` on its standard input
     /// (none where it is empty); a `build` keeps Cargo quiet.
     fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan sync throws
-    /// This compiler's `check --bounds --optimization LEVEL ENTRY`: what it
-    /// printed.
-    fn bounds(ref self, level: ref String, entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
+    /// This compiler's `check ARGS ENTRY` (`--bounds --optimization LEVEL`,
+    /// `--asserts`): what it printed.
+    fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
     /// The program the build of `project` made, run directly where the build
     /// puts it (`project_settings_own_copy`'s place, with no variant); nothing
     /// where it is not there. `stdin` goes to its standard input, none where it
@@ -618,16 +652,21 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     // proved does not depend on the build's settings (ADR-306 D14).
     let mut off: String = ""
     if program.bounds != null {
-        off = project_tests_relocated(host.bounds("prove-through-loops:off", entry, own), entry, written, root)
+        off = project_tests_relocated(host.explained(["--bounds", "--optimization", "prove-through-loops:off"], entry, own), entry, written, root)
     }
     let mut on: String = ""
     if program.loops_bounds != null {
-        on = project_tests_relocated(host.bounds("prove-through-loops:on", entry, own), entry, written, root)
+        on = project_tests_relocated(host.explained(["--bounds", "--optimization", "prove-through-loops:on"], entry, own), entry, written, root)
+    }
+    // **The `--asserts` report an `.asserts` expects** (ADR-269 D7).
+    let mut asserts: String = ""
+    if program.asserts != null {
+        asserts = project_tests_relocated(host.explained(["--asserts"], entry, own), entry, written, root)
     }
     let built = host.compiler("build", setting, project, own, Bytes([]))
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
-        return project_tests_bounds_outcome(program, refused, off, on)
+        return project_tests_bounds_outcome(program, refused, off, on, asserts)
     }
     // Where the program is not where it is expected, `nikaia run` finds it.
     let ran = match host.built(project, own, program.stdin) {
@@ -643,7 +682,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     let (out, said) = ran
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written, root))
-    return project_tests_bounds_outcome(program, outcome, off, on)
+    return project_tests_bounds_outcome(program, outcome, off, on, asserts)
 }
 
 /// What `--bless` did with one test.

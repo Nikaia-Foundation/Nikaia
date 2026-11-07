@@ -804,6 +804,18 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             else => {}
         }
     }
+    // **A whole number bound without a type is one to the prover** (#1358):
+    // `let n = text::parse_i64(s) ?? 0` is read as `let n: i64 = …` is.
+    if ty == null && names.len() == 1 && shape.len() == 0 {
+        match found {
+            Ty::Named { name, args, view } => {
+                if args.is_empty() && !view && is_whole_number(name) {
+                    state.facts.whole_lets.insert(span.start as i64, name.clone())
+                }
+            },
+            else => {}
+        }
+    }
     // **A map's read past a jump, bound to a declared type that owns its
     // value** (ADR-293 D15): refused or copied out as an assignment's is.
     if ty != null && names.len() == 1 && shape.len() == 0 {
@@ -1846,7 +1858,7 @@ pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref Che
     let at = check_span_at(world, cond, span)
     state.expect_bool(cond_ty, at, "A `while` loop repeats while a `bool` is `true`.")
     let depth = state.scope.len() as i64
-    state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
+    state.repeats.push(CheckRepeats::a_loop(world.words, depth, span.start as i64, body))
     // **The body sees what the condition proves not `null`** (ADR-382 D2).
     let proved = check_narrow_proved_here(state, world, cond, true)
     state.scope.push(proved)
@@ -1857,6 +1869,7 @@ pub fn check_core_stmt_while[H: CheckHost](mut state: CheckState, world: ref Che
     state.flow.loops -= 1
     state.scope.pop()
     check_narrow_turn_ends(state)
+    state.a_loop_ends()
     state.repeats.pop()
     return check_core_stmt_unit()
 }
@@ -2194,7 +2207,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         state.nameable(local.name, span, "a `for` binding")
     }
     let depth = state.scope.len() as i64
-    state.repeats.push(CheckRepeats::a_loop(world.words, depth, body))
+    state.repeats.push(CheckRepeats::a_loop(world.words, depth, span.start as i64, body))
     check_narrow_turn_begins(state, depth)
     state.scope.push(frame)
     // **The element of a `for mut` is only borrowed from its list** (D5): a part
@@ -2222,6 +2235,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     }
     state.scope.pop()
     check_narrow_turn_ends(state)
+    state.a_loop_ends()
     state.repeats.pop()
     return check_core_stmt_unit()
 }

@@ -980,13 +980,14 @@ fn a_call_inside_a_lets_value_is_read_with_what_its_callee_ensures() {
 }
 
 /// **D7: a claim the prover does not read names the part it could not read**:
-/// a binding whose value is outside D9 - here a quotient - is named, rather
+/// a binding that is not a whole number - here a float - is named, rather
 /// than the claim called something other than a comparison of whole numbers.
+/// (A whole-number quotient is read since #1358, written type or not.)
 #[test]
 fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
     let source = "fn quotient(n: i64, m: i64) throws {\n\
-                  \x20   let b = n / m\n\
-                  \x20   assert(b > 10)\n\
+                  \x20   let b = n as f64 / 2.0\n\
+                  \x20   assert(b > 10.0)\n\
                   \x20   println(f\"{b}\")\n\
                   }\n";
     assert_eq!(

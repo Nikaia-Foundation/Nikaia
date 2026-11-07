@@ -1813,6 +1813,13 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                     .iter()
                     .map(|unit| &unit.parsed)
                     .collect::<Vec<_>>(),
+                &program
+                    .units
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, u)| *k != at as usize && u.package == unit.package)
+                    .map(|(_, u)| &u.parsed)
+                    .collect::<Vec<_>>(),
                 &program.contracts,
                 library,
                 self.reads,
@@ -1821,6 +1828,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 // `NO_COLOR` is set (Part III, `--asserts`).
                 std::env::var_os("NO_COLOR").is_none()
                     && std::io::IsTerminal::is_terminal(&std::io::stdout()),
+                settings.build.prove_through_loops,
             ),
             "bounds" => crate::bounds_report::report(
                 &unit.parsed,
@@ -2688,7 +2696,7 @@ fn run_program_tests<'a>(
 pub fn program_tests(root: &Path) -> Result<Vec<ProgramTest>> {
     if let Some(stray) = project_tests::project_tests_stray_bounds(root).first() {
         return Err(anyhow!(
-            "tests/{stray}: there is no test program beside it to report the bounds of"
+            "tests/{stray}: there is no test program beside it to report on"
         ));
     }
     block_on(project_tests::program_tests(root)).map_err(|e| anyhow!("{e}"))
@@ -2802,16 +2810,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         self.held(self.ran(&self.exe, command, own, stdin))
     }
 
-    fn bounds(
+    fn explained(
         &self,
-        level: &str,
+        args: &[String],
         entry: &Path,
         own: &Path,
     ) -> HostResult<nikaia_std::bytes::Bytes> {
         let mut command = std::process::Command::new(&self.exe);
-        command
-            .args(["check", "--bounds", "--optimization", level])
-            .arg(entry);
+        command.arg("check").args(args).arg(entry);
         self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
     }
 

@@ -2399,7 +2399,7 @@ pub mod bounds_reasons {
 }
 pub mod bounds_report {
     #[allow(unused_imports)]
-    pub use super::{BoundsReportFacts, bounds_report_checked};
+    pub use super::{BoundsReportFacts, bounds_report_checked, bounds_report_derived};
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
@@ -2415,7 +2415,7 @@ pub mod bounds_walk {
 }
 pub mod buffers {
     #[allow(unused_imports)]
-    pub use super::{Escape, Source, KeepAt, BufferPlan, BufferAsk, buffer_plans};
+    pub use super::{Escape, Source, KeepAt, BufferPlan, LatePut, BufferAsk, buffer_plans};
 }
 pub mod build_eval {
     #[allow(unused_imports)]
@@ -2732,7 +2732,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3182,7 +3182,7 @@ pub mod project_settings {
 }
 pub mod project_tests {
     #[allow(unused_imports)]
-    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
+    pub use super::{ProjectTestsOutcome, OutputTest, ProgramTest, shown_path, output_tests, copy_into, project_tests_is_program, project_tests_program_manifest, program_tests, project_tests_stray_bounds, project_tests_bounds_report, project_tests_asserts_report, project_tests_bounds_outcome, project_tests_explain_bounds, is_refusal, does_not_compile, named_by, project_tests_difference, project_tests_agree, project_tests_verdict, project_tests_running, project_tests_result, project_tests_output_label, project_tests_program_label, project_tests_output_outcome, project_tests_stopped, project_tests_block_outcome, project_tests_refused_outcome, project_tests_ran_outcome, ProjectTestsRefusal, ProjectTestsRan, ProjectTestsProgramHost, project_tests_program_test, ProjectTestsBlessed, project_tests_blessed_line, project_tests_bless_program, project_tests_explain_said, project_tests_explain_output, project_tests_bless, ProjectTestsFailed, ProjectTestsHost, project_tests_program_done, project_tests_report_failures, project_tests_run, project_tests_wanted};
 }
 pub mod project_write {
     #[allow(unused_imports)]

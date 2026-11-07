@@ -1,0 +1,11 @@
+// A guard proves a claim about a `let` whose whole-number type is inferred
+// from `??` over an option call, as it does with `let n: i64` (#1358).
+use std::io
+use std::text
+fn main() throws {
+    let s = io::read_to_string()
+    let n = text::parse_i64(s.trim()) ?? 0
+    return if !(n > 0)
+    assert(n > 0)
+    println(f"{n}")
+}
