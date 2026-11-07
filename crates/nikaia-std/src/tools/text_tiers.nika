@@ -1102,7 +1102,18 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
         linked = back != "" && back == position_word(owner, path)
     }
     if !linked {
-        flow_type(owner, ty, path.clone(), kinds, ask, walk)
+        // **A view of text dropped before the position is** (#1287) - of a
+        // call's result, or of what a loop walks and no keep holds - cannot
+        // stay a view there: the position holds text of its own, and the
+        // view is refused with NK1102 (write `.clone()`), not left to rustc.
+        let mut flowed = kinds.clone()
+        if plain && kinds.view && value != null {
+            let given = value ?? return
+            if views_a_temporary(given, ask, walk) || unkept_root(given, ask, walk) {
+                flowed = owned_kinds()
+            }
+        }
+        flow_type(owner, ty, path.clone(), flowed, ask, walk)
     }
     if ty.is_view && value != null {
         let lent_value = value ?? return
@@ -1545,6 +1556,34 @@ fn rooted_in_a_parameter(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) 
             }
             (views_what_it_is_called_on(name) || hands_back_an_element(name)) && rooted_in_a_parameter(receiver, ask, walk)
         }
+        else => false,
+    }
+}
+
+/// **Whether a value views text a call hands back** (#1287), through the
+/// methods that view what they are called on or hand back its elements and
+/// through fields: `read(path).lines()` views a temporary the statement drops,
+/// so nothing it walks outlives the loop. A call's result is one when it is
+/// text of its own; a name, or a call that hands back a view, is not.
+fn views_a_temporary(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    return match value {
+        Expr::Call { func, .. } => {
+            let callee = tier_callee(func, ask) ?? return false
+            if walk.declared.fns.contains_key(callee) {
+                return only_own_text(result_kinds(callee, ask, walk))
+            }
+            only_own_text(std_result(callee, ask))
+        }
+        Expr::MethodCall { receiver, method, .. } => {
+            let name = ask.names.resolve(method)
+            if views_what_it_is_called_on(name) || hands_back_an_element(name) {
+                return views_a_temporary(receiver, ask, walk)
+            }
+            // The text form of text is the text itself (ADR-282 D8), no copy.
+            owns_its_text(name) && name != "to_string"
+        }
+        Expr::Field { base, .. } => views_a_temporary(base, ask, walk),
+        Expr::Try(inner, _) => views_a_temporary(inner, ask, walk),
         else => false,
     }
 }
@@ -2528,7 +2567,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                 if bindings.len() == 1 {
                     local.from = from?.clone()
                     local.of = walked?.clone()
-                    local.unkept = only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)
+                    local.unkept = (only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)) || views_a_temporary(iter, ask, walk)
                 }
                 if map != null {
                     let found = map?.clone() ?? continue

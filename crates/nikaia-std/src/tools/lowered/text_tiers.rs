@@ -723,7 +723,14 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
         let back = nikaia_std::index::or(text_source_word(value, ask, walk), || "".into());
         linked = back != "" && back == position_word(&owner, &path);
     }
-    if !linked { flow_type(&owner, &ty, &mut path.to_owned(), kinds, ask, walk); }
+    if !linked {
+        let mut flowed = kinds.clone();
+        if plain && kinds.view && value.is_some() {
+            let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            if views_a_temporary(given, ask, walk) || unkept_root(given, ask, walk) { flowed = owned_kinds(); }
+        }
+        flow_type(&owner, &ty, &mut path.to_owned(), &flowed, ask, walk);
+    }
     if ty.is_view && value.is_some() {
         let lent_value = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         lent_whole(lent_value, ask, walk);
@@ -1024,6 +1031,26 @@ pub(crate) fn rooted_in_a_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, 
             if name == "pop" || name == "remove" || name == "drain" { return false; }
             (views_what_it_is_called_on(name) || hands_back_an_element(name)) && rooted_in_a_parameter(receiver, ask, walk)
         },
+        _ => false,
+    }
+}
+
+pub(crate) fn views_a_temporary(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    match value {
+        Expr::Call { func, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if walk.declared.fns.contains_key(&callee) { return only_own_text(&result_kinds(&callee, ask, walk)); }
+            only_own_text(&std_result(&callee, ask))
+        },
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if views_what_it_is_called_on(name) || hands_back_an_element(name) { return views_a_temporary(receiver, ask, walk); }
+            owns_its_text(name) && name != "to_string"
+        },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); views_a_temporary(base, ask, walk) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); views_a_temporary(inner, ask, walk) },
         _ => false,
     }
 }
@@ -1753,7 +1780,7 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     };
-                    local.unkept = only_own_text(&kinds) && !rooted_in_a_parameter(iter, ask, walk);
+                    local.unkept = only_own_text(&kinds) && !rooted_in_a_parameter(iter, ask, walk) || views_a_temporary(iter, ask, walk);
                 }
                 if map.is_some() {
                     let found = match match map.as_ref() {

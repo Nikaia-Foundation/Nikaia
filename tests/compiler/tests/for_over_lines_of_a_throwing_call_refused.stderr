@@ -1,0 +1,31 @@
+error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+   --> tests/for_over_lines_of_a_throwing_call_refused.nika:16:61
+    |
+ 16 |             if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
+    |                                                             ^^^^^^^^^^^^^^^^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+   --> tests/for_over_lines_of_a_throwing_call_refused.nika:21:20
+    |
+ 21 |         parts.push(part)
+    |                    ^^^^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+error[NK1102]: `Vec::push` expects `value` to be `String` here, but you're passing `ref String`.
+   --> tests/for_over_lines_of_a_throwing_call_refused.nika:24:18
+    |
+ 24 |     trimmed.push(text().trim())
+    |                  ^^^^^^^^^^^^^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+3 type errors
