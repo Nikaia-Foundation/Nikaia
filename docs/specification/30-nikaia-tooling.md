@@ -986,7 +986,9 @@ knows who writes it reads it with `io::read_to_string(trusted: true)` ([ADR-365]
 
 `println(text)` writes a line to standard output, `print(text)` writes without the newline, and
 `eprintln` / `eprint` are the same two on standard error. They are in the prelude rather than in
-a module.
+a module. A write that fails (the reader closed the pipe, the disk is full) throws
+`io::IoError`; none of the four panics, so a function that prints says `throws` or catches
+([ADR-392](adr/adr-392.md)).
 
 The argument is an ordinary interpolated string (Part I, 2.5), so a hole is written where the
 value goes and `{{` is a literal brace:
