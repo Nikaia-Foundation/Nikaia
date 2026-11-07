@@ -54,6 +54,29 @@ impl AsRef<str> for EitherText<'_> {
     }
 }
 
+/// **Wherever a `String` goes, this goes** (#1286): a sink that takes the
+/// bytes (`fs::write`, `net::Connection::write`) or a path (`fs::exists`,
+/// through `Path::new`) takes it as it takes a `String`, so a declared
+/// `String` both kinds of text flow into is accepted by every call that
+/// accepts the other two tiers.
+impl AsRef<[u8]> for EitherText<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for EitherText<'_> {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        std::ffi::OsStr::new(&*self.0)
+    }
+}
+
+impl AsRef<std::path::Path> for EitherText<'_> {
+    fn as_ref(&self) -> &std::path::Path {
+        std::path::Path::new(&*self.0)
+    }
+}
+
 impl std::borrow::Borrow<str> for EitherText<'_> {
     fn borrow(&self) -> &str {
         &self.0

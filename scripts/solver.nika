@@ -58,7 +58,7 @@ fn solver_toolchain(repo: String) -> String throws {
 		"sh",
 		[
 			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
 		],
 	).stdout.trim().clone()
 	if exe.len() > 0 { return exe }
