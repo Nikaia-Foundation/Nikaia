@@ -538,7 +538,11 @@ fn the_ledger_is_never_published_for_a_caller_that_does_not_say_it_can_fail() {
     // What the ledger *would* say, which is why the program may not get there.
     let would_say = ledger_for(source);
     assert!(
-        would_say.contains("[fn.\"ruft\"]\nsignature = \"() -> String\"\n"),
+        would_say
+            .split("[fn.\"ruft\"]\n")
+            .nth(1)
+            .and_then(|entry| entry.split("\n\n").next())
+            .is_some_and(|entry| entry.contains("signature = \"() -> String\"\n")),
         "the inference records the declaration as written:\n{would_say}"
     );
 
@@ -593,7 +597,11 @@ fn the_ledger_is_never_published_for_a_caller_that_does_not_say_it_can_fail() {
     );
     assert!(
         declared
-            .contains("[fn.\"ruft\"]\nthrows = [\"io::IoError\"]\nsignature = \"() -> String\"\n"),
+            .split("[fn.\"ruft\"]\n")
+            .nth(1)
+            .and_then(|entry| entry.split("\n\n").next())
+            .is_some_and(|entry| entry.starts_with("throws = [\"io::IoError\"]\n")
+                && entry.contains("signature = \"() -> String\"\n")),
         "{declared}"
     );
 }
