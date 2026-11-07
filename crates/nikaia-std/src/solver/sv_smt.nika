@@ -540,6 +540,15 @@ fn sv_smt_engine(
 		},
 		SvFastEnd::Skip => {},
 	}
+	let pre = sv_pre(book, cnf, ids)
+	if pre.unsat {
+		return SvEngineRun {
+			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
+			work: 0,
+			path: "pre",
+		}
+	}
+	let shown = sv_smt_pre_shown(pre)
 	let mut units: Vec[u32] = []
 	let mut unit_ids: Vec[u32] = []
 	let mut known: Vec[u32] = []
@@ -564,10 +573,31 @@ fn sv_smt_engine(
 		sat.assign_unit(units[i], unit_ids[i])
 		i += 1
 	}
-	if theory == "fm" {
-		return sv_smt_run(
-			sv_theory(cnf.names.clone()),
-			sat,
+	for lemma in pre.lemmas {
+		sat.add_input(lemma.lits, lemma.id)
+	}
+	let mut run = if theory == "fm" {
+		sv_smt_run(sv_theory(cnf.names.clone()), sat,
+			theory_atom,
+			known,
+			cnf,
+			arena,
+			facts,
+			goal,
+			budget,
+		)
+	} else if theory == "simplex" {
+		sv_smt_run(sv_simplex(cnf.names.clone()), sat,
+			theory_atom,
+			known,
+			cnf,
+			arena,
+			facts,
+			goal,
+			budget,
+		)
+	} else {
+		sv_smt_run(sv_both(cnf.names.clone()), sat,
 			theory_atom,
 			known,
 			cnf,
@@ -577,30 +607,18 @@ fn sv_smt_engine(
 			budget,
 		)
 	}
-	if theory == "simplex" {
-		return sv_smt_run(
-			sv_simplex(cnf.names.clone()),
-			sat,
-			theory_atom,
-			known,
-			cnf,
-			arena,
-			facts,
-			goal,
-			budget,
-		)
+	run.path = shown
+	return run
+}
+
+/// What the preprocessing rewrote, for the runner's work column: `pre:`
+/// and its lemmas (`l`) and literals without a fixed column (`f`); `""`
+/// where it rewrote nothing.
+fn sv_smt_pre_shown(pre: ref SvPre) -> String {
+	if pre.lemmas.len() == 0 && pre.fixed == 0 {
+		return ""
 	}
-	return sv_smt_run(
-		sv_both(cnf.names.clone()),
-		sat,
-		theory_atom,
-		known,
-		cnf,
-		arena,
-		facts,
-		goal,
-		budget,
-	)
+	return f"pre:l{pre.lemmas.len()}f{pre.fixed}"
 }
 
 /// The search over theory `th`, its answer as the runner reads it: a log

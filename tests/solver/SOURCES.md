@@ -7,6 +7,7 @@ its `; EXPECT:` line.
 | Directory | What | Origin | Licence |
 | :--- | :--- | :--- | :--- |
 | `smoke/` | three tiny files: one sat, one unsat, one the reader refuses | written here | the repository's |
+| `pre/` | four tiny files the preprocessing (#1283 item 5) decides: gcd, fixed column, tightening | written here | the repository's |
 | `stress/` | D9's four families plus `blank = 2·n`, n = 1..12 (parity 2..12) | `scripts/solver.nika gen`, deterministic; status from z3 5.3.3 | the repository's |
 | `qflia/` | QF_LIA, non-incremental, under 64 KiB | see below | see below |
 | `qflra/` | QF_LRA, non-incremental, under 64 KiB | see below | see below |

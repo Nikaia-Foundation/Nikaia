@@ -31,7 +31,7 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain(repo.clone())
-	for args in [["run", "tests/solver/smoke"], ["run", "--summary", "tests/solver/stress"], ["run", "--engine", "new", "tests/solver/smoke"]] {
+	for args in [["run", "tests/solver/smoke"], ["run", "--summary", "tests/solver/stress"], ["run", "--engine", "new", "tests/solver/smoke"], ["run", "--engine", "new", "tests/solver/pre"]] {
 		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
 		for a in args { all.push(a.clone()) }
 		let out = process::run(nikaia.clone(), all; dir: repo.clone())

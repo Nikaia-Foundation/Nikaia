@@ -171,12 +171,20 @@ pub struct SvBook {
 	pub log: SvLog,
 	pub atoms: Vec[SvAtom],
 	pub bounds: collections::BTreeMap[u32, SvBound],
+	/// Per literal, the bound entry the preprocessing of `sv_pre.nika`
+	/// derived from it, which the theories assert in its place.
+	pub pre: collections::BTreeMap[u32, u32],
 }
 
 /// A book over `query`, its clauses not yet put in.
 fn sv_book(query: ref SvQuery) -> SvBook? {
 	let log = sv_log(query) ?? return null
-	return SvBook { log: log, atoms: query.atoms.clone(), bounds: collections::BTreeMap() }
+	return SvBook {
+		log: log,
+		atoms: query.atoms.clone(),
+		bounds: collections::BTreeMap(),
+		pre: collections::BTreeMap(),
+	}
 }
 
 /// A clause the log derived: its entry and its literals, ascending.
@@ -216,6 +224,19 @@ impl SvBook {
 		}
 		let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1)) ?? return null
 		return SvBound { row: negated, rel: SvRel::Le, assumed: [l] }
+	}
+
+	/// The bound literal `l` asserts as a theory reads it, with its source:
+	/// the bound entry the preprocessing derived from it where there is one,
+	/// else the literal's own bound.
+	fn asserted(ref self, l: u32) -> SvAsserted? {
+		if self.pre.contains_key(l) {
+			let id = (self.pre.get(l) ?? return null).clone()
+			let b = self.bounds.get(id) ?? return null
+			return SvAsserted { bound: b.clone(), src: SvSrc::Fact(id) }
+		}
+		let b = self.lit_bound(l) ?? return null
+		return SvAsserted { bound: b, src: SvSrc::Lit(l) }
 	}
 
 	/// The bound a source adds.
@@ -335,6 +356,12 @@ impl SvBook {
 	fn learn(ref mut self, lits: Vec[u32], hints: Vec[u32]) -> u32 {
 		return self.log.learn(lits, hints)
 	}
+}
+
+/// A bound a theory asserts and the source it cites.
+pub struct SvAsserted {
+	pub bound: SvBound,
+	pub src: SvSrc,
 }
 
 /// What an extension made: its column and its first bound entry.

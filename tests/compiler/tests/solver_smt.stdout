@@ -2,4 +2,4 @@ bits-20.smt2: simplex proved 344; fm proved 402; both proved 344
 bits-sat.smt2: simplex refuted 49; fm refuted 72; both refuted 49
 threes-10.smt2: simplex proved 635; fm proved 1; both proved 1
 branch-depth.smt2: simplex refuted 2; fm refuted 2; both refuted 2
-bounds.smt2: simplex proved 0; fm proved 0; both proved 0
+bounds.smt2: simplex proved 0/pre:l2f0; fm proved 0/pre:l2f0; both proved 0/pre:l2f0

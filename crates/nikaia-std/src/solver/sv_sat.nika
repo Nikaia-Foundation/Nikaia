@@ -133,7 +133,15 @@ fn sv_luby(i: i64) -> i64 {
 
 /// A solver over `vars` variables writing to `log`.
 fn sv_sat(vars: u32, log: SvLog) -> SvSat {
-	return sv_sat_book(vars, SvBook { log: log, atoms: [], bounds: collections::BTreeMap() })
+	return sv_sat_book(
+		vars,
+		SvBook {
+			log: log,
+			atoms: [],
+			bounds: collections::BTreeMap(),
+			pre: collections::BTreeMap(),
+		},
+	)
 }
 
 /// A solver over `vars` variables writing to `book`, which a theory shares

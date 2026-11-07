@@ -224,9 +224,9 @@ impl SvTh for SvTheory {
 	/// that is false is a conflict at once.
 	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
 		self.trail.push(lit)
-		let b = book.lit_bound(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
-		if b.row.cols.len() == 0 && b.row.constant > 0 {
-			let clause = book.farkas([SvSrc::Lit(lit)], [1])
+		let a = book.asserted(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+		if a.bound.row.cols.len() == 0 && a.bound.row.constant > 0 {
+			let clause = book.farkas([a.src], [1])
 				?? return SvChecked::Unknown(LgUnknown::Overflow)
 			return SvChecked::Conflict(clause)
 		}
@@ -306,8 +306,8 @@ impl SvTh for SvTheory {
 	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked {
 		let mut held: Vec[SvHeld] = []
 		for l in self.trail {
-			let b = book.lit_bound(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
-			held.push(SvHeld { row: b.row, src: SvSrc::Lit(l) })
+			let a = book.asserted(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+			held.push(SvHeld { row: a.bound.row, src: a.src })
 		}
 		for f in self.facts {
 			let b = book.bounds.get(f) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)

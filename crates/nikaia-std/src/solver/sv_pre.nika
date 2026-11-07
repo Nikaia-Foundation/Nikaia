@@ -1,0 +1,192 @@
+// crates/nikaia-std/src/solver/sv_pre.nika
+//
+// **Preprocessing** (ADR-270 D12, #1283 item 5), run once before the CDCL
+// loop over what holds at level zero, every rewrite a step of the log:
+//
+// 1. **Equality elimination first**: the bounds of the unit clauses go
+//    through the exact elimination of `sv_elim.nika` (#1282 item 6) - solved,
+//    substituted, each divided by its gcd and rounded. A conflict there
+//    refutes the query at once: its Farkas lemma and the empty clause
+//    learned from it and the unit clauses.
+// 2. **Bound tightening**: the unit rows and what the elimination left bound
+//    some columns alone; a single-column atom those bounds decide gets the
+//    lemma that decides it (`¬(x <= 4) ∨ x <= 7`), which the SAT core
+//    propagates at level zero.
+// 3. **Fixed columns**: a column whose bounds meet, `x = v`, is removed from
+//    every atom over further columns - per literal, a `Combine` of its bound
+//    and the side of `x = v` that cancels `x`, divided by the gcd of what is
+//    left and its constant rounded (`Round`). The atoms themselves come in
+//    gcd normal form from `sv_cnf` (ADR-270 D19); the gcd of an equality is
+//    the elimination's.
+//
+// A literal rewritten by 3 is asserted by the theories as the bound
+// entry it became (`SvBook.pre`, `SvBook.asserted`): a lemma that cites it
+// still names the literal, through the entry's assumptions.
+
+/// What the preprocessing did: refuted the query (the log ends in the empty
+/// clause), the lemmas of the tightening for the SAT core, and how many
+/// literals lost a fixed column.
+pub struct SvPre {
+	pub unsat: bool,
+	pub lemmas: Vec[SvClause],
+	pub fixed: i64,
+}
+
+fn sv_pre_none() -> SvPre {
+	return SvPre { unsat: false, lemmas: [], fixed: 0 }
+}
+
+/// Whether atom `a` of `cnf` is a theory atom.
+fn sv_pre_theory_atom(cnf: ref SvCnf, a: i64) -> bool {
+	return a >= cnf.definition.len() || !cnf.definition[a]
+}
+
+/// A column's bound at level zero: the held bound `x - v <= 0` (upper) or
+/// `-x + v <= 0` (lower) that gives it.
+struct SvPreSide {
+	value: i64,
+	src: SvSrc,
+}
+
+/// **The preprocessing** of `cnf` in `book`, its clauses' input entries
+/// `ids`; nothing where a step leaves `i64`.
+fn sv_pre(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvPre {
+	let mut out = sv_pre_none()
+	// The unit clauses of theory atoms: their literals and input entries.
+	let mut unit_lits: Vec[u32] = []
+	let mut unit_ids: Vec[u32] = []
+	let mut held: Vec[SvHeld] = []
+	let mut c = 0
+	while c < cnf.query.clauses.len() {
+		let clause = cnf.query.clauses[c].clone()
+		if clause.len() == 1 && sv_pre_theory_atom(cnf, (clause[0] / 2) as i64) {
+			match book.lit_bound(clause[0]) {
+				null => {},
+				b => {
+					unit_lits.push(clause[0])
+					unit_ids.push(ids[c])
+					held.push(SvHeld { row: b.row.clone(), src: SvSrc::Lit(clause[0]) })
+				},
+			}
+		}
+		c += 1
+	}
+	// The unit rows as given: the elimination substitutes a solved column
+	// away, and its bounds are those of a fixed column.
+	let given = held.clone()
+	// 1. The equality elimination.
+	let mut solved: Vec[SvSolved] = []
+	match sv_eliminate(held, solved, book) {
+		SvChecked::Consistent => {},
+		SvChecked::Conflict(lemma) => {
+			let mut hints: Vec[u32] = []
+			let mut i = 0
+			while i < unit_lits.len() {
+				let l = unit_lits[i]
+				// `l ^ 1` written as a branch: #1286.
+				let negation = if l % 2 == 0 { l + 1 } else { l - 1 }
+				if lemma.lits.contains(negation) && !hints.contains(unit_ids[i]) {
+					hints.push(unit_ids[i])
+				}
+				i += 1
+			}
+			hints.push(lemma.id)
+			book.learn([], hints)
+			out.unsat = true
+			return out
+		},
+		else => return out,
+	}
+	// The columns' bounds at level zero, given and left by the elimination.
+	let mut lower: collections::BTreeMap[u32, SvPreSide] = collections::BTreeMap()
+	let mut upper: collections::BTreeMap[u32, SvPreSide] = collections::BTreeMap()
+	let mut sides = given
+	for h in held {
+		sides.push(h.clone())
+	}
+	for h in sides {
+		if h.row.cols.len() != 1 {
+			continue
+		}
+		let col = h.row.cols[0]
+		if h.row.ks[0] == 1 {
+			let v = sv_mul_add(-1, h.row.constant, 0, 0) ?? return out
+			let tighter = match upper.get(col) {
+				null => true,
+				had => v < had.value,
+			}
+			if tighter {
+				upper.insert(col, SvPreSide { value: v, src: h.src.clone() })
+			}
+		} else if h.row.ks[0] == -1 {
+			let v = h.row.constant
+			let tighter = match lower.get(col) {
+				null => true,
+				had => v > had.value,
+			}
+			if tighter {
+				lower.insert(col, SvPreSide { value: v, src: h.src.clone() })
+			}
+		}
+	}
+	let atoms = book.atoms.len()
+	let mut a = 0
+	while a < atoms {
+		if !sv_pre_theory_atom(cnf, a) {
+			a += 1
+			continue
+		}
+		let width = book.atoms[a].row.cols.len()
+		let at = a.checked_u32() ?? return out
+		for negated in [false, true] {
+			let l = sv_lit(at, negated)
+			let b = book.lit_bound(l) ?? continue
+			if width == 1 {
+				// 2. A single-column literal the bounds contradict.
+				let col = b.row.cols[0]
+				let k = b.row.ks[0]
+				let side = if k > 0 { lower.get(col) } else { upper.get(col) }
+				match side {
+					null => {},
+					s => {
+						let m = k.checked_abs() ?? return out
+						let lemma = book.farkas([SvSrc::Lit(l), s.src.clone()], [1, m])
+						match lemma {
+							null => {},
+							made => out.lemmas.push(made.clone()),
+						}
+					},
+				}
+			}
+			// 3. The bound without its fixed columns.
+			let mut sources: Vec[SvSrc] = [SvSrc::Lit(l)]
+			let mut multipliers: Vec[i64] = [1]
+			let mut i = 0
+			while width > 1 && i < b.row.cols.len() {
+				let col = b.row.cols[i]
+				let k = b.row.ks[i]
+				let lo = lower.get(col)
+				let hi = upper.get(col)
+				if lo != null && hi != null {
+					let low = lo ?? return out
+					let high = hi ?? return out
+					if low.value == high.value {
+						let m = k.checked_abs() ?? return out
+						sources.push(if k > 0 { low.src.clone() } else { high.src.clone() })
+						multipliers.push(m)
+					}
+				}
+				i += 1
+			}
+			if sources.len() == 1 {
+				continue
+			}
+			out.fixed += 1
+			let combined = book.combine(sources, multipliers) ?? return out
+			let rounded = book.round(combined) ?? return out
+			book.pre.insert(l, rounded)
+		}
+		a += 1
+	}
+	return out
+}

@@ -706,8 +706,8 @@ impl SvTh for SvSimplex {
 	/// crosses the other side of its variable is a conflict at once.
 	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
 		self.trail.push(lit)
-		let b = book.lit_bound(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
-		return self.bound(b.row, b.rel, SvSrc::Lit(lit), book)
+		let a = book.asserted(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+		return self.bound(a.bound.row, a.bound.rel, a.src, book)
 	}
 
 	/// A bound entry of the log that holds at every level, asserted before
