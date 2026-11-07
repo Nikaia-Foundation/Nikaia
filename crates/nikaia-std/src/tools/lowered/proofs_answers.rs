@@ -204,7 +204,12 @@ pub(crate) fn proofs_known(t: &mut ProofsThread, written: &str) -> Option<Proofs
 }
 
 pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: i64) -> ProofsAsked {
-    if t.book.is_none() { return proofs_search(&lg_normal_of(arena, facts, goal)).asked; }
+    if t.book.is_none() {
+        let normal = lg_normal_of(arena, facts, goal);
+        let asked = proofs_search(&normal).asked;
+        proofs_dump(&normal, &asked);
+        return asked;
+    }
     let written = proofs_written(arena, facts, goal);
     let known = proofs_known(t, &written);
     if known.is_some() { return known.unwrap(); }
@@ -223,10 +228,12 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
         let asked = proofs_read(&normal, recorded.as_ref().unwrap());
         if asked.is_some() {
             t.known.insert(written.to_string(), ProofsKnown { key: key.to_string(), entry: recorded.as_ref().unwrap().clone(), asked: asked.as_ref().unwrap().clone() });
+            proofs_dump(&normal, asked.as_ref().unwrap());
             return asked.unwrap();
         }
     }
     let found = proofs_search(&normal);
+    proofs_dump(&normal, &found.asked);
     let entry = match found.entry.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -263,6 +270,41 @@ pub(crate) fn proofs_read(normal: &LgNormal, entry: &ProofsEntry) -> Option<Proo
         },
     }
 }
+
+pub const PROOFS_DUMP: &str = "NIKAIA_DUMP_QUERIES";
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn proofs_dump(normal: &LgNormal, asked: &ProofsAsked) { nikaia_std::cleanup::settle_with_sync::<nikaia_std::cleanup::Sent, _, _>(async {
+    let dir = match env::var(PROOFS_DUMP) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let status = match asked {
+        ProofsAsked::Proved => "unsat",
+        ProofsAsked::Refuted(_) => "sat",
+        _ => "",
+    };
+    let script = lg_smtlib_write(&normal.arena, &normal.facts, normal.goal);
+    let mut text = script.to_string();
+    let logic = "(set-logic QF_LIA)\n";
+    let rest = script.strip_prefix(logic);
+    if status != "" && rest.is_some() { text = format!("{}(set-info :status {})\n{}", logic, status, rest.as_ref().unwrap()); }
+    let key = hash::sha256_hex(&normal.text().bytes().collect::<Vec<_>>());
+    match fs::create_dir(std::path::Path::new(&(dir)), &fs::Root::Anywhere, true) {
+        Ok(_) => {},
+        Err(_error) => { return; },
+    };
+    let mut file = match fs::open(std::path::Path::new(&(format!("{}/{}.smt2", dir, key))), &fs::Root::Anywhere, true, false, true, true) {
+        Ok(value) => value,
+        Err(_error) => { return; },
+    };
+    match file.write(text) {
+        Ok(_) => {},
+        Err(error) => { eprintln!("{}: {}/{}.smt2: {}", PROOFS_DUMP, dir, key, error); },
+    };
+    match file.close_sync() {
+        Ok(_) => {},
+        Err(error) => { eprintln!("{}: {}/{}.smt2: {}", PROOFS_DUMP, dir, key, error); },
+    };
+}) }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProofsSearch {
