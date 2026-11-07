@@ -1617,7 +1617,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::Variable(name, _) => here.carriers.contains(asked.names.resolve(name)),
         Expr::MethodCall { receiver, args, config, .. } => mentions(unit, asked, here, receiver) || any_mentions(unit, asked, here, args) || config_mentions(unit, asked, here, config),
         Expr::SafeMethod { receiver, args, config, .. } => mentions(unit, asked, here, receiver) || any_mentions(unit, asked, here, args) || config_mentions(unit, asked, here, config),
-        Expr::Call { func, args, config, .. } => mentions(unit, asked, here, func) || any_mentions(unit, asked, here, args) || config_mentions(unit, asked, here, config),
+        Expr::Call { func, args, config, .. } => mentions(unit, asked, here, func) || call_args_mention(unit, asked, here, func, args) || config_mentions(unit, asked, here, config),
         Expr::Field { base, .. } => mentions(unit, asked, here, base),
         Expr::SafeField { base, .. } => mentions(unit, asked, here, base),
         Expr::Index { base, index, .. } => mentions(unit, asked, here, base) || mentions(unit, asked, here, index),
@@ -1662,6 +1662,44 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         // `null` holds nothing, so it borrows nothing.
         Expr::LitNull(_) => false,
     }
+}
+
+// **A call's result carries only what its result points into** (#1094,
+// ADR-views-3 D8): an argument counts where the callee's ledger lists its
+// parameter among `borrows`, so `leaf(e.key, input)` with `-> N` from `n`
+// carries no view of `input`. A callee nobody describes, one whose sources
+// are not known, or one that may keep an argument in another's place, is
+// asked of every argument, as before.
+fn call_args_mention(unit: ref Unit, asked: ref Asked, here: ref Here, func: ref Expr, args: ref Vec[Expr]) -> bool {
+    let mut key: String = ""
+    match func {
+        Expr::Variable(name, _) => {
+            let written = asked.names.resolve(name)
+            if variable_type(asked, here, written) == null && !here.carriers.contains(written) {
+                key = written.clone()
+            }
+        }
+        Expr::Path(parts, _) => {
+            key = joined_path(asked, parts)
+        }
+        else => {}
+    }
+    if key == "" {
+        return any_mentions(unit, asked, here, args)
+    }
+    let contract = asked.own.functions[key] ?? asked.library.functions[key] ?? return any_mentions(unit, asked, here, args)
+    let signature = contract.signature?.clone() ?? return any_mentions(unit, asked, here, args)
+    if contract.borrows.len() == 0 || contract.stores.len() > 0 || signature.mutable.len() > 0 {
+        return any_mentions(unit, asked, here, args)
+    }
+    for i in 0..<args.len() {
+        if mentions(unit, asked, here, args[i]) {
+            if i >= signature.params.len() || contract.borrows.contains(signature.params[i].0) {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 fn any_mentions(unit: ref Unit, asked: ref Asked, here: ref Here, exprs: ref Vec[Expr]) -> bool {
@@ -1985,6 +2023,9 @@ struct ResultSrcFlow {
     shadow: collections::BTreeSet[String],
     // The type a `let` wrote for a local, where it wrote one.
     annotated: collections::BTreeMap[String, Type],
+    // The type of a local a `let` bound to a struct literal (#1094): what a
+    // method called on it is, where no type was written.
+    built: collections::BTreeMap[String, Type],
     // The `mut` parameters whose place a view may be kept in (ADR-283 D27),
     // and what is kept there. Empty outside `places_stored`.
     places: collections::BTreeSet[String],
@@ -2095,7 +2136,7 @@ fn rsrc_all_loose(entries: ref collections::BTreeSet[String]) -> collections::BT
 
 fn rsrc_flow(at: ref Span) -> ResultSrcFlow {
     let env: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
-    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap(), places: rsrc_none(), stores: collections::BTreeMap() }
+    return ResultSrcFlow { env: env, ways: [], at: Span { start: at.start, end: at.end }, depth: 0, inner: rsrc_none(), shadow: rsrc_none(), annotated: collections::BTreeMap(), built: collections::BTreeMap(), places: rsrc_none(), stores: collections::BTreeMap() }
 }
 
 fn rsrc_shadow(asked: ref Asked, here: ref Here, name: ref String, mut flow: ResultSrcFlow) {
@@ -2587,9 +2628,19 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
                 for name in names {
                     rsrc_shadow(asked, here, asked.names.resolve(name), flow)
                 }
+                for name in names {
+                    flow.built.remove(asked.names.resolve(name))
+                }
                 if names.len() == 1 && ty != null {
                     let annotation = ty ?? return tail
                     flow.annotated.insert(asked.names.resolve(names[0]).clone(), annotation.clone())
+                } else if names.len() == 1 {
+                    match value {
+                        Expr::StructLit { name, .. } => {
+                            flow.built.insert(asked.names.resolve(names[0]).clone(), Type { name: name, generics: [], is_view: false, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false })
+                        }
+                        else => {}
+                    }
                 }
                 if !own_buffer(value) {
                     for name in names {
@@ -2707,7 +2758,7 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
         rsrc_join(stored, positional[i])
     }
     let root = rsrc_root_local(asked, here, flow, receiver)
-    let ty = rsrc_type(unit, asked, here, flow, receiver)
+    let ty = rsrc_type(unit, asked, here, flow, receiver) ?? rsrc_local_type(asked, flow, receiver)
     if stored.len() > 0 && flow.places.len() > 0 && rsrc_changes_described(asked, ty, name) {
         rsrc_store(asked, receiver, stored, flow)
     }
@@ -2737,6 +2788,16 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
         return rsrc_none()
     }
     return rsrc_callee(asked, known, key, positional, everything)
+}
+
+// **What a local is, from its `let`** (#1094): the type it wrote, or the
+// struct literal it was bound to, so `h.walk(n)` on `let h = H { .. }` maps
+// through `H::walk`'s sources rather than reaching every argument.
+fn rsrc_local_type(asked: ref Asked, flow: ref ResultSrcFlow, receiver: ref Expr) -> Type? {
+    return match receiver {
+        Expr::Variable(name, _) => flow.annotated[asked.names.resolve(name)]?.clone() ?? flow.built[asked.names.resolve(name)]?.clone(),
+        else => null,
+    }
 }
 
 // Nothing where the result is owned, else what the call reaches.

@@ -1,0 +1,69 @@
+// A call's result built from a by-value struct argument that holds views
+// points into that argument, not into a `ref` argument beside it (#1094):
+// storing it into a field of a struct literal keeps no view of `input`.
+// Row a: a call stored into a field; b: the call recursive; c: through a
+// `let`; d: pushed without a struct literal.
+
+struct N { raw: String, kids: Vec[E] }
+struct E { key: N }
+struct M { raw: String, kids: Vec[M] }
+
+fn leaf(n: N, _input: ref Bytes) -> N sync {
+	return n
+}
+
+fn walk_a(n: N, input: ref Bytes) -> N sync {
+	let mut out: Vec[E] = []
+	for e in n.kids.drain() {
+		out.push(E { key: leaf(e.key, input) })
+	}
+	return N { raw: n.raw, kids: out }
+}
+
+fn walk_b(n: N, input: ref Bytes) -> N sync {
+	let mut out: Vec[E] = []
+	for e in n.kids.drain() {
+		out.push(E { key: walk_b(e.key, input) })
+	}
+	return N { raw: n.raw, kids: out }
+}
+
+fn walk_c(n: N, input: ref Bytes) -> N sync {
+	let mut out: Vec[E] = []
+	for e in n.kids.drain() {
+		let w = walk_c(e.key, input)
+		out.push(E { key: w })
+	}
+	return N { raw: n.raw, kids: out }
+}
+
+fn walk_d(n: M, input: ref Bytes) -> M sync {
+	let mut out: Vec[M] = []
+	for k in n.kids.drain() {
+		out.push(walk_d(k, input))
+	}
+	return M { raw: n.raw, kids: out }
+}
+
+fn make(s: String) -> N {
+	let t = s.trim()
+	return N { raw: t, kids: [E { key: N { raw: t, kids: [] } }] }
+}
+
+fn make_m(s: String) -> M {
+	let t = s.trim()
+	return M { raw: t, kids: [M { raw: t, kids: [] }] }
+}
+
+fn main() throws {
+	let text = "  hello  "
+	let input = Bytes(text.bytes().collect())
+	let a = walk_a(make(text), input)
+	println(f"a {a.raw} {a.kids.len()}")
+	let b = walk_b(make(text), input)
+	println(f"b {b.raw} {b.kids.len()}")
+	let c = walk_c(make(text), input)
+	println(f"c {c.raw} {c.kids.len()}")
+	let d = walk_d(make_m(text), input)
+	println(f"d {d.raw} {d.kids.len()}")
+}
