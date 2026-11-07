@@ -52,6 +52,12 @@ const TOOLS_PACKAGE: &str = "lowered.rs";
 /// one `.nika` recompiles one module.
 const TOOLS_FILES: &str = "lowered";
 
+/// **The packages the toolchain's package depends on** (#1163): a manifest
+/// beside its files that holds only `[dependencies]`, each a Nikaia package by
+/// `path`, as a project's `nikaia.toml` names one. Not a `nikaia.toml`: that
+/// would make the directory a project for every file in it.
+const TOOLS_DEPENDENCIES: &str = "dependencies.toml";
+
 /// What the Rust a tool module reads says it does (ADR-294 D9.3).
 const TOOLS_DESCRIBED: &str = include_str!("../../nikaia-std/src/tools/described.contracts");
 
@@ -363,7 +369,72 @@ pub fn tools_build() -> crate::emit::Build {
 /// The same at a given build, for a test that lowers the package at another
 /// setting than [`tools_build`].
 pub fn lower_tools_at(dir: &Path, build: crate::emit::Build) -> Result<Package> {
-    lower_tools_files(&tools_sources(dir)?, build)
+    lower_package(
+        &tools_sources(dir)?,
+        &tools_dependencies(dir)?,
+        build,
+        None,
+        &LoweredBefore::none(),
+        &mut 0,
+    )
+    .map(|(package, _)| package)
+}
+
+/// **The packages `dir`'s package depends on** (#1163), by the name its files
+/// `use`, with the directory each stands in: the `path` entries of
+/// [`TOOLS_DEPENDENCIES`], resolved against it. None where there is no such
+/// file.
+fn tools_dependencies(dir: &Path) -> Result<Vec<(String, PathBuf)>> {
+    let manifest = dir.join(TOOLS_DEPENDENCIES);
+    if !manifest.is_file() {
+        return Ok(Vec::new());
+    }
+    let read = crate::manifest::Manifest::read(&manifest)?;
+    read.dependencies()
+        .iter()
+        .map(|(name, dependency)| match dependency {
+            crate::manifest::Dependency::Path(path) => Ok((name.clone(), dir.join(path))),
+            _ => Err(anyhow::anyhow!(
+                "{}: `{name}` is not a Nikaia package named by `path`, the only kind the \
+                 toolchain's package depends on",
+                manifest.display()
+            )),
+        })
+        .collect()
+}
+
+/// **Each dependency's ledger as its own package infers it** (#1163), by
+/// name, and the names: what a file of the package that `use`s one is checked
+/// against, without lowering it.
+#[allow(clippy::type_complexity)]
+fn dependency_ledgers(
+    dir: &Path,
+) -> Result<(BTreeSet<String>, Vec<(String, crate::contracts::Ledger)>)> {
+    let mut names = BTreeSet::new();
+    let mut ledgers = Vec::new();
+    for (name, root) in tools_dependencies(dir)? {
+        let (_, _, parsed) = read_tools_package(&tools_sources(&root.join("src"))?)?;
+        let (_, library, _) = tools_library()?;
+        let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
+        let (own, _) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+        names.insert(name.clone());
+        ledgers.push((name, own));
+    }
+    Ok((names, ledgers))
+}
+
+/// The files `lower-std` keys a package on: its own, its dependencies'
+/// manifest and every file of each dependency.
+fn tools_inputs(dir: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    let mut inputs = paths.to_vec();
+    let dependencies = tools_dependencies(dir)?;
+    if !dependencies.is_empty() {
+        inputs.push(dir.join(TOOLS_DEPENDENCIES));
+    }
+    for (_, root) in dependencies {
+        inputs.extend(tools_sources(&root.join("src"))?);
+    }
+    Ok(inputs)
 }
 
 /// The package's files: every `.nika` in `dir`, sorted.
@@ -387,7 +458,8 @@ pub fn lower_tools_files_on(
     build: crate::emit::Build,
     threads: Option<usize>,
 ) -> Result<Package> {
-    lower_tools_files_cached(paths, build, threads, &LoweredBefore::none(), &mut 0)
+    lower_package(paths, &[], build, threads, &LoweredBefore::none(), &mut 0)
+        .map(|(package, _)| package)
 }
 
 /// **The source with every body taken out** (#667): what another file of the
@@ -472,13 +544,14 @@ fn check_tools_file(
     beside: &[&crate::parser::Parsed],
     own: &crate::contracts::Ledger,
     library: &crate::contracts::Ledger,
+    packages: &BTreeSet<String>,
 ) -> crate::check::Checked {
     let mut checked = crate::check::check_against(
         unit,
         beside,
         own,
         library,
-        &std::collections::BTreeSet::new(),
+        packages,
         &crate::check::Newly::default(),
         &crate::assets::Reads::none(),
     );
@@ -510,9 +583,16 @@ pub fn bounds_tools(
 ) -> Result<String> {
     let paths = tools_sources(&sysroot.tools_dir())?;
     let (sizes, texts, parsed) = read_tools_package(&paths)?;
-    let (_, library, _) = tools_library()?;
+    let (_, mut library, _) = tools_library()?;
+    let (packages, theirs) = dependency_ledgers(&sysroot.tools_dir())?;
+    for (name, ledger) in &theirs {
+        library.absorb(Some(name), ledger.clone());
+    }
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
-    let (own, _) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+    let (mut own, _) = crate::contracts::Ledger::infer_package_checked(&units, &library);
+    for (name, ledger) in theirs {
+        own.absorb(Some(&name), ledger);
+    }
     let report_one = |at: usize| -> String {
         let beside: Vec<&crate::parser::Parsed> = parsed
             .iter()
@@ -520,7 +600,7 @@ pub fn bounds_tools(
             .filter(|(other, _)| *other != at)
             .map(|(_, other)| other)
             .collect();
-        let checked = check_tools_file(&parsed[at], &beside, &own, &library);
+        let checked = check_tools_file(&parsed[at], &beside, &own, &library, &packages);
         let path = paths[at].display().to_string();
         let refused = checked
             .findings
@@ -567,19 +647,42 @@ pub fn bounds_tools(
 /// interface - the others' signatures, the ledger and the trust it is checked
 /// against - and not the others' bodies, so a body change lowers one file and
 /// a signature change (or a change the ledger shows) lowers all.
-fn lower_tools_files_cached(
+///
+/// **A dependency is lowered first, as a package of its own** (#1163), and
+/// its ledger absorbed under its name, as a project absorbs one (ADR-286
+/// D15): the package's files `use` it and write `json::parse`. The answer is
+/// the package with its dependencies' files under it, and its own ledger.
+fn lower_package(
     paths: &[PathBuf],
+    dependencies: &[(String, PathBuf)],
     build: crate::emit::Build,
     threads: Option<usize>,
     cache: &LoweredBefore,
     reused: &mut usize,
-) -> Result<Package> {
+) -> Result<(Package, crate::contracts::Ledger)> {
+    let mut theirs: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    let mut ledgers: Vec<(String, crate::contracts::Ledger)> = Vec::new();
+    for (name, root) in dependencies {
+        let sources = tools_sources(&root.join("src"))?;
+        let (package, ledger) = lower_package(&sources, &[], build, threads, cache, reused)
+            .with_context(|| format!("lowering the dependency `{name}` ({})", root.display()))?;
+        theirs.push((name.clone(), package.files));
+        ledgers.push((name.clone(), ledger));
+    }
+    let packages: BTreeSet<String> = ledgers.iter().map(|(name, _)| name.clone()).collect();
     let mut timer = Phases::from_env();
     let (sizes, texts, parsed) = read_tools_package(paths)?;
     timer.lap("parse");
-    let (described, library, facts_reusable) = tools_library()?;
+    let (described, mut library, facts_reusable) = tools_library()?;
+    for (name, ledger) in &ledgers {
+        library.absorb(Some(name), ledger.clone());
+    }
     let units: Vec<&crate::parser::Parsed> = parsed.iter().collect();
-    let (own, checked) = crate::contracts::infer_package_parallel(&units, &library);
+    let (mut own, checked) = crate::contracts::infer_package_parallel(&units, &library);
+    let inferred = own.clone();
+    for (name, ledger) in ledgers {
+        own.absorb(Some(&name), ledger);
+    }
     timer.lap("ledger");
     // **The package's trust, asked once** (ADR-010 D9, #581): the join over all
     // its files is one answer, and asking it per file reads the package again
@@ -680,7 +783,7 @@ fn lower_tools_files_cached(
             .collect();
         // **Checked before it is lowered** (Part III C.1), with the package
         // beside it.
-        let checked = check_tools_file(unit, &beside, &own, &library);
+        let checked = check_tools_file(unit, &beside, &own, &library, &packages);
         let refusals: Vec<&crate::check::Finding> = checked
             .findings
             .iter()
@@ -768,9 +871,11 @@ fn lower_tools_files_cached(
         .collect();
     let files =
         nikaia_std::tools::sysroot_package::sysroot_package_assemble(&names, &texts, &views);
+    let files =
+        nikaia_std::tools::sysroot_package::sysroot_package_with_dependencies(&files, &theirs);
     timer.lap("assemble");
     timer.report();
-    Ok(Package { files })
+    Ok((Package { files }, inferred))
 }
 
 /// The file at `path` parsed again with its `test` blocks as functions, and
@@ -1039,11 +1144,11 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
         if !package.is_dir() {
             continue;
         }
-        // **Keyed per file** (#667): see `lower_tools_files_cached`.
+        // **Keyed per file** (#667): see `lower_package`.
         let paths = tools_sources(&package)?;
         // **Nothing changed**: the whole package is one entry, so a run that
         // changes nothing reads no file twice and checks nothing.
-        let whole = cache.key("tools-modules", &paths);
+        let whole = cache.key("tools-modules", &tools_inputs(&package, &paths)?);
         let rust = match cache
             .get(whole.as_deref())
             .as_deref()
@@ -1055,8 +1160,14 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
             }
             None => {
                 let mut reused = 0;
-                let rust =
-                    lower_tools_files_cached(&paths, tools_build(), None, &cache, &mut reused)?;
+                let (rust, _) = lower_package(
+                    &paths,
+                    &tools_dependencies(&package)?,
+                    tools_build(),
+                    None,
+                    &cache,
+                    &mut reused,
+                )?;
                 eprintln!(
                     "lower-std: {}: {reused} of {} files from the cache",
                     package.display(),
@@ -1081,6 +1192,11 @@ pub fn lower_std(sysroot: &Sysroot) -> Result<Vec<PathBuf>> {
     for (rs, rust) in lowered {
         let current = std::fs::read_to_string(&rs).ok();
         if current.as_deref() != Some(rust.as_str()) {
+            // A dependency's files stand in a directory of their own (#1163).
+            if let Some(dir) = rs.parent() {
+                std::fs::create_dir_all(dir)
+                    .with_context(|| format!("creating {}", dir.display()))?;
+            }
             std::fs::write(&rs, &rust).with_context(|| format!("writing {}", rs.display()))?;
             changed.push(rs);
         }
@@ -1243,8 +1359,9 @@ mod tests {
         let run = |a_text: &str| -> usize {
             std::fs::write(&a, a_text).unwrap();
             let mut reused = 0;
-            lower_tools_files_cached(
+            lower_package(
                 &[a.clone(), b.clone()],
+                &[],
                 tools_build(),
                 Some(1),
                 &cache,

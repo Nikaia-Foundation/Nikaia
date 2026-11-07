@@ -250,7 +250,14 @@ pub mod runtime {
 /// **And `manual_is_multiple_of` and `manual_clear`**: the solver's
 /// `l % 2 == 0` (a literal's sign) and `watch.truncate(0)` lower as written
 /// (`sv_sat.nika`, `sv_check.nika`, #1285).
+///
+/// **And `no_effect`, `eq_op` and `collapsible_if`**: `packages/json`, lowered
+/// into `tools::json` (#1163), keeps a `()` statement and its finite test
+/// `x - x != 0.0`; `bounds_rules.nika` nests an `if` in an `else if`.
 #[allow(
+    clippy::no_effect,
+    clippy::eq_op,
+    clippy::collapsible_if,
     clippy::map_identity,
     clippy::manual_is_multiple_of,
     clippy::manual_clear,

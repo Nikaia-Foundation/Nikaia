@@ -3278,7 +3278,7 @@ pub mod sysroot_cache {
 }
 pub mod sysroot_package {
     #[allow(unused_imports)]
-    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble};
+    pub use super::{SysrootPackageHand, SysrootPackageHost, sysroot_package_every_refusal, sysroot_package_render, sysroot_package_without_bodies, sysroot_package_shared, sysroot_package_facade, sysroot_package_assemble, sysroot_package_with_dependencies};
 }
 pub mod template {
     #[allow(unused_imports)]
@@ -3343,4 +3343,9 @@ pub mod views {
 pub mod written {
     #[allow(unused_imports)]
     pub use super::{written_expression, written_pattern};
+}
+pub mod json {
+    #[allow(unused_imports)]
+    use super::{scalar, IntoEither, IntoEitherMaybe, TextQuoted};
+    include!("lowered/json/lowered.rs");
 }

@@ -379,3 +379,35 @@ pub fn sysroot_package_assemble(names: ref Vec[String], lowered: ref Vec[String]
     }
     return package
 }
+
+/// **What the package's index hands a dependency** (#1163): the names
+/// `lib.rs` writes by hand beside the index that a lowered file reaches by its
+/// bare name, which a dependency's own index does not declare.
+comptime SYSROOT_PACKAGE_HANDED: ref Array[ref String] = ["scalar", "IntoEither", "IntoEitherMaybe", "TextQuoted"]
+
+/// **The package with the packages it depends on** (#1163), as a project's
+/// `[dependencies]` name them: each dependency's own lowered files stand
+/// under `lowered/<name>/`, and the index gets a module `<name>` that
+/// includes that dependency's index, so a file of the package writes
+/// `json::parse` as a program that depends on `json` does. Each dependency
+/// is `(name, its lowered files)`, the files as `sysroot_package_assemble`
+/// gives them.
+pub fn sysroot_package_with_dependencies(package: Vec[(String, String)], dependencies: ref Vec[(String, Vec[(String, String)])]) -> Vec[(String, String)] {
+    let mut index = package[0].1.clone()
+    let mut files: Vec[(String, String)] = []
+    for at in 1..<package.len() {
+        files.push(package[at].clone())
+    }
+    let handed = SYSROOT_PACKAGE_HANDED.iter().join(", ")
+    for (name, theirs) in dependencies {
+        index.push_str(f"pub mod {name} {{\n    #[allow(unused_imports)]\n    use super::{{{handed}}};\n    include!(\"{SYSROOT_TOOLS_FILES}/{name}/{SYSROOT_TOOLS_PACKAGE}\");\n}}\n")
+        for (file, text) in theirs {
+            files.push((f"{SYSROOT_TOOLS_FILES}/{name}/{file}", text.clone()))
+        }
+    }
+    // **Sorted by path** after the index, as `sysroot_committed` reads them.
+    files.sort()
+    let mut all: Vec[(String, String)] = [(package[0].0.clone(), index)]
+    all.extend(files)
+    return all
+}

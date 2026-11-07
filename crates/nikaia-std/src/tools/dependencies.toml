@@ -1,0 +1,5 @@
+# The packages the toolchain's Nikaia depends on (#1163), named as a
+# project's `nikaia.toml` names a Nikaia package by `path`. `nikaia
+# lower-std` lowers each into `lowered/<name>/` and its files `use` it.
+[dependencies]
+json = { path = "../../../../packages/json" }
