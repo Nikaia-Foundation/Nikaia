@@ -732,7 +732,7 @@ arrives (D21, D22): it is in the starting function's throw set, and a function
 that does not say `throws` catches it there or is refused with `NK2605`, the
 ordinary rule, `main` included. A task that cannot panic adds nothing: no
 handler is asked of its caller, a `catch` that could only take `task::Crashed`
-is `NK1134`, and its group keeps no failure slot (ADR-async-2 D6). A program
+is `NK1134`, and its group keeps no failure slot (D28). A program
 is not made to handle a failure that cannot happen, and one that can happen is
 handled; the rule is the same as for every other failure. `task::OverBudget`
 stays as D19 says.
