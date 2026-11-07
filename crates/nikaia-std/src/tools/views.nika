@@ -3439,8 +3439,9 @@ fn result_sources_inferred_in(asked: ref Asked, package: ref ResultPackage, item
 }
 
 /// What each function keeps in a `mut` parameter's place (ADR-283 D27), by
-/// ledger key: `v:s` where a view of the text parameter `s`, lent, reaches
-/// what the body pushes, inserts or assigns into `v`.
+/// ledger key: `v:s` where a view of the text parameter `s`, lent, or of a
+/// parameter written as a view, reaches what the body pushes, inserts or
+/// assigns into `v`.
 pub struct PlacesStored {
     pub key: String,
     pub stores: Vec[String],
@@ -3476,7 +3477,9 @@ pub fn places_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref
 }
 
 // One function: its `mut` parameters are the places, its lent text
-// parameters the sources, and the walk is the result's (`rsrc_block`).
+// parameters and those written as views the sources (a `ref Block` whose
+// element is pushed into `mut out: Vec[ref Expr]`, #1228), and the walk is
+// the result's (`rsrc_block`).
 fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span, item: ref Item, own_buffer: fn(ref Expr) -> bool sync, known: ref collections::BTreeMap[String, ResultSrcKnown], mut out: Vec[PlacesStored]) {
     match item {
         Item::Fn { name, receiver, args, config, body, .. } => {
@@ -3494,7 +3497,7 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
                 let named = asked.names.resolve(arg.name).clone()
                 if arg.mutable && arg.ty.code == null && !rsrc_scalar(asked, arg.ty) && rsrc_type_holds_view(asked, arg.ty) {
                     places.insert(named.clone())
-                } else if !arg.mutable && rsrc_plain_text(asked, arg.ty) && (arg.ty.is_view || rsrc_lent(asked, own_contract, position)) {
+                } else if !arg.mutable && arg.ty.code == null && (rsrc_plain_text(asked, arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, own_contract, position)) {
                     sources.push(named.clone())
                 }
                 position += 1

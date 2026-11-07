@@ -158,6 +158,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * Thread-locals in proofs, comptime and project make a parallel check safe only in lower-std (`infer_package_parallel`), never in project builds. (issue-1277)
 * `lower_tools_files_cached` re-parses files with `test` blocks (`with_tests_as_functions`), so package-wide values computed from `parsed` do not cover those files' test functions. (issue-1279)
 * A `__keep_N` in the wrong scope comes from the keep plan in `buffers.nika` (`decide_source`, keyed by `walk.statement`), not from the emitter. (issue-1289)
+* A trait method's positions are published in the text tiers (`of_a_trait`), so a view that one side of a trait/impl gets from `emit_item_lent_view` must be mirrored into the impl's AST (`hb_trait_from`), not inferred. (issue-1250)
+* Setting `ty.is_view` on a `String` in an AST rewrite makes NK1261 warn about a `ref` the user never wrote, unless the position's key (`param K n` / `result K`) goes into `parsed.text_views`. (issue-1250)
 
 ### Grammar
 

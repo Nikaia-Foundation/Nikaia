@@ -2551,7 +2551,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             if receiver.is_some() { position = 1; }
             for arg in args.iter() {
                 let named = asked.names.resolve(arg.name).to_string();
-                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(named.to_string()); } else if !arg.mutable && rsrc_plain_text(asked, &arg.ty) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_string()); }
+                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(named.to_string()); } else if !arg.mutable && (*arg.ty.code).is_none() && (rsrc_plain_text(asked, &arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_string()); }
                 position += 1;
             }
             if places.is_empty() || sources.is_empty() { return; }

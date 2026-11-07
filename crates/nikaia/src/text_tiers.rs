@@ -125,8 +125,11 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     parsed.viewed_arms = decided.viewed_arms.clone();
     parsed.refused_moves = decided.refused_moves.clone();
     // A parameter handed back is a view of it, of any type (ADR-views-3 D12, #1239).
-    nikaia_std::tools::text_tiers::tier_hand_back(&mut parsed.program, &parsed.interner);
+    // Its text views in an impl of a trait were written `String` (#1250).
+    let handed =
+        nikaia_std::tools::text_tiers::tier_hand_back(&mut parsed.program, &parsed.interner);
     if decided.tiers.is_empty() && decided.lets.is_empty() && decided.adopted.is_empty() {
+        parsed.text_views = handed;
         return;
     }
     let wraps: BTreeMap<usize, usize> = decided
@@ -191,6 +194,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     let written = tier_write(&mut parsed.program, &parsed.interner, &decided, text);
     parsed.text_tiers = written.said;
     parsed.text_views = written.views;
+    parsed.text_views.extend(handed);
 }
 
 /// **A `comptime` declared `String` is a view of text the build fixed**

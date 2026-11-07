@@ -40,22 +40,18 @@ pub(crate) struct CheckWalksTask {
     pub(crate) operations: Option<Vec<Operation>>,
 }
 
-pub(crate) fn check_walks_tasks_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, block: &Block, group: i64, out: &mut Vec<CheckWalksTask>) {
+pub(crate) fn check_walks_tasks_in<'a>(state: &CheckState, block: &'a Block, group: i64, out: &mut Vec<&'a Expr>) {
     for stmt in block.stmts.iter() {
         for each in check_visit_stmt(&stmt.node) {
             match each {
-                Expr::Async(inner, _, _) => {
-                    let inner = nikaia_std::boxed::open(inner);
+                Expr::Async(_, _, _) => {
                     let wait = match state.facts.async_waits.get(&(id_of(each) as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    if wait.group == group {
-                        let task = match check_walks_task(state, world, walking, id_of(each), inner) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        out.push(task);
-                    }
+                    if wait.group == group { out.push(each); }
                 },
                 _ => { },
             }
         }
-        if group >= 0 { for nested in check_visit_stmt_blocks(&stmt.node) { check_walks_tasks_in(state, world, walking, nested, group, out); } }
+        if group >= 0 { for nested in check_visit_stmt_blocks(&stmt.node) { check_walks_tasks_in(state, nested, group, out); } }
     }
 }
 
@@ -276,8 +272,20 @@ impl CheckState {
         }
         if count < 1 { return; }
         let walking = Walking { own: world.own, library: world.library, into: Going::Ours };
+        let mut started: Vec<&Expr> = vec![];
+        check_walks_tasks_in(self, block, group, &mut started);
         let mut tasks: Vec<CheckWalksTask> = vec![];
-        check_walks_tasks_in(self, world, &walking, block, group, &mut tasks);
+        for each in started.iter() {
+            let each = *each;
+            match each {
+                Expr::Async(inner, _, _) => {
+                    let inner = nikaia_std::boxed::open(inner);
+                    let task = match check_walks_task(self, world, &walking, id_of(each), inner) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    tasks.push(task);
+                },
+                _ => { },
+            }
+        }
         let mut beside: Vec<CheckFinding> = vec![];
         check_walks_window(self, world, &walking, block, group, &tasks, &mut beside);
         self.findings.extend(beside.into_iter());

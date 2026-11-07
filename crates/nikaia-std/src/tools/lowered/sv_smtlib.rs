@@ -113,7 +113,7 @@ pub(crate) fn sv_decimal(a: &str) -> SvGot {
     let mut parts: Vec<&str> = vec![];
     for part in a.split('.') { parts.push(part); }
     if parts.len() != 2 || !sv_is_numeral(*nikaia_std::index::get(&parts, 0)) || !sv_is_numeral(*nikaia_std::index::get(&parts, 1)) { return SvGot::Failed(SvReadWhy::Unsupported(format!("the numeral {}", a))); }
-    let n = match text::parse_i64(&nikaia_std::concat::plus(::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 0)), ::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 1)))) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
+    let n = match text::parse_i64(&(nikaia_std::concat::plus(::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 0)), ::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 1))))) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
     let mut den: i64 = 1;
     for _ in 0..(*nikaia_std::index::get(&parts, 1)).len() as i64 { den = match den.checked_mul(10) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) }; }
     let r = match sv_rat(n, den) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
