@@ -791,6 +791,11 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.a_map_read_handed_back(world, &walked, body);
     let tail = check_core_lambda_leave(state, (outer).as_ref(), &walked, body);
     check_core_ops_lambda_tail_wrapped(state, world, host, (declared).as_ref(), &tail, body);
+    let place: Ty = nikaia_std::index::or(match declared.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown);
+    state.a_lambda_hands_back_text_it_does_not_own(world, &place, params, body, &tail, span);
     state.flow.lambda_tail = Some(tail.clone());
     state.leave_boundary(&saved);
     state.scope.pop();

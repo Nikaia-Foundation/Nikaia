@@ -190,6 +190,12 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                     }
                     state.flow.lambda_tails.insert(id, came_to.clone())
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first)
+                    // **Code of this program whose result owns its text**
+                    // takes none the lambda does not own (#1264); `std`'s
+                    // callees run theirs in place.
+                    if declared_here || keeps {
+                        state.a_lambda_hands_back_text_it_does_not_own(world, code, params, body, came_to, span)
+                    }
                     let written: Ty = result?.clone() ?? Ty::Unknown
                     // A text a `return` hands back is the declared kind, as the
                     // last value's is (#758).
