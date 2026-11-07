@@ -45,10 +45,10 @@ description: >-
         <a class="safe-more" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks left out where proved →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Decided, being built</span>
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3>A failure that ends only its task</h3>
-        <p>In the specification a panic in a task ends that task: its cleanups run, whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. A panic in <code>main</code> ends the program. With the new <code>async</code> tasks this is part of the build of <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326, D4 →</a>
+        <p>A panic in a task ends that task: whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. The compiler works out which functions can panic, so only a task that can is a failure: the function that starts it says <code>throws</code>, catches the crash or gives the task a fallback, or it is refused. A task that cannot panic asks for nothing. A panic in <code>main</code> ends the program.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D35 →</a>
       </div>
     </div>
   </div>

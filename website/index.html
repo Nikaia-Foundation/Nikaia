@@ -152,7 +152,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-part">Partly checked</span>
         <h3><a href="{{ "/safe/#running" | relative_url }}">While the program runs</a></h3>
-        <p>An error nobody handles is refused when the program is built. A failing task is specified to end alone, and that is being built.</p>
+        <p>An error nobody handles is refused when the program is built. A task that can panic ends alone, and whoever waits for it handles the crash; the compiler works out which tasks can.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
