@@ -3844,6 +3844,7 @@ signature = "[T](self: ref SharedMut[T], f: fn(ref T)) -> ?"
 pub = true
 touches = ["lock write"]
 sync = "sync(f)"
+locks = true
 signature = "[T](self: ref SharedMut[T], f: fn(T))"
 
 # **The two doors over several locks** (Part II 12.3, ADR-281). They take the
@@ -3866,6 +3867,7 @@ signature = "[T](self: ref SharedMut[T], f: fn(T))"
 pub = true
 touches = ["lock read"]
 sync = "sync(f)"
+locks = true
 
 # Change several locked values at once.
 #
@@ -3876,6 +3878,7 @@ sync = "sync(f)"
 pub = true
 touches = ["lock write"]
 sync = "sync(f)"
+locks = true
 
 # Put the elements in the order of what the function returns, in place.
 #

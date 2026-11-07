@@ -1913,8 +1913,8 @@ error[NK2203]: `update` takes a lock, but you're already holding one here.
 ```
 
 A chain reads the same, with one note more: it names the call, and the function
-inside it that takes the lock. A scope opened inside the block is the same
-refusal: the scope waits for its tasks, so a task waiting for the held lock
+inside it that takes the lock. An `async` form opened inside the block is the
+same refusal: the block waits for its tasks, so a task waiting for the held lock
 waits for the block that is waiting for it.
 
 The two that come with the doors:

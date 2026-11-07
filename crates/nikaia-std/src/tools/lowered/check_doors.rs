@@ -15,6 +15,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn an_async_inside_a_door(&mut self, span: &Span) -> bool {
+        if !self.inside_a_door { return false; }
+        self.findings.push(check_refusal("NK2203", span, String::from("This `async` starts a task while you're holding a lock here."), vec![String::from("The block waits for its tasks before it lets the lock go, so a task that needs the held lock would wait for the block that is waiting for it.")], Some(String::from("Start the tasks before the block, or compute what the block needs first and pass it in."))));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
         if !self.inside_a_door { return; }
         let name = match on {

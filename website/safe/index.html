@@ -165,11 +165,10 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       </div>
       <div class="safe-tile safe-tile-b" id="stuck">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> A lock taken inside another lock by hand is not refused yet, so for several locks using <code>update_all</code> is up to you.</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
 </details>
         <h3><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a></h3>
-        <p>A task that pauses while it holds a lock is refused, since everyone who needs that value would wait too. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</p>
+        <p>A task that pauses while it holds a lock is refused, since everyone who needs that value would wait too, and so is a lock taken while another is held, written in the block or reached through a call. For several locks at once, <code>update_all</code> takes them in one fixed order, so two transfers cannot hold one each and wait for the other.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">a.update fn(mut acc) {
     acc.balance -= 30
     time::sleep(5.millis())

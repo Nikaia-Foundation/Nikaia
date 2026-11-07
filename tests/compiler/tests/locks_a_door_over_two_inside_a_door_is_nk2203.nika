@@ -1,0 +1,17 @@
+// `access_all` and `update_all` take locks too, so neither is opened inside
+// another door's block (Part III C.6, NK2203, #677).
+fn main() {
+    let a = SharedMut(1)
+    let b = SharedMut(2)
+    let c = SharedMut(3)
+    a.access fn(x) {
+        update_all(b, c) fn(mut p, mut q) {
+            p += 1
+            q += 1
+        }
+    }
+    c.update fn(mut z) {
+        access_all(a, b) fn(p, q) { let r = p + q }
+        z += 1
+    }
+}

@@ -627,6 +627,14 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
         if member == "attribute" { return Ty::Nullable(Box::new(check_core_call_named(&read))); }
         return Ty::Named { name: String::from("Vec"), args: vec![check_core_call_named(&read)], view: false };
     }
+    if state.inside_a_door {
+        let callee: Option<String> = check_core_call_free_callee(world, func);
+        if callee.is_some() {
+            let called: String = nikaia_std::index::or(callee, || "".into());
+            let holds = check_core_call_holds(world, &called);
+            state.a_lock_inside_a_lock(&called, &holds, span);
+        }
+    }
     let mut written: String = String::from("");
     if check_core_call_is_variable(func) {
         match func {
@@ -640,14 +648,6 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
         if written == "asset" && !state.flow.inside_a_comptime {
             state.an_asset_outside_a_comptime(span);
             return Ty::Unknown;
-        }
-    }
-    if state.inside_a_door {
-        let callee: Option<String> = check_core_call_free_callee(world, func);
-        if callee.is_some() {
-            let called: String = nikaia_std::index::or(callee, || "".into());
-            let holds = check_core_call_holds(world, &called);
-            state.a_lock_inside_a_lock(&called, &holds, span);
         }
     }
     let mut name: String = String::from("");

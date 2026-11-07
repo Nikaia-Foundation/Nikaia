@@ -1,0 +1,14 @@
+// A second lock written inside a door's block is refused (Part III C.6,
+// NK2203, #677): the way out is `update_all`.
+struct Account {
+    balance: i64,
+}
+
+fn main() {
+    let a = SharedMut(Account { balance: 100 })
+    let b = SharedMut(Account { balance: 100 })
+    a.update fn(mut from) {
+        from.balance -= 30
+        b.update fn(mut to) { to.balance += 30 }
+    }
+}
