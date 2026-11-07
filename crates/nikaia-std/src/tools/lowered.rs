@@ -171,6 +171,14 @@ mod calls_lowered {
 #[allow(unused_imports)]
 pub use calls_lowered::*;
 
+mod cargo_json_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/cargo_json.rs");
+}
+#[allow(unused_imports)]
+pub use cargo_json_lowered::*;
+
 mod cexport_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2367,6 +2375,10 @@ pub mod calls {
     #[allow(unused_imports)]
     pub use super::{Callee, callee_of, callee_named};
 }
+pub mod cargo_json {
+    #[allow(unused_imports)]
+    pub use super::{cargo_json_lines, cargo_json_member, cargo_json_text, cargo_json_bool, cargo_json_number, cargo_json_items, cargo_json_an_artifact, cargo_json_filenames, cargo_json_path, cargo_json_extension};
+}
 pub mod cexport {
     #[allow(unused_imports)]
     pub use super::{CX_LEDGER_DIGEST, CxExported, CxCtx, CxBuild, cx_export};
@@ -2723,7 +2735,7 @@ pub mod cli_commands {
 }
 pub mod comptime_bundle {
     #[allow(unused_imports)]
-    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
+    pub use super::{ComptimeBundle, ComptimeBundleFlavour, ComptimeBundleArtifacts, ComptimeBundleRan, ComptimeBundleFailed, ComptimeBundleHost, comptime_bundle_artifacts, comptime_bundle_bundle, comptime_bundle_run_bundle, comptime_bundle_run, comptime_bundle_write_if_changed};
 }
 pub mod comptime_driver {
     #[allow(unused_imports)]
@@ -2755,7 +2767,7 @@ pub mod describe {
 }
 pub mod diagnostics {
     #[allow(unused_imports)]
-    pub use super::{DiagnosticsRead, DiagnosticsChild, DiagnosticsPlaced, diagnostics_placed};
+    pub use super::{DiagnosticsRead, DiagnosticsChild, diagnostics_read_json, diagnostics_libraries_in, diagnostics_executable_in, DiagnosticsPlaced, diagnostics_placed};
 }
 pub mod diffs {
     #[allow(unused_imports)]

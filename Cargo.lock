@@ -493,7 +493,6 @@ dependencies = [
  "clap",
  "nikaia-std",
  "orchestrator",
- "serde_json",
  "sha2",
  "toml",
  "winnow 1.0.4",

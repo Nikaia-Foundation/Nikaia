@@ -69,6 +69,13 @@ fn line_of(source: &str, needle: &str) -> usize {
         + 1
 }
 
+/// `text` as a JSON string: quoted, its `\` and `"` escaped (what
+/// `serde_json::to_string` wrote, before the compiler read its JSON in
+/// Nikaia, #1163).
+fn json_string(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 #[test]
 fn a_rejected_frame_is_reported_on_the_nika_line_that_caused_it() {
     let errors = errors_for(BROKEN);
@@ -285,12 +292,7 @@ fn a_note_about_rust_rather_than_the_program_is_dropped() {
 
     let notes: String = children
         .iter()
-        .map(|(text, _)| {
-            format!(
-                r#",{{"level":"note","message":{}}}"#,
-                serde_json::to_string(text).expect("a JSON string")
-            )
-        })
+        .map(|(text, _)| format!(r#",{{"level":"note","message":{}}}"#, json_string(text)))
         .collect::<String>();
     let json = format!(
         r#"{{"$message_type":"diagnostic","message":"literal out of range","level":"error","spans":[{{"file_name":"lowered.rs","byte_start":0,"byte_end":4,"line_start":1,"column_start":1,"is_primary":true}}],"children":[{{"level":"note","message":"kept for shape"}}{notes}]}}"#
@@ -333,12 +335,8 @@ fn the_hasher_this_compiler_chose_is_not_in_the_message() {
     let lowered = lower(GOOD);
     let json = format!(
         r#"{{"$message_type":"diagnostic","message":{},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":0,"byte_end":4,"line_start":1,"column_start":1,"is_primary":true}}],"children":[{{"level":"note","message":{}}}]}}"#,
-        serde_json::to_string(
-            "type annotations needed for `HashMap<_, _, BuildHasherDefault<FxHasher>>`"
-        )
-        .expect("a JSON string"),
-        serde_json::to_string("`TrustedMap<ref String, i64>` is the type of `m`")
-            .expect("a JSON string"),
+        json_string("type annotations needed for `HashMap<_, _, BuildHasherDefault<FxHasher>>`"),
+        json_string("`TrustedMap<ref String, i64>` is the type of `m`"),
     );
 
     let translated = diagnostics::translate(&json, &lowered.map, GOOD);
@@ -376,8 +374,7 @@ fn a_translation_that_collapses_a_distinction_is_an_internal_error() {
     let end = offset + 4;
     let json = format!(
         r#"{{"$message_type":"diagnostic","message":{},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
-        serde_json::to_string("expected struct `Arc<Conn>`, found struct `Rc<Conn>`")
-            .expect("a JSON string"),
+        json_string("expected struct `Arc<Conn>`, found struct `Rc<Conn>`"),
     );
 
     let translated = diagnostics::translate(&json, &lowered.map, GOOD);
@@ -422,8 +419,7 @@ fn a_message_the_backend_wrote_that_way_is_not_an_internal_error() {
     let end = offset + 4;
     let json = format!(
         r#"{{"$message_type":"diagnostic","message":{},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
-        serde_json::to_string("expected struct `Conn`, found struct `Conn`")
-            .expect("a JSON string"),
+        json_string("expected struct `Conn`, found struct `Conn`"),
     );
 
     let translated = diagnostics::translate(&json, &lowered.map, GOOD);
@@ -449,8 +445,7 @@ fn a_nested_shared_type_is_translated_whole() {
     let end = offset + 4;
     let json = format!(
         r#"{{"$message_type":"diagnostic","message":{},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
-        serde_json::to_string("`Arc<Vec<Rc<Conn>>>` is not what this takes")
-            .expect("a JSON string"),
+        json_string("`Arc<Vec<Rc<Conn>>>` is not what this takes"),
     );
 
     let translated = diagnostics::translate(&json, &lowered.map, GOOD);

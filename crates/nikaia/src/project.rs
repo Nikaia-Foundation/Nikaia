@@ -2257,70 +2257,6 @@ impl Project {
     }
 }
 
-/// What this particular program links against, out of the three crates the
-/// emitter can name.
-///
-/// Declared because the *emitted Rust* names them, not because a program might:
-/// a program with no grammar in it depends on nothing at all and builds without
-/// fetching anything, and a manifest that declared three crates regardless would
-/// make every project pay for the ones it does not use.
-///
-/// `std` is reached **by path into the sysroot** (ADR-002 D4). It is not
-/// published, so there is no registry to reach it through; what changed is that
-/// the path is a sysroot's rather than a checkout's, and that the sources there
-/// need nothing but `rustc` to build.
-///
-/// The other two versions are baked into this binary by `build.rs` rather than
-/// read from a workspace manifest at run time. A sysroot is not a Cargo
-/// workspace and has no `[workspace.dependencies]` above it - and these are the
-/// *compiler's* versions anyway, since it is the emitter that writes
-/// `winnow::Parser` into a program. Read at the compiler's build time rather
-/// than written down twice: a program that linked a different `winnow` from the
-/// one `winnow-grammar` was built against is a type error at every `Stream`
-/// bound, so the two must not be able to drift apart.
-/// The program Cargo built, as its own build said where it was.
-///
-/// **Read rather than computed.** Cargo decides where a binary lands from the
-/// target directory, the profile and `CARGO_TARGET_DIR`; a second place that
-/// worked those rules out would have to keep agreeing with Cargo forever. A
-/// `--message-format=json` build says it outright, on the `compiler-artifact`
-/// line whose `executable` is not null - and this compiler already captures that
-/// output to read the diagnostics.
-///
-/// `None` where nothing says, which is not an error: the caller falls back to
-/// `cargo run` and the build behaves as it did before.
-/// The shared and the static library a `c-library` build made (ADR-284 D4).
-fn libraries_in(messages: &str) -> Vec<std::path::PathBuf> {
-    messages
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|value| value["reason"] == "compiler-artifact")
-        .filter(|value| {
-            value["target"]["kind"]
-                .as_array()
-                .is_some_and(|kinds| kinds.iter().any(|k| k == "cdylib" || k == "staticlib"))
-        })
-        .flat_map(|value| {
-            value["filenames"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|f| f.as_str().map(std::path::PathBuf::from))
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
-
-fn executable_in(messages: &str) -> Option<std::path::PathBuf> {
-    messages
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|value| value["reason"] == "compiler-artifact")
-        .filter_map(|value| value["executable"].as_str().map(std::path::PathBuf::from))
-        .next_back()
-}
-
 /// The package's output tests, by name (`tools/project_tests.nika`).
 pub fn output_tests(root: &Path) -> Result<Vec<OutputTest>> {
     block_on(project_tests::output_tests(root)).map_err(|e| anyhow!("{e}"))
@@ -3067,14 +3003,6 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
 
     fn bind(&self) -> Option<String> {
         self.project.settings.words.bind.clone()
-    }
-
-    fn libraries_in(&self, messages: &str) -> Vec<PathBuf> {
-        libraries_in(messages)
-    }
-
-    fn executable_in(&self, messages: &str) -> Option<PathBuf> {
-        executable_in(messages)
     }
 
     fn own_copy(&self, built: &Path) -> HostResult<PathBuf> {

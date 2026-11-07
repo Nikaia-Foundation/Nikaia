@@ -11,11 +11,17 @@
 // unwrapping Cargo's envelope, and asking the emitter's map where the primary
 // span's byte came from. What the message then becomes is decided here.
 //
+// The JSON itself is read here too, with `packages/json` (#1163): the
+// compiler only asks its map where a primary byte came from.
+//
 // What it deliberately does not do is rewrite the message. Because the
 // lowering is name-for-name (ADR-296 D17), a backend sentence is already about
 // the Nikaia source - only its position was wrong.
 
-/// One backend message as the compiler read it from a line of JSON.
+use json
+use std::fs
+
+/// One backend message as read from a line of JSON.
 pub struct DiagnosticsRead {
     /// `level`, or empty where the line has none.
     pub level: String,
@@ -25,6 +31,9 @@ pub struct DiagnosticsRead {
     pub generated_line: i64?,
     /// What the backend wrote under the primary span's caret.
     pub label: String?,
+    /// The primary span's `byte_start` in the emitted Rust, which the
+    /// compiler's map trades for `unit` and `span`.
+    pub byte_start: i64?,
     /// Whether the map knew which `.nika` span the primary byte came from;
     /// `unit` and `span` are then that place.
     pub located: bool,
@@ -39,6 +48,55 @@ pub struct DiagnosticsRead {
 pub struct DiagnosticsChild {
     pub level: String?,
     pub message: String?,
+}
+
+/// **The backend's messages, read from its JSON** (#1163): one per line that
+/// is a diagnostic. Cargo's own lines (`compiler-artifact`, `build-finished`)
+/// carry none; the one that does carries it under `message`; a line with no
+/// `reason` is what `rustc --error-format=json` writes directly. Not yet
+/// located: the compiler's map sets `located`, `unit` and `span` from
+/// `byte_start`.
+pub fn diagnostics_read_json(json: String) -> Vec[DiagnosticsRead] {
+    let mut read: Vec[DiagnosticsRead] = []
+    for line in cargo_json_lines(json) {
+        let reason = cargo_json_text(cargo_json_member(line, "reason"))
+        let value = match reason {
+            null => line.clone(),
+            said => if said == "compiler-message" { cargo_json_member(line, "message") ?? json::Value::Null } else { continue },
+        }
+        let primary = cargo_json_items(cargo_json_member(value, "spans")).iter().find(fn(span) { cargo_json_bool(cargo_json_member(span.clone(), "is_primary")) ?? false })?.clone()
+        read.push(DiagnosticsRead {
+            level: cargo_json_text(cargo_json_member(value, "level")) ?? "",
+            message: cargo_json_text(cargo_json_member(value, "message")) ?? "",
+            generated_line: cargo_json_number(cargo_json_member(primary, "line_start")),
+            label: cargo_json_text(cargo_json_member(primary, "label")),
+            byte_start: cargo_json_number(cargo_json_member(primary, "byte_start")),
+            located: false,
+            unit: 0,
+            span: Span { start: 0, end: 0 },
+            children: cargo_json_items(cargo_json_member(value, "children")).iter().map(fn(child) { DiagnosticsChild { level: cargo_json_text(cargo_json_member(child.clone(), "level")), message: cargo_json_text(cargo_json_member(child.clone(), "message")) } }).collect(),
+        })
+    }
+    return read
+}
+
+/// **The shared and the static library a `c-library` build made** (ADR-284
+/// D4), as the files of each `compiler-artifact` whose target is a `cdylib`
+/// or a `staticlib` (#1163).
+pub fn diagnostics_libraries_in(messages: String) -> Vec[fs::Path] {
+    return cargo_json_lines(messages).iter().filter(fn(value) { cargo_json_an_artifact(value) }).filter(fn(value) { cargo_json_items(cargo_json_member(cargo_json_member(value.clone(), "target"), "kind")).iter().any(fn(kind) { let named = cargo_json_text(kind.clone()) ?? ""; named == "cdylib" || named == "staticlib" }) }).flat_map(fn(value) { cargo_json_filenames(value) }).collect()
+}
+
+/// **The program Cargo built, as its own build said where it was** (#1163):
+/// the last `compiler-artifact` whose `executable` is not null.
+///
+/// **Read rather than computed.** Cargo decides where a binary lands from the
+/// target directory, the profile and `CARGO_TARGET_DIR`; a second place that
+/// worked those rules out would have to keep agreeing with Cargo forever.
+/// `null` where nothing says, which is not an error: the caller falls back to
+/// `cargo run`.
+pub fn diagnostics_executable_in(messages: String) -> fs::Path? {
+    return cargo_json_lines(messages).iter().filter(fn(value) { cargo_json_an_artifact(value) }).filter_map(fn(value) { cargo_json_text(cargo_json_member(value.clone(), "executable")) }).map(fn(file) { cargo_json_path(file) }).last()
 }
 
 /// One message, placed in the `.nika` file where that was possible: the
