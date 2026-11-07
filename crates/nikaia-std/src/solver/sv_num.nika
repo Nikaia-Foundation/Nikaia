@@ -1,0 +1,361 @@
+// crates/nikaia-std/src/solver/sv_num.nika
+//
+// **The solver's numbers** (ADR-270 D11, #1282 items 1-2): `i64` only, kept
+// small by construction, never wrapped. Every sum and product goes through
+// the language's overflow check (`checked_add`, `checked_mul`, ...); a step
+// that would leave the range answers `null`, and the engine that asked picks
+// another pivot or variable, or answers *unknown* with `SvUnknown::Overflow`.
+// A vector of coefficients is divided by its gcd at once, and an elimination
+// multiplies by the smallest multipliers that cancel the column, the
+// coefficients' quotients by their gcd, so a chain of combinations stays
+// near the size of its inputs instead of doubling per step.
+//
+// A value of the simplex is a rational of two `i64`, normalised by gcd with a
+// positive denominator (`SvRat`), extended by the infinitesimal `δ` for strict
+// bounds (`SvDelta`, Dutertre and de Moura). Comparing two rationals never
+// overflows: it compares the integer parts and then the reciprocals of the
+// fractional parts.
+
+/// Why the solver could not tell.
+pub enum SvUnknown {
+	/// Every step left was one that would leave `i64` (D11).
+	Overflow,
+	/// The query holds what the solver's theory does not read.
+	OutsideTheTheory,
+	/// The search reached its limit.
+	Budget,
+	/// Searched within the limit, found no contradiction.
+	NoContradiction,
+}
+
+/// The greatest common divisor, never negative; `0` for two zeros. `null`
+/// only where it is `2^63`, which no `i64` holds (`a` and `b` each `0` or
+/// the least `i64`).
+fn sv_gcd(a: i64, b: i64) -> i64? {
+	let mut x = a
+	let mut y = b
+	while y != 0 {
+		if y == 1 || y == -1 {
+			return 1
+		}
+		let t = x % y
+		x = y
+		y = t
+	}
+	return x.checked_abs()
+}
+
+/// `⌊a / m⌋` for `m > 0`; `null` for any other `m`.
+fn sv_floor_div(a: i64, m: i64) -> i64? {
+	if m <= 0 {
+		return null
+	}
+	return a.div_euclid(m)
+}
+
+/// `⌈a / m⌉` for `m > 0`; `null` for any other `m`.
+fn sv_ceil_div(a: i64, m: i64) -> i64? {
+	if m <= 0 {
+		return null
+	}
+	let q = a.div_euclid(m)
+	if a.rem_euclid(m) == 0 {
+		return q
+	}
+	return q + 1
+}
+
+/// `a·x + b·y`, or `null` where a product or the sum leaves `i64`.
+fn sv_mul_add(a: i64, x: i64, b: i64, y: i64) -> i64? {
+	let left = a.checked_mul(x) ?? return null
+	let right = b.checked_mul(y) ?? return null
+	return left.checked_add(right)
+}
+
+/// Whether `k` lies in the 32-bit range, where one product fits 63 bits and
+/// one combination `a·x + b·y` cannot overflow (D11's fast path).
+fn sv_fits32(k: i64) -> bool {
+	return k >= -2147483648 && k <= 2147483647
+}
+
+/// The gcd of all entries of `ks`; `null` where it is `2^63`.
+fn sv_content(ks: ref Vec[i64]) -> i64? {
+	let mut g: i64 = 0
+	for k in ks {
+		g = sv_gcd(g, k) ?? return null
+		if g == 1 {
+			return 1
+		}
+	}
+	return g
+}
+
+/// `ks` divided by their gcd. The division is exact, so it holds for an
+/// equality and for a bound `Σ <= 0` alike; a vector whose gcd no `i64`
+/// holds stays as it is.
+fn sv_reduced(ks: Vec[i64]) -> Vec[i64] {
+	let g = sv_content(ks) ?? return ks
+	if g <= 1 {
+		return ks
+	}
+	let mut out: Vec[i64] = []
+	for k in ks {
+		out.push(k / g)
+	}
+	return out
+}
+
+/// The largest absolute value of `ks`; `null` where it is `2^63`.
+fn sv_max_abs(ks: ref Vec[i64]) -> i64? {
+	let mut most: i64 = 0
+	for k in ks {
+		let a = k.checked_abs() ?? return null
+		if a > most {
+			most = a
+		}
+	}
+	return most
+}
+
+/// `a·x + b·y` entry by entry, divided by its gcd; `null` where an entry
+/// leaves `i64`. The two vectors have one length (a dense row, D10).
+fn sv_dense_combine(a: i64, x: ref Vec[i64], b: i64, y: ref Vec[i64]) -> Vec[i64]? {
+	if x.len() != y.len() {
+		return null
+	}
+	let mut out: Vec[i64] = []
+	let mut i = 0
+	while i < x.len() {
+		out.push(sv_mul_add(a, x[i], b, y[i]) ?? return null)
+		i += 1
+	}
+	return sv_reduced(out)
+}
+
+/// The smallest multipliers `(a, b)` with `a·xj + b·yj = 0` and `a > 0`:
+/// `yj` and `xj` divided by their gcd. `null` where a column is zero or a
+/// negation leaves `i64`.
+fn sv_cancelling(xj: i64, yj: i64) -> Vec[i64]? {
+	if xj == 0 || yj == 0 {
+		return null
+	}
+	let g = sv_gcd(xj, yj) ?? return null
+	let mut a = yj / g
+	let mut b = (xj / g).checked_neg() ?? return null
+	if a < 0 {
+		a = a.checked_neg() ?? return null
+		b = b.checked_neg() ?? return null
+	}
+	return [a, b]
+}
+
+/// Column `j` eliminated between `x` and `y` with the smallest multipliers,
+/// the result divided by its gcd. Between two bounds `Σ <= 0` the
+/// multipliers must both be positive, so `x[j]` and `y[j]` have opposite
+/// signs; the caller asks so, an equality may take either sign.
+fn sv_dense_eliminate(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]? {
+	let ab = sv_cancelling(x[j], y[j]) ?? return null
+	return sv_dense_combine(ab[0], x, ab[1], y)
+}
+
+/// Which column to eliminate between `x` and `y` among the first `width`
+/// (D11: a unit coefficient first, then the smallest product of the two
+/// multipliers); `-1` where no column is non-zero in both. `opposite` asks
+/// for columns of opposite signs only, as two bounds need.
+fn sv_pick_column(x: ref Vec[i64], y: ref Vec[i64], width: i64, opposite: bool) -> i64 {
+	let mut best: i64 = -1
+	let mut best_cost: i64 = 0
+	let mut j = 0
+	while j < width {
+		let xj = x[j]
+		let yj = y[j]
+		let x_up = xj > 0
+		let y_up = yj > 0
+		let usable = xj != 0 && yj != 0 && (!opposite || x_up != y_up)
+		if usable {
+			let cost = sv_column_cost(xj, yj)
+			if cost != null && (best < 0 || (cost ?? 0) < best_cost) {
+				best = j
+				best_cost = cost ?? 0
+			}
+		}
+		j += 1
+	}
+	return best
+}
+
+/// What eliminating with the coefficients `xj` and `yj` costs: `0` where one
+/// is a unit, else the product of the multipliers; `null` where a multiplier
+/// leaves `i64`.
+fn sv_column_cost(xj: i64, yj: i64) -> i64? {
+	if xj == 1 || xj == -1 || yj == 1 || yj == -1 {
+		return 0
+	}
+	let ab = sv_cancelling(xj, yj) ?? return null
+	let b = ab[1].checked_abs() ?? return null
+	return ab[0].checked_mul(b)
+}
+
+/// A rational `num / den`: `den > 0`, `gcd(num, den) = 1`.
+pub struct SvRat {
+	pub num: i64,
+	pub den: i64,
+}
+
+/// `n / d` normalised; `null` for `d = 0` or where the sign moves out of
+/// `i64`.
+fn sv_rat(n: i64, d: i64) -> SvRat? {
+	if d == 0 {
+		return null
+	}
+	let g = sv_gcd(n, d) ?? return null
+	let mut num = n / g
+	let mut den = d / g
+	if den < 0 {
+		num = num.checked_neg() ?? return null
+		den = den.checked_neg() ?? return null
+	}
+	return SvRat { num: num, den: den }
+}
+
+/// The integer `n` as a rational.
+fn sv_int(n: i64) -> SvRat {
+	return SvRat { num: n, den: 1 }
+}
+
+fn sv_rat_add(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	let g = sv_gcd(a.den, b.den) ?? return null
+	let da = a.den / g
+	let db = b.den / g
+	let num = sv_mul_add(a.num, db, b.num, da) ?? return null
+	let den = a.den.checked_mul(db) ?? return null
+	return sv_rat(num, den)
+}
+
+fn sv_rat_neg(a: ref SvRat) -> SvRat? {
+	return SvRat { num: a.num.checked_neg() ?? return null, den: a.den }
+}
+
+fn sv_rat_sub(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	let negated = sv_rat_neg(b) ?? return null
+	return sv_rat_add(a, negated)
+}
+
+/// The product, each numerator reduced against the other's denominator
+/// first so that nothing larger than the result is formed.
+fn sv_rat_mul(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	let g1 = sv_gcd(a.num, b.den) ?? return null
+	let g2 = sv_gcd(b.num, a.den) ?? return null
+	let num = (a.num / g1).checked_mul(b.num / g2) ?? return null
+	let den = (a.den / g2).checked_mul(b.den / g1) ?? return null
+	return sv_rat(num, den)
+}
+
+/// The quotient; `null` for a division by zero.
+fn sv_rat_div(a: ref SvRat, b: ref SvRat) -> SvRat? {
+	let inverse = sv_rat(b.den, b.num) ?? return null
+	return sv_rat_mul(a, inverse)
+}
+
+/// `-1`, `0` or `1` as `a` is less than, equal to or greater than `b`.
+/// Never overflows: integer parts first, then the fractional parts through
+/// their reciprocals, a continued fraction.
+fn sv_rat_cmp(a: ref SvRat, b: ref SvRat) -> i64 {
+	let mut an = a.num
+	let mut ad = a.den
+	let mut bn = b.num
+	let mut bd = b.den
+	let mut sign: i64 = 1
+	while true {
+		let aq = an.div_euclid(ad)
+		let bq = bn.div_euclid(bd)
+		if aq != bq {
+			return if aq < bq { -sign } else { sign }
+		}
+		let ar = an.rem_euclid(ad)
+		let br = bn.rem_euclid(bd)
+		if ar == 0 || br == 0 {
+			if ar == br {
+				return 0
+			}
+			return if ar == 0 { -sign } else { sign }
+		}
+		// ar/ad < br/bd exactly when ad/ar > bd/br.
+		an = ad
+		ad = ar
+		bn = bd
+		bd = br
+		sign = -sign
+	}
+}
+
+fn sv_rat_is_int(a: ref SvRat) -> bool {
+	return a.den == 1
+}
+
+fn sv_rat_floor(a: ref SvRat) -> i64 {
+	return a.num.div_euclid(a.den)
+}
+
+fn sv_rat_ceil(a: ref SvRat) -> i64 {
+	return sv_ceil_div(a.num, a.den) ?? 0
+}
+
+fn sv_rat_text(a: ref SvRat) -> String {
+	if a.den == 1 {
+		return f"{a.num}"
+	}
+	return f"{a.num}/{a.den}"
+}
+
+/// `c + k·δ` for an infinitesimal `δ > 0`: `x < 5` is `x <= 5 - δ`.
+pub struct SvDelta {
+	pub c: SvRat,
+	pub k: SvRat,
+}
+
+fn sv_delta(c: SvRat, k: SvRat) -> SvDelta {
+	return SvDelta { c: c, k: k }
+}
+
+fn sv_delta_add(a: ref SvDelta, b: ref SvDelta) -> SvDelta? {
+	let c = sv_rat_add(a.c, b.c) ?? return null
+	let k = sv_rat_add(a.k, b.k) ?? return null
+	return SvDelta { c: c, k: k }
+}
+
+fn sv_delta_sub(a: ref SvDelta, b: ref SvDelta) -> SvDelta? {
+	let c = sv_rat_sub(a.c, b.c) ?? return null
+	let k = sv_rat_sub(a.k, b.k) ?? return null
+	return SvDelta { c: c, k: k }
+}
+
+fn sv_delta_scale(a: ref SvDelta, r: ref SvRat) -> SvDelta? {
+	let c = sv_rat_mul(a.c, r) ?? return null
+	let k = sv_rat_mul(a.k, r) ?? return null
+	return SvDelta { c: c, k: k }
+}
+
+/// Ordered by the rational part, then by the coefficient of `δ`.
+fn sv_delta_cmp(a: ref SvDelta, b: ref SvDelta) -> i64 {
+	let first = sv_rat_cmp(a.c, b.c)
+	if first != 0 {
+		return first
+	}
+	return sv_rat_cmp(a.k, b.k)
+}
+
+fn sv_delta_text(a: ref SvDelta) -> String {
+	if a.k.num == 0 {
+		return sv_rat_text(a.c)
+	}
+	let real = if a.c.num == 0 { "" } else { sv_rat_text(a.c) }
+	let sign = if a.k.num > 0 && a.c.num != 0 { "+" } else { "" }
+	if a.k.num == 1 && a.k.den == 1 {
+		return f"{real}{sign}δ"
+	}
+	if a.k.num == -1 && a.k.den == 1 {
+		return f"{real}-δ"
+	}
+	return f"{real}{sign}{sv_rat_text(a.k)}δ"
+}

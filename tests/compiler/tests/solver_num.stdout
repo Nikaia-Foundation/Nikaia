@@ -1,0 +1,28 @@
+== item 1: i64 kept small
+reduced chain: 40 steps, largest coefficient 194, within 32 bits: true
+unreduced chain: 40 steps, largest coefficient 14293651161078, within 32 bits: false
+unreduced chain, longer: step 60: refused, would leave i64 (left 32 bits at step 28, largest so far 7493989779944505334)
+2^62 + 2^62: refused
+3037000500 * 3037000500: refused
+gcd(-12, 18) = 6, gcd(i64 least, 0): refused
+reduced [6, -9, 12, 3]: [2, -3, 4, 1]
+column cost unit 0, 4 vs -6: 6
+picked column of [4, 1, -6] and [-6, -1, 9]: 1
+floor(-7/2) = -4, ceil(-7/2) = -3, floor by 0: refused
+== item 2: rationals and delta
+6/-4 = -3/2, 0/-5 = 0, 1/0: refused
+1/6 + 1/10 = 4/15, 1/6 - 1/10 = 1/15
+3037000499/2 * 2/3037000499 = 1, divided = 9223372030926249001/4
+i64 max + 1/2: refused
+divided by 0: refused
+1/3 < 1/2
+-1/3 > -1/2
+9223372036854775806/9223372036854775807 > 9223372036854775805/9223372036854775806
+-7/2 = -7/2
+floor(-7/2) = -4, ceil = -3, integer: false
+5-δ < 5
+5 < 5+δ
+5-δ > 4+1000δ
+δ = δ
+(5 - δ) * -2 = -10+2δ
+(5 - δ) + (4 + 1000δ) = 9+999δ
