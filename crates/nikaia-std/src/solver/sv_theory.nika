@@ -171,6 +171,15 @@ fn sv_written(refutation: ref LgRefutation, held: ref Vec[SvHeld], mut book: SvB
 	return book.farkas(spelled[last].sources.clone(), spelled[last].multipliers.clone())
 }
 
+/// Integer values as rationals.
+fn sv_rat_values(values: ref collections::BTreeMap[String, i64]) -> collections::BTreeMap[String, SvRat] {
+	let mut out: collections::BTreeMap[String, SvRat] = collections::BTreeMap()
+	for (name, v) in values {
+		out.insert(name.clone(), sv_int(v))
+	}
+	return out
+}
+
 /// **The interface** every theory implements (D12), so one engine
 /// (`sv_smt.nika`) runs over any of them: Fourier-Motzkin here, the simplex
 /// of `sv_simplex.nika`, and the two together (`SvBoth`).
@@ -197,6 +206,9 @@ pub trait SvTh {
 	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked
 	/// `model()`: the values of the last consistent final `check`, by name.
 	fn model(ref self) -> collections::BTreeMap[String, i64]
+	/// `real_values()`: the same values as rationals, a real column's with
+	/// `δ` replaced by a small enough positive rational (ADR-270 D27).
+	fn real_values(ref self) -> collections::BTreeMap[String, SvRat]
 	/// `shared()`: the equalities a theory shares with others (D13).
 	fn shared(ref self) -> Vec[u32]
 }
@@ -304,6 +316,11 @@ impl SvTh for SvTheory {
 	/// within `limit` (Fourier-Motzkin's bounds). Not final, it may stop at
 	/// the cheap tests; this theory runs the whole test either way.
 	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked {
+		// Fourier-Motzkin here reads every bound as `row <= 0` over the
+		// integers: a query with a real column is outside it (ADR-270 D27).
+		if book.reals.len() > 0 {
+			return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+		}
 		let mut held: Vec[SvHeld] = []
 		for l in self.trail {
 			let a = book.asserted(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
@@ -353,6 +370,10 @@ impl SvTh for SvTheory {
 	/// `model()`: the values of the last consistent `check`, by name.
 	fn model(ref self) -> collections::BTreeMap[String, i64] {
 		return self.values.clone()
+	}
+
+	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] {
+		return sv_rat_values(self.values)
 	}
 
 	/// `shared()`: the equalities this theory shares with others (D13) -

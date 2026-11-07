@@ -101,13 +101,10 @@ fn sv_new_theory(engine: String) -> String {
 /// (why)` or `wrong (why)`, then the work.
 fn sv_line(source: String, engine: String) -> String {
 	let status = sv_status(source)
+	let mut reals: collections::BTreeSet[String] = collections::BTreeSet()
 	let script = match sv_smtlib_script(source) {
 		SvSmtRead::Script(s, sorts) => {
-			// No engine honours the Real sort yet (ADR-270 D27, #1299 item 4):
-			// a real script read as an integer one could be answered wrong.
-			if sorts.reals.len() > 0 {
-				return "unknown (theory) 0"
-			}
+			reals = sorts.reals.clone()
 			s.clone()
 		},
 		SvSmtRead::Failed(SvReadWhy::Overflow(_)) => {
@@ -121,7 +118,20 @@ fn sv_line(source: String, engine: String) -> String {
 	let goal = arena.boolean(false)
 	let budget = lg_budget()
 	if engine == "new" || engine == "new-fm" || engine == "new-simplex" {
-		return sv_new_line(arena, script.assertions, goal, budget, status, sv_new_theory(engine))
+		return sv_new_line(
+			arena,
+			script.assertions,
+			goal,
+			budget,
+			status,
+			sv_new_theory(engine),
+			reals,
+		)
+	}
+	// `lg_check` reads every variable as an integer (ADR-270 D27): a real
+	// script read so could be answered wrong.
+	if reals.len() > 0 {
+		return "unknown (theory) 0"
 	}
 	let run = sv_fm_check(arena, script.assertions, goal, budget)
 	let answer = match run.answer {
@@ -149,7 +159,8 @@ fn sv_line(source: String, engine: String) -> String {
 }
 
 /// The new engine's line (#1282, #1283): a *proved* is its proof log replayed by
-/// `sv_check`, a model evaluated as Fourier-Motzkin's is.
+/// `sv_check`, a model evaluated as Fourier-Motzkin's is, a rational one
+/// (a query with a real column, ADR-270 D27) by `sv_real_model_holds`.
 fn sv_new_line(
 	arena: ref TermArena,
 	facts: ref Vec[i64],
@@ -157,8 +168,9 @@ fn sv_new_line(
 	budget: ref LgBudget,
 	status: String,
 	theory: String,
+	reals: ref collections::BTreeSet[String],
 ) -> String {
-	let run = sv_smt_engine(arena, facts, goal, budget, theory)
+	let run = sv_smt_engine_sorted(arena, facts, goal, budget, theory, reals)
 	let answer = match run.driven {
 		SvDriven::Proved(query, steps) => {
 			let verdict = sv_check(query, steps)
@@ -172,6 +184,15 @@ fn sv_new_line(
 		},
 		SvDriven::Answer(LgAnswer::Refuted { model }) => {
 			if !lg_verify_model(arena, facts, goal, model) {
+				"wrong (model rejected)"
+			} else if status == "unsat" {
+				"wrong (refuted, status unsat)"
+			} else {
+				"refuted"
+			}
+		},
+		SvDriven::RealModel(values) => {
+			if !sv_real_model_holds(arena, facts, goal, values) {
 				"wrong (model rejected)"
 			} else if status == "unsat" {
 				"wrong (refuted, status unsat)"

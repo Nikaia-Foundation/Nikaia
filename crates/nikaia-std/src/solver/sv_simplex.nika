@@ -31,6 +31,11 @@
 // the two refutations by unit propagation; without it, `check` hands the
 // split to the engine as a lemma. Backtracking keeps the basis and restores
 // the bounds.
+//
+// Real columns (ADR-270 D27): a variable whose form holds a real column,
+// and a tableau row holding such a variable, gets no GCD test, no cut and no
+// branch, and a strict bound on it stays `F <= c - δ`. A final check's model
+// replaces `δ` by a positive rational small enough for every bound.
 
 /// One side of a variable's bounds: the variable lies at most (upper) or at
 /// least (lower) at `value`, from `src`, whose row is `scale·(F - value)`
@@ -154,6 +159,13 @@ pub struct SvSimplex {
 	pub marks: Vec[i64],
 	pub implied: Vec[SvImplied],
 	pub found: collections::BTreeMap[String, i64],
+	/// The values of the last consistent final check as rationals, a real
+	/// column's with `δ` replaced (ADR-270 D27); empty where a step left
+	/// `i64`.
+	pub found_real: collections::BTreeMap[String, SvRat],
+	/// The query's real columns, ascending: a variable whose form holds one
+	/// gets no GCD test, cut or branch (ADR-270 D27).
+	pub reals: Vec[u32],
 	/// Whether `check` searches a split itself (branch-and-bound) or hands
 	/// it to the engine as a lemma.
 	pub branching: bool,
@@ -197,6 +209,8 @@ fn sv_simplex(names: Vec[String]) -> SvSimplex {
 		marks: [],
 		implied: [],
 		found: collections::BTreeMap(),
+		found_real: collections::BTreeMap(),
+		reals: [],
 		branching: true,
 		bland_after: 64,
 		pivot_limit: 100000,
@@ -702,12 +716,76 @@ impl SvSimplex {
 		let mut v = 0
 		while v < self.var_col.len() {
 			let value = self.values[v].clone()
-			if self.var_col[v] >= 0 && (value.c.den != 1 || value.k.num != 0) {
+			if self.var_col[v] >= 0 && !self.is_real(v) && (value.c.den != 1 || value.k.num != 0) {
 				return v
 			}
 			v += 1
 		}
 		return -1
+	}
+
+	/// Whether variable `v`'s form holds a real column (ADR-270 D27).
+	fn is_real(ref self, v: i64) -> bool {
+		return sv_row_real(self.var_form[v], self.reals)
+	}
+
+	/// Whether tableau row `r` holds a real variable.
+	fn row_real(ref self, r: i64) -> bool {
+		for c in self.rows[r].cols {
+			if self.is_real(c as i64) {
+				return true
+			}
+		}
+		return false
+	}
+
+	/// The query columns' values as rationals, by name, `δ` replaced by a
+	/// positive rational small enough that every variable keeps its sides:
+	/// at most 1, and for a side `lc + lk·δ` below a value `c + k·δ` with
+	/// `c > lc`, `k < lk`, at most `(c - lc) / (lk - k)` (above, mirrored).
+	/// `null` where a step leaves `i64`.
+	fn rational_values(ref self) -> collections::BTreeMap[String, SvRat]? {
+		let mut delta = sv_int(1)
+		let mut v = 0
+		while v < self.var_col.len() {
+			let value = self.values[v].clone()
+			let lo = self.lower[v].clone()
+			let hi = self.upper[v].clone()
+			if lo.set
+				&& sv_rat_cmp(value.c, lo.value.c) > 0
+				&& sv_rat_cmp(value.k, lo.value.k) < 0 {
+					let gap = sv_rat_sub(value.c, lo.value.c) ?? return null
+					let slope = sv_rat_sub(lo.value.k, value.k) ?? return null
+					let most = sv_rat_div(gap, slope) ?? return null
+					if sv_rat_cmp(most, delta) < 0 {
+						delta = most
+					}
+				}
+			if hi.set
+				&& sv_rat_cmp(hi.value.c, value.c) > 0
+				&& sv_rat_cmp(hi.value.k, value.k) < 0 {
+					let gap = sv_rat_sub(hi.value.c, value.c) ?? return null
+					let slope = sv_rat_sub(value.k, hi.value.k) ?? return null
+					let most = sv_rat_div(gap, slope) ?? return null
+					if sv_rat_cmp(most, delta) < 0 {
+						delta = most
+					}
+				}
+			v += 1
+		}
+		let mut out: collections::BTreeMap[String, SvRat] = collections::BTreeMap()
+		v = 0
+		while v < self.var_col.len() {
+			let col = self.var_col[v]
+			if col >= 0 {
+				let value = self.values[v].clone()
+				let shift = sv_rat_mul(value.k, delta) ?? return null
+				let at = sv_rat_add(value.c, shift) ?? return null
+				out.insert(sv_column_name(col.checked_u32() ?? return null, self.names), at)
+			}
+			v += 1
+		}
+		return out
 	}
 
 	/// The query columns' values, by name, where every one is an integer.
@@ -784,6 +862,7 @@ impl SvTh for SvSimplex {
 		let v = self.fractional()
 		if v < 0 {
 			self.found = self.integer_values()
+			self.found_real = self.rational_values() ?? collections::BTreeMap()
 			return SvChecked::Consistent
 		}
 		if self.cut_kind != "none" && self.cut_depth < self.cut_rounds {
@@ -976,6 +1055,11 @@ impl SvTh for SvSimplex {
 		return self.found.clone()
 	}
 
+	/// `real_values()`: the rational values of the last final `check`.
+	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] {
+		return self.found_real.clone()
+	}
+
 	/// `shared()`: none while the simplex is the only theory (D13).
 	fn shared(ref self) -> Vec[u32] {
 		return []
@@ -1111,6 +1195,10 @@ impl SvSimplex {
 
 	/// The GCD test on row `r` (see above).
 	fn row_gcd(ref mut self, r: i64, mut book: SvBook) -> SvClause? {
+		// A real variable may take any rational: no GCD test (ADR-270 D27).
+		if self.row_real(r) {
+			return null
+		}
 		let row = self.rows[r].clone()
 		let mut g: i64 = 0
 		let mut constant = sv_int(0)
@@ -1159,12 +1247,13 @@ impl SvSimplex {
 	}
 
 	/// The lowest basic query column whose value is no integer and holds no
-	/// `δ`; `-1` where there is none.
+	/// `δ`, on a row without a real variable; `-1` where there is none.
 	fn fractional_basic(ref self) -> i64 {
 		let mut v = 0
 		while v < self.var_col.len() {
 			let value = self.values[v].clone()
-			if self.var_col[v] >= 0 && self.row_of[v] >= 0 && value.c.den != 1 && value.k.num == 0 {
+			let basic = self.var_col[v] >= 0 && self.row_of[v] >= 0
+			if basic && value.c.den != 1 && value.k.num == 0 && !self.row_real(self.row_of[v]) {
 				return v
 			}
 			v += 1
@@ -1176,7 +1265,8 @@ impl SvSimplex {
 	/// sits on no side free of `δ`.
 	fn gomory_row(ref self, b: i64) -> Vec[SvGomory]? {
 		let r = self.row_of[b]
-		let d = sv_row_coef(self.rows[r], b.checked_u32() ?? return null).checked_neg() ?? return null
+		let d = sv_row_coef(self.rows[r], b.checked_u32() ?? return null).checked_neg()
+			?? return null
 		let mut out: Vec[SvGomory] = []
 		let mut i = 0
 		while i < self.rows[r].cols.len() {
@@ -1305,7 +1395,10 @@ impl SvSimplex {
 		let mut n = 0
 		while n < cut_cols.len() {
 			let r = cut_ks[n].clone()
-			c_terms.push(SvTerm { col: cut_cols[n], k: r.num.checked_mul(den / r.den) ?? return null })
+			c_terms.push(SvTerm {
+				col: cut_cols[n],
+				k: r.num.checked_mul(den / r.den) ?? return null,
+			})
 			n += 1
 		}
 		let hold = sv_row_of(c_terms, cut_c.num.checked_mul(den / cut_c.den) ?? return null)
@@ -1313,7 +1406,8 @@ impl SvSimplex {
 		if hold.cols.len() == 0 {
 			return null
 		}
-		let le = sv_row_sum(1, l_form, 1, sv_row_constant(fl.checked_neg() ?? return null)) ?? return null
+		let le = sv_row_sum(1, l_form, 1, sv_row_constant(fl.checked_neg() ?? return null))
+			?? return null
 		let ge = sv_row_sum(-1, l_form, 1, sv_row_constant(fl.checked_add(1) ?? return null))
 			?? return null
 		let fail = sv_row_sum(-1, hold, 1, sv_row_constant(1)) ?? return null
@@ -1337,7 +1431,11 @@ impl SvSimplex {
 			let mut n = 0
 			while n < terms.len() {
 				if weights[n].num != 0 {
-					parts.push(sv_sx_weighted(terms[n].side, terms[n].upper, weights[n]) ?? return null)
+					parts.push(sv_sx_weighted(
+						terms[n].side,
+						terms[n].upper,
+						weights[n],
+					) ?? return null)
 				}
 				n += 1
 			}

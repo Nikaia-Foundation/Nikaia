@@ -54,6 +54,7 @@ fn engine(arena: ref TermArena, facts: ref Vec[i64], goal: i64, theory: String) 
 			if v.ok { f\"proved, log of {steps.len()} steps checked\" } else { f\"log rejected: {v.reason}\" }
 		},
 		SvDriven::Answer(answer) => answer_kind(answer),
+		SvDriven::RealModel(_) => \"refuted\",
 	}
 }
 

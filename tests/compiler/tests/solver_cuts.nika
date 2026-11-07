@@ -118,7 +118,7 @@ fn run(title: String, names: Vec[String], atoms: Vec[SvAtom], kind: String, how:
 		clauses.push([sv_lit(a, false)])
 		a += 1
 	}
-	let query = SvQuery { atoms: atoms, clauses: clauses, columns: names.len().checked_u32() ?? 0 }
+	let query = SvQuery { atoms: atoms, clauses: clauses, columns: names.len().checked_u32() ?? 0, reals: [] }
 	let mut book = sv_book(query) ?? return
 	let mut inputs: Vec[u32] = []
 	let mut i: u32 = 0

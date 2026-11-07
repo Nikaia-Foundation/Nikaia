@@ -39,6 +39,9 @@ struct SvReplay {
 	atoms: Vec[SvAtom],
 	entries: Vec[SvEntry],
 	columns: u32,
+	/// The query's real columns: a step over the integers may not touch
+	/// them (ADR-270 D27).
+	reals: Vec[u32],
 	refuted: bool,
 }
 
@@ -54,6 +57,7 @@ fn sv_check(query: ref SvQuery, log: ref Vec[SvStep]) -> SvVerdict {
 		atoms: query.atoms.clone(),
 		entries: [],
 		columns: query.columns,
+		reals: query.reals.clone(),
 		refuted: false,
 	}
 	for atom in query.atoms {
@@ -106,6 +110,17 @@ impl SvReplay {
 		for c in row.cols {
 			if c >= self.columns {
 				return f"x{c} is no column"
+			}
+		}
+		return ""
+	}
+
+	/// `""` where `row` has no real column, else which it has: a rounding, a
+	/// split and an extension hold over the integers only (ADR-270 D27).
+	fn real_in(ref self, row: ref SvRow) -> String {
+		for c in row.cols {
+			if self.reals.contains(c) {
+				return f"x{c} is real, and an integer step may not touch it"
 			}
 		}
 		return ""
@@ -213,25 +228,22 @@ impl SvReplay {
 					return SvSum { bound: null, why: f"literal {l} names no atom" }
 				}
 				let atom = self.atoms[at].clone()
-				if l % 2 == 0 {
-					return SvSum {
-						bound: SvBound { row: atom.row, rel: atom.rel, assumed: [l] },
-						why: "",
-					}
-				}
 				// Over the integers: not `row <= 0` is `-row + 1 <= 0`, not
-				// `row < 0` is `-row <= 0`.
-				let shift: i64 = match atom.rel {
-					SvRel::Le => 1,
-					SvRel::Lt => 0,
-					SvRel::Eq => return SvSum {
+				// `row < 0` is `-row <= 0`; over a real row not `row <= 0`
+				// is `-row < 0` (ADR-270 D27).
+				let negated = match atom.rel {
+					SvRel::Eq => l % 2 == 1,
+					else => false,
+				}
+				if negated {
+					return SvSum {
 						bound: null,
 						why: f"literal {l} negates an equality, which is no bound",
-					},
+					}
 				}
-				let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1))
-					?? return SvSum { bound: null, why: "overflow" }
-				SvSum { bound: SvBound { row: negated, rel: SvRel::Le, assumed: [l] }, why: "" }
+				let real = sv_row_real(atom.row, self.reals)
+				let b = sv_lit_bound(atom, l, real) ?? return SvSum { bound: null, why: "overflow" }
+				SvSum { bound: b, why: "" }
 			},
 			SvSrc::Fact(id) => {
 				let at = id as i64
@@ -350,6 +362,10 @@ impl SvReplay {
 		}
 		let got = self.source(SvSrc::Fact(id))
 		let b = got.bound ?? return got.why
+		let real = self.real_in(b.row)
+		if real != "" {
+			return real
+		}
 		let mut ks: Vec[i64] = []
 		let mut i = 0
 		while i < b.row.ks.len() {
@@ -397,6 +413,10 @@ impl SvReplay {
 		if why != "" {
 			return why
 		}
+		let real = self.real_in(le)
+		if real != "" {
+			return real
+		}
 		let both = sv_row_sum(1, le, 1, ge) ?? return "overflow"
 		if both.cols.len() > 0 {
 			return f"the two sides are not one form: x{both.cols[0]} is left"
@@ -421,6 +441,10 @@ impl SvReplay {
 		let why = self.row_known(l)
 		if why != "" {
 			return why
+		}
+		let real = self.real_in(l)
+		if real != "" {
+			return real
 		}
 		if q != self.columns {
 			return f"x{q} is not the next fresh column x{self.columns}"

@@ -140,6 +140,7 @@ fn sv_sat(vars: u32, log: SvLog) -> SvSat {
 			atoms: [],
 			bounds: collections::BTreeMap(),
 			pre: collections::BTreeMap(),
+			reals: [],
 		},
 	)
 }

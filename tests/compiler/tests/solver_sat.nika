@@ -102,7 +102,7 @@ fn main() throws {
 // 		atoms.push(SvAtom { row: sv_row_constant(0), rel: SvRel::Le })
 // 		v += 1
 // 	}
-// 	return SvQuery { atoms: atoms, clauses: clauses, columns: 0 }
+// 	return SvQuery { atoms: atoms, clauses: clauses, columns: 0, reals: [] }
 // }
 //
 // fn pos(v: u32) -> u32 {
