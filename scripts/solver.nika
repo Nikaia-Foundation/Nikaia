@@ -32,7 +32,7 @@ fn solver_logic_files() -> Vec[String] {
 // The new engine's files of `crates/nikaia-std/src/solver/` (#1282, #1283), in the
 // order the program takes them, before the driver.
 fn solver_engine_files() -> Vec[String] {
-	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_smt"]
+	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_smt"]
 }
 
 // The work budget PAR-2 doubles: `lg_budget().cases`, the branches
@@ -118,6 +118,9 @@ struct SolverRow {
 	name: String,
 	answer: String,
 	work: i64,
+	// The work as the engine wrote it, with the fast path that answered
+	// (`3/difference`).
+	shown: String,
 }
 
 // The `.smt2` files of an argument, each with the directory it is counted
@@ -150,14 +153,23 @@ fn solver_files(arg: String) -> Vec[(String, String)] throws {
 }
 
 // The engine's answer to one file: `answer work`, from the built binary.
-fn solver_answer(bin: String, engine: String, path: String, timeout: i64) -> (String, i64) throws {
+// The work is a count, after a fast path's answer followed by `/` and the
+// path's name; the third part is the work as written.
+fn solver_answer(
+	bin: String,
+	engine: String,
+	path: String,
+	timeout: i64,
+) -> (String, i64, String) throws {
 	let out = process::run(bin, [engine, path]; within: timeout.seconds())
-	if out.timed_out { return ("unknown (timeout)", -1) }
-	if !out.ok { return ("unknown (crashed)", -1) }
+	if out.timed_out { return ("unknown (timeout)", -1, "-1") }
+	if !out.ok { return ("unknown (crashed)", -1, "-1") }
 	let line = out.stdout.trim().to_string()
-	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1)
-	let work = text::parse_i64(line[at + 1..].to_string()) ?? -1
-	return (line[0..<at].to_string(), work)
+	let at = line.rfind(" ") ?? return ("unknown (no answer)", -1, "-1")
+	let shown = line[at + 1..].to_string()
+	let slash = shown.find("/") ?? shown.len()
+	let work = text::parse_i64(shown[0..<slash].to_string()) ?? -1
+	return (line[0..<at].to_string(), work, shown)
 }
 
 fn solver_solved(answer: String) -> bool {
@@ -245,15 +257,21 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 	if bin == "" { process::exit(1) }
 	let mut rows: Vec[SolverRow] = []
 	for (group, path) in files {
-		let (answer, work) = solver_answer(bin.clone(), engine.clone(), path.clone(), timeout)
+		let (answer, work, shown) = solver_answer(
+			bin.clone(),
+			engine.clone(),
+			path.clone(),
+			timeout,
+		)
 		let file = path.split("/").last() ?? path
 		let row = SolverRow {
 			group: group.clone(),
 			name: f"{group}/{file}",
 			answer: answer,
 			work: work,
+			shown: shown,
 		}
-		if !summary_only { println(f"{row.name} {row.answer} {row.work}") }
+		if !summary_only { println(f"{row.name} {row.answer} {row.shown}") }
 		rows.push(row)
 	}
 	let mut groups: Vec[String] = []
@@ -573,7 +591,7 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 		let path = f"{work}/{name}"
 		fs::write(path.clone(), fs::Root::Anywhere, source.clone())
 		let z3 = solver_fuzz_oracle(self_test, i, path.clone())
-		let (answer, _) = solver_answer(bin.clone(), "fm", path.clone(), 60)
+		let (answer, _, _) = solver_answer(bin.clone(), "fm", path.clone(), 60)
 		if answer == "proved" { proved += 1 }
 		if answer == "refuted" { refuted += 1 }
 		if answer.starts_with("unknown") { unknown += 1 }

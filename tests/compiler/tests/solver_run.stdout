@@ -10,5 +10,5 @@ stress/steps: 12 files, solved 12 (proved 6, refuted 6), unknown 0 (overflow 0, 
 all: 59 files, solved 35 (proved 18, refuted 17), unknown 24 (overflow 0, unreadable 0), wrong 0, PAR-2 835.5, certificates checked 18, models evaluated 17
 smoke/refused-function.smt2 unknown (unreadable) 0
 smoke/sat-interval.smt2 refuted 3
-smoke/unsat-bounds.smt2 proved 0
-smoke: 3 files, solved 2 (proved 1, refuted 1), unknown 1 (overflow 0, unreadable 1), wrong 0, PAR-2 683.6, certificates checked 1, models evaluated 1
+smoke/unsat-bounds.smt2 proved 3/difference
+smoke: 3 files, solved 2 (proved 1, refuted 1), unknown 1 (overflow 0, unreadable 1), wrong 0, PAR-2 684.6, certificates checked 1, models evaluated 1

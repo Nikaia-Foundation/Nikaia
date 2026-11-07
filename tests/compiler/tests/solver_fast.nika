@@ -1,0 +1,152 @@
+// The fast paths (ADR-270 D12, #1283 item 4): a query with no Boolean
+// choice whose atoms each bound one column is decided by the tightest bounds
+// per column (`interval`), one whose atoms are differences `x - y <= c` by
+// Bellman-Ford (`difference`), the negative cycle summed with every
+// multiplier one. Each line is the runner's: a *proved* is a log `sv_check`
+// replayed, a *refuted* a model evaluated against the query, then the work
+// and, after `/`, the path that answered. `interval-round` holds only where
+// each atom is rounded first (`2x >= 3`, `2x <= 3`: no integer between);
+// `difference-wide` has eleven columns, past the dense width (its distances
+// in a `Vec`); `choice` has a disjunction and takes the loop. The logic
+// layer's files, `solver/sv_*.nika` and the driver below make one program, as
+// `scripts/solver.nika` makes it.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The driver, run after the solver's files.
+fn driver() -> String {
+	return "// Each file answered by the new engine, as `scripts/solver.nika` answers it.
+fn each(path: String) throws {
+	let name = path.split(\"/\").last() ?? path
+	let source = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+	println(f\"{name}: {sv_line(source, \"new\")}\")
+}
+
+fn main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() {
+		args.push(a)
+	}
+	for i in 1..<args.len() {
+		each(args[i].clone())
+	}
+}
+"
+}
+
+// A file of status `status` over the integer constants `names` asserting
+// `body`.
+fn smt(status: String, names: Vec[String], body: String) -> String {
+	let mut text = f"(set-logic QF_LIA)\n(set-info :status {status})\n"
+	for n in names {
+		text = text + f"(declare-const {n} Int)\n"
+	}
+	return text + body + "(check-sat)\n"
+}
+
+// `x1 < x2 < ... < x11` and `x11 < x1 + 10`.
+fn wide() -> String {
+	let mut names: Vec[String] = []
+	let mut body = ""
+	for i in 1..11 {
+		names.push(f"x{i}")
+	}
+	for i in 1..10 {
+		body = body + f"(assert (< x{i} x{i + 1}))\n"
+	}
+	return smt("unsat", names, body + "(assert (< x11 (+ x1 10)))\n")
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let mut paths: Vec[String] = []
+	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
+		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+	}
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_smt", "sv_rod"] {
+		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+	}
+	let mut uses: Vec[String] = []
+	let mut body = ""
+	for p in paths {
+		// The text bound first: #1287.
+		let text = fs::read_to_string(p.clone(), fs::Root::Anywhere)
+		for line in text.lines() {
+			if line.starts_with("use std::") {
+				if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
+			} else {
+				body = body + line + "\n"
+			}
+		}
+	}
+	fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, uses.join("\n") + "\n" + body + driver())
+	let files = [
+		(
+			"interval-unsat",
+			smt(
+				"unsat",
+				["x", "y"],
+				"(assert (>= (* 2 x) 5))\n(assert (<= x 2))\n(assert (<= 0 y))\n",
+			),
+		),
+		("interval-sat", smt("sat", ["x", "y"], "(assert (<= 1 x 3))\n(assert (= y 4))\n")),
+		(
+			"interval-round",
+			smt("unsat", ["x"], "(assert (>= (* 2 x) 3))\n(assert (<= (* 2 x) 3))\n"),
+		),
+		(
+			"difference-unsat",
+			smt(
+				"unsat",
+				["x", "y", "z"],
+				"(assert (< x y))\n(assert (< y z))\n(assert (<= z (+ x 1)))\n(assert (<= x 5))\n",
+			),
+		),
+		(
+			"difference-sat",
+			smt(
+				"sat",
+				["x", "y", "z"],
+				"(assert (< x y))\n(assert (< y z))\n(assert (<= 0 x))\n(assert (<= z 10))\n",
+			),
+		),
+		("difference-wide", wide()),
+		("choice", smt("sat", ["x"], "(assert (or (< x 0) (> x 10)))\n")),
+	]
+	let mut args: Vec[String] = ["run", "main.nika", "--"]
+	for (name, text) in files {
+		fs::write(f"{tmp}/{name}.smt2", fs::Root::Anywhere, text)
+		args.push(f"{tmp}/{name}.smt2")
+	}
+	let out = process::run(nikaia, args; dir: tmp.clone())
+	println(out.stdout.trim())
+	if out.stdout.trim().len() == 0 {
+		println(out.stderr.trim())
+	}
+	process::run("rm", ["-rf", tmp])
+}

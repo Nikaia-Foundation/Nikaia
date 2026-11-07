@@ -32,14 +32,20 @@ pub enum SvDriven {
 	Answer(LgAnswer),
 }
 
-/// The new engine's answer and its work: the theory checks it ran.
+/// The new engine's answer, its work (the theory checks it ran, or a fast
+/// path's rounds) and the fast path that answered (`""`: the loop).
 pub struct SvEngineRun {
 	pub driven: SvDriven,
 	pub work: i64,
+	pub path: String,
 }
 
 fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
-	return SvEngineRun { driven: SvDriven::Answer(LgAnswer::Unknown { why: why }), work: work }
+	return SvEngineRun {
+		driven: SvDriven::Answer(LgAnswer::Unknown { why: why }),
+		work: work,
+		path: "",
+	}
 }
 
 /// `¬l`. Written as a branch: #1286.
@@ -520,6 +526,20 @@ fn sv_smt_engine(
 		ids.push(book.input(c))
 		c += 1
 	}
+	let fast = sv_fast(book, cnf, ids)
+	match fast.end {
+		SvFastEnd::Unsat => return SvEngineRun {
+			driven: SvDriven::Proved(cnf.query.clone(), book.log.steps.clone()),
+			work: fast.work,
+			path: fast.path.clone(),
+		},
+		SvFastEnd::Sat(values) => return SvEngineRun {
+			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, values)),
+			work: fast.work,
+			path: fast.path.clone(),
+		},
+		SvFastEnd::Skip => {},
+	}
 	let mut units: Vec[u32] = []
 	let mut unit_ids: Vec[u32] = []
 	let mut known: Vec[u32] = []
@@ -620,10 +640,12 @@ fn sv_smt_run[T: SvTh](
 		SvSmtEnd::Unsat => SvEngineRun {
 			driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.clone()),
 			work: s.checks,
+			path: "",
 		},
 		SvSmtEnd::Sat => SvEngineRun {
 			driven: SvDriven::Answer(lg_consistent_answer(arena, facts, goal, true, s.th.model())),
 			work: s.checks,
+			path: "",
 		},
 		SvSmtEnd::Unknown(why) => sv_engine_unknown(why.clone(), s.checks),
 	}

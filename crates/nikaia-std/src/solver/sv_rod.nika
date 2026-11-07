@@ -172,7 +172,9 @@ fn sv_new_line(
 		SvDriven::Answer(LgAnswer::Unknown { why }) => sv_unknown(why),
 		SvDriven::Answer(_) => "unknown",
 	}
-	return f"{answer} {run.work}"
+	// The work of a fast path carries its name (#1283 item 4).
+	let path = if run.path == "" { "" } else { f"/{run.path}" }
+	return f"{answer} {run.work}{path}"
 }
 
 /// The program's entry: `ENGINE FILE...`, one line per file. The engine is

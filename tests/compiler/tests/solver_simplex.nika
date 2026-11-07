@@ -226,7 +226,7 @@ fn main() throws {
 	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
-	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_smt", "sv_rod"] {
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_smt", "sv_rod"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
 	}
 	let mut uses: Vec[String] = []
