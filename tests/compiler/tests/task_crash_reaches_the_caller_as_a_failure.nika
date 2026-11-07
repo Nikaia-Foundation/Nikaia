@@ -1,0 +1,22 @@
+// A task that can panic fails with `task::Crashed` where it is waited for
+// (ADR-async-5 D35, #1355): `total` says `throws`, and its caller's `catch`
+// takes the crash; the program goes on.
+
+fn boom(n: int) -> int {
+    if n > 0 { panic("boom") }
+    return 1
+}
+
+fn total() -> int throws {
+    let a = async boom(1)
+    let b = async boom(0)
+    return a + b
+}
+
+fn main() throws {
+    let n = total() catch {
+        println("caught: a task crashed")
+        0
+    }
+    println(f"after: {n}")
+}

@@ -63,7 +63,7 @@ pub fn unit_panics(program: ref Program, names: ref winnow_grammar::InternerCont
         match item.node {
             Item::Fn { name, body, .. } => {
                 let key = key_of_function(name, "", names)
-                panics_function(key, body, program, names, holes_of, facts, own, library, graph)
+                panics_function(key, body, program.items, names, holes_of, facts, own, library, graph)
                 walked.push(key)
             }
             Item::Impl { target, methods, .. } => {
@@ -72,7 +72,7 @@ pub fn unit_panics(program: ref Program, names: ref winnow_grammar::InternerCont
                     match method.node {
                         Item::Fn { name, body, .. } => {
                             let key = key_of_function(name, owner, names)
-                            panics_function(key, body, program, names, holes_of, facts, own, library, graph)
+                            panics_function(key, body, program.items, names, holes_of, facts, own, library, graph)
                             walked.push(key)
                         }
                         else => {}
@@ -128,6 +128,30 @@ pub fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BT
     return false
 }
 
+/// **Whether a task can panic** (D35): what the expression of `async e`
+/// reaches, run as the task, joined with the answers its callees of this
+/// package have in `own`. The checker and the throw set ask it with every
+/// check left in (`facts.checked`, nothing proved): the task's own sites are
+/// counted where the build could keep them, its callees as the ledger says.
+pub fn panics_of_task(task: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger) -> bool {
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet() }
+    match task {
+        // A lambda written as the task is run, not stored: its body is it.
+        Expr::Closure { body, .. } => panics_block(body, items, names, holes_of, facts, own, library, reach),
+        else => panics_expr(task, items, names, holes_of, facts, own, library, reach),
+    }
+    if reach.sure || reach.unknown || reach.checks {
+        return true
+    }
+    for callee in reach.calls {
+        let theirs: Panics = own.functions[callee]?.panics?.clone() ?? Panics::Unknown
+        if theirs != Panics::No {
+            return true
+        }
+    }
+    return false
+}
+
 fn panics_own(reach: ref PanicReach) -> Panics {
     if reach.sure {
         return Panics::Yes
@@ -138,9 +162,9 @@ fn panics_own(reach: ref PanicReach) -> Panics {
     return Panics::No
 }
 
-fn panics_function(key: ref String, body: ref Block, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut graph: PanicsGraph) {
+fn panics_function(key: ref String, body: ref Block, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut graph: PanicsGraph) {
     let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet() }
-    panics_block(body, program, names, holes_of, facts, own, library, reach)
+    panics_block(body, items, names, holes_of, facts, own, library, reach)
     panics_methods(graph.methods[key], own, library, reach)
     graph.reaches.insert(key.clone(), reach)
 }
@@ -186,15 +210,15 @@ fn panics_check(proved: bool, facts: ref PanicFacts, mut reach: PanicReach) {
     }
 }
 
-fn panics_block(block: ref Block, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+fn panics_block(block: ref Block, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
     for stmt in block.stmts {
-        panics_stmt(stmt.node, stmt.span, program, names, holes_of, facts, own, library, reach)
+        panics_stmt(stmt.node, stmt.span, items, names, holes_of, facts, own, library, reach)
     }
 }
 
-fn panics_stmt(stmt: ref Stmt, span: ref Span, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+fn panics_stmt(stmt: ref Stmt, span: ref Span, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
     match stmt {
-        Stmt::Let { value, .. } => panics_expr(value, program, names, holes_of, facts, own, library, reach),
+        Stmt::Let { value, .. } => panics_expr(value, items, names, holes_of, facts, own, library, reach),
         Stmt::Comptime { .. } => {}
         Stmt::Assign { target, op, value } => {
             // **A compound assignment is its operation** (ADR-306 D5a), keyed
@@ -210,26 +234,26 @@ fn panics_stmt(stmt: ref Stmt, span: ref Span, program: ref Program, names: ref 
                     }
                 }
             }
-            panics_expr(target, program, names, holes_of, facts, own, library, reach)
-            panics_expr(value, program, names, holes_of, facts, own, library, reach)
+            panics_expr(target, items, names, holes_of, facts, own, library, reach)
+            panics_expr(value, items, names, holes_of, facts, own, library, reach)
         }
         Stmt::For { iter, body, .. } => {
-            panics_expr(iter, program, names, holes_of, facts, own, library, reach)
-            panics_block(body, program, names, holes_of, facts, own, library, reach)
+            panics_expr(iter, items, names, holes_of, facts, own, library, reach)
+            panics_block(body, items, names, holes_of, facts, own, library, reach)
         }
         Stmt::While { cond, body, .. } => {
-            panics_expr(cond, program, names, holes_of, facts, own, library, reach)
-            panics_block(body, program, names, holes_of, facts, own, library, reach)
+            panics_expr(cond, items, names, holes_of, facts, own, library, reach)
+            panics_block(body, items, names, holes_of, facts, own, library, reach)
         }
         Stmt::Return(value) => {
             match value {
                 null => {}
-                inner => panics_expr(inner, program, names, holes_of, facts, own, library, reach),
+                inner => panics_expr(inner, items, names, holes_of, facts, own, library, reach),
             }
         }
         Stmt::Break => {}
         Stmt::Continue => {}
-        Stmt::Expr(inner) => panics_expr(inner, program, names, holes_of, facts, own, library, reach),
+        Stmt::Expr(inner) => panics_expr(inner, items, names, holes_of, facts, own, library, reach),
     }
 }
 
@@ -251,19 +275,19 @@ fn panics_division(divisor: ref Expr, mut reach: PanicReach) {
     }
 }
 
-fn panics_expr(expr: ref Expr, program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+fn panics_expr(expr: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
     match expr {
         // **A task runs elsewhere** (D35): its panic reaches this function as
         // `task::Crashed`, a failure; only a deadline is read here.
         Expr::Async(_, _, within) => {
             match within {
                 null => {}
-                deadline => panics_expr(deadline, program, names, holes_of, facts, own, library, reach),
+                deadline => panics_expr(deadline, items, names, holes_of, facts, own, library, reach),
             }
             return
         }
         Expr::Spawn { .. } => return,
-        Expr::Call { func, .. } => panics_call(expr, func, program, names, own, library, reach),
+        Expr::Call { func, .. } => panics_call(expr, func, items, names, own, library, reach),
         Expr::Dsl { .. } => {
             reach.unknown = true
         }
@@ -298,14 +322,14 @@ fn panics_expr(expr: ref Expr, program: ref Program, names: ref winnow_grammar::
     }
     if check_visit_has_holes(expr) {
         for hole in holes_of(expr) {
-            panics_expr(hole, program, names, holes_of, facts, own, library, reach)
+            panics_expr(hole, items, names, holes_of, facts, own, library, reach)
         }
     }
     for child in check_visit_children(expr) {
-        panics_expr(child, program, names, holes_of, facts, own, library, reach)
+        panics_expr(child, items, names, holes_of, facts, own, library, reach)
     }
     for block in panics_blocks(expr) {
-        panics_block(block, program, names, holes_of, facts, own, library, reach)
+        panics_block(block, items, names, holes_of, facts, own, library, reach)
     }
 }
 
@@ -342,7 +366,7 @@ fn panics_blocks(expr: ref Expr) -> Vec[ref Block] {
 // `assert` the program was accepted with is proved, or its caller's
 // precondition (ADR-269 D4); an `assume` is checked where the build keeps
 // its checks.
-fn panics_call(expr: ref Expr, func: ref Expr, program: ref Program, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+fn panics_call(expr: ref Expr, func: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
     match func {
         Expr::Variable(symbol, _) => {
             let written = names.resolve(symbol)
@@ -358,7 +382,7 @@ fn panics_call(expr: ref Expr, func: ref Expr, program: ref Program, names: ref 
         }
         else => {}
     }
-    let callee = callee_of(names, expr, own, library, program.items) ?? return
+    let callee = callee_of(names, expr, own, library, items) ?? return
     match callee {
         Callee::Own(name) => {
             reach.calls.insert(name.clone())

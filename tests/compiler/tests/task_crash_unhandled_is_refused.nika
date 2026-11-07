@@ -1,0 +1,18 @@
+// A task that can panic makes its start a failure (ADR-async-5 D35, #1355):
+// a function that neither says `throws` nor catches it is refused with
+// `NK2605` at the `async` form.
+
+fn boom(n: int) -> int {
+    if n > 0 { panic("boom") }
+    return 1
+}
+
+fn total() -> int {
+    let a = async boom(1)
+    let b = async boom(0)
+    return a + b
+}
+
+fn main() throws {
+    println(f"after: {total()}")
+}

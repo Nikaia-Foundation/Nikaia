@@ -569,10 +569,11 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         Expr::Try(inner, _) => thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out),
         // **A task's crash is an error to whoever waits for it** (Part II
         // 12.7, ADR-328 D8): the function that starts it throws
-        // `task::Crashed`, as a `task::scope` in it does.
+        // `task::Crashed`, as a `task::scope` in it does, where the task can
+        // panic (ADR-async-5 D35); the host's answer for the form says so.
         Expr::Async(inner, _, within) => {
             if !caught {
-                out.direct.insert("task::Crashed")
+                out.direct.extend(contribution_of(expr).errors.clone())
             }
             thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out)
             thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out)

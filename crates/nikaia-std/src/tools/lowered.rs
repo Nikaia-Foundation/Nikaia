@@ -3122,7 +3122,7 @@ pub mod order {
 }
 pub mod panics {
     #[allow(unused_imports)]
-    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, panics_worth_proving};
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, panics_worth_proving, panics_of_task};
 }
 pub mod parse_errors {
     #[allow(unused_imports)]
