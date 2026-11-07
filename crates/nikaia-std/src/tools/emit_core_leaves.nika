@@ -221,7 +221,9 @@ impl EmitState {
         let parenthesise = match node {
             // **A sum that ends in a conversion** reads the same way at the left
             // of a comparison: `at + w.len() as i64 < n` is `i64<n>` to Rust.
-            Expr::Binary { op, .. } => precedence(op) < needs || (needs == precedence(BinaryOp::Lt) && self.ends_in_a_cast(world, node)),
+            // **A comparison left of a comparison** keeps its parentheses
+            // (#1293): Rust refuses any chain of comparison operators.
+            Expr::Binary { op, .. } => precedence(op) < needs || (needs == precedence(BinaryOp::Lt) && (precedence(op) == needs || self.ends_in_a_cast(world, node))),
             // **An operand that comes out as a conversion**, beside a unary
             // operator and at the left of a comparison, where Rust reads it
             // wrongly without parentheses.

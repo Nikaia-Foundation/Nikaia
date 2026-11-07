@@ -1,0 +1,14 @@
+// A comparison whose operands are parenthesised comparisons keeps its
+// parentheses in the Rust it is lowered to (#1293): Rust refuses any chain
+// of comparison operators, `a > 0 != b > 0` among them.
+fn main() {
+    let a = 1
+    let b = -2
+    println(f"{(a > 0) != (b > 0)}")
+    let same = (a > 0) == (b > 0)
+    println(same)
+    let ordered = (a < b) < (b < a)
+    println(ordered)
+    let negated = !((a > 0) != (b > 0))
+    println(negated)
+}

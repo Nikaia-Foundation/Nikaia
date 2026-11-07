@@ -145,7 +145,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_nested<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, needs: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let parenthesise = match node {
-            Expr::Binary { op, .. } => precedence(op) < needs || needs == precedence(&BinaryOp::Lt) && self.ends_in_a_cast(world, node),
+            Expr::Binary { op, .. } => precedence(op) < needs || needs == precedence(&BinaryOp::Lt) && (precedence(op) == needs || self.ends_in_a_cast(world, node)),
             _ => self.emits_as_cast(world, node) && (needs == 255 || needs == precedence(&BinaryOp::Lt)),
         };
         if parenthesise { out.push("("); }
