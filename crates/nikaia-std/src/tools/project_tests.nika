@@ -192,6 +192,40 @@ pub fn copy_into(from: ref fs::Path, to: ref fs::Path) throws {
     }
 }
 
+/// **Whether `file` is a test program of the project at `root`**
+/// ([ADR-269](../../../docs/specification/adr/adr-269.md) D22, #972): a
+/// `.nika` file straight in its `tests/`. Such a file is a program of its own
+/// that may `use` the package, not a file of a package `tests/`, so `check`
+/// and `lower` read it as `nikaia test` builds it
+/// (`project_tests_program_test`), and never with the other test programs.
+pub fn project_tests_is_program(file: ref fs::Path, root: ref fs::Path) -> bool {
+    if (file.extension()?.text_of() ?? "") != "nika" {
+        return false
+    }
+    let here: fs::Path = "."
+    let parent = match file.parent() {
+        null => here,
+        parent => if parent.text_of().is_empty() { here } else { parent },
+    }
+    return project_members_canonical(parent) == project_members_canonical(root.join("tests"))
+}
+
+/// **The manifest a test program is built under**: the one
+/// `project_tests_program_test` writes, a package of its own that depends on
+/// the project's package, by its name, where the project names one (#972).
+pub fn project_tests_program_manifest(root: ref fs::Path, package: String?) -> ProjectMembersManifest {
+    let mut keys: Vec[String] = []
+    let mut paths: Vec[(String, fs::Path)] = []
+    match package {
+        null => {},
+        name => {
+            keys.push(name.clone())
+            paths.push((name, project_members_canonical(root)))
+        },
+    }
+    return ProjectMembersManifest { name: "program_test", keys: keys, paths: paths, foreign: [], has_build: false }
+}
+
 /// The package's test programs, by name.
 pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
     let dir = root.join("tests")

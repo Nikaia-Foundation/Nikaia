@@ -138,6 +138,32 @@ pub async fn copy_into(from: &std::path::Path, to: &std::path::Path) -> Result<(
     Ok(())
 }
 
+pub fn project_tests_is_program(file: &std::path::Path, root: &std::path::Path) -> bool {
+    if nikaia_std::index::or(match nikaia_std::fs::path::extension(&(file)).as_ref() {
+        Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+        None => None,
+    }, || "".into()) != "nika" { return false; }
+    let here: fs::Path = std::path::PathBuf::from(".");
+    let parent = match nikaia_std::fs::path::parent(&(file)) {
+        None => here,
+        Some(parent) => if nikaia_std::fs::path::text_of(&(parent)).is_empty() { here } else { parent },
+    };
+    nikaia_std::fs::path::same(&(project_members_canonical(&parent)), &(project_members_canonical(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))))))
+}
+
+pub fn project_tests_program_manifest(root: &std::path::Path, package: Option<String>) -> ProjectMembersManifest {
+    let mut keys: Vec<String> = vec![];
+    let mut paths: Vec<(String, fs::Path)> = vec![];
+    match package {
+        None => { },
+        Some(name) => {
+            keys.push(name.to_string());
+            paths.push((name, project_members_canonical(root)));
+        },
+    }
+    ProjectMembersManifest { name: Some(String::from("program_test")), keys, paths, foreign: vec![], has_build: false }
+}
+
 pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let dir = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests")));
     let mut tests: Vec<ProgramTest> = vec![];

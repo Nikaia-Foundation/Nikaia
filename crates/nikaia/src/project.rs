@@ -371,8 +371,17 @@ pub fn packages_of(
     root: &Path,
     announce: bool,
 ) -> Result<Vec<modules::Dependency>> {
+    packages_of_view(&manifest_view(manifest), root, announce)
+}
+
+/// [`packages_of`] for a manifest already read as the walk reads one.
+fn packages_of_view(
+    view: &ProjectMembersManifest,
+    root: &Path,
+    announce: bool,
+) -> Result<Vec<modules::Dependency>> {
     let host = Manifests::default();
-    project_members::project_members_packages_of(&manifest_view(manifest), root, announce, &host)
+    project_members::project_members_packages_of(view, root, announce, &host)
         .map_err(|thrown| host.error(thrown))
 }
 
@@ -571,7 +580,12 @@ pub fn reads_for_file(input: &Path, allowlist: Option<&Path>) -> Result<assets::
 
 pub fn read_file(input: &Path) -> Result<(modules::Program, Vec<modules::Dependency>)> {
     let packages = packages_of_file(input)?;
-    match Layout::resolve(input).in_project {
+    let layout = Layout::resolve(input);
+    match layout.in_project {
+        _ if is_program_test(input, &layout) => Ok((
+            modules::Program::read_program_test(input, &packages)?,
+            packages,
+        )),
         false => Ok((modules::Program::read_one(input)?, packages)),
         true => Ok((modules::Program::read_with(input, &packages)?, packages)),
     }
@@ -588,7 +602,26 @@ pub fn packages_of_file(input: &Path) -> Result<Vec<modules::Dependency>> {
     let manifest = Manifest::read(&layout.root.join("nikaia.toml"))?;
     // Not announced: `Manifest::find` already read this manifest for the
     // settings, and a note said twice is noise.
-    packages_of(&manifest, &layout.root, false)
+    match is_program_test(input, &layout) {
+        // **A test program depends on the package** (ADR-269 D22, #972),
+        // under the manifest `nikaia test` builds it with.
+        true => packages_of_view(
+            &project_tests::project_tests_program_manifest(
+                &layout.root,
+                manifest.package_name().map(str::to_string),
+            ),
+            &layout.root,
+            false,
+        ),
+        false => packages_of(&manifest, &layout.root, false),
+    }
+}
+
+/// **Whether `input` is a test program** of the project `layout` found,
+/// `tests/NAME.nika` (ADR-269 D22, #972): a program of its own, not a file
+/// of a package `tests/` (`project_tests_is_program`).
+fn is_program_test(input: &Path, layout: &Layout) -> bool {
+    layout.in_project && project_tests::project_tests_is_program(input, &layout.root)
 }
 
 /// **The project `nikaia run <file>` builds** ([ADR-260](../../docs/specification/adr/adr-260.md) D4).
@@ -685,6 +718,13 @@ pub fn lower_reading(
     // It also names the unit relative to its root: an absolute path is D7's
     // first failure direction, a key that moves with the checkout.
     let layout = Layout::resolve(input);
+    // **A test program is read as `nikaia test` builds it** (ADR-269 D22,
+    // #972): alone, with the package as its dependency, in no project.
+    let program_test = is_program_test(input, &layout);
+    let layout = match program_test {
+        true => Layout::alone(input),
+        false => layout,
+    };
     let unit = layout.unit_name(input);
     // **What this build may read, resolved before anything is read**
     // ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D5).
@@ -721,6 +761,7 @@ pub fn lower_reading(
         packages,
         unit,
         layout: &layout,
+        program_test,
         reads: &reads,
         choices: RefCell::new(Some(choices)),
         program: RefCell::new(None),
@@ -798,6 +839,8 @@ struct LowerHost<'a> {
     packages: &'a [modules::Dependency],
     unit: String,
     layout: &'a Layout,
+    /// Whether the input is a test program (ADR-269 D22, #972).
+    program_test: bool,
     reads: &'a assets::Reads,
     /// The key's choices; named with the program's paths once it is read.
     choices: RefCell<Option<Choices>>,
@@ -858,6 +901,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         let program =
             crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
                 match (self.settings.words.tests, self.layout.in_project) {
+                    _ if self.program_test => modules::Program::read_program_test(input, packages),
                     (true, in_project) => {
                         modules::Program::read_for_tests(input, packages, in_project)
                     }

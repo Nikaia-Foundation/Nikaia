@@ -1042,7 +1042,25 @@ pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: r
     // image`), under the name a call writes it by (ADR-290 D1).
     names.extend(modules_foreign_beside(entry, host))
     let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), host)
+    units.extend(modules_dependency_units(dependencies, host))
+    return units
+}
 
+/// **A test program and the packages it depends on**
+/// ([ADR-269](../../../docs/specification/adr/adr-269.md) D22, #972): the
+/// entry alone, as `nikaia test` builds it, for it is a program of its own
+/// and the `.nika` files beside it in `tests/` are other programs. Its `use`
+/// lines are checked against its dependencies, as in a project.
+pub fn modules_collect_program_test[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+    let names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
+    let mut units: Vec[ModulesUnit] = [modules_read_unit(entry, null, names, collections::BTreeMap(), ModulesStanding::InProject, host)]
+    units.extend(modules_dependency_units(dependencies, host))
+    return units
+}
+
+/// The files of the packages a program depends on, in the order given.
+fn modules_dependency_units[H: ModulesHost](dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+    let mut units: Vec[ModulesUnit] = []
     // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)
     // D1). A dependency is its own crate now, so its files are Cargo's to
     // compile - but its *surface* is this program's to check against, and a
