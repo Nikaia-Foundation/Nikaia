@@ -6,9 +6,9 @@
 // The second piece of the compiler moved from Rust to Nikaia (0.0.248), by
 // ADR-290's route, the one `spelling.nika` took: written here, lowered ahead
 // of time by `nikaia lower-std` to `dsl.rs` beside it, `include!`d as
-// `nikaia_std::tools::dsl`, and called from the compiler's `dsl` module as an
-// ordinary Rust function. `tests/self_hosting.rs` holds it to the behaviour of
-// the Rust it replaced, and every deferred-parameter DSL in the tests goes
+// `nikaia_std::tools::dsl`, and called by the compiler directly as an
+// ordinary Rust function. `a_dsl_hole_is_a_colon_and_a_name.nika` holds the
+// scan to what a hole is, and every deferred-parameter DSL in the tests goes
 // through it.
 
 use std::collections

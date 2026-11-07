@@ -405,7 +405,10 @@ impl CheckHost for Host<'_> {
 /// holds.
 impl CheckWalkedPasses for Host<'_> {
     fn dsl_findings(&self) -> Vec<Finding> {
-        crate::dsl::check(self.parsed)
+        nikaia_std::tools::dsl::check(&self.parsed.interner, &self.parsed.program.items)
+            .into_iter()
+            .map(crate::traits::from_nikaia)
+            .collect()
     }
 
     fn nonnegative(&self, facts: &CheckFacts, nodes: &BTreeSet<i64>) -> BTreeSet<i64> {
