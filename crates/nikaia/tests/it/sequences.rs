@@ -384,7 +384,16 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
         read.types.extend(described.types);
         read.functions.extend(described.functions);
         let units: Vec<&nikaia::parser::Parsed> = tools.iter().map(|(_, p)| p).collect();
-        let own = Ledger::infer_package(&units, &read);
+        let mut own = Ledger::infer_package(&units, &read);
+        // **The packages the tools `use`** (#1163): `json`, as `lower-std`
+        // reads it - its ledger beside the library's and the package's.
+        let json_source = std::fs::read_to_string(root.join("packages/json/src/main.nika"))
+            .expect("the json package");
+        let json_parsed = parse_to_ast(&json_source).expect("the json package parses");
+        let json_own = Ledger::infer_package(&[&json_parsed], &read);
+        read.absorb(Some("json"), json_own.clone());
+        own.absorb(Some("json"), json_own);
+        let packages: BTreeSet<String> = BTreeSet::from(["json".to_string()]);
         for (at, (_, parsed)) in tools.iter().enumerate() {
             let beside: Vec<&nikaia::parser::Parsed> = tools
                 .iter()
@@ -393,13 +402,7 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
                 .map(|(_, (_, p))| p)
                 .collect();
             let checked = nikaia::check::check_against(
-                parsed,
-                &beside,
-                &own,
-                &read,
-                &BTreeSet::new(),
-                &newly,
-                &reads,
+                parsed, &beside, &own, &read, &packages, &newly, &reads,
             );
             files += 1;
             unanswered += checked

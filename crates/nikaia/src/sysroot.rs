@@ -458,8 +458,20 @@ pub fn lower_tools_files_on(
     build: crate::emit::Build,
     threads: Option<usize>,
 ) -> Result<Package> {
-    lower_package(paths, &[], build, threads, &LoweredBefore::none(), &mut 0)
-        .map(|(package, _)| package)
+    // The dependencies are those of the directory the files stand in (#1163).
+    let dependencies = match paths.first().and_then(|path| path.parent()) {
+        Some(dir) => tools_dependencies(dir)?,
+        None => Vec::new(),
+    };
+    lower_package(
+        paths,
+        &dependencies,
+        build,
+        threads,
+        &LoweredBefore::none(),
+        &mut 0,
+    )
+    .map(|(package, _)| package)
 }
 
 /// **The source with every body taken out** (#667): what another file of the
