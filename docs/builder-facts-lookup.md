@@ -106,6 +106,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **A change that flips a tool function's signature breaks its Rust callers**
   in `crates/nikaia/src` and `tests/it`: `grep` for them before the bootstrap
   (v18b).
+* `let c: ref Array[T] = v` (or `= x.field`) of a `Vec` local moves it (NK2105 on the next use); only an index or piece (`v[1..]`, `v[0]`) lends. (issue-1270)
 
 ### Lowering and lower-std
 

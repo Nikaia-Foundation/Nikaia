@@ -94,4 +94,8 @@ together with the specification section and an example test.
 * A refusal of a view handed back where `String` is wanted must exempt static text: ask `text_literal(world, a_string_type(), value, true)`, or `"x"` is refused too. (issue-1264)
 * Calling code stored in a struct field with an owned `String` argument (`h.f(g)`) is a rustc error on `develop`; avoid it in probes until it is fixed. (issue-1264)
 * Programs build against the workspace `crates/nikaia-std` source, so a fix in a std runtime `.rs` file passes on the old binary too; for fails-before, copy HEAD's version of that file back in for one run, then restore yours. (issue-1268)
+* A `let x: Array[T]` (no length) is made a view by `lv_let_views` in `text_tiers.nika`, like fields (`sf_slice_fields`) and results (`hb_fn`); extend those passes rather than the checker. (issue-1270)
+* Package-wide facts reach a file's tier pass only through `BesideFields` in `crates/nikaia/src/text_tiers.rs` (built in `beside_fields`, read by `refine_with`); add a field there rather than a new parameter at each caller. (issue-1272)
+* A two-file package test puts the struct in `tests/compiler/src/X_beside.nika` and the user in `X_beside_caller.nika`, and the program in `tests/` calls it as `compiler_tests::fn`. (issue-1272)
+* `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered only by tests/compiler programs. (issue-1272)
 
