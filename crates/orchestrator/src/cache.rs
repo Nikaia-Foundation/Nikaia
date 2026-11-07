@@ -684,16 +684,7 @@ impl Layout {
     }
 
     pub fn resolve(input: &Path) -> Layout {
-        let start = input
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
-        // Canonicalised so that `./src/../src` and `src` are one directory, and
-        // so the record name below is stable. A failure here (the path does not
-        // exist yet) is not fatal - the uncanonicalised path still works.
-        let start = start.canonicalize().unwrap_or(start);
-
+        let start = Self::start_of(input);
         for dir in start.ancestors() {
             if dir.join("nikaia.toml").is_file() {
                 return Layout {
@@ -704,7 +695,32 @@ impl Layout {
                 };
             }
         }
+        Self::outside(start)
+    }
 
+    /// **The file as one outside every project**, whatever is above it: a
+    /// test program (ADR-269 D22, #972) is a program of its own, built by
+    /// `nikaia test` in a project of its own, so the project around it keeps
+    /// no record of it and lends it no committed ledger.
+    pub fn alone(input: &Path) -> Layout {
+        Self::outside(Self::start_of(input))
+    }
+
+    /// The directory `input` sits in, canonicalised where it exists.
+    fn start_of(input: &Path) -> PathBuf {
+        let start = input
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        // Canonicalised so that `./src/../src` and `src` are one directory, and
+        // so the record name below is stable. A failure here (the path does not
+        // exist yet) is not fatal - the uncanonicalised path still works.
+        start.canonicalize().unwrap_or(start)
+    }
+
+    /// The layout of a file outside every project, from its directory.
+    fn outside(start: PathBuf) -> Layout {
         let base = Self::user_cache_dir();
         // One record per directory, named by a hash of the directory rather
         // than placed in it. Two projects that both have a `main.nika` must not

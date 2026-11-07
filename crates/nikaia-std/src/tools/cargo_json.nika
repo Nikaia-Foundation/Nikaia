@@ -1,0 +1,83 @@
+// crates/nikaia-std/src/tools/cargo_json.nika
+//
+// **Cargo's and `rustc`'s JSON, read with `packages/json`** (#1163): the
+// members a `--message-format=json` line is read by, where the compiler read
+// them with `serde_json`. A member that is missing or of another kind is
+// `null`, as `serde_json`'s `value["key"]` was `Value::Null`.
+
+use json
+use std::fs
+
+/// Each line of `messages` that is a JSON value, in order; a line that is not
+/// one (Cargo's progress, a blank) is skipped.
+pub fn cargo_json_lines(messages: String) -> Vec[json::Value] {
+    let mut out: Vec[json::Value] = []
+    for line in messages.lines() {
+        let value = json::parse(line.to_string()) catch { continue }
+        out.push(value)
+    }
+    return out
+}
+
+/// The member `key` of `value`, where it is an object that has one.
+pub fn cargo_json_member(value: ref json::Value?, key: ref String) -> json::Value? {
+    let present = value ?? return null
+    return match present {
+        json::Value::Object(members) => members.iter().find(fn(member) { member.key == key })?.value?.clone(),
+        else => null,
+    }
+}
+
+/// The text of `value`, where it is a string.
+pub fn cargo_json_text(value: ref json::Value?) -> String? {
+    let present = value ?? return null
+    return match present {
+        json::Value::Str(text) => text.clone(),
+        else => null,
+    }
+}
+
+/// The truth of `value`, where it is `true` or `false`.
+pub fn cargo_json_bool(value: ref json::Value?) -> bool? {
+    let present = value ?? return null
+    return match present {
+        json::Value::Bool(truth) => truth,
+        else => null,
+    }
+}
+
+/// The whole number `value` is, where it is one that fits an `i64`.
+pub fn cargo_json_number(value: ref json::Value?) -> i64? {
+    let present = value ?? return null
+    return json::as_i64(present.clone()) catch { return null }
+}
+
+/// The items of `value`, where it is an array; else none.
+pub fn cargo_json_items(value: ref json::Value?) -> Vec[json::Value] {
+    let present = value ?? return []
+    return match present {
+        json::Value::Array(items) => items.clone(),
+        else => [],
+    }
+}
+
+/// Whether a line is Cargo's `compiler-artifact` message.
+pub fn cargo_json_an_artifact(message: ref json::Value) -> bool {
+    return (cargo_json_text(cargo_json_member(message, "reason")) ?? "") == "compiler-artifact"
+}
+
+/// The files a `compiler-artifact` message names, as paths.
+pub fn cargo_json_filenames(message: ref json::Value) -> Vec[fs::Path] {
+    return cargo_json_items(cargo_json_member(message, "filenames")).iter().filter_map(fn(file) { cargo_json_text(file.clone()) }).map(fn(file) { cargo_json_path(file) }).collect()
+}
+
+/// A path, from the text Cargo wrote it as.
+pub fn cargo_json_path(text: String) -> fs::Path {
+    let path: fs::Path = text
+    return path
+}
+
+/// A file's extension, or empty.
+pub fn cargo_json_extension(file: ref fs::Path) -> String {
+    return file.extension()?.text_of() ?? ""
+}

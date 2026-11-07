@@ -1,0 +1,13 @@
+// A lambda handed where a function type's result owns its text does not give
+// away a `String` it captures (#1264): a lambda may run more than once, so it
+// is `NK1104` with the help `.clone()`.
+
+fn apply(f: fn(s: String) -> String, s: String) -> String {
+	return f(s)
+}
+
+fn main() {
+	let g: String = "  hi  "
+	let outer: String = "hi"
+	println(apply(fn(_s) { outer }, g))
+}

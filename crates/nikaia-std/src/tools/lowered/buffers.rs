@@ -1670,12 +1670,13 @@ pub(crate) fn element_refusal(keeper: &str, why: &str, help: &str, plan: &Buffer
 }
 
 pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> UntetheredWalk {
-    let mut walk = UntetheredWalk { owned: collections::BTreeSet::new(), views: collections::BTreeMap::new(), carrying: collections::BTreeMap::new(), lets: collections::BTreeMap::new(), anchored: collections::BTreeMap::new(), findings: vec![] };
+    let mut walk = UntetheredWalk { owned: collections::BTreeSet::new(), views: collections::BTreeMap::new(), carrying: collections::BTreeMap::new(), lets: collections::BTreeMap::new(), lists: collections::BTreeSet::new(), anchored: collections::BTreeMap::new(), findings: vec![] };
     let written = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return walk };
-    let fields = untethered_fields(written, ask);
+    let fields = untethered_fields(written, ask, false);
     let bare = untethered_view(written, ask);
-    if !bare && fields.is_empty() { return walk; }
-    let asked = UntetheredAsk { function: function.to_string(), bare, struct_name: ask.names.resolve(written.name).to_string(), fields };
+    let text_fields = untethered_fields(written, ask, true);
+    if !bare && fields.is_empty() && text_fields.is_empty() { return walk; }
+    let asked = UntetheredAsk { function: function.to_string(), bare, struct_name: ask.names.resolve(written.name).to_string(), fields, text_fields };
     untethered_block(body, &asked, ask, &mut walk);
     if !body.stmts.is_empty() {
         let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
@@ -1693,6 +1694,7 @@ pub(crate) struct UntetheredAsk {
     pub(crate) bare: bool,
     pub(crate) struct_name: String,
     pub(crate) fields: collections::BTreeSet<String>,
+    pub(crate) text_fields: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1701,6 +1703,7 @@ pub(crate) struct UntetheredWalk {
     pub(crate) views: collections::BTreeMap<String, String>,
     pub(crate) carrying: collections::BTreeMap<String, String>,
     pub(crate) lets: collections::BTreeMap<String, Source>,
+    pub(crate) lists: collections::BTreeSet<String>,
     pub(crate) anchored: collections::BTreeMap<i64, Source>,
     pub(crate) findings: Vec<Finding>,
 }
@@ -1713,7 +1716,13 @@ pub(crate) fn untethered_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
     true
 }
 
-pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<String> {
+pub(crate) fn untethered_text_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    if !ty.is_view || ty.is_tuple || (*ty.code).is_some() || ty.is_nullable { return false; }
+    let base = last_segment(ask.names.resolve(ty.name));
+    base == "String" || base == "str"
+}
+
+pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, text: bool) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     if ty.is_view || ty.is_tuple { return out; }
     let wanted = ask.names.resolve(ty.name).to_string();
@@ -1721,7 +1730,7 @@ pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '
         match &item.node {
             Item::Struct { name, fields, .. } => {
                 let name = *name;
-                if ask.names.resolve(name) == wanted { for field in fields.iter() { if untethered_view(&field.ty, ask) { out.insert(ask.names.resolve(field.name).to_string()); } } }
+                if ask.names.resolve(name) == wanted { for field in fields.iter() { if !text && untethered_view(&field.ty, ask) || text && untethered_text_view(&field.ty, ask) { out.insert(ask.names.resolve(field.name).to_string()); } } }
             },
             _ => { },
         }
@@ -1732,9 +1741,9 @@ pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '
 pub(crate) fn untethered_block(block: &Block, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { names, value, .. } => {
+            Stmt::Let { names, value, ty, .. } => {
                 untethered_expr(value, &stmt.span, asked, ask, walk);
-                if names.len() == 1 { untethered_let(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), value, stmt.span, asked, ask, walk); }
+                if names.len() == 1 { untethered_let(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), value, (ty).as_ref(), stmt.span, asked, ask, walk); }
             },
             Stmt::Return(value) => {
                 let returned = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -1766,11 +1775,16 @@ pub(crate) fn untethered_expr(expr: &Expr, at: &Span, asked: &UntetheredAsk, ask
     }
 }
 
-pub(crate) fn untethered_let(name: String, value: &Expr, span: Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+pub(crate) fn untethered_let(name: String, value: &Expr, ty: Option<&Type>, span: Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
     walk.owned.remove(&name);
     walk.views.remove(&name);
     walk.carrying.remove(&name);
     walk.lets.remove(&name);
+    walk.lists.remove(&name);
+    if untethered_made_list(value, ty, ask) {
+        walk.lets.insert(name.to_string(), Source::Buffer { at: span.start as i64, name: name.to_string(), ty: String::from(""), span: span.clone() });
+        walk.lists.insert(name.to_string());
+    }
     let owned = match value {
         Expr::ListLit { .. } => true,
         Expr::ListRepeat { .. } => true,
@@ -1788,6 +1802,27 @@ pub(crate) fn untethered_let(name: String, value: &Expr, span: Span, asked: &Unt
     }
     let root = match untethered_root(value, ask, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     walk.views.insert(name, root);
+}
+
+pub(crate) fn untethered_made_list(value: &Expr, ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if written.is_view || written.is_nullable || written.is_tuple || !is_a_container_name(ask.names.resolve(written.name)) { return false; }
+    !matches!(value, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. })
+}
+
+pub(crate) fn untethered_text_root(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &UntetheredWalk) -> Option<String> {
+    match value {
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let named = ask.names.resolve(name).to_string();
+                if a_range(index) || !walk.lists.contains(&named) { return None; }
+                Some(named)
+            },
+            _ => None,
+        } },
+        _ => None,
+    }
 }
 
 pub(crate) fn untethered_made_by(func: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
@@ -1830,7 +1865,14 @@ pub(crate) fn untethered_struct(value: &Expr, asked: &UntetheredAsk, ask: &Buffe
         Expr::StructLit { name, fields, .. } => { let name = *name; (name, fields) },
         _ => return None,
     };
-    if asked.fields.is_empty() || ask.names.resolve(name) != asked.struct_name { return None; }
+    if asked.fields.is_empty() && asked.text_fields.is_empty() || ask.names.resolve(name) != asked.struct_name { return None; }
+    for field in fields.iter() {
+        let named = ask.names.resolve(field.name).to_string();
+        if asked.text_fields.contains(&named) && field.value.is_some() {
+            let text_root = untethered_text_root(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, ask, walk);
+            if text_root.is_some() { return std::convert::identity(text_root); }
+        }
+    }
     for field in fields.iter() {
         let named = ask.names.resolve(field.name).to_string();
         if !asked.fields.contains(&named) { continue; }

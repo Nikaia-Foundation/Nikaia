@@ -48,12 +48,19 @@ fn emit_place_an_index(node: ref Expr) -> bool {
 }
 
 /// Whether a reach's receiver is a read that already lends what it finds
-/// (`get`, `first`, `last` answer an `Option<&T>`): one more `.as_ref()` would
+/// (`get`, `first`, `last` and `find` over `iter()` answer an `Option<&T>`,
+/// #1163): one more `.as_ref()` would
 /// bind a `&&T`, whose clone is a `&T` (D36).
 fn emit_place_already_lent(world: ref EmitWorld, node: ref Expr) -> bool {
     return match node {
-        Expr::MethodCall { method, .. } => {
+        Expr::MethodCall { receiver, method, .. } => {
             let name = emit_text(world, method)
+            if name == "find" {
+                return match receiver {
+                    Expr::MethodCall { method: iter, .. } => emit_text(world, iter) == "iter",
+                    else => false,
+                }
+            }
             name == "get" || name == "first" || name == "last"
         },
         else => false,

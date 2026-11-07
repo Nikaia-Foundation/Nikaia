@@ -1,0 +1,10 @@
+error[NK1341]: There's no dependency called `nosuch`.
+  --> src/main.nika:1:1
+   |
+ 1 | use nosuch
+   | ^^^^^^^^^^
+   |
+   = help: Add it to the project's `[dependencies]` under that name:
+    [dependencies]
+    nosuch = { path = "../nosuch" }
+exit 1

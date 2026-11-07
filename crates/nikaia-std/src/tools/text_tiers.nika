@@ -711,6 +711,10 @@ struct TierWalk {
     /// What each part of a tuple literal holds, by the literal's node, so
     /// that a part with no text adds nothing to the tuple's tier (#999).
     tuple_items: collections::BTreeMap[i64, Vec[Kinds]],
+    /// The next block walked is the body of a lambda handed where a function
+    /// type's result owns its text - `-> String` without `from` (ADR-views-3
+    /// D14, #1263) - so its last value is kept there.
+    closure_owns: bool,
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -2458,6 +2462,8 @@ fn field_place(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: Ti
 fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let back = walk.tail_back
     walk.tail_back = false
+    let keeps = walk.closure_owns
+    walk.closure_owns = false
     open_tier_scope(walk)
     let mut tail = no_kinds()
     let mut k = 0
@@ -2481,6 +2487,15 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         }
         if k + 1 == block.stmts.len() {
             tail = kinds
+            // **A lambda handed where its result owns its text keeps its
+            // last value** (ADR-views-3 D14, #1263): a view of static text
+            // there is text of its own, as in a tuple's part (ADR-282 D29).
+            if keeps && tail.still {
+                match stmt.node {
+                    Stmt::Expr(last) => kept_unseen(last, ask, walk),
+                    else => {}
+                }
+            }
             // A function's last value is handed back as a `return` is, and
             // so is each arm's last value of an `if` or a `match` it ends
             // with (#708).
@@ -2644,7 +2659,9 @@ fn tier_loop_seen(walk: ref TierWalk) -> String {
 fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Type?, at: i64, ask: ref TierAsk, mut walk: TierWalk) {
     // A name bound to a parameter is the parameter, counted where it is used.
     walk.read_here = ty == null
+    walk.closure_owns = a_lambda(value) && code_owns_text(ask.names, ty)
     let kinds = tier_expr(value, ask, walk)
+    walk.closure_owns = false
     let mut of = tier_struct_of(value, ask, walk)
     let mut literal = -1
     let mut empty = -1
@@ -3278,15 +3295,16 @@ fn lent_field(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
             let place = place_of(value, ask, walk) ?? return false
             plain_string(ask.names, place.ty) && !place.ty.is_nullable && lent_root(base, ask, walk)
         },
-        Expr::Index { base, .. } => lent_element(base, ask, walk),
+        Expr::Index { base, .. } => lent_element(base, false, ask, walk),
         else => false,
     }
 }
 
 /// **An element of a list a `ref` parameter lends is a view of it** (#738,
 /// ADR-282 D13): `v[0]` out of `v: ref Vec[String]`, or out of a list field
-/// of a lent struct.
-fn lent_element(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+/// of a lent struct. With `made`, also out of a list the body made
+/// (`made_list_local`), for an element handed back in a field (#1275).
+fn lent_element(base: ref Expr, made: bool, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     let list = place_of(base, ask, walk) ?? return false
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) {
         return false
@@ -3296,8 +3314,20 @@ fn lent_element(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
         return false
     }
     return match base {
-        Expr::Variable(name, _) => lent_list_parameter(ask.names.resolve(name), walk),
+        Expr::Variable(name, _) => lent_list_parameter(ask.names.resolve(name), walk) || (made && made_list_local(ask.names.resolve(name), walk)),
         Expr::Field { base: inner, .. } => !list.ty.is_view && lent_root(inner, ask, walk),
+        else => false,
+    }
+}
+
+/// **A list the body made, declared with its type** (#1275, ADR-283 D23): an
+/// element of it handed back is a view of a local, and the list moves into the
+/// caller's keep (`untethered_returns` in `buffers.nika`), as text does.
+fn made_list_local(name: ref String, walk: ref TierWalk) -> bool {
+    let local = tier_local(name, walk) ?? return false
+    let declared = local.declared ?? return false
+    return match declared.owner {
+        TextOwner::Let(_) => local.made && !declared.ty.is_view && !declared.ty.is_nullable,
         else => false,
     }
 }
@@ -3353,16 +3383,32 @@ fn kept_literal(value: ref Expr, owner: ref TextOwner, path: ref Vec[i64], ty: r
     if !plain_string(ask.names, ty) {
         return
     }
-    let name = match value {
-        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
-        else => return,
-    }
+    let name = literal_let_named(value, ask) ?? return
     let local = tier_local(name, walk) ?? return
     if local.literal < 0 {
         return
     }
     let word = seen(owner, path, walk)
     walk.flows.literal_lets.entry(local.literal).or_insert(collections::BTreeSet()).insert(word)
+}
+
+/// The name a value is, or whose `to_string()` it is: that is the name as
+/// it is (ADR-282 D8), so a `let` bound to a literal goes where either goes
+/// (#1269).
+fn literal_let_named(value: ref Expr, ask: ref TierAsk) -> String? {
+    return match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() > 0 || ask.names.resolve(method) != "to_string" {
+                return null
+            }
+            match receiver {
+                Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+                else => null,
+            }
+        },
+        else => null,
+    }
 }
 
 /// The struct a value is of, where the program says so without types: a
@@ -4803,6 +4849,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         Expr::Closure { body, .. } => {
             let held = walk.result?.clone()
             walk.result = null
+            // `closure_owns` is read by `tier_block` of the body.
             tier_block(body, ask, walk)
             walk.result = held
             owned_kinds()
@@ -4989,6 +5036,21 @@ fn tier_struct_field(owner: ref String, field: ref FieldInit, back: bool, ask: r
             kinds = no_kinds()
         }
     }
+    // **An element read whole, handed back in a field** of the struct handed
+    // back, is a view of the list (#1275, ADR-282 D13, ADR-283 D23): of a
+    // `ref` parameter's list, or of a list the body made, which moves into
+    // the caller's keep (`untethered_returns` in `buffers.nika`).
+    if back && plain_string(ask.names, found.ty) && !found.ty.is_nullable && same_kinds(kinds, owned_kinds()) && field.value != null {
+        let value = field.value ?? return
+        match value {
+            Expr::Index { base, .. } => {
+                if lent_element(base, true, ask, walk) {
+                    kinds = view_kinds()
+                }
+            }
+            else => {}
+        }
+    }
     flow_value(going_into(into, found.ty, [], false), field.value, kinds, ask, walk)
     if field.value == null {
         kept_literal(shorthand, into, no_path(), found.ty, ask, walk)
@@ -5005,8 +5067,22 @@ fn field_value_kinds(field: ref FieldInit, shorthand: ref Expr, ask: ref TierAsk
 
 fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let mut given: Vec[Kinds] = []
+    // **A lambda handed to a parameter of a function type** learns whether
+    // that type's result owns its text (#1263).
+    let mut params: Vec[Type] = []
+    if args.iter().any(fn(arg) { a_lambda(arg) }) {
+        let found = walk.declared.fns[tier_callee(func, ask) ?? ""]?.clone()
+        if found != null {
+            let decl = found ?? return owned_kinds()
+            params = decl.params
+        }
+    }
+    let mut at = 0
     for arg in args {
+        walk.closure_owns = a_lambda(arg) && at < params.len() && code_owns_text(ask.names, params[at])
         given.push(tier_expr(arg, ask, walk))
+        walk.closure_owns = false
+        at += 1
     }
     let callee = tier_callee(func, ask) ?? return owned_kinds()
     if walk.declared.fns.contains_key(callee) {
@@ -5044,9 +5120,25 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
             at += 1
         }
     } else {
-        std_container_args(args, ask, walk)
+        std_container_args(callee, args, ask, walk)
     }
     return std_result(callee, ask)
+}
+
+fn a_lambda(value: ref Expr) -> bool {
+    return match value {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+}
+
+/// **Whether a function type's result owns its text** (ADR-views-3 D14):
+/// `-> String` that writes no `from`.
+fn code_owns_text(names: ref winnow_grammar::InternerContext, ty: ref Type?) -> bool {
+    let written = ty ?? return false
+    let code = written.code ?? return false
+    let result = code.result ?? return false
+    return code.result_from.is_empty() && plain_string(names, result)
 }
 
 /// **The positions a function value's type lends** (ADR-views-3 D2, D14,
@@ -5073,9 +5165,23 @@ fn from_named_positions(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) ->
 
 /// **A container of text handed whole to `std` holds text of its own**
 /// (ADR-282 D29): `std`'s signature says `Vec[String]`, and a list of views
-/// is not one below.
-fn std_container_args(args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+/// is not one below. **A list or a tuple written at the call is built
+/// there** (#1269): each item going into text of its own, `[b]` handed to
+/// `args: Vec[String]` with `b` a view of static text, is kept.
+fn std_container_args(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+    let params = std_params(callee, ask)
+    let mut at = 0
     for arg in args {
+        let built = match arg {
+            Expr::ListLit { .. } => true,
+            Expr::Tuple(_, _) => true,
+            else => false,
+        }
+        if built && at < params.len() && std_owns_text_inside(params[at].1) {
+            kept_unseen(arg, ask, walk)
+            owned_literal_lets(arg, ask, walk)
+        }
+        at += 1
         let whole = source_of(arg, ask, walk)
         if whole != null {
             let found = whole ?? return
@@ -5083,6 +5189,56 @@ fn std_container_args(args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk)
                 demote_inside(found.owner, found.ty, [], ask, walk)
             }
         }
+    }
+}
+
+/// **A `let` bound to a literal and built into a list or a tuple at a call of
+/// `std` is text of its own** (#1269): `let c = "c"` handed in `[c, "d"]`.
+fn owned_literal_lets(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                owned_literal_lets(item, ask, walk)
+            }
+        }
+        Expr::Tuple(items, _) => {
+            for item in items {
+                owned_literal_lets(item, ask, walk)
+            }
+        }
+        else => {
+            let name = literal_let_named(value, ask) ?? return
+            let local = tier_local(name, walk) ?? return
+            if local.literal >= 0 {
+                walk.flows.owned_lets.insert(local.literal)
+            }
+        }
+    }
+}
+
+/// The parameters a function of `std` declares, none where it is unknown.
+fn std_params(callee: ref String, ask: ref TierAsk) -> Vec[(String, Ty)] {
+    let contract = ask.library.functions[callee] ?? return []
+    let signature = contract.signature ?? return []
+    return signature.params.clone()
+}
+
+/// Whether a type of `std` holds text of its own inside a list, a map or a
+/// tuple: `Vec[String]`, `ref Vec[String]`, `Vec[(String, String)]`, not
+/// `Vec[ref String]`.
+fn std_owns_text_inside(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { args, .. } => args.iter().any(fn(arg) { std_owns_text(arg) }),
+        Ty::Tuple(parts) => parts.iter().any(fn(part) { std_owns_text(part) }),
+        else => false,
+    }
+}
+
+fn std_owns_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => (name == "String" && !view) || std_owns_text_inside(ty),
+        Ty::Tuple(_) => std_owns_text_inside(ty),
+        else => false,
     }
 }
 
@@ -6545,7 +6701,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap() }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false }
     let found = late_arms(program, walk.declared, ask)
     walk.late = found.arms
     walk.late_args = found.args
@@ -7159,7 +7315,7 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// It returns the text positions it made views in an impl of a trait
 /// (`hb_trait_from`), keyed as `tw_views` keys the tiers' own: they were
 /// written `String`, so `NK1261` does not read them as a written `ref`.
-pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext, package: ref SliceFills) -> collections::BTreeSet[String] {
     let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
     let mut views: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
@@ -7173,9 +7329,91 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
             break
         }
     }
-    sf_slice_fields(program, words)
+    sf_slice_fields(program, words, package)
     sv_view_fields(program, words, plain, opted)
+    lv_let_views(program, words, views)
     return made
+}
+
+/// **A `let` declared `Array[T]` with no length that is given a piece of a
+/// buffer is a view** (ADR-views-3 D8, D11; #1270): owning needs a length, so
+/// `let r: Array[i64] = xs[1..]`, `= grid[0]` or `= rest(v)`, a call of a
+/// function of the file whose result is a view of what it is handed, is
+/// written as `ref Array[T]` and holds a view of the place, as a field or a
+/// result of that type does. A `mut` let, a tuple of names, and a value of
+/// its own (a call of anything else, a literal) stay as written, and
+/// `NK1182` says the type needs a length. A `let` declared `Bytes` given a
+/// cut or such a call is a view the same way (ADR-views-3 D15, #1271).
+fn lv_let_views(mut program: Program, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    for mut item in program.items {
+        lv_item(item.node, words, views)
+    }
+}
+
+fn lv_item(mut item: Item, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    match item {
+        Item::Fn { body, .. } => lv_block(body, words, views),
+        Item::Test { body, .. } => lv_block(body, words, views),
+        Item::Impl { methods, .. } => {
+            for mut method in methods {
+                lv_item(method.node, words, views)
+            }
+        },
+        else => {},
+    }
+}
+
+/// The `let`s of `block` and of its loops.
+fn lv_block(mut block: Block, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    for mut stmt in block.stmts {
+        lv_stmt(stmt.node, words, views)
+    }
+}
+
+fn lv_stmt(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) {
+    match stmt {
+        Stmt::Let { names, mutable, ty, value, .. } => {
+            if names.len() == 1 && !mutable && lv_a_piece(value, words, views) {
+                lv_mark(ty, words, lv_a_cut_or_call(value))
+            }
+        },
+        Stmt::For { body, .. } => lv_block(body, words, views),
+        Stmt::While { body, .. } => lv_block(body, words, views),
+        else => {},
+    }
+}
+
+/// A piece of a buffer: an element or a piece of a place (`xs[1..]`,
+/// `grid[0]`), or a call whose result is a view of the places it is handed.
+/// A whole name or field is not: the `let` would take it over.
+fn lv_a_piece(value: ref Expr, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) -> bool {
+    return match value {
+        Expr::Index { .. } => hb_place_root(value, words) != null,
+        Expr::Call { .. } => hb_call_sources(value, words, views) != null,
+        else => false,
+    }
+}
+
+/// A cut (`b[1..]`) or a call: what makes a `let` declared `Bytes` a view
+/// (ADR-views-3 D15, #1271). An element of a list of `Bytes` is not.
+fn lv_a_cut_or_call(value: ref Expr) -> bool {
+    return match value {
+        Expr::Index { index, .. } => sf_a_cut(index),
+        Expr::Call { .. } => true,
+        else => false,
+    }
+}
+
+fn lv_mark(mut ty: Type?, words: ref winnow_grammar::InternerContext, cut_or_call: bool) {
+    if ty != null {
+        lv_mark_run(ty, words, cut_or_call)
+    }
+}
+
+fn lv_mark_run(mut ty: Type, words: ref winnow_grammar::InternerContext, cut_or_call: bool) {
+    if sf_a_run(ty, words) || (cut_or_call && sf_a_buffer(ty, words)) {
+        ty.is_view = true
+    }
 }
 
 /// **A field `Array[T]` with no length that the file fills only with a place
@@ -7186,11 +7424,26 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
 /// checker ties it to what it points into, as a `String` field the walk above
 /// makes a view. A field no literal fills, or one filled with anything else,
 /// stays as written, and `NK1182` says it needs a length.
-fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerContext) {
+///
+/// **A `Bytes` field the file fills only with pieces is a view too**
+/// (ADR-views-3 D15, #1271): where every literal puts a cut there (`a[1..]`)
+/// or a lent `Bytes` parameter, the field is written as `ref Bytes`. A
+/// `Bytes` may own its bytes, so a local or a kept parameter there leaves
+/// the field owning, as written.
+///
+/// **The literals of every file of the package count** (#1272): a struct
+/// declared in one file and filled in another is decided by both, as
+/// `package` holds what the literals of all of them put into each field
+/// (`tier_slice_fills`). A field this file fills with something else stays
+/// owning whatever the others put there.
+fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerContext, package: ref SliceFills) {
     let mut filled: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    let mut pieces: collections::BTreeMap[String, bool] = collections::BTreeMap()
     for item in program.items {
-        sf_item(item.node, words, filled)
+        sf_item(item.node, words, filled, pieces)
     }
+    sf_join(filled, package.filled)
+    sf_join(pieces, package.pieces)
     for mut item in program.items {
         match item.node {
             Item::Struct { name, fields, is_extern, .. } => {
@@ -7198,7 +7451,8 @@ fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerCont
                     let of = words.resolve(name).clone()
                     for mut field in fields {
                         let key = f"{of}.{words.resolve(field.name)}"
-                        if sf_a_run(field.ty, words) && (filled.get(key) ?? false) {
+                        let run = sf_a_run(field.ty, words) && (filled.get(key) ?? false)
+                        if run || (sf_a_buffer(field.ty, words) && (pieces.get(key) ?? false)) {
                             field.ty.is_view = true
                         }
                     }
@@ -7209,21 +7463,72 @@ fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerCont
     }
 }
 
+/// **What the struct literals of a package's files put into each field**
+/// (#1272): `true` in `filled` while every value was a place, in `pieces`
+/// while every value was a cut of a place or a lent `Bytes` parameter, keyed
+/// `Struct.field`, as `sf_item` reads one file.
+pub struct SliceFills {
+    pub filled: collections::BTreeMap[String, bool],
+    pub pieces: collections::BTreeMap[String, bool],
+}
+
+/// What the struct literals of all of `files` put into each field, read
+/// before any file is decided, so the answer does not hang on the order.
+pub fn tier_slice_fills(files: ref Vec[ParsedView]) -> SliceFills {
+    let mut filled: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    let mut pieces: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for file in files {
+        for item in file.items {
+            sf_item(item.node, file.words, filled, pieces)
+        }
+    }
+    return SliceFills { filled, pieces }
+}
+
+/// `own` holds a field's answer only where `other` does not say otherwise.
+fn sf_join(mut own: collections::BTreeMap[String, bool], other: ref collections::BTreeMap[String, bool]) {
+    for (key, every) in other {
+        let before = own.get(key) ?? true
+        own.insert(key.clone(), before && every)
+    }
+}
+
 /// What the struct literals in the bodies of `item` put into each field:
-/// `true` while every value was a place.
-fn sf_item(item: ref Item, words: ref winnow_grammar::InternerContext, mut filled: collections::BTreeMap[String, bool]) {
+/// `true` in `filled` while every value was a place, in `pieces` while every
+/// value was a cut of a place or a lent `Bytes` parameter.
+fn sf_item(item: ref Item, words: ref winnow_grammar::InternerContext, mut filled: collections::BTreeMap[String, bool], mut pieces: collections::BTreeMap[String, bool]) {
     match item {
-        Item::Fn { body, .. } => sf_body(body, words, filled),
+        Item::Fn { args, body, .. } => {
+            let lent: Vec[String] = args.iter().filter(fn(arg) { !arg.keep && !arg.mutable && !arg.ty.is_mut && !arg.ty.is_nullable && arg.ty.code == null && arg.ty.generics.is_empty() && words.resolve(arg.ty.name) == "Bytes" }).map(fn(arg) { words.resolve(arg.name).clone() }).collect()
+            sf_body(body, words, lent, filled, pieces)
+        },
         Item::Impl { methods, .. } => {
             for method in methods {
-                sf_item(method.node, words, filled)
+                sf_item(method.node, words, filled, pieces)
             }
         },
         else => {},
     }
 }
 
-fn sf_body(body: ref Block, words: ref winnow_grammar::InternerContext, mut filled: collections::BTreeMap[String, bool]) {
+/// A piece of a buffer for a `Bytes` field: a cut of a place, or a lent
+/// `Bytes` parameter handed in whole.
+fn sf_a_piece(value: ref Expr, words: ref winnow_grammar::InternerContext, lent: ref Vec[String]) -> bool {
+    return match value {
+        Expr::Index { index, .. } => sf_a_cut(index) && hb_place_root(value, words) != null,
+        Expr::Variable(name, _) => lent.contains(words.resolve(name)),
+        else => false,
+    }
+}
+
+fn sf_a_cut(index: ref Expr) -> bool {
+    return match index {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+}
+
+fn sf_body(body: ref Block, words: ref winnow_grammar::InternerContext, lent: ref Vec[String], mut filled: collections::BTreeMap[String, bool], mut pieces: collections::BTreeMap[String, bool]) {
     for expr in visited_in_block(body) {
         match expr {
             Expr::StructLit { name, fields, .. } => {
@@ -7233,14 +7538,25 @@ fn sf_body(body: ref Block, words: ref winnow_grammar::InternerContext, mut fill
                         null => true,
                         value => hb_place_root(value, words) != null,
                     }
+                    let piece = match init.value {
+                        null => lent.contains(words.resolve(init.name)),
+                        value => sf_a_piece(value, words, lent),
+                    }
                     let key = f"{of}.{words.resolve(init.name)}"
                     let before = filled.get(key) ?? true
+                    let cut_before = pieces.get(key) ?? true
+                    pieces.insert(key.clone(), cut_before && piece)
                     filled.insert(key, before && place)
                 }
             },
             else => {},
         }
     }
+}
+
+/// `Bytes`, written as a value.
+fn sf_a_buffer(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+    return !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.code == null && ty.generics.is_empty() && words.resolve(ty.name) == "Bytes"
 }
 
 /// `Array[T]` with no length, written as a value.

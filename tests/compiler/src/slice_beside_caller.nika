@@ -1,0 +1,7 @@
+/// `SliceTail` of `src/slice_beside.nika` filled with `a[1..]`, a piece of
+/// a list: the field is a view, as it is when the literal stands in the
+/// file that declares the struct (#1272).
+pub fn slice_tail_second(a: ref Vec[i64]) -> i64 {
+	let s = SliceTail { xs: a[1..] }
+	return slice_tail_first(s)
+}

@@ -497,6 +497,10 @@ pub struct CheckFacts {
     /// `s.bytes`, or a name a `let` bound to it, where the program keeps it
     /// beyond the text: copied into a `Bytes` of its own (ADR-320 D11).
     pub kept_text_bytes: collections::BTreeSet[i64],
+    /// The `let`s, by start, that declare `Bytes` and are bound to a text's
+    /// own bytes: the view, written without the annotation (ADR-320 D11,
+    /// ADR-views-3 D15, #1271).
+    pub text_bytes_typed_lets: collections::BTreeSet[i64],
     /// The receivers of a `Bytes`'s `clone()`: a `Bytes` or a `&[u8]` below,
     /// copied into a `Bytes` of its own (ADR-320 D11).
     pub byte_copies: collections::BTreeSet[i64],
@@ -726,6 +730,7 @@ impl CheckFacts {
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
             kept_text_bytes: collections::BTreeSet(),
+            text_bytes_typed_lets: collections::BTreeSet(),
             byte_copies: collections::BTreeSet(),
             map_drains: collections::BTreeSet(),
             take_drains: collections::BTreeSet(),

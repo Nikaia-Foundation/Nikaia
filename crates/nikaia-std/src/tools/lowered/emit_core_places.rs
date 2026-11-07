@@ -25,9 +25,15 @@ pub(crate) fn emit_place_an_index(node: &Expr) -> bool { matches!(node, Expr::In
 
 pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {
-        Expr::MethodCall { method, .. } => {
-            let method = *method;
+        Expr::MethodCall { receiver, method, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let name = emit_text(world, method);
+            if name == "find" {
+                return match receiver {
+                    Expr::MethodCall { method: iter, .. } => { let iter = *iter; emit_text(world, iter) == "iter" },
+                    _ => false,
+                };
+            }
             name == "get" || name == "first" || name == "last"
         },
         _ => false,

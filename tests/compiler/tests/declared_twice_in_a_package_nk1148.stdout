@@ -1,0 +1,9 @@
+error[NK1148]: `Row` is declared twice in this package: in src/main.nika and in src/a.nika.
+  --> src/a.nika:1:1
+   |
+ 1 | pub struct Row {
+   | ^^^^^^^^^^^^^^^^
+   |
+   = note: All files of a package share their names.
+   = help: Rename one of the two, or keep one declaration and use it from the other file.
+exit 1

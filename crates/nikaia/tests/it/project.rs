@@ -3204,13 +3204,13 @@ fn a_file_outside_a_project_is_told_it_has_no_dependencies() {
     assert!(!run.status.success(), "{}", said(&run));
     let message = String::from_utf8_lossy(&run.stderr);
     assert!(
-        message.contains("a single file outside a project has no dependencies"),
+        message.contains("A single file outside a project has no dependencies"),
         "{}",
         said(&run)
     );
     assert!(message.contains("nikaia.toml"), "{}", said(&run));
     assert!(
-        !message.contains("there's no dependency called"),
+        !message.contains("There's no dependency called"),
         "not the message for a project that forgot a line: {}",
         said(&run)
     );

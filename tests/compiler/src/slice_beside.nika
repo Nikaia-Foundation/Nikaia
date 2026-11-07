@@ -1,0 +1,12 @@
+/// A struct whose `Array[i64]` field no literal of this file fills: the
+/// literal in `src/slice_beside_caller.nika` puts a piece of a list there,
+/// so the field is a view (ADR-views-3 D11, #1272;
+/// `tests/an_array_field_filled_in_another_file_is_a_view.nika`).
+pub struct SliceTail {
+	pub xs: Array[i64],
+}
+
+/// The first element the tail holds.
+pub fn slice_tail_first(s: SliceTail) -> i64 {
+	return s.xs[0]
+}

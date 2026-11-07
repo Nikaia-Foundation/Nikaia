@@ -1,0 +1,10 @@
+-- check tests/b_wrong_type.nika
+error[NK1103]: This value is `ref String`, but the `let` declares `i64`.
+  --> tests/b_wrong_type.nika:2:18
+-- check tests/a_bang.nika
+error: Expected `}` here, but found `!`.
+  --> tests/a_bang.nika:2:12
+-- check tests/c_uses_the_package.nika
+Checked tests/c_uses_the_package.nika
+-- check src/main.nika
+Checked src/main.nika

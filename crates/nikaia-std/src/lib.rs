@@ -251,9 +251,18 @@ pub mod runtime {
 /// `l % 2 == 0` (a literal's sign) and `watch.truncate(0)` lower as written
 /// (`sv_sat.nika`, `sv_check.nika`, #1285).
 ///
-/// **And `collapsible_if`**: an `if` whose whole body is an `if` lowers as
-/// written (`bounds_rules.nika`'s `rules_exit`, #1330).
+/// **And `no_effect`, `eq_op` and `collapsible_if`**: `packages/json`, lowered
+/// into `tools::json` (#1163), keeps a `()` statement and its finite test
+/// `x - x != 0.0`; an `if` whose whole body is an `if` lowers as written
+/// (`bounds_rules.nika`'s `rules_exit`, #1330).
+///
+/// **And `result_large_err`**: an error enum a `.nika` throws holds its values
+/// in place, and Nikaia has no `Box` to write around a large one
+/// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
 #[allow(
+    clippy::result_large_err,
+    clippy::no_effect,
+    clippy::eq_op,
     clippy::collapsible_if,
     clippy::map_identity,
     clippy::manual_is_multiple_of,

@@ -92,9 +92,18 @@ impl EmitState {
     /// the emitter can all name, and the sum it is.
     pub fn error_sums(ref self, world: ref EmitWorld) -> collections::BTreeMap[Vec[String], String] {
         let mut out: collections::BTreeMap[Vec[String], String] = collections::BTreeMap()
+        let declared = sums_declared_here(world)
         for key in self.own_contracts.functions.keys() {
             let contract = self.own_contracts.functions.get(key) ?? continue
             if contract.fails_with.len() < 2 {
+                continue
+            }
+            // **Only the sums of this file's own functions** in `std` and the
+            // tools (#1347): a file there is checked with the others beside it,
+            // and a sum of theirs written here too would stand in every lowered
+            // file, a different type in each. A program writes them all at its
+            // crate root.
+            if self.is_std && !declared.contains(key) {
                 continue
             }
             // One member this compiler cannot name is the whole set unnamed: a
@@ -144,7 +153,10 @@ impl EmitState {
                 decl = f"<{sum_input_lifetime()}>"
                 params = f"<{sum_input_lifetime()}>"
             }
-            out.push(f"// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\nenum {name}{decl} {{\n")
+            // In `std` and the tools a `pub fn` hands it to the crates that
+            // call it, so it is as public as they are.
+            let shared = if self.is_std { "pub " } else { "" }
+            out.push(f"// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\n{shared}enum {name}{decl} {{\n")
             for member in members {
                 let variant = sum_variant(member)
                 let held = self.sum_member_held(world, member, params)
@@ -282,6 +294,12 @@ impl EmitState {
             if any {
                 shown = self.channel_params(elided, params, static_params, borrows)
             }
+            // A file of `std` or of the tools is a module of its own, which
+            // writes the sums of its own functions (`error_sums`): the name
+            // stands bare, the file's own or another's through `use super::*`.
+            if self.is_std {
+                return f"{sum ?? ""}{shown}"
+            }
             return f"crate::{sum ?? ""}{shown}"
         }
         let kind = self.named_error_of(world, thrown)
@@ -312,4 +330,38 @@ impl EmitState {
         let contract = self.own_contracts.functions.get(key) ?? return "Box<dyn std::error::Error>"
         return self.channel_of(world, contract.fails_with, elided, params, static_params, borrows)
     }
+}
+
+/// **The ledger keys of the functions this file declares**: each `fn` by its
+/// name, each method by its type's and, in a trait's `impl`, its trait's.
+fn sums_declared_here(world: ref EmitWorld) -> collections::BTreeSet[String] {
+    let mut keys: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in world.items {
+        match item.node {
+            Item::Fn { name, .. } => {
+                let held = name ?? continue
+                keys.insert(world.words.resolve(held).clone())
+            },
+            Item::Impl { trait_name, target, methods } => {
+                let mut owners: Vec[String] = [world.words.resolve(target.name).clone()]
+                match trait_name {
+                    null => {},
+                    named => owners.push(world.words.resolve(named).clone()),
+                }
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, .. } => {
+                            let held = name ?? continue
+                            for owner in owners {
+                                keys.insert(f"{owner}::{world.words.resolve(held)}")
+                            }
+                        },
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return keys
 }

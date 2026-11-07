@@ -46,9 +46,11 @@ impl EmitState {
     }
     pub fn error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeMap<Vec<String>, String> {
         let mut out: collections::BTreeMap<Vec<String>, String> = collections::BTreeMap::new();
+        let declared = sums_declared_here(world);
         for key in self.own_contracts.functions.keys() {
             let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if contract.fails_with.len() < 2 { continue; }
+            if self.is_std && !declared.contains(key) { continue; }
             let mut all_named = true;
             for member in contract.fails_with.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }
             if all_named { out.insert(contract.fails_with.to_owned(), sum_name(&contract.fails_with)); }
@@ -71,7 +73,8 @@ impl EmitState {
                 decl = format!("<{}>", sum_input_lifetime());
                 params = format!("<{}>", sum_input_lifetime());
             }
-            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\nenum {}{} {{\n", name, decl));
+            let shared = if self.is_std { "pub " } else { "" };
+            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\n{}enum {}{} {{\n", shared, name, decl));
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
@@ -157,6 +160,7 @@ impl EmitState {
             let mut any = false;
             for member in thrown.iter() { if self.borrows_named(world, member) { any = true; } }
             if any { shown = self.channel_params(elided, params, static_params, borrows); }
+            if self.is_std { return format!("{}{}", nikaia_std::index::or(sum, || ""), shown); }
             return format!("crate::{}{}", nikaia_std::index::or(sum, || ""), shown);
         }
         let kind = self.named_error_of(world, thrown);
@@ -175,5 +179,38 @@ impl EmitState {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("Box<dyn std::error::Error>") };
         self.channel_of(world, &contract.fails_with, elided, params, static_params, borrows)
     }
+}
+
+pub(crate) fn sums_declared_here(world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {
+    let mut keys: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in world.items.iter() {
+        match &item.node {
+            Item::Fn { name, .. } => {
+                let name = *name;
+                let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                keys.insert(world.words.resolve(held).to_string());
+            },
+            Item::Impl { trait_name, target, methods } => {
+                let trait_name = *trait_name;
+                let mut owners: Vec<String> = vec![world.words.resolve(target.name).to_string()];
+                match trait_name {
+                    None => { },
+                    Some(named) => { owners.push(world.words.resolve(named).to_string()); },
+                }
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, .. } => {
+                            let name = *name;
+                            let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            for owner in owners.iter() { keys.insert(format!("{}::{}", owner, world.words.resolve(held))); }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    keys
 }
 

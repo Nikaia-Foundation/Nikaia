@@ -1,0 +1,79 @@
+// #1365: a package's units are its `.nika` files on disk and the documents
+// the editor has open in its directory. `main.nika` calls `helper()`, which no
+// file on disk declares: opened, it is refused (`NK1135`). The editor opens a
+// `helper.nika` that is not on disk, with an error of its own (`NK1104`):
+// that error is published under its URI and `main.nika` is clean. Fixed, both
+// lists are empty. Closed without saving, it leaves the package again, and
+// `main.nika` is checked again and refused. Last an `untitled:` document,
+// which has no path, is checked alone as a single file and its error is
+// published under its URI; `main.nika`'s marker stays, since that check was
+// of no package.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn framed(body: String) -> String {
+    return f"Content-Length: {body.len()}\r\n\r\n{body}"
+}
+
+fn quoted(text: String) -> String {
+    return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+}
+
+fn opened(uri: String, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"languageId\":\"nikaia\",\"version\":1,\"text\":\"{quoted(text)}\"}}}}}}")
+}
+
+fn changed(uri: String, version: i64, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"version\":{version}}},\"contentChanges\":[{{\"text\":\"{quoted(text)}\"}}]}}}}")
+}
+
+// Each frame as `Content-Length: ok` when the length is the body's bytes: the
+// length depends on the scratch path, which is cut from the output.
+fn masked(stdout: String, base: String) -> String {
+    let mut out = ""
+    for part in stdout.split("Content-Length: ") {
+        let pieces: Vec[String] = part.split("\r\n\r\n").map(fn(p) { p.to_string() }).collect()
+        if pieces.len() == 2 {
+            let length = if pieces[0] == f"{pieces[1].len()}" { "ok" } else { "wrong" }
+            out.push_str(f"Content-Length: {length}\\r\\n\n\\r\\n\n{pieces[1].replace(base, "<scratch>")}\n")
+        }
+    }
+    return out
+}
+
+fn closed(uri: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didClose\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\"}}}}}}")
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::create_dir("pk/src", root; recursive: true)
+    fs::write("pk/nikaia.toml", root, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
+    let calling = "fn main() {\n    println(f\"{helper()}\")\n}\n"
+    fs::write("pk/src/main.nika", root, calling.clone())
+    let base = fs::canonical(".", root).display()
+    let uri = f"file://{base}/pk/src/main.nika"
+    let helper = f"file://{base}/pk/src/helper.nika"
+    let fine = "fn helper() -> i64 {\n    return 1\n}\n"
+    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{} } }")
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{} }"))
+    transcript.push_str(opened(uri, calling))
+    transcript.push_str(opened(helper, fine.replace("return 1", "return \"one\"")))
+    transcript.push_str(changed(helper, 2, fine))
+    transcript.push_str(closed(helper))
+    transcript.push_str(opened("untitled:Untitled-1", "fn main() {\n    let n: i64 = \"one\"\n    println(f\"{n}\")\n}\n"))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"shutdown\"}"))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    let out = process::run(toolchain(), ["lsp"]; stdin: process::Input::Text(transcript))
+    print(masked(out.stdout, base))
+    println(f"exit {out.code}")
+    print(out.stderr)
+    let on_disk = fs::exists("pk/src/helper.nika", root)
+    println(f"helper.nika on disk: {on_disk}")
+}

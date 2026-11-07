@@ -357,7 +357,7 @@ impl EmitState {
             let found = match self.facts.number_lets.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
             return format!(": {}", found);
         }
-        if kept { return String::from(""); }
+        if kept || self.facts.text_bytes_typed_lets.contains(&at) { return String::from(""); }
         let own = match ty { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut written = self.emit_core_ty_counted(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), own, &EmitLifetimes::Elided, &count);
         if emit_text(world, own.name) == "Vec" && own.generics.len() == 1 && !own.is_nullable && !own.is_slice { written = a_list_read_as_a_slice(written); }

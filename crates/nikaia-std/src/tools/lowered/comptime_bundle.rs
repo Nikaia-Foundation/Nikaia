@@ -57,7 +57,6 @@ pub trait ComptimeBundleHost {
     fn user_cache_dir(&self) -> fs::Path;
     fn use_entry(&self, at: &std::path::Path);
     fn where_tools_start(&self) -> fs::Path;
-    fn artifacts(&self, messages: &str, named: &[String]) -> ComptimeBundleArtifacts;
     fn toolchain(&self) -> String;
     fn target_libdir(&self) -> String;
     fn cpu_level(&self) -> String;
@@ -72,6 +71,29 @@ pub(crate) const COMPTIME_BUNDLE_RUN_SOURCE: &str = "// GENERATED: the library `
 pub(crate) const COMPTIME_BUNDLE_RUN_PROFILE: &str = "\n[profile.dev]\noverflow-checks = false\ndebug-assertions = false\ndebug = 0\npanic = \"unwind\"\n";
 
 pub(crate) const COMPTIME_BUNDLE_NAMED: [&str; 3] = ["nikaia_std", "winnow", "winnow_grammar"];
+
+pub fn comptime_bundle_artifacts(messages: &str, named: &[String]) -> ComptimeBundleArtifacts {
+    let mut dylib: Option<fs::Path> = None;
+    let mut rlibs: Vec<(String, fs::Path)> = vec![];
+    for message in cargo_json_lines(messages) {
+        if !cargo_json_an_artifact(&message) { continue; }
+        let files = cargo_json_filenames(&message);
+        let name = match cargo_json_text((cargo_json_member((cargo_json_member(Some(&message), "target")).as_ref(), "name")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if named.iter().any(|each| { AsRef::<str>::as_ref(&(each)) == AsRef::<str>::as_ref(&(name)) }) {
+            let rlib = match files.iter().find(|&file| { cargo_json_extension(file) == "rlib" }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            rlibs.push((name, nikaia_std::fs::path::clone(&(rlib))));
+        } else if name == "nikaia_bundle" {
+            dylib = match files.iter().find(|&file| {
+                let extension = cargo_json_extension(file);
+                extension == "so" || extension == "dylib" || extension == "dll"
+            }) {
+                Some(__nikaia_it) => Some(nikaia_std::fs::path::clone(&(__nikaia_it))),
+                None => None,
+            };
+        }
+    }
+    ComptimeBundleArtifacts { dylib, rlibs }
+}
 
 pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { name.to_string() }).collect::<Vec<_>>() }
 
@@ -141,8 +163,8 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let dylib: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 1));
     let deps: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 2));
     let libdir: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 3));
-    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple9553| {
-        let (name, rlib) = __nikaia_tuple9553;
+    let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple10572| {
+        let (name, rlib) = __nikaia_tuple10572;
         (name.to_string(), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }
@@ -213,7 +235,7 @@ pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &C
         Err(error) => { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(format!("running cargo: {}", error)), &"comptime_bundle_bundle_of")) },
     };
     if !built.ok { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(built.stderr), &"comptime_bundle_bundle_of")); }
-    let found = host.artifacts(&built.stdout, &comptime_bundle_named());
+    let found = comptime_bundle_artifacts(&built.stdout, &comptime_bundle_named());
     if (found.rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("cargo built the bundle and named no library")), &"comptime_bundle_bundle_of")); }
     let dylib = match found.dylib { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("cargo built the bundle and named no library")), &"comptime_bundle_bundle_of")) };
     let deps = match nikaia_std::fs::path::parent(&(nikaia_std::index::get(&found.rlibs, 0).1)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("no directory for std")), &"comptime_bundle_bundle_of")) };

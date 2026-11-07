@@ -16,6 +16,12 @@ fn first() -> ref Array[i64] {
 	return v[0..1]
 }
 
+// The probe of #1273: a list built from a parameter, cut open-ended.
+fn rest(n: i64) -> ref Array[i64] {
+	let xs: Vec[i64] = [n, n + 1, n + 2]
+	return xs[1..]
+}
+
 fn built() -> W {
 	let xs = [L { n: 4 }]
 	let one: ref L = xs[0]
@@ -26,4 +32,5 @@ fn built() -> W {
 fn main() {
 	println(make().own.n + built().k)
 	println(first().len())
+	println(rest(1).len())
 }

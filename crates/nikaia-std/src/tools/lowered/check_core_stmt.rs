@@ -880,7 +880,10 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             _ => { },
         }
     }
-    if bytes_view { state.text_bytes_lets.insert(id); }
+    if bytes_view {
+        state.text_bytes_lets.insert(id);
+        if ty.is_some() { state.facts.text_bytes_typed_lets.insert(span.start as i64); }
+    }
     if !mutable && names.len() == 1 && shape.is_empty() {
         let position = check_core_places_text_position(&state, world, value);
         if position.is_some() { state.text_positions.insert(id, nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 })); }

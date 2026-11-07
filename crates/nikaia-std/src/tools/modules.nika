@@ -14,30 +14,34 @@ use std::hash
 /// The names a file declares: what one package's namespace counts
 /// (ADR-286 D1). A method belongs to its type and a grammar's rule to its
 /// grammar, so neither is among them; a `trait` and a `grammar` are
-/// (ADR-286 D5).
-pub fn declared_names(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[String] {
-    let mut out: Vec[String] = []
+/// (ADR-286 D5). Each with the item that declares it, where a second
+/// declaration is refused (#1364).
+pub fn declared_at(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> Vec[(String, Span)] {
+    let mut out: Vec[(String, Span)] = []
     for item in items {
         let name = name_declared(names, item.node)
         if name.len() > 0 {
-            out.push(name)
+            out.push((name, item.span.clone()))
         }
     }
     return out
 }
 
 /// **Every `use` in a file, against the packages it may name** (ADR-286 D11,
-/// D4, D5), and the refusal for the first that is wrong, or nothing. `use`
-/// makes a package reachable and brings no name in, so there are four things
-/// to say no to, each with the way out (Part III C.2): a path rather than a
-/// package; the same name twice; a name no dependency declares, where a file
-/// alone has none at all; and a file beside this one, whose package already
-/// sees it. `beside` says whether `<package>.nika` is a file next to this one.
-pub fn a_use_refused(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], here: ref String, reachable: ref collections::BTreeSet[String], alone: bool, beside: fn(ref String) -> bool sync) -> String? {
-    // What each `use` names, and what this file calls it: the two differ
-    // exactly where an alias is written (ADR-286 D12). A path first, and every
-    // one of them, because it is the only shape that is wrong about itself.
-    let mut named: Vec[(String, String)] = []
+/// D4, D5), and the refusal for the first that is wrong, at its `use` line,
+/// or nothing (#1364). `use` makes a package reachable and brings no name in,
+/// so there are four things to say no to, each with the way out (Part III
+/// C.2): a path rather than a package (`NK1337`); the same name twice
+/// (`NK1338`); a name no dependency declares, where a file alone has none at
+/// all (`NK1339`, `NK1341`); and a file beside this one, whose package already
+/// sees it (`NK1340`). `beside` says whether `<package>.nika` is a file next
+/// to this one.
+pub fn a_use_refused(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], reachable: ref collections::BTreeSet[String], alone: bool, beside: fn(ref String) -> bool sync) -> Finding? {
+    // What each `use` names, what this file calls it, and where it stands:
+    // the first two differ exactly where an alias is written (ADR-286 D12). A
+    // path first, and every one of them, because it is the only shape that is
+    // wrong about itself.
+    let mut named: Vec[(String, String, Span)] = []
     for item in items {
         let segments = use_segments(names, item.node)
         if segments.len() == 0 || segments[0] == "std" {
@@ -46,25 +50,25 @@ pub fn a_use_refused(names: ref winnow_grammar::InternerContext, items: ref Vec[
         let first = segments[0].clone()
         if segments.len() > 1 {
             let written = segments.join("::")
-            return f"`use {written}` in {here}: `use` takes a package name only, not a path into it. Write `use {first}`, and `{written}` where you need it."
+            return refusal("NK1337", item.span.clone(), "`use` takes a package name only, not a path into it.", [], f"Write `use {first}`, and `{written}` where you need it.")
         }
         let called = alias_of(names, item.node)
         if called.len() > 0 {
-            named.push((first, called))
+            named.push((first, called, item.span.clone()))
         } else {
-            named.push((first.clone(), first))
+            named.push((first.clone(), first, item.span.clone()))
         }
     }
     // **D5 before D4**: a name written twice is a fact about this file, and
     // the name counted is the one this file introduces - the alias.
     let mut once: collections::BTreeSet[String] = collections::BTreeSet()
-    for (_, called) in named {
+    for (_, called, span) in named {
         if once.contains(called) {
-            return f"`{called}` is used twice in {here}. Two packages can't have the same name in one file. Write `use … as …` to give one of them another name."
+            return refusal("NK1338", span.clone(), f"`{called}` is used twice in this file.", ["Two packages can't have the same name in one file."], "Write `use … as …` to give one of them another name.")
         }
         once.insert(called.clone())
     }
-    for (package, _) in named {
+    for (package, _, span) in named {
         if reachable.contains(package) {
             continue
         }
@@ -72,12 +76,12 @@ pub fn a_use_refused(names: ref winnow_grammar::InternerContext, items: ref Vec[
         // is read, so the advice about a package's files would be about a
         // package this file is not part of.
         if alone {
-            return f"`use {package}` in {here}: a single file outside a project has no dependencies, so there's no `{package}` to use.\nDependencies are declared in a project's `nikaia.toml`. Put this file in a project whose `nikaia.toml` declares it:\n    [dependencies]\n    {package} = {{ path = \"../{package}\" }}"
+            return refusal("NK1339", span.clone(), f"a single file outside a project has no dependencies, so there's no `{package}` to use.", ["Dependencies are declared in a project's `nikaia.toml`."], f"Put this file in a project whose `nikaia.toml` declares it:\n    [dependencies]\n    {package} = {{ path = \"../{package}\" }}")
         }
         if beside(package) {
-            return f"`use {package}` in {here}: the files of a package already see each other, so there's nothing to bring in. Remove the line and use the name directly."
+            return refusal("NK1340", span.clone(), "the files of a package already see each other, so there's nothing to bring in.", [], "Remove the line and use the name directly.")
         }
-        return f"`use {package}` in {here}: there's no dependency called `{package}`.\nAdd it to the project's `[dependencies]` under that name:\n    [dependencies]\n    {package} = {{ path = \"../{package}\" }}"
+        return refusal("NK1341", span.clone(), f"there's no dependency called `{package}`.", [], f"Add it to the project's `[dependencies]` under that name:\n    [dependencies]\n    {package} = {{ path = \"../{package}\" }}")
     }
     return null
 }
@@ -265,19 +269,21 @@ pub fn lost_sync_unplaced(message: ref String, help: ref String) -> String {
 /// into one namespace without it - two private `a_call`s in two files were
 /// read as one, and a call of the one met the other's parameters (found
 /// moving `trust`'s walk into Nikaia, #125). `declared` holds the names each
-/// file of `paths` declares (`declared_names`); the refusal for the first
-/// name two files declare, or nothing.
-pub fn declared_once(paths: ref Vec[String], declared: ref Vec[Vec[String]]) -> String? {
+/// file of `paths` declares (`declared_at`); the refusal for the first
+/// name two files declare, at its second declaration, with the number of the
+/// file it stands in, or nothing. The rule is `NK1148`'s, a name means one
+/// thing, across the files of one package (#1364).
+pub fn declared_once(paths: ref Vec[String], declared: ref Vec[Vec[(String, Span)]]) -> (i64, Finding)? {
     let mut seen: collections::BTreeMap[String, String] = collections::BTreeMap()
     for at in 0..<paths.len() {
         let path = paths[at].clone()
-        for name in declared[at] {
+        for (name, span) in declared[at] {
             if seen.contains_key(name) {
                 let first = (seen[name] ?? "").clone()
                 if first == path {
                     continue
                 }
-                return f"`{name}` is declared twice in this package: in {first} and in {path}.\nAll files of a package share their names. Rename one of the two, or keep one declaration and use it from the other file."
+                return (at, refusal("NK1148", span.clone(), f"`{name}` is declared twice in this package: in {first} and in {path}.", ["All files of a package share their names."], "Rename one of the two, or keep one declaration and use it from the other file."))
             }
             seen.insert(name.clone(), path.clone())
         }
@@ -947,11 +953,11 @@ pub trait ModulesHost {
     /// gives its number; `null` where it does not parse, and the host holds
     /// the refusal, rendered against `path` where it is a finding.
     fn parse_unit(ref self, path: ref fs::Path, source: ref String, package: String?) -> i64? sync
-    /// The names file `unit` declares (`declared_names`).
-    fn declared(ref self, unit: i64) -> Vec[String] sync
+    /// The names file `unit` declares, each with its item (`declared_at`).
+    fn declared(ref self, unit: i64) -> Vec[(String, Span)] sync
     /// The refusal of file `unit`'s first `use` that names what it may not
-    /// reach (`a_use_refused`), or nothing.
-    fn use_refused(ref self, unit: i64, at: ref fs::Path, reachable: ref collections::BTreeSet[String], alone: bool) -> String? sync
+    /// reach (`a_use_refused`), or nothing; `at` is where the file was read.
+    fn use_refused(ref self, unit: i64, at: ref fs::Path, reachable: ref collections::BTreeSet[String], alone: bool) -> Finding? sync
     /// The Rust crates the manifest at `path` declares, under the name a
     /// program writes them by; none where it does not read.
     fn foreign_crates(ref self, path: ref fs::Path) -> Vec[String] sync
@@ -965,6 +971,9 @@ pub enum ModulesRefusal {
     Refused(String),
     /// A file or directory that could not be read: what was read, and why not.
     Unreadable { what: String, why: String },
+    /// A finding about the file read at `path`, whose text is `source`: a
+    /// `use` line, a name declared twice (#1364).
+    Found { path: String, source: String, finding: Finding },
 }
 
 impl Error for ModulesRefusal {
@@ -973,6 +982,7 @@ impl Error for ModulesRefusal {
             ModulesRefusal::Parse => "a file did not parse",
             ModulesRefusal::Refused(why) => why.clone(),
             ModulesRefusal::Unreadable { what, why } => f"{what}: {why}",
+            ModulesRefusal::Found { path, finding, .. } => f"{path}: {finding.message}",
         }
     }
 }
@@ -1036,13 +1046,31 @@ pub fn modules_qualify(package: String?, name: String) -> String {
 /// tree (Part III 13.5). Each is read from the package's `src/`, because a
 /// dependency is a project and that is where a project keeps its files
 /// (Part III, 13.1).
-pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let mut names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
     // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
     // image`), under the name a call writes it by (ADR-290 D1).
     names.extend(modules_foreign_beside(entry, host))
-    let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), host)
+    let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), open, host)
+    units.extend(modules_dependency_units(dependencies, open, host))
+    return units
+}
 
+/// **A test program and the packages it depends on**
+/// ([ADR-269](../../../docs/specification/adr/adr-269.md) D22, #972): the
+/// entry alone, as `nikaia test` builds it, for it is a program of its own
+/// and the `.nika` files beside it in `tests/` are other programs. Its `use`
+/// lines are checked against its dependencies, as in a project.
+pub fn modules_collect_program_test[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+    let names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
+    let mut units: Vec[ModulesUnit] = [modules_read_unit(entry, null, names, collections::BTreeMap(), ModulesStanding::InProject, open, host)]
+    units.extend(modules_dependency_units(dependencies, open, host))
+    return units
+}
+
+/// The files of the packages a program depends on, in the order given.
+fn modules_dependency_units[H: ModulesHost](dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+    let mut units: Vec[ModulesUnit] = []
     // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)
     // D1). A dependency is its own crate now, so its files are Cargo's to
     // compile - but its *surface* is this program's to check against, and a
@@ -1059,14 +1087,14 @@ pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: r
             throw ModulesRefusal::Refused(f"`{dependency.name}` is a dependency by path, but {src.display()} doesn't exist.\nA package is a directory with a `{MODULES_SRC}/` folder in it.")
         }
         let package: String? = dependency.name.clone()
-        units.extend(modules_package_at(src.join(MODULES_ENTRY), package, dependency.reachable, dependency.renames, host))
+        units.extend(modules_package_at(src.join(MODULES_ENTRY), package, dependency.reachable, dependency.renames, open, host))
     }
     return units
 }
 
 /// One package: the directory an entry sits in, checked as a namespace of its
 /// own.
-fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let base = modules_base_of(entry)
     // `read_dir` gives the names sorted by their bytes: the order Rust's
     // sorted paths had, since they differ only in that last part.
@@ -1074,16 +1102,29 @@ fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, rea
     // The entry by its name: `x.nika` and the `./x.nika` the directory
     // lists are one file (#774).
     let entry_name = entry.file_name()?.text_of() ?? ""
-    let beside: Vec[fs::Path] = names.iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == "nika" }).filter(fn(name) { name.text_of() != entry_name }).map(fn(name) { base.join(name) }).collect()
+    // **A package's units are its `.nika` files on disk and the documents an
+    // editor has open in its directory** (#1365): a file created in the
+    // editor and not yet saved is a unit as the editor shows it. A name both
+    // lists give is one unit; the set keeps them sorted by their bytes.
+    let mut listed: collections::BTreeSet[String] = names.iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == "nika" }).map(fn(name) { name.text_of().clone() }).collect()
+    for key in open.keys() {
+        let held: fs::Path = key
+        let parent = held.parent() ?? continue
+        if parent.text_of() == base.text_of() && (held.extension()?.text_of() ?? "") == "nika" {
+            let name = held.file_name()?.text_of() ?? continue
+            listed.insert(name.clone())
+        }
+    }
+    let beside: Vec[fs::Path] = listed.iter().filter(fn(name) { name != entry_name }).map(fn(name) { base.join(name) }).collect()
 
     // A library needs no `main.nika`: what a package offers is its public
     // surface, and an entry point is what a *program* has.
     let mut units: Vec[ModulesUnit] = []
-    if modules_is_file(entry) {
-        units.push(modules_read_unit(entry, package?.clone(), reachable, renames, ModulesStanding::InProject, host))
+    if modules_is_file(entry) || open.contains_key(entry.display()) {
+        units.push(modules_read_unit(entry, package?.clone(), reachable, renames, ModulesStanding::InProject, open, host))
     }
     for path in beside {
-        units.push(modules_read_unit(path, package?.clone(), reachable, renames, ModulesStanding::InProject, host))
+        units.push(modules_read_unit(path, package?.clone(), reachable, renames, ModulesStanding::InProject, open, host))
     }
     modules_one_namespace(units, host)
     return units
@@ -1105,18 +1146,24 @@ fn modules_base_of(entry: ref fs::Path) -> fs::Path {
 /// a directory of programs, and compiling one of them must not pull in the other
 /// ten. A package is a directory **of a project**, which is what a `nikaia.toml`
 /// declares.
-pub fn modules_collect_one[H: ModulesHost](entry: ref fs::Path, host: ref H) -> Vec[ModulesUnit] throws {
-    return [modules_read_unit(entry, null, collections::BTreeSet(), collections::BTreeMap(), ModulesStanding::Alone, host)]
+pub fn modules_collect_one[H: ModulesHost](entry: ref fs::Path, open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+    return [modules_read_unit(entry, null, collections::BTreeSet(), collections::BTreeMap(), ModulesStanding::Alone, open, host)]
 }
 
 /// One file read, parsed by the host and its `use` lines checked.
-fn modules_read_unit[H: ModulesHost](path: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], standing: ModulesStanding, host: ref H) -> ModulesUnit throws {
-    let source = fs::read_to_string(path, fs::Root::Anywhere) catch { throw ModulesRefusal::Unreadable { what: f"cannot read {path.display()}", why: f"{error}" } }
+fn modules_read_unit[H: ModulesHost](path: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], standing: ModulesStanding, open: ref collections::BTreeMap[String, String], host: ref H) -> ModulesUnit throws {
+    // **A file an editor has open is read as the editor holds it** (#1347):
+    // `open` maps a path, as shown, to its text; every build but
+    // `nikaia lsp`'s passes it empty.
+    let source = match open.get(path.display()) {
+        null => fs::read_to_string(path, fs::Root::Anywhere) catch { throw ModulesRefusal::Unreadable { what: f"cannot read {path.display()}", why: f"{error}" } },
+        text => text.clone(),
+    }
     // A parse error is a finding, rendered by the host where the path is
     // known; it is a refusal of the program rather than a failure of this
     // compiler (`diagnostics::Refused`).
     let parsed = host.parse_unit(path, source, package?.clone()) ?? throw ModulesRefusal::Parse
-    modules_check_imports(parsed, path, reachable, standing, host)
+    modules_check_imports(parsed, path, source, reachable, standing, host)
     return ModulesUnit { path: path.clone(), source: source, parsed: parsed, package: package, renames: renames.clone() }
 }
 
@@ -1129,21 +1176,21 @@ fn modules_read_unit[H: ModulesHost](path: ref fs::Path, package: String?, reach
 /// Part III C.1 forbids - and it would name a line the user never wrote.
 fn modules_one_namespace[H: ModulesHost](units: ref Vec[ModulesUnit], host: ref H) throws {
     let paths: Vec[String] = units.iter().map(fn(unit) { unit.path.display() }).collect()
-    let declared: Vec[Vec[String]] = units.iter().map(fn(unit) { host.declared(unit.parsed) }).collect()
-    let message = declared_once(paths, declared) ?? return
-    throw ModulesRefusal::Refused(message)
+    let declared: Vec[Vec[(String, Span)]] = units.iter().map(fn(unit) { host.declared(unit.parsed) }).collect()
+    let (at, finding) = declared_once(paths, declared) ?? return
+    throw ModulesRefusal::Found { path: paths[at].clone(), source: units[at].source.clone(), finding: finding }
 }
 
 /// **Every `use` in a file, against the packages it may name**
 /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D11, D13, D14):
 /// `a_use_refused` over file `unit`, asked through the host.
-fn modules_check_imports[H: ModulesHost](unit: i64, at: ref fs::Path, reachable: ref collections::BTreeSet[String], standing: ModulesStanding, host: ref H) throws {
+fn modules_check_imports[H: ModulesHost](unit: i64, at: ref fs::Path, source: ref String, reachable: ref collections::BTreeSet[String], standing: ModulesStanding, host: ref H) throws {
     let alone = match standing {
         ModulesStanding::Alone => true,
         ModulesStanding::InProject => false,
     }
-    let message = host.use_refused(unit, at, reachable, alone) ?? return
-    throw ModulesRefusal::Refused(message)
+    let finding = host.use_refused(unit, at, reachable, alone) ?? return
+    throw ModulesRefusal::Found { path: at.display(), source: source.clone(), finding: finding }
 }
 
 /// The directory of the project an entry belongs to: the nearest one above it

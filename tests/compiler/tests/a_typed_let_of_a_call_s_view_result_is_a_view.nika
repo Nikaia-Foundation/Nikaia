@@ -1,0 +1,40 @@
+// A `let` declared `Array[T]` with no length holds a view where its value
+// is a piece of a buffer: a call whose result views its argument, a piece
+// or an element of a place (ADR-views-3 D8, D11; #1270).
+
+struct Item {
+    name: String,
+}
+
+fn rest(xs: Array[i64]) -> Array[i64] {
+    return xs[1..]
+}
+
+fn rest2(xs: Array[i64]) -> Array[i64] {
+    return rest(xs)
+}
+
+fn tail(xs: Array[Item]) -> Array[Item] {
+    return xs[1..]
+}
+
+fn count(xs: Array[Item]) -> i64 {
+    let w: Array[Item] = xs[1..]
+    let u: Array[Item] = tail(tail(xs))
+    return w.len() + u.len()
+}
+
+fn main() throws {
+    let v: Vec[i64] = [1, 2, 3]
+    let r: Array[i64] = rest(v)
+    println(r.len())
+    println(rest2(v).len())
+    let items: Vec[Item] = [Item { name: "a" }, Item { name: "b" }, Item { name: "c" }]
+    let grid: Vec[Vec[Item]] = [[Item { name: "x" }]]
+    let a: Array[Item] = tail(items)
+    let b: Array[Item] = items[1..]
+    let d: Array[Item] = grid[0]
+    println(f"{a.len()} {b.len()} {d.len()} {a[0].name} {d[0].name}")
+    println(count(items))
+    println(items.len())
+}

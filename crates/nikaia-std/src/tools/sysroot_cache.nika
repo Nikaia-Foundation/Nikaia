@@ -259,10 +259,31 @@ pub fn sysroot_drift(files: ref Vec[(String, String)], dir: ref fs::Path) -> Vec
 
 /// The generated files under `dir/lowered/` that `kept` does not name.
 pub fn sysroot_stale(dir: ref fs::Path, kept: ref Vec[String]) -> Vec[String] sync {
-    let listed = fs::read_dir(dir.join(SYSROOT_TOOLS_FILES), fs::Root::Anywhere) catch { [] }
-    let mut stale: Vec[String] = listed.iter().map(fn(name) { f"{SYSROOT_TOOLS_FILES}/{name.text_of()}" }).filter(fn(name) { !kept.contains(name) }).collect()
+    let mut stale: Vec[String] = sysroot_generated(dir).iter().filter(fn(name) { !kept.contains(name) }).map(fn(name) { name.clone() }).collect()
     stale.sort()
     return stale
+}
+
+/// **Every generated file under `dir/lowered/`**: one per file of the
+/// package, and a directory per dependency (#1163) with that package's index
+/// and its own `lowered/` files.
+fn sysroot_generated(dir: ref fs::Path) -> Vec[String] sync {
+    let mut names: Vec[String] = []
+    let listed = fs::read_dir(dir.join(SYSROOT_TOOLS_FILES), fs::Root::Anywhere) catch { [] }
+    for entry in listed {
+        let name = f"{SYSROOT_TOOLS_FILES}/{entry.text_of()}"
+        let meta = fs::metadata(dir.join(name), fs::Root::Anywhere) catch { continue }
+        if !meta.is_dir() {
+            names.push(name)
+            continue
+        }
+        names.push(f"{name}/{SYSROOT_TOOLS_PACKAGE}")
+        let theirs = fs::read_dir(dir.join(name).join(SYSROOT_TOOLS_FILES), fs::Root::Anywhere) catch { [] }
+        for file in theirs {
+            names.push(f"{name}/{SYSROOT_TOOLS_FILES}/{file.text_of()}")
+        }
+    }
+    return names
 }
 
 /// A package as one text, for its cache entry: each file after a

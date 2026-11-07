@@ -1,0 +1,8 @@
+error[NK1340]: The files of a package already see each other, so there's nothing to bring in.
+  --> src/main.nika:1:1
+   |
+ 1 | use helpers
+   | ^^^^^^^^^^^
+   |
+   = help: Remove the line and use the name directly.
+exit 1
