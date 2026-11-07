@@ -2826,6 +2826,31 @@ fn flow_result(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: Ti
     let key = walk.result?.clone() ?? return
     let function = walk.declared.fns[key]?.clone() ?? return
     let result = function.result ?? return
+    // **A body that ends in an `if` or a `match` hands back each arm's
+    // value**, as a `return` in each arm does (ADR-282 D12, ADR-views-3 D8,
+    // #1254): `if c { a } else { own(a) }` lends `a` as `if c { return a }
+    // else { return own(a) }` does. Split only where an arm hands back a
+    // lendable parameter; anything else goes in whole, as before.
+    let arms = tail_arms(value)
+    if plain_string(ask.names, result) && !function.of_a_trait && arms.len() > 0 {
+        let mut any = false
+        for arm in arms {
+            let mut sides: Vec[String] = []
+            if lendable_sides(arm, ask, walk, sides) && sides.len() > 0 {
+                any = true
+            }
+        }
+        if any {
+            for arm in arms {
+                let arm_kinds = match arm {
+                    Expr::Variable(name, _) => kinds_of_local(ask.names.resolve(name), walk),
+                    else => kinds.clone(),
+                }
+                flow_result(arm, arm_kinds, ask, walk)
+            }
+            return
+        }
+    }
     // **A field read through a borrowed parameter is a view of it** when it
     // is handed back (ADR-282 D2, D12, #663): `return self.path` from a
     // `ref self` method points into `self`, as `-> ref String` would.
@@ -2863,6 +2888,30 @@ fn flow_result(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: Ti
         }
     }
     flow_value(going_into(TextOwner::Returned(key.clone()), result, [], false), value, handed, ask, walk)
+}
+
+/// The values the arms of a tail `if` with an `else`, a `match` or a block
+/// hand back: each arm's last value, an arm that ends in a jump giving none.
+/// Empty for any other expression.
+fn tail_arms(value: ref Expr) -> Vec[ref Expr] {
+    let mut out: Vec[ref Expr] = []
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = else_branch ?? return out
+            out.extend(block_tail(then_branch))
+            out.extend(block_tail(otherwise))
+        }
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                match arm.body {
+                    Expr::Block(block, _) => out.extend(block_tail(block)),
+                    body => out.push(body),
+                }
+            }
+        }
+        else => {}
+    }
+    return out
 }
 
 /// **The parameters a value handed back is, side by side** (#678, #696): a
