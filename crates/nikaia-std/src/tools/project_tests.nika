@@ -367,8 +367,11 @@ pub fn is_refusal(text: String) -> bool {
 }
 
 /// Whether the build failed in rustc: not a refusal by the Nikaia compiler.
+/// Cargo's `could not compile`, or `NK1343`, the internal compiler error the
+/// build reports in its place (Part III C.1, #1373): neither is a refusal a
+/// `.stderr` can expect, so `--bless` writes none.
 pub fn does_not_compile(text: String) -> bool {
-    return text.contains("could not compile")
+    return text.contains("could not compile") || text.contains("error[NK1343]")
 }
 
 /// What names an output test in its report: its `.stdout`, or its `.out/`.

@@ -1,0 +1,46 @@
+// #1373: rustc refusing what a program the checker accepted was lowered to is
+// `error[NK1343]: internal compiler error` at the `.nika` line, for `nikaia
+// run` and `nikaia check --rustc` alike, and `nikaia test` counts it as a
+// failure that `--bless` never blesses. The program below is refused by rustc
+// today (a `fn` field called with an owned `String`); when that defect is
+// fixed, put another one here.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn shown(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
+    let out = process::run(nikaia, args; dir: tmp.clone())
+    println(f"-- {label}: exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("error[") || line.trim().starts_with("-->") || line.starts_with("program ") || line.starts_with("Checked") {
+            println(line)
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let refused = "struct H {\n    f: fn(String) -> i64,\n}\n\nfn size(s: String) -> i64 { s.len() }\n\nfn main() throws {\n    let h = H { f: size }\n    let mut g = String()\n    g.push_str(\"abc\")\n    println(h.f(g))\n}\n"
+    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
+    let alone = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{alone}/refused.nika", fs::Root::Anywhere, refused)
+    shown(nikaia, alone, "run", ["run", "refused.nika"])
+    shown(nikaia, alone, "check", ["check", "refused.nika"])
+    shown(nikaia, alone, "check --rustc", ["check", "--rustc", "refused.nika"])
+    fs::write(f"{tmp}/tests/refused.nika", fs::Root::Anywhere, refused)
+    fs::write(f"{tmp}/tests/refused.stdout", fs::Root::Anywhere, "3\n")
+    shown(nikaia, tmp, "test, expected stdout", ["test"])
+    process::run("rm", [f"{tmp}/tests/refused.stdout"])
+    fs::write(f"{tmp}/tests/refused.stderr", fs::Root::Anywhere, "")
+    shown(nikaia, tmp, "test --bless-stderr", ["test", "--bless-stderr"])
+    println(f"refused.stderr: [{fs::read_to_string(f"{tmp}/tests/refused.stderr", fs::Root::Anywhere).trim()}]")
+    process::run("rm", ["-rf", tmp, alone])
+}

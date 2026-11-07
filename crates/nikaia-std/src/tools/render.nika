@@ -326,6 +326,38 @@ fn after_help(note: ref String) -> String {
     return after_help(rest)
 }
 
+/// **`NK1343`, an internal compiler error** (Part III C.1, #1373): rustc
+/// refused the Rust a program the checker accepted was lowered to. It stands
+/// at the `.nika` span the failing Rust came from, where the map knew one, and
+/// at the generated line where it did not; rustc's own text follows under
+/// `rustc output:`, and the help asks for a bug report. Where translating the
+/// names made both sides of an `expected ... found ...` the same (ADR-056
+/// D2), the rustc output is the backend's own words.
+fn rustc_refused(message: ref Relayed, at: ref String, path: ref String, source: ref String) -> String {
+    let mut notes: Vec[String] = []
+    match message.internal {
+        null => notes.push(f"rustc output: {message.message}"),
+        original => {
+            notes.push("The compiler generated two different types for one of yours.")
+            notes.push(f"rustc output: {original}")
+        },
+    }
+    for note in message.notes {
+        notes.push(note.clone())
+    }
+    let help = "This is a bug in Nikaia, not in your program: the checker accepted it, and Rust refused the code it became. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."
+    if message.located {
+        let shown = Shown { warning: false, code: "NK1343", message: "internal compiler error", notes: notes, help: help, span: message.span.clone(), labels: [Marked { span: message.span.clone(), word: message.word.clone(), text: "", main: true }] }
+        return rendered(shown, path, source)
+    }
+    let mut out = f"error[NK1343]: internal compiler error\n  --> {at} (no Nikaia source maps to this)\n"
+    for note in notes {
+        out.push_str(ref f"   = note: {note}\n")
+    }
+    out.push_str(ref f"   = help: {help}\n")
+    return out
+}
+
 /// One message the backend reported, placed in the `.nika` file where that was
 /// possible, as the compiler's `diagnostics` holds it.
 pub struct Relayed {
@@ -343,6 +375,10 @@ pub struct Relayed {
     pub span: Span,
     pub word: String,
     pub notes: Vec[String],
+    /// Whether the message is a statement about the program (the parser
+    /// backend's frame check, a stale ledger) rather than this compiler's
+    /// defect; an error that is not one is `NK1343`.
+    pub about_the_program: bool,
 }
 
 /// A relayed message in the layout of the compiler's own: the backend's
@@ -358,6 +394,9 @@ pub fn relayed(message: ref Relayed, path: ref String, source: ref String, gener
     let mut at = generated_path.clone()
     if message.generated_line > 0 {
         at = f"{generated_path}:{message.generated_line}"
+    }
+    if message.level == "error" && !message.about_the_program {
+        return rustc_refused(message, at, path, source)
     }
     if message.internal != null {
         let original = message.internal ?? return ""
