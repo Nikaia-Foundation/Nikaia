@@ -306,7 +306,7 @@ pub(crate) fn check_claim_refused(held: Option<&ClaimHeld>) -> Option<String> {
     }
 }
 
-pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, colour: bool, refuses: bool) -> String {
+pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, derived: &[String], colour: bool, refuses: bool) -> String {
     let mut refused: Vec<String> = vec![];
     let mut at_run_time: Vec<String> = vec![];
     let mut arrives: Vec<String> = vec![];
@@ -364,6 +364,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     if through_loops > 0 { looped = format!(", through a loop {}", through_loops); }
     let mut vouched: String = String::from("");
     if !assumed.is_empty() { vouched = format!("; assumed {}", assumed.len() as i64); }
+    if !derived.is_empty() { vouched = format!("{}; derived from the callers {}", vouched, derived.len() as i64); }
     let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unproved + arrives.len() as i64 + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched);
     let mut red: Vec<String> = vec![];
     red.extend(refused);
@@ -372,6 +373,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let mut green: Vec<String> = vec![];
     green.extend(proved);
     green.extend(preconditions);
+    for row in derived.iter() { green.push(format!("  {}  derived  {}", path, row)); }
     out.push_str(&check_report_rows(&red, "\x1b[31m", colour));
     out.push_str(&check_report_rows(&arrives, "\x1b[94m", colour));
     out.push_str(&check_report_rows(&assumed, "\x1b[33m", colour));

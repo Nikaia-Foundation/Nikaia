@@ -141,16 +141,18 @@ impl CheckState {
             }
         }
         let mut loop_frame: i64 = -1
-        if how == "break" || how == "continue" {
-            let mut at = self.repeats.len()
-            while at > 0 && loop_frame < 0 {
-                at = at - 1
-                if self.repeats[at].what == "loop" {
+        let mut in_loop: i64 = -1
+        let mut at = self.repeats.len()
+        while at > 0 && in_loop < 0 {
+            at = at - 1
+            if self.repeats[at].what == "loop" {
+                in_loop = self.repeats[at].opened
+                if how == "break" || how == "continue" {
                     loop_frame = self.repeats[at].frame
                 }
             }
         }
-        self.ways_out.push(CheckWayOut { how: how.clone(), word: word.clone(), at: span.start as i64, seq: self.read_seq, choices: self.branch.clone(), span: span.clone(), loop_frame: loop_frame })
+        self.ways_out.push(CheckWayOut { how: how.clone(), word: word.clone(), at: span.start as i64, seq: self.read_seq, choices: self.branch.clone(), span: span.clone(), loop_frame: loop_frame, in_loop: in_loop })
     }
 
     /// **A part of a `mut` parameter or of a `let mut` view, taken out to be
@@ -352,14 +354,14 @@ impl CheckState {
 
     // The nearest body that may run again around a name bound at `bound`, and
     // that takes it again: its index in `repeats`, or -1.
-    fn around_a_repeat(ref self, bound: i64, name: ref String) -> i64 {
+    fn around_a_repeat(ref self, bound: i64, path: ref String) -> i64 {
         let mut at = self.repeats.len()
         while at > 0 {
             at = at - 1
             if self.repeats[at].frame <= bound {
                 return -1
             }
-            if self.repeats[at].takes_again(name) {
+            if self.repeats[at].takes_again(path) {
                 return at
             }
         }
@@ -426,11 +428,18 @@ impl CheckState {
         if bound < 0 {
             return
         }
-        let around = self.around_a_repeat(bound, root)
+        let around = self.around_a_repeat(bound, path)
         if around < 0 {
+            self.held_in_a_loop(bound, path, ty, to, span)
             return
         }
         let what = self.repeats[around].what.clone()
+        self.handed_over_again(what, path, ty, to, span)
+    }
+
+    /// `NK2105`: `path`, declared outside the `what` around it, handed over
+    /// inside it.
+    fn handed_over_again(ref mut self, what: ref String, path: ref String, ty: ref Ty, to: ref String, span: ref Span) sync {
         let mut again: String = "a lambda may run more than once, and the second run would find it gone"
         if what == "loop" {
             again = "the next time round the loop it would be handed over again, but it's already gone"
@@ -439,6 +448,89 @@ impl CheckState {
         }
         let copy = a_copy_said(path, ty)
         self.findings.push(check_refusal("NK2105", span, f"`{path}` is {to} inside a {what}, but it was declared outside it.", [f"`{path}` is a `{ty.text()}`, so it's handed over itself, not a copy - {again}.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"Hand over a copy each time: `{copy}`."))
+    }
+
+    /// **A taking in a loop that a `break` or a `return` may end** (#1366):
+    /// held on the innermost such loop, to be asked where it ends. Not when
+    /// the loop gives `path` a new value, nor inside a lambda, whose ways out
+    /// are not recorded.
+    fn held_in_a_loop(ref mut self, bound: i64, path: ref String, ty: ref Ty, to: ref String, span: ref Span) sync {
+        let mut loops: Vec[i64] = []
+        let mut holder: i64 = -1
+        let mut at = self.repeats.len()
+        while at > 0 {
+            at = at - 1
+            if self.repeats[at].what != "loop" {
+                return
+            }
+            loops.push(self.repeats[at].opened)
+            if self.repeats[at].frame > bound && holder < 0 {
+                if self.repeats[at].revives(path) {
+                    return
+                }
+                if self.repeats[at].leaves {
+                    holder = at
+                }
+            }
+        }
+        if holder < 0 {
+            return
+        }
+        let held = CheckHeldTaking { path: path.clone(), ty: ty.clone(), to: to.clone(), span: span.clone(), choices: self.branch.clone(), from: self.ways_out.len() as i64, bound: bound, loops: loops }
+        self.repeats[holder].held.push(held)
+    }
+
+    /// **Where a loop ends, what it held** (#1366): handed over again when a
+    /// `continue` of the loop, or the end of its body, can follow the taking
+    /// on some path, that is before a `return`, a `throw` or a `break` of the
+    /// loop that stands on every path from it. Otherwise it is held on the
+    /// next loop out that may end, which would hand it over again in turn.
+    pub fn a_loop_ends(ref mut self) sync {
+        let last = self.repeats.len() as i64 - 1
+        if last < 0 {
+            return
+        }
+        let ending = self.repeats[last].opened
+        let held = self.repeats[last].held.clone()
+        self.repeats[last].held = []
+        for taking in held {
+            if self.a_turn_follows(ending, taking) {
+                self.handed_over_again("loop", taking.path, taking.ty, taking.to, taking.span)
+                continue
+            }
+            let mut out = last
+            while out > 0 {
+                out = out - 1
+                if self.repeats[out].frame <= taking.bound || self.repeats[out].revives(taking.path) {
+                    break
+                }
+                if self.repeats[out].leaves {
+                    self.repeats[out].held.push(taking.clone())
+                    break
+                }
+            }
+        }
+    }
+
+    /// Whether the next turn of the loop opened at `ending` can follow `taking`.
+    fn a_turn_follows(ref self, ending: i64, taking: ref CheckHeldTaking) -> bool {
+        let mut at = taking.from
+        while at < self.ways_out.len() as i64 {
+            let way = self.ways_out[at].clone()
+            at = at + 1
+            if choices_apart(taking.choices, way.choices) {
+                continue
+            }
+            if way.how == "continue" && way.in_loop == ending {
+                return true
+            }
+            let leaves = way.how == "return" || way.how == "throw" || (way.how == "break" && way.in_loop == ending)
+            let on_every_path = way.choices.iter().all(fn(choice) { taking.choices.contains(choice) }) && taking.loops.contains(way.in_loop)
+            if leaves && on_every_path {
+                return false
+            }
+        }
+        return true
     }
 
     /// Whether `name` is bound by an `immutable` (ADR-389 D2).

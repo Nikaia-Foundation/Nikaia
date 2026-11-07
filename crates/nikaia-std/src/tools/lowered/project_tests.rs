@@ -34,6 +34,7 @@ pub struct ProgramTest {
     pub stops: Option<Bytes>,
     pub bounds: Option<Bytes>,
     pub loops_bounds: Option<Bytes>,
+    pub asserts: Option<Bytes>,
     pub stdin: Bytes,
 }
 
@@ -173,9 +174,10 @@ pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, n
         let stderr = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stderr", name))))).await?;
         let bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.bounds", name))))).await?;
         let loops_bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.loops.bounds", name))))).await?;
+        let asserts = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.asserts", name))))).await?;
         let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
         let stdin = nikaia_std::index::or(project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdin", name))))).await?, || Bytes(vec![]).into());
-        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, loops_bounds, stdin });
+        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, loops_bounds, asserts, stdin });
     }
     Ok(tests)
 }
@@ -188,6 +190,7 @@ pub fn project_tests_stray_bounds(root: &std::path::Path) -> Vec<String> {
         let beside = project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) || !short.is_empty() && project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", short)))));
         if !beside { stray.push(format!("{}.bounds", stem)); }
     }
+    for stem in project_tests_stems(&dir, ".asserts", false) { if !project_tests_is_file(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.nika", stem))))) { stray.push(format!("{}.asserts", stem)); } }
     stray
 }
 
@@ -215,7 +218,22 @@ pub fn project_tests_bounds_report(printed: &str, written: &str) -> Bytes {
     report.as_bytes().copy_of()
 }
 
-pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, off: &str, on: &str) -> ProjectTestsOutcome {
+pub fn project_tests_asserts_report(printed: &str, written: &str) -> Bytes {
+    let head = format!("asserts in {}: ", written);
+    let mut report: String = String::from("");
+    let mut inside = false;
+    for line in printed.lines() {
+        if inside && !line.starts_with(' ') { break; }
+        if inside || line.starts_with(&head) {
+            inside = true;
+            report.push_str(line);
+            report.push_str("\n");
+        }
+    }
+    report.as_bytes().copy_of()
+}
+
+pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTestsOutcome, off: &str, on: &str, asserts: &str) -> ProjectTestsOutcome {
     let written = format!("tests/{}.nika", program.name);
     let mut bounds: Vec<(String, Bytes, Bytes)> = vec![];
     match &program.bounds {
@@ -225,6 +243,10 @@ pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTest
     match &program.loops_bounds {
         None => { },
         Some(want) => { bounds.push((format!("{}.loops.bounds", program.name), want.copy_of(), project_tests_bounds_report(on, &written))); },
+    }
+    match &program.asserts {
+        None => { },
+        Some(want) => { bounds.push((format!("{}.asserts", program.name), want.copy_of(), project_tests_asserts_report(asserts, &written))); },
     }
     let right = bounds.iter().all(|entry| { entry.1 == entry.2 });
     ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: outcome.stderr.to_string(), files: outcome.files.to_owned(), bounds }
@@ -403,7 +425,7 @@ pub struct ProjectTestsRan {
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
     fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
-    fn bounds(&self, level: &str, entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
+    fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
     fn built(&self, project: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
 }
 
@@ -423,7 +445,10 @@ pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Resu
     Ok(())
 }
 
-pub(crate) fn project_tests_relocated(said: &[u8], entry: &std::path::Path, written: &str) -> String { said.text_lossy().replace(&nikaia_std::fs::path::display(&(entry)), &written).replace(&nikaia_std::fs::path::display(&(project_members_canonical(entry))), &written) }
+pub(crate) fn project_tests_relocated(said: &[u8], entry: &std::path::Path, written: &str, root: &std::path::Path) -> String {
+    let package = format!("{}/", nikaia_std::fs::path::display(&(project_members_canonical(root))));
+    said.text_lossy().replace(&nikaia_std::fs::path::display(&(entry)), &written).replace(&nikaia_std::fs::path::display(&(project_members_canonical(entry))), &written).replace(&package, &"")
+}
 
 pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
     let mut all: Vec<u8> = first.iter().copied().collect::<Vec<_>>();
@@ -452,13 +477,15 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     fs::write(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{}", dependency), false, true).await?;
     let written = format!("tests/{}.nika", program.name);
     let mut off: String = String::from("");
-    if program.bounds.is_some() { off = project_tests_relocated(&host.bounds("prove-through-loops:off", &entry, own)?, &entry, &written); }
+    if program.bounds.is_some() { off = project_tests_relocated(&host.explained(&vec![String::from("--bounds"), String::from("--optimization"), String::from("prove-through-loops:off")], &entry, own)?, &entry, &written, root); }
     let mut on: String = String::from("");
-    if program.loops_bounds.is_some() { on = project_tests_relocated(&host.bounds("prove-through-loops:on", &entry, own)?, &entry, &written); }
+    if program.loops_bounds.is_some() { on = project_tests_relocated(&host.explained(&vec![String::from("--bounds"), String::from("--optimization"), String::from("prove-through-loops:on")], &entry, own)?, &entry, &written, root); }
+    let mut asserts: String = String::from("");
+    if program.asserts.is_some() { asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own)?, &entry, &written, root); }
     let built = host.compiler("build", setting, &project, own, &Bytes(vec![]))?;
     if built.code != 0 {
-        let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written));
-        return Ok(project_tests_bounds_outcome(program, &refused, &off, &on));
+        let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
+        return Ok(project_tests_bounds_outcome(program, &refused, &off, &on, &asserts));
     }
     let ran = match host.built(&project, own, &program.stdin)? {
         None => {
@@ -472,8 +499,8 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     let (out, said) = ran;
-    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written));
-    Ok(project_tests_bounds_outcome(program, &outcome, &off, &on))
+    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written, root));
+    Ok(project_tests_bounds_outcome(program, &outcome, &off, &on, &asserts))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

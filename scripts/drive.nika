@@ -132,7 +132,7 @@
 // suite's step lines, the whole suite.log (the failed jobs' log tails), `git log
 // origin/develop..HEAD`, and the brief and report of each brief in
 // unpushed.txt; the QA agent runs (role `qa`) on DIR/qa/qa-task.md, a copy of
-// the template docs/briefs/qa-task.md made before each run (its report path
+// the template docs/qa-task.md made before each run (its report path
 // made the copy's), in the shared checkout; the copy, its report and run files
 // stay untracked, and the suite runs
 // again on the new HEAD, on CI the same way, and is waited for at
@@ -705,8 +705,15 @@ fn drive_lock_lane() -> String throws {
 }
 
 // The QA task's one text; each lane's QA runs on a copy of it (drive_qa_copy).
+// Tracked in git: docs/briefs/ is ignored, so a template there was missing in
+// a fresh container and QA ran on an empty copy (2026-11-07).
 fn drive_qa_template() -> String {
-	return "docs/briefs/qa-task.md"
+	return "docs/qa-task.md"
+}
+
+// The QA input path the template names, made the lane's own by drive_qa_copy.
+fn drive_qa_template_input() -> String {
+	return "docs/briefs/qa-input.txt"
 }
 
 // The brief lane DIR's QA runs on: DIR/qa/qa-task.md, so each lane's QA
@@ -717,17 +724,17 @@ fn drive_qa_brief(dir: String) -> String {
 	return f"{dir}/qa/qa-task.md"
 }
 
-// Copies the template to drive_qa_brief(dir), creating DIR/qa/; the one
-// change is the report path the template names, made the copy's own.
+// Copies the template to drive_qa_brief(dir), creating DIR/qa/; the report
+// path and the input path the template names are made the copy's own. A
+// missing or empty template escalates: QA on an empty brief does nothing.
 fn drive_qa_copy(dir: String) throws {
 	let qa = drive_qa_brief(dir)
 	process::run("mkdir", ["-p", f"{dir}/qa"])
 	let text = drive_read(drive_qa_template())
-	fs::write(
-		qa,
-		fs::Root::Anywhere,
-		text.replace(f"{drive_qa_template()}.report.md", f"{qa}.report.md"),
-	)
+	if text.trim() == "" { drive_escalate(f"QA template {drive_qa_template()} missing or empty") }
+	let reported = text.replace(f"{drive_qa_template()}.report.md", f"{qa}.report.md")
+	let own = reported.replace(drive_qa_template_input(), f"{dir}/qa-input.txt")
+	fs::write(qa, fs::Root::Anywhere, own)
 }
 
 // Waits for the background suite, if one runs, and handles its result: green

@@ -303,7 +303,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   take turns), prints `SUITE <sha8> green|red <steps>`, pushes the tested
   commit on green (`PUSHED <sha8>`), and on red starts QA
   (on `DIR/qa/qa-task.md`, the lane's own copy of the template
-  `docs/briefs/qa-task.md`, so its report and run files land in `DIR/qa/`;
+  `docs/qa-task.md`, so its report and run files land in `DIR/qa/`;
   input `DIR/qa-input.txt`, log `DIR/suite.log`),
   at most two rounds, then `ESCALATE`. The suite stops at the first red cheap
   step (build, lower-std, fmt, clippy, pre-push) without running the tests,
@@ -414,7 +414,7 @@ batch the driver has CI run the complete suite (one at a time per checkout,
 lock `target/suite.lock`: it pushes the tested sha to `ci/<lane>`, and the
 whole workflow runs on exactly that commit); green, it pushes the tested
 commit; red, it writes `qa-input.txt` and starts QA
-(`docs/briefs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
+(`docs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
 final gate for what other sessions push meanwhile.
 
 ## Lanes

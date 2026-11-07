@@ -1062,6 +1062,12 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         // (ADR-293 D15, #995): copied out where `T` copies, else refused
         // with the `?.clone()` to write (ADR-282 D7).
         state.a_map_read_kept(world, other, left, fallback, span)
+        // **Beside `null` it is the left side's type** (#1340): a `ref T?`
+        // stays a view, so a `??` over the name lent as an argument
+        // borrows nothing more.
+        if !from_a_map && check_core_ops_inside(other).is_unknown() {
+            return left.clone()
+        }
         return other
     }
     // **`a ?? b` on a `T?` is a `T`** (Part I 3.5, ADR-233 D4, #497).

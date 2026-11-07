@@ -1,0 +1,10 @@
+error[NK2101]: You're using `names` after a background task took it.
+   --> tests/a_task_takes_a_name_used_only_in_a_guard.nika:12:2
+    |
+ 12 | 	println(f"{names.len()} {h.join()}")
+    |  ^
+    |
+    = note: A task started with `spawn` may outlive this function, so it takes the variables it uses with it. `names` is a `Vec[ref String]`, so it went to the task.
+    = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
+    = help: Make a copy before and hand over the copy: `let copy = names.clone()`, then use `copy` inside.
+1 value a task took with it

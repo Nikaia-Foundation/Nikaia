@@ -103,6 +103,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
                     MatchPattern::Literal(pattern) => { names_in(pattern, words, out); },
                     _ => { },
                 }
+                maybe_names_in((arm.guard).as_ref(), words, out);
                 names_in(&arm.body, words, out);
             }
         },
