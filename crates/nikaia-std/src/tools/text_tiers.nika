@@ -3370,16 +3370,32 @@ fn kept_literal(value: ref Expr, owner: ref TextOwner, path: ref Vec[i64], ty: r
     if !plain_string(ask.names, ty) {
         return
     }
-    let name = match value {
-        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
-        else => return,
-    }
+    let name = literal_let_named(value, ask) ?? return
     let local = tier_local(name, walk) ?? return
     if local.literal < 0 {
         return
     }
     let word = seen(owner, path, walk)
     walk.flows.literal_lets.entry(local.literal).or_insert(collections::BTreeSet()).insert(word)
+}
+
+/// The name a value is, or whose `to_string()` it is: that is the name as
+/// it is (ADR-282 D8), so a `let` bound to a literal goes where either goes
+/// (#1269).
+fn literal_let_named(value: ref Expr, ask: ref TierAsk) -> String? {
+    return match value {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() > 0 || ask.names.resolve(method) != "to_string" {
+                return null
+            }
+            match receiver {
+                Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+                else => null,
+            }
+        },
+        else => null,
+    }
 }
 
 /// The struct a value is of, where the program says so without types: a
@@ -5076,7 +5092,7 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
             at += 1
         }
     } else {
-        std_container_args(args, ask, walk)
+        std_container_args(callee, args, ask, walk)
     }
     return std_result(callee, ask)
 }
@@ -5121,9 +5137,23 @@ fn from_named_positions(func: ref Expr, ask: ref TierAsk, walk: ref TierWalk) ->
 
 /// **A container of text handed whole to `std` holds text of its own**
 /// (ADR-282 D29): `std`'s signature says `Vec[String]`, and a list of views
-/// is not one below.
-fn std_container_args(args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+/// is not one below. **A list or a tuple written at the call is built
+/// there** (#1269): each item going into text of its own, `[b]` handed to
+/// `args: Vec[String]` with `b` a view of static text, is kept.
+fn std_container_args(callee: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) {
+    let params = std_params(callee, ask)
+    let mut at = 0
     for arg in args {
+        let built = match arg {
+            Expr::ListLit { .. } => true,
+            Expr::Tuple(_, _) => true,
+            else => false,
+        }
+        if built && at < params.len() && std_owns_text_inside(params[at].1) {
+            kept_unseen(arg, ask, walk)
+            owned_literal_lets(arg, ask, walk)
+        }
+        at += 1
         let whole = source_of(arg, ask, walk)
         if whole != null {
             let found = whole ?? return
@@ -5131,6 +5161,56 @@ fn std_container_args(args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk)
                 demote_inside(found.owner, found.ty, [], ask, walk)
             }
         }
+    }
+}
+
+/// **A `let` bound to a literal and built into a list or a tuple at a call of
+/// `std` is text of its own** (#1269): `let c = "c"` handed in `[c, "d"]`.
+fn owned_literal_lets(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                owned_literal_lets(item, ask, walk)
+            }
+        }
+        Expr::Tuple(items, _) => {
+            for item in items {
+                owned_literal_lets(item, ask, walk)
+            }
+        }
+        else => {
+            let name = literal_let_named(value, ask) ?? return
+            let local = tier_local(name, walk) ?? return
+            if local.literal >= 0 {
+                walk.flows.owned_lets.insert(local.literal)
+            }
+        }
+    }
+}
+
+/// The parameters a function of `std` declares, none where it is unknown.
+fn std_params(callee: ref String, ask: ref TierAsk) -> Vec[(String, Ty)] {
+    let contract = ask.library.functions[callee] ?? return []
+    let signature = contract.signature ?? return []
+    return signature.params.clone()
+}
+
+/// Whether a type of `std` holds text of its own inside a list, a map or a
+/// tuple: `Vec[String]`, `ref Vec[String]`, `Vec[(String, String)]`, not
+/// `Vec[ref String]`.
+fn std_owns_text_inside(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { args, .. } => args.iter().any(fn(arg) { std_owns_text(arg) }),
+        Ty::Tuple(parts) => parts.iter().any(fn(part) { std_owns_text(part) }),
+        else => false,
+    }
+}
+
+fn std_owns_text(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, view, .. } => (name == "String" && !view) || std_owns_text_inside(ty),
+        Ty::Tuple(_) => std_owns_text_inside(ty),
+        else => false,
     }
 }
 

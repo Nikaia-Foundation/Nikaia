@@ -1,0 +1,34 @@
+// A `-> String` function that hands back only static text, or a name bound to
+// a literal, goes into a list written at a call of `std` that takes
+// `Vec[String]`: that position holds text of its own, so the literals are
+// built (ADR-282 D29, #1269). The loop element of the issue's probe is a view
+// (ADR-282 D7, D8), so it is copied with `.clone()` where it is handed back.
+use std::process
+
+fn first() -> String throws {
+	for x in ["a", "b"] {
+		if x == "a" { return x.clone() }
+	}
+	return ""
+}
+
+fn label() -> String {
+	return "b"
+}
+
+fn named() -> String {
+	let x = "e"
+	return x.to_string()
+}
+
+fn main() throws {
+	let b = first()
+	let o = process::run("echo", [b])
+	print(o.stdout)
+	print(process::run("echo", [label()]).stdout)
+	let c = "c"
+	print(process::run("echo", [c, "d"]).stdout)
+	let mut e = named()
+	e.push_str("!")
+	println(e)
+}
