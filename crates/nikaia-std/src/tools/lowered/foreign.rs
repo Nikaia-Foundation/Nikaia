@@ -10,7 +10,7 @@ pub(crate) struct Walked {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Seen {
     Path { name: String, span: Span },
-    Call { name: String, wrote: Option<Wrote>, span: Span },
+    Call { name: String, wrote: Option<Wrote>, span: Span, literals: Vec<Option<String>> },
     Name(String),
     Spawn { span: Span },
     Opaque { span: Span },
@@ -320,6 +320,13 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], span: &Span, names: &winn
     let at = root_at(&name);
     let mut wrote: Option<Wrote> = None;
     if at >= 0 && at < args.len() as i64 { wrote = written_root(names, nikaia_std::index::get(&args, nikaia_std::index::at(at))); }
-    found.seen.push(Seen::Call { name, wrote, span: span.clone() });
+    let mut literals: Vec<Option<String>> = vec![];
+    for arg in args.iter() {
+        literals.push(match arg {
+            Expr::LitStr { text, .. } => Some(text.to_string()),
+            _ => None,
+        });
+    }
+    found.seen.push(Seen::Call { name, wrote, span: span.clone(), literals });
 }
 

@@ -96,7 +96,7 @@ pub(crate) fn check_walks_values_operations(state: &CheckState, values: &mut Vec
             CheckWalksDoor::Unaccounted => { return None; },
             CheckWalksDoor::NotADoor => { },
         }
-        let found = accounted(&Stmt::Expr(value), words, walking);
+        let found = accounted_beside(&Stmt::Expr(value), words, walking);
         match found {
             Accounted::Operation(ref operation) => { out.push(operation.clone()); },
             Accounted::NotAnOperation => { },

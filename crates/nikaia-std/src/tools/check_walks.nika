@@ -154,7 +154,7 @@ fn check_walks_values_operations(state: ref CheckState, mut values: Vec[Expr], w
             CheckWalksDoor::Unaccounted => return null,
             CheckWalksDoor::NotADoor => {},
         }
-        let found = accounted(Stmt::Expr(value), words, walking)
+        let found = accounted_beside(Stmt::Expr(value), words, walking)
         match found {
             Accounted::Operation(operation) => out.push(operation.clone()),
             Accounted::NotAnOperation => {},

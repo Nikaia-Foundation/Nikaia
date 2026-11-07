@@ -1,0 +1,20 @@
+// Two tasks of one group call a function that writes the file its parameter
+// names: the path is no literal there, so the compiler cannot account for the
+// tasks and does not refuse them (Part I 8.1.2, Part III C.4, #1354).
+// The group runs only with 99 arguments, so the test writes no file.
+use std::cli
+use std::fs
+
+fn put(path: String, text: String) {
+	fs::write(path, fs::Root::Anywhere, text) catch { }
+}
+
+fn main() {
+	if cli::args().len() > 99 {
+		async {
+			async put("a.txt", "a")
+			async put("a.txt", "b")
+		}
+	}
+	println("checked")
+}

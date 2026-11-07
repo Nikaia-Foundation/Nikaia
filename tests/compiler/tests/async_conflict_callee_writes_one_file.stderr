@@ -1,0 +1,10 @@
+error[NK2104]: These two tasks can't run at the same time.
+   --> tests/async_conflict_callee_writes_one_file.nika:12:3
+    |
+ 12 | 		async put("b")
+    |   ^^^^^^^^^^^^^^
+    |
+    = note: Both reach file `a.txt`, and one writes it.
+    = note: The tasks of a group run at the same time, so they can't depend on each other.
+    = help: If they should run in order, wait for the first before the second starts, or write them without `async`.
+1 branch that cannot run beside the others

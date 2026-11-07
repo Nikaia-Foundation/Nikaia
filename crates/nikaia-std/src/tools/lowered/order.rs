@@ -131,24 +131,28 @@ pub(crate) fn fits_with_the_front(run: &[Operation], at: i64) -> bool {
 
 pub(crate) const KNOWN_KINDS: [&str; 6] = ["file", "stdout", "stderr", "args", "lock", "socket"];
 
-pub fn accounted(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted {
+pub fn accounted(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted { accounted_as(stmt, words, walking, false) }
+
+pub fn accounted_beside(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted { accounted_as(stmt, words, walking, true) }
+
+pub(crate) fn accounted_as(stmt: &Stmt, words: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, beside: bool) -> Accounted {
     match stmt {
         Stmt::Let { names, value, ty, .. } => {
             if ty.is_some() { return Accounted::Opaque(String::from("a written type, which would have to be carried onto one half of a pattern")); }
             if names.len() != 1 { return Accounted::Opaque(String::from("several names bound at once")); }
             let binds: Option<String> = Some(words.resolve(*nikaia_std::index::get(&names, 0)).to_string());
-            accounted_value(binds, value, words, walking)
+            accounted_value(binds, value, words, walking, beside)
         },
-        Stmt::Expr(value) => accounted_value(None, value, words, walking),
+        Stmt::Expr(value) => accounted_value(None, value, words, walking, beside),
         _ => Accounted::NotAnOperation,
     }
 }
 
-pub(crate) fn accounted_value(binds: Option<String>, value: &Expr, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>) -> Accounted {
+pub(crate) fn accounted_value(binds: Option<String>, value: &Expr, names: &winnow_grammar::InternerContext, walking: &Walking<'_, '_>, beside: bool) -> Accounted {
     match value {
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
-            if diverts_within(&handler.stmts, false) { return Accounted::DivertingHandler; }
+            if !beside && diverts_within(&handler.stmts, false) { return Accounted::DivertingHandler; }
             let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
             reduce(expr, names, &mut reduced);
             reduce_handler(handler, names, &mut reduced);
@@ -162,7 +166,7 @@ pub(crate) fn accounted_value(binds: Option<String>, value: &Expr, names: &winno
             reduce(value, names, &mut reduced);
             let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new();
             names_in(value, names, &mut mentions);
-            accounted_reduced(binds, mentions, &reduced, false, walking)
+            accounted_reduced(binds, mentions, &reduced, beside, walking)
         },
     }
 }
@@ -198,7 +202,10 @@ pub(crate) fn a_call_reaches(call: &OneCall, caught: bool, walking: &Walking<'_,
     if !crossed.may() { return Some(Accounted::MayNotCross { callee: key.to_string(), crossing: crossed }); }
     let parameters = call_parameters(&signature);
     for touch in contract.touches.iter() {
-        let named = argument_named((touch.parameter).as_deref(), &parameters, &call.arguments);
+        let named = nikaia_std::index::or_maybe(match touch.named.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || argument_named((touch.parameter).as_deref(), &parameters, &call.arguments));
         reaches.push(Reached { kind: touch.kind.to_string(), unknown: touch.parameter.is_some() && named.is_none(), named, write: touch.write });
     }
     named_by.push(key);

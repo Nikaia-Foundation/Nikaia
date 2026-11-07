@@ -495,12 +495,20 @@ impl Threads {
 pub struct Touch {
     pub kind: String,
     pub parameter: Option<String>,
+    pub named: Option<String>,
     pub write: bool,
 }
 
 impl Touch {
     pub fn names_a_lock(&self) -> bool { self.kind == "lock" }
-    pub fn text(&self) -> String { touched(&self.kind, (self.parameter).as_deref(), self.write) }
+    pub fn text(&self) -> String {
+        if self.named.is_some() {
+            let access = if self.write { "write" } else { "read" };
+            let named_text = nikaia_std::index::or(self.named.as_deref(), || "");
+            return format!("{}('{}') {}", self.kind, named_text, access);
+        }
+        touched(&self.kind, (self.parameter).as_deref(), self.write)
+    }
 }
 
 pub(crate) fn touched(kind: &str, parameter: Option<&str>, write: bool) -> String {

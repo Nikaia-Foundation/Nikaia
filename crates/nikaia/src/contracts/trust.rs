@@ -132,7 +132,10 @@ fn join(
     for file in package {
         let own_file = only.is_none_or(|only| std::ptr::eq(*file, only));
         for seen in crate::foreign::seen(file, &root_at) {
-            let crate::foreign::Seen::Call { name, wrote, span } = seen else {
+            let crate::foreign::Seen::Call {
+                name, wrote, span, ..
+            } = seen
+            else {
                 continue;
             };
             let Some((key, contract)) = library.lookup(&name) else {

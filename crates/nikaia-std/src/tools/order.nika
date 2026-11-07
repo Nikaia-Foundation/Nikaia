@@ -238,6 +238,18 @@ comptime KNOWN_KINDS: Array[ref String, 6] = ["file", "stdout", "stderr", "args"
 /// An **assignment** is not among them and must not be: `x = 1` changes a
 /// name without binding one, so the data-dependency test would miss it.
 pub fn accounted(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Accounted {
+    return accounted_as(stmt, words, walking, false)
+}
+
+/// [`accounted`] for a statement that **runs beside** another, a task or a
+/// statement in a task's window (ADR-async-5 D7, #1354): a failure nobody
+/// catches leaves the function, but what runs beside it has run by then
+/// already, so it is no reason to leave the statement unaccounted for.
+pub fn accounted_beside(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Accounted {
+    return accounted_as(stmt, words, walking, true)
+}
+
+fn accounted_as(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking, beside: bool) -> Accounted {
     return match stmt {
         Stmt::Let { names, value, ty, .. } => {
             // A written type would have to be carried onto one half of a
@@ -249,20 +261,20 @@ pub fn accounted(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, wal
                 return Accounted::Opaque("several names bound at once")
             }
             let binds: String? = words.resolve(names[0]).clone()
-            accounted_value(binds, value, words, walking)
+            accounted_value(binds, value, words, walking, beside)
         }
-        Stmt::Expr(value) => accounted_value(null, value, words, walking),
+        Stmt::Expr(value) => accounted_value(null, value, words, walking, beside),
         else => Accounted::NotAnOperation,
     }
 }
 
 // The value of a statement, looked through a `catch` whose handler cannot
 // divert: a handler that leaves makes the *next* statement conditional on
-// this one (ADR-292).
-fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::InternerContext, walking: ref Walking) -> Accounted {
+// this one (ADR-292), which a statement that runs `beside` does not care for.
+fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::InternerContext, walking: ref Walking, beside: bool) -> Accounted {
     return match value {
         Expr::TryCatch { expr, handler, .. } => {
-            if diverts_within(handler.stmts, false) {
+            if !beside && diverts_within(handler.stmts, false) {
                 return Accounted::DivertingHandler
             }
             let mut reduced = Reduced { calls: [], performs: false, methods: [], refused: null }
@@ -281,7 +293,7 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
             reduce(value, names, reduced)
             let mut mentions: collections::BTreeSet[String] = collections::BTreeSet()
             names_in(value, names, mentions)
-            accounted_reduced(binds, mentions, reduced, false, walking)
+            accounted_reduced(binds, mentions, reduced, beside, walking)
         }
     }
 }
@@ -345,7 +357,9 @@ fn a_call_reaches(call: ref OneCall, caught: bool, walking: ref Walking, mut rea
     }
     let parameters = call_parameters(signature)
     for touch in contract.touches {
-        let named = argument_named(touch.parameter, parameters, call.arguments)
+        // A resource the callee's body named with a literal is that one,
+        // whatever this call passes (#1354).
+        let named = touch.named?.clone() ?? argument_named(touch.parameter, parameters, call.arguments)
         reaches.push(Reached { kind: touch.kind.clone(), unknown: touch.parameter != null && named == null, named: named, write: touch.write })
     }
     named_by.push(key)

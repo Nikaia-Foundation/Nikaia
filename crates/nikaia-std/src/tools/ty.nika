@@ -835,6 +835,10 @@ impl Threads {
 pub struct Touch {
     pub kind: String,
     pub parameter: String?,
+    /// The resource's name where the body named it with a literal
+    /// (`fs::write("a.txt", …)`, #1354): a caller's call reaches that one
+    /// resource, whatever it passes. `null` with `parameter`.
+    pub named: String?,
     pub write: bool,
 }
 
@@ -843,8 +847,14 @@ impl Touch {
         return self.kind == "lock"
     }
 
-    /// `file(path) write`, as a ledger writes it.
+    /// `file(path) write`, as a ledger writes it; `file('a.txt') write`
+    /// where the body named the resource with a literal.
     pub fn text(ref self) -> String {
+        if self.named != null {
+            let access = if self.write { "write" } else { "read" }
+            let named_text = self.named ?? ""
+            return f"{self.kind}('{named_text}') {access}"
+        }
         return touched(self.kind, self.parameter, self.write)
     }
 }
