@@ -78,6 +78,22 @@ pub struct BufferPlan {
     /// handed back - put into their keep whole, where no view is found by
     /// address (ADR-283 D15: one that leaves it is copied).
     pub opaque_puts: collections::BTreeSet[i64],
+    /// The buffer `let`s the body changes after they bind (#1276): `xs.push(..)`,
+    /// `text += ".."`. Put into their keep only after the last change, where
+    /// they are written to no more.
+    pub late_puts: collections::BTreeMap[i64, LatePut],
+}
+
+/// A buffer put into its keep after the statement that changes it last
+/// (#1276), by the `let` that binds it.
+pub struct LatePut {
+    /// The statement of the `let`'s own block after which it is put.
+    pub after: i64,
+    /// The name it is bound to.
+    pub name: String,
+    /// Assigned again after it is put (#293), so the name it is put under
+    /// stays `mut`.
+    pub reassigned: bool,
 }
 
 /// What the walk is asked against, which does not change from one function to
@@ -155,6 +171,16 @@ struct BufferWalk {
     /// The last expression of an arm, by the statement whose value it is
     /// (#1289): a call's keep there stands before that statement.
     hoisted: collections::BTreeMap[i64, i64],
+    /// The last change of a local after its `let` (#1276), by that `let`.
+    mutated: collections::BTreeMap[i64, Mutated],
+}
+
+// Where a local is changed last: the statement of its `let`'s own block that
+// holds the change, and the change itself.
+struct Mutated {
+    after: i64,
+    last: i64,
+    name: String,
 }
 
 fn open_scope(mut walk: BufferWalk) {
@@ -243,7 +269,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -298,7 +324,50 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         },
         else => {}
     }
+    late_puts(walk, plan)
     return plan
+}
+
+// **A buffer the body changes after its `let` is put after the last change**
+// (#1276): put at its `let`, it is a view from there on, and `xs.push(..)` or
+// `text += ".."` cannot write through it. An assignment before that point is
+// no put again either: the buffer is not in the keep yet.
+fn late_puts(walk: ref BufferWalk, mut plan: BufferPlan) {
+    let mut found: Vec[(i64, Mutated)] = []
+    for (at, _) in plan.puts {
+        let changed = walk.mutated.get(at) ?? continue
+        found.push((at.clone(), changed.clone()))
+    }
+    for (at, changed) in found {
+        let mut reassigned = false
+        for (statement, bound) in walk.reassigned {
+            if bound != at || !plan.reputs.contains_key(statement) {
+                continue
+            }
+            if statement <= changed.last {
+                plan.reputs.remove(statement)
+            } else {
+                reassigned = true
+            }
+        }
+        plan.late_puts.insert(at, LatePut { after: changed.after, name: changed.name.clone(), reassigned: reassigned })
+    }
+}
+
+// A change of a local after its `let` (#1276): a method called for its effect
+// or an assignment into it. Its put moves after the statement of the `let`'s
+// own block that holds the change.
+fn note_change(root: ref String, at: i64, mut walk: BufferWalk) {
+    let local = local_of(root, walk) ?? return
+    if local.parameter || local.at <= 0 {
+        return
+    }
+    let depth = local.path.len()
+    let mut after = at
+    if walk.path.len() > depth {
+        after = walk.path[depth].0
+    }
+    walk.mutated.insert(local.at, Mutated { after: after, last: at, name: root.clone() })
 }
 
 fn carries_maybe(ty: ref Type?, ask: ref BufferAsk) -> bool {
@@ -337,6 +406,9 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             let whole = op == null && match target {
                 Expr::Variable(_, _) => true,
                 else => false,
+            }
+            if !whole {
+                note_change(root, at, walk)
             }
             if whole {
                 let bound = local_of(root, walk)
@@ -400,6 +472,15 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             spawns_in(expr, ask, holes_of, walk)
             nested_blocks(expr, at, ask, holes_of, unaliased, walk)
             effects(expr, ask, holes_of, unaliased, walk)
+            match expr {
+                Expr::MethodCall { receiver, .. } => {
+                    let root = root_of(ask.names, receiver)
+                    if root != null {
+                        note_change(root ?? "", at, walk)
+                    }
+                }
+                else => {}
+            }
         }
         else => {}
     }
@@ -1910,7 +1991,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
     if body.stmts.len() > 0 {
         first = body.stmts[0].span.start as i64
     }
-    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet() }
+    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet(), late_puts: collections::BTreeMap() }
     for (id, found) in walk.sources {
         decide_source(id.clone(), found.source, found.path, walk, plan)
     }

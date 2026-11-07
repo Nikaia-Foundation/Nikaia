@@ -2383,7 +2383,7 @@ pub mod bounds_walk {
 }
 pub mod buffers {
     #[allow(unused_imports)]
-    pub use super::{Escape, Source, KeepAt, BufferPlan, BufferAsk, buffer_plans};
+    pub use super::{Escape, Source, KeepAt, BufferPlan, LatePut, BufferAsk, buffer_plans};
 }
 pub mod build_eval {
     #[allow(unused_imports)]
