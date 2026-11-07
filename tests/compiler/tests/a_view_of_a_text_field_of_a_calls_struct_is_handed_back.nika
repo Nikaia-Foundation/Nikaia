@@ -1,0 +1,35 @@
+// #1261: a `let` bound to a text field of a struct a call hands back owns that
+// text, so a view of it handed back lives in the caller's keep (6.6), as one
+// of `let r = make(n)` and `r.text` does. rustc refused it before.
+use std::process
+
+struct Made { text: String, code: i64 }
+
+fn make(n: i64) -> Made { Made { text: f"  part{n} rest  ", code: n } }
+
+fn first(n: i64) -> String {
+    let out = make(n).text
+    out.trim()
+}
+
+fn first_returned(n: i64) -> String {
+    let out = make(n).text
+    return out.trim()
+}
+
+fn words(n: i64) -> Vec[String] {
+    let out = make(n).text
+    out.trim().split(" ").collect()
+}
+
+fn echoed() -> String throws {
+    let out = process::run("echo", [" abc "]).stdout
+    return out.trim()
+}
+
+fn main() throws {
+    println(first(1))
+    println(first_returned(2))
+    println(words(3).len())
+    println(echoed())
+}

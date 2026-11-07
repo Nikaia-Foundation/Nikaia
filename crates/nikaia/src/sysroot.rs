@@ -625,6 +625,7 @@ pub fn bounds_tools(
         if bounds_report {
             out.push_str(&crate::bounds_report::report_checked(
                 &parsed[at],
+                &beside,
                 &texts[at],
                 &path,
                 &checked,

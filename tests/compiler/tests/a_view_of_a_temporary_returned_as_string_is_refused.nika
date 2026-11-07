@@ -1,0 +1,15 @@
+// #1261: a view of a temporary handed back where the function returns
+// `String` is refused (NK1104), with `.clone()` as the way out: nothing holds
+// the struct the view points into, and the compiler never copies text itself
+// (6.6). Before, `nikaia check` passed it and rustc refused it.
+struct Made { text: String }
+
+fn make(n: i64) -> Made { Made { text: f"  part{n}  " } }
+
+fn first(n: i64) -> String {
+    return make(n).text.trim()
+}
+
+fn main() {
+    println(first(1))
+}

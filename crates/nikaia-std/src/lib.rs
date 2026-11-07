@@ -253,7 +253,8 @@ pub mod runtime {
 ///
 /// **And `no_effect`, `eq_op` and `collapsible_if`**: `packages/json`, lowered
 /// into `tools::json` (#1163), keeps a `()` statement and its finite test
-/// `x - x != 0.0`; `bounds_rules.nika` nests an `if` in an `else if`.
+/// `x - x != 0.0`; an `if` whose whole body is an `if` lowers as written
+/// (`bounds_rules.nika`'s `rules_exit`, #1330).
 #[allow(
     clippy::no_effect,
     clippy::eq_op,

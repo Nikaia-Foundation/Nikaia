@@ -18,6 +18,7 @@ pub struct Around {
     pub changing_receivers: collections::BTreeSet<String>,
     pub frames: collections::BTreeMap<String, BoundsChanged>,
     pub rules: Vec<BoundsRule>,
+    pub derived: Derived,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

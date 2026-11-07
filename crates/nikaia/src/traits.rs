@@ -6,7 +6,7 @@
 // checker runs *before* `sync::infer` — that order is what keeps ADR-288 sound,
 // because the checker resolves method calls and the inference reads the result —
 // so a rule that needs the finished `sync` cannot live inside it. This runs
-// afterwards, from `check_program`, beside `dsl::check` and `views::check` and
+// afterwards, from `check_program`, beside `tools::dsl::check` and `views::check` and
 // for the same reason each of those is separate: it asks a question the type
 // walk does not have the answer to.
 //

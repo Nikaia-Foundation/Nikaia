@@ -7,3 +7,5 @@ bounds in tests/prove_loop_counter_bounds.nika: 0 indexes, 0 proved; 8 operation
     44  k() + g(3) + f(3) + c([1, -1])  checked: a call's result, which the walk knows nothing of (#382)
     44  k() + g(3) + f(3)               checked: a call's result, which the walk knows nothing of (#382)
     44  k() + g(3)                      checked: a call's result, which the walk knows nothing of (#382)
+  derived  f: 0 <= n, proved at the calls on lines 44
+  derived  g: 0 <= n, proved at the calls on lines 44

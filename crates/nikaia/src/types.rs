@@ -10,7 +10,7 @@
 // nobody wrote. Part III C.1's rule held for one half of this language's names
 // and not the other.
 //
-// **A walk of its own**, beside `dsl::check`, `views::check` and
+// **A walk of its own**, beside `tools::dsl::check`, `views::check` and
 // `traits::check`, and for the reason each of those is separate: it asks a
 // question about a *written name* rather than about a value's type, so it needs
 // the item tree and neither the scope stack nor the inference.

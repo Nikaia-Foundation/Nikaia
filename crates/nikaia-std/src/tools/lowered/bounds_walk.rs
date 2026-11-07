@@ -42,6 +42,7 @@ pub struct BoundsProven {
     pub negations: collections::BTreeSet<i64>,
     pub calls: collections::BTreeMap<i64, String>,
     pub loops: collections::BTreeMap<i64, String>,
+    pub derived: collections::BTreeMap<i64, collections::BTreeSet<i64>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,7 +112,7 @@ pub(crate) fn most_facts() -> i64 { 48 }
 
 pub(crate) fn call_depth() -> i64 { 4 }
 
-pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new() } }
+pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new() } }
 
 pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
 
@@ -203,6 +204,7 @@ pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
         let range = *range;
         if !walk.shape.bound.contains(name) { bounding_bounded(walk, &mut facts, &length_of(name), &range); }
     }
+    bounding_derived_entry(walk, &mut facts, args, context);
     rules_given(walk, &mut facts);
     let leaves = bounding_block(walk, body, &mut facts, context, program, words, ask);
     if !leaves { rules_exit(walk, &facts, (rules_tail(body)).as_ref(), false, context, program, words, ask); }
@@ -1129,6 +1131,60 @@ pub(crate) fn bounding_required(walk: &mut BoundsWalk, expr: &Expr, receiver: &E
     }
     let goal = walk.arena.and(goals);
     if bounding_proves_goal(walk, facts, goal, ask) { walk.proven.calls.insert(node_key(receiver), key); } else { walk.open += 1; }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, func: &Expr, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    if walk.collecting { return; }
+    let name = match bounding_variable(func, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let callee = match *nikaia_std::index::get(&context.around.derived.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut proved: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    if (args.len() as i64) == callee.params.len() as i64 {
+        for k in 0..callee.claims.len() as i64 {
+            let claim = (*nikaia_std::index::get(&callee.claims, nikaia_std::index::at(k))).clone();
+            let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, args, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let right = match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, args, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let goal = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+            if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); }
+        }
+    }
+    let node = node_key(expr);
+    if walk.proven.derived.contains_key(&node) {
+        let was = nikaia_std::index::or(match walk.proven.derived.get(&node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into());
+        let mut kept: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        for claim in was.iter() {
+            let claim = nikaia_std::num::value(claim);
+            if proved.contains(&claim) { kept.insert(claim); }
+        }
+        walk.proven.derived.insert(node, kept);
+    } else { walk.proven.derived.insert(node, proved); }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], param: &str, length: bool, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    if param == "" { return Some(walk.arena.int(0)); }
+    for k in 0..params.len() as i64 {
+        if *nikaia_std::index::get(&params, (k) as usize) != param { continue; }
+        if !length { return bounding_lin(walk, nikaia_std::index::get(&args, (k) as usize), facts, context, program, words); }
+        let path = match path_of(nikaia_std::index::get(&args, (k) as usize), words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if walk.pinned.contains(&path_root(&path)) { return None; }
+        return Some(bounding_length_named(walk, &path, true));
+    }
+    None
+}
+
+pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFacts, args: &[FnArg], context: &BoundsContext) {
+    if args.is_empty() { return; }
+    let held = match *nikaia_std::index::get(&context.around.derived.entry, &(nikaia_std::index::get(&args, 0).span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for claim in held.iter() {
+        let left = if claim.left == "" { walk.arena.int(0) } else { walk.arena.var(&claim.left) };
+        let right = if claim.length { walk.arena.var(&length_of(&claim.right)) } else { walk.arena.var(&claim.right) };
+        let fact = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+        bounding_push(&walk, facts, fact);
+    }
 }
 
 pub(crate) fn bounding_each(walk: &mut BoundsWalk, iter: &Expr, item: i64, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Vec<i64> {
@@ -2749,6 +2805,7 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
         Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; bounding_method_call(walk, expr, receiver, words.resolve(method), args, facts, context, program, words, &ask); },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
+            bounding_derived_call(walk, expr, func, args, &facts, context, program, words, &ask);
             bounding_expr(walk, func, facts, context, program, words, ask);
             for arg in args.iter() { bounding_expr(walk, arg, facts, context, program, words, ask); }
             for c in config.iter() { bounding_expr(walk, &c.value, facts, context, program, words, ask); }

@@ -31,6 +31,7 @@ use nikaia_std::tools::bounds_report::{BoundsReportFacts, bounds_report_checked}
 #[allow(clippy::too_many_arguments)]
 pub fn report(
     parsed: &Parsed,
+    beside: &[&Parsed],
     source: &str,
     path: &str,
     own: &Ledger,
@@ -42,6 +43,7 @@ pub fn report(
     let checked = crate::check::check(parsed, own, library);
     report_checked(
         parsed,
+        beside,
         source,
         path,
         &checked,
@@ -59,6 +61,7 @@ pub fn report(
 #[allow(clippy::too_many_arguments)]
 pub fn report_checked(
     parsed: &Parsed,
+    beside: &[&Parsed],
     source: &str,
     path: &str,
     checked: &crate::check::Checked,
@@ -71,6 +74,7 @@ pub fn report_checked(
     let published = crate::prove::with_published(own, &checked.facts.published);
     let proven = crate::bounds::proven(
         parsed,
+        beside,
         &crate::bounds::Sites::of(&checked.facts),
         &[&published, library],
         &std::collections::BTreeSet::new(),
@@ -83,6 +87,7 @@ pub fn report_checked(
         proven_indices: proven.indices.iter().copied().collect(),
         proven_arithmetic: proven.arithmetic.iter().copied().collect(),
         proven_negations: proven.negations.iter().copied().collect(),
+        derived: proven.derived,
     };
     bounds_report_checked(
         &parsed.program,

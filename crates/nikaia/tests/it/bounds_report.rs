@@ -11,7 +11,15 @@ fn report(source: &str, bounds: BoundsChecks, overflow: OverflowChecks) -> Strin
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std ships a ledger");
     nikaia::bounds_report::report(
-        &parsed, source, "p.nika", &own, &library, bounds, overflow, false,
+        &parsed,
+        &[],
+        source,
+        "p.nika",
+        &own,
+        &library,
+        bounds,
+        overflow,
+        false,
     )
 }
 

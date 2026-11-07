@@ -423,6 +423,8 @@ pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Opti
         _ => { },
     }
     if joins_text(value, ask, walk) { return Buffer::Named(String::from("String")); }
+    let field_text = text_field_of_a_call(value, ask, unaliased);
+    if field_text.is_some() { return Buffer::Named(nikaia_std::index::or(field_text, || "".into())); }
     let found = makes_a_buffer(value, &Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased);
     if a_named_buffer(&found) { return found; }
     let literal = matches!(value, Expr::LitStr { .. });
@@ -477,6 +479,27 @@ pub(crate) fn struct_made_by(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
             _ => false,
         };
         if text { return Some(name); }
+    }
+    None
+}
+
+pub(crate) fn text_field_of_a_call(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Option<String> {
+    let (base, field) = match value {
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; (base, ask.names.resolve(name)) },
+        _ => return None,
+    };
+    let held = match struct_made_by(base, ask, unaliased) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let found = match *nikaia_std::index::get(&ask.own.types, &held) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.types, &held) { Some(__nikaia_value) => __nikaia_value, None => return None } };
+    for one in found.fields.iter() {
+        if AsRef::<str>::as_ref(&(one.name)) == AsRef::<str>::as_ref(&(field)) {
+            return match &one.ty {
+                Ty::Named { name, .. } => match a_viewed_buffer(name) {
+                    true => Some(name.to_string()),
+                    false => None,
+                },
+                _ => None,
+            };
+        }
     }
     None
 }

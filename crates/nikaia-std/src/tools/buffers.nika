@@ -541,6 +541,14 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
     if joins_text(value, ask, walk) {
         return Buffer::Named("String")
     }
+    // **A text field of a struct a call hands back is this frame's own**
+    // (#1261): in `let out = process::run(…).stdout` nothing else holds the
+    // struct, so `out` owns its text, and a view of it that leaves lives in
+    // the caller's keep, as one of `let r = process::run(…)` and `r.stdout`.
+    let field_text = text_field_of_a_call(value, ask, unaliased)
+    if field_text != null {
+        return Buffer::Named(field_text ?? "")
+    }
     let found = makes_a_buffer(value, Asked { names: ask.names, own: ask.own, library: ask.library }, unaliased)
     if a_named_buffer(found) {
         return found
@@ -625,6 +633,29 @@ fn struct_made_by(value: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String)
         }
         if text {
             return name
+        }
+    }
+    return null
+}
+
+// The text type of `call(…).field`, where the call hands back a struct of its
+// own (`struct_made_by`) and `field` is one of its text or bytes.
+fn text_field_of_a_call(value: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> String? {
+    let (base, field) = match value {
+        Expr::Field { base, name, .. } => (base, ask.names.resolve(name)),
+        else => return null,
+    }
+    let held = struct_made_by(base, ask, unaliased) ?? return null
+    let found = ask.own.types[held] ?? ask.library.types[held] ?? return null
+    for one in found.fields {
+        if one.name == field {
+            return match one.ty {
+                Ty::Named { name, .. } => match a_viewed_buffer(name) {
+                    true => name.clone(),
+                    false => null,
+                },
+                else => null,
+            }
         }
     }
     return null
