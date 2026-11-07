@@ -5,7 +5,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
-pub fn bounds_around(program: &Program, ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
+pub fn bounds_around(program: &Program, beside: &[&Program], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
     let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![] };
     for item in program.items.iter() {
         match &item.node {

@@ -862,6 +862,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
     ) -> nikaia_std::tools::emit_contracts::EmitContractsProven {
         let proven = crate::bounds::proven(
             self.parsed,
+            self.beside,
             &crate::bounds::Sites {
                 lengths: &facts.std_lengths,
                 sized: &facts.sized_lengths,

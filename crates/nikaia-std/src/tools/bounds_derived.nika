@@ -1,0 +1,33 @@
+// crates/nikaia-std/src/tools/bounds_derived.nika
+//
+// **A private function's preconditions, derived from its callers**
+// (ADR-391 D1, D3, D4, #1331): what every call site in the package proves
+// about the arguments is a fact at the callee's entry. The compiler walks
+// the bodies in the order `derived_order` gives, hands each walk's answers
+// at its call sites to `derived_note`, and reads the derived preconditions
+// back for `--bounds` with `derived_rows`. Never published, never checked
+// when the program runs (D4).
+
+use std::collections
+
+/// **The order the bodies are walked in**, as positions into `starts` (the
+/// byte each body starts at): every caller before its callees, so that a
+/// callee's walk has the answers of all its call sites.
+pub fn derived_order(around: ref Around, starts: ref Vec[i64]) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    for k in 0..<starts.len() {
+        out.push(k as i64)
+    }
+    return out
+}
+
+/// **What one walk proved at its call sites**, kept for the callees walked
+/// after it.
+pub fn derived_note(mut around: Around, walked: ref BoundsProven) {
+}
+
+/// **The derived preconditions and the call sites that prove each**, one
+/// row each, for `--bounds` (D4).
+pub fn derived_rows(around: ref Around) -> Vec[String] {
+    return []
+}

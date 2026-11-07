@@ -75,6 +75,14 @@ mod bounds_body_lowered {
 #[allow(unused_imports)]
 pub use bounds_body_lowered::*;
 
+mod bounds_derived_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_derived.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_derived_lowered::*;
+
 mod bounds_frame_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2318,6 +2326,10 @@ pub mod bounds_basic {
 pub mod bounds_body {
     #[allow(unused_imports)]
     pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
+}
+pub mod bounds_derived {
+    #[allow(unused_imports)]
+    pub use super::{derived_order, derived_note, derived_rows};
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]

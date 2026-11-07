@@ -38,8 +38,9 @@ fn frame_rounds() -> i64 {
 /// function's parameters, `true` where one is `mut`; the methods that take a
 /// parameter `mut`, of this program and of what `ledgers` describe; those
 /// that take their receiver `mut` (ADR-306 D17); and every function's frame,
-/// by its name or by `Type::method` (ADR-391 D2).
-pub fn bounds_around(program: ref Program, ledgers: ref Vec[ref Ledger], std_receivers: ref collections::BTreeMap[i64, String], simd_loads: ref collections::BTreeMap[i64, i64], words: ref winnow_grammar::InternerContext) -> Around {
+/// by its name or by `Type::method` (ADR-391 D2). `beside` are the package's
+/// other files: a private function's call sites may stand there (ADR-391 D1).
+pub fn bounds_around(program: ref Program, beside: ref Vec[ref Program], ledgers: ref Vec[ref Ledger], std_receivers: ref collections::BTreeMap[i64, String], simd_loads: ref collections::BTreeMap[i64, i64], words: ref winnow_grammar::InternerContext) -> Around {
     let mut around = Around { functions: collections::BTreeMap(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet(), frames: collections::BTreeMap(), rules: [] }
     for item in program.items {
         match item.node {

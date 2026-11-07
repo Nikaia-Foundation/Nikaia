@@ -411,6 +411,7 @@ impl CheckWalkedPasses for Host<'_> {
     fn nonnegative(&self, facts: &CheckFacts, nodes: &BTreeSet<i64>) -> BTreeSet<i64> {
         crate::bounds::proven(
             self.parsed,
+            self.beside,
             &crate::bounds::Sites::of(facts),
             &[self.own, self.library],
             nodes,
