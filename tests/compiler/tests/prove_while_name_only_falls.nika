@@ -1,0 +1,57 @@
+// #1329 (ADR-361 D5, D4): a name a loop changes only by taking from it is
+// taken to only fall, `k <= k@` at the head of each turn, checked at each
+// assignment as a counter that only grows is. `shrink`'s `pieces[k]` is
+// proved at both settings, and so is its rising twin `rise`'s; `both`'s
+// `k`, which the body lowers and raises, and `uneven`'s, lowered by an
+// amount not known to be positive, stay checked, with the index they read.
+fn shrink(pieces: ref Vec[i64]) -> i64 sync {
+	let mut k = pieces.len()
+	let mut last = 0
+	while k > 0 {
+		k -= 1
+		last = pieces[k]
+	}
+	return last
+}
+
+fn rise(pieces: ref Vec[i64], n: i64) -> i64 sync {
+	let mut k = 0
+	let mut last = 0
+	while k < n && k < pieces.len() {
+		last = pieces[k]
+		k += 1
+	}
+	return last
+}
+
+fn both(pieces: ref Vec[i64]) -> i64 sync {
+	let mut k = pieces.len()
+	let mut last = 0
+	while k > 0 {
+		k -= 1
+		last = pieces[k]
+		if last > 3 {
+			k += 1
+			last = 0
+		}
+	}
+	return last
+}
+
+fn uneven(pieces: ref Vec[i64], d: i64) -> i64 sync {
+	let mut k = pieces.len()
+	let mut last = 0
+	while k > 0 {
+		k = k - d
+		if k >= 0 {
+			last = pieces[k]
+		}
+		k -= 1
+	}
+	return last
+}
+
+fn main() {
+	let xs = [4, 5, 1]
+	println(f"{shrink(xs)} {rise(xs, 2)} {both([1, 2])} {uneven(xs, 1)}")
+}

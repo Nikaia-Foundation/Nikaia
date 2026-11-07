@@ -75,6 +75,14 @@ mod bounds_body_lowered {
 #[allow(unused_imports)]
 pub use bounds_body_lowered::*;
 
+mod bounds_frame_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_frame.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_frame_lowered::*;
+
 mod bounds_interval_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2303,6 +2311,10 @@ pub mod bounds_body {
     #[allow(unused_imports)]
     pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
 }
+pub mod bounds_frame {
+    #[allow(unused_imports)]
+    pub use super::{bounds_around, frame_at_call, frame_writes};
+}
 pub mod bounds_interval {
     #[allow(unused_imports)]
     pub use super::{Range, candidate};
@@ -2325,7 +2337,7 @@ pub mod bounds_shape {
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, Ensured, BoundsProven, bounds_aggressive};
+    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive};
 }
 pub mod buffers {
     #[allow(unused_imports)]

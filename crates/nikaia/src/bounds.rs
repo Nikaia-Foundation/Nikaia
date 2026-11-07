@@ -33,7 +33,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use crate::ast::{Item, Spanned};
 use crate::parser::Parsed;
 use nikaia_std::tools::bounds_basic as nika;
-use nikaia_std::tools::bounds_shape::Around;
 use nikaia_std::tools::bounds_walk::{self as walk, BoundsContext, Ensured};
 
 /// What happens to an index or overflow check the walk proved (ADR-306
@@ -196,54 +195,15 @@ pub fn proven(
         comptime_values,
     } = *sites;
     let mut out = Proven::default();
-    let mut functions: BTreeMap<String, Vec<bool>> = BTreeMap::new();
-    // A method of this program that takes a parameter `mut` changes what it
-    // is handed, whichever type it is called on.
-    // So does one `std` or a dependency describes with a `mut` parameter.
-    let mut changing_methods: BTreeSet<String> =
-        nikaia_std::tools::bounds_matched::bm_changing_methods(ledgers);
-    // One that takes its receiver `mut` may change any field of it
-    // (ADR-306 D17).
-    let mut changing_receivers: BTreeSet<String> = BTreeSet::new();
-    for item in &parsed.program.items {
-        if let Item::Impl { methods, .. } = &item.node {
-            for method in methods {
-                if let Item::Fn {
-                    name: Some(name),
-                    args,
-                    receiver,
-                    ..
-                } = &method.node
-                {
-                    if args.iter().any(|a| a.mutable) {
-                        changing_methods.insert(parsed.text(*name).to_string());
-                    }
-                    if receiver.as_ref().is_some_and(|r| r.is_mut) {
-                        changing_receivers.insert(parsed.text(*name).to_string());
-                    }
-                }
-            }
-        }
-    }
-    for item in &parsed.program.items {
-        if let Item::Fn {
-            name: Some(name),
-            receiver: None,
-            args,
-            ..
-        } = &item.node
-        {
-            functions.insert(
-                parsed.text(*name).to_string(),
-                args.iter().map(|a| a.mutable).collect(),
-            );
-        }
-    }
-    let around = Around {
-        functions,
-        changing_methods,
-        changing_receivers,
-    };
+    // What each call may change, each function's frame among it (ADR-306
+    // D17, ADR-391 D2): `tools/bounds_frame.nika`.
+    let around = nikaia_std::tools::bounds_frame::bounds_around(
+        &parsed.program,
+        ledgers,
+        std_receivers,
+        simd_loads,
+        &parsed.interner,
+    );
     let context = BoundsContext {
         lengths: lengths.iter().copied().collect(),
         sized: sized.iter().copied().collect(),

@@ -16,6 +16,7 @@ pub struct Around {
     pub functions: collections::BTreeMap<String, Vec<bool>>,
     pub changing_methods: collections::BTreeSet<String>,
     pub changing_receivers: collections::BTreeSet<String>,
+    pub frames: collections::BTreeMap<String, BoundsChanged>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
