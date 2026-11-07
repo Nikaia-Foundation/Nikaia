@@ -108,6 +108,45 @@ pub fn brace_groups(text: &str) -> Vec<String> {
     found
 }
 
+pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
+    let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
+    let mut out: String = String::from("");
+    let mut doubled = false;
+    let mut open = 0;
+    let mut at: i64 = 0;
+    while ((at) as usize) < c.len() {
+        if *nikaia_std::index::get(&c, (at) as usize) == '\\' {
+            out.push(*nikaia_std::index::get(&c, (at) as usize));
+            at += 1;
+            if ((at) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) == 'u' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '{' {
+                while ((at) as usize) < c.len() && *nikaia_std::index::get(&c, (at) as usize) != '}' {
+                    out.push(*nikaia_std::index::get(&c, (at) as usize));
+                    at += 1;
+                }
+            }
+            if ((at) as usize) < c.len() { out.push(*nikaia_std::index::get(&c, (at) as usize)); }
+            at += 1;
+            continue;
+        }
+        if *nikaia_std::index::get(&c, (at) as usize) == '{' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '{' {
+            out.push('{');
+            doubled = true;
+            at += 2;
+            continue;
+        }
+        if *nikaia_std::index::get(&c, (at) as usize) == '{' { open += 1; } else if *nikaia_std::index::get(&c, (at) as usize) == '}' && open > 0 { open -= 1; } else if *nikaia_std::index::get(&c, (at) as usize) == '}' && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == '}' {
+            out.push('}');
+            doubled = true;
+            at += 2;
+            continue;
+        }
+        out.push(*nikaia_std::index::get(&c, (at) as usize));
+        at += 1;
+    }
+    if !doubled { return None; }
+    Some(out)
+}
+
 pub fn not_promised_note(callee: &str) -> String {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
     let mut package: String = String::from("its package");

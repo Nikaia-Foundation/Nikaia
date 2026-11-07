@@ -1,0 +1,8 @@
+warning[NK1111]: `{{{{` in a plain string is now two braces.
+  --> tests/plain_string_json_braces_are_no_doubled_brace.nika:8:5
+   |
+ 8 |     let escaped = "{{\"a\":{}}}"
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Only `f"…"` strings fill in `{…}`; a plain string keeps the braces as they are.
+   = help: Braces in a plain string don't need escaping any more: write `"{\"a\":{}}"`.
