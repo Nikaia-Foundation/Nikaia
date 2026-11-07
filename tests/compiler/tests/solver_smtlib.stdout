@@ -1,0 +1,22 @@
+let: yes, 1: x < 1
+let shadowing: yes, 1: true
+named: yes, 2: x == 5 || x > 9 ; !(x == 5)
+define-fun constant: yes, 1: x > 9
+define-fun parameters: yes, 1: 2 * x == 6
+Bool constant: yes, 5: |sv!|b:p >= 1 || !(|sv!|b:q >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1
+ite Boolean: yes, 3: |sv!|b:p >= 1 && x > 0 || !(|sv!|b:p >= 1) && x < 0 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1
+ite arithmetic: yes, 4: x - |sv!|ite:1 == 1 ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; |sv!|b:p >= 1 && |sv!|ite:1 == 2 || !(|sv!|b:p >= 1) && |sv!|ite:1 == 3
+= between Booleans: yes, 1: x >= 5 && x < 0 || !(x >= 5) && !(x < 0)
+distinct between Booleans: yes, 5: !(|sv!|b:p >= 1 && |sv!|b:q >= 1 || !(|sv!|b:p >= 1) && !(|sv!|b:q >= 1)) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1
+xor: yes, 5: (|sv!|b:p >= 1 && !(|sv!|b:q >= 1) || !(|sv!|b:p >= 1) && |sv!|b:q >= 1) && !true || !(|sv!|b:p >= 1 && !(|sv!|b:q >= 1) || !(|sv!|b:p >= 1) && |sv!|b:q >= 1) && true ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1
+=> chain: yes, 7: |sv!|b:p >= 1 → (|sv!|b:q >= 1 → |sv!|b:r >= 1) ; 0 <= |sv!|b:p ; |sv!|b:p <= 1 ; 0 <= |sv!|b:q ; |sv!|b:q <= 1 ; 0 <= |sv!|b:r ; |sv!|b:r <= 1
+negative numeral: yes, 1: -x <= 175
+skipped commands: yes, 1: x > 0
+push and pop: yes, 2: x > 0 ; x < 5
+reset-assertions: yes, 1: x > 0
+two check-sat: no, unsupported: 2 check-sat commands: a query is self-contained (ADR-270 D3)
+non-linear product: no, unsupported: a non-linear product: (* x y)
+uninterpreted function: no, unsupported: (declare-fun f (Int) Int)
+non-standard symbol: no, unsupported: (int.pow2 x)
+undeclared name: no, undeclared: y
+numeral out of i64: no, overflow: the numeral 9223372036854775808

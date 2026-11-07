@@ -1,0 +1,198 @@
+// The solver's SMT-LIB reader (`solver/sv_smtlib.nika`, ADR-270 D6, D17,
+// #1299): one row per form the measuring rod's files use - the form, read yes
+// or no, the number of assertions and the assertions as terms, or the reason
+// for a refusal. `prover_arena`, `solver_terms`, `prove_text`,
+// `logic_smtlib` (for `lg_parse`), `sv_num` and `sv_smtlib` are run beside a
+// driver.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The driver, run after the files: one row per script file.
+fn driver() -> String {
+	return "fn row(path: String) throws {
+	let file = path.split(\"/\").last() ?? path
+	let at = file.find(\"_\") ?? 0
+	let name = file[at + \"_\".len()..].replace(\".smt2\", \"\").replace(\"_\", \" \")
+	let source = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+	match sv_smtlib_read(source) {
+		LgRead::Script(s) => {
+			let mut shown: Vec[String] = []
+			for id in s.assertions {
+				shown.push(s.arena.text(id))
+			}
+			println(f\"{name}: yes, {s.assertions.len()}: {shown.join(\" ; \")}\")
+		},
+		LgRead::Failed(why) => {
+			let reason = match why {
+				LgReadError::Syntax(t) => f\"syntax: {t}\",
+				LgReadError::Unsupported(t) => t.clone(),
+				LgReadError::Undeclared(t) => f\"undeclared: {t}\",
+			}
+			println(f\"{name}: no, {reason}\")
+		},
+	}
+}
+
+fn main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() {
+		args.push(a)
+	}
+	for i in 1..<args.len() {
+		row(args[i].clone())
+	}
+}
+"
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let mut paths: Vec[String] = []
+	for name in ["prover_arena", "solver_terms", "prove_text", "logic_smtlib"] {
+		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+	}
+	for name in ["sv_num", "sv_smtlib"] {
+		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+	}
+	let mut uses: Vec[String] = ["use std::cli", "use std::fs"]
+	let mut body = ""
+	for p in paths {
+		// The text bound first: #1287.
+		let text = fs::read_to_string(p.clone(), fs::Root::Anywhere)
+		for line in text.lines() {
+			if line.starts_with("use std::") {
+				if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
+			} else {
+				body = body + line + "\n"
+			}
+		}
+	}
+	fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, uses.join("\n") + "\n" + body + driver())
+	let files = [
+		(
+			"let",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((y (+ x 1)) (z 2)) (< y z)))\n(check-sat)\n",
+		),
+		(
+			"let, shadowing",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (let ((x 3)) (let ((x (+ x 1))) (= x 4))))\n(check-sat)\n",
+		),
+		(
+			"named",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (or (! (= x 5) :named foo) (> x 9)))\n(assert (not foo))\n(check-sat)\n",
+		),
+		(
+			"define-fun, constant",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun big () Bool (> x 9))\n(assert big)\n(check-sat)\n",
+		),
+		(
+			"define-fun, parameters",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(define-fun twice ((a Int)) Int (* 2 a))\n(assert (= (twice x) (twice 3)))\n(check-sat)\n",
+		),
+		(
+			"Bool constant",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-fun q () Bool)\n(assert (or p (not q)))\n(check-sat)\n",
+		),
+		(
+			"ite, Boolean",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (ite p (> x 0) (< x 0)))\n(check-sat)\n",
+		),
+		(
+			"ite, arithmetic",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const x Int)\n(assert (= x (+ 1 (ite p 2 3))))\n(check-sat)\n",
+		),
+		(
+			"= between Booleans",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (>= x 5) (< x 0)))\n(check-sat)\n",
+		),
+		(
+			"distinct between Booleans",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (distinct p q))\n(check-sat)\n",
+		),
+		(
+			"xor",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(assert (xor p q true))\n(check-sat)\n",
+		),
+		(
+			"=> chain",
+			"(set-logic QF_LIA)\n(declare-const p Bool)\n(declare-const q Bool)\n(declare-const r Bool)\n(assert (=> p q r))\n(check-sat)\n",
+		),
+		(
+			"negative numeral",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (<= -175 x))\n(check-sat)\n",
+		),
+		(
+			"skipped commands",
+			"(set-logic QF_LIA)\n(set-option :produce-models true)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(get-value (x))\n(get-model)\n(get-info :reason-unknown)\n(echo \"done\")\n",
+		),
+		(
+			"push and pop",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(push 1)\n(assert (< x 0))\n(pop 1)\n(push)\n(assert (< x 5))\n(check-sat)\n",
+		),
+		(
+			"reset-assertions",
+			"(set-logic QF_LIA)\n(assert (= 0 1))\n(reset-assertions)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n",
+		),
+		(
+			"two check-sat",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (> x 0))\n(check-sat)\n(assert (< x 0))\n(check-sat)\n",
+		),
+		(
+			"non-linear product",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const y Int)\n(assert (= (* x y) 1))\n(check-sat)\n",
+		),
+		(
+			"uninterpreted function",
+			"(set-logic QF_LIA)\n(declare-fun f (Int) Int)\n(assert (= (f 1) 2))\n(check-sat)\n",
+		),
+		(
+			"non-standard symbol",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (= (int.pow2 x) 2))\n(check-sat)\n",
+		),
+		("undeclared name", "(set-logic QF_LIA)\n(assert (> y 0))\n(check-sat)\n"),
+		(
+			"numeral out of i64",
+			"(set-logic QF_LIA)\n(declare-const x Int)\n(assert (< x 9223372036854775808))\n(check-sat)\n",
+		),
+	]
+	let mut args: Vec[String] = ["run", "main.nika", "--"]
+	let mut i = 10
+	for (name, text) in files {
+		// The number keeps the rows in this order; the driver drops it.
+		let file = f"{tmp}/{i}_{name.replace(" ", "_").replace(",", "")}.smt2"
+		fs::write(file.clone(), fs::Root::Anywhere, text)
+		args.push(file)
+		i += 1
+	}
+	let out = process::run(nikaia, args; dir: tmp.clone())
+	println(out.stdout.trim())
+	if out.stdout.trim().len() == 0 {
+		println(out.stderr.trim())
+	}
+	process::run("rm", ["-rf", tmp])
+}
