@@ -4,7 +4,7 @@ fn nothing[T]() -> T? {
 	return null
 }
 
-fn main() {
+fn main() throws {
 	let x = nothing() ?? "a"
 	println(x)
 }

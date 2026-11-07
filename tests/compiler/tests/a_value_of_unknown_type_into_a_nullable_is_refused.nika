@@ -14,7 +14,7 @@ fn handed() -> String? {
 	return id(3)
 }
 
-fn main() {
+fn main() throws {
 	println(takes(id(3)))
 	let n = id(4)
 	println(takes(n))
