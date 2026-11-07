@@ -1,0 +1,8 @@
+error[NK1337]: `use` takes a package name only, not a path into it.
+  --> src/main.nika:1:1
+   |
+ 1 | use net::http
+   | ^^^^^^^^^^^^^
+   |
+   = help: Write `use net`, and `net::http` where you need it.
+exit 1

@@ -1,0 +1,22 @@
+// #1364: a name two files of one package declare is `NK1148`, the rule of a
+// name declared twice in one file, at the second declaration (ADR-286 D4, D6).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/src/a.nika", fs::Root::Anywhere, "pub struct Row {\n    pub id: i64\n}\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n\nstruct Row {\n    id: i64\n}\n")
+    let out = process::run(toolchain(), ["check", "src/main.nika"]; dir: tmp.clone())
+    print(f"{out.stdout}{out.stderr}".replace(tmp, "TMP"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

@@ -30,7 +30,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::ast::Item;
+use crate::ast::{Item, Span};
 use crate::parser::{self, Parsed};
 use nikaia_std::error::Thrown;
 use nikaia_std::rt::exec::block_on;
@@ -169,8 +169,8 @@ impl ModulesHost for Parsing {
         }
     }
 
-    fn declared(&self, unit: i64) -> Vec<String> {
-        declared_names(self.kept(unit).as_ref().expect(KEPT))
+    fn declared(&self, unit: i64) -> Vec<(String, Span)> {
+        declared_at(self.kept(unit).as_ref().expect(KEPT))
     }
 
     fn use_refused(
@@ -179,13 +179,12 @@ impl ModulesHost for Parsing {
         at: &Path,
         reachable: &BTreeSet<String>,
         alone: bool,
-    ) -> Option<String> {
+    ) -> Option<nikaia_std::tools::findings::Finding> {
         let parsed = self.kept(unit);
         let parsed = parsed.as_ref().expect(KEPT);
-        let refused = nikaia_std::tools::modules::a_use_refused(
+        nikaia_std::tools::modules::a_use_refused(
             &parsed.interner,
             &parsed.program.items,
-            &at.display().to_string(),
             reachable,
             alone,
             &|package: &str| {
@@ -193,11 +192,7 @@ impl ModulesHost for Parsing {
                     .map(|dir| dir.join(format!("{package}.nika")))
                     .is_some_and(|path| path.is_file())
             },
-        );
-        if let Some(why) = &refused {
-            crate::diagnostics::collect_refusal(&at.display().to_string(), why, 0);
-        }
-        refused
+        )
     }
 
     fn foreign_crates(&self, path: &Path) -> Vec<String> {
@@ -229,6 +224,11 @@ impl Parsing {
                 .unwrap_or_else(|| anyhow::anyhow!("a file did not parse")),
             ModulesRefusal::Refused(why) => crate::diagnostics::refuse(why),
             ModulesRefusal::Unreadable { what, why } => anyhow::anyhow!(why).context(what),
+            ModulesRefusal::Found {
+                path,
+                source,
+                finding,
+            } => a_finding(&path, &source, finding),
         })?;
         let mut kept = self.parsed.borrow_mut();
         let mut units: Vec<Unit> = found
@@ -259,26 +259,47 @@ impl Parsing {
 /// into one namespace without it - two private `a_call`s in two files were
 /// read as one, and a call of the one met the other's parameters (found
 /// moving `trust`'s walk into Nikaia, #125).
-pub(crate) fn declared_once(files: &[(&Path, &Parsed)]) -> Result<()> {
+/// `files` holds each file's path, parse and text.
+pub(crate) fn declared_once(files: &[(&Path, &Parsed, &str)]) -> Result<()> {
     // In Nikaia (`tools/modules.nika`, ADR-294, #125).
     let paths: Vec<String> = files
         .iter()
-        .map(|(path, _)| path.display().to_string())
+        .map(|(path, _, _)| path.display().to_string())
         .collect();
-    let declared: Vec<Vec<String>> = files
+    let declared: Vec<Vec<(String, Span)>> = files
         .iter()
-        .map(|(_, parsed)| declared_names(parsed))
+        .map(|(_, parsed, _)| declared_at(parsed))
         .collect();
     match nikaia_std::tools::modules::declared_once(&paths, &declared) {
-        Some(message) => Err(crate::diagnostics::refuse(message)),
+        Some((at, finding)) => Err(a_finding(
+            &paths[at as usize],
+            files[at as usize].2,
+            finding,
+        )),
         None => Ok(()),
     }
 }
 
-/// The names a file declares: what one package's namespace counts
-/// (`declared_names`, `tools/modules.nika`).
-fn declared_names(parsed: &Parsed) -> Vec<String> {
-    nikaia_std::tools::modules::declared_names(&parsed.interner, &parsed.program.items)
+/// **A refusal of collecting that is a finding** (#1364): kept for
+/// `nikaia lsp` at its place, rendered for `nikaia check`, like a parse error.
+fn a_finding(
+    path: &str,
+    source: &str,
+    finding: nikaia_std::tools::findings::Finding,
+) -> anyhow::Error {
+    let finding = crate::traits::from_nikaia(finding);
+    crate::diagnostics::collect_finding(path, &finding);
+    crate::diagnostics::refuse(
+        crate::diagnostics::render_finding(&finding, path, source)
+            .trim_end()
+            .to_string(),
+    )
+}
+
+/// The names a file declares, each with its item: what one package's
+/// namespace counts (`declared_at`, `tools/modules.nika`).
+fn declared_at(parsed: &Parsed) -> Vec<(String, Span)> {
+    nikaia_std::tools::modules::declared_at(&parsed.interner, &parsed.program.items)
 }
 
 /// The runs of units that belong to one package, in the order they were read.

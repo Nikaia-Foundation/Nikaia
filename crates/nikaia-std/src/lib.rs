@@ -255,7 +255,12 @@ pub mod runtime {
 /// into `tools::json` (#1163), keeps a `()` statement and its finite test
 /// `x - x != 0.0`; an `if` whose whole body is an `if` lowers as written
 /// (`bounds_rules.nika`'s `rules_exit`, #1330).
+///
+/// **And `result_large_err`**: an error enum a `.nika` throws holds its values
+/// in place, and Nikaia has no `Box` to write around a large one
+/// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
 #[allow(
+    clippy::result_large_err,
     clippy::no_effect,
     clippy::eq_op,
     clippy::collapsible_if,

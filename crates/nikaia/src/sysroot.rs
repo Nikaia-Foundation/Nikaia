@@ -518,10 +518,10 @@ fn read_tools_package(
         crate::text_tiers::refine_package(&mut files);
     }
     // **One package, one namespace** (ADR-286 D1), as a project's files are.
-    let files: Vec<(&Path, &crate::parser::Parsed)> = paths
+    let files: Vec<(&Path, &crate::parser::Parsed, &str)> = paths
         .iter()
-        .map(PathBuf::as_path)
-        .zip(parsed.iter())
+        .zip(parsed.iter().zip(texts.iter()))
+        .map(|(path, (parsed, text))| (path.as_path(), parsed, text.as_str()))
         .collect();
     crate::modules::declared_once(&files)?;
     Ok((sizes, texts, parsed))
