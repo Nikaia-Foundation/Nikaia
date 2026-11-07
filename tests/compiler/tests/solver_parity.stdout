@@ -1,6 +1,14 @@
 even-odd.smt2: simplex proved, log of 10 steps checked; fm proved, log of 10 steps checked; both proved, log of 10 steps checked
 gcd.smt2: simplex proved, log of 4 steps checked; fm proved, log of 4 steps checked; both proved, log of 4 steps checked
 even-even.smt2: simplex refuted; fm refuted; both refuted
+sum-2.smt2: simplex proved, log of 54 steps checked; fm proved, log of 56 steps checked; both proved, log of 54 steps checked
+sum-3.smt2: simplex refuted; fm refuted; both refuted
 sum-4.smt2: simplex proved, log of 100 steps checked; fm proved, log of 106 steps checked; both proved, log of 100 steps checked
+sum-5.smt2: simplex refuted; fm refuted; both refuted
+sum-6.smt2: simplex proved, log of 146 steps checked; fm proved, log of 156 steps checked; both proved, log of 146 steps checked
+sum-7.smt2: simplex refuted; fm refuted; both refuted
 sum-8.smt2: simplex proved, log of 192 steps checked; fm proved, log of 206 steps checked; both proved, log of 192 steps checked
+sum-9.smt2: simplex refuted; fm refuted; both refuted
+sum-10.smt2: simplex proved, log of 238 steps checked; fm proved, log of 256 steps checked; both proved, log of 238 steps checked
+sum-11.smt2: simplex refuted; fm refuted; both refuted
 sum-12.smt2: simplex proved, log of 284 steps checked; fm proved, log of 306 steps checked; both proved, log of 284 steps checked
