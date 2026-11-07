@@ -80,7 +80,7 @@ fn field_given_back_each_turn() -> String {
     return h.e.name.clone()
 }
 
-fn main() {
+fn main() throws {
     println(continue_before(Expr { name: "a" }, true))
     println(same_arm(Expr { name: "a" }, true))
     println(then_break(Expr { name: "a" }))
