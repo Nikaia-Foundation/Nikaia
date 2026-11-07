@@ -250,7 +250,11 @@ pub mod runtime {
 /// **And `manual_is_multiple_of` and `manual_clear`**: the solver's
 /// `l % 2 == 0` (a literal's sign) and `watch.truncate(0)` lower as written
 /// (`sv_sat.nika`, `sv_check.nika`, #1285).
+///
+/// **And `collapsible_if`**: an `if` whose whole body is an `if` lowers as
+/// written (`bounds_rules.nika`'s `rules_exit`, #1330).
 #[allow(
+    clippy::collapsible_if,
     clippy::map_identity,
     clippy::manual_is_multiple_of,
     clippy::manual_clear,
