@@ -431,6 +431,7 @@ pub(crate) struct TierWalk {
     pub(crate) function: String,
     pub(crate) stmt: Span,
     pub(crate) tuple_items: collections::BTreeMap<i64, Vec<Kinds>>,
+    pub(crate) closure_owns: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1704,6 +1705,8 @@ pub(crate) fn field_place(base: &Expr, field: &str, ask: &TierAsk<'_, '_, '_, '_
 pub(crate) fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let back = walk.tail_back;
     walk.tail_back = false;
+    let keeps = walk.closure_owns;
+    walk.closure_owns = false;
     open_tier_scope(walk);
     let mut tail = no_kinds();
     let mut k: i64 = 0;
@@ -1718,6 +1721,12 @@ pub(crate) fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk:
         if bound >= 0 { walk.handed_back = before; }
         if k + 1 == block.stmts.len() as i64 {
             tail = kinds;
+            if keeps && tail.still {
+                match &stmt.node {
+                    Stmt::Expr(last) => { kept_unseen(last, ask, walk); },
+                    _ => { },
+                }
+            }
             if (walk.frames.len() == 2 || back) && walk.result.is_some() {
                 match &stmt.node {
                     Stmt::Expr(last) => {
@@ -1844,7 +1853,9 @@ pub(crate) fn tier_loop_seen(walk: &TierWalk) -> String {
 
 pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Option<&Type>, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     walk.read_here = ty.is_none();
+    walk.closure_owns = a_lambda(value) && code_owns_text(ask.names, ty);
     let kinds = tier_expr(value, ask, walk);
+    walk.closure_owns = false;
     let mut of = tier_struct_of(value, ask, walk);
     let mut literal: i64 = -1;
     let mut empty: i64 = -1;
@@ -3661,7 +3672,24 @@ pub(crate) fn field_value_kinds(field: &FieldInit, shorthand: &Expr, ask: &TierA
 
 pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let mut given: Vec<Kinds> = vec![];
-    for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
+    let mut params: Vec<Type> = vec![];
+    if args.iter().any(|arg| { a_lambda(arg) }) {
+        let found = match *nikaia_std::index::get(&walk.declared.fns, &(nikaia_std::index::or(tier_callee(func, ask), || "".into()))) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if found.is_some() {
+            let decl = match found { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
+            params = decl.params;
+        }
+    }
+    let mut at: i64 = 0;
+    for arg in args.iter() {
+        walk.closure_owns = a_lambda(arg) && at < params.len() as i64 && code_owns_text(ask.names, Some(nikaia_std::index::get(&params, nikaia_std::index::at(at))));
+        given.push(tier_expr(arg, ask, walk));
+        walk.closure_owns = false;
+        at += 1;
+    }
     let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     if walk.declared.fns.contains_key(&callee) {
         flow_args(&callee, args, &given, ask, walk);
@@ -3682,6 +3710,15 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
         }
     } else { std_container_args(args, ask, walk); }
     std_result(&callee, ask)
+}
+
+pub(crate) fn a_lambda(value: &Expr) -> bool { matches!(value, Expr::Closure { .. }) }
+
+pub(crate) fn code_owns_text(names: &winnow_grammar::InternerContext, ty: Option<&Type>) -> bool {
+    let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let code = match (*written.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    code.result_from.is_empty() && plain_string(names, result)
 }
 
 pub(crate) fn from_named_positions(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Vec<i64> {
@@ -4800,7 +4837,7 @@ pub(crate) fn tier_word(tier: &Tier) -> &'static str {
 pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextTiers {
     let declared = declared_of(program, ask.names);
     let text = string_type(&declared, ask.names);
-    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new() };
+    let mut walk = TierWalk { declared, tiers: collections::BTreeMap::new(), flows: no_flows(), locals: collections::BTreeMap::new(), frames: vec![], result: None, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap::new(), demoted: collections::BTreeSet::new(), handed_back: -1, unlent: collections::BTreeSet::new(), read_here: false, tail_back: false, ties: collections::BTreeMap::new(), late: collections::BTreeSet::new(), late_args: collections::BTreeSet::new(), late_params: collections::BTreeSet::new(), keeping: collections::BTreeSet::new(), kept_into: collections::BTreeSet::new(), param_arms: collections::BTreeSet::new(), reads: no_reads(), function: String::from(""), stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap::new(), closure_owns: false };
     let found = late_arms(program, &walk.declared, ask);
     walk.late = found.arms;
     walk.late_args = found.args;

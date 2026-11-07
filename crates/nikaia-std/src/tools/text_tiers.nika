@@ -711,6 +711,10 @@ struct TierWalk {
     /// What each part of a tuple literal holds, by the literal's node, so
     /// that a part with no text adds nothing to the tuple's tier (#999).
     tuple_items: collections::BTreeMap[i64, Vec[Kinds]],
+    /// The next block walked is the body of a lambda handed where a function
+    /// type's result owns its text - `-> String` without `from` (ADR-views-3
+    /// D14, #1263) - so its last value is kept there.
+    closure_owns: bool,
 }
 
 /// A view a call's result may hold of the caller's text (#702): the word of
@@ -2458,6 +2462,8 @@ fn field_place(base: ref Expr, field: ref String, ask: ref TierAsk, mut walk: Ti
 fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let back = walk.tail_back
     walk.tail_back = false
+    let keeps = walk.closure_owns
+    walk.closure_owns = false
     open_tier_scope(walk)
     let mut tail = no_kinds()
     let mut k = 0
@@ -2481,6 +2487,15 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         }
         if k + 1 == block.stmts.len() {
             tail = kinds
+            // **A lambda handed where its result owns its text keeps its
+            // last value** (ADR-views-3 D14, #1263): a view of static text
+            // there is text of its own, as in a tuple's part (ADR-282 D29).
+            if keeps && tail.still {
+                match stmt.node {
+                    Stmt::Expr(last) => kept_unseen(last, ask, walk),
+                    else => {}
+                }
+            }
             // A function's last value is handed back as a `return` is, and
             // so is each arm's last value of an `if` or a `match` it ends
             // with (#708).
@@ -2644,7 +2659,9 @@ fn tier_loop_seen(walk: ref TierWalk) -> String {
 fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Type?, at: i64, ask: ref TierAsk, mut walk: TierWalk) {
     // A name bound to a parameter is the parameter, counted where it is used.
     walk.read_here = ty == null
+    walk.closure_owns = a_lambda(value) && code_owns_text(ask.names, ty)
     let kinds = tier_expr(value, ask, walk)
+    walk.closure_owns = false
     let mut of = tier_struct_of(value, ask, walk)
     let mut literal = -1
     let mut empty = -1
@@ -4803,6 +4820,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         Expr::Closure { body, .. } => {
             let held = walk.result?.clone()
             walk.result = null
+            // `closure_owns` is read by `tier_block` of the body.
             tier_block(body, ask, walk)
             walk.result = held
             owned_kinds()
@@ -5005,8 +5023,22 @@ fn field_value_kinds(field: ref FieldInit, shorthand: ref Expr, ask: ref TierAsk
 
 fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     let mut given: Vec[Kinds] = []
+    // **A lambda handed to a parameter of a function type** learns whether
+    // that type's result owns its text (#1263).
+    let mut params: Vec[Type] = []
+    if args.iter().any(fn(arg) { a_lambda(arg) }) {
+        let found = walk.declared.fns[tier_callee(func, ask) ?? ""]?.clone()
+        if found != null {
+            let decl = found ?? return owned_kinds()
+            params = decl.params
+        }
+    }
+    let mut at = 0
     for arg in args {
+        walk.closure_owns = a_lambda(arg) && at < params.len() && code_owns_text(ask.names, params[at])
         given.push(tier_expr(arg, ask, walk))
+        walk.closure_owns = false
+        at += 1
     }
     let callee = tier_callee(func, ask) ?? return owned_kinds()
     if walk.declared.fns.contains_key(callee) {
@@ -5047,6 +5079,22 @@ fn call_kinds(func: ref Expr, args: ref Vec[Expr], ask: ref TierAsk, mut walk: T
         std_container_args(args, ask, walk)
     }
     return std_result(callee, ask)
+}
+
+fn a_lambda(value: ref Expr) -> bool {
+    return match value {
+        Expr::Closure { .. } => true,
+        else => false,
+    }
+}
+
+/// **Whether a function type's result owns its text** (ADR-views-3 D14):
+/// `-> String` that writes no `from`.
+fn code_owns_text(names: ref winnow_grammar::InternerContext, ty: ref Type?) -> bool {
+    let written = ty ?? return false
+    let code = written.code ?? return false
+    let result = code.result ?? return false
+    return code.result_from.is_empty() && plain_string(names, result)
 }
 
 /// **The positions a function value's type lends** (ADR-views-3 D2, D14,
@@ -6545,7 +6593,7 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap() }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false }
     let found = late_arms(program, walk.declared, ask)
     walk.late = found.arms
     walk.late_args = found.args
