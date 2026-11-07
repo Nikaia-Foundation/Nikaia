@@ -109,14 +109,14 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       </div>
       <div class="safe-tile safe-tile-b" id="conflicts">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> For <code>async</code> tasks the check is being built (#988), and two writes to the same file are not yet told apart from writes to two files.</p>
+<p><span class="why why-todo">Still being built</span> A file written inside a function that a task calls is not seen yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1354">#1354</a>); written in the task itself, two writes to one file are refused.</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
 </details>
         <h3><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a></h3>
-        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses two tasks that change the same value or both write to standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
+        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses a task that changes a value bound outside it, and two tasks that write the same file, the same lock or standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">async {
     async fn { balance = balance + 50 }
-    async fn { balance = balance - 30 }   // refused: both change `balance`
+    async fn { balance = balance - 30 }   // refused: `balance` is bound outside
 }</code></pre></div>
         <a class="safe-more" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a>
       </div>

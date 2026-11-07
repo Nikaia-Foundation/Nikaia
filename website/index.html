@@ -170,7 +170,7 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#logic" | relative_url }}">Parts that keep their promises</a></h3>
-        <p>An <code>assert</code> is a contract, and a call that breaks it is refused. Two tasks that change the same value are refused too; for <code>async</code> that check is being built.</p>
+        <p>An <code>assert</code> is a contract, and a call that breaks it is refused. Two tasks that change the same value are refused too.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
     assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
     return n
@@ -296,7 +296,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
       <div class="safe-tile safe-tile-a">
         <span class="safe-chip safe-chip-part">Current status</span>
         <h3><a href="{{ "/good/#prealpha" | relative_url }}">Pre-alpha: what to expect</a></h3>
-        <p>The compiler builds real programs today. A formatter (<code>nikaia fmt</code>) is there; a package registry and a language server do not exist yet.</p>
+        <p>The compiler builds real programs today. A formatter (<code>nikaia fmt</code>) is there; a language server is being built; a package registry does not exist yet.</p>
 <p class="safe-note">A calculator, a JSON parser, a log analyser, a small HTTP server and the One Billion Row Challenge build today.</p>
         <a class="safe-more" href="{{ "/good/#prealpha" | relative_url }}">Read more →</a>
       </div>
