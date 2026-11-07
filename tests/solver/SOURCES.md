@@ -11,7 +11,7 @@ its `; EXPECT:` line.
 | `stress/` | D9's four families plus `blank = 2·n`, n = 1..12 (parity 2..12) | `scripts/solver.nika gen`, deterministic; status from z3 5.3.3 | the repository's |
 | `qflia/` | QF_LIA, non-incremental, under 64 KiB | see below | see below |
 | `qflra/` | QF_LRA, non-incremental, under 64 KiB | see below | see below |
-| `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with z3's status (none yet: 300 queries of seed 1 agree) | generated | the repository's |
+| `bugs/` | disagreements `scripts/solver.nika fuzz` finds, with z3's status (none yet: 300 queries of seed 1 agree, over Fourier-Motzkin and the CDCL(T) engine) | generated | the repository's |
 
 ## `qflia/` and `qflra/`
 

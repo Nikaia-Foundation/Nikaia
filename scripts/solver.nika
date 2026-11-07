@@ -1,7 +1,7 @@
 // The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
 // toolchain of the day: no compiler change, no `lower-std`, no rebuild.
 //
-//   nikaia run scripts/solver.nika -- run [--engine fm|new|new-fm|new-simplex] [--summary] [--timeout S] DIR|FILE...
+//   nikaia run scripts/solver.nika -- run [--engine new|fm|new-fm|new-simplex] [--summary] [--timeout S] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
 //   nikaia run scripts/solver.nika -- oracle [--write] FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED
@@ -219,7 +219,8 @@ fn solver_summary(label: String, rows: Vec[SolverRow]) -> String {
 }
 
 fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
-	let mut engine: String = "fm"
+	// The CDCL(T) engine by default (#1283); `fm` stays as the cross-check.
+	let mut engine: String = "new"
 	let mut summary_only = false
 	let mut timeout = 60
 	let mut targets: Vec[String] = []
@@ -591,7 +592,7 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 		let path = f"{work}/{name}"
 		fs::write(path.clone(), fs::Root::Anywhere, source.clone())
 		let z3 = solver_fuzz_oracle(self_test, i, path.clone())
-		let (answer, _, _) = solver_answer(bin.clone(), "fm", path.clone(), 60)
+		let (answer, _, _) = solver_answer(bin.clone(), "new", path.clone(), 60)
 		if answer == "proved" { proved += 1 }
 		if answer == "refuted" { refuted += 1 }
 		if answer.starts_with("unknown") { unknown += 1 }

@@ -1,7 +1,9 @@
 // The measuring rod of the solver (#1281, ADR-270 D17): `scripts/solver.nika
-// run` on the three smoke files (one sat, one unsat, one the reader refuses),
-// then the summary of the stress families: Fourier-Motzkin's counts of the day,
-// unknowns included (they are the baseline the engine issues compare with).
+// run --engine fm` on the three smoke files (one sat, one unsat, one the
+// reader refuses), then the summary of the stress families: Fourier-Motzkin's
+// counts of the day, unknowns included (the baseline and cross-check of the
+// engine issues); then the default engine, CDCL(T) (#1283), on the smoke
+// files and the preprocessing's.
 use std::fs
 use std::process
 
@@ -31,7 +33,7 @@ fn root() -> String throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain(repo.clone())
-	for args in [["run", "tests/solver/smoke"], ["run", "--summary", "tests/solver/stress"], ["run", "--engine", "new", "tests/solver/smoke"], ["run", "--engine", "new", "tests/solver/pre"]] {
+	for args in [["run", "--engine", "fm", "tests/solver/smoke"], ["run", "--engine", "fm", "--summary", "tests/solver/stress"], ["run", "tests/solver/smoke"], ["run", "tests/solver/pre"]] {
 		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
 		for a in args { all.push(a.clone()) }
 		let out = process::run(nikaia.clone(), all; dir: repo.clone())

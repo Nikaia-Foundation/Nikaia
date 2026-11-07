@@ -1,7 +1,8 @@
 // The fuzzer of the measuring rod (#1281, ADR-270 D17): `scripts/solver.nika
 // fuzz --self-test` generates eight queries from a fixed seed, answers them
-// with Fourier-Motzkin and compares with a stubbed oracle (z3 is not in CI):
-// the same seed gives the same queries, answers and disagreements.
+// with the CDCL(T) engine (#1283) and compares with a stubbed oracle (z3 is
+// not in CI; it calls every third query `unsat`, so its disagreements are the
+// stub's): the same seed gives the same queries, answers and disagreements.
 use std::fs
 use std::process
 
