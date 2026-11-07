@@ -1,0 +1,419 @@
+// crates/nikaia-std/src/solver/sv_cnf.nika
+//
+// **Tseitin input** (ADR-270 D12, #1283 item 2): the Boolean structure of a
+// `TermArena` query - its facts hold, its goal does not - put into clauses
+// over atom literals, the query of `sv_proof.nika` the SAT core and the
+// theory start from.
+//
+// * **Atoms** are `row <= 0` and `row < 0` over integer columns: `a <= b` is
+//   `a - b <= 0`, `a < b` is `a - b < 0`, `a = b` the two `<=` both ways, and
+//   `a != b` the two strict inequalities `a - b < 0 ∨ b - a < 0`. An atom is
+//   kept once: a row whose first coefficient is negative is the negation of
+//   the other relation on the negated row (`r <= 0` is `¬(-r < 0)`), so
+//   `x <= y` and `y < x` are one atom and its negation. A row without
+//   columns is decided on the spot.
+// * **Clauses**: what holds at the top - a conjunction, a negated
+//   disjunction - is split into its parts, a disjunction there is one
+//   clause, and only a junction nested below a disjunction gets a
+//   *definition*: a fresh atom `d <= 0` over a fresh column `def#k`, the
+//   theory leaving it free, with clauses making it equivalent to the
+//   junction (Tseitin: every model of the formula extends to one of the
+//   clauses, and every model of the clauses is one of the formula).
+// * **Constants** fold: a true part drops out of a conjunction and makes a
+//   disjunction true, a false one the reverse; a literal and its negation in
+//   one clause drop the clause; a false fact is the empty clause.
+// * **Quotients** by a positive constant are read by `lg_linear` as the
+//   fresh column `quot#place`, and their definitions (`lg_quotient`) join the
+//   query as further facts.
+//
+// A literal while it is built is an `i64`: `-1` true, `-2` false, else the
+// literal of `sv_proof.nika`.
+
+/// A query in clauses: the log's query, the columns' names, and per atom
+/// whether it is a definition (no theory atom).
+pub struct SvCnf {
+	pub query: SvQuery,
+	pub names: Vec[String],
+	pub definition: Vec[bool],
+}
+
+/// A junction while it is built: its literals, a conjunction or a
+/// disjunction.
+struct SvParts {
+	conjunction: bool,
+	lits: Vec[i64],
+}
+
+/// The encoding under way.
+struct SvTseitin {
+	atoms: Vec[SvAtom],
+	definition: Vec[bool],
+	clauses: Vec[Vec[u32]],
+	vars: SvVars,
+	/// Each atom by its text, for keeping it once.
+	known: collections::BTreeMap[String, u32],
+	/// The literal each junction node of the arena was given.
+	defined: collections::BTreeMap[i64, i64],
+	definitions: i64,
+}
+
+/// The negation of a literal under way.
+fn sv_cnf_not(l: i64) -> i64 {
+	if l == -1 {
+		return -2
+	}
+	if l == -2 {
+		return -1
+	}
+	return if l % 2 == 0 { l + 1 } else { l - 1 }
+}
+
+/// The clauses of `facts` and of the negation of `goal`; `null` where a term
+/// is outside linear integer arithmetic or a number leaves `i64` (`why`
+/// says which).
+fn sv_cnf(arena: ref TermArena, facts: ref Vec[i64], goal: i64, mut why: LgWhy) -> SvCnf? {
+	let mut t = SvTseitin {
+		atoms: [],
+		definition: [],
+		clauses: [],
+		vars: sv_vars(),
+		known: collections::BTreeMap(),
+		defined: collections::BTreeMap(),
+		definitions: 0,
+	}
+	for fact in facts {
+		t.assert(arena, fact, true, why) ?? return null
+	}
+	t.assert(arena, goal, false, why) ?? return null
+	// Each quotient read, defined - a definition may read a further one.
+	let mut at = 0
+	while at < why.quotients.len() {
+		let formula = lg_quotient(arena, why.quotients[at], why) ?? return null
+		t.assert_formula(formula) ?? return null
+		at += 1
+	}
+	let columns = t.vars.names.len().checked_u32() ?? return null
+	return SvCnf {
+		query: SvQuery { atoms: t.atoms, clauses: t.clauses, columns: columns },
+		names: t.vars.names,
+		definition: t.definition,
+	}
+}
+
+impl SvTseitin {
+	/// The literal of `row < 0` (`strict`) or `row <= 0`, the atom made where
+	/// it is new. Over the integers every atom is `row <= 0` in normal form:
+	/// `row < 0` is `row + 1 <= 0`, the row divided by the gcd of its
+	/// coefficients (`sv_row_tightened`), and a row whose first coefficient is
+	/// negative the negation of `-row < 0` - so `x <= y` and `y < x` are one
+	/// atom (the normal form of ADR-270 D19).
+	fn atom(ref mut self, row: SvRow, strict: bool) -> i64? {
+		if row.cols.len() == 0 {
+			let holds = if strict { row.constant < 0 } else { row.constant <= 0 }
+			return if holds { -1 } else { -2 }
+		}
+		if row.ks[0] < 0 {
+			let negated = sv_row_scale(row, -1) ?? return null
+			let other = self.atom(negated, !strict) ?? return null
+			return sv_cnf_not(other)
+		}
+		let mut le = row
+		if strict {
+			le.constant = le.constant.checked_add(1) ?? return null
+		}
+		let normal = sv_row_tightened(le)
+		let key = sv_row_text(normal)
+		// The default bound first: #1297.
+		let missing: u32 = 4294967295
+		let known: u32 = self.known.get(key) ?? missing
+		if known != missing {
+			return sv_lit(known, false) as i64
+		}
+		let a = self.atoms.len().checked_u32() ?? return null
+		self.atoms.push(SvAtom { row: normal, rel: SvRel::Le })
+		self.definition.push(false)
+		self.known.insert(key, a)
+		return sv_lit(a, false) as i64
+	}
+
+	/// `x - y`, as a row, where `x` and `y` are the terms `a` and `b`.
+	fn difference(ref mut self, arena: ref TermArena, a: i64, b: i64, mut why: LgWhy) -> SvRow? {
+		let x = lg_linear(arena, a, why) ?? return null
+		let y = lg_linear(arena, b, why) ?? return null
+		let d = lg_overflowed(lg_sub(x, y), why) ?? return null
+		return sv_cnf_overflowed_row(sv_row_of_lin(d, self.vars), why)
+	}
+
+	/// The parts of the Boolean term `id` where it holds; `null` where it is
+	/// no junction or comparison (a constant or a negation).
+	fn parts(ref mut self, arena: ref TermArena, id: i64, mut why: LgWhy) -> SvParts? {
+		return match arena.at(id) {
+			SolverTerm::And(items) => SvParts {
+				conjunction: true,
+				lits: self.lits(arena, items, why) ?? return null,
+			},
+			SolverTerm::Or(items) => SvParts {
+				conjunction: false,
+				lits: self.lits(arena, items, why) ?? return null,
+			},
+			SolverTerm::Le(a, b) => {
+				let d = self.difference(arena, a, b, why) ?? return null
+				self.single(d, false) ?? return sv_cnf_overflow_parts(why)
+			},
+			SolverTerm::Lt(a, b) => {
+				let d = self.difference(arena, a, b, why) ?? return null
+				self.single(d, true) ?? return sv_cnf_overflow_parts(why)
+			},
+			SolverTerm::Ge(a, b) => {
+				let d = self.difference(arena, b, a, why) ?? return null
+				self.single(d, false) ?? return sv_cnf_overflow_parts(why)
+			},
+			SolverTerm::Gt(a, b) => {
+				let d = self.difference(arena, b, a, why) ?? return null
+				self.single(d, true) ?? return sv_cnf_overflow_parts(why)
+			},
+			SolverTerm::Eq(a, b) => {
+				let d = self.difference(arena, a, b, why) ?? return null
+				let e = sv_row_scale(d, -1) ?? return sv_cnf_overflow_parts(why)
+				let x = self.atom(d, false) ?? return sv_cnf_overflow_parts(why)
+				let y = self.atom(e, false) ?? return sv_cnf_overflow_parts(why)
+				SvParts { conjunction: true, lits: [x, y] }
+			},
+			SolverTerm::Ne(a, b) => {
+				let d = self.difference(arena, a, b, why) ?? return null
+				let e = sv_row_scale(d, -1) ?? return sv_cnf_overflow_parts(why)
+				let x = self.atom(d, true) ?? return sv_cnf_overflow_parts(why)
+				let y = self.atom(e, true) ?? return sv_cnf_overflow_parts(why)
+				SvParts { conjunction: false, lits: [x, y] }
+			},
+			else => {
+				why.unknown = LgUnknown::OutsideTheTheory
+				null
+			},
+		}
+	}
+
+	/// The one atom `row REL 0` as a conjunction of it.
+	fn single(ref mut self, row: SvRow, strict: bool) -> SvParts? {
+		let l = self.atom(row, strict) ?? return null
+		return SvParts { conjunction: true, lits: [l] }
+	}
+
+	/// The literal of each of `items`, where it holds.
+	fn lits(ref mut self, arena: ref TermArena, items: ref Vec[i64], mut why: LgWhy) -> Vec[i64]? {
+		let mut out: Vec[i64] = []
+		for item in items {
+			out.push(self.lit(arena, item, why) ?? return null)
+		}
+		return out
+	}
+
+	/// The literal of the Boolean term `id` where it holds.
+	fn lit(ref mut self, arena: ref TermArena, id: i64, mut why: LgWhy) -> i64? {
+		let node = arena.at(id)
+		match node {
+			SolverTerm::Bool(b) => return if b { -1 } else { -2 },
+			SolverTerm::Not(a) => {
+				let inner = self.lit(arena, a, why) ?? return null
+				return sv_cnf_not(inner)
+			},
+			else => {},
+		}
+		let made: i64 = self.defined.get(id) ?? -3
+		if made != -3 {
+			return made
+		}
+		let parts = self.parts(arena, id, why) ?? return null
+		let l = self.junction(parts) ?? return sv_cnf_overflow_lit(why)
+		self.defined.insert(id, l)
+		return l
+	}
+
+	/// The literal of a junction: a constant or a single literal as it is,
+	/// else a definition.
+	fn junction(ref mut self, parts: SvParts) -> i64? {
+		// A conjunction is the negation of the disjunction of the negations.
+		let mut lits: Vec[i64] = []
+		for l in parts.lits {
+			lits.push(if parts.conjunction { sv_cnf_not(l) } else { l })
+		}
+		let clause = sv_cnf_clause(lits)
+		let either: Vec[u32] = clause ?? return if parts.conjunction { -2 } else { -1 }
+		if either.len() == 0 {
+			return if parts.conjunction { -1 } else { -2 }
+		}
+		if either.len() == 1 {
+			let l = either[0] as i64
+			return if parts.conjunction { sv_cnf_not(l) } else { l }
+		}
+		// `d ↔ ∨ either`: `¬d ∨ either`, and `d ∨ ¬e` for each `e`.
+		let col = self.vars.column(f"def#{self.definitions}") ?? return null
+		self.definitions += 1
+		let a = self.atoms.len().checked_u32() ?? return null
+		self.atoms.push(SvAtom { row: SvRow { cols: [col], ks: [1], constant: 0 }, rel: SvRel::Le })
+		self.definition.push(true)
+		let d = sv_lit(a, false)
+		let mut long = either.clone()
+		long.push(d ^ 1)
+		long.sort()
+		self.clauses.push(long)
+		for e in either {
+			let mut short = [d, e ^ 1]
+			short.sort()
+			self.clauses.push(short)
+		}
+		let dl = d as i64
+		return if parts.conjunction { sv_cnf_not(dl) } else { dl }
+	}
+
+	/// Adds the clauses saying the Boolean term `id` holds (or, where
+	/// `holds` is false, does not).
+	fn assert(ref mut self, arena: ref TermArena, id: i64, holds: bool, mut why: LgWhy) -> bool? {
+		match arena.at(id) {
+			SolverTerm::Bool(b) => {
+				if b != holds {
+					self.clauses.push([])
+				}
+				return true
+			},
+			SolverTerm::Not(a) => return self.assert(arena, a, !holds, why),
+			SolverTerm::And(items) => {
+				if holds {
+					for item in items {
+						self.assert(arena, item, true, why) ?? return null
+					}
+					return true
+				}
+			},
+			SolverTerm::Or(items) => {
+				if !holds {
+					for item in items {
+						self.assert(arena, item, false, why) ?? return null
+					}
+					return true
+				}
+			},
+			else => {},
+		}
+		let parts = self.parts(arena, id, why) ?? return null
+		self.add(parts, holds)
+		return true
+	}
+
+	/// Adds the clauses of a junction that holds (or, where `holds` is
+	/// false, does not).
+	fn add(ref mut self, parts: SvParts, holds: bool) {
+		let mut lits: Vec[i64] = []
+		for l in parts.lits {
+			lits.push(if holds { l } else { sv_cnf_not(l) })
+		}
+		if parts.conjunction == holds {
+			for l in lits {
+				self.unit(l)
+			}
+			return
+		}
+		let clause: Vec[u32] = sv_cnf_clause(lits) ?? return
+		self.clauses.push(clause)
+	}
+
+	/// Adds the clause of the one literal `l`.
+	fn unit(ref mut self, l: i64) {
+		if l == -1 {
+			return
+		}
+		if l == -2 {
+			self.clauses.push([])
+			return
+		}
+		self.clauses.push([l as u32])
+	}
+
+	/// Adds the clauses of a formula of `logic_lia.nika` that holds.
+	fn assert_formula(ref mut self, formula: LgFormula) -> bool? {
+		match formula {
+			LgFormula::And(items) => {
+				for item in items {
+					self.assert_formula(item) ?? return null
+				}
+			},
+			else => {
+				let l = self.formula_lit(formula) ?? return null
+				let parts = SvParts { conjunction: true, lits: [l] }
+				self.add(parts, true)
+			},
+		}
+		return true
+	}
+
+	/// The literal of a formula of `logic_lia.nika`.
+	fn formula_lit(ref mut self, formula: LgFormula) -> i64? {
+		return match formula {
+			LgFormula::True => -1,
+			LgFormula::False => -2,
+			LgFormula::Le(lin) => {
+				let row = sv_row_of_lin(lin, self.vars) ?? return null
+				self.atom(row, false) ?? return null
+			},
+			LgFormula::And(items) => {
+				let mut lits: Vec[i64] = []
+				for item in items {
+					lits.push(self.formula_lit(item) ?? return null)
+				}
+				self.junction(SvParts { conjunction: true, lits: lits }) ?? return null
+			},
+			LgFormula::Or(items) => {
+				let mut lits: Vec[i64] = []
+				for item in items {
+					lits.push(self.formula_lit(item) ?? return null)
+				}
+				self.junction(SvParts { conjunction: false, lits: lits }) ?? return null
+			},
+		}
+	}
+}
+
+/// The clause of the literals `lits`, ascending and each once; `null` where
+/// it is true (a true literal, or a literal and its negation).
+fn sv_cnf_clause(lits: Vec[i64]) -> Vec[u32]? {
+	let mut out: Vec[u32] = []
+	for l in lits {
+		if l == -1 {
+			return null
+		}
+		if l >= 0 {
+			out.push(l as u32)
+		}
+	}
+	out.sort()
+	let mut kept: Vec[u32] = []
+	for l in out {
+		let n = kept.len()
+		if n > 0 && kept[n - 1] == l {
+			continue
+		}
+		if n > 0 && kept[n - 1] == (l ^ 1) {
+			return null
+		}
+		kept.push(l)
+	}
+	return kept
+}
+
+/// `made`, or the overflow it is.
+fn sv_cnf_overflowed_row(made: SvRow?, mut why: LgWhy) -> SvRow? {
+	if made == null {
+		why.unknown = LgUnknown::Overflow
+	}
+	return made
+}
+
+fn sv_cnf_overflow_parts(mut why: LgWhy) -> SvParts? {
+	why.unknown = LgUnknown::Overflow
+	return null
+}
+
+fn sv_cnf_overflow_lit(mut why: LgWhy) -> i64? {
+	why.unknown = LgUnknown::Overflow
+	return null
+}
