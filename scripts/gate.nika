@@ -117,15 +117,33 @@ fn gate_lowered_hash() -> String throws {
 }
 
 // A lower-std run refused a file when it exits non-zero or prints an error.
+// It runs with `NIKAIA_LOWER_TIMES` set, and its phase times (parse, ledger,
+// trust, files and the slowest files) are appended to
+// `target/lower-std-times.log`, the measurements for incremental lowering.
 fn gate_lower_std() -> String throws {
-    let out = process::run("target/fast/nikaia", ["lower-std"])
+    let out = process::run("sh", ["-c", "NIKAIA_LOWER_TIMES=1 target/fast/nikaia lower-std"])
     let all = out.stdout + "\n" + out.stderr
+    gate_log_lower_times(all.clone())
     let mut refused = out.code != 0
     for line in all.split("\n") {
         if line.starts_with("error") || line.starts_with("Error") { refused = true }
     }
     if refused { return "red " + gate_first_error(all) }
     return "green"
+}
+
+// Append the `lower-std:` lines of one run, under the time and HEAD, to
+// `target/lower-std-times.log`.
+fn gate_log_lower_times(all: String) throws {
+    let log = "target/lower-std-times.log"
+    let stamp = process::run("sh", ["-c", "date -u +%FT%TZ; git rev-parse --short HEAD"]).stdout.trim().replace("\n", " ")
+    let mut text = ""
+    if fs::exists(log, fs::Root::Anywhere) { text = fs::read_to_string(log, fs::Root::Anywhere) }
+    text = text + "== " + stamp + "\n"
+    for line in all.split("\n") {
+        if line.starts_with("lower-std: ") || line.starts_with("lower-std (") || line.contains("from the cache") { text = text + line + "\n" }
+    }
+    fs::write(log, fs::Root::Anywhere, text)
 }
 
 // **Lowered drift** (#1060): the lowered files the first lower-std rewrote
