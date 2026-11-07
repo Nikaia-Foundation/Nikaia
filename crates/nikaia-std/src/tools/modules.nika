@@ -1036,13 +1036,13 @@ pub fn modules_qualify(package: String?, name: String) -> String {
 /// tree (Part III 13.5). Each is read from the package's `src/`, because a
 /// dependency is a project and that is where a project keeps its files
 /// (Part III, 13.1).
-pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let mut names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
     // **A Rust crate is a package a `use` may name** (Part III 15.2's `use
     // image`), under the name a call writes it by (ADR-290 D1).
     names.extend(modules_foreign_beside(entry, host))
-    let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), host)
-    units.extend(modules_dependency_units(dependencies, host))
+    let mut units = modules_package_at(entry, null, names, collections::BTreeMap(), open, host)
+    units.extend(modules_dependency_units(dependencies, open, host))
     return units
 }
 
@@ -1051,15 +1051,15 @@ pub fn modules_collect_with[H: ModulesHost](entry: ref fs::Path, dependencies: r
 /// entry alone, as `nikaia test` builds it, for it is a program of its own
 /// and the `.nika` files beside it in `tests/` are other programs. Its `use`
 /// lines are checked against its dependencies, as in a project.
-pub fn modules_collect_program_test[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+pub fn modules_collect_program_test[H: ModulesHost](entry: ref fs::Path, dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let names: collections::BTreeSet[String] = dependencies.iter().map(fn(d) { d.name.clone() }).collect()
-    let mut units: Vec[ModulesUnit] = [modules_read_unit(entry, null, names, collections::BTreeMap(), ModulesStanding::InProject, host)]
-    units.extend(modules_dependency_units(dependencies, host))
+    let mut units: Vec[ModulesUnit] = [modules_read_unit(entry, null, names, collections::BTreeMap(), ModulesStanding::InProject, open, host)]
+    units.extend(modules_dependency_units(dependencies, open, host))
     return units
 }
 
 /// The files of the packages a program depends on, in the order given.
-fn modules_dependency_units[H: ModulesHost](dependencies: ref Vec[ProjectMembersDependency], host: ref H) -> Vec[ModulesUnit] throws {
+fn modules_dependency_units[H: ModulesHost](dependencies: ref Vec[ProjectMembersDependency], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let mut units: Vec[ModulesUnit] = []
     // **Read, and not emitted** ([ADR-286](../../../docs/specification/adr/adr-286.md)
     // D1). A dependency is its own crate now, so its files are Cargo's to
@@ -1077,14 +1077,14 @@ fn modules_dependency_units[H: ModulesHost](dependencies: ref Vec[ProjectMembers
             throw ModulesRefusal::Refused(f"`{dependency.name}` is a dependency by path, but {src.display()} doesn't exist.\nA package is a directory with a `{MODULES_SRC}/` folder in it.")
         }
         let package: String? = dependency.name.clone()
-        units.extend(modules_package_at(src.join(MODULES_ENTRY), package, dependency.reachable, dependency.renames, host))
+        units.extend(modules_package_at(src.join(MODULES_ENTRY), package, dependency.reachable, dependency.renames, open, host))
     }
     return units
 }
 
 /// One package: the directory an entry sits in, checked as a namespace of its
 /// own.
-fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
     let base = modules_base_of(entry)
     // `read_dir` gives the names sorted by their bytes: the order Rust's
     // sorted paths had, since they differ only in that last part.
@@ -1098,10 +1098,10 @@ fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, rea
     // surface, and an entry point is what a *program* has.
     let mut units: Vec[ModulesUnit] = []
     if modules_is_file(entry) {
-        units.push(modules_read_unit(entry, package?.clone(), reachable, renames, ModulesStanding::InProject, host))
+        units.push(modules_read_unit(entry, package?.clone(), reachable, renames, ModulesStanding::InProject, open, host))
     }
     for path in beside {
-        units.push(modules_read_unit(path, package?.clone(), reachable, renames, ModulesStanding::InProject, host))
+        units.push(modules_read_unit(path, package?.clone(), reachable, renames, ModulesStanding::InProject, open, host))
     }
     modules_one_namespace(units, host)
     return units
@@ -1123,13 +1123,19 @@ fn modules_base_of(entry: ref fs::Path) -> fs::Path {
 /// a directory of programs, and compiling one of them must not pull in the other
 /// ten. A package is a directory **of a project**, which is what a `nikaia.toml`
 /// declares.
-pub fn modules_collect_one[H: ModulesHost](entry: ref fs::Path, host: ref H) -> Vec[ModulesUnit] throws {
-    return [modules_read_unit(entry, null, collections::BTreeSet(), collections::BTreeMap(), ModulesStanding::Alone, host)]
+pub fn modules_collect_one[H: ModulesHost](entry: ref fs::Path, open: ref collections::BTreeMap[String, String], host: ref H) -> Vec[ModulesUnit] throws {
+    return [modules_read_unit(entry, null, collections::BTreeSet(), collections::BTreeMap(), ModulesStanding::Alone, open, host)]
 }
 
 /// One file read, parsed by the host and its `use` lines checked.
-fn modules_read_unit[H: ModulesHost](path: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], standing: ModulesStanding, host: ref H) -> ModulesUnit throws {
-    let source = fs::read_to_string(path, fs::Root::Anywhere) catch { throw ModulesRefusal::Unreadable { what: f"cannot read {path.display()}", why: f"{error}" } }
+fn modules_read_unit[H: ModulesHost](path: ref fs::Path, package: String?, reachable: ref collections::BTreeSet[String], renames: ref collections::BTreeMap[String, String], standing: ModulesStanding, open: ref collections::BTreeMap[String, String], host: ref H) -> ModulesUnit throws {
+    // **A file an editor has open is read as the editor holds it** (#1347):
+    // `open` maps a path, as shown, to its text; every build but
+    // `nikaia lsp`'s passes it empty.
+    let source = match open.get(path.display()) {
+        null => fs::read_to_string(path, fs::Root::Anywhere) catch { throw ModulesRefusal::Unreadable { what: f"cannot read {path.display()}", why: f"{error}" } },
+        text => text.clone(),
+    }
     // A parse error is a finding, rendered by the host where the path is
     // known; it is a refusal of the program rather than a failure of this
     // compiler (`diagnostics::Refused`).

@@ -74,40 +74,53 @@ impl Unit {
 /// `tools/project_members.nika`, which finds them (P4a).
 pub use nikaia_std::tools::project_members::ProjectMembersDependency as Dependency;
 
+/// **The files an editor has open** (#1347): a path, as shown, to the text
+/// the editor holds, read instead of the file. Every build but `nikaia lsp`'s
+/// passes it empty.
+pub type Open = BTreeMap<String, String>;
+
 /// Every file of the package the entry belongs to, entry first
 /// (`modules_collect_with`, `tools/modules.nika`, M3a).
 pub fn collect(entry: &Path) -> Result<Vec<Unit>> {
-    collect_with(entry, &[])
+    collect_with(entry, &[], &Open::new())
 }
 
 /// The same, with the packages this program depends on
 /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15), their files
 /// after the program's own (`modules_collect_with`).
-pub fn collect_with(entry: &Path, dependencies: &[Dependency]) -> Result<Vec<Unit>> {
+pub fn collect_with(entry: &Path, dependencies: &[Dependency], open: &Open) -> Result<Vec<Unit>> {
     let host = Parsing::default();
     host.units(block_on(collecting::modules_collect_with(
         entry,
         dependencies,
+        open,
         &host,
     )))
 }
 
 /// A test program alone and the packages it depends on
 /// (`modules_collect_program_test`, ADR-269 D22, #972).
-pub fn collect_program_test(entry: &Path, dependencies: &[Dependency]) -> Result<Vec<Unit>> {
+pub fn collect_program_test(
+    entry: &Path,
+    dependencies: &[Dependency],
+    open: &Open,
+) -> Result<Vec<Unit>> {
     let host = Parsing::default();
     host.units(block_on(collecting::modules_collect_program_test(
         entry,
         dependencies,
+        open,
         &host,
     )))
 }
 
 /// The entry and nothing beside it - a `.nika` file compiled on its own
 /// (`modules_collect_one`): outside a project a directory is not a package.
-pub fn collect_one(entry: &Path) -> Result<Vec<Unit>> {
+pub fn collect_one(entry: &Path, open: &Open) -> Result<Vec<Unit>> {
     let host = Parsing::default();
-    host.units(block_on(collecting::modules_collect_one(entry, &host)))
+    host.units(block_on(collecting::modules_collect_one(
+        entry, open, &host,
+    )))
 }
 
 /// **What collecting a program's files asks of the compiler** (M3a): the
@@ -135,17 +148,20 @@ impl ModulesHost for Parsing {
                 Some(kept.len() as i64 - 1)
             }
             Err(error) => {
+                let shown_as = path.display().to_string();
                 let refused = match crate::diagnostics::refused_finding(&error) {
-                    Some(finding) => crate::diagnostics::refuse(
-                        crate::diagnostics::render_finding(
-                            finding,
-                            &path.display().to_string(),
-                            source,
+                    Some(finding) => {
+                        crate::diagnostics::collect_finding(&shown_as, finding);
+                        crate::diagnostics::refuse(
+                            crate::diagnostics::render_finding(finding, &shown_as, source)
+                                .trim_end()
+                                .to_string(),
                         )
-                        .trim_end()
-                        .to_string(),
-                    ),
-                    None => error.context(path.display().to_string()),
+                    }
+                    None => {
+                        crate::diagnostics::collect_refusal(&shown_as, &format!("{error:#}"), 0);
+                        error.context(shown_as)
+                    }
                 };
                 *self.failed.borrow_mut() = Some(refused);
                 None
@@ -166,7 +182,7 @@ impl ModulesHost for Parsing {
     ) -> Option<String> {
         let parsed = self.kept(unit);
         let parsed = parsed.as_ref().expect(KEPT);
-        nikaia_std::tools::modules::a_use_refused(
+        let refused = nikaia_std::tools::modules::a_use_refused(
             &parsed.interner,
             &parsed.program.items,
             &at.display().to_string(),
@@ -177,7 +193,11 @@ impl ModulesHost for Parsing {
                     .map(|dir| dir.join(format!("{package}.nika")))
                     .is_some_and(|path| path.is_file())
             },
-        )
+        );
+        if let Some(why) = &refused {
+            crate::diagnostics::collect_refusal(&at.display().to_string(), why, 0);
+        }
+        refused
     }
 
     fn foreign_crates(&self, path: &Path) -> Vec<String> {
@@ -453,8 +473,18 @@ impl Program {
     /// The same, with the packages this program depends on
     /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15).
     pub fn read_with(entry: &Path, dependencies: &[Dependency]) -> Result<Program> {
+        Self::read_with_open(entry, dependencies, &Open::new())
+    }
+
+    /// [`Program::read_with`], with the files an editor has open read as it
+    /// holds them ([`Open`]).
+    pub fn read_with_open(
+        entry: &Path,
+        dependencies: &[Dependency],
+        open: &Open,
+    ) -> Result<Program> {
         Self::of(
-            collect_with(entry, dependencies)?,
+            collect_with(entry, dependencies, open)?,
             dependencies,
             &described_beside(entry),
         )
@@ -463,7 +493,16 @@ impl Program {
     /// The entry compiled on its own - what `nikaia lower` outside a project is
     /// (see [`collect_one`]).
     pub fn read_one(entry: &Path) -> Result<Program> {
-        Self::of(collect_one(entry)?, &[], &crate::contracts::Ledger::blank())
+        Self::read_one_open(entry, &Open::new())
+    }
+
+    /// [`Program::read_one`] over [`Open`].
+    pub fn read_one_open(entry: &Path, open: &Open) -> Result<Program> {
+        Self::of(
+            collect_one(entry, open)?,
+            &[],
+            &crate::contracts::Ledger::blank(),
+        )
     }
 
     /// **A test program as `nikaia test` builds it**
@@ -471,8 +510,17 @@ impl Program {
     /// the file alone, with the packages it depends on, and no ledger
     /// described beside it, as in the project of its own the test builds.
     pub fn read_program_test(entry: &Path, dependencies: &[Dependency]) -> Result<Program> {
+        Self::read_program_test_open(entry, dependencies, &Open::new())
+    }
+
+    /// [`Program::read_program_test`] over [`Open`].
+    pub fn read_program_test_open(
+        entry: &Path,
+        dependencies: &[Dependency],
+        open: &Open,
+    ) -> Result<Program> {
         Self::of(
-            collect_program_test(entry, dependencies)?,
+            collect_program_test(entry, dependencies, open)?,
             dependencies,
             &crate::contracts::Ledger::blank(),
         )
@@ -491,9 +539,22 @@ impl Program {
         dependencies: &[Dependency],
         in_project: bool,
     ) -> Result<Program> {
+        Self::read_for_tests_open(entry, dependencies, in_project, &Open::new())
+    }
+
+    /// [`Program::read_for_tests`] over [`Open`].
+    pub fn read_for_tests_open(
+        entry: &Path,
+        dependencies: &[Dependency],
+        in_project: bool,
+        open: &Open,
+    ) -> Result<Program> {
         let (units, described) = match in_project {
-            true => (collect_with(entry, dependencies)?, described_beside(entry)),
-            false => (collect_one(entry)?, crate::contracts::Ledger::blank()),
+            true => (
+                collect_with(entry, dependencies, open)?,
+                described_beside(entry),
+            ),
+            false => (collect_one(entry, open)?, crate::contracts::Ledger::blank()),
         };
         let (units, tests) = with_tests_as_functions(units)?;
         let mut program = Self::of(units, dependencies, &described)?;

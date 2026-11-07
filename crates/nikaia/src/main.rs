@@ -1126,8 +1126,9 @@ fn run() -> Result<()> {
         ),
         Command::Check { file } => single_file(&args, file, Verb::Check),
         Command::Lsp => {
-            let code = nikaia_std::rt::exec::block_on(nikaia_std::tools::lsp::lsp_serve())
-                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            let code =
+                nikaia_std::rt::exec::block_on(nikaia_std::tools::lsp::lsp_serve(&project::Lsp))
+                    .map_err(|error| anyhow::anyhow!("{error}"))?;
             std::process::exit(code as i32);
         }
         Command::Fmt { files, check } => {

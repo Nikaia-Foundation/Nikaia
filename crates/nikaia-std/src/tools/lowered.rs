@@ -3051,7 +3051,7 @@ pub mod logic_smtlib {
 }
 pub mod lsp {
     #[allow(unused_imports)]
-    pub use super::{LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position};
+    pub use super::{LspHost, LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position, lsp_path_uri, lsp_diagnostic, lsp_range};
 }
 pub mod manifest {
     #[allow(unused_imports)]

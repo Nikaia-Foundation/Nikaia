@@ -4,13 +4,28 @@
 // editor starts it and talks LSP's JSON-RPC on its standard input and output:
 // each message is a header, `Content-Length: N`, a blank line, and a body of
 // exactly `N` bytes of JSON, which `packages/json` reads and writes (#1163).
-// This slice answers the lifecycle (`initialize`, `shutdown`, `exit`); a
-// request it does not know is answered with `-32601`, a notification it does
-// not know is dropped.
+// It answers the lifecycle (`initialize`, `shutdown`, `exit`); a request it
+// does not know is answered with `-32601`, a notification it does not know is
+// dropped. It keeps the text of each document the editor has open, and after
+// each `didOpen`, `didChange` and `didSave` it publishes what `nikaia check`
+// says of that file's package - checked in this process, over the editor's
+// text (`LspHost`) - as `textDocument/publishDiagnostics`, each finding on the
+// file it is about.
 
 use json
+use std::collections
+use std::fs
 use std::io
 use std::text
+
+/// **What the server asks of the compiler** (#1347): the findings of the
+/// program `entry` belongs to, read as `nikaia check` reads it with the files
+/// in `open` (a path to the text the editor holds) instead of the disk, and
+/// checked; nothing emitted, cached or written. Each finding comes with the
+/// path of the file it is about, warnings too.
+pub trait LspHost {
+    fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String]) -> Vec[(String, Shown)] sync
+}
 
 /// A message the editor sent that cannot be read as one.
 pub enum LspRefusal {
@@ -91,8 +106,14 @@ pub fn lsp_capabilities() -> json::Value {
 /// **The server**: messages are read and answered until `exit`. What it ends
 /// with is LSP's: `0` after a `shutdown`, `1` for an `exit` without one or an
 /// input that ended without `exit`.
-pub fn lsp_serve() -> i64 throws {
+pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
     let mut shut_down = false
+    // The documents the editor has open, by path, and the URI it named each by.
+    let mut open: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut uris: collections::BTreeMap[String, String] = collections::BTreeMap()
+    // The URIs whose markers the last check published, to be cleared when a
+    // check finds nothing there any more.
+    let mut marked: collections::BTreeSet[String] = collections::BTreeSet()
     while true {
         let body = lsp_read_message() ?? return 1
         let message = json::parse(body) catch {
@@ -106,7 +127,36 @@ pub fn lsp_serve() -> i64 throws {
         }
         match id {
             // A notification: one it does not know is dropped.
-            null => {},
+            null => {
+                let params = cargo_json_member(message, "params")
+                let document = cargo_json_member(params, "textDocument")
+                let uri = cargo_json_text(cargo_json_member(document, "uri")) ?? continue
+                let path = lsp_uri_path(uri) ?? continue
+                if method == "textDocument/didOpen" {
+                    open.insert(path.clone(), cargo_json_text(cargo_json_member(document, "text")) ?? "")
+                    uris.insert(path.clone(), uri.clone())
+                    marked = lsp_publish(host, path, open, uris, marked)
+                } else if method == "textDocument/didChange" {
+                    // The whole text, as `textDocumentSync` 1 asks: the last
+                    // change is the document.
+                    let changes = cargo_json_items(cargo_json_member(params, "contentChanges"))
+                    if changes.len() > 0 {
+                        let last = changes.len() - 1
+                        let changed: json::Value? = changes[last].clone()
+                        open.insert(path.clone(), cargo_json_text(cargo_json_member(changed, "text")) ?? "")
+                    }
+                    marked = lsp_publish(host, path, open, uris, marked)
+                } else if method == "textDocument/didSave" {
+                    marked = lsp_publish(host, path, open, uris, marked)
+                } else if method == "textDocument/didClose" {
+                    open.remove(path)
+                    uris.remove(path)
+                    if marked.contains(uri) {
+                        marked.remove(uri)
+                        lsp_notify_diagnostics(uri, [])
+                    }
+                }
+            },
             asked => {
                 if method == "initialize" {
                     lsp_respond(asked, lsp_capabilities())
@@ -186,4 +236,175 @@ pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
         }
     }
     return (line, column)
+}
+
+/// **What the check of `path`'s program says, published** (#1347): one
+/// `publishDiagnostics` for each file it found something in, one for `path`
+/// itself even when that is nothing, and an empty one for each file the last
+/// check marked and this one did not, so old markers disappear. What it
+/// gives back is the URIs it marked.
+fn lsp_publish[H: LspHost](host: ref H, path: ref String, open: ref collections::BTreeMap[String, String], uris: ref collections::BTreeMap[String, String], marked: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let found = host.diagnose(path, open)
+    let mut by_file: collections::BTreeMap[String, Vec[json::Value]] = collections::BTreeMap()
+    by_file.insert(path.clone(), [])
+    let mut sources: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for (file, shown) in found {
+        if !sources.contains_key(file) {
+            let text = match open.get(file) {
+                null => fs::read_to_string(file, fs::Root::Anywhere) catch { "" },
+                held => held.clone(),
+            }
+            sources.insert(file.clone(), text)
+        }
+        let source = sources.get(file) ?? continue
+        let uri = lsp_uri_of(file, uris)
+        let diagnostic = lsp_diagnostic(shown, source, uri)
+        by_file.entry(file.clone()).or_insert([]).push(diagnostic)
+    }
+    let mut now: collections::BTreeSet[String] = collections::BTreeSet()
+    for (file, list) in by_file {
+        let uri = lsp_uri_of(file, uris)
+        if !list.is_empty() {
+            now.insert(uri.clone())
+        }
+        lsp_notify_diagnostics(uri, list.clone())
+    }
+    for uri in marked {
+        if !now.contains(uri) && !by_file.keys().any(fn(file) { lsp_uri_of(file, uris) == uri }) {
+            lsp_notify_diagnostics(uri, [])
+        }
+    }
+    return now
+}
+
+/// One `textDocument/publishDiagnostics` notification.
+fn lsp_notify_diagnostics(uri: ref String, diagnostics: Vec[json::Value]) {
+    let params = lsp_object([("uri", lsp_string(uri)), ("diagnostics", json::Value::Array(diagnostics))])
+    lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("method", lsp_string("textDocument/publishDiagnostics")), ("params", params)]))
+}
+
+/// The URI the editor named the file at `path` by, or the `file://` URI of
+/// the path for a file it does not have open.
+fn lsp_uri_of(path: ref String, uris: ref collections::BTreeMap[String, String]) -> String {
+    return match uris.get(path) {
+        null => lsp_path_uri(path),
+        uri => uri.clone(),
+    }
+}
+
+/// **The `file://` URI of a path**: every byte but a letter, a digit, `-`,
+/// `.`, `_`, `~` and `/` written as `%XX` (RFC 3986 2.3).
+pub fn lsp_path_uri(path: ref String) -> String {
+    let mut out: String = "file://"
+    let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+    for b in path.bytes() {
+        let d = b as i64
+        let kept = (d >= 48 && d <= 57) || (d >= 65 && d <= 90) || (d >= 97 && d <= 122) || d == 45 || d == 46 || d == 95 || d == 126 || d == 47
+        if kept {
+            out.push(b as scalar)
+        } else {
+            out.push('%')
+            out.push(digits[d / 16].clone())
+            out.push(digits[d % 16].clone())
+        }
+    }
+    return out
+}
+
+/// **One finding as an LSP `Diagnostic`**: severity 1 for an error and 2 for
+/// a warning, its code, `source` `nikaia`, its message with each note and the
+/// help as lines of their own, the range of the place it marks (the one
+/// `nikaia check`'s `-->` names), and each place that explains it as
+/// `relatedInformation`.
+pub fn lsp_diagnostic(shown: ref Shown, source: ref String, uri: ref String) -> json::Value {
+    let mut message = said(shown.message)
+    for note in shown.notes {
+        message.push_str(ref f"\nnote: {said(note)}")
+    }
+    match shown.help {
+        null => {},
+        help => message.push_str(ref f"\nhelp: {said(help)}"),
+    }
+    let mut range = lsp_range(source, shown.span, "")
+    let mut related: Vec[json::Value] = []
+    let mut placed = false
+    for label in shown.labels {
+        let marks = lsp_range(source, label.span, label.word)
+        if label.main && !placed {
+            range = marks
+            placed = true
+        } else if !label.main {
+            let location = lsp_object([("uri", lsp_string(uri)), ("range", marks)])
+            let text = if label.text.is_empty() { "here" } else { label.text.clone() }
+            related.push(lsp_object([("location", location), ("message", lsp_string(text))]))
+        }
+    }
+    let mut members: Vec[(ref String, json::Value)] = [("range", range), ("severity", lsp_number(if shown.warning { 2 } else { 1 }))]
+    if !shown.code.is_empty() {
+        members.push(("code", lsp_string(shown.code)))
+    }
+    members.push(("source", lsp_string("nikaia")))
+    members.push(("message", lsp_string(message)))
+    if !related.is_empty() {
+        members.push(("relatedInformation", json::Value::Array(related)))
+    }
+    return lsp_object(members)
+}
+
+/// **LSP's range of what a place marks**, placed as `tools/render.nika` places
+/// it: the line `span` starts on, `word` found from there (`word_in`), or
+/// for no word the span's first line without its trailing space; at least one
+/// character. Lines from 0, columns in UTF-16 code units from 0.
+pub fn lsp_range(source: ref String, span: ref Span, word: ref String) -> json::Value {
+    let lines: Vec[ref String] = source.split("\n").collect()
+    let at = span.start as i64
+    let end = span.end as i64
+    let mut line = 0
+    let mut start = 0
+    while line + 1 < lines.len() as i64 && start + lines[line].len() as i64 < at {
+        start += lines[line].len() as i64 + 1
+        line += 1
+    }
+    let text = lines[line]
+    let mut column = 1
+    let mut covered = 0
+    let mut pending = 0
+    let mut bytes = start
+    for c in text.chars() {
+        if bytes < at {
+            column += 1
+        } else if bytes < end {
+            if c == ' ' || c == '\t' || c == '\r' {
+                pending += 1
+            } else {
+                covered += pending + 1
+                pending = 0
+            }
+        }
+        let code = c as i64
+        bytes += if code < 128 { 1 } else if code < 2048 { 2 } else if code < 65536 { 3 } else { 4 }
+    }
+    let placed = if word.is_empty() { (column, if covered < 1 { 1 } else { covered }) } else { word_in(text, column, word) }
+    let from = lsp_units(text, placed.0 - 1)
+    let to = lsp_units(text, placed.0 - 1 + placed.1)
+    return lsp_object([("start", lsp_point(line, from)), ("end", lsp_point(line, to))])
+}
+
+/// How many UTF-16 code units the first `count` characters of `line` take.
+fn lsp_units(line: ref String, count: i64) -> i64 {
+    let mut units = 0
+    let mut seen = 0
+    for c in line.chars() {
+        if seen >= count {
+            break
+        }
+        units += if (c as i64) < 65536 { 1 } else { 2 }
+        seen += 1
+    }
+    return units
+}
+
+/// A `Position`.
+fn lsp_point(line: i64, character: i64) -> json::Value {
+    return lsp_object([("line", lsp_number(line)), ("character", lsp_number(character))])
 }
