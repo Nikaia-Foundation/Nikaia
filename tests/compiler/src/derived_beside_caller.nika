@@ -1,0 +1,6 @@
+/// The first `n` elements' last, through the private `derived_take` of
+/// `src/derived_beside.nika`: nothing bounds `n` here, so no claim holds
+/// at every call (ADR-391 D1).
+pub fn derived_take_first(xs: ref Vec[i64], n: i64) -> i64 {
+	return derived_take(xs, n)
+}

@@ -1,0 +1,5 @@
+bounds in tests/prove_derived_precondition_one_caller_over.nika: 1 indexes, 0 proved; 2 operations, 2 proved
+     8  arms[before]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+     9  before += 1   proved
+    21  xs.len() + 1  proved
+  derived  pick: 0 <= at, proved at the calls on lines 19, 21

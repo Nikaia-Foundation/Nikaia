@@ -1,0 +1,4 @@
+bounds in tests/prove_derived_precondition.nika: 1 indexes, 1 proved; 1 operations, 1 proved
+     9  arms[before]  proved
+    10  before += 1   proved
+  derived  pick: 0 <= at, at <= arms.len(), proved at the calls on lines 17, 18

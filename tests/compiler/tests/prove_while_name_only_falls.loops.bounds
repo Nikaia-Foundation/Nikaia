@@ -9,3 +9,4 @@ bounds in tests/prove_while_name_only_falls.nika: 4 indexes, 2 proved; 6 operati
     45  k - d      checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
     47  pieces[k]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
     49  k -= 1     checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+  derived  rise: 0 <= n, n <= pieces.len(), n < pieces.len(), proved at the calls on lines 56

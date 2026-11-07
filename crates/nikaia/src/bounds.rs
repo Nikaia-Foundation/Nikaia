@@ -204,6 +204,7 @@ pub fn proven(
     let around = nikaia_std::tools::bounds_frame::bounds_around(
         &parsed.program,
         &beside.iter().map(|p| &p.program).collect::<Vec<_>>(),
+        &beside.iter().map(|p| &p.interner).collect::<Vec<_>>(),
         ledgers,
         std_receivers,
         simd_loads,
