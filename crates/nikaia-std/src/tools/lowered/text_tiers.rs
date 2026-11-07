@@ -2350,19 +2350,28 @@ pub(crate) fn lent_field(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: 
             let place = match place_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
             plain_string(ask.names, &place.ty) && !place.ty.is_nullable && lent_root(base, ask, walk)
         },
-        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); lent_element(base, ask, walk) },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); lent_element(base, false, ask, walk) },
         _ => false,
     }
 }
 
-pub(crate) fn lent_element(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+pub(crate) fn lent_element(base: &Expr, made: bool, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
     let list = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) { return false; }
     let element = nikaia_std::index::get(&list.ty.generics, 0);
     if !plain_string(ask.names, &element) || element.is_nullable { return false; }
     match base {
-        Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) },
+        Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) || made && made_list_local(ask.names.resolve(name), &walk) },
         Expr::Field { base: inner, .. } => { let inner = nikaia_std::boxed::open(inner); !list.ty.is_view && lent_root(inner, ask, walk) },
+        _ => false,
+    }
+}
+
+pub(crate) fn made_list_local(name: &str, walk: &TierWalk) -> bool {
+    let local = match tier_local(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match declared.owner {
+        TextOwner::Let(_) => local.made && !declared.ty.is_view && !declared.ty.is_nullable,
         _ => false,
     }
 }
@@ -3668,6 +3677,16 @@ pub(crate) fn tier_struct_field(owner: &str, field: &FieldInit, back: bool, ask:
             walk.flows.lent_uses.insert(word.to_string(), lent_before + 1);
             walk.flows.lent_into.insert((word, to));
             kinds = no_kinds();
+        }
+    }
+    if back && plain_string(ask.names, &found.ty) && !found.ty.is_nullable && same_kinds(&kinds, &owned_kinds()) && field.value.is_some() {
+        let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+        match value {
+            Expr::Index { base, .. } => {
+                let base = nikaia_std::boxed::open(base);
+                if lent_element(base, true, ask, walk) { kinds = view_kinds(); }
+            },
+            _ => { },
         }
     }
     flow_value(&going_into(&into, &found.ty, vec![], false), (field.value).as_ref(), &kinds, ask, walk);

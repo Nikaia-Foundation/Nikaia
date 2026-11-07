@@ -3295,15 +3295,16 @@ fn lent_field(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
             let place = place_of(value, ask, walk) ?? return false
             plain_string(ask.names, place.ty) && !place.ty.is_nullable && lent_root(base, ask, walk)
         },
-        Expr::Index { base, .. } => lent_element(base, ask, walk),
+        Expr::Index { base, .. } => lent_element(base, false, ask, walk),
         else => false,
     }
 }
 
 /// **An element of a list a `ref` parameter lends is a view of it** (#738,
 /// ADR-282 D13): `v[0]` out of `v: ref Vec[String]`, or out of a list field
-/// of a lent struct.
-fn lent_element(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+/// of a lent struct. With `made`, also out of a list the body made
+/// (`made_list_local`), for an element handed back in a field (#1275).
+fn lent_element(base: ref Expr, made: bool, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     let list = place_of(base, ask, walk) ?? return false
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) {
         return false
@@ -3313,8 +3314,20 @@ fn lent_element(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
         return false
     }
     return match base {
-        Expr::Variable(name, _) => lent_list_parameter(ask.names.resolve(name), walk),
+        Expr::Variable(name, _) => lent_list_parameter(ask.names.resolve(name), walk) || (made && made_list_local(ask.names.resolve(name), walk)),
         Expr::Field { base: inner, .. } => !list.ty.is_view && lent_root(inner, ask, walk),
+        else => false,
+    }
+}
+
+/// **A list the body made, declared with its type** (#1275, ADR-283 D23): an
+/// element of it handed back is a view of a local, and the list moves into the
+/// caller's keep (`untethered_returns` in `buffers.nika`), as text does.
+fn made_list_local(name: ref String, walk: ref TierWalk) -> bool {
+    let local = tier_local(name, walk) ?? return false
+    let declared = local.declared ?? return false
+    return match declared.owner {
+        TextOwner::Let(_) => local.made && !declared.ty.is_view && !declared.ty.is_nullable,
         else => false,
     }
 }
@@ -5021,6 +5034,21 @@ fn tier_struct_field(owner: ref String, field: ref FieldInit, back: bool, ask: r
             walk.flows.lent_uses.insert(word.clone(), lent_before + 1)
             walk.flows.lent_into.insert((word, to))
             kinds = no_kinds()
+        }
+    }
+    // **An element read whole, handed back in a field** of the struct handed
+    // back, is a view of the list (#1275, ADR-282 D13, ADR-283 D23): of a
+    // `ref` parameter's list, or of a list the body made, which moves into
+    // the caller's keep (`untethered_returns` in `buffers.nika`).
+    if back && plain_string(ask.names, found.ty) && !found.ty.is_nullable && same_kinds(kinds, owned_kinds()) && field.value != null {
+        let value = field.value ?? return
+        match value {
+            Expr::Index { base, .. } => {
+                if lent_element(base, true, ask, walk) {
+                    kinds = view_kinds()
+                }
+            }
+            else => {}
         }
     }
     flow_value(going_into(into, found.ty, [], false), field.value, kinds, ask, walk)
