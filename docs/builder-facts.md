@@ -90,4 +90,8 @@ together with the specification section and an example test.
 * `pre-push` "self-hosted.svg out of date" can persist even when `badges.py` on the staged tree gives a byte-identical badge; compare with `cmp` and report it, don't chase it. (issue-1261)
 * Nikaia has no `loop` or `|x|` closures and declares mutables with `let mut`; write probes with `while true` and `fn(x) { … }`. (issue-1261)
 * a view of a lent parameter handed to an owning `String` result is a refusal with a `.clone()` hint by ADR-282 D8 and views-3 D12/D14, whatever an issue's expected output says. (issue-1263)
+* A text view in the checker's `Ty` is `Named { name: "str", view: true }` (printed as `ref String`), and `is_a_view_of_a_string` misses it; match `TEXT_VIEW` too. (issue-1264)
+* A refusal of a view handed back where `String` is wanted must exempt static text: ask `text_literal(world, a_string_type(), value, true)`, or `"x"` is refused too. (issue-1264)
+* Calling code stored in a struct field with an owned `String` argument (`h.f(g)`) is a rustc error on `develop`; avoid it in probes until it is fixed. (issue-1264)
+* Programs build against the workspace `crates/nikaia-std` source, so a fix in a std runtime `.rs` file passes on the old binary too; for fails-before, copy HEAD's version of that file back in for one run, then restore yours. (issue-1268)
 

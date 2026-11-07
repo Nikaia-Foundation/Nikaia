@@ -161,6 +161,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A trait method's positions are published in the text tiers (`of_a_trait`), so a view that one side of a trait/impl gets from `emit_item_lent_view` must be mirrored into the impl's AST (`hb_trait_from`), not inferred. (issue-1250)
 * Setting `ty.is_view` on a `String` in an AST rewrite makes NK1261 warn about a `ref` the user never wrote, unless the position's key (`param K n` / `result K`) goes into `parsed.text_views`. (issue-1250)
 * A `String` param that a mixed result hands back through `let o = own(a) ?? return null` lowers as `EitherText` by value, which gives a rustc move error, not an NK refusal. (issue-1254-r1)
+* A `for` over a `Vec[String]` place lowers to `.iter()`, so its element is `&String` below; only numbers, `bool`, `char` and `&str` are copied out with `let x = *x`. (issue-1268)
 
 ### Grammar
 
