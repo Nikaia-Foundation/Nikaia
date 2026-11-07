@@ -1,0 +1,26 @@
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1}}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":1,"character":4},"end":{"line":1,"character":26}},"severity":1,"code":"NK1117","source":"nikaia","message":"There's no function called `helper`.\nnote: A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.\nhelp: Declare it with `fn helper(…)`, or call it through the package that has it."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/helper.nika","diagnostics":[{"range":{"start":{"line":1,"character":11},"end":{"line":1,"character":16}},"severity":1,"code":"NK1104","source":"nikaia","message":"You're returning `ref String`, but the function is declared to return `i64`.\nhelp: Make it an `i64`, or change the declaration to `ref String`."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/helper.nika","diagnostics":[]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":1,"character":4},"end":{"line":1,"character":26}},"severity":1,"code":"NK1117","source":"nikaia","message":"There's no function called `helper`.\nnote: A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.\nhelp: Declare it with `fn helper(…)`, or call it through the package that has it."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"untitled:Untitled-1","diagnostics":[{"range":{"start":{"line":1,"character":17},"end":{"line":1,"character":22}},"severity":1,"code":"NK1103","source":"nikaia","message":"This value is `ref String`, but the `let` declares `i64`.\nhelp: Make it an `i64`, or change the declaration to `ref String`."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":2,"result":null}
+exit 0
+helper.nika on disk: false

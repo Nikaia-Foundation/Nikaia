@@ -1102,12 +1102,25 @@ fn modules_package_at[H: ModulesHost](entry: ref fs::Path, package: String?, rea
     // The entry by its name: `x.nika` and the `./x.nika` the directory
     // lists are one file (#774).
     let entry_name = entry.file_name()?.text_of() ?? ""
-    let beside: Vec[fs::Path] = names.iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == "nika" }).filter(fn(name) { name.text_of() != entry_name }).map(fn(name) { base.join(name) }).collect()
+    // **A package's units are its `.nika` files on disk and the documents an
+    // editor has open in its directory** (#1365): a file created in the
+    // editor and not yet saved is a unit as the editor shows it. A name both
+    // lists give is one unit; the set keeps them sorted by their bytes.
+    let mut listed: collections::BTreeSet[String] = names.iter().filter(fn(name) { (name.extension()?.text_of() ?? "") == "nika" }).map(fn(name) { name.text_of().clone() }).collect()
+    for key in open.keys() {
+        let held: fs::Path = key
+        let parent = held.parent() ?? continue
+        if parent.text_of() == base.text_of() && (held.extension()?.text_of() ?? "") == "nika" {
+            let name = held.file_name()?.text_of() ?? continue
+            listed.insert(name.clone())
+        }
+    }
+    let beside: Vec[fs::Path] = listed.iter().filter(fn(name) { name != entry_name }).map(fn(name) { base.join(name) }).collect()
 
     // A library needs no `main.nika`: what a package offers is its public
     // surface, and an entry point is what a *program* has.
     let mut units: Vec[ModulesUnit] = []
-    if modules_is_file(entry) {
+    if modules_is_file(entry) || open.contains_key(entry.display()) {
         units.push(modules_read_unit(entry, package?.clone(), reachable, renames, ModulesStanding::InProject, open, host))
     }
     for path in beside {

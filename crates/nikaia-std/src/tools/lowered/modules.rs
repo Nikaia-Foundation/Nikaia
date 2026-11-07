@@ -680,14 +680,29 @@ pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, 
         Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
         None => None,
     }, || "".into());
-    let beside: Vec<fs::Path> = names.iter().filter(|&name| {
+    let mut listed: collections::BTreeSet<String> = names.iter().filter(|&name| {
         nikaia_std::index::or(match nikaia_std::fs::path::extension(&(name)).as_ref() {
             Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
             None => None,
         }, || "".into()) == "nika"
-    }).filter(|&name| { nikaia_std::fs::path::text_of(&(name)) != entry_name }).map(|name| { nikaia_std::fs::path::join(&(base), name) }).collect::<Vec<_>>();
+    }).map(|name| { nikaia_std::fs::path::text_of(&(name)).to_string() }).collect();
+    for key in open.keys() {
+        let held: fs::Path = std::path::PathBuf::from(key);
+        let parent = match nikaia_std::fs::path::parent(&(held)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if nikaia_std::fs::path::text_of(&(parent)) == nikaia_std::fs::path::text_of(&(base)) && nikaia_std::index::or(match nikaia_std::fs::path::extension(&(held)).as_ref() {
+            Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+            None => None,
+        }, || "".into()) == "nika" {
+            let name = match match nikaia_std::fs::path::file_name(&(held)).as_ref() {
+                Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => continue };
+            listed.insert(name.to_string());
+        }
+    }
+    let beside: Vec<fs::Path> = listed.iter().filter(|&name| { AsRef::<str>::as_ref(&(name)) != AsRef::<str>::as_ref(&(entry_name)) }).map(|name| { nikaia_std::fs::path::join(&(base), std::path::Path::new(&(name))) }).collect::<Vec<_>>();
     let mut units: Vec<ModulesUnit> = vec![];
-    if modules_is_file(entry) {
+    if modules_is_file(entry) || open.contains_key(&nikaia_std::fs::path::display(&(entry))) {
         units.push(modules_read_unit(entry, match package {
             Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,

@@ -721,6 +721,7 @@ pub fn lower_reading(
         packages,
         allowlist,
         &open,
+        false,
         |host, in_project| match project_lower::project_lower_reading(host, in_project) {
             Ok(out) => Ok((out, host.proofs.take(), host.exported.take())),
             Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
@@ -773,20 +774,35 @@ pub fn lower_reading(
 /// and checked; then it stops - no emitter, no cache, no ledger written. Each
 /// finding comes back as data beside the file it is about, warnings too; a
 /// refusal that has no finding of its own (a manifest, a file that cannot be
-/// read) is one on `input`, with no code, at its first byte.
+/// read) is one on `input`, with no code, at its first byte. `alone` reads
+/// `input` as a file of no project, whatever directory it names: an editor's
+/// document with no `file://` path (#1365).
 pub fn diagnose(
     input: &Path,
     open: &modules::Open,
+    alone: bool,
 ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
     let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
-        let settings = Settings::resolve(&Manifest::find(input)?, None, None)?;
-        let packages = packages_of_file(input)?;
-        with_lower_host(input, &settings, true, &packages, None, open, |host, _| {
-            use project_lower::ProjectLowerHost;
-            host.read_program()
-                .and_then(|()| host.check_units().map(|_| ()))
-                .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
-        })?
+        let (manifest, packages) = match alone {
+            true => (Manifest::default(), Vec::new()),
+            false => (Manifest::find(input)?, packages_of_file(input)?),
+        };
+        let settings = Settings::resolve(&manifest, None, None)?;
+        with_lower_host(
+            input,
+            &settings,
+            true,
+            &packages,
+            None,
+            open,
+            alone,
+            |host, _| {
+                use project_lower::ProjectLowerHost;
+                host.read_program()
+                    .and_then(|()| host.check_units().map(|_| ()))
+                    .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
+            },
+        )?
     });
     if let Err(error) = checked
         && !found.iter().any(|(_, shown)| !shown.warning)
@@ -808,13 +824,16 @@ impl nikaia_std::tools::lsp::LspHost for Lsp {
         &self,
         entry: &str,
         open: &BTreeMap<String, String>,
+        alone: bool,
     ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
-        diagnose(Path::new(entry), open)
+        diagnose(Path::new(entry), open, alone)
     }
 }
 
 /// The [`LowerHost`] of a build of `input`, handed to `run` with whether the
 /// input is in a project: what [`lower_reading`] and [`diagnose`] share.
+/// `alone` reads the input as a file of no project ([`diagnose`]).
+#[allow(clippy::too_many_arguments)]
 fn with_lower_host<R>(
     input: &Path,
     settings: &Settings,
@@ -822,6 +841,7 @@ fn with_lower_host<R>(
     packages: &[modules::Dependency],
     allowlist: Option<&Path>,
     open: &modules::Open,
+    alone: bool,
     run: impl FnOnce(&LowerHost<'_>, bool) -> R,
 ) -> Result<R> {
     // `Layout` decides where the lock and the store go, and guarantees that
@@ -831,8 +851,8 @@ fn with_lower_host<R>(
     let layout = Layout::resolve(input);
     // **A test program is read as `nikaia test` builds it** (ADR-269 D22,
     // #972): alone, with the package as its dependency, in no project.
-    let program_test = is_program_test(input, &layout);
-    let layout = match program_test {
+    let program_test = !alone && is_program_test(input, &layout);
+    let layout = match program_test || alone {
         true => Layout::alone(input),
         false => layout,
     };
