@@ -1,7 +1,7 @@
 {
   "name": "nikaia",
   "displayName": "Nikaia",
-  "description": "Syntax highlighting for the Nikaia programming language.",
+  "description": "Syntax highlighting and the language server (nikaia lsp) for the Nikaia programming language.",
   "version": "0.0.7",
   "publisher": "nikaia",
   "license": "Apache-2.0",
@@ -11,15 +11,26 @@
     "directory": "editors/vscode"
   },
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.82.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:nikaia"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "nikaia",
-        "aliases": ["Nikaia", "nikaia"],
-        "extensions": [".nika"],
+        "aliases": [
+          "Nikaia",
+          "nikaia"
+        ],
+        "extensions": [
+          ".nika"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -32,6 +43,19 @@
           "meta.embedded.sql.nika": "sql"
         }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Nikaia",
+      "properties": {
+        "nikaia.server.path": {
+          "type": "string",
+          "default": "nikaia",
+          "description": "The nikaia binary the editor starts as `nikaia lsp`. A name is looked up on PATH."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
   }
 }
