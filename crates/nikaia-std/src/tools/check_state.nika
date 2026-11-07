@@ -237,6 +237,8 @@ pub struct CheckPendingCleanup {
     pub choices: Vec[(i64, i64)],
     /// How many loops are around the `let`.
     pub loops: i64,
+    /// Where the `let` ends: a `return` in its own `catch` comes before the
+    /// value is bound and leaves nothing held (#1317).
     pub from: i64,
     /// Where a `break` or `continue` of the loop around it leaves the block.
     pub leaves: Vec[i64],
