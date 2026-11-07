@@ -152,6 +152,15 @@ impl CheckState {
             _ => *want == value_of,
         };
         if !wanted { return false; }
+        let symbol = match given {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; symbol },
+            _ => return true,
+        };
+        let local = self.binding(&world.words.resolve(symbol).to_string());
+        if local.is_some() {
+            let bound: CheckLocal = match local { Some(__nikaia_value) => __nikaia_value, None => return true };
+            if self.flow.declared_options.contains(&bound.id) { return true; }
+        }
         self.facts.copied_views.insert(id_of(given) as i64);
         true
     }

@@ -1319,6 +1319,17 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     local.literal = literal
     local.without_mut = without_mut
     local.written_mut = mutable
+    let mut declared_option = false
+    if ty != null {
+        let t: ref Type = ty ?? return check_core_stmt_unit()
+        declared_option = match written_ty(world.words, world.here.aliases, t) {
+            Ty::Nullable(inner) => !inner.is_a_view(),
+            else => false,
+        }
+    }
+    if declared_option && names.len() == 1 && shape.len() == 0 {
+        state.flow.declared_options.insert(local.id)
+    }
     state.bind_local(local)
     // **A mutable view is the `&mut` already** (#975): handed to a `mut`
     // parameter, it is lent on again.

@@ -222,6 +222,20 @@ impl CheckState {
         if !wanted {
             return false
         }
+        // **A name whose binding already holds the value is not copied again**
+        // (#1291): `let known: u32? = m.get(k)` copied the read at the `let`,
+        // so `return known` reads an `Option<u32>`, not an `Option<&u32>`.
+        let symbol = match given {
+            Expr::Variable(symbol, _) => symbol,
+            else => return true,
+        }
+        let local = self.binding(world.words.resolve(symbol).clone())
+        if local != null {
+            let bound: CheckLocal = local ?? return true
+            if self.flow.declared_options.contains(bound.id) {
+                return true
+            }
+        }
         self.facts.copied_views.insert(id_of(given) as i64)
         return true
     }

@@ -959,6 +959,15 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     local.literal = literal;
     local.without_mut = without_mut;
     local.written_mut = mutable;
+    let mut declared_option = false;
+    if ty.is_some() {
+        let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
+        declared_option = match written_ty(world.words, world.here.aliases, t) {
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); !inner.is_a_view() },
+            _ => false,
+        };
+    }
+    if declared_option && names.len() == 1 && shape.is_empty() { state.flow.declared_options.insert(local.id); }
     state.bind_local(local);
     if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
     check_core_stmt_unit()

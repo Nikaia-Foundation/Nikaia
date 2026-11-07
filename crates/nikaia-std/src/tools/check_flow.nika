@@ -198,6 +198,9 @@ pub struct CheckFlow {
     pub read_index: collections::BTreeMap[(i64, i64), i64],
     /// `??`s that may lend their left side (ADR-279 D5).
     pub pending_coalesces: Vec[CheckPendingCoalesce],
+    /// **Bindings a `let` declared as an owned `T?`** (#1291): what they hold
+    /// was copied out at the `let`, so a read of them is not copied again.
+    pub declared_options: collections::BTreeSet[i64],
     /// Set by an assignment whose target is an index (ADR-293 D27).
     pub writing_index: bool,
     /// Set where an `Index` read a map (ADR-293 D28).
@@ -406,6 +409,7 @@ impl CheckFlow {
             choice_arms: collections::BTreeMap(),
             read_index: collections::BTreeMap(),
             pending_coalesces: Vec(),
+            declared_options: collections::BTreeSet(),
             writing_index: false,
             read_a_map: false,
             lending_let: false,

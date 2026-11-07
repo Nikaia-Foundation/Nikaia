@@ -1,0 +1,18 @@
+// A map's read bound by a `let` that declares `u32?` is copied at the `let`,
+// so `return known` after a `!= null` test is not copied a second time
+// (#1291).
+use std::collections
+
+fn column(m: collections::BTreeMap[String, u32], name: String) -> u32? {
+    let known: u32? = m.get(name)
+    if known != null {
+        return known
+    }
+    return null
+}
+
+fn main() {
+    let mut m: collections::BTreeMap[String, u32] = collections::BTreeMap()
+    m.insert("a", 7)
+    println(f"{column(m, "a") ?? 0} {column(m, "b") ?? 0}")
+}
