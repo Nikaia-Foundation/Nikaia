@@ -89,12 +89,18 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
         let line = site.line.to_string();
         out.push_str(&format!("  {}{}  {}{}  {}\n", bounds_report_spaces(&line, 4), line, site.text, bounds_report_spaces(&site.text, width), how));
     }
-    for row in facts.derived.iter() {
+    for row in bounds_report_derived(&facts.derived, source) { out.push_str(&format!("  derived  {}\n", row)); }
+    out
+}
+
+pub fn bounds_report_derived(derived: &[String], source: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for row in derived.iter() {
         let parts: Vec<&str> = row.split("\t").map(|p| { p }).collect::<Vec<_>>();
         if parts.len() != 3 { continue; }
         let mut lines: Vec<String> = vec![];
         for byte in (*nikaia_std::index::get(&parts, 2)).split(' ') { lines.push(bounds_report_line(source, nikaia_std::index::or(text::parse_i64(byte), || 0)).to_string()); }
-        out.push_str(&format!("  derived  {}: {}, proved at the calls on lines {}\n", *nikaia_std::index::get(&parts, 0), *nikaia_std::index::get(&parts, 1), lines.join(", ")));
+        out.push(format!("{}: {}, proved at the calls on lines {}", *nikaia_std::index::get(&parts, 0), *nikaia_std::index::get(&parts, 1), lines.join(", ")));
     }
     out
 }

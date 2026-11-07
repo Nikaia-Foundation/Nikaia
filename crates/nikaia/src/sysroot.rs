@@ -637,11 +637,21 @@ pub fn bounds_tools(
             ));
         }
         if asserts_report {
+            let derived = crate::bounds_report::derived(
+                &parsed[at],
+                &beside,
+                &texts[at],
+                &checked,
+                &own,
+                &library,
+                through_loops,
+            );
             out.push_str(&nikaia_std::tools::check_facts::check_claims_report(
                 &checked.facts.claims,
                 &texts[at],
                 &path,
                 &checked.facts.published,
+                &derived,
                 false,
                 true,
             ));

@@ -100,3 +100,27 @@ pub fn report_checked(
         &|e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
     )
 }
+
+/// **The derived preconditions as the reports write them** (ADR-391 D4), for
+/// `--asserts`: the walk `--bounds` runs, over a check the caller ran, gives
+/// them; `bounds_report_derived` writes each with the lines of its calls.
+pub fn derived(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    source: &str,
+    checked: &crate::check::Checked,
+    own: &Ledger,
+    library: &Ledger,
+    through_loops: bool,
+) -> Vec<String> {
+    let published = crate::prove::with_published(own, &checked.facts.published);
+    let proven = crate::bounds::proven(
+        parsed,
+        beside,
+        &crate::bounds::Sites::of(&checked.facts),
+        &[&published, library],
+        &std::collections::BTreeSet::new(),
+        through_loops,
+    );
+    nikaia_std::tools::bounds_report::bounds_report_derived(&proven.derived, source)
+}

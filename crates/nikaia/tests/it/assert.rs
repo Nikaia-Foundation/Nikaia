@@ -361,7 +361,7 @@ fn asserts_reports_every_claim() {
         stdout.contains(
             "asserts in claims.nika: 3 - not proved 0 (refused 0, checked at run time 0, \
              checked by a test 0); checked where the words arrive 0; proved 3 (proved 2, \
-             preconditions proved at every call 1)\n\
+             preconditions proved at every call 1); derived from the callers 1\n\
              \x20 claims.nika:9  assert(four == 4)  proved\n\
              \x20 claims.nika:11  assert(twice > 2)  proved\n\
              \x20 claims.nika:2  assert(n >= 0; message: \"not negative\")  precondition of \

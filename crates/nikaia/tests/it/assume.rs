@@ -201,7 +201,10 @@ fn asserts_lists_every_assume() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(stdout.contains("; assumed 1\n"), "{stdout}");
+    assert!(
+        stdout.contains("; assumed 1; derived from the callers 1\n"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("  claims.nika:4  assume(i >= 0 && i < xs.len())  assumed: "),
         "{stdout}"

@@ -799,7 +799,11 @@ fn check_claim_refused(held: ref ClaimHeld?) -> String? {
 /// order of their lines; `colour` asks for the colours. `published` gives
 /// `main`'s preconditions carried back from a callee (ADR-269 D15, ADR-360
 /// D3), which no `assert` of `main` states: each is a row of its own.
-pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], colour: bool, refuses: bool) -> String {
+/// `derived` gives the preconditions the build derived from a private
+/// function's callers (ADR-391 D4), as `bounds_report_derived` writes them:
+/// each a row marked `derived`, in green after the rest, counted apart from
+/// the asserts.
+pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], derived: ref Vec[String], colour: bool, refuses: bool) -> String {
     let mut refused: Vec[String] = []
     let mut at_run_time: Vec[String] = []
     let mut arrives: Vec[String] = []
@@ -879,6 +883,11 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     if assumed.len() > 0 {
         vouched = f"; assumed {assumed.len()}"
     }
+    // **What callers proved** (ADR-391 D4): no `assert` states it, so it is
+    // counted on its own.
+    if derived.len() > 0 {
+        vouched = f"{vouched}; derived from the callers {derived.len()}"
+    }
     let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}{looped}, preconditions proved at every call {preconditions.len()}){vouched}\n"
     let mut red: Vec[String] = []
     red.extend(refused)
@@ -887,6 +896,9 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     let mut green: Vec[String] = []
     green.extend(proved)
     green.extend(preconditions)
+    for row in derived {
+        green.push(f"  {path}  derived  {row}")
+    }
     out.push_str(check_report_rows(red, "\x1b[31m", colour))
     out.push_str(check_report_rows(arrives, "\x1b[94m", colour))
     out.push_str(check_report_rows(assumed, "\x1b[33m", colour))

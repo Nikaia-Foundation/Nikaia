@@ -1,0 +1,3 @@
+asserts in tests/prove_derived_precondition_asserts.nika: 1 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 1 (proved 1, preconditions proved at every call 0); derived from the callers 1
+  tests/prove_derived_precondition_asserts.nika:28  assert(xs.len() == 3)  proved
+  tests/prove_derived_precondition_asserts.nika  derived  pick: 0 <= at, at <= arms.len(), proved at the calls on lines 29, 30
