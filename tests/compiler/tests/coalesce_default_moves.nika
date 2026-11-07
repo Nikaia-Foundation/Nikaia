@@ -1,0 +1,14 @@
+// The fallback of a `??` is handed over (ADR-005 D3, #1292): `maybe(1) ??
+// r` gives `r` where the left is `null`, so a second `??` with the same `r`
+// is a move error of the checker's, never rustc's.
+
+fn maybe(x: i64) -> String? {
+    return if x > 0 { null } else { "m" }
+}
+
+fn main() {
+    let r: String = "d"
+    let a = maybe(1) ?? r
+    let b = maybe(1) ?? r
+    println(a + b)
+}

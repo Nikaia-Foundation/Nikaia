@@ -684,6 +684,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
             } else if written == "" && !inner.is_a_view() && !other.is_a_view() { state.expect_type(world, &other, &inner, span, "let", &|found, wanted| { format!("The fallback of this `??` is `{}`, but the left side holds `{}`.", found, wanted) }); }
         }
     }
+    if nullable && !other.is_a_view() && !state.jumps(world, fallback) && a_name_or_a_field(fallback) && !state.facts.view_fallbacks.contains(&(id_of(fallback) as i64)) { state.hands_over(world, fallback, &other, "given to `??` as its fallback", span); }
     if nullable && check_core_ops_nullable(&other) {
         state.facts.optional_fallbacks.insert(id_of(expr) as i64);
         state.a_map_read_kept(world, &other, &left, fallback, span);
