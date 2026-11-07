@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_cnf.nika
+// crates/nikaia-std/src/tools/sv_cnf.nika
 //
 // **Tseitin input** (ADR-270 D12, #1283 item 2): the Boolean structure of a
 // `TermArena` query - its facts hold, its goal does not - put into clauses
@@ -30,6 +30,8 @@
 //
 // A literal while it is built is an `i64`: `-1` true, `-2` false, else the
 // literal of `sv_proof.nika`.
+
+use std::collections
 
 /// A query in clauses: the log's query, the columns' names, and per atom
 /// whether it is a definition (no theory atom).

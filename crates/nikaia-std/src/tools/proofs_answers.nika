@@ -34,8 +34,9 @@ pub comptime PROOFS_LONG_DIR: ref String = "nikaia.proofs.d"
 pub comptime PROOFS_LONG: i64 = 4096
 
 /// The solver an `unknown` was given by (D19): an entry is searched again
-/// only under a different one (D21).
-pub comptime PROOFS_SOLVER: ref String = "fourier-motzkin-1"
+/// only under a different one (D21). Fourier-Motzkin, then the new engine
+/// where it gives up (`sv_ask`, #1285).
+pub comptime PROOFS_SOLVER: ref String = "fourier-motzkin-1+sv-1"
 
 /// What a question came to, in the program's names.
 pub enum ProofsAsked {
@@ -53,7 +54,11 @@ pub enum ProofsAsked {
 
 /// One recorded answer, as the file writes it.
 pub enum ProofsEntry {
+    /// Fourier-Motzkin's certificate (`lg_certificate_text`).
     Proved(String),
+    /// The new engine's log (`sv_log_text`, `SV_LOG_PREFIX` and its steps),
+    /// checked by `sv_check` when read (ADR-270 D20, #1285).
+    ProvedLog(String),
     Refuted(String),
     Unknown(String),
 }
@@ -316,6 +321,13 @@ fn proofs_read(normal: ref LgNormal, entry: ref ProofsEntry) -> ProofsAsked? {
             }
             return ProofsAsked::Proved
         }
+        ProofsEntry::ProvedLog(text) => {
+            let log = sv_log_of(text) ?? return null
+            if !sv_log_verified(normal.arena, normal.facts, normal.goal, log) {
+                return null
+            }
+            return ProofsAsked::Proved
+        }
         ProofsEntry::Refuted(text) => {
             let model = lg_model_of(text) ?? return null
             if !lg_verify_model(normal.arena, normal.facts, normal.goal, model) {
@@ -338,10 +350,24 @@ pub struct ProofsSearch {
     pub entry: ProofsEntry?,
 }
 
-/// The reference solver's answer to the normal form, and what to record of
-/// it. A proof that does not check is not recorded.
+/// The solvers' answer to the normal form (`sv_ask`: Fourier-Motzkin, then
+/// the new engine where it gives up), and what to record of it. A proof that
+/// does not check is not recorded; the new engine's log is checked through
+/// its text, as a later build reads it.
 fn proofs_search(normal: ref LgNormal) -> ProofsSearch {
-    match lg_check(normal.arena, normal.facts, normal.goal, lg_budget()) {
+    let answer = match sv_ask(normal.arena, normal.facts, normal.goal, lg_budget()) {
+        SvDriven::Answer(answer) => answer,
+        SvDriven::Proved(_, steps) => {
+            let text = sv_log_text(steps)
+            let log = sv_log_of(text) ?? return ProofsSearch { asked: ProofsAsked::Rejected("the solver's proof did not read back, which is a fault of the compiler"), entry: null }
+            if !sv_log_verified(normal.arena, normal.facts, normal.goal, log) {
+                return ProofsSearch { asked: ProofsAsked::Rejected("the solver's proof did not check, which is a fault of the compiler"), entry: null }
+            }
+            return ProofsSearch { asked: ProofsAsked::Proved, entry: ProofsEntry::ProvedLog(text) }
+        }
+        SvDriven::RealModel(_) => LgAnswer::Unknown { why: LgUnknown::NoContradiction },
+    }
+    match answer {
         LgAnswer::Proved { certificate } => {
             let why = lg_verify(normal.arena, normal.facts, normal.goal, certificate)
             if why != null {
@@ -506,7 +532,9 @@ pub fn proofs_book_read(root: ref fs::Path) -> ProofsBook {
             }
             continue
         }
-        if line.kind == "proved" {
+        if line.kind == "proved" && line.body.starts_with(SV_LOG_PREFIX) {
+            book.entries.insert(line.key.clone(), ProofsEntry::ProvedLog(line.body.clone()))
+        } else if line.kind == "proved" {
             book.entries.insert(line.key.clone(), ProofsEntry::Proved(line.body.clone()))
         } else if line.kind == "refuted" {
             book.entries.insert(line.key.clone(), ProofsEntry::Refuted(line.body.clone()))
@@ -528,6 +556,7 @@ pub fn proofs_book_render(book: ref ProofsBook) -> PbRendered {
         }
         let line = match entry {
             ProofsEntry::Proved(text) => PbLine { key: key.clone(), kind: "proved", body: text.clone() },
+            ProofsEntry::ProvedLog(text) => PbLine { key: key.clone(), kind: "proved", body: text.clone() },
             ProofsEntry::Refuted(text) => PbLine { key: key.clone(), kind: "refuted", body: text.clone() },
             ProofsEntry::Unknown(solver) => PbLine { key: key.clone(), kind: "unknown", body: solver.clone() },
         }

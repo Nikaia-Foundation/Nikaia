@@ -11,14 +11,14 @@
 // `tune` (ADR-270 D14, #1284 item 5) splits the `.smt2` files of DIR
 // (default `tests/solver/qflia`), sorted by name, into two fixed halves: the
 // files at even places tune, the files at odd places are held out. It walks
-// the parameters of `sv_params` (`solver/sv_strategy.nika`) one by one, tries
+// the parameters of `sv_params` (`tools/sv_strategy.nika`) one by one, tries
 // each of its candidate values on the tuning half with the engine
 // `new:name=value,...`, and keeps a value only where it lowers the half's
 // PAR-2 with no wrong answer. Then it reports the defaults and the tuned set
 // on the held-out half, which the tuning never saw.
 //
 // `run` puts the logic layer's files of `crates/nikaia-std/src/tools/` (read,
-// never copied), the new engine's files of `crates/nikaia-std/src/solver/`
+// never copied), the new engine's files there too (moved in #1285),
 // and the driver `crates/nikaia-std/src/solver/sv_rod.nika` into
 // one program in a temporary directory, builds it with the `nikaia` that runs
 // this script, and answers every `.smt2` file: one line per file (`name answer
@@ -41,7 +41,7 @@ fn solver_logic_files() -> Vec[String] {
 	return ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"]
 }
 
-// The new engine's files of `crates/nikaia-std/src/solver/` (#1282, #1283), in the
+// The new engine's files of `crates/nikaia-std/src/tools/` (#1282, #1283, #1285), in the
 // order the program takes them, before the driver.
 fn solver_engine_files() -> Vec[String] {
 	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib"]
@@ -89,7 +89,7 @@ fn solver_program(repo: String) -> String throws {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
 	for name in solver_engine_files() {
-		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
 	paths.push(f"{repo}/crates/nikaia-std/src/solver/sv_rod.nika")
 	let mut uses: Vec[String] = []

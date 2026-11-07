@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_elim.nika
+// crates/nikaia-std/src/tools/sv_elim.nika
 //
 // **Exact equality elimination** before Fourier-Motzkin (ADR-270 D5, #1282
 // item 6). An equality is two bounds `R <= 0` and `-R <= 0`. One with a

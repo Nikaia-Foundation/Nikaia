@@ -1149,7 +1149,15 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         else => false,
     }
     let walks_a_pausing_step = seq_pauses && walks && !chained
-    let pauses = !contract.sync_claim.is_sync() || walks_a_pausing_step
+    // **`close()` of a value whose cleanup says `sync` does not pause**
+    // (#1317): an `fs::File`'s is a plain system call. The lowering writes
+    // `close_sync()` where the call does not pause.
+    let mut sync_close = false
+    if key == "cleanup::close" {
+        let held: CheckCleanup? = state.cleanup_of(world, on)
+        sync_close = !(held?.pauses ?? true)
+    }
+    let pauses = (!contract.sync_claim.is_sync() && !sync_close) || walks_a_pausing_step
     state.method_pauses(node, pauses)
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract)
     if walks_a_pausing_step && hands_back_a_sequence {
@@ -1164,7 +1172,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         state.a_walk_of_a_failing_sequence(world, method, span)
     }
     let written: String = f"{world.words.resolve(method)}"
-    state.a_pausing_method_in_a_sync_body(key, contract, span)
+    if !sync_close {
+        state.a_pausing_method_in_a_sync_body(key, contract, span)
+    }
     state.a_call_that_may_pause(written, pauses, contract.sync_claim.is_unpromised() && !walks_a_pausing_step, span)
     state.a_pausing_call_in_an_action(written, contract, span)
     if !known_text {

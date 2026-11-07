@@ -4,7 +4,7 @@
 // and the log they leave replayed by `sv_check`; then the smoke files of #1281
 // and two of the disjunction family answered by `lg_check` and by the
 // CDCL(T) engine of `sv_smt.nika` over the interface (Fourier-Motzkin), each
-// *proved* a log `sv_check` accepts. The logic layer's files, `solver/sv_*.nika` and the driver below
+// *proved* a log `sv_check` accepts. The logic layer's files, `tools/sv_*.nika` and the driver below
 // make one program, as `scripts/solver.nika` makes it.
 use std::fs
 use std::process
@@ -167,7 +167,8 @@ fn main() throws {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
 	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_strategy", "sv_smt", "sv_smtlib", "sv_rod"] {
-		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+		let dir = if name == "sv_rod" { "solver" } else { "tools" }
+		paths.push(f"{repo}/crates/nikaia-std/src/{dir}/{name}.nika")
 	}
 	let mut uses: Vec[String] = []
 	let mut body = ""

@@ -38,7 +38,7 @@ impl CheckState {
     /// **`NK2605` waits for the block's end** (#934): `name`'s cleanup can
     /// fail, but a `close()` later in the block may leave nothing to clean up.
     pub fn a_failing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
-        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.start as i64, leaves: [], finding: finding })
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding })
     }
 
     /// After a statement of a block: the `let` of a held value has bound its

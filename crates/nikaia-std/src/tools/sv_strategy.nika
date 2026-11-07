@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_strategy.nika
+// crates/nikaia-std/src/tools/sv_strategy.nika
 //
 // **The strategy layer** (ADR-270 D14, #1284 item 4): which pipeline a
 // query gets, under which parameters, and what crosses from one engine to
@@ -26,6 +26,9 @@
 //   core's phases. The log is the search's own and stays whole: the walk
 //   writes nothing to it, and its model is an answer only after
 //   `lg_consistent_answer` has evaluated the query (D3).
+
+use std::collections
+use std::text
 
 /// The parameter set (ADR-270 D14). A field is a heuristic; `version`
 /// changes whenever a default does.

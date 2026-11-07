@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_theory.nika
+// crates/nikaia-std/src/tools/sv_theory.nika
 //
 // **The theory interface** (ADR-270 D12, #1282 item 5): every theory sits
 // behind the same calls - `assert(lit)`, `propagate()`, `check(final,
@@ -12,6 +12,8 @@
 // A literal names an atom of the book (`2a` the atom, `2a + 1` its negation,
 // as `sv_proof.nika` says); every atom is a bound `row <= 0` over integer
 // columns, so a negated atom is the bound `-row + 1 <= 0`.
+
+use std::collections
 
 /// A bound the theory hands to its engine: `row <= 0`, and where it comes
 /// from - a literal on the trail or a bound entry the theory derived.
@@ -187,30 +189,30 @@ pub trait SvTh {
 	/// A new level: what is asserted from now on is forgotten by
 	/// `backtrack` to the level before. D12's `push`, named `push_level`:
 	/// a trait method `push` breaks `v[i].push(x)` elsewhere, #1298.
-	fn push_level(ref mut self)
+	fn push_level(ref mut self) sync
 	/// The current level.
-	fn level(ref self) -> i64
+	fn level(ref self) -> i64 sync
 	/// `assert(lit)`: the literal holds from now on.
-	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked
+	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked sync
 	/// A bound entry of the log that holds at every level, given before the
 	/// first `push`.
-	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked
+	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked sync
 	/// `propagate()`: literals of the book's atoms that what is asserted
 	/// implies, each explained by `explain`.
-	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32]
+	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32] sync
 	/// `explain(lit)`: the clause behind a propagated literal.
-	fn explain(ref mut self, lit: u32, mut book: SvBook) -> SvClause?
+	fn explain(ref mut self, lit: u32, mut book: SvBook) -> SvClause? sync
 	/// `backtrack(level)`: forgets what was asserted above `level`.
-	fn backtrack(ref mut self, level: i64)
+	fn backtrack(ref mut self, level: i64) sync
 	/// `check(final, limit)`: whether what is asserted has integer values.
-	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked
+	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked sync
 	/// `model()`: the values of the last consistent final `check`, by name.
-	fn model(ref self) -> collections::BTreeMap[String, i64]
+	fn model(ref self) -> collections::BTreeMap[String, i64] sync
 	/// `real_values()`: the same values as rationals, a real column's with
 	/// `δ` replaced by a small enough positive rational (ADR-270 D27).
-	fn real_values(ref self) -> collections::BTreeMap[String, SvRat]
+	fn real_values(ref self) -> collections::BTreeMap[String, SvRat] sync
 	/// `shared()`: the equalities a theory shares with others (D13).
-	fn shared(ref self) -> Vec[u32]
+	fn shared(ref self) -> Vec[u32] sync
 }
 
 impl SvTh for SvTheory {

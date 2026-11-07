@@ -1,0 +1,64 @@
+// #1285 item 2, ADR-270 D5, D8, D20: a question Fourier-Motzkin gives up on
+// (twelve numbers, each 1 or -1, never sum to 1: a parity argument) is
+// proved by the new engine (`sv_ask`), and `nikaia.proofs` keeps its proof
+// as the engine's log (`proved sv:...`). A build under `--locked` reads the
+// entry and checks it with `sv_check`; an entry changed by one step no
+// longer checks, so the question is searched again and `--locked` refuses.
+use std::fs
+use std::process
+use std::text
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn program() -> String {
+	let names = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"]
+	let mut params: Vec[String] = []
+	let mut ones: Vec[String] = []
+	for n in names {
+		params.push(f"{n}: i64")
+		ones.push(f"({n} == 1 || {n} == -1)")
+	}
+	let sum = names.join(" + ")
+	return f"fn odd({params.join(", ")}) -> i64 sync {{\n\tif {ones.join(" && ")} {{\n\t\tassert({sum} != 1)\n\t\treturn 1\n\t}}\n\treturn 0\n}}\n\nfn main() {{\n\tprintln(odd(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1))\n}}\n"
+}
+
+// The book's entries that hold a log, inline or in `nikaia.proofs.d`.
+fn logs(tmp: String) -> i64 throws {
+	let out = process::run("sh", ["-c", "grep -c ' proved sv:' nikaia.proofs; grep -l '^sv:' nikaia.proofs.d/* 2>/dev/null | wc -l"]; dir: tmp.clone())
+	let mut n = 0
+	for line in out.stdout.lines() {
+		n += text::parse_i64(line.trim()) ?? 0
+	}
+	return n
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	process::run("mkdir", ["-p", f"{tmp}/src"])
+	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"parity\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, program())
+	let first = process::run(nikaia, ["build", "--no-cache"]; dir: tmp.clone())
+	println(f"built: {first.stderr.contains("error") == false}")
+	println(f"entries holding a log: {logs(tmp) > 0}")
+	let locked = process::run(nikaia, ["build", "--no-cache", "--locked"]; dir: tmp.clone())
+	println(f"--locked with the log as written: {locked.stderr.contains("--locked") == false}")
+	// One step of the inline log changed: `i3` (an input) becomes `i99999`.
+	process::run("sed", ["-i", "-E", "/ proved sv:/ s/,i3,/,i99999,/", "nikaia.proofs"]; dir: tmp.clone())
+	let tampered = process::run(nikaia, ["build", "--no-cache", "--locked"]; dir: tmp.clone())
+	println(f"--locked with one step changed: {tampered.stderr.contains("commit `nikaia.proofs`")}")
+	process::run("rm", ["-rf", tmp])
+}

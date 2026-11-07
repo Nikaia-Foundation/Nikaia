@@ -159,7 +159,7 @@ fn a_false_claim_stops_the_program_when_it_runs() {
          \x20   let blank = n * 2\n\
          \x20   for i in 0..<1 {\n\
          \x20   }\n\
-         \x20   assert(blank == 1; message: \"an empty line is blank\")\n\
+         \x20   assert(blank == 4; message: \"an empty line is blank\")\n\
          \x20   return blank\n\
          }\n\
          \n\
@@ -173,7 +173,7 @@ fn a_false_claim_stops_the_program_when_it_runs() {
     assert!(
         stderr.contains("claims.nika:5")
             && stderr.contains("assertion failed: an empty line is blank")
-            && stderr.contains("assert(blank == 1; message: \"an empty line is blank\")")
+            && stderr.contains("assert(blank == 4; message: \"an empty line is blank\")")
             && stderr.contains("blank is 2"),
         "{stderr}"
     );
@@ -190,7 +190,7 @@ fn a_computed_precondition_fails_at_the_call() {
         "computed",
         "fn twice(n: i64) -> i64 sync {\n\
          \x20   let blank = n * 2\n\
-         \x20   assert(blank == 1; message: \"an empty line is blank\")\n\
+         \x20   assert(blank == 4; message: \"an empty line is blank\")\n\
          \x20   return blank\n\
          }\n\
          \n\
@@ -204,7 +204,7 @@ fn a_computed_precondition_fails_at_the_call() {
     assert!(
         stderr.contains("claims.nika:9")
             && stderr.contains("assertion failed: an empty line is blank")
-            && stderr.contains("precondition of `twice`: `n * 2 == 1`, from `assert(blank == 1)`")
+            && stderr.contains("precondition of `twice`: `n * 2 == 4`, from `assert(blank == 4)`")
             && stderr.contains("n is 1"),
         "{stderr}"
     );

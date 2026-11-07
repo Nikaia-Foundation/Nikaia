@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_fast.nika
+// crates/nikaia-std/src/tools/sv_fast.nika
 //
 // **The fast paths** (ADR-270 D12, #1283 item 4): a query with no Boolean
 // choice - every clause one literal of a theory atom - is decided before the
@@ -23,6 +23,8 @@
 // its distances in an `Array` up to the dense width (eight columns, D10),
 // in a `Vec` above it. Anything else - a choice, a wider atom, a step that
 // leaves `i64`, a real column (ADR-270 D27) - is left to the loop (`Skip`).
+
+use std::collections
 
 /// What a fast path decided: refuted (the log holds the empty clause), a
 /// model by name, or nothing.
@@ -230,9 +232,9 @@ fn sv_fast_interval(mut book: SvBook, cnf: ref SvCnf, ids: ref Vec[u32]) -> SvFa
 /// The difference path's distances and, per node, the unit that last
 /// lowered it (`-1`: none).
 trait SvDist {
-	fn dist(ref self, node: i64) -> i64
-	fn pred(ref self, node: i64) -> i64
-	fn lower(ref mut self, node: i64, d: i64, unit: i64)
+	fn dist(ref self, node: i64) -> i64 sync
+	fn pred(ref self, node: i64) -> i64 sync
+	fn lower(ref mut self, node: i64, d: i64, unit: i64) sync
 }
 
 /// Up to the dense width: eight columns and `zero`, inline.

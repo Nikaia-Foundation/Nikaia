@@ -1,0 +1,34 @@
+use std::fs
+
+// #1317: an `fs::File`'s cleanup says `sync`, so a `sync` function may close
+// one by hand, or leave it to the end of its block or of its body, and the
+// settle point there is lowered without a pause (ADR-297 D2, D4).
+fn closed_by_hand(root: ref fs::Root, name: String, text: String) sync {
+	let mut file = fs::open(name, root; write: true, create: true, truncate: true) catch { return }
+	file.write(text) catch { println("write failed") }
+	file.close() catch { println("close failed") }
+}
+
+fn left_to_the_body(root: ref fs::Root, name: String, text: String) sync throws {
+	let mut file = fs::open(name, root; write: true, create: true, truncate: true)
+	file.write(text)
+}
+
+fn left_to_a_block(root: ref fs::Root, name: String, text: String) sync throws {
+	if text != "" {
+		let mut file = fs::open(name, root; write: true, create: true, truncate: true)
+		file.write(text)
+	}
+	println("block ended")
+}
+
+fn main() throws {
+	let root = fs::scratch()
+	closed_by_hand(root, "a.txt", "closed by hand\n")
+	left_to_the_body(root, "b.txt", "left to the body\n") catch { println("body failed") }
+	left_to_a_block(root, "c.txt", "left to a block\n") catch { println("block failed") }
+	for name in ["a.txt", "b.txt", "c.txt"] {
+		print(fs::read_to_string(name, root))
+		fs::remove(name, root)
+	}
+}

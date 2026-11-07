@@ -7,7 +7,7 @@
 // definitions and quotient columns chosen freely). A product of two
 // variables is refused. The clauses of a contradictory query go to the SAT
 // core and its log to `sv_check`. `prover_arena.nika`, `solver_terms.nika`, `prove_text.nika`,
-// `logic_lia.nika` and `solver/sv_*.nika` run beside the driver at the end of
+// `logic_lia.nika` and `tools/sv_*.nika` run beside the driver at the end of
 // this file (the lines after `// driver:`, their `// ` taken off).
 use std::fs
 use std::process
@@ -69,7 +69,8 @@ fn main() throws {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
 	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf"] {
-		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+		let dir = if name == "sv_rod" { "solver" } else { "tools" }
+		paths.push(f"{repo}/crates/nikaia-std/src/{dir}/{name}.nika")
 	}
 	let mut uses: Vec[String] = ["use std::collections"]
 	let mut body = ""

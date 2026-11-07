@@ -290,6 +290,12 @@ fn check_core_args_other[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if !lends {
         lends = check_core_args_lent(world, callee, at)
     }
+    // **A field of `mut self` handed to a `mut` parameter is lent in place**
+    // (ADR-views-3 D3, #1315), whatever its type and whichever file declares
+    // the callee: nothing is given away, so nothing is taken out.
+    if !lends && state.changing_self && check_core_args_changes(callee, at) {
+        lends = true
+    }
     // **A field of `mut self` handed to a keeper is taken out**, to be given
     // back (ADR-views-3 D3, ADR-views-1 D1, #1208): `NK2108` asks that it is.
     let taken = !lends && state.changing_self && check_core_args_taken_from_self(state, world, host, arg, span)

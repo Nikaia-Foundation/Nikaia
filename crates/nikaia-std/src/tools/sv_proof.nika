@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_proof.nika
+// crates/nikaia-std/src/tools/sv_proof.nika
 //
 // **The proof log** (ADR-270 D5, #1282 item 4): one append-only log every
 // engine, strategy and theory writes into, replayed by `sv_check.nika`
@@ -39,6 +39,8 @@
 // replays it - the atoms and every bound entry's bound - so an engine and
 // its theory write steps the checker accepts; the SAT core and the theory
 // share one book (#1283).
+
+use std::collections
 
 /// How a row compares to zero.
 pub enum SvRel {
@@ -157,7 +159,7 @@ impl SvLog {
 		return self.add(SvStep::Learn(lits, hints), 1)
 	}
 
-	fn delete(ref mut self, id: u32) {
+	pub fn delete(ref mut self, id: u32) {
 		self.steps.push(SvStep::Delete(id))
 	}
 

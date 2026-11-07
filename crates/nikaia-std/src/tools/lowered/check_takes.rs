@@ -24,7 +24,7 @@ impl CheckState {
         let binding = self.binding_id(&root);
         CheckTaken { path, ty, from: span.start as i64, at: span.end as i64, seq, choices: self.branch.to_owned(), until: None, to: to.to_string(), binding }
     }
-    pub fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: name.to_string(), binding: None, depth: self.scope.len() as i64, choices: self.branch.to_owned(), loops: self.flow.loops, from: span.start as i64, leaves: vec![], finding }); }
+    pub fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: name.to_string(), binding: None, depth: self.scope.len() as i64, choices: self.branch.to_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding }); }
     pub fn failing_cleanups_bound(&mut self) {
         let depth = self.scope.len() as i64;
         for at in 0..self.cleanups_pending.len() as i64 {

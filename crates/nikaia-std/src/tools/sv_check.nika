@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_check.nika
+// crates/nikaia-std/src/tools/sv_check.nika
 //
 // **The checker** (ADR-270 D5, #1282 item 4): replays a proof log of
 // `sv_proof.nika` against its query and accepts it when it derives the empty

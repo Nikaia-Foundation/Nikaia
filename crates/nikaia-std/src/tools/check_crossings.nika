@@ -422,8 +422,8 @@ pub fn check_crossings_a_bound_handle_is_taken(mut state: CheckState, world: ref
 
 /// **A value with a cleanup may die in the function being walked** (ADR-297
 /// D2): the settle the function reaches is a call it makes.
-fn check_crossings_settle(mut state: CheckState, fails: bool) sync {
-    let key: String? = state.a_settle_in_this_function(fails)
+fn check_crossings_settle(mut state: CheckState, fails: bool, pauses: bool) sync {
+    let key: String? = state.a_settle_in_this_function(fails, pauses)
     if key == null {
         return
     }
@@ -433,7 +433,7 @@ fn check_crossings_settle(mut state: CheckState, fails: bool) sync {
 /// A value with a cleanup, made by a call or a literal (ADR-297 D2).
 pub fn check_crossings_a_value_with_a_cleanup_made(mut state: CheckState, world: ref CheckWorld, ty: ref Ty) sync {
     let held = state.cleanup_of(world, ty) ?? return
-    check_crossings_settle(state, held.fails)
+    check_crossings_settle(state, held.fails, held.pauses)
 }
 
 /// **A value with a cleanup dies in this function**, a `let`'s or a kept
@@ -442,8 +442,10 @@ pub fn check_crossings_a_value_with_a_cleanup_made(mut state: CheckState, world:
 /// has a cleanup at all.
 pub fn check_crossings_a_value_with_a_cleanup_dying(mut state: CheckState, world: ref CheckWorld, name: ref String, ty: ref Ty, span: ref Span) -> bool? sync {
     let held = state.cleanup_of(world, ty) ?? return null
-    check_crossings_settle(state, held.fails)
-    state.a_cleanup_that_may_pause(name, span)
+    check_crossings_settle(state, held.fails, held.pauses)
+    if held.pauses {
+        state.a_cleanup_that_may_pause(name, span)
+    }
     if held.fails {
         state.a_failing_cleanup_undeclared(name, ty, held.owner, span)
     }
@@ -456,8 +458,10 @@ pub fn check_crossings_a_value_with_a_cleanup_dying(mut state: CheckState, world
 /// end (`failing_cleanups_settled`), and a `close()` on every path drops it.
 pub fn check_crossings_a_value_with_a_cleanup_bound(mut state: CheckState, world: ref CheckWorld, name: ref String, ty: ref Ty, span: ref Span) sync {
     let held = state.cleanup_of(world, ty) ?? return
-    check_crossings_settle(state, held.fails)
-    state.a_cleanup_that_may_pause(name, span)
+    check_crossings_settle(state, held.fails, held.pauses)
+    if held.pauses {
+        state.a_cleanup_that_may_pause(name, span)
+    }
     state.facts.settle_lets.insert(span.start as i64, held.fails)
     if !held.fails {
         return

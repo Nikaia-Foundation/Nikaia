@@ -4,7 +4,7 @@
 // evaluated on every clause; pigeonhole 6-into-5 with the clause database
 // reduced and the arena compacted on the way, still accepted; a log with one
 // learned clause's hints taken away rejected; a search stopped by its budget.
-// `solver/sv_num.nika`, `sv_row.nika`, `sv_proof.nika`, `sv_check.nika`,
+// `tools/sv_num.nika`, `sv_row.nika`, `sv_proof.nika`, `sv_check.nika`,
 // `sv_sat.nika` and the `LgLin` struct run beside the driver at the end of
 // this file (the lines after `// driver:`, their `// ` taken off).
 use std::fs
@@ -74,7 +74,7 @@ fn main() throws {
 	let mut program = "use std::collections\n"
 	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat"] {
 		program.push_str(fs::read_to_string(
-			f"{repo}/crates/nikaia-std/src/solver/{name}.nika",
+			f"{repo}/crates/nikaia-std/src/tools/{name}.nika",
 			fs::Root::Anywhere,
 		))
 		program.push_str("\n")

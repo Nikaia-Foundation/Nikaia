@@ -1,4 +1,4 @@
-// crates/nikaia-std/src/solver/sv_smtlib.nika
+// crates/nikaia-std/src/tools/sv_smtlib.nika
 //
 // **The solver's SMT-LIB 2 reader** (ADR-270 D6, D17, #1299): a script of the
 // measuring rod read into the logic layer's `LgScript`, a `TermArena` and its
