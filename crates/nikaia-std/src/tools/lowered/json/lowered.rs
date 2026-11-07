@@ -30,5 +30,5 @@ pub use main_lowered::*;
 
 pub mod main {
     #[allow(unused_imports)]
-    pub use super::{Value, Member, Error, ConvertError, parse, as_i64, as_u64, as_f64};
+    pub use super::{Value, Member, Error, ConvertError, parse, as_i64, as_u64, as_f64, to_string};
 }

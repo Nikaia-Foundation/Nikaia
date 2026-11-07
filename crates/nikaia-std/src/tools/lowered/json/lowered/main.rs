@@ -349,3 +349,54 @@ pub fn as_f64(v: &Value) -> Result<f64, nikaia_std::error::Thrown<ConvertError>>
     Ok(x)
 }
 
+pub fn to_string(v: &Value) -> String {
+    let mut out = String::new();
+    write_value(v, &mut out);
+    out
+}
+
+pub(crate) fn write_value(v: &Value, out: &mut String) {
+    match v {
+        Value::Null => { out.push_str("null"); },
+        Value::Bool(b) => { let b = *b; out.push_str(if b { "true" } else { "false" }); },
+        Value::Number(t) => { out.push_str(t); },
+        Value::Str(s) => { write_string(s, out); },
+        Value::Array(items) => {
+            out.push('[');
+            let mut first = true;
+            for item in items.iter() {
+                if !first { out.push(','); }
+                first = false;
+                write_value(item, out);
+            }
+            out.push(']');
+        },
+        Value::Object(members) => {
+            out.push('{');
+            let mut first = true;
+            for m in members.iter() {
+                if !first { out.push(','); }
+                first = false;
+                write_string(&m.key, out);
+                out.push(':');
+                write_value(&m.value, out);
+            }
+            out.push('}');
+        },
+    }
+}
+
+pub(crate) fn write_string(s: &str, out: &mut String) {
+    let digits: Vec<scalar> = vec!['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+    out.push('"');
+    for c in s.chars() {
+        let code = c as i64;
+        if c == '"' { out.push_str("\\\""); } else if c == '\\' { out.push_str("\\\\"); } else if c == '\n' { out.push_str("\\n"); } else if c == '\r' { out.push_str("\\r"); } else if c == '\t' { out.push_str("\\t"); } else if code == 8 { out.push_str("\\b"); } else if code == 12 { out.push_str("\\f"); } else if code < 32 {
+            out.push_str("\\u00");
+            out.push(*nikaia_std::index::get(&digits, nikaia_std::index::at(code / 16)));
+            out.push(*nikaia_std::index::get(&digits, nikaia_std::index::at(code % 16)));
+        } else { out.push(c); }
+    }
+    out.push('"');
+}
+
