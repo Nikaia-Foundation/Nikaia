@@ -32,7 +32,7 @@ fn solver_logic_files() -> Vec[String] {
 // The new engine's files of `crates/nikaia-std/src/solver/` (#1282, #1283), in the
 // order the program takes them, before the driver.
 fn solver_engine_files() -> Vec[String] {
-	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_smt", "sv_smtlib"]
+	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_fast", "sv_pre", "sv_walk", "sv_smt", "sv_smtlib"]
 }
 
 // The work budget PAR-2 doubles: `lg_budget().cases`, the branches
