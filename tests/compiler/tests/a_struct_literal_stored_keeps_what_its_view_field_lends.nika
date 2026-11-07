@@ -1,0 +1,17 @@
+// A struct literal stored where the call does not end takes along what its
+// view fields lend (ADR-views-3 D5, #1225): `b.w = W { own: l }` keeps `l`,
+// so the caller may not use it after the call.
+struct L { n: i64, tag: String }
+struct W { own: ref L, k: i64 }
+struct Holder { w: W? }
+
+fn go(l: L, mut b: Holder) {
+    b.w = W { own: l, k: 1 }
+}
+
+fn main() {
+    let l = L { n: 3, tag: "a" }
+    let mut b = Holder { w: null }
+    go(l, b)
+    println(l.tag)
+}

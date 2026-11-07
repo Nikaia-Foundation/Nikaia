@@ -1,0 +1,41 @@
+// A struct literal that stays in the function lends a parameter of any type,
+// or a part of one, into a field it holds as a view (ADR-views-3 D5, #1225).
+struct In { n: i64 }
+struct L { n: i64, part: In, tag: String }
+struct W { own: ref L, k: i64 }
+struct P { own: ref In, k: i64 }
+
+fn show(w: W) -> i64 {
+    return w.own.n + w.k
+}
+
+fn go(l: L) -> i64 {
+    let w = W { own: l, k: 1 }
+    return show(w)
+}
+
+fn handed(l: L) -> i64 {
+    return show(W { own: l, k: 2 })
+}
+
+fn read(l: L) -> i64 {
+    let w = W { own: l, k: 3 }
+    return w.own.n + w.k
+}
+
+fn piece(l: L) -> i64 {
+    let p = P { own: l.part, k: 4 }
+    return p.own.n + p.k
+}
+
+// Handed back, the struct points into the parameter (D8), so the caller's
+// value stays usable while the result lives.
+fn back(l: L) -> W {
+    return W { own: l, k: 5 }
+}
+
+fn main() {
+    let l = L { n: 3, part: In { n: 10 }, tag: "a" }
+    let w = back(l)
+    println(f"{go(l)} {handed(l)} {read(l)} {piece(l)} {w.own.n + w.k} {l.tag}")
+}
