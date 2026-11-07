@@ -137,10 +137,24 @@ fn print_throws_fns(tokens: ref Vec[MigrateToken]) -> Vec[PrintThrowsFn] sync {
     return out
 }
 
-// Whether the call whose name is token `k` is followed by `catch`.
-fn print_throws_caught(tokens: ref Vec[MigrateToken], k: i64) -> bool sync {
-    let end = migrate_closing(tokens, k + 1)
+// Whether the call whose arguments open at token `paren` is followed by
+// `catch`.
+fn print_throws_caught(tokens: ref Vec[MigrateToken], paren: i64) -> bool sync {
+    let end = migrate_closing(tokens, paren)
     return migrate_text_at(tokens, end + 1) == "catch"
+}
+
+// The `(` of a call whose name is token `k`, past its type arguments
+// (`show[T]()`), or -1 where no call follows the name.
+fn print_throws_paren(tokens: ref Vec[MigrateToken], k: i64) -> i64 sync {
+    let mut at = k + 1
+    if migrate_text_at(tokens, at) == "[" {
+        at = migrate_closing(tokens, at) + 1
+    }
+    if migrate_text_at(tokens, at) == "(" {
+        return at
+    }
+    return -1
 }
 
 // Whether a body calls something that fails: a print, or a function whose
@@ -148,7 +162,8 @@ fn print_throws_caught(tokens: ref Vec[MigrateToken], k: i64) -> bool sync {
 fn print_throws_body_fails(tokens: ref Vec[MigrateToken], open: i64, close: i64, free: ref collections::BTreeSet[String], methods: ref collections::BTreeSet[String]) -> bool sync {
     let mut k = open + 1
     while k < close {
-        if tokens[k].kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == "(" {
+        let paren = print_throws_paren(tokens, k)
+        if tokens[k].kind == MigrateKind::Word && paren >= 0 {
             let word = tokens[k].text.clone()
             let before = migrate_text_at(tokens, k - 1)
             let called = if before == "." {
@@ -160,7 +175,7 @@ fn print_throws_body_fails(tokens: ref Vec[MigrateToken], open: i64, close: i64,
             } else {
                 print_throws_is_print(word) || free.contains(word)
             }
-            if called && !print_throws_caught(tokens, k) {
+            if called && !print_throws_caught(tokens, paren) {
                 return true
             }
         }

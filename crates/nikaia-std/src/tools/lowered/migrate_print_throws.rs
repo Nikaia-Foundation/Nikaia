@@ -98,9 +98,18 @@ pub(crate) fn print_throws_fns(tokens: &[MigrateToken]) -> Vec<PrintThrowsFn> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn print_throws_caught(tokens: &[MigrateToken], k: i64) -> bool {
-    let end = migrate_closing(tokens, k + 1);
+pub(crate) fn print_throws_caught(tokens: &[MigrateToken], paren: i64) -> bool {
+    let end = migrate_closing(tokens, paren);
     migrate_text_at(tokens, end + 1) == "catch"
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn print_throws_paren(tokens: &[MigrateToken], k: i64) -> i64 {
+    let mut at = k + 1;
+    if migrate_text_at(tokens, at) == "[" { at = migrate_closing(tokens, at) + 1; }
+    if migrate_text_at(tokens, at) == "(" { return at; }
+    -1
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -108,11 +117,12 @@ pub(crate) fn print_throws_caught(tokens: &[MigrateToken], k: i64) -> bool {
 pub(crate) fn print_throws_body_fails(tokens: &[MigrateToken], open: i64, close: i64, free: &collections::BTreeSet<String>, methods: &collections::BTreeSet<String>) -> bool {
     let mut k = open + 1;
     while k < close {
-        if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && migrate_text_at(tokens, k + 1) == "(" {
+        let paren = print_throws_paren(tokens, k);
+        if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && paren >= 0 {
             let word = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string();
             let before = migrate_text_at(tokens, k - 1);
             let called = if before == "." { methods.contains(&word) } else if before == "::" { methods.contains(&word) || free.contains(&word) } else if before == "fn" { false } else { print_throws_is_print(&word) || free.contains(&word) };
-            if called && !print_throws_caught(tokens, k) { return true; }
+            if called && !print_throws_caught(tokens, paren) { return true; }
         }
         k += 1;
     }

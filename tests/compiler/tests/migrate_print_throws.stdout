@@ -35,9 +35,14 @@ fn each(items: Vec[i64]) throws {
     items.iter().for_each fn(v) { print(f"{v} ") }
 }
 
+fn generic[T]() throws {
+    println("g")
+}
+
 fn main() throws {
     // println("in a comment") is left alone
     uses(P { x: quiet(1) })
+    generic[i64]()
     let n = calls_already()
     each([n])
 }
