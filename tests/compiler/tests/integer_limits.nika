@@ -1,0 +1,16 @@
+// An integer type's limits are values of that type (Part I 2.2, #1294).
+fn widest(x: i64) -> i64 {
+    return x
+}
+
+fn main() {
+    println(f"{i64::MIN} {i64::MAX}")
+    println(f"{i32::MIN} {i32::MAX}")
+    println(f"{u8::MIN} {u8::MAX}")
+    println(f"{u32::MIN} {u32::MAX}")
+    println(f"{u64::MIN} {u64::MAX}")
+    let small: i32 = i32::MAX
+    let byte = u8::MAX
+    println(f"{small} {byte}")
+    println(widest(i64::MIN))
+}
