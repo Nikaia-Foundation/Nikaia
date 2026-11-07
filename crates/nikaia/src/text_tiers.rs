@@ -46,6 +46,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{Block, Expr, Item, Stmt};
 use crate::parser::Parsed;
+use nikaia_std::tools::text_tiers::SliceFills;
 
 /// **No two nodes of the tree share an id** ([ADR-340](../../../docs/specification/adr/adr-340.md)
 /// D2): a node the parser placed twice - `xs[a..]` holds `xs` as the base and
@@ -78,12 +79,26 @@ fn separate_repeated_ids(parsed: &mut Parsed) {
 /// writing that answer into the types (`tier_write`). What stays here is
 /// wrapping a value handed into a mixed position, which replaces a node.
 pub fn refine(parsed: &mut Parsed) {
-    refine_with(parsed, &BTreeMap::new());
+    let fills = SliceFills {
+        filled: BTreeMap::new(),
+        pieces: BTreeMap::new(),
+    };
+    refine_with(
+        parsed,
+        &BesideFields {
+            fields: BTreeMap::new(),
+            fills,
+        },
+    );
 }
 
-/// The published fields of the published structs of a package's files, as
-/// written (`tier_beside_fields`).
-pub type BesideFields = BTreeMap<String, Vec<nikaia_std::tools::ty::FieldContract>>;
+/// What a package's files read of each other: the published fields of the
+/// published structs, as written (`tier_beside_fields`), and what the struct
+/// literals of all of them put into each field (`tier_slice_fills`, #1272).
+pub struct BesideFields {
+    pub fields: BTreeMap<String, Vec<nikaia_std::tools::ty::FieldContract>>,
+    pub fills: SliceFills,
+}
 
 /// **One package's files, each decided against the published fields of all
 /// of them** ([ADR-282](../../../docs/specification/adr/adr-282.md) D17, D25,
@@ -104,7 +119,10 @@ pub fn beside_fields(files: &[&Parsed]) -> BesideFields {
         .iter()
         .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
-    nikaia_std::tools::text_tiers::tier_beside_fields(&views)
+    BesideFields {
+        fields: nikaia_std::tools::text_tiers::tier_beside_fields(&views),
+        fills: nikaia_std::tools::text_tiers::tier_slice_fills(&views),
+    }
 }
 
 /// One file, against the published fields of its package's files.
@@ -119,15 +137,18 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
         aliases: &parsed.aliases,
         library,
         methods: &methods,
-        beside,
+        beside: &beside.fields,
     };
     let decided = text_tiers(&parsed.program, &ask);
     parsed.viewed_arms = decided.viewed_arms.clone();
     parsed.refused_moves = decided.refused_moves.clone();
     // A parameter handed back is a view of it, of any type (ADR-views-3 D12, #1239).
     // Its text views in an impl of a trait were written `String` (#1250).
-    let handed =
-        nikaia_std::tools::text_tiers::tier_hand_back(&mut parsed.program, &parsed.interner);
+    let handed = nikaia_std::tools::text_tiers::tier_hand_back(
+        &mut parsed.program,
+        &parsed.interner,
+        &beside.fills,
+    );
     if decided.tiers.is_empty() && decided.lets.is_empty() && decided.adopted.is_empty() {
         parsed.text_views = handed;
         return;

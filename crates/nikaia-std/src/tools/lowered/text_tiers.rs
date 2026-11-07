@@ -5406,7 +5406,7 @@ pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, V
     out
 }
 
-pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext, package: &SliceFills) -> collections::BTreeSet<String> {
     let plain = hb_plain_enums(&program.items, words);
     let opted = keep_marks_opted_in_items(&program.items);
     let mut views: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
@@ -5416,7 +5416,7 @@ pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerCon
         for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted, &mut views, &mut made); }
         if (views.len() as i64) == before { break; }
     }
-    sf_slice_fields(program, words);
+    sf_slice_fields(program, words, package);
     sv_view_fields(program, words, &plain, opted);
     lv_let_views(program, words, &views);
     made
@@ -5467,10 +5467,12 @@ pub(crate) fn lv_mark(ty: &mut Option<Type>, words: &winnow_grammar::InternerCon
 
 pub(crate) fn lv_mark_run(ty: &mut Type, words: &winnow_grammar::InternerContext, cut_or_call: bool) { if sf_a_run(&ty, words) || cut_or_call && sf_a_buffer(&ty, words) { ty.is_view = true; } }
 
-pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext) {
+pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext, package: &SliceFills) {
     let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     let mut pieces: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for item in program.items.iter() { sf_item(&item.node, words, &mut filled, &mut pieces); }
+    sf_join(&mut filled, &package.filled);
+    sf_join(&mut pieces, &package.pieces);
     for item in program.items.iter_mut() {
         match &mut (*item).node {
             Item::Struct { name, fields, is_extern, .. } => {
@@ -5479,12 +5481,34 @@ pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::Int
                     let of = words.resolve(name).to_string();
                     for field in fields.iter_mut() {
                         let key = format!("{}.{}", of, words.resolve((*field).name));
-                        if sf_a_run(&(*field).ty, words) && nikaia_std::index::or(filled.get(&key), || false) { (*field).ty.is_view = true; } else if sf_a_buffer(&(*field).ty, words) && nikaia_std::index::or(pieces.get(&key), || false) { (*field).ty.is_view = true; }
+                        let run = sf_a_run(&(*field).ty, words) && nikaia_std::index::or(filled.get(&key), || false);
+                        if run || sf_a_buffer(&(*field).ty, words) && nikaia_std::index::or(pieces.get(&key), || false) { (*field).ty.is_view = true; }
                     }
                 }
             },
             _ => { },
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SliceFills {
+    pub filled: collections::BTreeMap<String, bool>,
+    pub pieces: collections::BTreeMap<String, bool>,
+}
+
+pub fn tier_slice_fills(files: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> SliceFills {
+    let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    let mut pieces: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for file in files.iter() { for item in file.items.iter() { sf_item(&item.node, file.words, &mut filled, &mut pieces); } }
+    SliceFills { filled, pieces }
+}
+
+pub(crate) fn sf_join(own: &mut collections::BTreeMap<String, bool>, other: &collections::BTreeMap<String, bool>) {
+    for (key, every) in other.iter() {
+        let every = nikaia_std::num::value(every);
+        let before = nikaia_std::index::or(own.get(key), || true);
+        own.insert(key.to_string(), before && every);
     }
 }
 

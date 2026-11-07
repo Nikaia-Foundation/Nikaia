@@ -7287,7 +7287,7 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// It returns the text positions it made views in an impl of a trait
 /// (`hb_trait_from`), keyed as `tw_views` keys the tiers' own: they were
 /// written `String`, so `NK1261` does not read them as a written `ref`.
-pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext, package: ref SliceFills) -> collections::BTreeSet[String] {
     let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
     let mut views: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
@@ -7301,7 +7301,7 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
             break
         }
     }
-    sf_slice_fields(program, words)
+    sf_slice_fields(program, words, package)
     sv_view_fields(program, words, plain, opted)
     lv_let_views(program, words, views)
     return made
@@ -7402,12 +7402,20 @@ fn lv_mark_run(mut ty: Type, words: ref winnow_grammar::InternerContext, cut_or_
 /// or a lent `Bytes` parameter, the field is written as `ref Bytes`. A
 /// `Bytes` may own its bytes, so a local or a kept parameter there leaves
 /// the field owning, as written.
-fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerContext) {
+///
+/// **The literals of every file of the package count** (#1272): a struct
+/// declared in one file and filled in another is decided by both, as
+/// `package` holds what the literals of all of them put into each field
+/// (`tier_slice_fills`). A field this file fills with something else stays
+/// owning whatever the others put there.
+fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerContext, package: ref SliceFills) {
     let mut filled: collections::BTreeMap[String, bool] = collections::BTreeMap()
     let mut pieces: collections::BTreeMap[String, bool] = collections::BTreeMap()
     for item in program.items {
         sf_item(item.node, words, filled, pieces)
     }
+    sf_join(filled, package.filled)
+    sf_join(pieces, package.pieces)
     for mut item in program.items {
         match item.node {
             Item::Struct { name, fields, is_extern, .. } => {
@@ -7415,9 +7423,8 @@ fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerCont
                     let of = words.resolve(name).clone()
                     for mut field in fields {
                         let key = f"{of}.{words.resolve(field.name)}"
-                        if sf_a_run(field.ty, words) && (filled.get(key) ?? false) {
-                            field.ty.is_view = true
-                        } else if sf_a_buffer(field.ty, words) && (pieces.get(key) ?? false) {
+                        let run = sf_a_run(field.ty, words) && (filled.get(key) ?? false)
+                        if run || (sf_a_buffer(field.ty, words) && (pieces.get(key) ?? false)) {
                             field.ty.is_view = true
                         }
                     }
@@ -7425,6 +7432,36 @@ fn sf_slice_fields(mut program: Program, words: ref winnow_grammar::InternerCont
             },
             else => {},
         }
+    }
+}
+
+/// **What the struct literals of a package's files put into each field**
+/// (#1272): `true` in `filled` while every value was a place, in `pieces`
+/// while every value was a cut of a place or a lent `Bytes` parameter, keyed
+/// `Struct.field`, as `sf_item` reads one file.
+pub struct SliceFills {
+    pub filled: collections::BTreeMap[String, bool],
+    pub pieces: collections::BTreeMap[String, bool],
+}
+
+/// What the struct literals of all of `files` put into each field, read
+/// before any file is decided, so the answer does not hang on the order.
+pub fn tier_slice_fills(files: ref Vec[ParsedView]) -> SliceFills {
+    let mut filled: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    let mut pieces: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for file in files {
+        for item in file.items {
+            sf_item(item.node, file.words, filled, pieces)
+        }
+    }
+    return SliceFills { filled, pieces }
+}
+
+/// `own` holds a field's answer only where `other` does not say otherwise.
+fn sf_join(mut own: collections::BTreeMap[String, bool], other: ref collections::BTreeMap[String, bool]) {
+    for (key, every) in other {
+        let before = own.get(key) ?? true
+        own.insert(key.clone(), before && every)
     }
 }
 
