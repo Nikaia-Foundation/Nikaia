@@ -1677,6 +1677,13 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
             ),
             "bounds" => crate::bounds_report::report(
                 &unit.parsed,
+                &program
+                    .units
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, u)| *k != at as usize && u.package == unit.package)
+                    .map(|(_, u)| &u.parsed)
+                    .collect::<Vec<_>>(),
                 &unit.source,
                 &unit.path.display().to_string(),
                 &program.contracts,

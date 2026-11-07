@@ -75,6 +75,14 @@ mod bounds_body_lowered {
 #[allow(unused_imports)]
 pub use bounds_body_lowered::*;
 
+mod bounds_derived_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_derived.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_derived_lowered::*;
+
 mod bounds_frame_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -114,6 +122,14 @@ mod bounds_report_lowered {
 }
 #[allow(unused_imports)]
 pub use bounds_report_lowered::*;
+
+mod bounds_rules_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_rules.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_rules_lowered::*;
 
 mod bounds_shape_lowered {
     #[allow(unused_imports)]
@@ -2311,6 +2327,10 @@ pub mod bounds_body {
     #[allow(unused_imports)]
     pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
 }
+pub mod bounds_derived {
+    #[allow(unused_imports)]
+    pub use super::{derived_order, derived_note, derived_rows};
+}
 pub mod bounds_frame {
     #[allow(unused_imports)]
     pub use super::{bounds_around, frame_at_call, frame_writes};
@@ -2330,6 +2350,10 @@ pub mod bounds_reasons {
 pub mod bounds_report {
     #[allow(unused_imports)]
     pub use super::{BoundsReportFacts, bounds_report_checked};
+}
+pub mod bounds_rules {
+    #[allow(unused_imports)]
+    pub use super::{BoundsRule, rules_candidates};
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]

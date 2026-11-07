@@ -1,0 +1,144 @@
+// #1330 (ADR-369 D4): rules between a struct's private list fields, found,
+// checked against every method that writes the fields, and used as facts.
+// `Row::add` pushes `cols` and `ks` together, so `cols.len() == ks.len()`
+// holds and `self.ks[i]` under `i < self.cols.len()` is proved, in a method
+// and through a parameter of the type (`row_sum`). `Arena::link` pushes onto
+// `links` only what `node` hands back, a position of `nodes`, so every
+// element of `links` is one and `self.nodes[self.links[i]]` is proved, read
+// in place and through a `let`. `Grid` has a method that pushes to `cols`
+// alone, and `Loose` one that pushes a number of its caller's to `links`:
+// their rules fail, nothing is refused, and those indexes stay checked.
+struct Row {
+	cols: Vec[i64],
+	ks: Vec[i64],
+}
+
+impl Row {
+	fn add(ref mut self, col: i64, k: i64) {
+		self.cols.push(col)
+		self.ks.push(k)
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+fn row_sum(r: ref Row) -> i64 {
+	let mut i = 0
+	let mut last = 0
+	while i < r.cols.len() {
+		last = r.ks[i]
+		i += 1
+	}
+	return last
+}
+
+struct Arena {
+	nodes: Vec[i64],
+	links: Vec[i64],
+}
+
+impl Arena {
+	fn node(ref mut self, value: i64) -> i64 {
+		self.nodes.push(value)
+		return self.nodes.len() - 1
+	}
+
+	fn link(ref mut self, value: i64) {
+		let at = self.node(value)
+		self.links.push(at)
+	}
+
+	fn follow(ref self, i: i64) -> i64 {
+		if i < 0 || i >= self.links.len() {
+			return 0
+		}
+		return self.nodes[self.links[i]]
+	}
+
+	fn follow_held(ref self, i: i64) -> i64 {
+		if i < 0 || i >= self.links.len() {
+			return 0
+		}
+		let at = self.links[i]
+		return self.nodes[at]
+	}
+}
+
+struct Grid {
+	cols: Vec[i64],
+	ks: Vec[i64],
+}
+
+impl Grid {
+	fn add(ref mut self, col: i64, k: i64) {
+		self.cols.push(col)
+		self.ks.push(k)
+	}
+
+	fn widen(ref mut self, col: i64) {
+		self.cols.push(col)
+	}
+
+	fn total(ref self) -> i64 {
+		let mut i = 0
+		let mut sum = 0
+		while i < self.cols.len() {
+			sum = self.ks[i]
+			i += 1
+		}
+		return sum
+	}
+}
+
+struct Loose {
+	nodes: Vec[i64],
+	links: Vec[i64],
+}
+
+impl Loose {
+	fn node(ref mut self, value: i64) -> i64 {
+		self.nodes.push(value)
+		return self.nodes.len() - 1
+	}
+
+	fn link(ref mut self, value: i64) {
+		let at = self.node(value)
+		self.links.push(at)
+	}
+
+	fn point(ref mut self, at: i64) {
+		self.links.push(at)
+	}
+
+	fn follow(ref self, i: i64) -> i64 {
+		if i < 0 || i >= self.links.len() {
+			return 0
+		}
+		return self.nodes[self.links[i]]
+	}
+}
+
+fn main() {
+	let mut r = Row { cols: [], ks: [] }
+	r.add(1, 2)
+	r.add(3, 4)
+	let mut a = Arena { nodes: [], links: [] }
+	a.link(7)
+	a.link(8)
+	let mut g = Grid { cols: [], ks: [] }
+	g.add(1, 5)
+	let mut l = Loose { nodes: [], links: [] }
+	l.link(9)
+	println(f"{r.total()} {row_sum(r)} {a.follow(1)} {a.follow_held(0)} {g.total()} {l.follow(0)}")
+	g.widen(2)
+	l.point(0)
+	println(f"{l.follow(1)}")
+}

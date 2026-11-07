@@ -5,8 +5,8 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
-pub fn bounds_around(program: &Program, ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
-    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new() };
+pub fn bounds_around(program: &Program, beside: &[&Program], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
+    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![] };
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, .. } => {
@@ -33,13 +33,19 @@ pub fn bounds_around(program: &Program, ledgers: &[&Ledger], std_receivers: &col
     let mut context = frame_context(around, std_receivers, simd_loads);
     for (key, _) in frames_round(program, &context, words) { context.around.frames.insert(key.to_string(), nothing_changed()); }
     let mut round: i64 = 0;
+    let mut settled = false;
     while round < frame_rounds() {
         let next = frames_round(program, &context, words);
-        if next == context.around.frames { return context.around; }
+        if next == context.around.frames {
+            settled = true;
+            break;
+        }
         context.around.frames = next;
         round += 1;
     }
-    context.around.frames = collections::BTreeMap::new();
+    if !settled { context.around.frames = collections::BTreeMap::new(); }
+    let rules = rules_candidates(program, &context, words);
+    context.around.rules = rules;
     context.around
 }
 

@@ -38,9 +38,10 @@ fn frame_rounds() -> i64 {
 /// function's parameters, `true` where one is `mut`; the methods that take a
 /// parameter `mut`, of this program and of what `ledgers` describe; those
 /// that take their receiver `mut` (ADR-306 D17); and every function's frame,
-/// by its name or by `Type::method` (ADR-391 D2).
-pub fn bounds_around(program: ref Program, ledgers: ref Vec[ref Ledger], std_receivers: ref collections::BTreeMap[i64, String], simd_loads: ref collections::BTreeMap[i64, i64], words: ref winnow_grammar::InternerContext) -> Around {
-    let mut around = Around { functions: collections::BTreeMap(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet(), frames: collections::BTreeMap() }
+/// by its name or by `Type::method` (ADR-391 D2). `beside` are the package's
+/// other files: a private function's call sites may stand there (ADR-391 D1).
+pub fn bounds_around(program: ref Program, beside: ref Vec[ref Program], ledgers: ref Vec[ref Ledger], std_receivers: ref collections::BTreeMap[i64, String], simd_loads: ref collections::BTreeMap[i64, i64], words: ref winnow_grammar::InternerContext) -> Around {
+    let mut around = Around { functions: collections::BTreeMap(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet(), frames: collections::BTreeMap(), rules: [] }
     for item in program.items {
         match item.node {
             Item::Impl { methods, .. } => {
@@ -76,15 +77,23 @@ pub fn bounds_around(program: ref Program, ledgers: ref Vec[ref Ledger], std_rec
         context.around.frames.insert(key.clone(), nothing_changed())
     }
     let mut round = 0
+    let mut settled = false
     while round < frame_rounds() {
         let next = frames_round(program, context, words)
         if next == context.around.frames {
-            return context.around
+            settled = true
+            break
         }
         context.around.frames = next
         round += 1
     }
-    context.around.frames = collections::BTreeMap()
+    if !settled {
+        context.around.frames = collections::BTreeMap()
+    }
+    // **The rules between list fields** read with the frames found
+    // (ADR-369 D4, `bounds_rules.nika`): checked where a body uses them.
+    let rules = rules_candidates(program, context, words)
+    context.around.rules = rules
     return context.around
 }
 

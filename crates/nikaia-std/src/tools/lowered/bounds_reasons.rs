@@ -14,6 +14,7 @@ pub fn blocked_index(base: &Expr, index: &Expr, args: &[FnArg], body: &Block, wo
         },
         _ => { },
     }
+    if is_element(index, words) { return element(); }
     from_binding(&names_read(index, words), args, body, words)
 }
 

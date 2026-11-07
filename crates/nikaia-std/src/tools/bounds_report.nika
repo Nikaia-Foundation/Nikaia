@@ -18,6 +18,9 @@ pub struct BoundsReportFacts {
     pub proven_indices: collections::BTreeSet[i64],
     pub proven_arithmetic: collections::BTreeSet[i64],
     pub proven_negations: collections::BTreeSet[i64],
+    /// The derived preconditions, each with the call sites that prove it
+    /// (ADR-391 D4, `derived_rows`).
+    pub derived: Vec[String],
 }
 
 /// One site a check stands at.

@@ -28,6 +28,11 @@ pub fn blocked_index(base: ref Expr, index: ref Expr, args: ref Vec[FnArg], body
         },
         else => {},
     }
+    // An index read out of another list (`a[b[i]]`) is kept for want of a
+    // fact on that list's elements, not for the names inside it (#1330).
+    if is_element(index, words) {
+        return element()
+    }
     return from_binding(names_read(index, words), args, body, words)
 }
 

@@ -33,6 +33,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use crate::ast::{Item, Spanned};
 use crate::parser::Parsed;
 use nikaia_std::tools::bounds_basic as nika;
+use nikaia_std::tools::bounds_derived as derived;
 use nikaia_std::tools::bounds_walk::{self as walk, BoundsContext, Ensured};
 
 /// What happens to an index or overflow check the walk proved (ADR-306
@@ -61,6 +62,8 @@ pub struct Proven {
     /// stand** ([ADR-269](../../docs/specification/adr/adr-269.md) D20, #776),
     /// by the receiver's node, with the callee's ledger key.
     pub calls: BTreeMap<i64, String>,
+    /// The derived preconditions, for `--bounds` (ADR-391 D4).
+    pub derived: Vec<String>,
 }
 
 /// **What each callee the ledgers describe ensures**
@@ -173,9 +176,10 @@ fn decided(parsed: &Parsed, values: &BTreeMap<i64, (String, String)>) -> BTreeMa
 
 /// `sites` are what may be read and proved; `ledgers` answer what a callee
 /// ensures (ADR-314 D3); `nonnegative` are the signed values asked `>= 0`
-/// (ADR-285 D32).
+/// (ADR-285 D32); `beside` are the package's other files (ADR-391 D1).
 pub fn proven(
     parsed: &Parsed,
+    beside: &[&Parsed],
     sites: &Sites<'_>,
     ledgers: &[&crate::contracts::Ledger],
     nonnegative: &BTreeSet<i64>,
@@ -199,12 +203,13 @@ pub fn proven(
     // D17, ADR-391 D2): `tools/bounds_frame.nika`.
     let around = nikaia_std::tools::bounds_frame::bounds_around(
         &parsed.program,
+        &beside.iter().map(|p| &p.program).collect::<Vec<_>>(),
         ledgers,
         std_receivers,
         simd_loads,
         &parsed.interner,
     );
-    let context = BoundsContext {
+    let mut context = BoundsContext {
         lengths: lengths.iter().copied().collect(),
         sized: sized.iter().copied().collect(),
         char_codes: char_codes.iter().copied().collect(),
@@ -241,7 +246,10 @@ pub fn proven(
             _ => {}
         }
     }
-    for item in bodies {
+    // Callers before callees (ADR-391 D1): `tools/bounds_derived.nika`.
+    let starts: Vec<i64> = bodies.iter().map(|b| b.span.start as i64).collect();
+    let order = derived::derived_order(&context.around, &starts);
+    for item in order.iter().map(|k| bodies[*k as usize]) {
         let Item::Fn {
             name, args, body, ..
         } = &item.node
@@ -276,12 +284,14 @@ pub fn proven(
         // **The invariants that carried a check through a loop** go into
         // `nikaia.proofs` (ADR-361 D4, D10).
         crate::proofs::record_bound_invariants(&walked.loops);
+        derived::derived_note(&mut context.around, &walked);
         out.indices.extend(walked.indices);
         out.arithmetic.extend(walked.arithmetic);
         out.nonnegative.extend(walked.nonnegative);
         out.negations.extend(walked.negations);
         out.calls.extend(walked.calls);
     }
+    out.derived = derived::derived_rows(&context.around);
     // **A grammar's actions, walked like a function's body**
     // ([ADR-314](../../docs/specification/adr/adr-314.md) D1), from what each
     // binding matched.

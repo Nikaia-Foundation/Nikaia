@@ -1,0 +1,15 @@
+bounds in tests/prove_struct_rule_parallel_and_arena.nika: 9 indexes, 7 proved; 5 operations, 5 proved
+    26  self.ks[i]                 proved
+    27  i += 1                     proved
+    37  r.ks[i]                    proved
+    38  i += 1                     proved
+    51  self.nodes.len() - 1       proved
+    63  self.nodes[self.links[i]]  proved
+    63  self.links[i]              proved
+    70  self.links[i]              proved
+    71  self.nodes[at]             proved
+    94  self.ks[i]                 checked: the length of another list, which bounds the loop and not this index (#388)
+    95  i += 1                     proved
+   109  self.nodes.len() - 1       proved
+   125  self.nodes[self.links[i]]  checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+   125  self.links[i]              proved

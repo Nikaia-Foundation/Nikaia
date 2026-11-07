@@ -9,6 +9,7 @@ pub struct BoundsReportFacts {
     pub proven_indices: collections::BTreeSet<i64>,
     pub proven_arithmetic: collections::BTreeSet<i64>,
     pub proven_negations: collections::BTreeSet<i64>,
+    pub derived: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

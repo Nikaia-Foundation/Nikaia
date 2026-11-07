@@ -51,6 +51,9 @@ pub struct Around {
     /// parameters, by its name or by `Type::method` (ADR-391 D2,
     /// `bounds_frame.nika`): a call to one forgets only that.
     pub frames: collections::BTreeMap[String, BoundsChanged],
+    /// The rules found between the private list fields of a type, not yet
+    /// checked (ADR-369 D4, `bounds_rules.nika`).
+    pub rules: Vec[BoundsRule],
 }
 
 enum Look {
