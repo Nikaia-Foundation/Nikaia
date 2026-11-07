@@ -11,6 +11,6 @@ fn path_to(n: i64) -> Vec[i64]? sync {
     }
 }
 
-fn main() {
+fn main() throws {
     println(f"{path_to(3)?.len() ?? 0}")
 }

@@ -91,7 +91,12 @@ and what one machine proved is not rejected by another (D4).
 Today's solver is the reference solver, which decides linear integer
 arithmetic by Fourier-Motzkin elimination with case splits on demand and is
 written in Nikaia (`logic_lia`, `logic_search`). Its successor is decided
-piece by piece, and each step is measured before the next (D8).
+piece by piece, and each step is measured before the next (D8). The new
+engine's core is built, in Nikaia too (`sv_*.nika`): a CDCL(T) loop, the
+simplex with cuts, fast paths, local search and a strategy layer, measured on
+SMT-LIB sets by `scripts/solver.nika`. The compiler still asks the reference
+solver; the switch, with the reference solver kept as the cross-check, is
+[#1285](https://github.com/Nikaia-Foundation/Nikaia/issues/1285).
 
 <figure class="nkd">
 <svg viewBox="0 0 760 420" role="img" aria-labelledby="nkd-propose-title">
@@ -150,9 +155,10 @@ arena of `u32` words with watch lists that hold a blocking literal (D16).
 | Loops as Horn clauses, invariants by closed forms and intervals, each checked | [ADR-361](/docs/specification/adr/adr-361.html) | built for whole numbers, more strategies to come (D5 there) |
 | The solver's inner loops measured in Nikaia against Rust | D8 step 1 | measured, the gaps found are in the lowering of indexes ([solver workload](/docs/solver-workload.html), section 8) |
 | Reference solver moved from Rust into Nikaia | D8 step 2 | done |
-| `u32` variables, sparse rows, big numbers, theory interface | D8 step 3, D10-D12 | not built |
-| CDCL(T) skeleton, simplex, fast paths | D8 step 5, D12 | not built |
-| Cuts, local search, strategy layer | D8 step 6, D14 | not built |
+| `u32` variables, sparse rows, theory interface | D8 step 3, D10, D12 | built; numbers are `i64` kept small, and a step that would leave them answers *unknown* (D11) |
+| Big numbers where a value outgrows `i64` | D11 | not built |
+| CDCL(T) skeleton, simplex, fast paths | D8 step 5, D12 | built, measured; not yet asked by the compiler ([#1285](https://github.com/Nikaia-Foundation/Nikaia/issues/1285)) |
+| Cuts, local search, strategy layer | D8 step 6, D14 | built, being tuned |
 | E-graph, combination, arrays, bit-vectors | D13 | decided, not built |
 | Parallel search within one question | D8 step 7, D18 | not built |
 
@@ -168,23 +174,23 @@ and the compiler uses it only after checking it like one of its own
 
 <figure class="nkd">
 <svg viewBox="0 0 760 460" role="img" aria-labelledby="nkd-solver-title">
-<title id="nkd-solver-title">The solver as decided: a strategy layer above a CDCL(T) skeleton, which drives fast paths, linear arithmetic and an e-graph; arrays and bit-vectors sit behind the e-graph. Today the reference solver, Fourier-Motzkin with case splits written in Nikaia, is built; the rest is decided and not yet built.</title>
+<title id="nkd-solver-title">The solver as decided: a strategy layer above a CDCL(T) skeleton, which drives fast paths, linear arithmetic and an e-graph; arrays and bit-vectors sit behind the e-graph. Built are the reference solver, Fourier-Motzkin with case splits written in Nikaia, which the compiler asks today, and the strategy layer, the CDCL(T) skeleton, the fast paths and the simplex with cuts of the new engine; the e-graph, arrays and bit-vectors are decided and not yet built.</title>
 <g class="vi dash"><rect class="box" x="20" y="18" width="26" height="14" rx="3"/></g>
 <text class="l" x="54" y="30">decided, not yet built</text>
 <g class="gr"><rect class="box" x="20" y="42" width="26" height="14" rx="3"/></g>
 <text class="l" x="54" y="54">built</text>
-<g class="am dash"><rect class="box" x="230" y="16" width="300" height="58" rx="10"/>
+<g class="am"><rect class="box" x="230" y="16" width="300" height="58" rx="10"/>
 <text class="t" x="250" y="42">strategy layer · D14</text>
 <text class="m" x="250" y="62">picks engines, counts effort</text></g>
-<g class="vi dash glow"><rect class="box" x="150" y="110" width="460" height="72" rx="10"/>
+<g class="vi glow"><rect class="box" x="150" y="110" width="460" height="72" rx="10"/>
 <text class="t" x="170" y="136">CDCL(T) skeleton · D12</text>
 <text class="m" x="170" y="156">decisions, propagation, conflict analysis,</text>
 <text class="m" x="170" y="173">backjumping, restarts, learned clauses</text></g>
-<g class="cy dash"><rect class="box" x="20" y="230" width="220" height="76" rx="10"/>
+<g class="cy"><rect class="box" x="20" y="230" width="220" height="76" rx="10"/>
 <text class="t" x="36" y="256">fast paths · D12</text>
 <text class="m" x="36" y="276">intervals, differences,</text>
 <text class="m" x="36" y="293">no general search</text></g>
-<g class="cy dash"><rect class="box" x="270" y="230" width="220" height="76" rx="10"/>
+<g class="cy"><rect class="box" x="270" y="230" width="220" height="76" rx="10"/>
 <text class="t" x="286" y="256">linear arithmetic</text>
 <text class="m" x="286" y="276">simplex over the</text>
 <text class="m" x="286" y="293">integers, cuts · D5, D11</text></g>
@@ -199,7 +205,7 @@ and the compiler uses it only after checking it like one of its own
 <text class="t" x="581" y="396">bit-vectors</text>
 <text class="m" x="581" y="416">blasted into clauses</text></g>
 <g class="gr glow"><rect class="box" x="20" y="360" width="340" height="80" rx="10"/>
-<text class="t" x="36" y="386">today: reference solver</text>
+<text class="t" x="36" y="386">asked today: reference solver</text>
 <text class="m" x="36" y="408">Fourier-Motzkin with case splits,</text>
 <text class="m" x="36" y="425">written in Nikaia</text></g>
 <g class="am"><path class="flow" d="M380 74 V102"/><polygon class="head" points="375,102 385,102 380,110"/>

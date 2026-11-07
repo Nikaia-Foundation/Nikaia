@@ -26,7 +26,7 @@ fn g(s: String) -> i64 throws {
     return s.len()
 }
 
-fn run(n: i64) -> i64 {
+fn run(n: i64) -> i64 throws {
     let a = g(f(n)) catch {
         match error {
             Low::Bad(k) => {
@@ -42,7 +42,7 @@ fn run(n: i64) -> i64 {
     return a
 }
 
-fn quiet(n: i64) {
+fn quiet(n: i64) throws {
     let a = g(f(n)) catch {
         println("caught")
         return

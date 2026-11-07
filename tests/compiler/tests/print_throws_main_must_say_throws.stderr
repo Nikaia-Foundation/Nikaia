@@ -1,0 +1,10 @@
+error[NK2605]: This function can fail, because `println` can fail.
+  --> tests/print_throws_main_must_say_throws.nika:4:5
+   |
+ 4 |     println("hello")
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: `println` can fail with `io::IoError`.
+   = note: A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.
+   = help: Add `throws` to `main`, or handle it at the call: `… catch { … }`.
+1 place that can fail without saying so

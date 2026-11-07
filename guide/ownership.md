@@ -29,11 +29,11 @@ struct File { name: String }
 
 impl Drop for File {
     fn drop(mut self) {
-        println(f"closing {self.name}")
+        println(f"closing {self.name}") catch { }   // a drop cannot fail
     }
 }
 
-fn main() {
+fn main() throws {
     let log = File { name: "log.txt" }
     if log.name != "" {
         let tmp = File { name: "tmp.txt" }
@@ -65,11 +65,11 @@ call nor in the declaration.
 ```nika
 struct Person { name: String, age: int }
 
-fn greet(p: Person) {
+fn greet(p: Person) throws {
     println(f"Hello, {p.name}")
 }
 
-fn main() {
+fn main() throws {
     let ada = Person { name: "Ada", age: 36 }
     greet(ada)
     greet(ada)
@@ -101,7 +101,7 @@ fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
-fn main() {
+fn main() throws {
     let ada = Person { name: "Ada", age: 36 }
     let mut team: Vec[Person] = []
     enrol(team, ada)
@@ -132,7 +132,7 @@ fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
-fn main() {
+fn main() throws {
     let ada = Person { name: "Ada", age: 36 }
     let mut team: Vec[Person] = []
     enrol(team, ada.clone())        // a copy: `ada` is used again below
@@ -165,7 +165,7 @@ fn add_guest(mut names: Vec[String]) {
     names.push("Grace")
 }
 
-fn main() {
+fn main() throws {
     let mut names: Vec[String] = ["Ada"]
     add_guest(names)
     println(names.len())
@@ -192,7 +192,7 @@ fn birthday(mut people: Vec[Person]) {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut people: Vec[Person] = [Person { name: "Ada", age: 36 }, Person { name: "Alan", age: 41 }]
     birthday(people)
     for p in people {
@@ -229,7 +229,7 @@ fn letters(text: String) -> int {
     return text.len()
 }
 
-fn main() {
+fn main() throws {
     let report = "nightly report".to_uppercase()
     let w = async words(report)      // the task reads `report`
     let n = letters(report)          // runs beside the task
@@ -259,7 +259,7 @@ fn badge_for(name: String) -> Badge {
     return Badge { owner: name }
 }
 
-fn main() {
+fn main() throws {
     let name = "grace".to_uppercase()
     let b = badge_for(name)
     println(b.owner)
@@ -287,7 +287,7 @@ it, and the struct stays whole:
 ```nika
 struct Config { name: String, retries: int }
 
-fn main() {
+fn main() throws {
     let config = Config { name: "server", retries: 3 }
     let name = config.name
     println(f"{name} retries {config.retries} times")
@@ -311,7 +311,7 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let x = "a long line".to_uppercase()
     let mut y = "short".to_uppercase()
     let r = longest(x, y)
@@ -346,7 +346,7 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let x = "a long line".to_uppercase()
     let mut y = "short".to_uppercase()
     let r = longest(x, y)
@@ -384,7 +384,7 @@ fn words_of(path: String) -> Vec[String] {
     return words
 }
 
-fn main() {
+fn main() throws {
     let ws = words_of("notes.txt")
     println(ws.len())
     println(ws[1])
@@ -474,7 +474,7 @@ fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
-fn main() {
+fn main() throws {
     let people: Vec[Person] = [Person { name: "Ada", age: 36 }]
     let mut team: Vec[Person] = []
     for p in people {
@@ -509,7 +509,7 @@ fn enrol(mut team: Vec[Person], keep p: Person) {
     team.push(p)
 }
 
-fn main() {
+fn main() throws {
     let people: Vec[Person] = [Person { name: "Ada", age: 36 }, Person { name: "Bob", age: 41 }]
     let mut team: Vec[Person] = []
     for p in people.drain() {
@@ -640,7 +640,7 @@ impl Cart {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut cart = Cart { items: [] }
     cart.add(Item { name: "pen", price: 3 })
     cart.add(Item { name: "ink", price: 9 })
@@ -686,7 +686,7 @@ impl Cart {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut cart = Cart { items: [] }
     cart.add(Item { name: "pen", price: 3 })
     println(cart.total())
@@ -738,7 +738,7 @@ fn longest(a: String, b: String) -> String from a | b {
     return b
 }
 
-fn main() {
+fn main() throws {
     println(first_word("hello world"))
     println(longest("ab", "abc"))
 }

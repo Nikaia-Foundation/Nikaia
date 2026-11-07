@@ -19,7 +19,7 @@ fn longest(a: String, b: String) -> String {
     return t
 }
 
-fn main() {
+fn main() throws {
     let x = f"abc{1}"
     let y = f"de{2}"
     let r = longest(x, y)

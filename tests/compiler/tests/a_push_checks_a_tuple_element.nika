@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut v: Vec[(i64, String)] = []
     v.push(("a", 1))
     println(v.len())

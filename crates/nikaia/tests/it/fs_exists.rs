@@ -90,7 +90,7 @@ fn exists_says_whether_a_name_is_there() {
 fn exists_out_of_its_root_is_refused() {
     let source = "use std::fs\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let there = fs::exists(\"../program.rs\", fs::Root::Dir(\"tree\")) catch {\n\
                   \x20       println(\"refused\")\n\
                   \x20       return\n\

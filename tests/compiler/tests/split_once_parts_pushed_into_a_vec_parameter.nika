@@ -6,7 +6,7 @@ fn parts(s: String, mut v: Vec[String]) {
     v.push(b)
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = []
     parts(f"k={1}", v)
     parts("x=y", v)

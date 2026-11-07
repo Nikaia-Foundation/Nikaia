@@ -43,7 +43,7 @@ fn lowered(source: &str) -> String {
 #[test]
 fn the_pages_two_forms_parse() {
     parse_to_ast(&format!(
-        "{DECLARED}fn main() {{ let id = unsafe {{ getpid() }}\n    println(f\"{{id}}\") }}\n"
+        "{DECLARED}fn main() throws {{ let id = unsafe {{ getpid() }}\n    println(f\"{{id}}\") }}\n"
     ))
     .expect("both forms parse");
 }
@@ -114,7 +114,7 @@ fn a_foreign_call_outside_unsafe_is_refused() {
 
     // …and inside one, nothing is said: the block makes no other rule.
     let fine = findings(&format!(
-        "{DECLARED}fn main() {{ let id = unsafe {{ getpid() }}\n    println(f\"{{id}}\") }}\n"
+        "{DECLARED}fn main() throws {{ let id = unsafe {{ getpid() }}\n    println(f\"{{id}}\") }}\n"
     ));
     assert!(fine.is_empty(), "{fine:#?}");
 }
@@ -128,7 +128,7 @@ fn a_foreign_call_outside_unsafe_is_refused() {
 fn an_ordinary_call_is_not_this_refusal() {
     let refused = findings(
         "fn helper() -> i32 { return 1 }\n\
-         fn main() { let n = helper()\n    println(f\"{n}\") }\n",
+         fn main() throws { let n = helper()\n    println(f\"{n}\") }\n",
     );
     assert!(!refused.iter().any(|f| f.code == "NK1143"), "{refused:#?}");
 }
@@ -138,7 +138,7 @@ fn an_ordinary_call_is_not_this_refusal() {
 #[test]
 fn it_lowers_to_rusts_own_extern_and_unsafe() {
     let rust = lowered(&format!(
-        "{DECLARED}fn main() {{ let id = unsafe {{ getpid() }}\n    println(f\"{{id}}\") }}\n"
+        "{DECLARED}fn main() throws {{ let id = unsafe {{ getpid() }}\n    println(f\"{{id}}\") }}\n"
     ));
     assert!(rust.contains("extern \"C\" {"), "{rust}");
     assert!(rust.contains("fn getpid() -> i32;"), "{rust}");

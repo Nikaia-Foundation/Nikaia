@@ -9,7 +9,7 @@ fn sum(xs: Vec[i64]) -> i64 {
     return s
 }
 
-fn main() {
+fn main() throws {
     let overlap = 3
     println(f"{overlap}")
     let r = overlap {

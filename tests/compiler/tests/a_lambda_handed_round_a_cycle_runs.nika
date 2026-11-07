@@ -11,4 +11,4 @@ fn ping(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync {
 
 fn pong(n: i64, known: fn(ref String) -> i64? sync) -> i64 sync { return ping(n, known) }
 
-fn main() { println(f"{ping(2, fn(_name) { null })}") }
+fn main() throws { println(f"{ping(2, fn(_name) { null })}") }

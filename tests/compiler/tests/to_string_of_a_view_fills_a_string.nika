@@ -14,7 +14,7 @@ fn copied(ws: ref Vec[String]) -> i64 {
     return v.len()
 }
 
-fn main() {
+fn main() throws {
     let abc = "abc"
     let d = "d"
     let words: Vec[String] = [abc.to_string(), d.to_string()]

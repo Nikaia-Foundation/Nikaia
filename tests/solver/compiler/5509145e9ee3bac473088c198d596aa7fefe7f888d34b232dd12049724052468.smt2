@@ -1,0 +1,6 @@
+(set-logic QF_LIA)
+(declare-const v0 Int)
+(assert (not (<= 0 v0)))
+(assert (not (= v0 (- (- 9223372036854775807) 1))))
+(assert (not (<= (- 4611686018427387904) v0)))
+(check-sat)

@@ -1,0 +1,17 @@
+error[NK2203]: `update_all` takes a lock, but you're already holding one here.
+  --> tests/locks_a_door_over_two_inside_a_door_is_nk2203.nika:8:9
+   |
+ 8 |         update_all(b, c) fn(mut p, mut q) {
+   |         ^^^^^^^^^^ takes a second lock
+   |
+   = note: This block runs while a lock is held, so taking a second lock inside it can deadlock.
+   = help: Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.
+error[NK2203]: `access_all` takes a lock, but you're already holding one here.
+   --> tests/locks_a_door_over_two_inside_a_door_is_nk2203.nika:14:9
+    |
+ 14 |         access_all(a, b) fn(p, q) { let r = p + q }
+    |         ^^^^^^^^^^ takes a second lock
+    |
+    = note: This block runs while a lock is held, so taking a second lock inside it can deadlock.
+    = help: Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.
+2 mistakes with a lock

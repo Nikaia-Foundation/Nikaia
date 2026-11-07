@@ -14,7 +14,7 @@ fn control() throws {
     println(f"{a.len()} {b.len()}")
 }
 
-fn foreign_against_foreign() {
+fn foreign_against_foreign() throws {
     let first = hyper_shim::serve_once(18080)
     let second = hyper_shim::serve_once(18081)
     println(f"{first} {second}")

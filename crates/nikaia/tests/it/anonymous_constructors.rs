@@ -42,7 +42,7 @@ fn refusals(source: &str) -> Vec<nikaia::check::Finding> {
 #[test]
 fn stds_types_are_called_like_a_constructor() {
     let rust = lowered(
-        "use std::collections\n\nfn main() {\n\
+        "use std::collections\n\nfn main() throws {\n\
          \x20   let mut xs = Vec()\n\
          \x20   let s = String()\n\
          \x20   let m = collections::HashMap()\n\
@@ -72,7 +72,7 @@ fn stds_types_are_called_like_a_constructor() {
 fn a_constructed_vec_keeps_its_element_type() {
     let parsed = parse_to_ast(
         "struct S { xs: Vec[i64] }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs = Vec()\n\
          \x20   let s = S { xs: xs }\n\
          \x20   println(f\"{s.xs.len()}\")\n\
@@ -93,7 +93,7 @@ fn a_constructed_vec_keeps_its_element_type() {
 /// the whole of what D2 evens out.
 #[test]
 fn new_is_refused_at_a_call() {
-    let found = refusals("fn main() { let xs = Vec::new()\nprintln(f\"{xs.len()}\") }");
+    let found = refusals("fn main() throws { let xs = Vec::new()\nprintln(f\"{xs.len()}\") }");
     assert_eq!(found.len(), 1, "{found:#?}");
     let help = found[0].help.as_deref().expect("a way out");
     assert!(help.contains("`Vec(…)`"), "{help}");
@@ -109,7 +109,7 @@ fn new_is_refused_as_a_value_and_the_bare_name_lowers() {
             "struct S {{ n: i64 }}\n\
              impl S {{ pub fn(n: i64) -> S {{ return S {{ n: n }} }} }}\n\
              fn take(f: fn(i64) -> S) -> i64 {{ return f(1).n }}\n\
-             fn main() {{ println(f\"{{take({ctor})}}\") }}\n"
+             fn main() throws {{ println(f\"{{take({ctor})}}\") }}\n"
         )
     };
     assert_eq!(refusals(&source("S::new")).len(), 1);
@@ -159,7 +159,7 @@ fn the_other_three_collections_are_built() {
     // value, which is issue #169's *a method's key of a number type*.
     let source = "use std::collections\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let mut seen = collections::HashSet()\n\
                   \x20   seen.insert(\"a\")\n\
                   \x20   seen.insert(\"a\")\n\
@@ -206,7 +206,7 @@ fn a_struct_without_a_constructor_is_not_called() {
                   \x20   text: String,\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let e = NotANumber(\"x\")\n\
                   \x20   println(e.text)\n\
                   }\n";

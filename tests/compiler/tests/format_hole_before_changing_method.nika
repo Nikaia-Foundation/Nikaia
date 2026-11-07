@@ -14,7 +14,7 @@ impl Em {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut e = Em { name: "a", n: 0 }
     println(e.both())
 }

@@ -712,13 +712,13 @@ impl EmitState {
                             walk.async_handles = collections::BTreeMap::new();
                             if pausing == "" && inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
                             let name = emit_async_group_name(group);
-                            if throws_ { emit_async_channel_holds_a_crash(&channel, Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64))?; }
+                            let grouped = throws_ && self.emit_async_tasks_channel(&channel) == channel;
                             if pausing != "" {
-                                if throws_ { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, channel, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
+                                if grouped { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, channel, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
                                 out.append(&inner);
                                 out.push(")()).await }");
                             } else {
-                                if throws_ { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
+                                if grouped { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
                                 out.append(&inner);
                                 out.push(") }");
                             }

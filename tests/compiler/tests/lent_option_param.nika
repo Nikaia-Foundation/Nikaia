@@ -27,7 +27,7 @@ fn through(z: ref Zone?) -> String {
     return label(z)
 }
 
-fn main() {
+fn main() throws {
     let z = Zone { name: "a" }
     println(f"{named(z)} {label(z)} {handed_on(z)}")
     let o: Zone? = Zone { name: "b" }

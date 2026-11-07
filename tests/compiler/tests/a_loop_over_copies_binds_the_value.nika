@@ -14,7 +14,7 @@ fn count(points: ref Vec[P]) -> i64 sync {
     return m.len()
 }
 
-fn main() {
+fn main() throws {
     let points: Vec[P] = [P { x: 1, y: 2 }, P { x: 3, y: 4 }]
     println(f"{count(points)} {points[1].y}")
 }

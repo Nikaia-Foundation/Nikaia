@@ -10,7 +10,7 @@ fn one() -> f32 { return 1.5 }
 
 fn neg() -> f32 { return -(0.25 + 0.5) }
 
-fn main() {
+fn main() throws {
     let y: f32 = 0.5
     let s = S { a: 2.5 }
     let mut v: Vec[f32] = [1.0, 2.25]

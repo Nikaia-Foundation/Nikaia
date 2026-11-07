@@ -24,7 +24,7 @@ impl Seen {
     }
 }
 
-fn main() {
+fn main() throws {
     let s = f"a b a{1}"
     let mut x = Seen { m: collections::HashMap() }
     let mut y = Seen { m: collections::HashMap() }

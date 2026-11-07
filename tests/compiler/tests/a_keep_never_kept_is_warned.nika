@@ -4,7 +4,7 @@ fn look(keep s: String) -> i64 {
 	s.len() as i64
 }
 
-fn main() {
+fn main() throws {
 	let w = "abc"
 	println(f"{look(w)}")
 }

@@ -5,7 +5,7 @@
 
 use std::time
 
-fn slow() -> i64 {
+fn slow() -> i64 throws {
 	time::sleep(500.millis())
 	println("never printed")
 	return 7
@@ -15,7 +15,7 @@ fn other() -> i64 {
 	return 1
 }
 
-fn main() {
+fn main() throws {
 	let a = async(within: 20.millis()) slow() catch {
 		println(f"fallback: {error}")
 		0

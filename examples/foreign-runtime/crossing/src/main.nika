@@ -14,7 +14,7 @@
 // What decides it is the crate's description in `contracts/`: `LocalHandle`
 // may not cross a thread, and `across_a_thread` starts one.
 
-fn main() {
+fn main() throws {
     let handle = hyper_shim::local_handle("not Send")
     let crossed = hyper_shim::across_a_thread(handle)
     println(f"crossed: {crossed}")

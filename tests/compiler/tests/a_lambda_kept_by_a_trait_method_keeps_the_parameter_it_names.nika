@@ -10,7 +10,7 @@ impl H for Keep {
 fn hand[T: H](mut h: T, s: String) {
     h.take(fn(x) { x + s.len() })
 }
-fn main() {
+fn main() throws {
     hand(Keep { held: [] }, "ab")
     println("ok")
 }

@@ -23,7 +23,7 @@ grammar Escape {
 	rule Hex -> i64 = x:any if(is_hex(x)) -> { hex_value(x) }
 }
 
-fn main() {
+fn main() throws {
 	for t in ["\\u0041", "\\u00e9", "\\uD800"] {
 		let b = Bytes(t.bytes().collect())
 		let r = Escape::top(b) catch {

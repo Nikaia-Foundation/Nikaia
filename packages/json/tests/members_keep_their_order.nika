@@ -33,7 +33,7 @@ fn show(v: json::Value) -> String {
     }
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
     let v = json::parse(text) catch {
         println(f"error {error.line}:{error.column} {error.path}: {error.message}")
         return
@@ -41,7 +41,7 @@ fn line(text: String) {
     println(show(v))
 }
 
-fn main() {
+fn main() throws {
     line("{\"z\": 1, \"a\": 2, \"m\": {\"y\": 0, \"b\": 1}}")
     line("{\"a\": 1, \"a\": 2}")
 }

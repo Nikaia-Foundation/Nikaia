@@ -719,7 +719,7 @@ fn pick(rest: ref String) -> String {
     return inner
 }
 
-fn main() {
+fn main() throws {
     println(pick(\"abc\"))
     println(pick(\"ax\"))
     println(pick(\"zzz\"))
@@ -757,7 +757,7 @@ fn a_copy_of_an_untyped_view_keeps_nothing() {
     return out
 }
 
-fn main() {
+fn main() throws {
     let p = pieces(\"a, b,c\")
     println(f\"{p.len()} {p[2]}\")
 }
@@ -782,7 +782,7 @@ fn a_kept_buffer_assigned_again_is_kept_again() {
     return f\"{views[0]} {views[1]}\"
 }
 
-fn main() {
+fn main() throws {
     println(first_then(\"new\"))
 }
 ";
@@ -803,7 +803,7 @@ fn word(n: i64) -> String {
     return f\"w{n}\"
 }
 
-fn main() {
+fn main() throws {
     let mut l = L { from: null }
     for i in 0..<2 {
         if i == 1 {

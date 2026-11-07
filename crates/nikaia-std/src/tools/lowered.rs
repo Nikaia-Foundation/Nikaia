@@ -1677,6 +1677,14 @@ mod maps_lowered {
 #[allow(unused_imports)]
 pub use maps_lowered::*;
 
+mod migrate_print_throws_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/migrate_print_throws.rs");
+}
+#[allow(unused_imports)]
+pub use migrate_print_throws_lowered::*;
+
 mod migrate_views3_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1716,6 +1724,14 @@ mod order_lowered {
 }
 #[allow(unused_imports)]
 pub use order_lowered::*;
+
+mod panics_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/panics.rs");
+}
+#[allow(unused_imports)]
+pub use panics_lowered::*;
 
 mod parse_errors_lowered {
     #[allow(unused_imports)]
@@ -2688,7 +2704,7 @@ pub mod check_references {
 }
 pub mod check_refusals {
     #[allow(unused_imports)]
-    pub use super::{left_out_text};
+    pub use super::{drop_help, left_out_text};
 }
 pub mod check_reports {
     #[allow(unused_imports)]
@@ -2761,7 +2777,7 @@ pub mod check_with {
 }
 pub mod check_words {
     #[allow(unused_imports)]
-    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, not_promised_note, is_a_lookup, boxed_member, articles};
+    pub use super::{reserved_elsewhere, nearest_name, with_article, article, counted, names_listed, indented_text, brace_groups, collapsed_doubled_braces, not_promised_note, is_a_lookup, boxed_member, articles};
 }
 pub mod claim_names {
     #[allow(unused_imports)]
@@ -2932,7 +2948,10 @@ pub mod emit_state {
     pub use super::{EmitPair, EmitKeptCall, EmitWorld, EmitState, EmitWalk};
 }
 pub mod emit_stmt {}
-pub mod emit_sums {}
+pub mod emit_sums {
+    #[allow(unused_imports)]
+    pub use super::{emit_sums_written};
+}
 pub mod emit_tables {
     #[allow(unused_imports)]
     pub use super::{emit_tables_names_outside, emit_tables_names_borrowing, emit_tables_borrowing_structs_beside, emit_tables_view_slots, EmitTablesItems, emit_tables_items, emit_tables_structs_beside, emit_tables_declared_errors, emit_tables_tethered, emit_tables_read_view_slots, emit_tables_described_maps, emit_tables_package_borrowing};
@@ -3077,6 +3096,10 @@ pub mod maps {
     #[allow(unused_imports)]
     pub use super::{MpHeld, MpShape, MpFnMaps, mp_analyse};
 }
+pub mod migrate_print_throws {
+    #[allow(unused_imports)]
+    pub use super::{migrate_print_throws_exports, migrate_print_throws_nika, migrate_print_throws_lambdas, migrate_print_throws_markdown_lambdas, migrate_print_throws_markdown};
+}
 pub mod migrate_views3 {
     #[allow(unused_imports)]
     pub use super::{migrate_views3_unwritten, migrate_views3_lent, migrate_views3_selves, migrate_views3_code, migrate_views3_nika, migrate_views3_markdown, migrate_views3_keeps};
@@ -3095,7 +3118,11 @@ pub mod node_numbers {
 }
 pub mod order {
     #[allow(unused_imports)]
-    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, diverts_within, overlap_report};
+    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, accounted_beside, OneCall, diverts_within, overlap_report};
+}
+pub mod panics {
+    #[allow(unused_imports)]
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, panics_worth_proving};
 }
 pub mod parse_errors {
     #[allow(unused_imports)]
@@ -3163,7 +3190,7 @@ pub mod project_write {
 }
 pub mod proofs_answers {
     #[allow(unused_imports)]
-    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
+    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]
@@ -3380,11 +3407,11 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, written_root, Reason, Place, render, MapPlan, trusted_maps};
+    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, Place, render, MapPlan, trusted_maps};
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, lent_mut, unlent_each, parse, split_args, a_view_of, Provenance, Sync, Lock, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
+    pub use super::{Ty, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, lent_mut, unlent_each, parse, split_args, a_view_of, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, bind, substitute, qualify, renamed, MethodIndex, method_index, method_keys};
 }
 pub mod type_rules {
     #[allow(unused_imports)]

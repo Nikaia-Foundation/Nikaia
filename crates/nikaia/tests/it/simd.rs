@@ -67,7 +67,7 @@ fn tool(name: &str, command: &str, source: &str, options: &[&str]) -> (String, S
 /// Every operation of D3 and D5 once.
 const EVERY_OPERATION: &str = r#"use std::simd
 
-fn main() {
+fn main() throws {
     let b = Bytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33])
     let x: simd::Fixed[u64, 2] = simd::Fixed::from([7, 9])
     let m: simd::Fixed[u64, 2] = simd::splat(0xFF)
@@ -175,7 +175,7 @@ fn each_code() {
 
 const PAST_THE_END: &str = r#"use std::simd
 
-fn main() {
+fn main() throws {
     let b = Bytes([1, 2, 3, 4, 5, 6, 7, 8])
     let v: simd::Fixed[u16, 4] = simd::load(b, 1)
     println(f"{v.lane(0)}")
@@ -212,7 +212,7 @@ fn f(b: ref Bytes, at: i64) -> i64 {
     return u.lane(1) as i64
 }
 
-fn main() {
+fn main() throws {
     println(f"{f(Bytes([1, 2]), 0)}")
 }
 "#;
@@ -245,7 +245,7 @@ fn a_proved_load_has_no_check() {
 /// lane is found at every width (`pmovmskb` at both CPU levels).
 const SPLAT_A_BYTE: &str = r#"use std::simd
 
-fn main() {
+fn main() throws {
     let mut v: Vec[u8] = []
     for i in 0..<48 {
         if i == 4 || i == 37 { v.push(';') } else { v.push('a') }

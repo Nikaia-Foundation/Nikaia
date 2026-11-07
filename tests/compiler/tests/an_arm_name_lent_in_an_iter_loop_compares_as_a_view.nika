@@ -5,7 +5,7 @@ fn name() -> String {
     return f"{1}y"
 }
 
-fn main() {
+fn main() throws {
     let a: Vec[(String, String)] = [("a", "x")]
     let b: Vec[(String, String?)] = [("a", "y"), ("c", "x"), ("b", null)]
     for written in b.iter() {

@@ -6,6 +6,6 @@ fn first(s: String) -> String {
     return rest
 }
 
-fn main() {
+fn main() throws {
     println(first("(sat) "))
 }

@@ -30,7 +30,7 @@ fn direct(returned: ref Expr?) -> bool {
     return uses(returned ?? return false)
 }
 
-fn main() {
+fn main() throws {
     let e = Expr { name: "a" }
     let some: Expr? = e
     println(through_continue(some))

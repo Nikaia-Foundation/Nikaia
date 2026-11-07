@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let pairs: Vec[(i64, i64)] = [(1, 2), (3, 4)]
     for mut (a, b) in pairs.drain() {
         a += 10

@@ -195,7 +195,7 @@ impl Scanner {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut s = Scanner { c: ['a', 'a', 'x'], at: 0 }
     println(f\"{s.pair()} {s.after_step()}\")
 }
@@ -273,7 +273,7 @@ fn total(p: Piece, b: Vec[i64]) -> i64 {
     return sum
 }
 
-fn main() {
+fn main() throws {
     let b = [1, 2, 3, 4]
     let p = Piece { start: 1, end: 3 }
     println(f\"{total(p, b)}\")

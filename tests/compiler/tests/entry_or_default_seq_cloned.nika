@@ -6,7 +6,7 @@ struct Tally {
     label: String = "none",
 }
 
-fn main() {
+fn main() throws {
     // The probe of #1082.
     let mut m: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     m.entry(["a"].join("")).or_default().insert(["x"].join(""))

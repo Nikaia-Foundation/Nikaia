@@ -24,7 +24,7 @@ impl Facts {
     }
 }
 
-fn main() {
+fn main() throws {
     let mut values: collections::BTreeMap[i64, (String, String)] = collections::BTreeMap()
     values.insert(1, ("a", "b"))
     let mut counted: collections::BTreeMap[i64, (String, i64)] = collections::BTreeMap()

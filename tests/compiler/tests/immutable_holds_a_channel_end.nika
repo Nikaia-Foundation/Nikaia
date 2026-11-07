@@ -2,7 +2,7 @@
 
 use std::channel
 
-fn main() {
+fn main() throws {
 	let (tx, _rx) = channel::bounded[i64](4)
 	immutable t = tx
 	println("bound")

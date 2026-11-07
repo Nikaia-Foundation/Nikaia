@@ -13,7 +13,7 @@ fn left_of(p: Pair) -> Vec[i64] {
     return p.left
 }
 
-fn main() {
+fn main() throws {
     let xs = [[1, 2], [3]]
     let f = first(xs)
     println(f"{f:?}")

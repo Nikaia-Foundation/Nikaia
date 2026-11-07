@@ -16,7 +16,7 @@ fn emphasised(name: String) -> String {
     return built
 }
 
-fn main() {
+fn main() throws {
     println(emphasised("a<b"))
     println(emphasised("Ada"))
     println(counted(html::escape("a&b")))

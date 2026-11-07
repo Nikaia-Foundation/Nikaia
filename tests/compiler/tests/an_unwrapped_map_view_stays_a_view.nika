@@ -50,7 +50,7 @@ fn moving_bound(m: ref collections::BTreeMap[String, D], k: String) -> ref D? {
 	return d
 }
 
-fn main() {
+fn main() throws {
 	let mut m = collections::BTreeMap()
 	m.insert(f"a{1}", C { n: 5 })
 	let hit = lookup(m, f"a{1}")

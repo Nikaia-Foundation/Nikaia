@@ -10,7 +10,7 @@ fn g(e: E) -> Vec[String] {
     return r
 }
 
-fn main() {
+fn main() throws {
     println(g(E::A(["a", "b"])).len())
     println(g(E::N).len())
 }

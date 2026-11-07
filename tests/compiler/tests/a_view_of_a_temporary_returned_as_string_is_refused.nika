@@ -10,6 +10,6 @@ fn first(n: i64) -> String {
     return make(n).text.trim()
 }
 
-fn main() {
+fn main() throws {
     println(first(1))
 }

@@ -1,6 +1,6 @@
 // A `Bytes` has `iter`, `starts_with` and `ends_with` (#877), as converted
 // Rust's `.as_bytes().iter()` and `.starts_with(b"..")` need.
-fn main() {
+fn main() throws {
     let s = "hello"
     let mut sum = 0
     for b in s.bytes.iter() {

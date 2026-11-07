@@ -20,7 +20,7 @@ impl Pick for First {
     }
 }
 
-fn main() {
+fn main() throws {
     let f = First { n: "first" }
     let t: String = "  hello  "
     println(f"[{f.pick(t, "x")}]")

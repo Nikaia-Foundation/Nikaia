@@ -1,0 +1,15 @@
+// Part I 6.4, ADR-392, #1360: a `println` in a `drop` that does not catch it
+// is `NK2605`, and the help does not tell the `drop` to say `throws`: it
+// cannot fail, so the failure is caught there or the teardown is a `Cleanup`.
+struct File { name: String }
+
+impl Drop for File {
+    fn drop(mut self) {
+        println(f"closing {self.name}")
+    }
+}
+
+fn main() throws {
+    let f = File { name: "a" }
+    println(f.name)
+}

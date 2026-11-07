@@ -20,7 +20,7 @@ fn score(lines: ref Vec[String]) -> Score {
     return Score { kinds: kinds }
 }
 
-fn main() {
+fn main() throws {
     let mut ls: Vec[String] = []
     ls.push("xa")
     let s = score(ls)

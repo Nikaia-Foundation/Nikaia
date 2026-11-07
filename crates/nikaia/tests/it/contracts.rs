@@ -941,13 +941,19 @@ fn provenance(source: &str) -> trust::Trust {
     trust::analyse(&parsed, &library)
 }
 
-/// Every source `std` has today is the operator's own, so a program that reads
-/// a file it was pointed at is trusted - and its maps may have the fast hash.
+/// A file read while the program runs is untrusted (ADR-365 D1) unless the
+/// call says `trusted: true` (D2): then the program is trusted, and its maps
+/// may have the fast hash.
 #[test]
-fn a_program_that_reads_a_file_is_trusted() {
+fn a_program_that_reads_a_file_is_trusted_where_the_read_says_so() {
     let t = provenance(
         "use std::fs\n\
          fn main() throws { let data = fs::map(\"x\", fs::Root::Anywhere) }",
+    );
+    assert_eq!(t.provenance, Provenance::Untrusted);
+    let t = provenance(
+        "use std::fs\n\
+         fn main() throws { let data = fs::map(\"x\", fs::Root::Anywhere; trusted: true) }",
     );
     assert_eq!(t.provenance, Provenance::Trusted);
     assert_eq!(t.reasons.len(), 1);

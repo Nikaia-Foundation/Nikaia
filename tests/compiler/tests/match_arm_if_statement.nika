@@ -1,6 +1,6 @@
 use std::collections
 
-fn main() {
+fn main() throws {
     let mut seen: collections::BTreeSet[i64] = collections::BTreeSet()
     let x: i64? = 3
     match x {

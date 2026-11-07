@@ -21,7 +21,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println(f"error {error.line}:{error.column}: {error.message}")
@@ -31,7 +31,7 @@ fn line(text: String) {
 	println(f"{docs.len()} [{parts.join(" | ")}]")
 }
 
-fn main() {
+fn main() throws {
 	// an empty stream holds no document
 	line("")
 	line("\n\n")

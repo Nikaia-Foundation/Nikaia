@@ -1,7 +1,7 @@
 // Two statement tasks of an `async { … }` both end before the line after it
 // (ADR-async-5 D9, #988); their values are dropped.
 
-fn work(n: i64) -> i64 {
+fn work(n: i64) -> i64 throws {
 	println(f"task {n}")
 	return n
 }
@@ -11,7 +11,7 @@ fn quiet(n: i64) -> i64 {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	let n = async {
 		async work(1)
 		async quiet(2)

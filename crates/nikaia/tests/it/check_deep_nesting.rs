@@ -40,7 +40,7 @@ fn nested_calls_check_on_the_default_stack() {
     let call = format!("{}1{}", "id(".repeat(depth), ")".repeat(depth));
     lowers(
         &format!(
-            "fn id(x: i64) -> i64 {{\n    return x\n}}\n\nfn main() {{\n    let a: i64 = {call}\n    println(f\"{{a}}\")\n}}\n"
+            "fn id(x: i64) -> i64 {{\n    return x\n}}\n\nfn main() throws {{\n    let a: i64 = {call}\n    println(f\"{{a}}\")\n}}\n"
         ),
         "calls",
     );
@@ -51,7 +51,7 @@ fn nested_lists_check_on_the_default_stack() {
     let depth = 500;
     let list = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
     lowers(
-        &format!("fn main() {{\n    let a = {list}\n    println(f\"{{a.len()}}\")\n}}\n"),
+        &format!("fn main() throws {{\n    let a = {list}\n    println(f\"{{a.len()}}\")\n}}\n"),
         "lists",
     );
 }
@@ -61,7 +61,7 @@ fn a_coalesce_chain_checks_on_the_default_stack() {
     let chain = "b ?? ".repeat(500);
     lowers(
         &format!(
-            "fn main() {{\n    let b: i64? = null\n    let c: i64 = {chain}3\n    println(f\"{{c}}\")\n}}\n"
+            "fn main() throws {{\n    let b: i64? = null\n    let c: i64 = {chain}3\n    println(f\"{{c}}\")\n}}\n"
         ),
         "coalesce",
     );
@@ -72,7 +72,7 @@ fn a_method_chain_checks_on_the_default_stack() {
     let chain = ".abs()".repeat(1000);
     lowers(
         &format!(
-            "fn main() {{\n    let a: i64 = 1\n    let d: i64 = a{chain}\n    println(f\"{{d}}\")\n}}\n"
+            "fn main() throws {{\n    let a: i64 = 1\n    let d: i64 = a{chain}\n    println(f\"{{d}}\")\n}}\n"
         ),
         "chain",
     );

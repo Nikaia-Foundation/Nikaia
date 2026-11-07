@@ -35,7 +35,7 @@ fn fix(mut c: C) -> i64 {
     c.shape = Shape::Node([f"s{size(shapes[0])}"])
     return kept.len() + text.len()
 }
-fn main() {
+fn main() throws {
     let mut c = C { ensures: [f"e{1}", f"e{2}"], name: f"n{1}", shape: Shape::Node([f"a{1}", f"b{2}"]) }
     let n = fix(c)
     println(f"{n} {c.ensures.len()} {c.name} {size(c.shape)}")

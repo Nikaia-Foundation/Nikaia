@@ -23,7 +23,7 @@ impl TakenWatches {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut w: Vec[Vec[u32]] = [[], [1, 2]]
 	let mut saved: Vec[Vec[u32]] = []
 	taken_element_stash(w, saved)

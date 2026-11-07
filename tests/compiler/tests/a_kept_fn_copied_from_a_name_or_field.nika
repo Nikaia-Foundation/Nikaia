@@ -2,7 +2,7 @@
 // it shares the one closure, and the place keeps its own (Part I, #1031).
 struct H { f: fn(i64) -> i64 }
 
-fn main() {
+fn main() throws {
 	let f: fn(i64) -> i64 = fn(x) { x + 5 }
 	let g = f
 	println(f(1))

@@ -17,7 +17,7 @@ fn swap(mut s: Shape, hit: bool) {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let mut s = Shape::Pair { left: "a", right: "b", id: 1 }
 	swap(s, true)
 	match s {

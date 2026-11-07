@@ -12,7 +12,7 @@ fn other() -> i64 {
 	return 1
 }
 
-fn main() {
+fn main() throws {
 	let a = async(within: 2.seconds()) quick() catch { 0 }
 	let b = other()
 	println(f"{a + b}")

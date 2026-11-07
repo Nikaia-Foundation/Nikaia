@@ -73,7 +73,7 @@ fn hand[T](x: T) -> T {
     return x
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 7
     println(f"{hand(n)}")
 }
@@ -103,7 +103,7 @@ impl Pair[T] {
     }
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 1
     let m: i64 = 2
     let p = Pair { first: n, second: m }
@@ -132,7 +132,7 @@ fn hand[T](x: T) -> T {
     return x
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 7
     let wrong: String = hand(n)
     println(wrong)
@@ -159,7 +159,7 @@ struct Pair[T] {
     second: T,
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 7
     let p = Pair { first: n, second: n }
     let wrong: String = p.first
@@ -182,7 +182,7 @@ fn shout[T](x: T) -> String {
     return x.to_uppercase()
 }
 
-fn main() {
+fn main() throws {
     println(shout("hi"))
 }
 "#,
@@ -210,7 +210,7 @@ fn count_of[T](x: T) -> i64 {
     return x.count
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 1
     println(f"{count_of(n)}")
 }
@@ -234,7 +234,7 @@ fn hand[T](x: T) -> i64 {
     return x
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 1
     println(f"{hand(n)}")
 }
@@ -258,7 +258,7 @@ fn hand[T](x: T) -> T {{
     return x
 }}
 
-fn main() {{
+fn main() throws {{
     let it = hand({argument})
     println(f"{{it}}")
 }}
@@ -289,7 +289,7 @@ impl Holder[i64] {
     }
 }
 
-fn main() {
+fn main() throws {
     let n: i64 = 21
     let h = Holder { it: n }
     println(f"{h.doubled()}")
@@ -323,7 +323,7 @@ impl Holder[T] {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { value: "hi" }
     println(h.shout())
 }
@@ -357,7 +357,7 @@ impl Holder[T] {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { value: 7 }
     println(f"{h.count()}")
 }
@@ -396,7 +396,7 @@ impl Holder[T] {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { value: 7 }
     println(f"{h.get(8, false)}")
 }
@@ -451,7 +451,7 @@ impl Holder[T] {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { value: 21 }
     println(f"{h.seen()}")
     println(f"{h.taken()}")
@@ -477,7 +477,7 @@ impl Holder[i64] {
     }
 }
 
-fn main() {
+fn main() throws {
     let h = Holder { it: 21 }
     println(h.wrong())
 }

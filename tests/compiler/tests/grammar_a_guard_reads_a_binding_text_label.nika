@@ -7,7 +7,7 @@ grammar G {
     entry rule top -> String = s:text(d:Ch+) if(s.len() > 1, "two digits") eof -> { s }
 }
 
-fn main() {
+fn main() throws {
     let r = G::top("12") catch {
         println("error")
         return

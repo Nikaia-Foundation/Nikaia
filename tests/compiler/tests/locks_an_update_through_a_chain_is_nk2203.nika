@@ -1,0 +1,23 @@
+// A lock reached through a chain of calls is refused where the chain starts
+// inside a door's block (Part III C.6, NK2203, #677): `deposit` opens
+// `update`, and `transfer` calls `deposit`.
+struct Account {
+    balance: i64,
+}
+
+fn deposit(to: SharedMut[Account], amount: i64) {
+    to.update fn(mut account) { account.balance += amount }
+}
+
+fn transfer(to: SharedMut[Account], amount: i64) {
+    deposit(to, amount)
+}
+
+fn main() {
+    let a = SharedMut(Account { balance: 100 })
+    let b = SharedMut(Account { balance: 100 })
+    a.update fn(mut from) {
+        from.balance -= 30
+        transfer(b, 30)
+    }
+}

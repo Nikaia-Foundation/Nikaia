@@ -23,7 +23,7 @@ description: >-
           <dt>What Nikaia checks</dt>
           <dd>The compiler knows which values come from outside the program. A claim about such a value, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case where the data arrives; after that line the claim is proved, and the rest of the program can rely on it. Words on the command line are checked against <code>main</code>'s preconditions before the body runs. A path from outside is opened under a directory the call names, and a name that leaves it, such as <code>../../etc/passwd</code>, is stopped at the call. A map whose keys come from the network gets a hash with a random seed, so whoever sends the keys cannot choose ones that collide.</dd>
           <dt>The limit</dt>
-          <dd>The compiler cannot know what valid data is for your program; the guard says that, and the compiler checks that there is one. Where the program vouches for a path itself, with <code>fs::Root::Anywhere</code>, the compiler takes its word, and <code>nikaia build --trust</code> lists every such place. Today standard input and a file read while the program runs still count as trusted, although the specification counts them as outside data; the build of that, with the marker <code>trusted: true</code> for a source the program vouches for, is <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/649">#649</a>.</dd>
+          <dd>The compiler cannot know what valid data is for your program; the guard says that, and the compiler checks that there is one. Where the program vouches for a path itself, with <code>fs::Root::Anywhere</code>, the compiler takes its word, and <code>nikaia build --trust</code> lists every such place. Standard input and every file read while the program runs are outside data too; a program that knows who wrote them says so where it reads them, <code>fs::read_to_string(path, root; trusted: true)</code>, and the same list names every such marker.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>
@@ -64,7 +64,7 @@ fn main() throws {
 <p>A name from outside is opened under the directory the call names. The second name leaves it, and the call refuses it:</p>
 <pre><code class="language-nika">use std::fs
 
-fn main() {
+fn main() throws {
     for name in ["a.txt", "../../etc/passwd"] {
         let text = fs::read_to_string(name, fs::Root::Dir("store")) catch {
             println(f"refused {name}: {error}")

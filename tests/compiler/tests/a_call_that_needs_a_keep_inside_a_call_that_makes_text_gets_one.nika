@@ -27,7 +27,7 @@ fn count(t: Tree) -> String {
     return f"{t.nodes.len()} {t.nodes[2].kind}"
 }
 
-fn main() {
+fn main() throws {
     let text = f"a{1}\nb{2}"
     let draft = count(parse(text))
     println(draft)

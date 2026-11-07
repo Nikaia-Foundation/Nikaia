@@ -28,7 +28,7 @@ fn handler(body: &str) -> String {
          fn both() -> i64 throws {{\n    let t = fs::read_to_string(\"x\", fs::Root::Anywhere)\n    \
          throw ConfigError::BadSyntax {{ line: t.len(), expected: \"x\" }}\n}}\n\n\
          fn again() -> i64 throws {{\n    return both() catch {{\n{body}\n    }}\n}}\n\n\
-         fn main() {{\n    let n = again() catch {{ 0 }}\n    println(f\"{{n}}\")\n}}\n"
+         fn main() throws {{\n    let n = again() catch {{ 0 }}\n    println(f\"{{n}}\")\n}}\n"
     )
 }
 

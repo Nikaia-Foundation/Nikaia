@@ -216,7 +216,7 @@ fn every_program(root: &Path) -> Vec<PathBuf> {
 fn an_ordinary_value_crosses_into_a_task() {
     let clean = crossings(
         "struct Reading { name: String, temp: f64 }\n\
-         fn report(text: String, counts: Vec[i64], r: Reading) {\n\
+         fn report(text: String, counts: Vec[i64], r: Reading) throws {\n\
              spawn fn { println(f\"{text} {counts.len()} {r.temp}\") }\n\
          }",
     );
@@ -254,7 +254,7 @@ fn a_value_whose_type_is_not_written_down_is_not_refused() {
 #[test]
 fn a_shared_crosses_into_a_task() {
     let clean = crossings(
-        "fn zaehle(counts: Shared[Vec[i64]]) {\n\
+        "fn zaehle(counts: Shared[Vec[i64]]) throws {\n\
              spawn fn { println(f\"{counts.len()}\") }\n\
          }",
     );
@@ -267,7 +267,7 @@ fn a_shared_crosses_into_a_task() {
 fn a_struct_that_holds_a_shared_crosses_into_a_task() {
     let clean = crossings(
         "struct Tally { hits: Shared[i64] }\n\
-         fn zaehle(t: Tally) {\n\
+         fn zaehle(t: Tally) throws {\n\
              spawn fn { println(f\"{t.hits}\") }\n\
          }",
     );
@@ -289,7 +289,7 @@ fn a_struct_that_holds_a_shared_crosses_into_a_task() {
 #[test]
 fn a_lock_goes_into_a_task_of_our_own() {
     let clean = crossings(
-        "fn zaehle(counter: SharedMut[i32]) {\n\
+        "fn zaehle(counter: SharedMut[i32]) throws {\n\
              spawn fn { println(f\"{counter.get()}\") }\n\
          }",
     );
@@ -361,7 +361,7 @@ fn a_lock_does_not_go_into_code_nothing_describes() {
     // added. Without this half the refusal above would read as the old rule.
     assert!(
         crossings(
-            "fn zaehle(counter: SharedMut[i32]) {\n\
+            "fn zaehle(counter: SharedMut[i32]) throws {\n\
              spawn fn { println(f\"{counter.get()}\") }\n\
          }",
         )
@@ -413,7 +413,7 @@ fn a_shared_does_not_go_into_a_call_this_compiler_cannot_see() {
     // is about a signature outside this language and nothing else.
     assert!(
         crossings(
-            "fn ueber(handle: Shared[String]) {\n\
+            "fn ueber(handle: Shared[String]) throws {\n\
              spawn fn { println(f\"{handle}\") }\n\
          }",
         )
@@ -455,10 +455,10 @@ fn a_call_this_compiler_can_see_is_not_a_crossing() {
 #[test]
 fn the_verdict_is_the_same_at_both_settings() {
     for source in [
-        "fn zaehle(counts: Shared[Vec[i64]]) {\n\
+        "fn zaehle(counts: Shared[Vec[i64]]) throws {\n\
              spawn fn { println(f\"{counts.len()}\") }\n\
          }",
-        "fn zaehle(counter: SharedMut[i32]) {\n\
+        "fn zaehle(counter: SharedMut[i32]) throws {\n\
              spawn fn { println(f\"{counter.get()}\") }\n\
          }",
     ] {
@@ -503,7 +503,7 @@ fn the_verdict_is_the_same_at_both_settings() {
 /// asserts the silence rather than a verdict about the lock.
 #[test]
 fn the_shared_half_of_part_ii_12_2s_counter_no_longer_refuses() {
-    let source = "fn zaehle(counter: SharedMut[i32]) {\n\
+    let source = "fn zaehle(counter: SharedMut[i32]) throws {\n\
                       counter.access(fn(a) { a })\n\
                       spawn fn { println(f\"{counter.get()}\") }\n\
                   }";
@@ -626,7 +626,7 @@ fn verdict_against_probe(source: &str) -> String {
 #[test]
 fn two_crossable_operations_still_overlap() {
     let report = verdict_against_probe(
-        "fn main() {\n\
+        "fn main() throws {\n\
              let a = probe::plain()\n\
              let b = probe::plain()\n\
              println(f\"{a} {b}\")\n\
@@ -648,7 +648,7 @@ fn two_crossable_operations_still_overlap() {
 #[test]
 fn a_pair_whose_result_is_a_shared_of_plain_data_overlaps() {
     let report = verdict_against_probe(
-        "fn main() {\n\
+        "fn main() throws {\n\
              let a = probe::counted()\n\
              let b = probe::counted()\n\
              println(f\"{a} {b}\")\n\
@@ -670,7 +670,7 @@ fn a_pair_whose_result_is_a_shared_of_plain_data_overlaps() {
 /// D4's own polarity, applied to the crossing question.
 #[test]
 fn an_operation_whose_result_nothing_permits_keeps_its_place() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                       let a = probe::opaque()\n\
                       let b = probe::opaque()\n\
                       println(f\"{a} {b}\")\n\
@@ -700,7 +700,7 @@ fn an_operation_whose_result_nothing_permits_keeps_its_place() {
 #[test]
 fn a_result_that_holds_a_lock_overlaps() {
     let report = verdict_against_probe(
-        "fn main() {\n\
+        "fn main() throws {\n\
              let a = probe::held()\n\
              let b = probe::held()\n\
              println(f\"{a} {b}\")\n\
@@ -906,7 +906,7 @@ fn the_threads_column_survives_being_written_and_read_again() {
 fn a_described_type_that_may_not_cross_is_refused_into_a_task() {
     let found = crossings_against(
         &describing("crosses = false\n"),
-        "fn ueber() {\n\
+        "fn ueber() throws {\n\
              let handle = fremd::ortsgebunden(\"nicht Send\")\n\
              spawn fn { println(f\"{handle}\") }\n\
          }",
@@ -927,7 +927,7 @@ fn a_described_type_that_may_not_cross_is_refused_into_a_task() {
     assert!(
         crossings_against(
             &describing(""),
-            "fn ueber() {\n\
+            "fn ueber() throws {\n\
                  let handle = fremd::ortsgebunden(\"nicht Send\")\n\
                  spawn fn { println(f\"{handle}\") }\n\
              }",

@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut a: Vec[i64] = []
     let p = overlap {
         a.push(1)

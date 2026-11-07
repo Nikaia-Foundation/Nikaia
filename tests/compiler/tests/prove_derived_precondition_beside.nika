@@ -4,7 +4,7 @@ use compiler_tests
 /// bound from its callers (ADR-391 D1): `src/derived_beside_caller.nika`
 /// hands `derived_take` an `n` nothing bounds, so its index keeps the check
 /// and both calls read what they are given.
-fn main() {
+fn main() throws {
 	let xs = [1, 2, 3]
 	println(f"{compiler_tests::derived_take_all(xs)}")
 	println(f"{compiler_tests::derived_take_first(xs, 2)}")

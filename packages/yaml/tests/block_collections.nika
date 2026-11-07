@@ -23,7 +23,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println("error")
@@ -33,7 +33,7 @@ fn line(text: String) {
 	println(parts.join(" | "))
 }
 
-fn main() {
+fn main() throws {
 	line("name: winnow\ntags:\n  - parser\n  - grammar\nowner:\n  login: keywan\n")
 	line("- a\n- b\n")
 	// a compact sequence or mapping as an entry (suite 3ALJ, V9D5)

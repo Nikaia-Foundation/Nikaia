@@ -113,4 +113,9 @@ together with the specification section and an example test.
 * After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. (issue-1366)
 * NK2105 for loops is decided in `hands_over_path_of` and `CheckRepeats` (`check_takes.nika`, `check_state.nika`); `revived` there also drives narrowing (ADR-382), so a new exemption needs its own set. (issue-1366)
 * `a..b` is inclusive in Nikaia (lowered `0..=b`); write `a..<b` in probes for a half-open slice. (issue-1276)
+* The prover (`prover_*.nika`) reads only the syntax tree; a checker fact reaches it only by adding a field to `ProveComptimes`, filled in `comptimes_of` (`prove.rs`, called from `check/host.rs`) and copied into `ProverState` by `prove_state`. (issue-1358)
+* `cargo test -p nikaia --lib prove::` and `--lib check::` run 0 tests; the prover is covered by the `it` tests `prove::`, `assert::`, `assume::` and by `tests/compiler` programs. (issue-1358)
+* `nikaia test --filter NAME --bless` creates no `.stderr` when none exists; `touch NAME.stderr` first, then bless. (issue-1361)
+* The LSP test programs in `tests/compiler/tests/` are already unformatted on HEAD; `fmt --check` on them proves nothing about your change. (issue-1361)
+* NK1111's doubled-brace and hole warnings are both in `unmarked_hole` (`tools/check_host.nika`), and the brace scanning helpers are in `tools/check_words.nika`. (issue-1361)
 

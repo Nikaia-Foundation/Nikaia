@@ -38,7 +38,7 @@ fn show(n: yaml::Node) -> String {
 	}
 }
 
-fn line(text: String) {
+fn line(text: String) throws {
 	let input = Bytes(text.bytes().collect())
 	let docs = yaml::parse(input) catch {
 		println(f"error {error.line}:{error.column}")
@@ -47,7 +47,7 @@ fn line(text: String) {
 	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
 	println(parts.join(" | "))
 }
-fn main() {
+fn main() throws {
 	// explicit block entries, a block scalar as key, a compact sequence as
 	// value (example 8.17)
 	line("? explicit key # Empty value\n? |\n  block key\n: - one # Explicit compact\n  - two # block value\n")

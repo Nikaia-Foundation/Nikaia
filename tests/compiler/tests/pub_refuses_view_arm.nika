@@ -9,6 +9,6 @@ pub fn plain(s: ref String, n: i64) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(plain("hi", 0))
 }

@@ -19,7 +19,7 @@ fn both[T: Same](x: T, y: T) -> bool {
     return x.same(y)
 }
 
-fn main() {
+fn main() throws {
     println(f"{both(N { v: 3 }, N { v: 3 })}")
     println(f"{both(N { v: 3 }, N { v: 4 })}")
 }

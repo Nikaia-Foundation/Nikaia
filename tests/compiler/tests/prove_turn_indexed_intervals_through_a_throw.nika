@@ -36,7 +36,7 @@ fn hex(cs: ref Vec[scalar]) -> i64 throws {
     return n
 }
 
-fn main() {
+fn main() throws {
     let cs: Vec[scalar] = ['0', '0', 'e', '9']
     let r = hex(cs) catch { 0 }
     println(f"{r}")

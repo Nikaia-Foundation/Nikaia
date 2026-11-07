@@ -430,8 +430,17 @@ impl ProjectMembersHost for Manifests {
 }
 
 impl Manifests {
-    /// A refusal of the walk, as the error it was before the move.
-    fn error(&self, thrown: nikaia_std::error::Thrown<ProjectMembersRefusal>) -> anyhow::Error {
+    /// A refusal of the walk, as the error it was before the move; a failed
+    /// write of its note is the `io::IoError` it threw (ADR-392).
+    fn error(
+        &self,
+        thrown: nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError,
+    ) -> anyhow::Error {
+        use nikaia_std::tools::__NikaiaThrows_ProjectMembersRefusal__io_IoError as Thrown;
+        let thrown = match thrown {
+            Thrown::ProjectMembersRefusal(thrown) => thrown,
+            Thrown::io_IoError(thrown) => return anyhow!("{}", thrown.split().0),
+        };
         match thrown.split().0 {
             ProjectMembersRefusal::Manifest => self
                 .failed
@@ -1741,8 +1750,9 @@ pub fn explain(
         reads,
         library: crate::contracts::std_ledger(),
     };
-    project_check::project_check_explain(&host, want.comptime, &kinds);
-    Ok(())
+    // A failed write of the report is an error (ADR-392).
+    project_check::project_check_explain(&host, want.comptime, &kinds)
+        .map_err(|error| anyhow!("{error}"))
 }
 
 /// What `project_check_explain` asks of the compiler: the reports, which stay
@@ -2529,11 +2539,10 @@ pub fn run_tests(suite: &Suite<'_>) -> Result<i32> {
                 .unwrap_or_else(|| anyhow!("{error}")));
         }
     };
-    project_tests::project_tests_report_failures(&failed);
-    Ok(project_tests::project_tests_result(
-        total as i64,
-        failed.len() as i64,
-    ))
+    // A failed write of the report is an error (ADR-392).
+    project_tests::project_tests_report_failures(&failed).map_err(|error| anyhow!("{error}"))?;
+    project_tests::project_tests_result(total as i64, failed.len() as i64)
+        .map_err(|error| anyhow!("{error}"))
 }
 
 /// What `project_tests_run` asks of the compiler: the suite, and the error of

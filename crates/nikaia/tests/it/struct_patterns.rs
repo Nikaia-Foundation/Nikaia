@@ -75,7 +75,7 @@ fn click_x(e: Event) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(f\"{where_is(Point { x: 0, y: 7 })} {where_is(Point { x: 3, y: 7 })}\")
     println(f\"{size(Shape::Circle { r: 4 })} {size(Shape::Square { side: 5 })}\")
     println(f\"{eval(Expr::Bin { op: Op::Add, l: 2, r: 3 })} {eval(Expr::Bin { op: Op::Sub, l: 9, r: 4 })} {eval(Expr::Num(8))}\")
@@ -132,7 +132,7 @@ fn size(s: Shape) -> i64 {
         Shape::Circle { r: radius } | Shape::Square { side: size } => 1,
     }
 }
-fn main() { println(f\"{size(Shape::Circle { r: 1 })}\") }
+fn main() throws { println(f\"{size(Shape::Circle { r: 1 })}\") }
 ";
     let codes: Vec<String> = findings(source).iter().map(|f| f.code.clone()).collect();
     assert!(codes.contains(&"NK1155".to_string()), "{codes:?}");
@@ -145,9 +145,9 @@ fn main() { println(f\"{size(Shape::Circle { r: 1 })}\") }
 #[test]
 fn a_pattern_that_leaves_fields_out_without_the_rest_is_refused() {
     let refused = [
-        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x: px } => px,\n    }\n}\nfn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
-        "struct Point { x: i64, y: i64 }\nenum Event { Click(Point), Key }\nfn f(e: Event) -> i64 {\n    return match e {\n        Event::Click(Point { y }) => y,\n        else => 0,\n    }\n}\nfn main() { println(f\"{f(Event::Key)}\") }\n",
-        "enum Shape { Rect { w: i64, h: i64 }, Dot }\nfn f(s: Shape) -> i64 {\n    return match s {\n        Shape::Rect { w } => w,\n        else => 0,\n    }\n}\nfn main() { println(f\"{f(Shape::Dot)}\") }\n",
+        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x: px } => px,\n    }\n}\nfn main() throws { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
+        "struct Point { x: i64, y: i64 }\nenum Event { Click(Point), Key }\nfn f(e: Event) -> i64 {\n    return match e {\n        Event::Click(Point { y }) => y,\n        else => 0,\n    }\n}\nfn main() throws { println(f\"{f(Event::Key)}\") }\n",
+        "enum Shape { Rect { w: i64, h: i64 }, Dot }\nfn f(s: Shape) -> i64 {\n    return match s {\n        Shape::Rect { w } => w,\n        else => 0,\n    }\n}\nfn main() throws { println(f\"{f(Shape::Dot)}\") }\n",
     ];
     for source in refused {
         let found = findings(source);
@@ -158,8 +158,8 @@ fn a_pattern_that_leaves_fields_out_without_the_rest_is_refused() {
         );
     }
     let accepted = [
-        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x: px, .. } => px,\n    }\n}\nfn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
-        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x, y } => x + y,\n    }\n}\nfn main() { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
+        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x: px, .. } => px,\n    }\n}\nfn main() throws { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
+        "struct Point { x: i64, y: i64 }\nfn f(p: Point) -> i64 {\n    return match p {\n        Point { x, y } => x + y,\n    }\n}\nfn main() throws { println(f\"{f(Point { x: 1, y: 2 })}\") }\n",
     ];
     for source in accepted {
         let found = findings(source);

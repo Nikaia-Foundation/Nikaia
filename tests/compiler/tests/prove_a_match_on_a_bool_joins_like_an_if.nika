@@ -36,7 +36,7 @@ fn cap(first: i64) -> i64 {
 	return cp
 }
 
-fn main() {
+fn main() throws {
 	println(f"{bump(3)} {bump(7)}")
 	println(f"{shrink(3)} {shrink(7)}")
 	println(f"{cap(2)} {cap(9)}")

@@ -4,7 +4,7 @@
 
 use std::collections
 
-fn main() {
+fn main() throws {
     let mut wide = collections::HashMap()
     wide.entry(1).or_insert(3000000000)
     wide[2] = 5

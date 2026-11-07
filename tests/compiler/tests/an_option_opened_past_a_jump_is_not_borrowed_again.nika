@@ -15,7 +15,7 @@ fn lookup_owned(opt: String?, m: ref collections::HashMap[String, i64]) -> i64 {
     return a + b + n.len()
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
     m["ab"] = 5
     let some: String? = "ab"

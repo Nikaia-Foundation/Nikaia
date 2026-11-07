@@ -24,7 +24,7 @@ fn head(xs: Vec[i64]) -> Array[i64] from xs {
 	return xs[0..<2]
 }
 
-fn main() {
+fn main() throws {
 	let b = Bag { tags: [1, 2, 3], inner: Inner { n: 4 } }
 	let t = b.tags()
 	println(t.len())

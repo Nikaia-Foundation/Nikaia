@@ -1,0 +1,6 @@
+(set-logic QF_LIA)
+(set-info :status sat)
+(declare-const v0 Int)
+(assert (<= 0 v0))
+(assert (not (and (<= 0 (* v0 10)) (<= (* v0 10) 4611686018427387904))))
+(check-sat)

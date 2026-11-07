@@ -33,7 +33,7 @@ fn hold(kind: Kind, keep names: Vec[String]) -> Bag {
     return Bag { kind: kind, names: names }
 }
 
-fn main() {
+fn main() throws {
     let r = Row { id: 1, name: "x" }
     let k = Kind::B
     let p = Point { x: 1, y: 2 }

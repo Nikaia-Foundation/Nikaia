@@ -26,7 +26,7 @@ fn events(text: String) -> Vec[Event] {
     return events
 }
 
-fn main() {
+fn main() throws {
     let text = f"one\n two \nthree {3}"
     let mut p = Parser { input: text, pos: 0 }
     let mut found: Vec[Event] = []

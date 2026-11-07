@@ -6,6 +6,6 @@ fn pick(o: i64?) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(pick(3))
 }

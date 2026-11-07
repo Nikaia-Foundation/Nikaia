@@ -250,7 +250,9 @@ impl Table {
 
 fn main() throws {
     let path = cli::args().nth(1) ?? "measurements.txt"
-    let b = fs::map(ref path, fs::Root::Anywhere) catch {
+    // The measurements are the file `brc.sh` generated: who wrote them is known,
+    // so the table takes the fast hash (ADR-365 D2).
+    let b = fs::map(ref path, fs::Root::Anywhere; trusted: true) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }

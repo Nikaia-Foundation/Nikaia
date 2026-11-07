@@ -35,7 +35,7 @@ fn schema[T](T) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(schema(User))
     println(schema(i64))
     println(schema(Address))

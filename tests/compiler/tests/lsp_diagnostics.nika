@@ -49,14 +49,14 @@ fn main() throws {
     let root = fs::scratch()
     fs::create_dir("pk/src", root; recursive: true)
     fs::write("pk/nikaia.toml", root, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
-    let fine = "fn f() -> i64 {\n    return 1\n}\n\nfn main() {\n    println(f\"{f()}\")\n}\n"
+    let fine = "fn f() -> i64 {\n    return 1\n}\n\nfn main() throws {\n    println(f\"{f()}\")\n}\n"
     fs::write("pk/src/main.nika", root, fine.clone())
     let base = fs::canonical(".", root).display()
     let uri = f"file://{base}/pk/src/main.nika"
     let umlaut = fine.replace("    return 1", "    let s = \"ä\"; return s")
     let astral = fine.replace("    return 1", "    let s = \"😀\"; return s")
-    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{} } }")
-    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{} }"))
+    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}")
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}"))
     transcript.push_str(opened(uri, umlaut))
     transcript.push_str(changed(uri, 2, astral))
     transcript.push_str(changed(uri, 3, fine.replace("fn main", "fn h(s: ref String) {\n}\n\nfn main")))

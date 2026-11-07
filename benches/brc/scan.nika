@@ -8,7 +8,8 @@ use std::fs
 
 fn main() throws {
     let path = cli::args().nth(1) ?? "measurements.txt"
-    let data = fs::map(path, fs::Root::Anywhere) catch {
+    // The file `brc.sh` generated, so who wrote it is known (ADR-365 D2).
+    let data = fs::map(path, fs::Root::Anywhere; trusted: true) catch {
         eprintln(f"cannot open {path}: {error}")
         return
     }

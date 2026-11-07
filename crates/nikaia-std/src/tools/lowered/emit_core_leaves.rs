@@ -79,7 +79,7 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
-        if kind == 0 {
+        if kind == 0 || kind == 2 && self.emit_match_lent_subject(world, index) == "*" {
             self.emit_expr(world, walk, out, host, index, depth, flow, scope)?;
             return Ok(());
         }

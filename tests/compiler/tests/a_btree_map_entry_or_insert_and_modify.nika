@@ -1,6 +1,6 @@
 use std::collections
 
-fn main() {
+fn main() throws {
     let words = ["b", "a", "b", "c", "a", "b"]
     let mut counts: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for w in words {

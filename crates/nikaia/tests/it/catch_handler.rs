@@ -89,12 +89,12 @@ fn read(text: ref String) -> i32 throws {{
     return 7
 }}
 
-fn parsed(text: ref String) -> i32 {{
+fn parsed(text: ref String) -> i32 throws {{
     let errors = 5
     return read(text) {handler}
 }}
 
-fn main() {{
+fn main() throws {{
     let it = parsed("7")
     println(f"{{it}}")
 }}
@@ -137,7 +137,7 @@ fn read(text: ref String) -> i32 throws {
     return 7
 }
 
-fn parsed(text: ref String) -> i32 {
+fn parsed(text: ref String) -> i32 throws {
     return read(text) catch {
         if text.len() > 0 {
             println(f"{error}")
@@ -146,7 +146,7 @@ fn parsed(text: ref String) -> i32 {
     }
 }
 
-fn main() {
+fn main() throws {
     let it = parsed("7")
     println(f"{it}")
 }
@@ -186,7 +186,7 @@ fn read(text: ref String) -> i32 throws {
     return 7
 }
 
-fn main() {
+fn main() throws {
     let steps = cli::args().nth(1) ?? "1000"
     let n: i32 = read(steps) catch { 1000 }
     println(f"{n}")
@@ -240,14 +240,14 @@ fn read(text: ref String) -> i32 throws {
     return 7
 }
 
-fn parsed(text: ref String) -> i32 {
+fn parsed(text: ref String) -> i32 throws {
     return read(text) catch {
         println(f"caught {error}")
         0
     }
 }
 
-fn main() {
+fn main() throws {
     let it = parsed("not a number")
     println(f"{it}")
 }

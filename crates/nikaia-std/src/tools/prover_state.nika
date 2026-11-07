@@ -47,6 +47,9 @@ pub struct ProverState {
     /// An integer `comptime` inside a body, by its statement's start: the
     /// value the build computed for it (D7).
     pub comptime_at: collections::BTreeMap[i64, i64],
+    /// **A `let` without a written type that binds a whole number**, by its
+    /// statement's start, with the type the checker gave it (#1358).
+    pub whole_lets: collections::BTreeMap[i64, String],
     /// **Each call with arguments the build knows** that a claim or a
     /// binding read (ADR-359 D11), by `call_result_name`: the call as
     /// written, and the callee with its arguments' values.
@@ -118,6 +121,7 @@ impl ProverState {
             value_readers: collections::BTreeSet(),
             pinned: collections::BTreeMap(),
             comptime_at: collections::BTreeMap(),
+            whole_lets: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),
             call_args: collections::BTreeMap(),
             wanted: collections::BTreeSet(),

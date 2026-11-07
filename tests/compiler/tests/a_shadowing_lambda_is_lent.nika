@@ -6,4 +6,4 @@ fn outer(known: fn(ref String) -> i64? sync) -> i64 sync {
     let known = fn(name) { known(name) ?? alt(name) }
     return use_it(known)
 }
-fn main() { println(f"{outer(fn(_name) { null })}") }
+fn main() throws { println(f"{outer(fn(_name) { null })}") }

@@ -6,11 +6,11 @@ fn longest(keep a: String, keep b: String) -> String {
     return b
 }
 
-fn show(keep s: String) {
+fn show(keep s: String) throws {
     let r = longest(s, "ab")
     println(r)
 }
 
-fn main() {
+fn main() throws {
     show(f"base{1}")
 }

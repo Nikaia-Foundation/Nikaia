@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1352 (Draft)
+**Version:** 0.0.1357 (Draft)
 **Date:** 2026-11-07
 
 ---
@@ -429,7 +429,7 @@ fn fnv(key: String) -> u64 {
     return hash
 }
 
-fn main() {
+fn main() throws {
     let h = fnv("hello")
     println(f"{h >> 32} {(h & 0xff) == 0x0b}")
 }
@@ -1184,7 +1184,7 @@ element, and a change reaches the list:
 ```nika
 struct P { pub n: i64 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[P] = [P { n: 1 }, P { n: 2 }]
     for mut p in v {
         p.n = p.n + 1                // changes `v`
@@ -2310,7 +2310,7 @@ fn adder(n: i64) -> fn(i64) -> i64 sync {
     return fn(x) { x + n }
 }
 
-fn main() {
+fn main() throws {
     let b = Button { label: "ok", on_click: fn(x) { x * 2 } }
     let add = adder(3)
     println(f"{b.on_click(4)} {add(1)}")
@@ -2351,7 +2351,7 @@ program is started with ([ADR-360](adr/adr-360.md)).
 
 ```nika
 /// Multiplies a positive number.
-fn main(a: int; times: int = 4, verbose: bool = false) {
+fn main(a: int; times: int = 4, verbose: bool = false) throws {
     assert(a > 0)
     let b = times * a
     if verbose {
@@ -2626,7 +2626,11 @@ A struct that manages an external resource (a file handle, a socket, a C
 pointer) may implement the `Drop` trait. The `drop` method is called when the
 value is destroyed. `drop` is **synchronous**: it runs straight through and
 never pauses. It is for teardown that is pure memory work or a cheap native
-call.
+call. `drop` **cannot fail**: it is the one teardown that also runs while a
+panic unwinds or a task is cancelled, where no failure can come out, so a
+`drop` that says `throws` is refused, and a call in it that can fail (a
+`println`, [ADR-392](adr/adr-392.md)) is caught there. Teardown that can fail
+is a `Cleanup`, below.
 
 ```nika
 struct FileHandle {
@@ -2635,7 +2639,7 @@ struct FileHandle {
 
 impl Drop for FileHandle {
     fn drop(mut self) {
-        println("Closing file descriptor...")
+        eprintln(f"closing descriptor {self.fd}") catch { }   // nowhere to report it
         // Native close call would go here
     }
 }
@@ -3770,7 +3774,11 @@ its `secondary` list, in written order. Leaving a group waits for its tasks
 and cancels none.
 
 **A task that panics cancels its siblings**, and the group throws
-`task::Crashed` where it ends. A task whose memory block is full ends with
+`task::Crashed` where it ends. That is a failure only where a task of the group can panic: a
+task whose body has no panic site, and calls nothing that can panic, adds no
+failure, so nothing is asked of the code around it; one that can panic makes
+the form throw `task::Crashed`, which is caught or declared with `throws` as
+any failure is ([ADR-async-5](adr/adr-async-5.md) D35). A task whose memory block is full ends with
 `task::OverBudget` (Part II, Chapter 12) and fails only itself.
 
 **A body that holds an `async` form pauses**, so it is not `sync`, whatever
@@ -3928,7 +3936,7 @@ fn helper() -> i64 { return 41 }
 
 ```nika
 // file: src/main.nika
-fn main() {
+fn main() throws {
     let r = Row { id: helper() + 1 }   // no `use`, and no prefix
     println(f"{r.id}")
 }

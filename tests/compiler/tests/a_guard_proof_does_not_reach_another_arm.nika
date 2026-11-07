@@ -6,6 +6,6 @@ fn step(a: i64?, k: i64) -> i64 {
     }
 }
 
-fn main() {
+fn main() throws {
     println(step(1, 0))
 }

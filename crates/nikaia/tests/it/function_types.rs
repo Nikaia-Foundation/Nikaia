@@ -148,7 +148,7 @@ fn a_run_parameters_result_is_its_declared_type() {
                   \x20   let name = f(s)\n\
                   \x20   return name.contains(\"::\")\n\
                   }\n\
-                  fn main() { println(f\"{has(fn(x) { x.clone() }, \"a::b\")}\") }\n";
+                  fn main() throws { println(f\"{has(fn(x) { x.clone() }, \"a::b\")}\") }\n";
     let rust = lowered(source);
     assert!(rust.contains("\nfn has("), "{rust}");
 }
@@ -162,7 +162,7 @@ fn a_run_parameter_is_lent_what_it_takes_as_a_view() {
                   \x20   let name: String = \"abc\"\n\
                   \x20   return f(name)\n\
                   }\n\
-                  fn main() { println(ask(fn(x) { x.len() })) }\n";
+                  fn main() throws { println(ask(fn(x) { x.len() })) }\n";
     assert!(lowered(source).contains("f(&name)"), "{}", lowered(source));
 }
 
@@ -207,7 +207,7 @@ fn throws_on_the_type_is_the_result_a_throws_function_has() {
 #[test]
 fn a_lambda_that_pauses_fits_a_parameter_that_allows_pausing() {
     let source = "use std::io\n\nfn run(f: fn() -> String) -> String { return f() }\n\
-                  fn main() { let said = run(fn() { return io::read_to_string() })\n\
+                  fn main() throws { let said = run(fn() { return io::read_to_string() })\n\
                   \x20   println(f\"{said}\") }\n";
     // It lowers, which is what "refused at the build" meant: the emitter used
     // to return an error here rather than write anything.
@@ -239,7 +239,7 @@ fn a_lambda_that_pauses_fits_a_parameter_that_allows_pausing() {
 #[test]
 fn a_kept_parameter_keeps_the_boxed_closure() {
     let rust = lowered(
-        "fn holds(f: fn() -> String) {\n\
+        "fn holds(f: fn() -> String) throws {\n\
          \x20   spawn fn { println(f()) }\n\
          }\n\
          fn main() { }\n",
@@ -261,7 +261,7 @@ fn a_kept_parameter_keeps_the_boxed_closure() {
 #[test]
 fn a_std_entrys_lambda_keeps_its_plain_closure() {
     let rust = lowered(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs = Vec()\n\
          \x20   let doubled = xs.map fn(n) { n * 2 }\n\
          \x20   println(f\"{doubled.len()}\")\n\
@@ -278,7 +278,7 @@ fn a_function_type_outside_a_parameter_is_a_kept_value() {
     for source in [
         "struct Router { handler: fn(i64) -> i64 }\nfn main() { }\n",
         "fn make() -> fn(i64) -> i64 sync { return fn(x) { x } }\nfn main() { }\n",
-        "fn main() { let f: fn(i64) -> i64 sync = fn(x) { x + 1 }\n println(f\"{f(1)}\") }\n",
+        "fn main() throws { let f: fn(i64) -> i64 sync = fn(x) { x + 1 }\n println(f\"{f(1)}\") }\n",
     ] {
         let refused = findings(source);
         assert!(refused.is_empty(), "{source}\n{refused:#?}");
@@ -429,7 +429,7 @@ fn a_free_calls_lambda_is_typed_from_the_signature() {
     // Nothing is refused, and that is the claim: the walk reaches the body
     // through the door that carries types rather than the one that does not.
     let source = "fn twice(x: i64, f: fn(i64) -> i64) -> i64 { return f(f(x)) }\n\
-                  fn main() { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n";
+                  fn main() throws { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
 }
 
@@ -473,13 +473,13 @@ fn the_parameters_type_decides_whether_the_callee_pauses() {
     // sees: one is a function, the other is an `async fn` whose call is awaited.
     let plain = lowered(
         "fn twice(x: i64, f: fn(i64) -> i64 sync) -> i64 { return f(f(x)) }\n\
-         fn main() { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n",
+         fn main() throws { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n",
     );
     assert!(plain.contains("fn twice("), "{plain}");
     assert!(!plain.contains("async fn twice("), "{plain}");
     let future = lowered(
         "fn twice(x: i64, f: fn(i64) -> i64) -> i64 { return f(f(x)) }\n\
-         fn main() { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n",
+         fn main() throws { println(f\"{twice(2, fn(n) { return n * 3 })}\") }\n",
     );
     assert!(future.contains("async fn twice("), "{future}");
     assert!(future.contains("f(f(x).await).await"), "{future}");
@@ -622,7 +622,7 @@ fn a_handler_passed_on_inside_a_loop_is_lent() {
                   \x20   }\n\
                   \x20   return total\n\
                   }\n\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{all(fn(x) { x * 10 })}\")\n\
                   }\n";
     let rust = lowered(source);
@@ -661,7 +661,7 @@ fn a_mut_parameter_handed_to_another_mut_parameter_gains_no_second_reference() {
                   \x20   bump(xs)\n\
                   \x20   bump(xs)\n\
                   }\n\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let mut xs = [0]\n\
                   \x20   twice(xs)\n\
                   \x20   println(f\"{xs.len()}\")\n\
@@ -703,7 +703,7 @@ fn sum(ask: ref Ask, words: ref Vec[String]) -> i64 {
     return total
 }
 
-fn main() {
+fn main() throws {
     let name: String = "abc"
     let ask = Ask { name: ref name, size_of: fn(s) { s.len() } }
     let words: Vec[String] = ["x", "yy"]

@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let a = !"x"
     println(f"{a}")
 }

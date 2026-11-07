@@ -23,7 +23,7 @@ fn run(name: &str, source: &str) -> String {
 /// The issue's probe, and the same with the loops swapped.
 #[test]
 fn a_loop_name_used_again_keeps_the_first_index() {
-    let first = r#"fn main() {
+    let first = r#"fn main() throws {
     let xs: Vec[String] = ["a", "b", "c"]
     let mut s = String()
     for i in 0..<2 {
@@ -37,7 +37,7 @@ fn a_loop_name_used_again_keeps_the_first_index() {
 }
 "#;
     assert_eq!(run("loop-name-first", first), "ab!!\n");
-    let swapped = r#"fn main() {
+    let swapped = r#"fn main() throws {
     let xs: Vec[String] = ["a", "b", "c"]
     let mut s = String()
     let total = 3

@@ -3,12 +3,12 @@
 // names, and one that pauses all run to their end before `main` ends.
 use std::time
 
-fn work(n: i64) -> i64 {
+fn work(n: i64) -> i64 throws {
 	println(f"work {n}")
 	return n
 }
 
-fn slow(n: i64) -> i64 {
+fn slow(n: i64) -> i64 throws {
 	time::sleep(1.millis())
 	println(f"slow {n}")
 	return n

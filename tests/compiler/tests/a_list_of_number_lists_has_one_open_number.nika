@@ -10,7 +10,7 @@ fn total(xs: Vec[Vec[u8]]) -> u8 {
 	return xs[0][0] + xs[1][0]
 }
 
-fn main() {
+fn main() throws {
 	let a = [[1, 2], [3]]
 	println(f"{a[0][1] + a[1][0]}")
 	let b = [[1, 2], [3]]

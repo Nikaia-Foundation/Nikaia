@@ -40,6 +40,6 @@ fn c(xs: ref Vec[i64]) -> i64 sync {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	println(k() + g(3) + f(3) + c([1, -1]))
 }

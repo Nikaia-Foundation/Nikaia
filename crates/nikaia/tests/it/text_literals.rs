@@ -86,7 +86,7 @@ fn a_literal_is_a_string_wherever_one_is_kept() {
                   }\n\
                   fn keep(s: String) -> String { return s }\n\
                   fn label() -> String { return \"label\" }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                       let p = Person { name: \"Ada\", nick: \"A\" }\n\
                       let s: String = \"let\"\n\
                       let names: Vec[String] = [\"a\", \"b\", \"c\"]\n\
@@ -106,8 +106,8 @@ fn a_literal_is_a_string_wherever_one_is_kept() {
 /// declaration by the `&` the call already had.
 #[test]
 fn a_literal_handed_to_a_reader_is_not_allocated() {
-    let source = "fn show(s: String) { println(s) }\n\
-                  fn main() {\n\
+    let source = "fn show(s: String) throws { println(s) }\n\
+                  fn main() throws {\n\
                       let owned = f\"owned\"\n\
                       show(\"lent\")\n\
                       show(owned)\n\
@@ -124,7 +124,7 @@ fn a_literal_handed_to_a_reader_is_not_allocated() {
 /// an argument to `println`, a comparison.
 #[test]
 fn a_literal_nobody_keeps_stays_a_view() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
                       let s = \"view\"\n\
                       if s == \"view\" { println(\"same\") }\n\
                   }\n";
@@ -158,7 +158,7 @@ fn a_list_with_a_view_in_it_is_a_list_of_views() {
                       let all: Vec[String] = [\"a\", n]\n\
                       return all\n\
                   }\n\
-                  fn main() { println(names(\"b\").len()) }\n";
+                  fn main() throws { println(names(\"b\").len()) }\n";
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     let rust = lowered(source);
     assert!(!rust.contains("String::from"), "{rust}");
@@ -182,7 +182,7 @@ fn a_literal_beside_text_of_its_own_becomes_it() {
                       }\n\
                       return s\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                       let n = 3\n\
                       let names = [\"a\", f\"c{n}\"]\n\
                       println(f\"{names.len()} {name_or(false, f\"ada\")} {pick(0, f\"ada\")} {pick(1, f\"ada\")} {pick(5, f\"ada\")}\")\n\
@@ -197,9 +197,9 @@ fn a_literal_beside_text_of_its_own_becomes_it() {
 /// a `&str` below, so `.clone()` there asked for a copy nothing would keep.
 #[test]
 fn a_view_handed_to_a_reader_needs_no_copy() {
-    let source = "fn show(s: String) { println(s) }\n\
-                  fn relay(city: ref String) { show(city) }\n\
-                  fn main() { relay(\"Hamburg\") }\n";
+    let source = "fn show(s: String) throws { println(s) }\n\
+                  fn relay(city: ref String) throws { show(city) }\n\
+                  fn main() throws { relay(\"Hamburg\") }\n";
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     let rust = lowered(source);
     assert!(rust.contains("show(city)"), "{rust}");
@@ -265,7 +265,7 @@ fn a_branch_of_literals_kept_is_declared_string_and_one_looked_at_is_not() {
          \x20   return s.len()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let k = 3\n\
          \x20   let mut xs: Vec[String] = Vec()\n\
          \x20   let n = \"ada\"\n\
@@ -298,7 +298,7 @@ fn a_literal_handed_to_a_string_option_is_one() {
     let source = "fn greet(name: String; greeting: String = \"Hello\") -> String {\n\
                       return f\"{greeting}, {name}!\"\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                       println(greet(\"Nika\"))\n\
                       println(greet(\"Nika\"; greeting: \"Hallo\"))\n\
                   }\n";
@@ -329,7 +329,7 @@ fn a_published_list_handed_back_from_a_call_is_text_of_its_own() {
          \x20   return first()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{all().len()} {all()[1]} {one()}\")\n\
          }\n";
     let found = findings(source);

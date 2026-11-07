@@ -5,12 +5,12 @@
 
 use std::time
 
-fn quick() {
+fn quick() throws {
 	time::sleep(1.millis())
 	println("quick done")
 }
 
-fn slow() {
+fn slow() throws {
 	time::sleep(500.millis())
 	println("never printed")
 }
@@ -23,7 +23,7 @@ fn run() throws {
 	println("never printed either")
 }
 
-fn main() {
+fn main() throws {
 	run() catch {
 		match error {
 			task::TimedOut => println("timed out"),

@@ -1,0 +1,10 @@
+error[NK2605]: This function can fail, because `println` can fail.
+  --> tests/drop_that_prints_must_catch.nika:8:9
+   |
+ 8 |         println(f"closing {self.name}")
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `println` can fail with `io::IoError`.
+   = note: A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.
+   = help: Handle the failure in the body (`… catch { }`), or move teardown that can fail to `impl Cleanup for File { fn cleanup(ref mut self) throws { … } }`.
+1 place that can fail without saying so

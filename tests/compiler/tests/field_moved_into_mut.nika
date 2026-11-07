@@ -10,7 +10,7 @@ struct Walk {
 fn collect() -> Walk {
     Walk { sites: [Site { line: 3 }, Site { line: 1 }], name: "w" }
 }
-fn main() {
+fn main() throws {
     let walk = collect()
     let mut sites = walk.sites
     sites.sort_by_key(fn(s) { s.line })

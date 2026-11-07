@@ -510,8 +510,9 @@ impl CheckState {
     /// plain strings stopped doing so: a warning, only where the braces hold an
     /// expression that resolves to something that is here.
     pub fn unmarked_hole[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, text: ref String, span: ref Span) sync {
-        if text.contains("{{") || text.contains("}}") {
-            let single = text.replace("{{", "{").replace("}}", "}")
+        let collapsed = collapsed_doubled_braces(text)
+        if collapsed != null {
+            let single = collapsed ?? ""
             self.warn_migration(span, "`{{{{` in a plain string is now two braces.", f"Braces in a plain string don't need escaping any more: write `\"{single}\"`.")
             return
         }

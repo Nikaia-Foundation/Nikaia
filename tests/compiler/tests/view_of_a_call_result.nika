@@ -1,5 +1,5 @@
 fn f() -> String { return "  abc,d  " }
-fn main() {
+fn main() throws {
     let v = f().trim_start()
     let w = f().trim().split(",").collect()
     let n = f().trim_end().len()

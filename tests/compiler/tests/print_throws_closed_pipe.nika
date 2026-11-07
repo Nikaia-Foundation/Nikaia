@@ -1,0 +1,29 @@
+// ADR-392, #1360: a write to a closed pipe throws `io::IoError`, never a
+// panic. A program printing in a loop, its standard output closed, ends with
+// status 1 and the error on standard error; one that catches the failure of
+// its `println` runs its handler and ends normally.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn closed(nikaia: String, tmp: String, name: String) throws {
+    let out = process::run("sh", ["-c", f"({nikaia} run {tmp}/{name}.nika 2>{tmp}/{name}.err; echo $? >{tmp}/{name}.status) | true"])
+    let status = fs::read_to_string(f"{tmp}/{name}.status", fs::Root::Anywhere).trim().clone()
+    let said = fs::read_to_string(f"{tmp}/{name}.err", fs::Root::Anywhere)
+    print(f"{name}: status {status}\n{said}{out.stderr}")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    fs::write(f"{tmp}/looping.nika", fs::Root::Anywhere, "fn main() throws {\n    let mut n = 0\n    while true {\n        println(f\"line {n}\")\n        n += 1\n    }\n}\n")
+    fs::write(f"{tmp}/caught.nika", fs::Root::Anywhere, "fn main() {\n    let mut n = 0\n    let mut failed = false\n    while !failed {\n        println(f\"line {n}\") catch {\n            failed = true\n        }\n        n += 1\n    }\n    eprintln(\"caught\") catch { }\n}\n")
+    closed(nikaia, tmp, "looping")
+    closed(nikaia, tmp, "caught")
+    process::run("rm", ["-rf", tmp])
+}

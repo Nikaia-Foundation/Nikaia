@@ -15,7 +15,7 @@ impl Bag {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let b = Bag { tags: [1, 2, 3] }
 	println(b.tags().len())
 	println(b.first_tags().len())

@@ -13,7 +13,7 @@ impl Reader {
     fn put(ref mut self, b: ref Bytes) { self.seen += b.len() }
 }
 
-fn main() {
+fn main() throws {
     let mut v: Vec[u8] = []
     v.push(65)
     v.push(10)

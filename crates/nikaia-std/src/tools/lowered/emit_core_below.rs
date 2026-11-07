@@ -282,6 +282,11 @@ impl EmitState {
         }
         if world.library.functions.contains_key(&name) {
             let found = match world.library.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+            if found.provenance.is_some() {
+                let mut kept: Vec<ConfigContract> = vec![];
+                for option in emit_config_of(found) { if option.name != "trusted" { kept.push(option); } }
+                return kept;
+            }
             return emit_config_of(found);
         }
         vec![]

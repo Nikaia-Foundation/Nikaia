@@ -3,6 +3,6 @@
 
 pub immutable LIMIT = 3
 
-fn main() {
+fn main() throws {
     println("bound")
 }

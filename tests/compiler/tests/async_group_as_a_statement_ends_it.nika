@@ -2,7 +2,7 @@
 // (ADR-async-5 D9, #988): the next statement follows on its own line, with no
 // `;`, and runs after both tasks of the group have ended.
 
-fn work(n: i64) -> i64 {
+fn work(n: i64) -> i64 throws {
 	println(f"task {n}")
 	return n
 }
@@ -12,7 +12,7 @@ fn quiet(n: i64) -> i64 {
 	return n
 }
 
-fn main() {
+fn main() throws {
 	async {
 		async work(1)
 		async quiet(2)

@@ -217,6 +217,25 @@ impl EmitState {
                 else => {},
             }
         }
+        // **A sum with a fatal member is registered too** (#1360): a function
+        // that throws its own fatal type and prints fails in a sum, and the
+        // box a child or a detached task hands on holds that sum, not the
+        // member. Only a sum without lifetime parameters can be asked.
+        for (members, name) in self.sums {
+            let mut fatal_member = false
+            let mut borrows = false
+            for member in members {
+                if emit_is_fatal(self.own_contracts, member) {
+                    fatal_member = true
+                }
+                if self.borrows_named(world, member) {
+                    borrows = true
+                }
+            }
+            if fatal_member && !borrows {
+                text = f"{text}    nikaia_std::process::fatal::<{self.sum_root()}{name}>();\n"
+            }
+        }
         return text
     }
 

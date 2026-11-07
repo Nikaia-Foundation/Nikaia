@@ -25,7 +25,7 @@ fn sum(a: Strict, b: Lenient) -> i64 throws {
     return a.get() + b.get()
 }
 
-fn main() {
+fn main() throws {
     let total = sum(Strict { n: 2 }, Lenient { n: 3 }) catch { 0 }
     println(f"{total}")
 }

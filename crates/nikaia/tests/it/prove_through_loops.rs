@@ -37,7 +37,7 @@ fn runaway(xs: ref Vec[i64], h: i64) -> i64 {
     return -1
 }
 
-fn main() {
+fn main() throws {
     let mut xs: Vec[i64] = []
     xs.resize(16384, 1)
     xs[5] = 0
@@ -264,7 +264,7 @@ fn scan(buf: ref Bytes, stop: i64) -> u64 {
     return acc
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[u8] = [59; 40]
     println(f\"{scan(Bytes(v), 10)}\")
 }
@@ -308,7 +308,7 @@ fn an_unsigned_shift_bounds_an_index_and_a_sum() {
     return xs[at] ^ (s + 4 + ((d >> 3) as i64))
 }
 
-fn main() {
+fn main() throws {
     let mut xs: Vec[i64] = []
     xs.resize(16384, 1)
     println(f\"{pick(xs, 12345678901234, 20, 3)}\")
@@ -337,7 +337,7 @@ fn bump(mut xs: Vec[S], at: i64) {
     xs[at].count = c + 1
 }
 
-fn main() {
+fn main() throws {
     let mut xs = [S { count: 0 }]
     bump(xs, 0)
     println(f\"{xs[0].count}\")

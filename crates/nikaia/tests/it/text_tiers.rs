@@ -218,7 +218,7 @@ fn a_field_only_text_of_its_own_flows_into_stays_a_string() {
     text: String,
 }
 
-fn main() {
+fn main() throws {
     let who = "world"
     let a = Greeting { text: f"hello {who}" }
     let b = Greeting { text: "hi" }
@@ -274,7 +274,7 @@ pub fn built(n: i64) -> Person {
     return Person { name: f"person {n}" }
 }
 
-fn main() {
+fn main() throws {
     println(named("ada").name)
 }
 "##;
@@ -726,7 +726,7 @@ impl Req {
     pub fn body(ref self) -> String { return self.body }
     pub fn trimmed(ref self) -> String { return self.body.trim() }
 }
-fn main() {
+fn main() throws {
     let r = Req { head: Head { path: f"/{1}" }, body: f" x{2} " }
     println(r.path())
     println(r.body())
@@ -758,7 +758,7 @@ impl Head {
         return f"own{1}"
     }
 }
-fn main() {
+fn main() throws {
     let h = Head { path: f"/{1}" }
     println(h.pick(true))
     println(h.pick(false))
@@ -846,16 +846,16 @@ fn outer(n: i64; sep: ref String = " ") -> i64 {
     return inner(sep, n) + opt(n; sep: sep)
 }
 
-fn shout(t: ref String) {
+fn shout(t: ref String) throws {
     println(f"{t}!")
 }
 
-fn say(s: ref String) {
+fn say(s: ref String) throws {
     shout(s)
     println(f"{s.starts_with("a")} {inner(s, 0)}")
 }
 
-fn main() {
+fn main() throws {
     let a = f"ab{1}"
     say("ada")
     say(a)
@@ -937,7 +937,7 @@ fn make() -> Team {
     return Team { names: ["Ada", "Grace"], lead: "Ada" }
 }
 
-fn main() {
+fn main() throws {
     let mut rows = Vec()
     for i in 0..<3 {
         rows.push(Row { name: "Hamburg", note: "a <note>" })
@@ -1003,7 +1003,7 @@ fn label(big: bool, n: i64) -> String {
     if big { "large" } else { f"small {n}" }
 }
 
-fn main() {
+fn main() throws {
     let n = 3
     let t = Team { names: ["Ada", f"Grace {n}"], lead: "Ada" }
     let u = Team { names: ["Bob"], lead: f"Lead {n}" }
@@ -1038,7 +1038,7 @@ pub fn make(n: i64) -> Card {
     return Card { note: "plain" }
 }
 
-fn main() {
+fn main() throws {
     println(f"{make(2).note} {make(1).note}")
 }
 "##;
@@ -1060,7 +1060,7 @@ fn a_local_list_linked_to_a_field_takes_its_tier() {
     names: Vec[String],
 }
 
-fn main() {
+fn main() throws {
     let mut names = Vec()
     names.push("Ada")
     names.push("Grace")
@@ -1106,7 +1106,7 @@ fn pair() -> (i64, String) {
     return (1, r.name)
 }
 
-fn main() {
+fn main() throws {
     let mut s: String = ""
     s.push_str("a")
     let mut t: String = "b"
@@ -1139,7 +1139,7 @@ fn longest(a: String, b: String) -> String {
     if a.len() >= b.len() { return a }
     return b
 }
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     let y = f"yy{2}"
     println(longest(x, y))
@@ -1181,7 +1181,7 @@ fn or_none(a: String, c: bool) -> String {
     return "none"
 }
 fn outer(a: String, b: String) -> String { return first(b, a) }
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     let y = f"y{2}"
     let d = Doc { name: f"d{2}" }
@@ -1276,7 +1276,7 @@ fn main() throws {
     ] {
         assert!(rust.contains(kept), "{kept}\n{rust}");
     }
-    let reused = "fn mixed(a: String, b: bool) -> String {\n    if b { return a }\n    return f\"own{1}\"\n}\nfn main() {\n    let x = f\"x{1}\"\n    println(mixed(x, true))\n    println(x)\n}\n";
+    let reused = "fn mixed(a: String, b: bool) -> String {\n    if b { return a }\n    return f\"own{1}\"\n}\nfn main() throws {\n    let x = f\"x{1}\"\n    println(mixed(x, true))\n    println(x)\n}\n";
     // Read again after the call, `x` goes in as a view (#716): the only text
     // `a` is handed, so `a` is one, and `x` is lent, not handed over.
     let found = findings(reused);
@@ -1294,7 +1294,7 @@ fn main() throws {
 fn an_argument_made_in_the_call_lives_as_long_as_the_struct_handed_back() {
     let source = r##"struct Tag { s: String }
 fn tag(s: String) -> Tag { return Tag { s: s } }
-fn main() {
+fn main() throws {
     let x = f"x{1}"
     let a = tag(x)
     let b = tag(f"own{1}")
@@ -1312,12 +1312,12 @@ fn main() {
 /// `s` as `return Tag { label: s }` does, and lowers byte for byte as the
 /// `ref String` twin, given text of its own (`x`) and a view (`w`).
 const HANDED_BACK_THROUGH_A_LET: &str = r##"struct Tag { label: String }
-fn tag(s: String) -> Tag {
+fn tag(s: String) -> Tag throws {
     let t = Tag { label: s }
     println(t.label.len())
     return t
 }
-fn main() {
+fn main() throws {
     let x = f" x{1} "
     let a = tag(x)
     let w = x.trim()
@@ -1350,12 +1350,12 @@ fn a_struct_bound_to_a_name_handed_back_lends_its_fields() {
 /// a view (`w`). One handed to a function that keeps it stays `String`.
 const HANDED_ON_AND_BACK: &str = r##"fn width(a: String) -> i64 { return a.len() as i64 }
 fn twice(a: String) -> i64 { return width(a) * 2 }
-fn checked(a: String) -> String {
+fn checked(a: String) -> String throws {
     let n = width(a)
     println(twice(a) + n)
     return a
 }
-fn main() {
+fn main() throws {
     let x = f" x{1} "
     println(checked(x))
     let w = x.trim()
@@ -1388,7 +1388,7 @@ fn kept(a: String, mut v: Vec[String], c: bool) -> String {
     }
     return a
 }
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = []
     println(kept(f"x{1}", v, true))
     println(kept(f"y{2}", v, false))
@@ -1412,7 +1412,7 @@ fn token_program(header: &str, payload: &str, given: &str) -> String {
          fn first(line: String, n: i64) -> Tok {{\n\
          \x20   if n == 0 {{\n        return Tok::Num(0)\n    }}\n\
          \x20   return Tok::Word({given})\n}}\n\n\
-         fn main() {{\n\
+         fn main() throws {{\n\
          \x20   let text = f\"  hi {{1}} \"\n\
          \x20   for n in 0..<2 {{\n\
          \x20       match first(text, n) {{\n\
@@ -1444,7 +1444,7 @@ fn a_variant_payload_only_views_flow_into_is_a_view() {
                 \x20   let mut out: Vec[String] = []\n\
                 \x20   for w in line.split(\" \") {\n        out.push(w)\n    }\n\
                 \x20   return Tok::Words(out)\n}\n\n\
-                fn main() {\n\
+                fn main() throws {\n\
                 \x20   let text = f\"a b {1}\"\n\
                 \x20   match split(text) {\n\
                 \x20       Tok::Words(ws) => println(f\"{ws.len()}\"),\n\
@@ -1502,7 +1502,7 @@ fn show(t: T) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(f"{show(T::Named("x"))} {show(T::Unknown)}")
 }
 "##;
@@ -1546,7 +1546,7 @@ fn a_parameter_changed_through_a_name_bound_to_it_refuses_a_view() {
     return s
 }
 pub fn hello(w: ref String) -> String { return greet(w) }
-fn main() {
+fn main() throws {
     let w = f"w{1}"
     println(hello(w))
     println(w)
@@ -1608,7 +1608,7 @@ fn the_map_examples_without_ref_on_their_keys_lower_as_their_ref_twins() {
 fn a_literal_keyed_map_is_static_text_looked_up_by_any_text() {
     let probe = r##"use std::collections
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, i64] = collections::HashMap()
     m.insert("a", 1)
     m.insert("b", 2)
@@ -1632,7 +1632,7 @@ fn main() {
 fn a_map_of_views_is_looked_up_by_text_of_its_own() {
     let local = r##"use std::collections
 
-fn main() {
+fn main() throws {
     let s = f"x y x{1}"
     let mut m: collections::HashMap[String, String] = collections::HashMap()
     for w in s.split(" ") {
@@ -1679,7 +1679,7 @@ fn cut(dna: String) -> collections::HashMap[String, i64] {
     return counts
 }
 
-fn main() {
+fn main() throws {
     let s = f"a b a{1}"
     let mut x = Seen { m: collections::HashMap() }
     let mut y = Seen { m: collections::HashMap() }
@@ -1712,7 +1712,7 @@ fn main() {
 fn split_once_parts_are_views_of_what_was_cut() {
     let pushed = |jump: &str| {
         format!(
-            r#"fn main() {{
+            r#"fn main() throws {{
     let s = f"x=1 y=2"
     let mut v: Vec[String] = []
     for w in s.split(" ") {{
@@ -1728,7 +1728,7 @@ fn split_once_parts_are_views_of_what_was_cut() {
     runs("split-once-return", &pushed("return"), "2");
     runs("split-once-break", &pushed("break"), "2");
     let inserted = r#"use std::collections
-fn main() {
+fn main() throws {
     let s = f"x=1 y=2 x=3"
     let mut m: collections::HashMap[String, String] = collections::HashMap()
     for w in s.split(" ") {
@@ -1739,7 +1739,7 @@ fn main() {
 }
 "#;
     runs("split-once-insert", inserted, "2");
-    let matched = r#"fn main() {
+    let matched = r#"fn main() throws {
     let s = f"x=1 y=2 z"
     let mut v: Vec[String] = []
     for w in s.split(" ") {
@@ -1755,7 +1755,7 @@ fn main() {
     // Cut from text owned by one turn of the loop: the list cannot hold a
     // view of it, so it holds text of its own.
     let short_lived = r#"use std::collections
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = []
     let mut m: collections::HashMap[String, String] = collections::HashMap()
     for i in 0..2 {
@@ -1792,7 +1792,7 @@ fn keep(v: String, mut b: Box) {
     b.items.push(a)
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { items: [] }
     keep(f"x{1}", b)
     println(b.items.len())
@@ -1837,7 +1837,9 @@ fn a_struct_viewing_a_kept_parameter_pushed_into_a_container_owns_its_text() {
 /// and lowers byte for byte as its `ref String` twin.
 #[test]
 fn a_struct_viewing_a_parameter_only_read_still_lends_it() {
-    let read = KEPT_INTO_A_CONTAINER.replace("    b.items.push(a)", "    println(a.label)");
+    let read = KEPT_INTO_A_CONTAINER
+        .replace("    b.items.push(a)", "    println(a.label)")
+        .replace("mut b: Box) {", "mut b: Box) throws {");
     runs("kept-only-read", &read, "x1\n0");
     let written = read
         .replace("    label: String,", "    label: ref String,")
@@ -1884,7 +1886,7 @@ fn a_method_result_viewing_a_kept_parameter_pushed_into_a_container_owns_its_tex
 /// stays a plain `String`. That both run is `tests/accepted/712_*.nika`.
 #[test]
 fn an_arm_naming_text_read_later_is_a_view_of_it() {
-    let later = r##"fn main() {
+    let later = r##"fn main() throws {
     let s = f"x{1}"
     for i in 0..<2 {
         let c = if i == 1 { s } else { f"y{i}" }
@@ -1898,7 +1900,7 @@ fn an_arm_naming_text_read_later_is_a_view_of_it() {
         rust.contains("nikaia_std::either_text::either(&s)"),
         "{rust}"
     );
-    let moved = r##"fn main() {
+    let moved = r##"fn main() throws {
     let s = f"x{1}"
     let c = if s.len() == 1 { s } else { f"y{2}" }
     println(c)
@@ -1930,7 +1932,7 @@ fn a_name_read_later_handed_to_a_keeping_parameter_is_a_view() {
     let later = format!(
         "{longest}{}",
         r##"
-fn main() {
+fn main() throws {
     let t = f"t{1}"
     for n in 0..<3 {
         let r = longest(if n == 0 { "lit" } else { f"n{n}" }, "ab")
@@ -1953,7 +1955,7 @@ fn main() {
     let moved = format!(
         "{longest}{}",
         r##"
-fn main() {
+fn main() throws {
     let t = f"t{1}"
     for n in 0..<3 {
         let r = longest(if n == 0 { "lit" } else { f"n{n}" }, "ab")
@@ -1997,7 +1999,7 @@ fn a_mixed_nullable_text_result_lowers() {
 #[test]
 fn a_nullable_parameter_handed_back_is_lent() {
     let plain = "fn pick(a: String?, b: String?) -> String? { return a ?? b }\n\
-                 fn main() {\n    let x: String? = f\"x{1}\"\n    println(pick(null, x) ?? \"-\")\n    println(x ?? \"\")\n}\n";
+                 fn main() throws {\n    let x: String? = f\"x{1}\"\n    println(pick(null, x) ?? \"-\")\n    println(x ?? \"\")\n}\n";
     let twin = plain.replace(
         "fn pick(a: String?, b: String?) -> String?",
         "fn pick(a: ref String?, b: ref String?) -> ref String?",
@@ -2060,7 +2062,7 @@ fn a_mixed_value_unwrapped_into_a_published_position_is_refused() {
 #[test]
 fn a_view_kept_in_a_list_the_walk_cannot_link_is_refused() {
     let source = "fn fill(a: ref String, mut into: Vec[String]) { into.push(a) }\n\
-                  fn main() {\n    let mut w = \"c d\".lines().map(fn(p) { p.clone() }).collect()\n    let s = f\"y{2}\"\n    fill(s, w)\n    println(w.len())\n}\n";
+                  fn main() throws {\n    let mut w = \"c d\".lines().map(fn(p) { p.clone() }).collect()\n    let s = f\"y{2}\"\n    fill(s, w)\n    println(w.len())\n}\n";
     let found = findings(source);
     assert!(
         found
@@ -2078,7 +2080,7 @@ fn a_view_kept_in_a_list_the_walk_cannot_link_is_refused() {
 #[test]
 fn an_element_of_a_lent_list_into_a_mixed_published_result_is_refused() {
     let source = "pub fn pick(v: ref Vec[String], c: bool) -> String {\n    if c { return v[0] }\n    return f\"x{1}\"\n}\n\
-                  fn main() {\n    let v = [f\"a{1}\"]\n    println(pick(v, true))\n}\n";
+                  fn main() throws {\n    let v = [f\"a{1}\"]\n    println(pick(v, true))\n}\n";
     let found = findings(source);
     assert!(
         found
@@ -2095,8 +2097,8 @@ fn an_element_of_a_lent_list_into_a_mixed_published_result_is_refused() {
 #[test]
 fn a_local_kept_in_a_parameters_list_is_handed_over() {
     let source = "fn fill(a: String, mut into: Vec[String]) { into.push(a) }\n\
-                  fn outer(mut v: Vec[String]) {\n    let s = f\"y{2}\"\n    fill(s, v)\n    println(s)\n}\n\
-                  fn main() {\n    let mut v: Vec[String] = Vec()\n    fill(\"lit\", v)\n    outer(v)\n    println(v.len())\n}\n";
+                  fn outer(mut v: Vec[String]) throws {\n    let s = f\"y{2}\"\n    fill(s, v)\n    println(s)\n}\n\
+                  fn main() throws {\n    let mut v: Vec[String] = Vec()\n    fill(\"lit\", v)\n    outer(v)\n    println(v.len())\n}\n";
     let found = findings(source);
     assert!(
         found.iter().any(|f| f.code == "NK2105"
@@ -2114,8 +2116,8 @@ fn a_local_kept_in_a_parameters_list_is_handed_over() {
 fn a_local_kept_through_two_calls_is_handed_over() {
     let source = "fn fill(a: String, mut into: Vec[String]) { into.push(a) }\n\
                   fn fill2(a: String, mut into: Vec[String]) { fill(a, into) }\n\
-                  fn outer(mut v: Vec[String]) {\n    let s = f\"y{2}\"\n    fill2(s, v)\n    println(s)\n}\n\
-                  fn main() {\n    let mut v: Vec[String] = Vec()\n    fill2(\"lit\", v)\n    outer(v)\n    println(v.len())\n}\n";
+                  fn outer(mut v: Vec[String]) throws {\n    let s = f\"y{2}\"\n    fill2(s, v)\n    println(s)\n}\n\
+                  fn main() throws {\n    let mut v: Vec[String] = Vec()\n    fill2(\"lit\", v)\n    outer(v)\n    println(v.len())\n}\n";
     let found = findings(source);
     assert!(
         found.iter().any(|f| f.code == "NK2105"
@@ -2133,7 +2135,7 @@ fn a_literal_arm_beside_a_lent_field_lends() {
     let source = "struct Holder { name: String }\n\
                   fn t(h: ref Holder, c: bool) -> String { if c { h.name } else { \"none\" } }\n\
                   fn m(h: ref Holder, c: i64) -> String {\n    match c {\n        0 => h.name,\n        else => \"none\",\n    }\n}\n\
-                  fn main() {\n    let h = Holder { name: f\"n{1}\" }\n    println(t(h, true))\n    println(t(h, false))\n    println(m(h, 0))\n    println(m(h, 1))\n}\n";
+                  fn main() throws {\n    let h = Holder { name: f\"n{1}\" }\n    println(t(h, true))\n    println(t(h, false))\n    println(m(h, 0))\n    println(m(h, 1))\n}\n";
     runs("literal-beside-a-lent-field", source, "n1\nnone\nn1\nnone");
     let rust = lowered(source, Build::default());
     assert!(
@@ -2150,7 +2152,7 @@ fn a_literal_arm_beside_a_lent_field_lends() {
 fn a_name_bound_over_a_lent_option_field_is_a_view() {
     let source = "struct Rule { name: String, action: String? }\n\
                   fn action_of(rule: ref Rule) -> String { return match rule.action { a => a, null => \"none\" } }\n\
-                  fn main() {\n    let k = 1\n    let r = Rule { name: f\"n{k}\", action: f\"go{k}\" }\n    let q = Rule { name: \"n\", action: null }\n    println(r.name)\n    println(action_of(r))\n    println(action_of(q))\n}\n";
+                  fn main() throws {\n    let k = 1\n    let r = Rule { name: f\"n{k}\", action: f\"go{k}\" }\n    let q = Rule { name: \"n\", action: null }\n    println(r.name)\n    println(action_of(r))\n    println(action_of(q))\n}\n";
     runs("some-over-a-lent-field", source, "n1\ngo1\nnone");
     let rust = lowered(source, Build::default());
     assert!(
@@ -2165,7 +2167,7 @@ fn a_name_bound_over_a_lent_option_field_is_a_view() {
 fn an_interpolated_arm_beside_a_lent_option_field_is_either() {
     let source = "struct Rule { action: String? }\n\
                   fn action_of(rule: ref Rule, k: i64) -> String { return match rule.action { a => a, null => f\"none{k}\" } }\n\
-                  fn main() {\n    let r = Rule { action: f\"go{1}\" }\n    let q = Rule { action: null }\n    println(action_of(r, 1))\n    println(action_of(q, 2))\n}\n";
+                  fn main() throws {\n    let r = Rule { action: f\"go{1}\" }\n    let q = Rule { action: null }\n    println(action_of(r, 1))\n    println(action_of(q, 2))\n}\n";
     runs("some-beside-an-owned-arm", source, "go1\nnone2");
     let rust = lowered(source, Build::default());
     assert!(rust.contains("EitherText"), "{rust}");
@@ -2175,7 +2177,7 @@ fn an_interpolated_arm_beside_a_lent_option_field_is_either() {
 #[test]
 fn a_match_over_an_owned_local_stays_a_move() {
     let source = "fn pick(k: i64) -> String {\n    let o: String? = f\"go{k}\"\n    return match o { a => a, null => \"none\" }\n}\n\
-                  fn main() { println(pick(1)) }\n";
+                  fn main() throws { println(pick(1)) }\n";
     runs("some-over-an-owned-local", source, "go1");
     let rust = lowered(source, Build::default());
     assert!(rust.contains("fn pick(k: i64) -> String"), "{rust}");

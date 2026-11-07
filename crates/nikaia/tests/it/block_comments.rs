@@ -31,7 +31,7 @@ fn a_nested_block_comment_stands_inside_an_argument_list() {
          fn add(a: i64, /* a /* nested */ note */ b: i64) -> i64 {\n\
              return a + b\n\
          }\n\
-         fn main() { println(f\"{add(1, 2)}\") }",
+         fn main() throws { println(f\"{add(1, 2)}\") }",
     )
     .expect("it parses and lowers");
     assert!(
@@ -47,7 +47,7 @@ fn a_nested_block_comment_stands_inside_an_argument_list() {
 /// the grammar, and this is the program that says it.
 #[test]
 fn a_block_comment_opener_inside_a_string_is_text() {
-    let rust = lowered("fn main() { let text = \"a /* b */ c\"\nprintln(text) }")
+    let rust = lowered("fn main() throws { let text = \"a /* b */ c\"\nprintln(text) }")
         .expect("it parses and lowers");
     assert!(
         rust.contains("\"a /* b */ c\""),
@@ -63,7 +63,7 @@ fn a_block_comment_opener_inside_a_string_is_text() {
 #[test]
 fn a_line_comment_inside_a_block_comment_is_comment() {
     let rust = lowered(
-        "fn main() {\n\
+        "fn main() throws {\n\
              /* a note\n\
              \x20  // and the close is behind this\n\
              \x20  */\n\
@@ -71,7 +71,10 @@ fn a_line_comment_inside_a_block_comment_is_comment() {
          }",
     )
     .expect("it parses and lowers");
-    assert!(rust.contains("println!(\"ok\")"), "{rust}");
+    assert!(
+        rust.contains("nikaia_std::io::println(format_args!(\"ok\"))"),
+        "{rust}"
+    );
 }
 
 /// **An unclosed block comment is reported at the `/*` that opened it** (D2).
@@ -118,7 +121,7 @@ fn an_unclosed_block_comment_is_reported_at_its_opening() {
 fn two_stars_and_a_bang_are_comments() {
     for opener in ["/**", "/*!"] {
         let rust = lowered(&format!(
-            "{opener} not a doc comment */\nfn main() {{ println(\"ok\") }}"
+            "{opener} not a doc comment */\nfn main() throws {{ println(\"ok\") }}"
         ))
         .unwrap_or_else(|e| panic!("`{opener}` is a comment: {e}"));
         assert!(
@@ -132,6 +135,7 @@ fn two_stars_and_a_bang_are_comments() {
 /// new lexical rule beside `COMMENT` can cause.
 #[test]
 fn division_is_untouched() {
-    let rust = lowered("fn main() { let n = 10 / 2\nprintln(f\"{n}\") }").expect("it lowers");
+    let rust =
+        lowered("fn main() throws { let n = 10 / 2\nprintln(f\"{n}\") }").expect("it lowers");
     assert!(rust.contains("10 / 2"), "{rust}");
 }

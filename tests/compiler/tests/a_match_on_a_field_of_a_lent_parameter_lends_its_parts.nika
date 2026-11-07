@@ -22,6 +22,6 @@ fn send(mut connection: net::Connection, response: Response) throws {
     }
 }
 
-fn main() {
+fn main() throws {
     println("built")
 }

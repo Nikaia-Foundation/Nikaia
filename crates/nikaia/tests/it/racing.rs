@@ -71,7 +71,7 @@ fn an_arm_binds_and_then_runs_a_block() {
          \n\
          fn slow() -> i64 { return 7 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   select {\n\
          \x20       result = slow() => { println(f\"{result}\") }\n\
          \x20       _ = time::sleep(50.millis()) => { println(\"too slow\") }\n\
@@ -100,7 +100,7 @@ fn every_arm_is_a_block_of_its_own() {
          fn b() -> i64 { return 2 }\n\
          fn c() -> i64 { return 3 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   select {\n\
          \x20       x = a() => { println(f\"{x}\") }\n\
          \x20       y = b() => { println(f\"{y}\") }\n\
@@ -126,7 +126,7 @@ fn an_underscore_arm_binds_nothing() {
          fn a() -> i64 { return 1 }\n\
                   fn b() -> i64 { return 2 }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   select {\n\
                   \x20       _ = a() => { println(\"first\") }\n\
                   \x20       _ = b() => { println(\"second\") }\n\
@@ -147,7 +147,7 @@ fn one_arm_is_refused_with_its_reason() {
          \n\
          fn a() -> i64 { return 1 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   select {\n\
          \x20       x = a() => { println(f\"{x}\") }\n\
          \x20   }\n\
@@ -184,7 +184,7 @@ fn a_sleeping_arm_loses_to_a_ready_one() {
         "select-sleeping",
         "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   select {\n\
          \x20       _ = time::sleep(5.seconds()) => { println(\"too slow\") }\n\
          \x20       _ = time::sleep(1.millis()) => { println(\"soon enough\") }\n\
@@ -224,7 +224,7 @@ fn a_failing_arm_propagates_from_its_own_body() {
 fn a_handle_can_be_cancelled() {
     let source = "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
                   \x20   let handle = spawn fn { 1 + 1 }\n\
                   \x20   handle.cancel()\n\
                   \x20   println(\"stopped\")\n\
@@ -246,7 +246,7 @@ fn a_cancelled_task_stops_at_its_pause_point() {
         "select-cancel-stops",
         "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let handle = spawn fn {\n\
          \x20       time::sleep(50.millis())\n\
          \x20       println(\"the task finished\")\n\
@@ -268,7 +268,7 @@ fn a_task_that_is_not_cancelled_still_runs() {
         "select-uncancelled",
         "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   spawn fn {\n\
          \x20       time::sleep(10.millis())\n\
          \x20       println(\"the task finished\")\n\
@@ -291,7 +291,7 @@ fn a_task_that_sleeps_after_main_is_done_is_not_held_to_the_deadline() {
         "select-sleeps-after-main",
         "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   spawn fn {\n\
          \x20       time::sleep(50.millis())\n\
          \x20       println(\"the task finished\")\n\

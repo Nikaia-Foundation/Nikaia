@@ -11,7 +11,7 @@ fn words(text: String) -> Vec[String] {
 	return m
 }
 
-fn main() {
+fn main() throws {
 	let t = f"a b {1}"
 	let m = words(t)
 	println(f"{m.len()}")

@@ -45,7 +45,7 @@ fn apply(f: fn(ref Vec[i64], i64) -> i64, xs: ref Vec[i64]) -> i64 {
 	return f(xs, 1)
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, 2, 3, 4]
 	println(f"{sum_to(xs, 1)}")
 	println(f"{sum_to(xs, 2)}")

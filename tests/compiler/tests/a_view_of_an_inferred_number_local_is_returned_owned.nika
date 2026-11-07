@@ -16,7 +16,7 @@ fn from_mixed() -> String {
     return s.trim()
 }
 
-fn main() {
+fn main() throws {
     println(from_local())
     println(from_tuple())
     println(from_mixed())

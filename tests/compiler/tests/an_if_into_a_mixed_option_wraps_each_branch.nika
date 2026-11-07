@@ -38,7 +38,7 @@ fn plain(s: ref String, n: i64) -> String {
     return if n == 0 { s } else { int_text(n) }
 }
 
-fn main() {
+fn main() throws {
     for n in 0..<3 {
         println(f"{by_return("hi", n) ?? "none"} {by_tail("hi", n) ?? "none"} {by_let("hi", n) ?? "none"}")
     }

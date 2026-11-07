@@ -1,6 +1,6 @@
 // `find`, `rfind`, `replace` and `replacen` take one scalar as their needle,
 // as `contains` and `split` do (#877).
-fn main() {
+fn main() throws {
     let s = "a,b;c,ä;d"
     let first = s.find(',') ?? return
     let last = s.rfind(',') ?? return

@@ -37,7 +37,7 @@ fn a_type_nested_deep_lowers() {
     lowers(
         &format!(
             "fn count(xs: ref {ty}) -> i64 {{\n    return xs.len()\n}}\n\n\
-             fn main() {{\n    let n: {ty} = []\n    println(f\"{{count(n)}}\")\n}}\n"
+             fn main() throws {{\n    let n: {ty} = []\n    println(f\"{{count(n)}}\")\n}}\n"
         ),
         "type",
     );
@@ -47,7 +47,7 @@ fn a_type_nested_deep_lowers() {
 fn casts_nested_deep_lower() {
     let cast = format!("1{}", " as i64".repeat(DEPTH));
     lowers(
-        &format!("fn main() {{\n    let a = {cast}\n    println(f\"{{a}}\")\n}}\n"),
+        &format!("fn main() throws {{\n    let a = {cast}\n    println(f\"{{a}}\")\n}}\n"),
         "cast",
     );
 }
@@ -57,7 +57,7 @@ fn an_index_nested_deep_lowers() {
     let index = format!("0{}", " + 0".repeat(DEPTH));
     lowers(
         &format!(
-            "fn main() {{\n    let xs = [1, 2, 3]\n    let b = xs[{index}]\n    println(f\"{{b}}\")\n}}\n"
+            "fn main() throws {{\n    let xs = [1, 2, 3]\n    let b = xs[{index}]\n    println(f\"{{b}}\")\n}}\n"
         ),
         "index",
     );
@@ -67,7 +67,7 @@ fn an_index_nested_deep_lowers() {
 fn lists_nested_deep_lower() {
     let list = format!("{}1{}", "[".repeat(DEPTH), "]".repeat(DEPTH));
     lowers(
-        &format!("fn main() {{\n    let a = {list}\n    println(f\"{{a.len()}}\")\n}}\n"),
+        &format!("fn main() throws {{\n    let a = {list}\n    println(f\"{{a.len()}}\")\n}}\n"),
         "list",
     );
 }
@@ -77,7 +77,7 @@ fn a_coalesce_chain_deep_lowers() {
     let chain = format!("{}0", "x ?? ".repeat(DEPTH));
     lowers(
         &format!(
-            "fn main() {{\n    let x: i64? = null\n    let a = {chain}\n    println(f\"{{a}}\")\n}}\n"
+            "fn main() throws {{\n    let x: i64? = null\n    let a = {chain}\n    println(f\"{{a}}\")\n}}\n"
         ),
         "coalesce",
     );
@@ -88,7 +88,7 @@ fn a_method_chain_deep_lowers() {
     let chain = format!("s{}", ".clone()".repeat(DEPTH));
     lowers(
         &format!(
-            "fn main() {{\n    let s: String = \"a\"\n    let t = {chain}\n    println(t)\n}}\n"
+            "fn main() throws {{\n    let s: String = \"a\"\n    let t = {chain}\n    println(t)\n}}\n"
         ),
         "chain",
     );
@@ -98,7 +98,9 @@ fn a_method_chain_deep_lowers() {
 fn a_binary_chain_deep_lowers() {
     let chain = format!("a{}", " + a".repeat(DEPTH));
     lowers(
-        &format!("fn main() {{\n    let a = 1\n    let b = {chain}\n    println(f\"{{b}}\")\n}}\n"),
+        &format!(
+            "fn main() throws {{\n    let a = 1\n    let b = {chain}\n    println(f\"{{b}}\")\n}}\n"
+        ),
         "binary",
     );
 }

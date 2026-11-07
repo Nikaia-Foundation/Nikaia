@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let mut v: Vec[String] = ["x", "y"]
     v[1] = "z"
     let mut names: Array[String, 2] = ["x", "y"]

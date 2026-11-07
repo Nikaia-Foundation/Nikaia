@@ -157,7 +157,7 @@ fn a_program_trait_method_on_a_duration_is_awaited() {
          \x20   fn label(self) -> String { return \"span\" }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(5.seconds().label())\n\
          \x20   let span = 3.seconds()\n\
          \x20   println(span.label())\n\
@@ -191,7 +191,7 @@ fn a_sleeping_program_compiles_and_runs() {
         "duration-sleeps",
         "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   time::sleep(120.millis())\n\
          \x20   println(\"awake\")\n\
          }\n",
@@ -212,7 +212,7 @@ fn a_span_below_zero_is_no_wait() {
         "duration-negative",
         "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let back: i64 = 0 - 5\n\
          \x20   time::sleep(back.seconds())\n\
          \x20   println(\"through\")\n\
@@ -230,7 +230,7 @@ fn nothing_here_is_a_keyword() {
          \n\
          fn seconds(of: i64) -> i64 { return of * 2 }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let doubled = seconds(3)\n\
                   \x20   println(f\"{doubled}\")\n\
                   }\n";
@@ -253,7 +253,7 @@ fn nothing_here_is_a_keyword() {
 fn a_count_read_back_is_an_i64() {
     let source = "use std::time\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let wrong: String = 5.seconds().in_seconds()\n\
          \x20   println(wrong)\n\
          }\n";
@@ -266,7 +266,7 @@ fn a_count_read_back_is_an_i64() {
 #[test]
 fn a_reading_and_its_readers_are_typed() {
     let program = |line: &str| {
-        format!("use std::time\n\nfn main() {{\n    {line}\n    println(f\"{{n}}\")\n}}\n")
+        format!("use std::time\n\nfn main() throws {{\n    {line}\n    println(f\"{{n}}\")\n}}\n")
     };
     let right = "let n: i64 = time::now().since(time::now()).in_nanos()";
     assert!(findings(&program(right)).is_empty(), "taken: {right}");
@@ -292,7 +292,7 @@ fn a_clock_reading_measures_a_sleep() {
          \x20   return at.elapsed().in_nanos()\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let started = time::now()\n\
          \x20   time::sleep(20.millis())\n\
          \x20   let first = since_start(started)\n\

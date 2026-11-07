@@ -182,22 +182,23 @@ pub trait ProjectCheckExplainHost {
     fn explain_report(&self, kind: &str, at: i64) -> String;
 }
 
-pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_asked: bool, kinds: &[String]) {
-    if !comptime_asked && kinds.is_empty() { return; }
-    if comptime_asked { print!("{}", host.unrolling_report()); }
+pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_asked: bool, kinds: &[String]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    if !comptime_asked && kinds.is_empty() { return Ok(()); }
+    if comptime_asked { nikaia_std::io::print(format_args!("{}", host.unrolling_report()))?; }
     let units = host.units();
     for at in 0..units {
-        if units > 1 { println!("--- {}", host.unit_path(at)); }
-        for kind in kinds.iter() { print!("{}", host.explain_report(kind, at)); }
+        if units > 1 { nikaia_std::io::println(format_args!("--- {}", host.unit_path(at)))?; }
+        for kind in kinds.iter() { nikaia_std::io::print(format_args!("{}", host.explain_report(kind, at)))?; }
     }
+    Ok(())
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26129| {
-        let (_, asked) = __nikaia_tuple26129; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple26136| {
+        let (_, asked) = __nikaia_tuple26136; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple26159| {
-        let (kind, _) = __nikaia_tuple26159;
+    }).map(|__nikaia_tuple26166| {
+        let (kind, _) = __nikaia_tuple26166;
         kind.to_string()
     }).collect::<Vec<_>>()
 }

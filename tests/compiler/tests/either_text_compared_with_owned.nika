@@ -1,4 +1,4 @@
-fn swapped(line: String, from: String, to: String) -> String {
+fn swapped(line: String, from: String, to: String) -> String throws {
     if !from.contains("{") {
         let r: String = line.replace(from, to)
         if r != line {
@@ -14,7 +14,7 @@ fn swapped(line: String, from: String, to: String) -> String {
     return s
 }
 
-fn main() {
+fn main() throws {
     println(swapped("abc", "a", "b"))
     println(swapped("xyz", "{x", "b"))
     println(swapped("xyz", "{y", "b"))

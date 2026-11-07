@@ -116,6 +116,11 @@ impl CheckState {
             errors.push(f"`{error}`")
         }
         let list = errors.join(", ")
-        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605", message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it."], help: f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.", labels: [] })
+        let mut help: String = f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`."
+        // **A `drop` cannot fail** (Part I 6.4): `throws` is no way out there.
+        if self.inside_a_drop && function.ends_with("::drop") {
+            help = drop_help((function.strip_suffix("::drop") ?? "").clone())
+        }
+        self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605", message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it."], help: help, labels: [] })
     }
 }

@@ -4,7 +4,7 @@ struct S { cfg: String }
 
 fn mk(n: i64) -> String { f"B{n}" }
 
-fn main() {
+fn main() throws {
     let which: Vec[String] = ["A", "B"]
     let s = S { cfg: "B" }
     let a = which.iter().any(fn(w) { w == s.cfg })

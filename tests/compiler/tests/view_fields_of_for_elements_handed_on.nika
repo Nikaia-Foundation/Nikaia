@@ -14,7 +14,7 @@ fn again_each(ws: ref Vec[Word]) -> Vec[Word] {
 	return out
 }
 
-fn main() {
+fn main() throws {
 	let s = " hello "
 	let ws = [word_of(s), word_of(s)]
 	let vs = again_each(ws)

@@ -154,7 +154,7 @@ fn grow(mut g: Grown) {
 	g.ks.push(1)
 }
 
-fn main() {
+fn main() throws {
 	let mut good = Good { cols: [], ks: [] }
 	good.add(1, 2)
 	let mut open = Open { cols: [], ks: [] }

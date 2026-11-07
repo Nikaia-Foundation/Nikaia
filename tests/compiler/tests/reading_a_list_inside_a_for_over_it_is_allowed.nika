@@ -1,5 +1,5 @@
 // Part I 3.3: reading the list inside the loop that lends it stays allowed.
-fn main() {
+fn main() throws {
     let v: Vec[i64] = [1, 2, 3]
     let mut total = 0
     for x in v {

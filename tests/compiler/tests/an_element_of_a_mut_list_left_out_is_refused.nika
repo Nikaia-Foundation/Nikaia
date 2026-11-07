@@ -9,7 +9,7 @@ fn left_out_element_stash(mut w: Vec[Vec[u32]], i: i64) -> i64 {
 	return t.len()
 }
 
-fn main() {
+fn main() throws {
 	let mut w: Vec[Vec[u32]] = [[], [1, 2]]
 	println(f"{left_out_element_stash(w, 1)}")
 }

@@ -12,7 +12,7 @@ fn twice(n: i64) -> i64 {
     return n * 2
 }
 
-fn main() {
+fn main() throws {
     let mut n: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut c = n.entry("q").or_insert(0)
     c += 1

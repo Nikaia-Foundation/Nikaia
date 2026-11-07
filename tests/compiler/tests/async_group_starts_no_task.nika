@@ -1,11 +1,11 @@
 // An `async { … }` that starts no task is refused (ADR-async-5 D9,
 // `NK2111`): it waits for nothing.
 
-fn work(n: i64) {
+fn work(n: i64) throws {
 	println(f"{n}")
 }
 
-fn main() {
+fn main() throws {
 	async {
 		work(3)
 	}

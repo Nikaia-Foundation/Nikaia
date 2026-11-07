@@ -11,6 +11,11 @@ reports*.
 
 ## Reporting to the owner
 
+* **Every message to the owner begins with the time** (owner, 2026-11-07):
+  `HH:MM` in the owner's time zone (Europe/Berlin, `TZ=Europe/Berlin date
+  +%H:%M`), before the first word, in replies, status updates and questions
+  alike. The owner reads the session later and on several devices; the time
+  says how fresh a status is.
 * **Short, progress by topic** (owner, 2026-11-07). A status report to the
   owner names the topics and how far each has got: what is finished, what is
   being built now, what comes next, and what needs the owner. Each topic is

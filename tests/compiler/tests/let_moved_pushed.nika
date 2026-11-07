@@ -6,7 +6,7 @@ fn back(p: P) -> Vec[Vec[i64]] {
     out.push(k)
     return out
 }
-fn main() {
+fn main() throws {
     let v = back(P { items: [1, 2, 3] })
     print(v.len())
 }

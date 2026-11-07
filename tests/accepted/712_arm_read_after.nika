@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let s = f"x{1}"
     for i in 0..<2 {
         let c = if i == 1 { s } else { f"y{i}" }

@@ -42,7 +42,7 @@ fn computed(view: ref Unit, at: ref At) -> i64? {
     }
 }
 
-fn main() {
+fn main() throws {
     let f = Spanned { node: Item::Fn { name: "f", config: [7] }, at: 0 }
     let u = Unit { items: [Spanned { node: Item::Impl { name: "i", methods: [f] }, at: 1 }] }
     println(f"{computed(u, At { item: 0, method: 0 }) ?? -1}")

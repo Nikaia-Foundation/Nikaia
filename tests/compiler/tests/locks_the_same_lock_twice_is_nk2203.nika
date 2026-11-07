@@ -1,0 +1,12 @@
+// The same lock taken again inside its own door is refused (Part III C.6,
+// NK2203, #677).
+struct Account {
+    balance: i64,
+}
+
+fn main() {
+    let a = SharedMut(Account { balance: 100 })
+    a.access fn(x) {
+        a.update fn(mut y) { y.balance += 1 }
+    }
+}

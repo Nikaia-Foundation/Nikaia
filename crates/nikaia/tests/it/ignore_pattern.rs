@@ -44,7 +44,7 @@ fn the_ignore_pattern_stands_where_a_name_would_be_bound() {
         "fn pair() -> (i64, i64) { return (1, 2) }\n\
          fn handle(event: i64, _: String) -> i64 { return event }\n\
          fn twice(x: i64, f: fn(i64) -> i64 sync) -> i64 { return f(f(x)) }\n\
-         fn main() {\n\
+         fn main() throws {\n\
              let (first, _) = pair()\n\
              let tag = \"x\"\n\
              let n = twice(1, fn(_) { 3 })\n\
@@ -100,7 +100,7 @@ fn the_ledger_writes_an_ignored_parameter_and_never_keeps_it() {
 fn a_let_that_binds_nothing_is_refused() {
     let found: Vec<_> = findings(
         "fn side() -> i64 { return 7 }\n\
-         fn main() { let _ = side()\nprintln(\"done\") }",
+         fn main() throws { let _ = side()\nprintln(\"done\") }",
     )
     .into_iter()
     .filter(|f| f.code == "NK1144")
@@ -126,7 +126,7 @@ fn a_let_that_binds_nothing_is_refused() {
     assert!(
         findings(
             "fn pair() -> (i64, i64) { return (1, 2) }\n\
-             fn main() { let (a, _) = pair()\nprintln(f\"{a}\") }",
+             fn main() throws { let (a, _) = pair()\nprintln(f\"{a}\") }",
         )
         .iter()
         .all(|f| f.code != "NK1144"),
@@ -141,7 +141,7 @@ fn a_let_that_binds_nothing_is_refused() {
 /// character was the accident the record closed.
 #[test]
 fn the_ignore_pattern_is_not_an_expression() {
-    let said = lowered("fn main() { let n = 1\nlet m = n + _ println(f\"{m}\") }")
+    let said = lowered("fn main() throws { let n = 1\nlet m = n + _ println(f\"{m}\") }")
         .expect_err("`_` is not a value");
     assert!(
         said.contains("Expected expression here, but found `_`."),
@@ -160,11 +160,12 @@ fn the_ignore_pattern_is_not_an_expression() {
 /// with both reads as a name.
 #[test]
 fn a_name_beginning_with_an_underscore_is_a_name() {
-    let rust = lowered("fn main() { let _count = 1\nlet _0 = 2\nprintln(f\"{_count} {_0}\") }")
-        .expect("both are names");
+    let rust =
+        lowered("fn main() throws { let _count = 1\nlet _0 = 2\nprintln(f\"{_count} {_0}\") }")
+            .expect("both are names");
     assert!(rust.contains("_count"), "{rust}");
 
-    let found: Vec<_> = findings("fn main() { println(f\"{_000}\") }")
+    let found: Vec<_> = findings("fn main() throws { println(f\"{_000}\") }")
         .into_iter()
         .filter(|f| f.code == "NK1117")
         .collect();
@@ -174,7 +175,7 @@ fn a_name_beginning_with_an_underscore_is_a_name() {
     );
 
     // And the form it replaced is a number now, with nothing left to report.
-    let separated = findings("fn main() { let n = 1_000\nprintln(f\"{n}\") }");
+    let separated = findings("fn main() throws { let n = 1_000\nprintln(f\"{n}\") }");
     assert!(separated.is_empty(), "{separated:#?}");
 }
 
@@ -189,7 +190,7 @@ fn an_ignored_argument_earns_no_warning_from_rustc() {
     let rust = lowered(
         "fn twice(x: i64, f: fn(i64) -> i64 sync) -> i64 { return f(f(x)) }\n\
          fn ignored(event: i64, _: String) -> i64 { return event }\n\
-         fn main() {\n\
+         fn main() throws {\n\
              let tag = \"x\"\n\
              let n = twice(1, fn(_) { 3 })\n\
              println(f\"{ignored(n, tag)}\")\n\

@@ -645,6 +645,8 @@ impl CheckState {
             // parameter the function is lent (ADR-279), or a `let` over a
             // place (#465) is a reference already.
             form = FactKeyForm::AsIs
+        } else {
+            self.a_key_an_arm_bound(world, index)
         }
         self.facts.map_keys.insert((node_key(index), writing), form)
     }
@@ -656,6 +658,19 @@ impl CheckState {
             else => false,
         }
         return named || self.number_shaped(world, index)
+    }
+
+    /// **A key an enclosing arm bound** (#1355): where that arm lends it, the
+    /// lowering binds it `ref`, so it is a reference already and goes in as
+    /// it is; the arm is filed as a `match`'s subject's is.
+    fn a_key_an_arm_bound(ref mut self, world: ref CheckWorld, index: ref Expr) sync {
+        let name = match index {
+            Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+            else => return,
+        }
+        let bound = self.binding(name) ?? return
+        let arm = self.arm_bound.get(bound.id) ?? return
+        self.facts.arm_subjects.insert(node_key(index), arm)
     }
 
     fn a_key_read_as_it_is(ref self, world: ref CheckWorld, found: ref Ty, index: ref Expr) -> bool sync {

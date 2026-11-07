@@ -8,7 +8,7 @@ fn parse(t: String) -> View {
 // ADR-views-3 D9 (#942): `text` moved into `c.input` is followed there, so
 // changing that field in place while `v` is still used is refused; `c.pos`
 // is no part of the data `v` may point into.
-fn main() {
+fn main() throws {
     let n = 1
     let text = f"a: {n}"
     let v = parse(text)

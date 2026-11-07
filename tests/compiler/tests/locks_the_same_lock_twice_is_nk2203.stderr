@@ -1,0 +1,9 @@
+error[NK2203]: `update` takes a lock, but you're already holding one here.
+   --> tests/locks_the_same_lock_twice_is_nk2203.nika:10:11
+    |
+ 10 |         a.update fn(mut y) { y.balance += 1 }
+    |           ^^^^^^ takes a second lock
+    |
+    = note: This block runs while a lock is held, so taking a second lock inside it can deadlock.
+    = help: Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.
+1 mistake with a lock

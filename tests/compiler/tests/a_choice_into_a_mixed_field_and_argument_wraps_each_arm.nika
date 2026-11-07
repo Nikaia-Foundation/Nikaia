@@ -17,7 +17,7 @@ fn arg(s: ref String, n: i64) -> String {
     return same(if n == 0 { s } else { int_text(n) })
 }
 
-fn main() {
+fn main() throws {
     println(keep("hi", 0).text)
     println(keep("hi", 7).text)
     println(arg("hi", 0))

@@ -24,7 +24,7 @@ fn nested(n: i64) -> ((String, i64), String) {
     return (("deep", n), "outer")
 }
 
-fn main() {
+fn main() throws {
     let (s, n) = pair(1)
     let (t, m) = tail(2)
     let r = built(3)

@@ -22,12 +22,12 @@ impl Cleanup for Flaky {
     }
 }
 
-fn closing() {
+fn closing() throws {
     let f = Flaky { name: f"closed" }
     f.close() catch { println(f"close: {error}") }
     println("after close")
 }
 
-fn main() {
+fn main() throws {
     closing()
 }

@@ -2,6 +2,6 @@ fn f(throws: i64) -> i64 sync {
     return throws
 }
 
-fn main() {
+fn main() throws {
     print(f(1))
 }

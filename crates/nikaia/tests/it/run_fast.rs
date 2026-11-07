@@ -77,13 +77,13 @@ fn an_edited_script_runs_with_its_new_output() {
     let dir = common::scratch_dir("run-fast-edit");
     std::fs::create_dir_all(&dir).expect("dir");
     let script = dir.join("hello.nika");
-    std::fs::write(&script, "fn main() {\n    println(\"erster\")\n}\n").expect("script");
+    std::fs::write(&script, "fn main() throws {\n    println(\"erster\")\n}\n").expect("script");
 
     let first = nikaia(&["run", "hello.nika"], &dir);
     assert!(first.status.success(), "{}", said(&first));
     assert_eq!(String::from_utf8_lossy(&first.stdout), "erster\n");
 
-    std::fs::write(&script, "fn main() {\n    println(\"zweiter\")\n}\n").expect("edit");
+    std::fs::write(&script, "fn main() throws {\n    println(\"zweiter\")\n}\n").expect("edit");
     let second = nikaia(&["run", "hello.nika"], &dir);
     assert!(second.status.success(), "{}", said(&second));
     assert_eq!(
@@ -109,7 +109,7 @@ fn an_overflow_aborts_as_the_cargo_build_does() {
         "run-fast-overflow",
         "[package]\nname = \"grow\"\nversion = \"0.1.0\"\n",
         "fn grow(n: i32) -> i32 {\n    return n * 2\n}\n\n\
-         fn main() {\n    println(\"before\")\n    println(f\"{grow(2000000000)}\")\n}\n",
+         fn main() throws {\n    println(\"before\")\n    println(f\"{grow(2000000000)}\")\n}\n",
     );
     let project = dir.to_string_lossy().to_string();
 
@@ -156,7 +156,7 @@ fn a_program_with_a_rust_dependency_takes_cargos_path() {
     .expect("app manifest");
     std::fs::write(
         dir.join("app/src/main.nika"),
-        "fn main() {\n    println(\"through cargo\")\n}\n",
+        "fn main() throws {\n    println(\"through cargo\")\n}\n",
     )
     .expect("entry");
     let project = dir.join("app").to_string_lossy().to_string();
@@ -186,7 +186,7 @@ fn a_backend_error_is_still_said_in_nikaias_words() {
     let dir = a_project(
         "run-fast-backend-error",
         "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n",
-        "fn main() {\n    let n: i64 = 1\n    let unused = n + 1\n    println(f\"{n}\")\n}\n",
+        "fn main() throws {\n    let n: i64 = 1\n    let unused = n + 1\n    println(f\"{n}\")\n}\n",
     );
     let project = dir.to_string_lossy().to_string();
     let rustc = rustc_denying_warnings(&dir, "refused");

@@ -15,7 +15,7 @@ fn word_of(input: String) -> N {
 	return N { name: input.trim() }
 }
 
-fn main() {
+fn main() throws {
 	let n = word_of(" hello ")
 	let es = walk(n)
 	println(f"{es.len()} {es[0].name}")

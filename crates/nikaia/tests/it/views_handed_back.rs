@@ -27,7 +27,7 @@ fn d() -> ref String {
     return ref s
 }
 
-fn main() {
+fn main() throws {
     println(d())
 }
 ";
@@ -59,7 +59,7 @@ fn label(a: String, b: String) -> ref String {
     return \"other\"
 }
 
-fn main() {
+fn main() throws {
     let t: String = f\"y\"
     let row = Row { name: f\"z\" }
     println(f\"{e(t)} {c(row)} {first(\"long\", \"x\")} {label(\"a\", \"b\")}\")
@@ -99,7 +99,7 @@ fn d() -> ref String {
     return s
 }
 
-fn main() {
+fn main() throws {
     println(d())
 }
 ";
@@ -129,7 +129,7 @@ fn g() -> ref String {
     return e(f\"y\")
 }
 
-fn main() {
+fn main() throws {
     println(g())
 }
 ";

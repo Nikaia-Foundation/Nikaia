@@ -1,0 +1,48 @@
+// A map key an enclosing `match` arm bound, read through the brackets of a map
+// whose keys are owned (#1355): the arm binds it `ref`, so it is a reference
+// already and goes in as it is, not lent a second time.
+use std::collections
+
+enum Answer {
+    No,
+    Yes,
+}
+
+struct Entry {
+    name: String,
+    answer: Answer,
+}
+
+enum Callee {
+    Own(i64),
+    Library { key: Vec[i64], pauses: bool },
+}
+
+fn score(answer: Answer) -> i64 {
+    return match answer {
+        Answer::No => 0,
+        Answer::Yes => 1,
+    }
+}
+
+fn callee(library: bool) -> Callee? {
+    if library {
+        return Callee::Library { key: [1, 2], pauses: false }
+    }
+    return null
+}
+
+fn pick(entries: ref collections::BTreeMap[Vec[i64], Entry], library: bool) -> i64 {
+    let found = callee(library) ?? return -1
+    match found {
+        Callee::Library { key, .. } => return score(entries[key]?.answer?.clone() ?? Answer::No),
+        Callee::Own(_) => return 3,
+    }
+}
+
+fn main() throws {
+    let mut entries: collections::BTreeMap[Vec[i64], Entry] = collections::BTreeMap()
+    entries.insert([1, 2], Entry { name: "len", answer: Answer::Yes })
+    println(pick(entries, true))
+    println(pick(entries, false))
+}

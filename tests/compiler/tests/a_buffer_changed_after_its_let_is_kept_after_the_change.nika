@@ -29,7 +29,7 @@ fn picked(n: i64) -> Picked {
     return Picked { xs: xs[1..<n], at: 0 }
 }
 
-fn main() {
+fn main() throws {
     println(line(3).text)
     let g = grown(2)
     println(f"{g.text} {g.at}")

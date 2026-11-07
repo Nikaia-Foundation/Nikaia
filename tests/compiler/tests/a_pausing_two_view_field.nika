@@ -16,7 +16,7 @@ struct Unused {
 	f: fn(ref String, ref String) -> ref String,
 }
 
-fn main() {
+fn main() throws {
 	let h = Holder { f: longer }
 	println(f"{h.f("abcd", "abc").len()}")
 	let u = Unused { f: longer }

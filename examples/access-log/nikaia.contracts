@@ -11,17 +11,20 @@ version = 4
 
 [fn."Counts::add"]
 sync = true
+panics = true
 touches = []
 signature = "(ref mut self, bytes: i64)"
 
 [fn."Counts::merge"]
 sync = true
+panics = true
 touches = []
 signature = "(ref mut self, other: Counts)"
 
 [fn."Counts::new"]
 pub = true
 sync = true
+panics = false
 touches = []
 signature = "(bytes: i64) -> Counts"
 
@@ -36,24 +39,28 @@ signature = "(input: ?) -> Report"
 [fn."Report::merge"]
 sync = true
 keeps = ["other"]
+panics = true
 views = ["self: borrowed", "other: borrowed"]
 signature = "(ref mut self, other: Report)"
 
 [fn."Report::new"]
 pub = true
 sync = true
+panics = false
 touches = []
 views = ["<result>: borrowed"]
 signature = "() -> Report"
 
 [fn."Report::record"]
 sync = true
+panics = true
 views = ["self: borrowed", "e: borrowed"]
 signature = "(ref mut self, e: Hit)"
 
 [fn."main"]
-throws = ["?"]
+throws = ["?", "io::IoError"]
 locks = true
+panics = true
 signature = "()"
 
 [type."Counts"]

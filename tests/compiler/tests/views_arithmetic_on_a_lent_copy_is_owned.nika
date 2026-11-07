@@ -27,7 +27,7 @@ impl Counter {
 	}
 }
 
-fn main() {
+fn main() throws {
 	let d = 3.millis()
 	println(f"{d.doubled().in_millis()}")
 	println(f"{d.doubled().in_millis()}")

@@ -51,4 +51,4 @@ name xs@0 | \nother [@24 | digits 0@25 | other ]@26
 == drive_docs.nika
 25 words, 136 names, 0 docs, 36 literals, 273 other, 32 after a line break
 == grammar_same_line.nika
-20 words, 76 names, 0 docs, 30 literals, 139 other, 25 after a line break
+21 words, 76 names, 0 docs, 30 literals, 139 other, 25 after a line break

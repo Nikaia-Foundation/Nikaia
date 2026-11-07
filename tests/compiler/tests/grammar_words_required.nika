@@ -28,7 +28,7 @@ grammar Names {
     entry rule pair -> (i64, Named) = n:ident eof -> { (1, Named { name: n }) }
 }
 
-fn main() {
+fn main() throws {
     let input = Bytes("ab".bytes().collect())
     let a = Names::names(input) catch {
         return

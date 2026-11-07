@@ -2,10 +2,10 @@
 // keeps its name (#703).
 comptime LIMIT: i64 = 42
 comptime NAME = "const"
-fn show(LIMIT: i64) { println(f"{LIMIT}") }
+fn show(LIMIT: i64) throws { println(f"{LIMIT}") }
 fn unused(LIMIT: i64) { }
 fn named(NAME: String) -> i64 { return NAME.len() }
-fn main() {
+fn main() throws {
     show(1)
     unused(2)
     println(f"{LIMIT}")

@@ -23,7 +23,7 @@ struct P {
     n: i64,
 }
 
-fn main() {
+fn main() throws {
     let b = Box { item: 3 }
     let y = hand(b.get())
     println(f"{y}")

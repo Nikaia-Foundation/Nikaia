@@ -1,0 +1,52 @@
+// ADR-351 D1-D4, ADR-392, #1360: a call through a code parameter in a
+// function whose channel is typed opens the box into that channel; a lambda
+// handed to `fn() throws` hands back a `Result` (its failing calls leave
+// through `?`, its value goes into `Ok`); a `catch` around the call runs.
+enum Bad { Oops }
+impl Error for Bad {
+    fn message(ref self) -> String { "oops" }
+}
+
+fn run(f: fn() throws, stop: bool) throws {
+    if stop {
+        throw Bad::Oops
+    }
+    f()
+}
+
+fn quiet(f: fn() throws) {
+    f() catch {
+        eprintln("caught") catch { }
+    }
+}
+
+fn main() throws {
+    run(fn { println("z") }, false)
+    run(fn { println("never") }, true) catch {
+        match error {
+            Bad::Oops => println("oops caught"),
+            else => println("other"),
+        }
+    }
+    quiet(fn { println("q") })
+    values()
+}
+
+fn twice(f: fn(i64) -> i64 throws, x: i64) -> i64 throws {
+    return f(f(x))
+}
+
+fn values() throws {
+    let n = twice(fn(v) {
+        if v > 5 {
+            return v
+        }
+        println(f"step {v}")
+        v * 3
+    }, 1)
+    println(f"{n}")
+    let none = twice(fn(v) { v + 1 }, 1) catch { 0 }
+    println(f"{none}")
+    let g: fn() throws = fn { println("kept") }
+    g()
+}

@@ -55,7 +55,7 @@ fn a_comptime_calls_a_dependency() {
     let root = projects(
         "build-time-dependency-comptime",
         LIB,
-        "use lib\n\ncomptime N: i64 = lib::tripled(14)\n\nfn main() {\n    println(f\"{N}\")\n}\n",
+        "use lib\n\ncomptime N: i64 = lib::tripled(14)\n\nfn main() throws {\n    println(f\"{N}\")\n}\n",
     );
     let out = run(&root);
     let generated =
@@ -77,7 +77,7 @@ fn a_grammar_action_calls_a_dependency_at_build_time() {
          fn plus_one(n: i64) -> i64 {\n    return n + 1\n}\n\n\
          grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) -> { lib::tripled(plus_one(d)) }\n}\n\n\
          comptime N: i64 = Num::n(\"13\")\n\n\
-         fn main() {\n    println(f\"{N}\")\n}\n",
+         fn main() throws {\n    println(f\"{N}\")\n}\n",
     );
     let out = run(&root);
     let generated =
@@ -96,7 +96,7 @@ fn a_dependency_that_reaches_c_is_refused_at_build_time() {
         "build-time-dependency-c",
         "extern {\n    fn abs(n: i32) -> i32\n}\n\n\
          pub fn tripled(n: i64) -> i64 {\n    return n * 3 + unsafe { abs(0) } as i64\n}\n",
-        "use lib\n\ncomptime N: i64 = lib::tripled(14)\n\nfn main() {\n    println(f\"{N}\")\n}\n",
+        "use lib\n\ncomptime N: i64 = lib::tripled(14)\n\nfn main() throws {\n    println(f\"{N}\")\n}\n",
     );
     let out = run(&root);
     let _ = std::fs::remove_dir_all(&root);
@@ -129,7 +129,7 @@ fn the_build_time_program_links_no_c_library() {
          pub fn tripled(n: i64) -> i64 sync {\n    return n * 3\n}\n\n\
          pub fn marked(n: i32) -> i32 {\n    return unsafe { marker_value(n) }\n}\n",
         "use lib\n\ncomptime N: i64 = lib::tripled(14)\n\n\
-         fn main() {\n    println(f\"{N} {lib::marked(1)}\")\n}\n",
+         fn main() throws {\n    println(f\"{N} {lib::marked(1)}\")\n}\n",
     );
     std::fs::write(
         root.join("lib/nikaia.toml"),
@@ -263,7 +263,7 @@ fn a_grammar_action_calls_another_file_of_its_package() {
         "use lib\n\n\
          grammar Num {\n    entry rule n -> i64 = d:dec[i64](digit+) -> { lib::tripled(plus_one(d)) }\n}\n\n\
          comptime N: i64 = Num::n(\"13\")\n\n\
-         fn main() {\n    println(f\"{N}\")\n}\n",
+         fn main() throws {\n    println(f\"{N}\")\n}\n",
     );
     std::fs::write(
         root.join("app/src/helpers.nika"),
@@ -292,7 +292,7 @@ fn the_build_time_program_holds_no_rust_crate() {
          pub fn tripled(n: i64) -> i64 sync {\n    return n * 3\n}\n\n\
          pub fn shimmed(n: i64) -> i64 {\n    return shim::plus_one(n)\n}\n",
         "use lib\n\ncomptime N: i64 = lib::tripled(14)\n\n\
-         fn main() {\n    println(f\"{N} {lib::shimmed(1)}\")\n}\n",
+         fn main() throws {\n    println(f\"{N} {lib::shimmed(1)}\")\n}\n",
     );
     std::fs::write(
         root.join("lib/nikaia.toml"),

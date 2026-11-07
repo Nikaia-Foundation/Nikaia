@@ -141,7 +141,7 @@ fn the_sections_own_example_lowers() {
     let rust = compiled(
         "nullable-example",
         "\
-fn main() {
+fn main() throws {
     let strictly_string: String = \"Hello\"
     let mut maybe_string: String? = null
     maybe_string = \"World\"
@@ -177,7 +177,7 @@ fn score(id: i64) -> i64? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let hit = score(1) ?? 0
     let miss = score(0) ?? 0
     println(f\"{hit} {miss}\")
@@ -205,7 +205,7 @@ fn score(id: i64) -> i64? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let mut a: i64? = null
     a = score(1)
     let shown = a ?? 0
@@ -258,7 +258,7 @@ fn a_plain_value_fits_a_nullable_slot_and_not_the_other_way() {
 fn handing_a_nullable_where_a_plain_value_is_wanted_is_refused() {
     let source = "\
 fn plain(n: i64) -> i64 { return n }
-fn main() {
+fn main() throws {
     let maybe: i64? = null
     println(f\"{plain(maybe)}\")
 }
@@ -305,7 +305,7 @@ fn find(id: i64) -> User? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let name = find(1)?.name ?? \"nobody\"
     let city = find(1)?.home?.city ?? \"nowhere\"
     let zip = find(1)?.home?.zip ?? \"none\"
@@ -345,7 +345,7 @@ fn a_plain_value_in_a_nullable_field_is_wrapped() {
 struct Address { city: String }
 struct User { name: String, home: Address? }
 
-fn main() {
+fn main() throws {
     let home = Address { city: f\"Bletchley\" }
     let u = User { name: \"Ada\", home: home }
     let city = u.home?.city ?? \"nowhere\"
@@ -374,7 +374,7 @@ fn main() {
 fn reaching_through_a_plain_value_warns_and_is_the_plain_read() {
     let source = "\
 struct User { name: String }
-fn main() {
+fn main() throws {
     let u = User { name: \"Ada\" }
     let n = u?.name
     println(f\"{n}\")
@@ -429,7 +429,7 @@ fn reaching_through_a_list_index_is_refused() {
 /// on a `String` is `s.len()`.
 #[test]
 fn a_reached_method_on_a_plain_text_runs_as_the_plain_call() {
-    let source = "fn main() {\n    let s: String = \"abc\"\n    let n = s?.len()\n    println(f\"{n}\")\n}\n";
+    let source = "fn main() throws {\n    let s: String = \"abc\"\n    let n = s?.len()\n    println(f\"{n}\")\n}\n";
     let codes: Vec<&str> = findings(source).iter().map(|f| f.code_str()).collect();
     assert_eq!(codes, vec!["NK1217"]);
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -500,7 +500,7 @@ fn pair(a: i64?, b: i64?) -> i64 {
     return (a ?? 0) + (b ?? 0)
 }
 
-fn main() {
+fn main() throws {
     println(f\"{shown(\"here\")}\")
     println(f\"{shown(null)}\")
     println(f\"{pair(1, 2)}\")
@@ -527,7 +527,7 @@ fn shown(what: String?) -> String {
     return what ?? \"nothing\"
 }
 
-fn main() {
+fn main() throws {
     let b = Box { label: \"on it\" }
     println(f\"{shown(b.label)}\")
 }
@@ -706,7 +706,7 @@ fn two_calls_to_one_function_in_one_statement_get_their_own_wraps() {
          \x20   return a ?? 7\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let r = pick(1) + pick(null)\n\
          \x20   println(f\"{r}\")\n\
          }\n",
@@ -724,7 +724,7 @@ fn the_order_of_two_calls_does_not_decide_their_wraps() {
          \x20   return a ?? 7\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let r = pick(null) + pick(1)\n\
          \x20   println(f\"{r}\")\n\
          }\n",
@@ -743,7 +743,7 @@ fn two_holes_of_one_string_get_their_own_wraps() {
          \x20   return a ?? 7\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{pick(1)}{pick(null)}\")\n\
          }\n",
     );
@@ -764,7 +764,7 @@ fn two_struct_literals_in_one_statement_get_their_own_wraps() {
          \x20   return p.x ?? 9\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let r = hold(P { x: 2 }) + hold(P { x: null })\n\
          \x20   println(f\"{r}\")\n\
          }\n",
@@ -794,7 +794,7 @@ fn two_structs_sharing_a_field_name_get_their_own_wraps() {
          \x20   return (a.x ?? 0) + b.x\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let x = 1\n\
          \x20   let r = hold(P { x }, Q { x })\n\
          \x20   println(f\"{r}\")\n\
@@ -854,7 +854,7 @@ fn find(id: i64) -> User? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let name = find(1)?.name ?? \"nobody\"
     println(f\"{name}\")
 }
@@ -881,7 +881,7 @@ fn a_fallback_that_owns_what_the_reach_views_is_refused() {
     let source = "\
 struct User { name: String }
 
-fn main() {
+fn main() throws {
     let user: User? = User { name: \"Ada\" }
     let nobody: String = \"nobody\"
     let name = user?.name ?? nobody
@@ -939,7 +939,7 @@ fn find(id: i64) -> User? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let a = find(1)?.label() ?? \"none\"
     let b = find(2)?.first() ?? \"none\"
     let c = find(1)?.first()
@@ -983,7 +983,7 @@ fn a_variant_matched_on_a_nullable_is_refused() {
              fn g(n: i64) -> W? {{\n\
              \x20   return if n == 0 {{ W::B }} else {{ null }}\n\
              }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   {scrutinee}\n\
              \x20   println(f\"{{z}}\")\n\
              }}\n"
@@ -1010,7 +1010,7 @@ fn a_variant_matched_on_a_nullable_is_refused() {
 fn a_literal_matched_on_a_nullable_is_refused() {
     let source = |arms: &str| {
         format!(
-            "fn main() {{\n\
+            "fn main() throws {{\n\
              \x20   let v = [1, 2]\n\
              \x20   let r = match v.first() {{ {arms} }}\n\
              \x20   println(f\"{{r}}\")\n\
@@ -1039,7 +1039,7 @@ fn a_literal_matched_on_a_nullable_is_refused() {
 fn a_name_given_to_a_coalesce_is_handed_over() {
     let taken = findings(
         "fn find(n: i64) -> String? {\n    if n > 0 {\n        return f\"some\"\n    }\n    return null\n}\n\n\
-         fn main() {\n    let viewed = find(1)\n    let first = viewed ?? \"none\"\n    println(first)\n    \
+         fn main() throws {\n    let viewed = find(1)\n    let first = viewed ?? \"none\"\n    println(first)\n    \
          if viewed != null {\n        println(\"again\")\n    }\n}\n",
     );
     let refusal = taken
@@ -1054,7 +1054,7 @@ fn a_name_given_to_a_coalesce_is_handed_over() {
 
     let copied = findings(
         "fn count(n: i64) -> i64? {\n    if n > 0 {\n        return n\n    }\n    return null\n}\n\n\
-         fn main() {\n    let c = count(1)\n    let first = c ?? 0\n    println(f\"{first}\")\n    \
+         fn main() throws {\n    let c = count(1)\n    let first = c ?? 0\n    println(f\"{first}\")\n    \
          if c != null {\n        println(\"again\")\n    }\n}\n",
     );
     assert!(copied.is_empty(), "{copied:#?}");
@@ -1117,7 +1117,7 @@ fn kept(n: i64) -> String {
     return user ?? "x"
 }
 
-fn main() {
+fn main() throws {
     let user = find(1)
     println(user ?? "guest")
     println(shown(user ?? "guest"))
@@ -1167,7 +1167,7 @@ impl Touch {
     }
 }
 
-fn main() {
+fn main() throws {
     let t = Touch { kind: "file", parameter: "path" }
     let u = Touch { kind: "lock", parameter: null }
     println(t.read())
@@ -1214,7 +1214,7 @@ fn tag(n: i64) -> Tag? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let name = find(1)
     let none = find(0)
     let fallback = Tag { word: "none" }
@@ -1252,7 +1252,7 @@ fn a_loop_over_a_nullable_is_refused() {
              \x20   if n > 0 {{ return [\"xy\", \"z\"] }}\n\
              \x20   return null\n\
              }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()\n\
              \x20   m.insert(\"a\", [\"xyz\"])\n\
              \x20   let mut total = 0\n\
@@ -1300,7 +1300,7 @@ fn a_name_bound_to_a_map_read_is_read_as_one() {
              \x20   let full = imports.get(call) ?? call\n\
              \x20   return full.clone()\n\
              }}\n\
-             fn main() {{\n\
+             fn main() throws {{\n\
              \x20   let mut m: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()\n\
              \x20   m.insert(\"a\", [\"xy\", \"z\"])\n\
              \x20   let mut i: collections::BTreeMap[String, String] = collections::BTreeMap()\n\
@@ -1359,7 +1359,7 @@ fn grid_of(n: i64) -> Grid? {
     }
     return null
 }
-fn main() {
+fn main() throws {
     let kind = kind_of(0)
     let found = grid_of(1)
     let spare = Grid { cells: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] }
@@ -1395,7 +1395,7 @@ fn labels(cs: ref Vec[Contract]) -> i64 {
     }
     return total
 }
-fn main() {
+fn main() throws {
     let a = Contract { signature: Sig { names: ["x", "y"] }, label: "ab" }
     let b = Contract { signature: null, label: null }
     println(f"{count(a)} {count(b)} {labels([a, b])}")
@@ -1411,7 +1411,7 @@ fn kept(c: ref Contract) -> Sig {
     let signature = c.signature ?? return Sig { names: [] }
     return signature
 }
-fn main() {
+fn main() throws {
     println(f"{kept(Contract { signature: null }).names.len()}")
 }
 "#;
@@ -1433,7 +1433,7 @@ fn the_text_form_of_text_beside_a_view_is_the_text_itself() {
         "\
 struct User { name: String }
 
-fn main() {
+fn main() throws {
     let user: User? = User { name: f\"Ada\" }
     let nobody: String = f\"nobody\"
     let name = user?.name ?? nobody.to_string()
@@ -1451,7 +1451,7 @@ fn main() {
         "\
 struct User { name: String }
 
-fn main() {
+fn main() throws {
     let user: User? = User { name: \"Ada\" }
     let n = 5
     let name = user?.name ?? n.to_string()
@@ -1491,7 +1491,7 @@ fn text_of(t: ref String?) -> String {
     let known = t ?? return \"-\"
     return known.clone()
 }
-fn main() {
+fn main() throws {
     let found: Kind? = null
     let boxed = Labelled { label: \"x\" }
     let owned: String = \"own\"
@@ -1531,9 +1531,9 @@ fn none_is_answered_with_null() {
 #[test]
 fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
     let refused = [
-        "fn main() {\n    let o: i64? = 3\n    if o == null { print(o + 1) }\n}\n",
-        "fn f(x: i64?) -> String {\n    return match x {\n        n if n > 3 => \"big\",\n        else => \"small\",\n    }\n}\nfn main() { print(f(5)) }\n",
-        "fn main() {\n    let o: i64? = 3\n    println(f\"{o}\")\n}\n",
+        "fn main() throws {\n    let o: i64? = 3\n    if o == null { print(o + 1) }\n}\n",
+        "fn f(x: i64?) -> String {\n    return match x {\n        n if n > 3 => \"big\",\n        else => \"small\",\n    }\n}\nfn main() throws { print(f(5)) }\n",
+        "fn main() throws {\n    let o: i64? = 3\n    println(f\"{o}\")\n}\n",
     ];
     for source in refused {
         let found = findings(source);
@@ -1545,7 +1545,7 @@ fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
             found.iter().map(|f| &f.message).collect::<Vec<_>>()
         );
     }
-    let fixed = "fn f(x: i64?) -> String {\n    return match x {\n        n if (n ?? 0) > 3 => \"big\",\n        n => f\"small {n ?? 0}\",\n    }\n}\nfn main() {\n    let o: i64? = 3\n    if o != null { println((o ?? 0) + 1) }\n    println(f(5))\n    println(f(1))\n}\n";
+    let fixed = "fn f(x: i64?) -> String {\n    return match x {\n        n if (n ?? 0) > 3 => \"big\",\n        n => f\"small {n ?? 0}\",\n    }\n}\nfn main() throws {\n    let o: i64? = 3\n    if o != null { println((o ?? 0) + 1) }\n    println(f(5))\n    println(f(1))\n}\n";
     assert!(findings(fixed).is_empty(), "{:?}", findings(fixed));
     assert_eq!(ran("maybe-operand", fixed), "4\nbig\nsmall 1\n");
 }
@@ -1554,7 +1554,7 @@ fn a_maybe_is_refused_as_an_operand_and_as_a_hole() {
 /// 'i'])` lowered to a `Vec<char>`, which rustc refuses.
 #[test]
 fn a_list_is_no_pattern_of_text() {
-    let source = "fn vowel(ty: ref String) -> bool {\n    return ty.starts_with(['a', 'i'])\n}\nfn main() { print(vowel(\"apple\")) }\n";
+    let source = "fn vowel(ty: ref String) -> bool {\n    return ty.starts_with(['a', 'i'])\n}\nfn main() throws { print(vowel(\"apple\")) }\n";
     let found = findings(source);
     assert!(
         found
@@ -1570,7 +1570,7 @@ fn a_list_is_no_pattern_of_text() {
 /// `None`, which rustc refused; a function's own `T?` result already wrapped it.
 #[test]
 fn a_lambdas_arm_beside_a_null_is_wrapped() {
-    let source = "fn main() {\n    let v = [1, 2, 3, 4]\n    let h: Vec[i64] = v.iter().filter_map(fn(x) { if x % 2 == 0 { x / 2 } else { null } }).collect()\n    println(f\"{h.len()} {h[0]} {h[1]}\")\n}\n";
+    let source = "fn main() throws {\n    let v = [1, 2, 3, 4]\n    let h: Vec[i64] = v.iter().filter_map(fn(x) { if x % 2 == 0 { x / 2 } else { null } }).collect()\n    println(f\"{h.len()} {h[0]} {h[1]}\")\n}\n";
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     assert_eq!(ran("lambda-arm-beside-null", source), "2 1 2\n");
 }
@@ -1585,12 +1585,12 @@ fn a_nullable_tuple_is_a_type() {
     return (path[0..<at].clone(), (path[at..].strip_prefix(sep) ?? "").clone())
 }
 
-fn show(path: String) {
+fn show(path: String) throws {
     let (a, b) = cut(path, "/") ?? return
     println(f"{a} | {b}")
 }
 
-fn main() {
+fn main() throws {
     show("usr/lib")
     show("nothing")
     match cut("a=b", "=") {
@@ -1624,7 +1624,7 @@ fn a_nullable_tuples_parts_are_reached_with_safe_navigation() {
     return (path[0..<at].clone(), (path[at..].strip_prefix(sep) ?? "").clone())
 }
 
-fn main() {
+fn main() throws {
     let p = cut("key=value", "=")
     let q = cut("plain", "=")
     let first = p?.0 ?? "none"
@@ -1647,7 +1647,7 @@ fn told(pair: (String, i64)?) -> String {
     return f"{name}:{n}"
 }
 
-fn second() {
+fn second() throws {
     let e = Entry { pair: ("k", 7) }
     let none = Entry { pair: null }
     println(f"{told(e.pair?.clone())} {told(none.pair?.clone())}")
@@ -1685,7 +1685,7 @@ fn cut(s: ref String) -> (String, String)? {
     (s[0..<at].clone(), s[at + 1..].clone())
 }
 
-fn main() {
+fn main() throws {
     println(f"{first("a:b") ?? "-"} {first("ab") ?? "-"} {lit(false) ?? "-"} {lit(true) ?? "-"}")
     println(f"{twice(4) ?? 0} {twice(-1) ?? 0} {cut("k:v")?.1 ?? "-"} {cut("kv")?.1 ?? "-"}")
 }
@@ -1746,7 +1746,7 @@ fn keep(x: i64?) -> i64? {
     if x != null && x > 0 { return x }
     return null
 }
-fn main() {
+fn main() throws {
     println(f"{above(5)} {above(2)} {above(null)}")
     println(f"{absent_or_big(null)} {absent_or_big(1)} {absent_or_big(9)}")
     println(f"{twice(4)} {twice(null)} {early(2)} {early(null)}")
@@ -1787,7 +1787,7 @@ fn total(xs: Vec[i64]) -> i64 {
     }
     return t
 }
-fn width(r: Rect?) -> i64 {
+fn width(r: Rect?) -> i64 throws {
     if r != null && r.w > 0 {
         println(r.area())
     }
@@ -1796,7 +1796,7 @@ fn width(r: Rect?) -> i64 {
     }
     return r.w + wide(r)
 }
-fn lists(n: i64) -> i64 {
+fn lists(n: i64) -> i64 throws {
     let mut xs: Vec[i64]? = null
     if n > 0 {
         xs = [1, 2, n]
@@ -1827,7 +1827,7 @@ fn back(xs: Vec[i64]?) -> Vec[i64] {
     }
     return xs
 }
-fn main() {
+fn main() throws {
     let r: Rect? = Rect { w: 2, h: 3 }
     println(width(r))
     println(width(null))
@@ -1849,9 +1849,9 @@ fn main() {
 #[test]
 fn a_maybe_stays_where_nothing_proves_it() {
     let refused = [
-        "fn f(x: i64?, c: bool) -> bool {\n    return c || x > 3\n}\nfn main() { print(f(1, true)) }\n",
-        "fn f(x: i64?) -> i64 {\n    if x != null { return 1 } else { return x + 1 }\n}\nfn main() { print(f(1)) }\n",
-        "fn f(x: i64?) -> i64 {\n    if x != null && x > 1 { return 1 }\n    return x + 1\n}\nfn main() { print(f(1)) }\n",
+        "fn f(x: i64?, c: bool) -> bool {\n    return c || x > 3\n}\nfn main() throws { print(f(1, true)) }\n",
+        "fn f(x: i64?) -> i64 {\n    if x != null { return 1 } else { return x + 1 }\n}\nfn main() throws { print(f(1)) }\n",
+        "fn f(x: i64?) -> i64 {\n    if x != null && x > 1 { return 1 }\n    return x + 1\n}\nfn main() throws { print(f(1)) }\n",
     ];
     for source in refused {
         let found = findings(source);
@@ -1861,7 +1861,7 @@ fn a_maybe_stays_where_nothing_proves_it() {
             found.iter().map(|f| &f.message).collect::<Vec<_>>()
         );
     }
-    let reassigned = "fn other() -> i64? { return null }\nfn f(start: i64?) -> i64 {\n    let mut x = start\n    if x == null { return 0 }\n    x = other()\n    return x + 1\n}\nfn main() { print(f(1)) }\n";
+    let reassigned = "fn other() -> i64? { return null }\nfn f(start: i64?) -> i64 {\n    let mut x = start\n    if x == null { return 0 }\n    x = other()\n    return x + 1\n}\nfn main() throws { print(f(1)) }\n";
     let found = findings(reassigned);
     let refusal = found
         .iter()
@@ -1898,7 +1898,7 @@ fn shout(name: String?) -> String {
     }
 }
 
-fn main() {
+fn main() throws {
     println(describe(null, true))
     println(describe(null, false))
     println(describe(0, false))
@@ -1959,7 +1959,7 @@ fn count(b: bool) -> i64? {
     if b { 4 } else { 5 }
 }
 
-fn main() {
+fn main() throws {
     let (x, n) = pick(true) ?? ("z", 0)
     let (y, m) = pick(false) ?? ("z", 0)
     println(f"{x} {n} {y} {m}")
@@ -2007,7 +2007,7 @@ fn mixed(x: i64) -> i64? {
     }
 }
 
-fn main() {
+fn main() throws {
     println(f"{pick(0) ?? -1} {pick(1) ?? -1} {pick(2) ?? -1} {pick(5) ?? -1}")
     println(f"{clamp(-4) ?? -1} {clamp(4) ?? -1}")
     println(f"{mixed(0) ?? -1} {mixed(1) ?? -1} {mixed(9) ?? -1}")
@@ -2026,14 +2026,14 @@ fn main() {
 #[test]
 fn a_fallback_of_another_kind_is_refused() {
     for source in [
-        "fn main() {\n    let s: String? = null\n    let t = s ?? 5\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let n: i64? = null\n    let t = n ?? \"none\"\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let b: bool? = null\n    let t = b ?? 0\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let s: String? = null\n    let t = s ?? 5\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let n: i64? = null\n    let t = n ?? \"none\"\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let b: bool? = null\n    let t = b ?? 0\n    println(f\"{t}\")\n}",
         // #732: an integer and a float are not made into one another.
-        "fn main() {\n    let x: f64? = null\n    let t = x ?? 1\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let x: f64? = null\n    println(f\"{x ?? -1}\")\n}",
-        "fn main() {\n    let n: i64? = null\n    let t = n ?? 1.5\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let n: i64 = 3\n    let x: f64? = null\n    let t = x ?? n\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let x: f64? = null\n    let t = x ?? 1\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let x: f64? = null\n    println(f\"{x ?? -1}\")\n}",
+        "fn main() throws {\n    let n: i64? = null\n    let t = n ?? 1.5\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let n: i64 = 3\n    let x: f64? = null\n    let t = x ?? n\n    println(f\"{t}\")\n}",
     ] {
         let found = findings(source);
         assert!(
@@ -2045,13 +2045,13 @@ fn a_fallback_of_another_kind_is_refused() {
         );
     }
     for source in [
-        "fn main() {\n    let s: String? = null\n    let t = s ?? \"none\"\n    println(t)\n}",
-        "fn main() {\n    let n: i64? = null\n    let t = n ?? 5\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let x: f64? = null\n    let t = x ?? 1.0\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let x: f32? = null\n    let t = x ?? -1.5\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let n: i32? = null\n    let t = n ?? -5\n    println(f\"{t}\")\n}",
-        "fn main() {\n    let m: i32 = 3\n    let n: i64? = null\n    let t = n ?? m\n    println(f\"{t}\")\n}",
-        "fn f(s: String?) -> i64 {\n    let t = s ?? return 0\n    return t.len()\n}\nfn main() { println(f\"{f(null)}\") }",
+        "fn main() throws {\n    let s: String? = null\n    let t = s ?? \"none\"\n    println(t)\n}",
+        "fn main() throws {\n    let n: i64? = null\n    let t = n ?? 5\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let x: f64? = null\n    let t = x ?? 1.0\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let x: f32? = null\n    let t = x ?? -1.5\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let n: i32? = null\n    let t = n ?? -5\n    println(f\"{t}\")\n}",
+        "fn main() throws {\n    let m: i32 = 3\n    let n: i64? = null\n    let t = n ?? m\n    println(f\"{t}\")\n}",
+        "fn f(s: String?) -> i64 {\n    let t = s ?? return 0\n    return t.len()\n}\nfn main() throws { println(f\"{f(null)}\") }",
     ] {
         let found = findings(source);
         assert!(
@@ -2074,7 +2074,7 @@ fn f(w: i64, k: i64) -> R {
     return R { lo: 0, hi: (1 << (w - k).min(62)) - 1 }
 }
 
-fn main() {
+fn main() throws {
     let r = f(64, 50)
     println(f\"{r.hi ?? 0}\")
 }

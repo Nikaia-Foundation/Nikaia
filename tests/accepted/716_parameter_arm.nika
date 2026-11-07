@@ -5,12 +5,12 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn show(s: String, n: i64) {
+fn show(s: String, n: i64) throws {
     let r = longest(if n == 0 { s } else { f"n{n}" }, "ab")
     println(r)
 }
 
-fn main() {
+fn main() throws {
     let s = f"base{1}"
     show(s, 0)
     show(s, 7)

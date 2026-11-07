@@ -11,7 +11,7 @@ fn column(m: collections::BTreeMap[String, u32], name: String) -> u32? {
     return null
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, u32] = collections::BTreeMap()
     m.insert("a", 7)
     println(f"{column(m, "a") ?? 0} {column(m, "b") ?? 0}")

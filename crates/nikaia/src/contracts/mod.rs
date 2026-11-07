@@ -30,6 +30,7 @@ pub mod keeps;
 pub mod locks;
 pub mod maps;
 pub mod order;
+pub mod panics;
 pub mod send;
 pub mod sharing;
 pub mod sync;
@@ -872,6 +873,19 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
                 self.library,
                 &self.resolved.borrow(),
                 &self.stored.borrow(),
+            )
+        });
+    }
+
+    fn infer_panics(&self, ledger: &mut Ledger) {
+        self.timed("panics", || {
+            panics::infer(
+                ledger,
+                self.units,
+                self.library,
+                &self.resolved.borrow(),
+                &self.checked.borrow(),
+                self.parallel,
             )
         });
     }

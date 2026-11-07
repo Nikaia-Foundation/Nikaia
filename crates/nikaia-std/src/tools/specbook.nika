@@ -128,7 +128,7 @@ pub fn readings(code: ref String) -> Vec[Reading] {
 
 /// A body inside a `main`, every line that says something indented.
 fn wrapped(body: ref String) -> String {
-    let mut out: String = "fn main() {\n"
+    let mut out: String = "fn main() throws {\n"
     let mut first = true
     for line in body.trim_end().split("\n") {
         if !first {

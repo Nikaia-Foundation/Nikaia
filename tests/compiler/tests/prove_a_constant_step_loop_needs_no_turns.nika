@@ -1,6 +1,6 @@
 // A name a turn changes by one constant is proved by its closed form, as
 // before turn-indexed intervals (ADR-361 D5, D12).
-fn main() {
+fn main() throws {
     let mut s = 0
     let mut k = 0
     while k < 4 {

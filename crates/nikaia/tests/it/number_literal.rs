@@ -67,10 +67,11 @@ fn the_hex_digits_take_either_case_and_the_prefix_does_not() {
     assert!(rust.contains("let a = 255;"), "{rust}");
     assert!(rust.contains("let b = 255;"), "{rust}");
 
-    let found: Vec<_> = findings("fn main() {\n    let n = 0\nX10\n    println(f\"{n}\")\n}\n")
-        .into_iter()
-        .filter(|f| f.code == "NK1117")
-        .collect();
+    let found: Vec<_> =
+        findings("fn main() throws {\n    let n = 0\nX10\n    println(f\"{n}\")\n}\n")
+            .into_iter()
+            .filter(|f| f.code == "NK1117")
+            .collect();
     assert_eq!(found.len(), 1, "{found:#?}");
     assert!(found[0].message.contains("X10"), "{found:#?}");
 }
@@ -133,7 +134,7 @@ fn a_number_too_wide_for_an_i64_is_refused_and_does_not_panic() {
 #[test]
 fn a_diagnostic_names_the_number_and_not_the_spelling() {
     let found: Vec<_> =
-        findings("fn main() {\n    let n: i32 = 3_000_000_000\n    println(f\"{n}\")\n}\n")
+        findings("fn main() throws {\n    let n: i32 = 3_000_000_000\n    println(f\"{n}\")\n}\n")
             .into_iter()
             .filter(|f| f.code == "NK1116")
             .collect();
@@ -304,7 +305,7 @@ fn a_scaled_number_is_typed_by_its_use() {
     assert!(rust.contains("let a = 1000000000;"), "{rust}");
     assert!(rust.contains("let b = 3000000000i64;"), "{rust}");
 
-    let found = findings("fn main() {\n    let c: u8 = 1K\n    println(f\"{c}\")\n}\n");
+    let found = findings("fn main() throws {\n    let c: u8 = 1K\n    println(f\"{c}\")\n}\n");
     assert!(
         found
             .iter()
@@ -317,10 +318,11 @@ fn a_scaled_number_is_typed_by_its_use() {
 /// a name, as `0X10` is.
 #[test]
 fn a_scale_followed_by_a_name_is_a_name() {
-    let found: Vec<_> = findings("fn main() {\n    let n = 1\nGx\n    println(f\"{n}\")\n}\n")
-        .into_iter()
-        .filter(|f| f.code == "NK1117")
-        .collect();
+    let found: Vec<_> =
+        findings("fn main() throws {\n    let n = 1\nGx\n    println(f\"{n}\")\n}\n")
+            .into_iter()
+            .filter(|f| f.code == "NK1117")
+            .collect();
     assert_eq!(found.len(), 1, "{found:#?}");
     assert!(found[0].message.contains("Gx"), "{found:#?}");
 }
@@ -375,27 +377,27 @@ fn a_number_literal_where_text_is_declared_is_refused() {
         findings(source).iter().map(|f| f.code_str()).collect()
     };
     assert_eq!(
-        codes("fn main() {\n    let s: String = 3\n    println(s)\n}\n"),
+        codes("fn main() throws {\n    let s: String = 3\n    println(s)\n}\n"),
         ["NK1103"]
     );
     assert_eq!(
-        codes("fn f() -> String {\n    return -2\n}\nfn main() {\n    println(f())\n}\n"),
+        codes("fn f() -> String {\n    return -2\n}\nfn main() throws {\n    println(f())\n}\n"),
         ["NK1104"]
     );
     assert_eq!(
         codes(
-            "struct P { name: String }\nfn main() {\n    let p = P { name: 1.5 }\n    println(p.name)\n}\n"
+            "struct P { name: String }\nfn main() throws {\n    let p = P { name: 1.5 }\n    println(p.name)\n}\n"
         ),
         ["NK1106"]
     );
     // An integer declared, or one that may be absent, still takes it; a float
     // is written with a decimal point (Part I 2.4, #703).
     assert!(
-        codes("fn main() {\n    let n: i32 = 4\n    let x: f64 = 2.0\n    let y: i64? = 3\n    println(f\"{n} {x} {y ?? 0}\")\n}\n")
+        codes("fn main() throws {\n    let n: i32 = 4\n    let x: f64 = 2.0\n    let y: i64? = 3\n    println(f\"{n} {x} {y ?? 0}\")\n}\n")
             .is_empty()
     );
     assert_eq!(
-        codes("fn main() {\n    let x: f64 = 2\n    println(f\"{x}\")\n}\n"),
+        codes("fn main() throws {\n    let x: f64 = 2\n    println(f\"{x}\")\n}\n"),
         ["NK1103"]
     );
 }
@@ -404,7 +406,7 @@ fn a_number_literal_where_text_is_declared_is_refused() {
 /// the binding carries no known value, so a later use is not refused again.
 #[test]
 fn an_overflowed_constant_is_reported_once() {
-    let source = "fn main() {\n    let n: i64 = -9223372036854775807 - 1\n    let m = n * -1\n    println(m)\n}\n";
+    let source = "fn main() throws {\n    let n: i64 = -9223372036854775807 - 1\n    let m = n * -1\n    println(m)\n}\n";
     let found: Vec<_> = findings(source)
         .into_iter()
         .filter(|f| f.code == "NK1116")

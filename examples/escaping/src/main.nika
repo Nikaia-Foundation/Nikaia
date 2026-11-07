@@ -48,7 +48,7 @@ fn emphasised(name: String) -> String {
     } eod
 }
 
-fn main() {
+fn main() throws {
     let rows = [
         Row { name: "Ada", note: "fine", shade: "odd" },
         Row { name: "a<b & c", note: "\"quoted\"", shade: "even" },

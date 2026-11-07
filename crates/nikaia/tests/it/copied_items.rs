@@ -130,7 +130,7 @@ const OPEN_ITEMS: &str = r##"fn bytes(b: Vec[u8]) -> i64 {
     return b.len() as i64
 }
 
-fn main() {
+fn main() throws {
     let xs = [1, 2, 3, 4, 5]
     let n = xs.iter().map fn(x) { x * 3 }.filter fn(v) { v > 4 }.count()
     let m = xs.iter().filter fn(v) { v > 4 }.count()
@@ -159,7 +159,7 @@ fn the_items_of_a_list_of_number_literals_copy() {
 
 /// **A lambda handed the items reads the list's number**: a use in it asks
 /// for the list's type as a use anywhere else does (ADR-285 D34).
-const ASKED_IN_A_LAMBDA: &str = "fn byte(b: u8) -> i64 {\n    return b as i64\n}\n\nfn main() {\n    let xs = [1, 2, 3]\n    let n = xs.iter().filter fn(v) { byte(v) > 1 }.count()\n    println(f\"{n}\")\n}\n";
+const ASKED_IN_A_LAMBDA: &str = "fn byte(b: u8) -> i64 {\n    return b as i64\n}\n\nfn main() throws {\n    let xs = [1, 2, 3]\n    let n = xs.iter().filter fn(v) { byte(v) > 1 }.count()\n    println(f\"{n}\")\n}\n";
 
 #[test]
 fn a_use_in_the_lambda_types_the_list() {

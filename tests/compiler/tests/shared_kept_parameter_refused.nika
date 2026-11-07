@@ -7,7 +7,7 @@ fn pool(keep db: Conn) -> Pool {
     return Pool { conn: db }
 }
 
-fn main() {
+fn main() throws {
     let db = Shared(Conn { host: "k" })
     println(pool(db).conn.host)
 }

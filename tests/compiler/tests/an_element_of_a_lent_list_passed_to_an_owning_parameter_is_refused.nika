@@ -18,7 +18,7 @@ fn lent_copied(v: ref Vec[LentT]) -> i64 {
     lent_keep(o, v[0].u.clone())
     o.len() as i64 + lent_reads(v[0].text)
 }
-fn main() {
+fn main() throws {
     let v = [LentT { text: "a", u: LentU { n: 1, s: "x" } }]
     println(f"{lent_element([v[0].u.clone()])} {lent_field(v)} {lent_copied(v)}")
 }

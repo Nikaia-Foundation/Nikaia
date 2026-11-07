@@ -5,7 +5,7 @@ fn pick(s: String) -> String from s {
     return s
 }
 
-fn main() {
+fn main() throws {
     let names: Vec[String] = ["a", "b"]
     let g: String = " b "
     println(names.contains(pick(g)))

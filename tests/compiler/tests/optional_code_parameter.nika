@@ -42,7 +42,7 @@ fn unused(n: i64, run: (fn(i64) -> i64 sync)?) -> i64 sync { return n }
 
 fn grouped(n: i64, run: (fn(i64) -> i64 sync)) -> i64 sync { return run(n) }
 
-fn main() {
+fn main() throws {
     println(f"{by_match(3, double)} {by_match(3, null)}")
     println(f"{by_test(3, double)} {by_test(3, null)} {by_test(4, fn(x) { x + 1 })}")
     println(f"{by_coalesce(3, double)} {by_coalesce(3, null)}")

@@ -96,7 +96,7 @@ fn conv(s: ref String) -> u8 {
     return v as u8
 }
 
-fn main() {
+fn main() throws {
     println(f\"{conv(\"300\")}\")
 }
 ";
@@ -120,7 +120,7 @@ fn a_cast_out_of_an_unasked_open_number_writes_its_type() {
          \x20   let n = 7\n\
          \x20   return n as u8\n\
          }\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(f\"{small()}\")\n\
          }\n",
     );
@@ -137,7 +137,7 @@ fn a_method_of_an_open_number_keeps_the_function_plain() {
                   \x20   let n = 5\n\
                   \x20   return n.abs()\n\
                   }\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{digits()}\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -191,7 +191,7 @@ const WITH_INT: &str = "fn f(a: int) -> int {
     return a + 5
 }
 
-fn main() {
+fn main() throws {
     let x: i64 = f(1)
     let y: int = x
     println(f\"{x} {f(y)}\")
@@ -225,7 +225,7 @@ fn next(a: int) -> int {
     return a + 1
 }
 
-fn main() {
+fn main() throws {
     let read: int = text::parse_i64(\"9223372036854775807\") ?? 0
     println(f\"{next(read)}\")
 }
@@ -286,7 +286,7 @@ fn the_prover_reads_an_int() {
                   \x20   return whole\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let a: int = 3\n\
                   \x20   let b = 4 * (10 + positive(a))\n\
                   \x20   assert(a > 0)\n\

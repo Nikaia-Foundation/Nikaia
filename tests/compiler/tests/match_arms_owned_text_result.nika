@@ -23,7 +23,7 @@ fn number(i: i64) -> String {
     return i.to_string()
 }
 
-fn main() {
+fn main() throws {
     println(cloned(BV::Text("x")))
     println(cloned(BV::Int(3)))
     println(moved_out(BV::Text("y")))

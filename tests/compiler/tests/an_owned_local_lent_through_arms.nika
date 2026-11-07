@@ -9,7 +9,7 @@ fn look(p: ref P) -> i64 { return p.name.len() }
 
 fn count(s: String) -> i64 { return s.len() }
 
-fn main() {
+fn main() throws {
     let c = true
     let t = P { name: "a" }
     let a = look(if c { t } else { P { name: "bb" } })

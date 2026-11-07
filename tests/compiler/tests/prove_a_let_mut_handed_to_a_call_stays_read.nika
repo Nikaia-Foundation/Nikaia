@@ -13,7 +13,7 @@ fn id(n: i64) -> i64 {
 	return n
 }
 
-fn pick(a: i64) -> i64 {
+fn pick(a: i64) -> i64 throws {
 	let first = small(a)
 	let mut cp = first
 	if cp > 5 {
@@ -26,7 +26,7 @@ fn pick(a: i64) -> i64 {
 	return s
 }
 
-fn main() {
+fn main() throws {
 	println(f"{pick(3)}")
 	println(f"{pick(7)}")
 }

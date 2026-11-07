@@ -14,7 +14,7 @@ fn longest(a: String, b: String) -> String {
     return b
 }
 
-fn main() {
+fn main() throws {
     let part = f"p{1}"
     let owned = f"own{2}"
     let r = longest(part, owned)

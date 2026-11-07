@@ -1,4 +1,4 @@
-fn main() {
+fn main() throws {
     let n = f"a {{ b }}".len()
     println(n)
     println(f"a {{ b }}".clone())

@@ -28,7 +28,7 @@ fn decode(a: i64) -> scalar throws {
 	return scalar::from(fin)
 }
 
-fn main() {
+fn main() throws {
 	let c = decode(65) catch { 'x' }
 	println(f"{c}")
 	let d = decode(55296) catch { 'x' }

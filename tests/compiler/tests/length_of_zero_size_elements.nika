@@ -17,6 +17,6 @@ fn a(hs: ref Vec[Z]) -> i64 {
 	return index + k
 }
 
-fn main() {
+fn main() throws {
 	println(f"{a([Z {}])}")
 }

@@ -24,7 +24,7 @@ impl Cleanup for Flaky {
 
 fn closing() {
     let f = Flaky { name: f"closed" }
-    println("no close")
+    println("no close") catch {}
 }
 
 fn main() {

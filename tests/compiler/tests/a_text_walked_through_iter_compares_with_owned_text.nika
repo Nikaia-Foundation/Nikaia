@@ -23,7 +23,7 @@ fn same(keys: ref Vec[String]) -> i64 {
     return n
 }
 
-fn main() {
+fn main() throws {
     let pairs: Vec[(String, String)] = [("a", "a"), ("b", "c")]
     for line in renamed(pairs) {
         println(line)

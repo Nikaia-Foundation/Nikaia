@@ -695,7 +695,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         if value_at_entry != null {
             scope.entry.insert(name.clone(), value_at_entry ?? 0)
         }
-    } else if prover_typed(ty, words, 0) || (called && called_whole) {
+    } else if prover_let_typed(walk, ty, span, words, 0) || (called && called_whole) {
         scope.ints.insert(name.clone())
         scope.loose.insert(name.clone())
     }
@@ -707,7 +707,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             scope.summed.insert(name.clone(), called_summed ?? [])
         }
     }
-    if prover_typed(ty, words, 1) && scope.ints.contains(name) {
+    if prover_let_typed(walk, ty, span, words, 1) && scope.ints.contains(name) {
         scope.not_negative(walk.arena, name)
     }
     match value {
@@ -2784,6 +2784,22 @@ fn prover_a_branch(stmt: ref Stmt) -> bool {
 fn prover_symbol_text(symbol: ref winnow_grammar::Symbol?, words: ref winnow_grammar::InternerContext) -> String? {
     let present = symbol ?? return null
     return words.resolve(present).clone()
+}
+
+/// `prover_typed` of a `let`'s type, where a `let` written without one has
+/// the whole-number type the checker gave it (#1358).
+fn prover_let_typed(walk: ref ProverWalk, ty: ref Type?, span: Span, words: ref winnow_grammar::InternerContext, asked: i64) -> bool {
+    if ty != null {
+        return prover_typed(ty, words, asked)
+    }
+    let inferred = walk.state.whole_lets.get(span.start as i64) ?? return false
+    if asked == 0 {
+        return true
+    }
+    if asked == 1 {
+        return inferred.starts_with("u")
+    }
+    return false
 }
 
 /// What a `let`'s written type says: `0` a whole number, `1` an unsigned

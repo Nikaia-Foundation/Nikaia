@@ -3,7 +3,7 @@
 
 enum Slot { Empty, Held(Locked[i64]) }
 
-fn main() {
+fn main() throws {
 	immutable s = Slot::Empty
 	println("bound")
 }

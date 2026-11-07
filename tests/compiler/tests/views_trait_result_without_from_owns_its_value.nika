@@ -20,7 +20,7 @@ impl Named for P {
     }
 }
 
-fn main() {
+fn main() throws {
     let p = P { n: "x" }
     println(p.name())
 }

@@ -78,7 +78,7 @@
 10-nikaia-light.md #78 refused (a body) [sketch NK1181]  let db = Shared(postgres::connect("…"))
 10-nikaia-light.md #79 fragment (as written)  keep(Shared(connect(url)))                      // an a…
 10-nikaia-light.md #80 fragment (as written) [sketch]  let kasse: SharedMut[i32] = ...
-10-nikaia-light.md #81 lowered (as written) [sketch]  struct FileHandle {
+10-nikaia-light.md #81 lowered (as written)  struct FileHandle {
 10-nikaia-light.md #82 lowered (as written)  use std::fs
 10-nikaia-light.md #83 lowered (as written)  use std::fs
 10-nikaia-light.md #84 refused (as written) [sketch NK1135]  use std::fs
@@ -92,7 +92,7 @@
 10-nikaia-light.md #92 refused (a body) [NK1117]  let mut users = load_users()
 10-nikaia-light.md #93 refused (as written) [NK2105]  use std::fs
 10-nikaia-light.md #94 lowered (as written)  enum ConfigError {
-10-nikaia-light.md #95 refused (a body) [NK1117,NK1181,NK2605]  if !fs::exists(path, fs::Root::Anywhere) {
+10-nikaia-light.md #95 refused (a body) [NK1117,NK1181]  if !fs::exists(path, fs::Root::Anywhere) {
 10-nikaia-light.md #96 refused (a body) [NK1117]  let user = find(id) ?? throw NotFound(id)
 10-nikaia-light.md #97 refused (as written) [NK1117,NK1135]  fn load() -> Config throws {
 10-nikaia-light.md #98 refused (a body) [NK1117]  let config = load() catch {
@@ -117,7 +117,7 @@
 20-nikaia-advance.md #2 refused (as written) [NK1175,NK1181]  // The compiler runs the Json grammar at build time.
 20-nikaia-advance.md #3 refused (as written) [NK1181]  fn parse_input(input: String) throws {
 20-nikaia-advance.md #4 refused (as written) [NK1166,NK1170]  comptime ROUTES: Fixed[String, i64] = [("get", 1), ("po…
-20-nikaia-advance.md #5 lowered (as written)  fn describe[T: Struct](value: T) {
+20-nikaia-advance.md #5 lowered (as written)  fn describe[T: Struct](value: T) throws {
 20-nikaia-advance.md #6 refused (items, then a body) [NK1117]  fn schema[T](T) -> String {
 20-nikaia-advance.md #7 refused (as written) [NK1135]  struct User {
 20-nikaia-advance.md #8 refused (as written) [NK1135,NK1181]  @meta::Attribute(field)
@@ -127,7 +127,7 @@
 20-nikaia-advance.md #12 fragment (as written)  // If parsing fails inside the block, skip ahead to the…
 20-nikaia-advance.md #13 fragment (as written)  // Up to ";" - or to the end of the frame, whichever co…
 20-nikaia-advance.md #14 fragment (as written)  entry rule file -> Summary =
-20-nikaia-advance.md #15 refused (a body) [NK1117,NK1181,NK2605]  let data = fs::map(path, fs::Root::Anywhere)
+20-nikaia-advance.md #15 refused (a body) [NK1117,NK1181]  let data = fs::map(path, fs::Root::Anywhere)
 20-nikaia-advance.md #16 fragment (as written) [sketch]  grammar Yml {
 20-nikaia-advance.md #17 fragment (as written) [sketch]  pub grammar Json {
 20-nikaia-advance.md #18 fragment (as written) [about-a-refusal sketch]  fn process_image(path: String) -> Image { ... }
@@ -135,7 +135,7 @@
 20-nikaia-advance.md #20 refused (items, then a body) [about-a-refusal NK1117,NK1135]  use std::fs
 20-nikaia-advance.md #21 refused (as written) [NK1135]  fn bonus(score: i32) -> i32 { score * 2 + 1 }   // no `…
 20-nikaia-advance.md #22 refused (a body) [NK1117]  counter.access fn(n) { n + xs.sort_by_key fn(x) { x } }…
-20-nikaia-advance.md #23 refused (a body) [NK1117,NK2605]  counter.access fn(n) { xs.map fn(x) { fs::read("log", f…
+20-nikaia-advance.md #23 refused (a body) [NK1117]  counter.access fn(n) { xs.map fn(x) { fs::read("log", f…
 20-nikaia-advance.md #24 lowered (as written)  fn apply(f: fn(i64) -> i64, x: i64) -> i64 sync(f) {
 20-nikaia-advance.md #25 lowered (as written)  fn charge(kasse: SharedMut[i64], wieviel: i64) throws {
 20-nikaia-advance.md #26 lowered (a body) [about-a-refusal]  let counter = SharedMut(0)
@@ -179,7 +179,7 @@
 30-nikaia-tooling.md #30 fragment (as written)  impl File {
 30-nikaia-tooling.md #31 fragment (as written)  pub fn map(path: Path, root: Root) -> Mapped throws    …
 30-nikaia-tooling.md #32 fragment (as written)  pub fn exists(path: Path, root: Root) -> bool throws
-30-nikaia-tooling.md #33 refused (a body) [NK1109,NK1117,NK2605]  // A benchmark reading a file it generated itself.
+30-nikaia-tooling.md #33 refused (a body) [NK1117]  // A benchmark reading a file it generated itself.
 30-nikaia-tooling.md #34 fragment (as written) [about-a-refusal]  use sqlite                                    // a driv…
 30-nikaia-tooling.md #35 refused (items, then a body) [NK1175,NK1181,NK1230]  comptime SCHEMA = asset("contact.schema.json")
 30-nikaia-tooling.md #36 fragment (as written)  // std::collections::List

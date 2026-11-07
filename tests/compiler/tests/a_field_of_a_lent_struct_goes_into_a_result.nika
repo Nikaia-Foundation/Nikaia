@@ -17,7 +17,7 @@ fn opening(n: Node) -> Event {
 	return Event { start: n.start, anchor: n.anchor, name: n.name }
 }
 
-fn main() {
+fn main() throws {
 	let n = Node { anchor: "a1", name: "root", start: 3 }
 	let e = opening(n)
 	println(e.anchor ?? "none")

@@ -7,7 +7,7 @@ fn twice(mut s: S, f: fn(mut S)) {
     f(s)
 }
 fn bump(mut s: S) { s.n += 10 }
-fn main() {
+fn main() throws {
     let mut s = S { n: 1 }
     twice(s, fn(mut t) { t.n += 1 })
     let k = K { f: bump }

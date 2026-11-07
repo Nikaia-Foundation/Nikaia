@@ -1,0 +1,10 @@
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+  --> tests/an_inferred_whole_let_without_a_guard.nika:8:5
+   |
+ 8 |     assert(n > 0)
+   |     ^^^^^^^^^^^^^
+   |
+   = note: `n` comes from outside the program, so nothing the compiler can see says what it holds.
+   = note: That it is wrong is a case the program has to handle, not a defect an `assert` catches.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n > 0)`, or `return … if !(n > 0)`. After that line, this `assert` is proved.
+1 type error

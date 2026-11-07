@@ -252,13 +252,14 @@ pub fn project_tests_bounds_outcome(program: &ProgramTest, outcome: &ProjectTest
     ProjectTestsOutcome { ended_well: outcome.ended_well, stopped: outcome.stopped, passed: outcome.passed && right, stdout: outcome.stdout.copy_of(), stderr: outcome.stderr.to_string(), files: outcome.files.to_owned(), bounds }
 }
 
-pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) {
+pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     for (name, want, got) in outcome.bounds.iter() {
         if want != got {
-            println!("tests/{} (- expected, + reported):", name);
-            print!("{}", project_tests_difference(want, got));
+            nikaia_std::io::println(format_args!("tests/{} (- expected, + reported):", name))?;
+            nikaia_std::io::print(format_args!("{}", project_tests_difference(want, got)))?;
         }
     }
+    Ok(())
 }
 
 pub fn is_refusal(text: &str) -> bool { (text.starts_with("error") || text.contains("\nerror")) && !does_not_compile(text) }
@@ -286,7 +287,7 @@ pub fn project_tests_difference(expected: &[u8], produced: &[u8]) -> String {
 
 pub fn project_tests_agree(outcomes: &[(String, ProjectTestsOutcome)]) -> bool { (nikaia_std::range::span(1, outcomes.len() as i64)).all(|at| { nikaia_std::index::get(&outcomes, nikaia_std::index::at(at - 1)).1 == nikaia_std::index::get(&outcomes, nikaia_std::index::at(at)).1 }) }
 
-pub fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutcome)]) -> bool {
+pub fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<bool, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let agree = project_tests_agree(outcomes);
     let passed = agree && (nikaia_std::range::span(0, outcomes.len() as i64)).all(|at| { nikaia_std::index::get(&outcomes, nikaia_std::index::at(at)).1.passed });
     let said = match (passed, agree) {
@@ -294,29 +295,30 @@ pub fn project_tests_verdict(label: &str, outcomes: &[(String, ProjectTestsOutco
         (false, true) => "FAILED",
         (false, false) => "FAILED (the settings disagree)",
     };
-    println!("{} ... {}", label, said);
-    passed
+    nikaia_std::io::println(format_args!("{} ... {}", label, said))?;
+    Ok(passed)
 }
 
-pub fn project_tests_running(total: i64) {
+pub fn project_tests_running(total: i64) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let plural = match total == 1 {
         true => "",
         false => "s",
     };
-    println!("running {} test{}", total, plural);
+    nikaia_std::io::println(format_args!("running {} test{}", total, plural))?;
+    Ok(())
 }
 
-pub fn project_tests_result(total: i64, failed: i64) -> i32 {
+pub fn project_tests_result(total: i64, failed: i64) -> Result<i32, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let passed = total - failed;
     let said = match failed == 0 {
         true => "ok",
         false => "FAILED",
     };
-    println!("\ntest result: {}. {} passed; {} failed", said, passed, failed);
-    match failed == 0 {
+    nikaia_std::io::println(format_args!("\ntest result: {}. {} passed; {} failed", said, passed, failed))?;
+    Ok(match failed == 0 {
         true => 0,
         false => 1,
-    }
+    })
 }
 
 pub fn project_tests_output_label(output: &OutputTest) -> String { format!("output \"{}\" (tests/{})", output.name, named_by(output)) }
@@ -510,16 +512,16 @@ pub enum ProjectTestsBlessed {
     Refused(String),
 }
 
-pub fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) -> bool {
+pub fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBlessed) -> Result<bool, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     match blessed {
-        ProjectTestsBlessed::Unchanged => { println!("{} ... ok", label); },
-        ProjectTestsBlessed::Written => { println!("{} ... blessed", label); },
+        ProjectTestsBlessed::Unchanged => { nikaia_std::io::println(format_args!("{} ... ok", label))?; },
+        ProjectTestsBlessed::Written => { nikaia_std::io::println(format_args!("{} ... blessed", label))?; },
         ProjectTestsBlessed::Refused(why) => {
-            println!("{} ... FAILED ({}, so it is not blessed)", label, why);
-            return false;
+            nikaia_std::io::println(format_args!("{} ... FAILED ({}, so it is not blessed)", label, why))?;
+            return Ok(false);
         },
     }
-    true
+    Ok(true)
 }
 
 pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)], stderr: bool) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -540,24 +542,25 @@ pub async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(Str
     Ok(ProjectTestsBlessed::Written)
 }
 
-pub fn project_tests_explain_said(want: &[u8], written: &[u8]) {
+pub fn project_tests_explain_said(want: &[u8], written: &[u8]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if want != written {
-        println!("standard error (- expected, + written):");
-        print!("{}", project_tests_difference(want, written));
+        nikaia_std::io::println(format_args!("standard error (- expected, + written):"))?;
+        nikaia_std::io::print(format_args!("{}", project_tests_difference(want, written)))?;
     }
+    Ok(())
 }
 
-pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsOutcome) {
+pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsOutcome) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     match &output.stops {
-        None => { if !outcome.ended_well { println!("the program did not end successfully"); } },
-        _ => { if !outcome.stopped { println!("the program did not stop, as its .stops expects"); } },
+        None => { if !outcome.ended_well { nikaia_std::io::println(format_args!("the program did not end successfully"))?; } },
+        _ => { if !outcome.stopped { nikaia_std::io::println(format_args!("the program did not stop, as its .stops expects"))?; } },
     }
     match &output.stdout {
         None => { },
         Some(want) => {
             if *want != outcome.stdout {
-                println!("standard output (- expected, + printed):");
-                print!("{}", project_tests_difference(want, &outcome.stdout));
+                nikaia_std::io::println(format_args!("standard output (- expected, + printed):"))?;
+                nikaia_std::io::print(format_args!("{}", project_tests_difference(want, &outcome.stdout)))?;
             }
         },
     }
@@ -565,24 +568,25 @@ pub fn project_tests_explain_output(output: &OutputTest, outcome: &ProjectTestsO
         None => {
             match &output.stderr {
                 None => { },
-                Some(want) => { project_tests_explain_said(want, &outcome.stderr.as_bytes()); },
+                Some(want) => { project_tests_explain_said(want, &outcome.stderr.as_bytes())?; },
             }
         },
-        Some(want) => { project_tests_explain_said(want, &outcome.stderr.as_bytes()); },
+        Some(want) => { project_tests_explain_said(want, &outcome.stderr.as_bytes())?; },
     }
     for (wanted, written) in output.files.iter().zip(outcome.files.iter()) {
         let relative = &wanted.0;
         let want = &wanted.1;
         match written.1 {
-            None => { println!("{}: not written", relative); },
+            None => { nikaia_std::io::println(format_args!("{}: not written", relative))?; },
             Some(ref got) => {
                 if got != want {
-                    println!("{} (- expected, + written):", relative);
-                    print!("{}", project_tests_difference(&want, got));
+                    nikaia_std::io::println(format_args!("{} (- expected, + written):", relative))?;
+                    nikaia_std::io::print(format_args!("{}", project_tests_difference(&want, got)))?;
                 }
             },
         }
     }
+    Ok(())
 }
 
 pub async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -622,47 +626,48 @@ pub async fn project_tests_program_done(program: &ProgramTest, outcomes: Vec<(St
     let label = project_tests_program_label(program);
     if bless {
         let blessed = project_tests_bless_program(program, &outcomes, stderr).await?;
-        if !project_tests_blessed_line(&label, &blessed) { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
+        if !project_tests_blessed_line(&label, &blessed)? { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
         return Ok(None);
     }
-    if !project_tests_verdict(&label, &outcomes) { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
+    if !project_tests_verdict(&label, &outcomes)? { return Ok(Some(ProjectTestsFailed { label, outcomes, output: None })); }
     Ok(None)
 }
 
-pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) {
-    if failed.is_empty() { return; }
-    println!("\nfailures:");
+pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    if failed.is_empty() { return Ok(()); }
+    nikaia_std::io::println(format_args!("\nfailures:"))?;
     for one in failed.iter() {
-        println!("\n--- {}", one.label);
+        nikaia_std::io::println(format_args!("\n--- {}", one.label))?;
         let agree = project_tests_agree(&one.outcomes);
         let shown = match agree {
             true => 1,
             false => one.outcomes.len() as i64,
         };
         for (setting, outcome) in nikaia_std::index::get(&one.outcomes, nikaia_std::index::at(0..shown)).iter() {
-            if !agree { println!("at user-parallelism = {}:", setting); }
+            if !agree { nikaia_std::io::println(format_args!("at user-parallelism = {}:", setting))?; }
             match &one.output {
                 None => {
-                    print!("{}", outcome.stdout.text_lossy());
-                    project_tests_explain_bounds(outcome);
+                    nikaia_std::io::print(format_args!("{}", outcome.stdout.text_lossy()))?;
+                    project_tests_explain_bounds(outcome)?;
                 },
-                Some(output) => { project_tests_explain_output(output, outcome); },
+                Some(output) => { project_tests_explain_output(output, outcome)?; },
             }
-            eprint!("{}", outcome.stderr);
+            nikaia_std::io::eprint(format_args!("{}", outcome.stderr))?;
         }
     }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
     let total = blocks.len() as i64 + outputs.len() as i64 + program_tests;
-    project_tests_running(total);
+    project_tests_running(total)?;
     let mut failed: Vec<ProjectTestsFailed> = vec![];
     for (k, (title, path, line)) in blocks.iter().enumerate().map(|(at, item)| (at as i64, item)) {
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
         for (setting, binary) in test_builds.iter() { outcomes.push((setting.to_string(), host.block_outcome(binary, k)?)); }
         let label = format!("test \"{}\" ({}:{})", title, shown_path(&path, root), line);
-        if !project_tests_verdict(&label, &outcomes) { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
+        if !project_tests_verdict(&label, &outcomes)? { failed.push(ProjectTestsFailed { label, outcomes, output: None }); }
     }
     for output in outputs.iter() {
         let mut outcomes: Vec<(String, ProjectTestsOutcome)> = vec![];
@@ -670,10 +675,10 @@ pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String,
         let label = project_tests_output_label(output);
         if bless {
             let blessed = project_tests_bless(output, &outcomes).await?;
-            if !project_tests_blessed_line(&label, &blessed) { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
+            if !project_tests_blessed_line(&label, &blessed)? { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
             continue;
         }
-        if !project_tests_verdict(&label, &outcomes) { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
+        if !project_tests_verdict(&label, &outcomes)? { failed.push(ProjectTestsFailed { label, outcomes, output: Some(output.clone()) }); }
     }
     for program in host.program_failures(bless, stderr)? { failed.push(program); }
     Ok(failed)

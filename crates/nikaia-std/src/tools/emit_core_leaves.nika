@@ -119,7 +119,8 @@ impl EmitState {
             out.push(")")
             return
         }
-        if kind == 0 {
+        // **A name an enclosing arm lent** (#1355) is a reference already.
+        if kind == 0 || (kind == 2 && self.emit_match_lent_subject(world, index) == "*") {
             self.emit_expr(world, walk, out, host, index, depth, flow, scope)
             return
         }

@@ -14,7 +14,7 @@ fn h(b: ref Bytes) -> i64 {
 	return b.len()
 }
 
-fn main() {
+fn main() throws {
 	let xs = [1, 2, 3]
 	let k = xs[2]
 	let mut u: Vec[u8] = []

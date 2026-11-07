@@ -34,7 +34,7 @@ fn lower(source: &str) -> String {
         .rust
 }
 
-const FOUR: &str = "fn main() {\n\
+const FOUR: &str = "fn main() throws {\n\
      \x20   comptime LIMIT = 4 * 1024\n\
      \x20   comptime BIG = 3000000000\n\
      \x20   comptime WIDE: i64 = 7\n\
@@ -90,7 +90,8 @@ fn the_type_is_written_or_the_first_one_that_holds_it() {
 /// with `NK1127`; compiled, it runs as it does in the program.
 #[test]
 fn a_comptime_binding_may_call_a_method_of_std() {
-    let source = "fn main() { comptime GREET = \"hallo\".to_uppercase()\nprintln(f\"{GREET}\") }";
+    let source =
+        "fn main() throws { comptime GREET = \"hallo\".to_uppercase()\nprintln(f\"{GREET}\") }";
     let found = findings(source);
     assert!(found.is_empty(), "{found:#?}");
     let rust = lower(source);
@@ -103,7 +104,7 @@ fn a_comptime_binding_may_call_a_method_of_std() {
 #[test]
 fn a_comptime_binding_may_be_built_out_of_another() {
     let rust = lower(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   comptime PAGE = 4096\n\
          \x20   comptime PAIR = PAGE * 2\n\
          \x20   println(f\"{PAIR}\")\n\
@@ -125,7 +126,7 @@ fn a_comptime_binding_cannot_be_mutable() {
 /// generated file as the `&str` a `const` can hold.
 #[test]
 fn a_comptime_binding_over_text_folds() {
-    let rust = lower("fn main() { comptime GREET = \"hallo\"\nprintln(f\"{GREET}\") }");
+    let rust = lower("fn main() throws { comptime GREET = \"hallo\"\nprintln(f\"{GREET}\") }");
     assert!(rust.contains("const GREET: &str = \"hallo\";"), "{rust}");
 }
 
@@ -141,7 +142,7 @@ fn a_comptime_binding_over_text_folds() {
 fn a_comptime_list_of_text_crosses_as_an_array_of_views() {
     let rust = lower(
         "comptime NAMES: Array[ref String, 3] = [\"get\", \"post\", \"put\"]\n\
-         fn main() { for name in NAMES { println(name) } }",
+         fn main() throws { for name in NAMES { println(name) } }",
     );
     assert!(
         rust.contains("const NAMES: [&str; 3] = [\"get\", \"post\", \"put\"];"),
@@ -153,7 +154,7 @@ fn a_comptime_list_of_text_crosses_as_an_array_of_views() {
 /// declares is named.
 #[test]
 fn a_comptime_says_which_wall_it_met() {
-    let elsewhere = findings("comptime N = doubled(21)\nfn main() { println(f\"{N}\") }");
+    let elsewhere = findings("comptime N = doubled(21)\nfn main() throws { println(f\"{N}\") }");
     let said = elsewhere
         .iter()
         .find(|f| f.code == "NK1127")
@@ -192,7 +193,7 @@ const OPEN: &str = "fn big(n: i64) -> i64 {\n\
      comptime N = 4 * 1024\n\
      comptime W: i64 = big(1)\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let y: i64 = FIB_10\n\
      \x20   println(f\"{take_i32(A)} {take_i64(A)} {y} {take_i64(N)} {take_i32(A + 1)}\")\n\
      \x20   let x = A + 1\n\
@@ -228,7 +229,7 @@ fn a_use_that_cannot_hold_the_value_is_refused_where_it_stands() {
                   \n\
                   comptime A = big(1)\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(f\"{take_u8(A)}\")\n\
                   }\n";
     let found = findings(source);

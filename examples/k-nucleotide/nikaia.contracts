@@ -19,34 +19,42 @@ signature = "(input: ?) -> Vec[Section]"
 
 [fn."Tally::bump"]
 sync = true
+panics = true
 touches = []
 signature = "(ref mut self)"
 
 [fn."Tally::new"]
 pub = true
 sync = true
+panics = false
 touches = []
 signature = "(first: i64) -> Tally"
 
 [fn."count"]
 sync = "inferred"
+panics = true
 views = ["dna: borrowed", "<result>: borrowed"]
 signature = "(dna: String, k: i64) -> collections::HashMap[ref(dna) String, Tally]"
 
 [fn."main"]
-throws = ["?"]
+throws = ["io::IoError"]
 locks = true
+panics = true
 signature = "()"
 
 [fn."report_fragment"]
 sync = "inferred"
+throws = ["io::IoError"]
 locks = true
+panics = true
 views = ["dna: borrowed", "fragment: borrowed"]
 signature = "(dna: String, fragment: String)"
 
 [fn."report_frequencies"]
 sync = "inferred"
+throws = ["io::IoError"]
 locks = true
+panics = true
 views = ["dna: borrowed"]
 signature = "(dna: String, k: i64)"
 

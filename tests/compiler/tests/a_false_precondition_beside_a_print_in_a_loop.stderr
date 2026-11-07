@@ -1,0 +1,9 @@
+error[NK1207]: This call breaks `percent`'s precondition `whole > 0` when `i` is 0.
+   --> tests/a_false_precondition_beside_a_print_in_a_loop.nika:11:9
+    |
+ 11 |         let x = percent(1, i)
+    |         ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Then `whole` is 0.
+    = help: Pass `percent` arguments for which `whole > 0` holds, or check them with a guard before the call.
+1 claim shown false

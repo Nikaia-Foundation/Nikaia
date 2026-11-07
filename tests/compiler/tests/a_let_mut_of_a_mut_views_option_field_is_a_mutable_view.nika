@@ -22,7 +22,7 @@ fn add(mut m: collections::HashMap[String, C], k: ref String) {
     s.names.push("n")
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::HashMap[String, C] = collections::HashMap()
     m["a"] = C { sig: Sig { names: [] } }
     add(m, "a")

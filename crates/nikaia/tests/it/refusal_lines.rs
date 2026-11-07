@@ -71,7 +71,7 @@ fn a_block_too_small_is_refused_on_its_line() {
     let said = nikaia(
         "fn a() -> i64 { return 1 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let x = overlap {\n\
          \x20       a()\n\
          \x20   }\n\
@@ -93,7 +93,7 @@ fn it_reads_like_a_checkers_refusal() {
     let lowering = nikaia(
         "fn a() -> i64 { return 1 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let x = overlap {\n\
          \x20       a()\n\
          \x20   }\n\
@@ -129,7 +129,7 @@ fn it_reads_like_a_checkers_refusal() {
 #[test]
 fn a_malformed_literal_is_refused_on_its_line() {
     let said = nikaia(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let n = 1\n\
          \x20   println(f\"unclosed {n\")\n\
          }\n",
@@ -175,7 +175,7 @@ fn an_items_refusal_names_the_item() {
          \x20   fn getpid() -> i64 sync\n\
          }\n\
          \n\
-         fn main() { println(f\"{unsafe { getpid() }}\") }\n",
+         fn main() throws { println(f\"{unsafe { getpid() }}\") }\n",
         "unknown-abi",
     );
     assert!(said.contains("`extern` takes no convention"), "{said}");
@@ -196,7 +196,7 @@ fn a_grammar_entry_that_is_not_there_names_its_line() {
                   \x20   entry rule one -> i64 = n:NUM -> { n }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let n = Tiny::{RULE}(\"7\")\n\
                   \x20   println(f\"{n}\")\n\
                   }\n";
@@ -217,7 +217,7 @@ fn a_grammar_entry_that_is_not_there_names_its_line() {
 #[test]
 fn a_template_refusal_names_its_statement() {
     let said = nikaia(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let page = dsl markdown {\n\
          \x20       # Title\n\
          \x20   } eod\n\
@@ -249,7 +249,7 @@ fn a_refusal_under_an_index_keeps_its_line() {
     let said = nikaia(
         "fn a() -> i64 { return 1 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let x = xs[overlap {\n\
          \x20       a()\n\
@@ -269,7 +269,7 @@ fn a_refusal_under_a_slice_bound_keeps_its_line() {
     let said = nikaia(
         "fn a() -> i64 { return 1 }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let x = xs[0..overlap {\n\
          \x20       a()\n\

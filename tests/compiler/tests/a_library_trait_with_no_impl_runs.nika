@@ -16,7 +16,7 @@ fn main() throws {
     process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
     fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"traitlib\"\nversion = \"0.1.0\"\n")
     fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub trait H {\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync\n}\n")
-    fs::write(f"{tmp}/tests/runs.nika", fs::Root::Anywhere, "use traitlib\nstruct Plain { base: i64 }\nimpl traitlib::H for Plain {\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"a\") }\n}\nfn main() {\n    let p = Plain { base: 1 }\n    println(p.ask(fn(n) { if n == \"a\" { 4 } else { null } }) ?? 0)\n}\n")
+    fs::write(f"{tmp}/tests/runs.nika", fs::Root::Anywhere, "use traitlib\nstruct Plain { base: i64 }\nimpl traitlib::H for Plain {\n    fn ask(ref self, known: fn(ref String) -> i64? sync) -> i64? sync { return known(\"a\") }\n}\nfn main() throws {\n    let p = Plain { base: 1 }\n    println(p.ask(fn(n) { if n == \"a\" { 4 } else { null } }) ?? 0)\n}\n")
     fs::write(f"{tmp}/tests/runs.stdout", fs::Root::Anywhere, "4\n")
     let out = process::run(nikaia, ["test", "--project", "."]; dir: tmp.clone())
     if out.stdout.contains("1 passed; 0 failed") {

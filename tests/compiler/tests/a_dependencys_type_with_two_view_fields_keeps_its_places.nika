@@ -7,7 +7,7 @@ fn show(n: ref compiler_tests::Places) -> String {
 	}
 }
 
-fn main() {
+fn main() throws {
 	for n in compiler_tests::places(" left ") {
 		println(show(n))
 	}

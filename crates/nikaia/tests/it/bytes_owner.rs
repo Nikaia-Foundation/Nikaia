@@ -229,7 +229,7 @@ fn a_method_keeping_a_ref_bytes_takes_every_owner() {
 fn an_owned_bytes_compares_with_a_cut() {
     let out = printed(
         "bytes-owner-eq-cut",
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let mut v: Vec[u8] = []\n\
          \x20   v.push('a')\n\
          \x20   let a = Bytes(v)\n\

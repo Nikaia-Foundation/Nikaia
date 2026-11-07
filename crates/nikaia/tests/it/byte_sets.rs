@@ -82,7 +82,7 @@ fn pieces(b: ref Bytes, set: bytes::ByteSet) -> i64 {\n\
     return n\n\
 }\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
     let seps = bytes::ByteSet([';', '\\n'])\n\
     let data = Bytes(['a', ';', 'b', '\\n', 'c', ';', ';'])\n\
     let high = bytes::ByteSet(['\\xFF', '\\x80', '\\x00'])\n\
@@ -128,7 +128,7 @@ fn every_search_of_a_byte_set_answers() {
 fn a_byte_set_written_empty_is_nk1287() {
     let said = checked(
         "byte-sets-empty",
-        "use std::bytes\n\nfn main() {\n    let seps = bytes::ByteSet([])\n    println(f\"{\"a;b\".bytes.find(seps) ?? -1}\")\n}\n",
+        "use std::bytes\n\nfn main() throws {\n    let seps = bytes::ByteSet([])\n    println(f\"{\"a;b\".bytes.find(seps) ?? -1}\")\n}\n",
     );
     assert!(said.contains("NK1287"), "{said}");
     assert!(said.contains("computed at run time may be empty"), "{said}");
@@ -141,7 +141,7 @@ fn a_byte_set_written_empty_is_nk1287() {
 fn a_count_right_after_find_all_is_its_own() {
     let rust = lowered(
         "byte-sets-count",
-        "use std::bytes\n\nfn main() {\n    let seps = bytes::ByteSet([';'])\n    let data = Bytes(['a', ';'])\n    let n = data.find_all(seps).count()\n    let m = data.find_all(seps).filter(fn(p) { p > 0 }).count()\n    println(f\"{n} {m}\")\n}\n",
+        "use std::bytes\n\nfn main() throws {\n    let seps = bytes::ByteSet([';'])\n    let data = Bytes(['a', ';'])\n    let n = data.find_all(seps).count()\n    let m = data.find_all(seps).filter(fn(p) { p > 0 }).count()\n    println(f\"{n} {m}\")\n}\n",
     );
     assert!(
         rust.contains("data.find_all(seps, 0, bytes::Scan::ByBlock).count()"),
@@ -172,7 +172,7 @@ fn reference(data: ref Vec[u8], members: ref Vec[u8], from: i64) -> Vec[i64] {\n
     return out\n\
 }\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
     let alphabet: Vec[u8] = [';', '\\n', 'a', 'e', '\\x00', '\\x80', '\\xFF', '\\x7F', '\\x15', '\\x95', 'x', 'y']\n\
     let sets: Vec[Vec[u8]] = [[';'], [';', '\\n'], ['\\x00', '\\x80', '\\xFF'], ['a', 'e', '\\x15', '\\x95', '\\xFF'], [';', '\\n', 'a', 'e', '\\x00', '\\x80', '\\xFF', '\\x7F', '\\x15', '\\x95', 'x', 'y']]\n\
     let mut seed: u64 = 7\n\
@@ -291,7 +291,7 @@ fn filtered(b: ref Bytes) -> i64 {\n\
     return n\n\
 }\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
     let b = Bytes([';', 'a', ';', 'b', ';'])\n\
     println(f\"{total(b)} {from_f(b, 1)} {kept(b)} {filtered(b)}\")\n\
 }\n";
@@ -360,7 +360,7 @@ fn changed(h: Holder, mut v: Vec[u8]) -> i64 {\n\
     return n\n\
 }\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
     let h = Holder { base: 1 }\n\
     let b = Bytes([';', 'a', ';'])\n\
     let mut v: Vec[u8] = [1, 2, 3]\n\
@@ -429,7 +429,7 @@ fn every_cpu_level_finds_the_same() {
 /// to look up at each block, and it finds what the built set finds.
 const WRITTEN_AT_FIND_ALL: &str = "use std::bytes\n\
 \n\
-fn main() {\n\
+fn main() throws {\n\
     let b = Bytes([';', 'a', '\\n', ';', 'x'])\n\
     let mut s = 0\n\
     for p in b.find_all(bytes::ByteSet([';', '\\n'])) { s = s * 10 + p }\n\
@@ -463,7 +463,7 @@ fn a_set_written_at_find_all_is_fixed_when_compiling() {
 
 /// Two cuts compared are compared in place (`nikaia_std::same!`): what `==`
 /// means, for bytes a word at a time, with no call into `memcmp`.
-const CUTS: &str = "fn main() {\n\
+const CUTS: &str = "fn main() throws {\n\
     let a = Bytes(['n', 'a', 'm', 'e', 's', ' ', 'o', 'f', ' ', 's', 't', 'a', 't', 'i', 'o', 'n', 's', '!'])\n\
     let b = Bytes(['-', 'n', 'a', 'm', 'e', 's', ' ', 'o', 'f', ' ', 's', 't', 'a', 't', 'i', 'o', 'n', 's', '?'])\n\
     let mut same = 0\n\

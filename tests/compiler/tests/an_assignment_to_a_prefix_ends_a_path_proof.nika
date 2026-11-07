@@ -1,7 +1,7 @@
 struct Inner { n: i64? }
 struct Outer { inner: Inner }
 
-fn main() {
+fn main() throws {
     let mut o = Outer { inner: Inner { n: 1 } }
     if o.inner.n != null {
         o.inner = Inner { n: null }

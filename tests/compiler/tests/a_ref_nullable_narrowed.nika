@@ -30,7 +30,7 @@ fn read(ret: ref Ty?, ts: ref Vec[Ty?]) -> i64 {
     return sum
 }
 
-fn main() {
+fn main() throws {
     println(f"{f(Ty { k: 1 }, N { r: null }, E::A { r: null })} {f(null, N { r: null }, E::A { r: Ty { k: 1 } })}")
     println(f"{read(Ty { k: 2 }, [Ty { k: 1 }, null, Ty { k: 3 }])} {read(null, [])}")
 }

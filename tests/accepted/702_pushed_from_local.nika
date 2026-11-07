@@ -26,7 +26,7 @@ fn keep(v: String, mut b: Box) {
     b.items.push(a)
 }
 
-fn main() {
+fn main() throws {
     let mut b = Box { items: [] }
     keep(f"x{1}", b)
     keep(f"y{2}", b)

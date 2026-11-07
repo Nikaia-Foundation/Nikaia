@@ -11,6 +11,8 @@ version = 4
 
 [fn."main"]
 sync = "inferred"
+throws = ["io::IoError"]
 locks = true
+panics = true
 touches = ["stdout write"]
 signature = "()"

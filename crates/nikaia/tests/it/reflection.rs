@@ -72,13 +72,13 @@ fn the_specifications_own_example_runs() {
     let source = "struct User { name: ref String, age: i64 }\n\
                   struct Point { x: i64, y: i64 }\n\
                   \n\
-                  fn describe[T: Struct](value: T) {\n\
+                  fn describe[T: Struct](value: T) throws {\n\
                   \x20   for field in T::fields {\n\
                   \x20       println(f\"{field.name} = {field.of(value)}\")\n\
                   \x20   }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   describe(User { name: \"ada\", age: 36 })\n\
                   \x20   describe(Point { x: 1, y: 2 })\n\
                   }\n";
@@ -115,7 +115,7 @@ fn a_body_wrong_for_one_field_names_the_turn() {
          \x20   return total\n\
          }\n\
          \n\
-         fn main() { println(f\"{sum(User { name: \"ada\", age: 36 })}\") }\n",
+         fn main() throws { println(f\"{sum(User { name: \"ada\", age: 36 })}\") }\n",
     );
     assert_eq!(
         found.len(),
@@ -143,11 +143,11 @@ fn a_member_a_reflected_field_does_not_have_is_said_once() {
     let found = findings(
         "struct User { name: ref String, age: i64 }\n\
          \n\
-         fn d[T: Struct](value: T) {\n\
+         fn d[T: Struct](value: T) throws {\n\
          \x20   for field in T::fields { println(field.label) }\n\
          }\n\
          \n\
-         fn main() { d(User { name: \"a\", age: 1 }) }\n",
+         fn main() throws { d(User { name: \"a\", age: 1 }) }\n",
     );
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1180").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
@@ -168,9 +168,9 @@ fn a_bound_that_is_never_asked_is_an_ordinary_generic() {
     let rust = lowered(
         "struct User { name: ref String }\n\
          \n\
-         fn tell[T: Struct](value: T) { println(\"told\") }\n\
+         fn tell[T: Struct](value: T) throws { println(\"told\") }\n\
          \n\
-         fn main() { tell(User { name: \"a\" }) }\n",
+         fn main() throws { tell(User { name: \"a\" }) }\n",
     );
     assert!(rust.contains("fn tell<T>("), "{rust}");
     assert!(!rust.contains("tell__User"), "{rust}");
@@ -192,11 +192,11 @@ fn variants_are_walked_like_fields() {
          \x20   return \"?\"\n\
          }\n\
          \n\
-         fn names[T: Enum](value: T) {\n\
+         fn names[T: Enum](value: T) throws {\n\
          \x20   for v in T::variants { println(v.name) }\n\
          }\n\
          \n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   println(which(Op::Sub(2)))\n\
          \x20   println(which(Op::Mul { by: 3 }))\n\
          \x20   names(Op::Add)\n\
@@ -212,11 +212,11 @@ fn a_member_a_reflected_variant_does_not_have_is_refused() {
     let found = findings(
         "enum Shade { Odd, Even }\n\
          \n\
-         fn tell[T: Enum](value: T) {\n\
+         fn tell[T: Enum](value: T) throws {\n\
          \x20   for v in T::variants { println(v.payload) }\n\
          }\n\
          \n\
-         fn main() { tell(Shade::Odd) }\n",
+         fn main() throws { tell(Shade::Odd) }\n",
     );
     let refused: Vec<_> = found.iter().filter(|f| f.code == "NK1180").collect();
     assert_eq!(refused.len(), 1, "{found:#?}");
@@ -243,15 +243,15 @@ fn the_report_prints_what_was_unrolled() {
     let source = "struct User { name: ref String, age: i64 }\n\
                   struct Point { x: i64, y: i64 }\n\
                   \n\
-                  fn describe[T: Struct](value: T) {\n\
+                  fn describe[T: Struct](value: T) throws {\n\
                   \x20   for field in T::fields { println(field.name) }\n\
                   }\n\
                   \n\
-                  fn unused[T: Struct](value: T) {\n\
+                  fn unused[T: Struct](value: T) throws {\n\
                   \x20   for field in T::fields { println(field.name) }\n\
                   }\n\
                   \n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   describe(User { name: \"ada\", age: 36 })\n\
                   \x20   describe(Point { x: 1, y: 2 })\n\
                   }\n";
@@ -293,7 +293,7 @@ fn a_shape_walk_is_unrolled_across_the_files_of_a_package() {
         "struct User { name: ref String, age: i64 }\n\
          struct Point { x: i64, y: i64 }\n\
          \n\
-         fn describe[T: Struct](value: T) {\n\
+         fn describe[T: Struct](value: T) throws {\n\
          \x20   for field in T::fields { println(field.name) }\n\
          }\n",
     )

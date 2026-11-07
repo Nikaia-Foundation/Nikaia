@@ -32,52 +32,54 @@ fn slots(from: &str, into: &str) -> Vec<(&'static str, String)> {
     vec![
         (
             "let",
-            format!("fn main() {{\n{value}    let x: {into} = a\n    println(f\"{{x}}\")\n}}\n"),
+            format!(
+                "fn main() throws {{\n{value}    let x: {into} = a\n    println(f\"{{x}}\")\n}}\n"
+            ),
         ),
         (
             "argument",
             format!(
                 "fn take(x: {into}) -> {into} {{\n    return x\n}}\n\n\
-                 fn main() {{\n{value}    println(f\"{{take(a)}}\")\n}}\n"
+                 fn main() throws {{\n{value}    println(f\"{{take(a)}}\")\n}}\n"
             ),
         ),
         (
             "return",
             format!(
                 "fn give(a: {from}) -> {into} {{\n    return a\n}}\n\n\
-                 fn main() {{\n{value}    println(f\"{{give(a)}}\")\n}}\n"
+                 fn main() throws {{\n{value}    println(f\"{{give(a)}}\")\n}}\n"
             ),
         ),
         (
             "last expression",
             format!(
                 "fn give(a: {from}) -> {into} {{\n    a\n}}\n\n\
-                 fn main() {{\n{value}    println(f\"{{give(a)}}\")\n}}\n"
+                 fn main() throws {{\n{value}    println(f\"{{give(a)}}\")\n}}\n"
             ),
         ),
         (
             "field",
             format!(
                 "struct S {{\n    v: {into},\n}}\n\n\
-                 fn main() {{\n{value}    let s = S {{ v: a }}\n    println(f\"{{s.v}}\")\n}}\n"
+                 fn main() throws {{\n{value}    let s = S {{ v: a }}\n    println(f\"{{s.v}}\")\n}}\n"
             ),
         ),
         (
             "assignment",
             format!(
-                "fn main() {{\n{value}    let mut x: {into} = 0\n    x = a\n    println(f\"{{x}}\")\n}}\n"
+                "fn main() throws {{\n{value}    let mut x: {into} = 0\n    x = a\n    println(f\"{{x}}\")\n}}\n"
             ),
         ),
         (
             "method argument",
             format!(
-                "fn main() {{\n{value}    let mut v: Vec[{into}] = []\n    v.push(a)\n    println(f\"{{v[0]}}\")\n}}\n"
+                "fn main() throws {{\n{value}    let mut v: Vec[{into}] = []\n    v.push(a)\n    println(f\"{{v[0]}}\")\n}}\n"
             ),
         ),
         (
             "list element",
             format!(
-                "fn main() {{\n{value}    let xs: Vec[{into}] = [a, a]\n    println(f\"{{xs.len()}} {{xs[0]}}\")\n}}\n"
+                "fn main() throws {{\n{value}    let xs: Vec[{into}] = [a, a]\n    println(f\"{{xs.len()}} {{xs[0]}}\")\n}}\n"
             ),
         ),
     ]
@@ -142,7 +144,7 @@ fn a_wider_integer_into_a_narrower_stays_refused() {
 #[test]
 fn a_list_that_exists_is_not_converted() {
     let found = errors(
-        "fn main() {\n    let a: u32 = 7\n    let ys = [a]\n    let xs: Vec[i64] = ys\n    println(f\"{xs.len()}\")\n}\n",
+        "fn main() throws {\n    let a: u32 = 7\n    let ys = [a]\n    let xs: Vec[i64] = ys\n    println(f\"{xs.len()}\")\n}\n",
     );
     assert!(!found.is_empty(), "a Vec[u32] was taken as a Vec[i64]");
 }
@@ -158,13 +160,13 @@ fn a_u64_with_a_signed_type_stays_refused() {
     let both = "    let a: u64 = 7\n    let b: i64 = -3\n";
     assert!(
         codes(&format!(
-            "fn main() {{\n{both}    let s = a + b\n    println(f\"{{s}}\")\n}}\n"
+            "fn main() throws {{\n{both}    let s = a + b\n    println(f\"{{s}}\")\n}}\n"
         ))
         .contains(&"NK1199")
     );
     assert!(
         codes(&format!(
-            "fn main() {{\n{both}    let xs = [a, b]\n    println(f\"{{xs.len()}}\")\n}}\n"
+            "fn main() throws {{\n{both}    let xs = [a, b]\n    println(f\"{{xs.len()}}\")\n}}\n"
         ))
         .contains(&"NK1154")
     );
@@ -176,7 +178,7 @@ fn a_u64_with_a_signed_type_stays_refused() {
 #[test]
 fn a_type_variable_is_not_widened_to_agree() {
     let source = "fn pick[T](a: T, b: T) -> T {\n    a\n}\n\n\
-                  fn main() {\n    let a: i32 = 1\n    let b: i64 = 2\n    \
+                  fn main() throws {\n    let a: i32 = 1\n    let b: i64 = 2\n    \
                   println(f\"{pick(a, b)}\")\n}\n";
     let found = errors(source);
     let refusal = found
@@ -197,7 +199,7 @@ fn an_open_number_is_decided_before_any_widening() {
     let found = codes(
         "fn wide(x: i64) -> i64 {\n    x\n}\n\n\
          fn narrow(x: u32) -> u32 {\n    x\n}\n\n\
-         fn main() {\n    let n = 5\n    println(f\"{wide(n)} {narrow(n)}\")\n}\n",
+         fn main() throws {\n    let n = 5\n    println(f\"{wide(n)} {narrow(n)}\")\n}\n",
     );
     assert!(found.contains(&"NK1200"), "{found:?}");
 }
@@ -207,7 +209,7 @@ fn an_open_number_is_decided_before_any_widening() {
 #[test]
 fn a_name_keeps_the_type_it_was_computed_in() {
     let source = "fn area(x: i32, y: i32) -> i64 {\n    let p = x * y\n    p\n}\n\n\
-                  fn main() {\n    println(f\"{area(50000, 50000)}\")\n}\n";
+                  fn main() throws {\n    println(f\"{area(50000, 50000)}\")\n}\n";
     let parsed = parse_to_ast(source).expect("the source parses");
     let rust = emit_program(&parsed, Build::default())
         .expect("it lowers")
@@ -248,7 +250,7 @@ fn a_name_keeps_the_type_it_was_computed_in() {
 fn a_width_dependent_computation_says_which_width() {
     let program = |line: &str| {
         format!(
-            "fn main() {{\n    let a: u32 = 7\n    let b: u32 = 3\n    {line}\n    println(f\"{{t}}\")\n}}\n"
+            "fn main() throws {{\n    let a: u32 = 7\n    let b: u32 = 3\n    {line}\n    println(f\"{{t}}\")\n}}\n"
         )
     };
     for line in [
@@ -278,7 +280,7 @@ fn a_width_dependent_computation_says_which_width() {
 #[test]
 fn the_help_says_when_a_number_widens() {
     let refusals = errors(
-        "fn main() {\n    let a: u64 = 7\n    let b: i64 = -3\n    let x: i64 = a\n    \
+        "fn main() throws {\n    let a: u64 = 7\n    let b: i64 = -3\n    let x: i64 = a\n    \
          let s = a + b\n    println(f\"{x} {s}\")\n}\n",
     );
     let slot = refusals
@@ -314,7 +316,7 @@ const NOT_NEGATIVE: &str = "fn half(k: i64) -> u64 {\n\
      \x20   return 0\n\
      }\n\
      \n\
-     fn main() {\n\
+     fn main() throws {\n\
      \x20   let xs = [1, 2, 3]\n\
      \x20   let n: u64 = xs.len()\n\
      \x20   println(f\"{n} {half(9)} {half(-4)}\")\n\
@@ -342,7 +344,7 @@ fn a_value_proved_not_negative_goes_into_a_u64() {
 fn a_value_nothing_shows_not_negative_is_refused() {
     let found = errors(
         "fn f(k: i64) -> u64 {\n    let n: u64 = k\n    n\n}\n\n\
-         fn main() {\n    println(f\"{f(3)}\")\n}\n",
+         fn main() throws {\n    println(f\"{f(3)}\")\n}\n",
     );
     let refusal = found
         .iter()
@@ -357,7 +359,7 @@ fn a_value_nothing_shows_not_negative_is_refused() {
     // **And the `assert` is a way out**: what it claims holds after it.
     let asserted = errors(
         "fn f(k: i64) -> u64 {\n    assert(k >= 0)\n    let n: u64 = k\n    n\n}\n\n\
-         fn main() {\n    println(f\"{f(3)}\")\n}\n",
+         fn main() throws {\n    println(f\"{f(3)}\")\n}\n",
     );
     assert!(asserted.is_empty(), "{asserted:#?}");
 }
@@ -407,9 +409,9 @@ fn the_answer_is_recorded_and_replayed() {
 /// `i64` has no common type (`NK1199`).
 #[test]
 fn a_compound_assignment_computes_in_the_common_type() {
-    let narrower = "fn main() {\n    let b: i64 = 4\n    let mut small: u32 = 1\n    small += b\n    println(f\"{small}\")\n}\n";
+    let narrower = "fn main() throws {\n    let b: i64 = 4\n    let mut small: u32 = 1\n    small += b\n    println(f\"{small}\")\n}\n";
     assert!(codes(narrower).contains(&"NK1105"), "{:?}", codes(narrower));
-    let none = "fn main() {\n    let b: i64 = 4\n    let mut u: u64 = 1\n    u += b\n    println(f\"{u}\")\n}\n";
+    let none = "fn main() throws {\n    let b: i64 = 4\n    let mut u: u64 = 1\n    u += b\n    println(f\"{u}\")\n}\n";
     assert!(codes(none).contains(&"NK1199"), "{:?}", codes(none));
 }
 
@@ -418,9 +420,10 @@ fn a_compound_assignment_computes_in_the_common_type() {
 /// operation narrow into a wider return type is `NK1215` there as well.
 #[test]
 fn a_last_expression_asks_as_a_return_does() {
-    let refused = "fn f(k: i64) -> u64 {\n    k\n}\n\nfn main() {\n    println(f\"{f(3)}\")\n}\n";
+    let refused =
+        "fn f(k: i64) -> u64 {\n    k\n}\n\nfn main() throws {\n    println(f\"{f(3)}\")\n}\n";
     assert!(codes(refused).contains(&"NK1104"), "{:?}", codes(refused));
     let narrow =
-        "fn f(a: u32) -> i64 {\n    a << 3\n}\n\nfn main() {\n    println(f\"{f(3)}\")\n}\n";
+        "fn f(a: u32) -> i64 {\n    a << 3\n}\n\nfn main() throws {\n    println(f\"{f(3)}\")\n}\n";
     assert!(codes(narrow).contains(&"NK1215"), "{:?}", codes(narrow));
 }

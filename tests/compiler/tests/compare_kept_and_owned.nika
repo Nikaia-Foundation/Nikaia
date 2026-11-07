@@ -17,7 +17,7 @@ fn tail(lines: ref Vec[String]) -> i64 {
     return -1
 }
 
-fn main() {
+fn main() throws {
     let v: Vec[String] = ["let x;", "let x"]
     println(f"{tail(v)}")
 }

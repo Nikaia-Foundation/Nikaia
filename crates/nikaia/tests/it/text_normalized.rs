@@ -35,7 +35,7 @@ fn run(name: &str, source: &str) -> String {
 fn nfc_and_nfd_make_equal_what_bytes_do_not() {
     let out = run(
         "normalized_nfc_nfd",
-        r#"fn main() {
+        r#"fn main() throws {
     let composed = "ä"
     let decomposed = "a\u{308}"
     println(f"{composed == decomposed}")
@@ -54,7 +54,7 @@ fn nfc_and_nfd_make_equal_what_bytes_do_not() {
 fn nfkc_folds_a_ligature_and_nfc_leaves_it() {
     let out = run(
         "normalized_nfkc",
-        r#"fn main() {
+        r#"fn main() throws {
     let ligature = "ﬁ"
     println(f"{ligature.normalized(text::Form::Nfkc) == "fi"}")
     println(f"{ligature.normalized(text::Form::Nfc) == "fi"}")
@@ -76,7 +76,7 @@ fn a_form_is_held_and_passed_on() {
     return a.normalized(form) == b.normalized(form)
 }
 
-fn main() {
+fn main() throws {
     let form = text::Form::Nfc
     println(f"{same("ä", "a\u{308}", form)}")
     println(f"{same("ﬁ", "fi", form)}")
@@ -98,7 +98,7 @@ fn a_decomposed_char_literal_is_the_composed_scalar() {
         ("normalized_char_source", "e\u{301}".to_string()),
     ] {
         let source = format!(
-            "fn main() {{\n    let c = '{written}'\n    println(f\"{{c}}\")\n    println(f\"{{c == 'é'}}\")\n    println(f\"{{c as i64}}\")\n}}\n"
+            "fn main() throws {{\n    let c = '{written}'\n    println(f\"{{c}}\")\n    println(f\"{{c == 'é'}}\")\n    println(f\"{{c as i64}}\")\n}}\n"
         );
         let (ok, out, err) = nikaia(name, "run", &source);
         assert!(ok, "{out}{err}");
@@ -115,7 +115,7 @@ fn a_char_literal_of_a_grapheme_is_refused() {
     let (ok, out, err) = nikaia(
         "normalized_char_grapheme",
         "check",
-        "fn main() {\n    let c = '👍🏽'\n    println(f\"{c}\")\n}\n",
+        "fn main() throws {\n    let c = '👍🏽'\n    println(f\"{c}\")\n}\n",
     );
     assert!(!ok, "{out}{err}");
     assert!(err.contains("NK1212"), "{err}");
@@ -128,7 +128,7 @@ fn a_surrogate_char_literal_is_refused() {
     let (ok, out, err) = nikaia(
         "normalized_char_surrogate",
         "check",
-        "fn main() {\n    let c = '\\u{D800}'\n    println(f\"{c}\")\n}\n",
+        "fn main() throws {\n    let c = '\\u{D800}'\n    println(f\"{c}\")\n}\n",
     );
     assert!(!ok, "{out}{err}");
     assert!(err.contains("NK1184"), "{err}");
@@ -140,7 +140,7 @@ fn a_surrogate_char_literal_is_refused() {
 fn quoted_escapes_like_debug() {
     let out = run(
         "text_quoted",
-        r#"fn main() {
+        r#"fn main() throws {
     println("a\"b\\c\nd\te".quoted())
     println("ä".quoted())
     println("".quoted())

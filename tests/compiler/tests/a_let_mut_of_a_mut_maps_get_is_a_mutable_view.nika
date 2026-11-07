@@ -9,7 +9,7 @@ fn bump(mut m: collections::BTreeMap[String, C], k: String) {
     c.ensures.push("p")
 }
 
-fn main() {
+fn main() throws {
     let mut m: collections::BTreeMap[String, C] = collections::BTreeMap()
     m.insert("a", C { ensures: [] })
     let mut c = m.get("a") ?? return

@@ -14,6 +14,7 @@ views = ["name: borrowed"]
 signature = "(name: String) -> String"
 
 [fn."main"]
+throws = ["io::IoError"]
 locks = true
 signature = "()"
 

@@ -8,7 +8,7 @@ fn bump(mut n: i64) { n += 1 }
 
 fn shout(mut s: String) { s.push_str("!") }
 
-fn main() {
+fn main() throws {
     match 5 {
         k => {
             bump(k)

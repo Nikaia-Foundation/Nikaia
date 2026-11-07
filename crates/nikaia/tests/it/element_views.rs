@@ -51,7 +51,7 @@ fn an_element_under_ref_t_and_ref_t_nullable_runs() {
          \x20   let b: ref Expr = p.b\n\
          \x20   return b.n\n\
          }\n\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let v = [Expr { n: 1, s: \"a\" }]\n\
          \x20   let t = Expr { n: 2, s: \"b\" }\n\
          \x20   let p = Pair { a: Expr { n: 5, s: \"c\" }, b: Expr { n: 7, s: \"d\" } }\n\
@@ -69,7 +69,7 @@ fn a_word_declared_ref_is_refused() {
          \x20   let y: ref i64 = given[0]\n\
          \x20   return y\n\
          }\n\n\
-         fn main() { println(f\"{first([1])}\") }\n",
+         fn main() throws { println(f\"{first([1])}\") }\n",
     );
     let f = found
         .iter()
@@ -88,27 +88,27 @@ fn a_word_declared_ref_is_refused() {
 fn a_word_declared_ref_is_refused_at_every_position() {
     for (program, position) in [
         (
-            "fn f(x: ref i32) -> i32 { return x + 1 }\n\nfn main() { println(f\"{f(2)}\") }\n",
+            "fn f(x: ref i32) -> i32 { return x + 1 }\n\nfn main() throws { println(f\"{f(2)}\") }\n",
             "parameter",
         ),
         (
-            "struct S { n: ref i64 }\n\nfn main() { println(\"x\") }\n",
+            "struct S { n: ref i64 }\n\nfn main() throws { println(\"x\") }\n",
             "field",
         ),
         (
-            "fn f(xs: ref Vec[bool]) -> ref bool { return xs[0] }\n\nfn main() { println(\"x\") }\n",
+            "fn f(xs: ref Vec[bool]) -> ref bool { return xs[0] }\n\nfn main() throws { println(\"x\") }\n",
             "result",
         ),
         (
-            "trait T { fn f(ref self, x: ref f64) -> f64 }\n\nfn main() { println(\"x\") }\n",
+            "trait T { fn f(ref self, x: ref f64) -> f64 }\n\nfn main() throws { println(\"x\") }\n",
             "parameter",
         ),
         (
-            "trait T { fn f(ref self) -> ref u8 }\n\nfn main() { println(\"x\") }\n",
+            "trait T { fn f(ref self) -> ref u8 }\n\nfn main() throws { println(\"x\") }\n",
             "result",
         ),
         (
-            "enum Colour { Red, Green }\n\nfn f(c: ref Colour) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
+            "enum Colour { Red, Green }\n\nfn f(c: ref Colour) -> i64 { return 1 }\n\nfn main() throws { println(\"x\") }\n",
             "parameter",
         ),
     ] {
@@ -131,15 +131,15 @@ fn a_word_declared_ref_is_refused_at_every_position() {
 fn ref_int_is_refused_as_a_word() {
     for (program, position) in [
         (
-            "fn f(x: ref int) -> int { return x + 1 }\n\nfn main() { println(f\"{f(2)}\") }\n",
+            "fn f(x: ref int) -> int { return x + 1 }\n\nfn main() throws { println(f\"{f(2)}\") }\n",
             "parameter",
         ),
         (
-            "struct S { n: ref int }\n\nfn main() { println(\"x\") }\n",
+            "struct S { n: ref int }\n\nfn main() throws { println(\"x\") }\n",
             "field",
         ),
         (
-            "fn f(xs: ref Vec[int]) -> ref int { return xs[0] }\n\nfn main() { println(\"x\") }\n",
+            "fn f(xs: ref Vec[int]) -> ref int { return xs[0] }\n\nfn main() throws { println(\"x\") }\n",
             "result",
         ),
     ] {
@@ -160,16 +160,16 @@ fn ref_int_is_refused_as_a_word() {
 #[test]
 fn a_word_declared_ref_inside_a_type_is_refused() {
     for program in [
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let back: Vec[ref i64] = xs.iter().filter(fn(x) { x > 1 }).collect()\n\
          \x20   println(f\"{back.len()}\")\n\
          }\n",
-        "fn f(v: Vec[ref i64]) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
-        "struct S { xs: Vec[ref bool] }\n\nfn main() { println(\"x\") }\n",
-        "fn f() -> (String, ref u8)? { return null }\n\nfn main() { println(\"x\") }\n",
-        "fn f(g: fn(ref i64) -> i64 sync) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
-        "fn f(g: fn(i64) -> ref i64 sync) -> i64 { return 1 }\n\nfn main() { println(\"x\") }\n",
+        "fn f(v: Vec[ref i64]) -> i64 { return 1 }\n\nfn main() throws { println(\"x\") }\n",
+        "struct S { xs: Vec[ref bool] }\n\nfn main() throws { println(\"x\") }\n",
+        "fn f() -> (String, ref u8)? { return null }\n\nfn main() throws { println(\"x\") }\n",
+        "fn f(g: fn(ref i64) -> i64 sync) -> i64 { return 1 }\n\nfn main() throws { println(\"x\") }\n",
+        "fn f(g: fn(i64) -> ref i64 sync) -> i64 { return 1 }\n\nfn main() throws { println(\"x\") }\n",
     ] {
         let found = findings(program);
         let f = found
@@ -183,7 +183,7 @@ fn a_word_declared_ref_inside_a_type_is_refused() {
     }
     // Without `ref` the same `let` is the program.
     let found = findings(
-        "fn main() {\n\
+        "fn main() throws {\n\
          \x20   let xs = [1, 2, 3]\n\
          \x20   let back: Vec[i64] = xs.iter().filter(fn(x) { x > 1 }).collect()\n\
          \x20   println(f\"{back.len()}\")\n\
@@ -201,7 +201,7 @@ fn a_word_declared_ref_at_the_c_boundary_stays() {
          \x20   fn takes_one(n: ref i32) -> i32\n\
          \x20   fn fills_one(n: ref mut i32) -> i32\n\
          }\n\n\
-         fn main() { println(\"x\") }\n",
+         fn main() throws { println(\"x\") }\n",
     );
     assert!(!found.iter().any(|f| f.code == "NK1257"), "{found:#?}");
 }
@@ -215,7 +215,7 @@ fn a_generic_ref_t_at_a_word_runs() {
          \x20   let y: ref T = given[0]\n\
          \x20   return given.len() > 0\n\
          }\n\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let v: Vec[i64] = [4, 5]\n\
          \x20   println(f\"{first(v)}\")\n\
          }\n",
@@ -230,7 +230,7 @@ fn an_element_view_returned_past_its_list_is_refused() {
     std::fs::write(
         dir.join("main.nika"),
         "struct Expr { n: i64 }\n\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let mut out: ref Expr? = null\n\
          \x20   {\n\
          \x20       let given = [Expr { n: 1 }]\n\

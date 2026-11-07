@@ -13,7 +13,7 @@ fn lend(f: fn(ref String) -> String, s: String) -> String {
 	return f(s)
 }
 
-fn main() {
+fn main() throws {
 	let g: String = "  hi  "
 	println(apply(fn(s) { s.trim().to_string() }, g))
 	println(lend(fn(s) { s.trim().to_string() }, g))

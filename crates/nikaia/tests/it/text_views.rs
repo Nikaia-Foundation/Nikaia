@@ -75,13 +75,13 @@ fn count(dna: ref String, k: i64) -> collections::HashMap[ref String, i64] {
     return counts
 }
 
-fn report(dna: ref String, fragment: TEXT) {
+fn report(dna: ref String, fragment: TEXT) throws {
     let counts = count(dna, fragment.len())
     let n = counts.get(fragment) ?? 0
     println(f"{n}\t{fragment}")
 }
 
-fn main() {
+fn main() throws {
     let d = f"GGTAGGT"
     report(d, "GGT")
 }
@@ -107,7 +107,7 @@ pub struct Hit {
     path: TEXT,
 }
 
-fn main() {
+fn main() throws {
     let text = f"a\nb\n"
     let hits = Hits::file(text) catch { return }
     for h in hits {
@@ -146,7 +146,7 @@ pub fn read(data: TEXT) -> Vec[Entry] throws {
     return Stock::file(data)
 }
 
-fn main() {
+fn main() throws {
     let text = f"fruit;apple;3\n"
     let entries = read(text) catch { return }
     for e in entries {
@@ -167,7 +167,7 @@ fn main() {
 fn a_map_key_filled_by_views_is_a_view() {
     let program = r#"use std::collections
 
-fn main() {
+fn main() throws {
     let data = f"a;1\nb;2\na;3\n"
     let mut seen: collections::HashMap[TEXT, i64] = collections::HashMap()
     for line in data.lines() {
@@ -200,7 +200,7 @@ fn a_lent_string_parameter_is_borrowed_in_the_ledger() {
             .collect::<Vec<_>>()
     };
     let program = "fn report(dna: TEXT, k: i64) -> i64 {\n    return dna.len() + k\n}\n\n\
-                   fn main() {\n    let d = \"GGT\"\n    println(f\"{report(d, 1)}\")\n}\n";
+                   fn main() throws {\n    let d = \"GGT\"\n    println(f\"{report(d, 1)}\")\n}\n";
     let written = views(&program.replace("TEXT", "ref String"));
     assert_eq!(written, vec!["dna: borrowed".to_string()]);
     assert_eq!(views(&program.replace("TEXT", "String")), written);
@@ -222,7 +222,7 @@ fn a_string_option_the_body_only_reads_is_lent() {
                    \x20   }\n\
                    \x20   return out\n\
                    }\n\n\
-                   fn main() {\n\
+                   fn main() throws {\n\
                    \x20   let ws = [f\"a\", f\"b\"]\n\
                    \x20   let dash = \"-\"\n\
                    \x20   println(join(ws))\n\
@@ -249,7 +249,7 @@ fn a_kept_option_is_owned_and_listed_in_keeps() {
                   fn store(label: String = \"kept\") -> Holder {\n    return Holder { name: label }\n}\n\n\
                   fn read(n: i64; sep: String = \",\") -> String {\n    return f\"{n}{sep}\"\n}\n\n\
                   fn hands(text: String) -> Holder {\n    return store(label: text)\n}\n\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   println(store().name)\n\
                   \x20   println(read(1; sep: \";\"))\n\
                   \x20   println(hands(\"t\").name)\n\
@@ -296,7 +296,7 @@ fn ref_string_outside_the_c_boundary_is_a_warning() {
                   \x20   let b: ref String = a\n\
                   \x20   return b\n\
                   }\n\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let n = Named { name: null }\n\
                   \x20   let j = join(\"x\")\n\
                   \x20   println(f\"{first(j)}{n.name ?? \"-\"}\")\n\
@@ -331,7 +331,7 @@ fn string_the_tiers_made_a_view_is_no_warning() {
     let source = "struct User {\n    name: String,\n}\n\n\
                   impl User {\n    fn title(ref self) -> String {\n        return \"user\"\n    }\n}\n\n\
                   fn label() -> String {\n    return \"label\"\n}\n\n\
-                  fn main() {\n\
+                  fn main() throws {\n\
                   \x20   let nobody: String = \"nobody\"\n\
                   \x20   let u = User { name: \"ada\" }\n\
                   \x20   println(f\"{nobody} {u.name} {u.title()} {label()}\")\n\
@@ -354,7 +354,7 @@ fn ref_string_at_the_c_boundary_is_no_warning() {
     let source = "extern \"C\" {\n    fn puts(s: ref String) -> i32\n}\n\n\
                   pub extern fn greet(name: ref String) -> i64 sync {\n    return name.len()\n}\n\n\
                   fn count(names: Vec[ref String], name: String) -> i64 {\n    return names.len() + name.len()\n}\n\n\
-                  fn main() {\n    println(f\"{count([\"a\"], \"b\")}\")\n}\n";
+                  fn main() throws {\n    println(f\"{count([\"a\"], \"b\")}\")\n}\n";
     assert_eq!(redundant_refs(source), Vec::<String>::new());
 }
 
@@ -367,7 +367,7 @@ fn ref_string_in_a_variant_payload_is_a_warning() {
                    fn first(line: String) -> Tok {\n\
                    \x20   if line.len() == 0 {\n        return Tok::Num(0)\n    }\n\
                    \x20   return Tok::Word(line.trim())\n}\n\n\
-                   fn main() {\n\
+                   fn main() throws {\n\
                    \x20   match first(f\" hi {1} \") {\n\
                    \x20       Tok::Word(w) => println(w),\n\
                    \x20       Tok::Num(n) => println(f\"{n}\"),\n\
@@ -398,7 +398,7 @@ fn a_view_orders_against_owned_text() {
     a < owned
 }
 
-fn main() {
+fn main() throws {
     let s = "abc"
     let t = f"a" + "b"
     print(f"{less(s, "abd")} {s.trim() >= t} {t > s} {t <= s.trim()}")

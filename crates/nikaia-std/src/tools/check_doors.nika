@@ -23,6 +23,20 @@ impl CheckState {
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2203", message: f"`{written}` takes a lock, but you're already holding one here.", notes: ["This block runs while a lock is held, so taking a second lock inside it can deadlock."], help: "Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.", labels: [CheckLabel { span: span.clone(), word: method, text: "takes a second lock", main: true }] })
     }
 
+    /// `NK2203` for an `async` form inside a door's block (Part I 8.1.2,
+    /// Part III C.6): its group waits for its tasks before the lock is let
+    /// go, so a task that needs the held lock waits for the block that waits
+    /// for it. A detached task (`spawn`, `async(detached)`) is not the
+    /// block's to wait for, and is not asked. Whether it said anything: the
+    /// form's own tasks are then not asked again.
+    pub fn an_async_inside_a_door(ref mut self, span: ref Span) -> bool sync {
+        if !self.inside_a_door {
+            return false
+        }
+        self.findings.push(check_refusal("NK2203", span, "This `async` starts a task while you're holding a lock here.", ["The block waits for its tasks before it lets the lock go, so a task that needs the held lock would wait for the block that is waiting for it."], "Start the tasks before the block, or compute what the block needs first and pass it in."))
+        return true
+    }
+
     /// `NK2201`: a read of a mapped file while a lock is held. A block that
     /// holds a lock must never wait, and this wait doesn't show up as a pause
     /// or a second lock, which is why it gets its own message.

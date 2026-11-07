@@ -18,7 +18,7 @@ grammar Run {
 	entry rule top -> String = "0x" d:hex_digit+ eof -> { d }
 }
 
-fn main() {
+fn main() throws {
 	for s in ["x7", "xa", "xF", "xg", "x"] {
 		let h = One::top(s) catch {
 			println(f"{s}: error")

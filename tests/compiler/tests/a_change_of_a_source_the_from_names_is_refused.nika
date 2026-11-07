@@ -3,7 +3,7 @@ fn pick(a: String, b: String) -> String from a | b {
     return a.trim()
 }
 
-fn main() {
+fn main() throws {
     let x = "long word"
     let mut y = f"short"
     let r = pick(x, y)

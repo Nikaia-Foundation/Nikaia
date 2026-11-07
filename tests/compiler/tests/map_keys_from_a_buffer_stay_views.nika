@@ -32,7 +32,7 @@ fn words(text: String) -> Vec[String] {
 	return m
 }
 
-fn main() {
+fn main() throws {
 	let t = f"a b {1}"
 	let m = count(t)
 	let idx = index(t)

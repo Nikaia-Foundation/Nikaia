@@ -978,7 +978,7 @@ fn a_caller_may_change_the_argument_the_result_does_not_point_into() {
     }
     return a.trim()
 }
-fn main() {
+fn main() throws {
     let x = f" ab "
     let mut y = f"c"
     let r = pick(x, y)
@@ -1070,7 +1070,7 @@ fn per_view_sources_are_read_across_files() {
     let helper = "pub struct Pair { pub left: ref String, pub right: ref String }\n\
         pub fn pair(a: ref String, b: ref String) -> Pair {\n    return Pair { left: a, right: b }\n}\n";
     let main = "fn swapped(x: ref String, y: ref String) -> Pair {\n    let p = pair(x, y)\n    return Pair { left: p.right, right: p.left }\n}\n\
-        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = swapped(x, y)\n    println(f\"{t.left} {t.right}\")\n}\n";
+        fn main() throws {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = swapped(x, y)\n    println(f\"{t.left} {t.right}\")\n}\n";
     let (dir, program) = package("per-view", &[("helper.nika", helper), ("main.nika", main)]);
     let found = package_findings(&program);
     assert!(found.is_empty(), "{found:#?}");
@@ -1091,7 +1091,7 @@ const HELPER: &str = "pub struct Txt { pub n: ref String }\n\
 #[test]
 fn a_foreign_struct_result_with_two_sources_is_accepted() {
     let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if a.len() > 9 {\n        return Txt { n: a }\n    }\n    return mk(b)\n}\n\
-        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = hole(x, y)\n    println(t.n)\n}\n";
+        fn main() throws {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = hole(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package("xfile-two", &[("helper.nika", HELPER), ("main.nika", main)]);
     let found = package_findings(&program);
     assert!(found.is_empty(), "{found:#?}");
@@ -1103,7 +1103,7 @@ fn a_foreign_struct_result_with_two_sources_is_accepted() {
 #[test]
 fn a_foreign_struct_result_with_one_source_is_accepted() {
     let main = "fn hole(a: ref String, b: ref String) -> Txt {\n    if b.len() > 9 {\n        return mk(a)\n    }\n    return Txt { n: a }\n}\n\
-        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = hole(x, y)\n    println(t.n)\n}\n";
+        fn main() throws {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = hole(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package("xfile-one", &[("helper.nika", HELPER), ("main.nika", main)]);
     let found = package_findings(&program);
     assert!(found.is_empty(), "{found:#?}");
@@ -1117,7 +1117,7 @@ fn a_foreign_struct_result_with_one_source_is_accepted() {
 fn a_foreign_struct_without_views_is_accepted() {
     let helper = "pub struct Pair { pub n: String, pub k: i64 }\n";
     let main = "fn both(a: ref String, b: ref String) -> Pair {\n    return Pair { n: a.clone(), k: b.len() }\n}\n\
-        fn main() {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = both(x, y)\n    println(t.n)\n}\n";
+        fn main() throws {\n    let x = \"hello\"\n    let y = \"hi\"\n    let t = both(x, y)\n    println(t.n)\n}\n";
     let (dir, program) = package(
         "xfile-plain",
         &[("helper.nika", helper), ("main.nika", main)],
@@ -1352,7 +1352,7 @@ fn a_change_under_an_element_view_or_in_a_loop_is_nk2305() {
 ";
     assert_eq!(changed_under(element).len(), 1);
     let looping = format!(
-        "{LONGEST}pub fn twice() {{
+        "{LONGEST}pub fn twice() throws {{
     let x = \"ab\"
     let mut y = \"short\"
     let r = longest(x, y)
@@ -1680,7 +1680,7 @@ pub fn both() -> String {{
 fn a_pub_struct_keeps_its_places_across_packages() {
     let dir = common::scratch_dir("d7-across");
     let lib = format!("{PUB_PAIR}\nfn main() {{\n}}\n");
-    let app = "use lib\n\nfn main() {\n    let x = \"left\"\n    let mut y = \"right\"\n    let l = lib::pair(x, y).left\n    y = \"replaced\"\n    println(l)\n    println(y)\n}\n";
+    let app = "use lib\n\nfn main() throws {\n    let x = \"left\"\n    let mut y = \"right\"\n    let l = lib::pair(x, y).left\n    y = \"replaced\"\n    println(l)\n    println(y)\n}\n";
     for (package, source, manifest) in [
         (
             "lib",

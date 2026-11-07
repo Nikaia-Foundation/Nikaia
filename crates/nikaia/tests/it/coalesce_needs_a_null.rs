@@ -71,7 +71,8 @@ fn a_list_index_of_a_value_is_refused_with_the_length_help() {
 /// side, and the fallback is not written.
 #[test]
 fn a_plain_number_warns_and_is_its_left_side() {
-    let source = "fn main() {\n    let x: i64 = 5\n    let y = x ?? 0\n    println(f\"{y}\")\n}\n";
+    let source =
+        "fn main() throws {\n    let x: i64 = 5\n    let y = x ?? 0\n    println(f\"{y}\")\n}\n";
     let found = findings(source);
     let codes: Vec<(&str, bool)> = found
         .iter()
@@ -89,7 +90,7 @@ fn a_plain_number_warns_and_is_its_left_side() {
 fn a_narrowed_callee_does_not_break_its_callers() {
     let source = "struct User {\n    name: String,\n}\n\n\
          fn find(id: i64) -> User {\n    return User { name: f\"u{id}\" }\n}\n\n\
-         fn main() {\n\
+         fn main() throws {\n\
          \x20   let a = find(1) ?? User { name: \"-\" }\n\
          \x20   let b = find(2)?.name\n\
          \x20   println(f\"{a.name} {b}\")\n\
@@ -103,7 +104,7 @@ fn a_narrowed_callee_does_not_break_its_callers() {
 
 #[test]
 fn a_list_of_optionals_replaces_a_null_and_an_index_past_the_end_still_stops() {
-    let source = "fn main() {\n\
+    let source = "fn main() throws {\n\
          \x20   let xs: Vec[i64?] = [1, null, 3]\n\
          \x20   let a = xs[1] ?? 0\n\
          \x20   let ys: Vec[String?] = [\"a\", null]\n\
