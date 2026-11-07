@@ -71,8 +71,10 @@ pub trait EmitContractsHost {
 /// of the files `beside` it, in that order; `checked` the facts of a check
 /// already run as `propagation_against` would run it, `checked_plans` its
 /// keep plans (#727); `refused` the names the tier pass moved into a position
-/// that must hold text of its own (`Parsed::refused_moves`).
-pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H, parsed: ref P, units: ref Vec[ParsedView], beside: ref Vec[ParsedView], program: ref Program, own_contracts: Ledger, described: ref Ledger, library: ref Ledger, checked: CheckFacts?, checked_plans: Vec[BufferPlan]?, refused: ref collections::BTreeMap[i64, TierRefusal], build: ref EmitContractsBuild) -> EmitContractsMade sync {
+/// that must hold text of its own (`Parsed::refused_moves`); `graphs` the
+/// package's call graphs where they were worked out once for all its files
+/// (`emit_contracts_package_graphs`, #1279), else they are worked out here.
+pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H, parsed: ref P, units: ref Vec[ParsedView], beside: ref Vec[ParsedView], program: ref Program, own_contracts: Ledger, described: ref Ledger, library: ref Ledger, checked: CheckFacts?, checked_plans: Vec[BufferPlan]?, refused: ref collections::BTreeMap[i64, TierRefusal], build: ref EmitContractsBuild, graphs: EmitReachGraphs?) -> EmitContractsMade sync {
     let words = units[0].words
     let items = units[0].items
     let tables = emit_tables_items(words, items)
@@ -114,8 +116,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
     let shared = host.shared(own_contracts)
 
     // ADR-055 D6, before `own_contracts` is moved into place.
-    let reach = emit_contracts_pausing_reach(units, own_contracts)
-    let code_cycle_graph = emit_contracts_code_cycle_graph(units, own_contracts)
+    let made_graphs = graphs ?? emit_contracts_package_graphs(units, own_contracts)
 
     // **The classes of the file's maps** (ADR-010 D9, #581): where the
     // package is untrusted, the `let`s, parameters and results whose class
@@ -184,8 +185,8 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         cleaned_types: own_contracts.implementations.get("Cleanup")?.clone() ?? collections::BTreeSet(),
         shared: shared,
         built_at_build_time: emit_holes_built_at_build_time(parsed, words, items),
-        pausing_reach: reach,
-        code_cycle_graph: code_cycle_graph,
+        pausing_reach: made_graphs.pausing_reach,
+        code_cycle_graph: made_graphs.code_cycle_graph,
         own_methods: method_index(own_contracts),
         library_methods: method_index(library),
         own_contracts: own_contracts,
@@ -219,13 +220,33 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
     return EmitContractsMade { give_ups: vc_analyse(ask, fn(e) { emit_holes_literal(parsed, words, e) }).give_ups, state: state, order_proofs: order_proofs }
 }
 
+/// **The two call graphs of a package's functions** (ADR-055 D6, ADR-277
+/// D11): the same for every file of it, so a package lowered file by file
+/// works them out once (#1279).
+pub struct EmitReachGraphs {
+    /// A pausing function to the pausing functions it reaches.
+    pub pausing_reach: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// A function that runs a `sync` code parameter to those it calls.
+    pub code_cycle_graph: collections::BTreeMap[String, collections::BTreeSet[String]],
+}
+
+/// Both graphs over `units`, a file and the files `beside` it, or every file
+/// of a package: a cycle may pass through two files.
+pub fn emit_contracts_package_graphs(units: ref Vec[ParsedView], contracts: ref Ledger) -> EmitReachGraphs {
+    return EmitReachGraphs {
+        pausing_reach: emit_contracts_pausing_reach(units, contracts),
+        code_cycle_graph: emit_contracts_code_cycle_graph(units, contracts),
+    }
+}
+
 /// The functions of this program that can pause **and take part in a cycle**
 /// (ADR-055 D6's first sharp edge), over the file and its `beside` units: a
 /// cycle may pass through two files.
 fn emit_contracts_pausing_reach(units: ref Vec[ParsedView], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let index = reach_pausing_index(contracts)
     let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for unit in units {
-        for (key, reached) in pausing_edges(unit.words, unit.aliases, unit.items, contracts).drain() {
+        for (key, reached) in pausing_edges(unit.words, unit.aliases, unit.items, index).drain() {
             graph.entry(key).or_default().extend(reached)
         }
     }
@@ -236,9 +257,10 @@ fn emit_contracts_pausing_reach(units: ref Vec[ParsedView], contracts: ref Ledge
 /// the file and its `beside` units (ADR-277 D11, #1129): a cycle that hands a
 /// lambda on may pass through two files, like `emit_contracts_pausing_reach`'s.
 fn emit_contracts_code_cycle_graph(units: ref Vec[ParsedView], contracts: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let index = reach_running_index(contracts)
     let mut graph: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for unit in units {
-        for (key, reached) in code_cycle_edges(unit.words, unit.aliases, unit.items, contracts).drain() {
+        for (key, reached) in code_cycle_edges(unit.words, unit.aliases, unit.items, index).drain() {
             graph.entry(key).or_default().extend(reached)
         }
     }

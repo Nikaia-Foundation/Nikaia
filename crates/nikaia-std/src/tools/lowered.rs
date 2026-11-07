@@ -2631,7 +2631,7 @@ pub mod emit_calls {
 }
 pub mod emit_contracts {
     #[allow(unused_imports)]
-    pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state};
+    pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state, EmitReachGraphs, emit_contracts_package_graphs};
 }
 pub mod emit_core_args {}
 pub mod emit_core_below {
@@ -2719,7 +2719,7 @@ pub mod emit_pattern {}
 pub mod emit_program {}
 pub mod emit_reach {
     #[allow(unused_imports)]
-    pub use super::{pausing_edges, pausing_reach, code_cycle_edges, code_on_a_cycle};
+    pub use super::{ReachIndex, reach_pausing_index, reach_running_index, pausing_edges, pausing_reach, code_cycle_edges, code_on_a_cycle};
 }
 pub mod emit_seeds {
     #[allow(unused_imports)]

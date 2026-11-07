@@ -626,6 +626,14 @@ fn lower_tools_files_cached(
         ))
     };
 
+    // **The package's call graphs, worked out once** (#1279): they are the
+    // same for every file, read over all of them against `own`.
+    let graphs = {
+        let views: Vec<_> = parsed.iter().map(crate::check::parsed_view_of).collect();
+        nikaia_std::tools::emit_contracts::emit_contracts_package_graphs(&views, &own)
+    };
+    timer.lap("graphs");
+
     // **Each file checked and lowered on its own, on every core** (#667): a
     // file's lowering reads the package (`beside`, `own`, `provenance`) and
     // nothing another file's lowering writes, so the files are independent;
@@ -704,8 +712,18 @@ fn lower_tools_files_cached(
                 std::time::Duration::ZERO,
             );
         }
+        // A file lowered with its tests as functions holds functions the
+        // package's graphs were not drawn over, so its own are drawn.
+        let file_graphs = tests.is_none().then(|| graphs.clone());
         let lowered = crate::emit::emit_std_items_against_at(
-            unit, &beside, &own, &described, build, provenance, facts,
+            unit,
+            &beside,
+            &own,
+            &described,
+            build,
+            provenance,
+            facts,
+            file_graphs,
         )
         .map(|lowered| {
             let rust = format!("{}{wrappers}", lowered.rust);
