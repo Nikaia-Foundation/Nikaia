@@ -34,6 +34,7 @@ pub struct ProgramTest {
     pub stops: Option<Bytes>,
     pub bounds: Option<Bytes>,
     pub loops_bounds: Option<Bytes>,
+    pub stdin: Bytes,
 }
 
 pub fn shown_path(path: &std::path::Path, root: &std::path::Path) -> String {
@@ -173,7 +174,8 @@ pub async fn program_tests(root: &std::path::Path) -> Result<Vec<ProgramTest>, n
         let bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.bounds", name))))).await?;
         let loops_bounds = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.loops.bounds", name))))).await?;
         let stops = project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stops", name))))).await?;
-        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, loops_bounds });
+        let stdin = nikaia_std::index::or(project_tests_optional(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(format!("{}.stdin", name))))).await?, || Bytes(vec![]).into());
+        tests.push(ProgramTest { name: name.to_string(), dir: nikaia_std::fs::path::join(&(root), std::path::Path::new(&("tests"))), stdout, stderr, stops, bounds, loops_bounds, stdin });
     }
     Ok(tests)
 }
@@ -400,9 +402,9 @@ pub struct ProjectTestsRan {
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, own: &std::path::Path) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
     fn bounds(&self, level: &str, entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, own: &std::path::Path) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
 }
 
 pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Result<(), nikaia_std::error::Thrown<ProjectTestsRefusal>> {
@@ -453,14 +455,14 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     if program.bounds.is_some() { off = project_tests_relocated(&host.bounds("prove-through-loops:off", &entry, own)?, &entry, &written); }
     let mut on: String = String::from("");
     if program.loops_bounds.is_some() { on = project_tests_relocated(&host.bounds("prove-through-loops:on", &entry, own)?, &entry, &written); }
-    let built = host.compiler("build", setting, &project, own)?;
+    let built = host.compiler("build", setting, &project, own, &Bytes(vec![]))?;
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written));
         return Ok(project_tests_bounds_outcome(program, &refused, &off, &on));
     }
-    let ran = match host.built(&project, own)? {
+    let ran = match host.built(&project, own, &program.stdin)? {
         None => {
-            let out = host.compiler("run", setting, &project, own)?;
+            let out = host.compiler("run", setting, &project, own, &program.stdin)?;
             let said = out.stderr.copy_of();
             (out, said)
         },

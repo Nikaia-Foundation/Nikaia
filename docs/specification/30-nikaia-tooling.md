@@ -952,8 +952,12 @@ input owns the buffer first.
 pub fn read_to_string() -> String throws   // all of it, UTF-8 validated
 pub fn read() -> Bytes throws              // all of it, as bytes
 pub fn lines() -> Lines throws             // one line at a time
+pub fn read_line() -> String? throws       // the next line; null at the end
+pub fn read_exact(n: i64) -> Bytes throws  // exactly n bytes
 pub fn bytes() -> ByteStream throws        // chunks as they arrive
 ```
+
+`read_line` and `read_exact` read a framed message, a header line and then exactly the body's length of bytes, as LSP's `Content-Length` framing needs: both pause, and both take from the one buffer `lines()` takes from, so the three can be mixed; `null` from `read_line` is the end of the input, and an input that ends before `read_exact` has its `n` bytes is an error, not a shorter result (Part I 6.4).
 
 **A step of `lines` can fail, and the failure leaves the function.** Nothing marks the loop. The compiler requires the enclosing function to declare `throws`:
 

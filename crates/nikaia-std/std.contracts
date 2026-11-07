@@ -558,6 +558,29 @@ throws = ["io::IoError"]
 provenance = "trusted"
 signature = "() -> String"
 
+# One line of standard input, without its line ending; `null` at the end of
+# the input (Part III 17.1).
+#
+# It reads from the buffer `io::lines` and `io::read_exact` read from, so they
+# can be mixed. It pauses, and fails where the line is not UTF-8.
+[fn."io::read_line"]
+pub = true
+throws = ["io::IoError"]
+provenance = "trusted"
+signature = "() -> String?"
+
+# Exactly `n` bytes of standard input (Part III 17.1): a body whose length a
+# header gave. An input that ends sooner is an error, not a shorter result
+# (Part I 6.4).
+#
+# It reads from the buffer `io::lines` and `io::read_line` read from. It
+# pauses.
+[fn."io::read_exact"]
+pub = true
+throws = ["io::IoError"]
+provenance = "trusted"
+signature = "(n: i64) -> Bytes"
+
 # Each element through a function, as a new list.
 #
 # Whether this pauses is the lambda's answer and not its own.

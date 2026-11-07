@@ -2629,20 +2629,42 @@ impl ProgramHost {
         })
     }
 
-    /// `program` run in `own` with no standard input and no
-    /// `CARGO_TARGET_DIR`, as `command` has it set up.
+    /// `program` run in `own` with `stdin` on its standard input (none where
+    /// it is empty) and no `CARGO_TARGET_DIR`, as `command` has it set up.
     fn ran(
         &self,
         program: &Path,
         mut command: std::process::Command,
         own: &Path,
+        stdin: &[u8],
     ) -> Result<project_tests::ProjectTestsRan> {
-        let out = command
-            .current_dir(own)
-            .env_remove("CARGO_TARGET_DIR")
-            .stdin(std::process::Stdio::null())
-            .output()
-            .with_context(|| format!("running {}", program.display()))?;
+        use std::io::Write;
+        command.current_dir(own).env_remove("CARGO_TARGET_DIR");
+        let out = if stdin.is_empty() {
+            command.stdin(std::process::Stdio::null()).output()
+        } else {
+            command
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    // Written beside the wait, so a program that prints before
+                    // it reads does not fill its pipe and stop; one that stops
+                    // reading early closes the pipe, which is its business.
+                    let mut input = child.stdin.take();
+                    let given = stdin.to_vec();
+                    let writing = std::thread::spawn(move || {
+                        if let Some(input) = input.as_mut() {
+                            let _ = input.write_all(&given);
+                        }
+                    });
+                    let out = child.wait_with_output();
+                    let _ = writing.join();
+                    out
+                })
+        }
+        .with_context(|| format!("running {}", program.display()))?;
         Ok(project_tests::ProjectTestsRan {
             code: exit_code(&out.status),
             stdout: out.stdout.into(),
@@ -2665,6 +2687,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         setting: &str,
         project: &Path,
         own: &Path,
+        stdin: &[u8],
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -2674,7 +2697,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, own))
+        self.held(self.ran(&self.exe, command, own, stdin))
     }
 
     fn bounds(
@@ -2687,13 +2710,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         command
             .args(["check", "--bounds", "--optimization", level])
             .arg(entry);
-        self.held(self.ran(&self.exe, command, own).map(|out| out.stdout))
+        self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
     }
 
     fn built(
         &self,
         project: &Path,
         own: &Path,
+        stdin: &[u8],
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -2705,7 +2729,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, own).map(Some))
+        self.held(self.ran(&binary, command, own, stdin).map(Some))
     }
 }
 
