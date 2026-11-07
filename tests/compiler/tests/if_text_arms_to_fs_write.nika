@@ -1,0 +1,30 @@
+// #1286, ADR-282 D14: a declared `String` that a view and text of its own both
+// flow into (`EitherText` below) goes into a sink that takes bytes
+// (`fs::write`'s data) or a path (`fs::write`, `fs::exists`) as a `String`
+// does (before: accepted, then rustc refused `AsRef<[u8]>` and `AsRef<OsStr>`).
+use std::fs
+use std::process
+
+fn shout(s: String, t: String) -> String {
+    return s + t
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    for i in 0..<2 {
+        let source = f"x{i}"
+        fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, source.clone())
+        let z3 = if i == 0 { "unsat" } else { "sat" }
+        let kept: String = if z3 == "unknown" { source } else { shout(source, z3.clone()) }
+        fs::write(f"{tmp}/d.txt", fs::Root::Anywhere, kept)
+        println(fs::read_to_string(f"{tmp}/d.txt", fs::Root::Anywhere))
+        if i == 0 { println(source) }
+        let base = f"{tmp}/p{i}"
+        let path: String = if i == 0 { base } else { shout(base, ".b") }
+        fs::write(path, fs::Root::Anywhere, "hi")
+        println(fs::read_to_string(path, fs::Root::Anywhere))
+        println(fs::exists(path, fs::Root::Anywhere))
+        println(base.len() > 0)
+    }
+    process::run("rm", ["-r", tmp])
+}
