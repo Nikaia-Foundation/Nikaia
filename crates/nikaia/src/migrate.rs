@@ -120,6 +120,17 @@ pub fn print_throws(named: &[PathBuf]) -> Result<i32> {
                 .with_context(|| format!("cannot write {}", file.display()))?;
             println!("migrated {}", file.display());
         }
+        // A printing lambda is left to its author (supervisor, 2026-11-07).
+        let lambdas = match is_md(file) {
+            true => tool::migrate_print_throws_markdown_lambdas(source),
+            false => tool::migrate_print_throws_lambdas(source, &outside),
+        };
+        for line in lambdas {
+            eprintln!(
+                "{}:{line}: a printing lambda handed to a parameter that cannot fail; handle it or use a for loop",
+                file.display()
+            );
+        }
     }
     Ok(0)
 }

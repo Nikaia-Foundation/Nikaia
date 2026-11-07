@@ -114,19 +114,88 @@ pub(crate) fn print_throws_paren(tokens: &[MigrateToken], k: i64) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn print_throws_fails_at(tokens: &[MigrateToken], k: i64, free: &collections::BTreeSet<String>, methods: &collections::BTreeSet<String>) -> bool {
+    let paren = print_throws_paren(tokens, k);
+    if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind != MigrateKind::Word || paren < 0 { return false; }
+    let word = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string();
+    let before = migrate_text_at(tokens, k - 1);
+    let called = if before == "." { methods.contains(&word) } else if before == "::" { methods.contains(&word) || free.contains(&word) } else if before == "fn" { false } else { print_throws_is_print(&word) || free.contains(&word) };
+    called && !print_throws_caught(tokens, paren)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn print_throws_body_fails(tokens: &[MigrateToken], open: i64, close: i64, free: &collections::BTreeSet<String>, methods: &collections::BTreeSet<String>) -> bool {
     let mut k = open + 1;
     while k < close {
-        let paren = print_throws_paren(tokens, k);
-        if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && paren >= 0 {
-            let word = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string();
-            let before = migrate_text_at(tokens, k - 1);
-            let called = if before == "." { methods.contains(&word) } else if before == "::" { methods.contains(&word) || free.contains(&word) } else if before == "fn" { false } else { print_throws_is_print(&word) || free.contains(&word) };
-            if called && !print_throws_caught(tokens, paren) { return true; }
-        }
+        if print_throws_fails_at(tokens, k, free, methods) { return true; }
         k += 1;
     }
     false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn print_throws_names(fns: &[PrintThrowsFn], failing: &[bool], outside: &[String]) -> (collections::BTreeSet<String>, collections::BTreeSet<String>) {
+    let mut free: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut methods: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in outside.iter() {
+        let bare = name.strip_prefix('.');
+        if bare.is_some() { methods.insert(nikaia_std::index::or(bare, || "").to_string()); } else { free.insert(name.to_string()); }
+    }
+    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) { if nikaia_std::index::get(&fns, (i) as usize).method { methods.insert(nikaia_std::index::get(&fns, (i) as usize).name.to_string()); } else { free.insert(nikaia_std::index::get(&fns, (i) as usize).name.to_string()); } } }
+    (free, methods)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn print_throws_lambdas(tokens: &[MigrateToken]) -> Vec<(i64, i64, i64)> {
+    let mut out: Vec<(i64, i64, i64)> = vec![];
+    for k in 0..tokens.len() as i64 {
+        let next = migrate_text_at(tokens, k + 1);
+        if nikaia_std::index::get(&tokens, (k) as usize).kind != MigrateKind::Word || nikaia_std::index::get(&tokens, (k) as usize).text != "fn" || next != "(" && next != "{" { continue; }
+        let mut j = k + 1;
+        if next == "(" {
+            j = migrate_closing(tokens, j) + 1;
+            while j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" {
+                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Close || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == ";" { break; }
+                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open { j = migrate_closing(tokens, j); }
+                j += 1;
+            }
+        }
+        if j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == "{" { out.push((k, j, migrate_closing(tokens, j))); }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn print_throws_handed_to_method(tokens: &[MigrateToken], k: i64) -> bool {
+    if migrate_text_at(tokens, k - 2) == "." && nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).kind == MigrateKind::Word { return true; }
+    let mut depth = 0;
+    let mut j = k - 1;
+    while j >= 0 {
+        if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Close { depth += 1; } else if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open {
+            if depth == 0 {
+                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "(" { return false; }
+                return j >= 2 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j - 1)).kind == MigrateKind::Word && nikaia_std::index::get(&tokens, nikaia_std::index::at(j - 2)).text == ".";
+            }
+            depth -= 1;
+        }
+        j -= 1;
+    }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn print_throws_line(tokens: &[MigrateToken], k: i64) -> i64 {
+    let mut line: i64 = 1;
+    for i in 0..k + 1 {
+        for c in nikaia_std::index::get(&tokens, (i) as usize).gap.chars() { if c == '\n' { line += 1; } }
+        if i < k { for c in nikaia_std::index::get(&tokens, (i) as usize).text.chars() { if c == '\n' { line += 1; } } }
+    }
+    line
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -191,6 +260,62 @@ pub fn migrate_print_throws_nika(source: &str, outside: &[String]) -> String {
         out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).gap);
         out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text);
         if after.contains(&k) { out.push_str(" throws"); }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_print_throws_lambdas(source: &str, outside: &[String]) -> Vec<i64> {
+    let tokens = print_throws_tokens(source);
+    let fns = print_throws_fns(&tokens);
+    let failing = print_throws_failing(&tokens, &fns, &outside);
+    let (free, methods) = print_throws_names(&fns, &failing, &outside);
+    let lambdas = print_throws_lambdas(&tokens);
+    let mut lines: Vec<i64> = vec![];
+    for k in 0..tokens.len() as i64 {
+        if !print_throws_fails_at(&tokens, k, &free, &methods) { continue; }
+        let mut inner: i64 = -1;
+        let mut width = tokens.len() as i64;
+        for (at, open, close) in lambdas.iter() {
+            let at = nikaia_std::num::value(at);let open = nikaia_std::num::value(open);let close = nikaia_std::num::value(close);
+            if open < k && k < close && close - open < width {
+                inner = at;
+                width = close - open;
+            }
+        }
+        if inner >= 0 && print_throws_handed_to_method(&tokens, inner) {
+            let line = print_throws_line(&tokens, inner);
+            if !lines.contains(&line) { lines.push(line); }
+        }
+    }
+    lines
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_print_throws_markdown_lambdas(source: &str) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    let mut block: String = String::from("");
+    let mut inside = false;
+    let mut start: i64 = 0;
+    let mut number: i64 = 0;
+    for line in source.split("\n") {
+        number += 1;
+        let fence = line.trim();
+        if inside && fence == "```" {
+            for at in migrate_print_throws_lambdas(&block, &vec![]) { out.push(start + at); }
+            block = String::from("");
+            inside = false;
+            continue;
+        }
+        if inside {
+            block.push_str(line);
+            block.push('\n');
+        } else if fence == "```nika" || fence == "```nikaia" {
+            inside = true;
+            start = number;
+        }
     }
     out
 }

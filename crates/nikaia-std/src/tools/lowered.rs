@@ -3056,7 +3056,7 @@ pub mod maps {
 }
 pub mod migrate_print_throws {
     #[allow(unused_imports)]
-    pub use super::{migrate_print_throws_exports, migrate_print_throws_nika, migrate_print_throws_markdown};
+    pub use super::{migrate_print_throws_exports, migrate_print_throws_nika, migrate_print_throws_lambdas, migrate_print_throws_markdown_lambdas, migrate_print_throws_markdown};
 }
 pub mod migrate_views3 {
     #[allow(unused_imports)]

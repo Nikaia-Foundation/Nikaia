@@ -1,5 +1,7 @@
 migrated TMP/a.nika
 migrated TMP/b.md
+TMP/a.nika:33: a printing lambda handed to a parameter that cannot fail; handle it or use a for loop
+TMP/b.md:11: a printing lambda handed to a parameter that cannot fail; handle it or use a for loop
 trait Show {
     fn draw(self) throws
 }
@@ -51,6 +53,12 @@ fn main() throws {
 ```nika
 fn main() throws {
     println("hi")
+}
+```
+
+```nika
+fn show(xs: Vec[i64]) throws {
+    xs.iter().for_each fn(v) { println(f"{v}") }
 }
 ```
 

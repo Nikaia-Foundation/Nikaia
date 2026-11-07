@@ -13,7 +13,10 @@ fn main() throws {
             }
             "neg"
         }, n)
-        println(s) catch {}
+        // A failed write is the item's value: -1 (ADR-392).
+        println(s) catch {
+            return -1
+        }
         if n > 5 {
             return n * 2
         }
