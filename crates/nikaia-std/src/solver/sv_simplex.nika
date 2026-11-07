@@ -1,0 +1,909 @@
+// crates/nikaia-std/src/solver/sv_simplex.nika
+//
+// **The simplex theory** (ADR-270 D12, D11, #1283 item 3): the general
+// simplex of Dutertre and de Moura behind the theory interface of
+// `sv_theory.nika` - `assert`, `propagate`, `check`, `explain`, `backtrack`,
+// `model`, `shared` - the second theory beside Fourier-Motzkin.
+//
+// Every bound of an atom is a bound on one variable: a query column where
+// the atom's form is one column, else the *slack* of its form, one slack per
+// distinct form (`x + 2y` and `-2x - 4y` share it, the form divided by its
+// gcd and its first coefficient made positive). The slack's definition is a
+// row of the tableau: rows of `sv_row.nika` over the simplex's variables,
+// integral, `Σ aⱼ·xⱼ - d·x_b = 0` with the basic variable's coefficient the
+// row's one denominator `-d`. Values are rationals with the infinitesimal `δ`
+// of `sv_num.nika`, so a strict bound `F < c` is `F <= c - δ`.
+//
+// `check` repairs the basic variables outside their bounds by pivots. The
+// leaving variable is the lowest violated one; the entering variable the one
+// with the smallest coefficient in its row (D11: small multipliers keep the
+// rows small), and after `bland_after` pivots in one check the lowest
+// eligible one, Bland's rule, which cannot cycle. A pivot whose rows would
+// leave `i64` is not taken; when no pivot remains the answer is *unknown*,
+// `Overflow`. A row with no eligible variable is a conflict: the bounds of
+// its variables, each a literal's row divided by its scale, add up to a
+// constant contradiction, and that sum is the Farkas lemma written to the
+// log, which `sv_check.nika` replays without trusting the simplex.
+//
+// Integer columns by branch-and-bound (D5): a column with a fractional value
+// `v` is split by `x <= ⌊v⌋ ∨ x >= ⌊v⌋ + 1` (`SvBook::split`). With
+// `branching` the check searches both sides itself and learns the clause of
+// the two refutations by unit propagation; without it, `check` hands the
+// split to the engine as a lemma. Backtracking keeps the basis and restores
+// the bounds.
+
+/// One side of a variable's bounds: the variable lies at most (upper) or at
+/// least (lower) at `value`, from `src`, whose row is `scale·(F - value)`
+/// for the variable's form `F`. `set` is false where there is no bound
+/// (#1296: a `null` cannot be stored into a `Vec[SvSide?]`).
+pub struct SvSide {
+	pub set: bool,
+	pub value: SvDelta,
+	pub src: SvSrc,
+	pub scale: i64,
+}
+
+fn sv_sx_unset() -> SvSide {
+	return SvSide { set: false, value: sv_sx_zero(), src: SvSrc::Fact(0), scale: 1 }
+}
+
+fn sv_sx_zero() -> SvDelta {
+	return sv_delta(sv_int(0), sv_int(0))
+}
+
+/// A bound the backtrack restores: the side it replaced.
+pub struct SvUndo {
+	pub var: i64,
+	pub upper: bool,
+	pub old: SvSide,
+}
+
+/// One summand of a Farkas sum: the row of `src` times `num / scale`,
+/// negated where `neg`. An upper side `F <= u` with weight `c` is
+/// `c·(F - u)`, a lower side `F >= l` is `c·(l - F)`.
+pub struct SvPart {
+	pub src: SvSrc,
+	pub num: i64,
+	pub scale: i64,
+	pub neg: bool,
+}
+
+fn sv_side_part(side: ref SvSide, upper: bool, weight: i64) -> SvPart {
+	return SvPart { src: side.src.clone(), num: weight, scale: side.scale, neg: !upper }
+}
+
+/// A literal the simplex propagated: the level it holds from, and the
+/// bounds it follows from, weighted, the negated literal's weight `d`.
+pub struct SvImplied {
+	pub lit: u32,
+	pub level: i64,
+	pub parts: Vec[SvPart],
+	pub d: i64,
+}
+
+/// A bound as the simplex reads it: `form REL value` on the form divided by
+/// its gcd, first coefficient positive; `scale` the factor that gives the
+/// atom's row back, `row = scale·(form - value)`.
+pub struct SvReading {
+	pub form: SvRow,
+	pub upper: bool,
+	pub lower: bool,
+	pub value: SvDelta,
+	pub scale: i64,
+}
+
+/// The reading of `row REL 0` for a row with columns; `null` where a step
+/// leaves `i64`.
+fn sv_reading(row: ref SvRow, rel: SvRel) -> SvReading? {
+	let g = sv_row_content(row) ?? return null
+	let scale = if row.ks[0] < 0 { g.checked_neg() ?? return null } else { g }
+	let mut form = SvRow { cols: row.cols.clone(), ks: [], constant: 0 }
+	for k in row.ks {
+		form.ks.push(k / scale)
+	}
+	let c = sv_rat(row.constant.checked_neg() ?? return null, scale) ?? return null
+	let strict = match rel {
+		SvRel::Lt => true,
+		else => false,
+	}
+	let eq = match rel {
+		SvRel::Eq => true,
+		else => false,
+	}
+	let up = scale > 0
+	let k = if !strict { sv_int(0) } else if up { sv_int(-1) } else { sv_int(1) }
+	return SvReading {
+		form: form,
+		upper: eq || up,
+		lower: eq || !up,
+		value: sv_delta(c, k),
+		scale: scale,
+	}
+}
+
+/// `¬l`. Written as a branch: #1286, #1290.
+fn sv_sx_not(l: u32) -> u32 {
+	return if l % 2 == 0 { l + 1 } else { l - 1 }
+}
+
+/// **The simplex theory**: the variables (query columns met so far, then
+/// slacks), the tableau, the values and bounds, the trail and its levels.
+pub struct SvSimplex {
+	/// Each query column's name, as a model names it.
+	pub names: Vec[String],
+	pub col_var: collections::BTreeMap[u32, i64],
+	/// Each variable's query column, `-1` for a slack.
+	pub var_col: Vec[i64],
+	pub slack_of: collections::BTreeMap[String, i64],
+	pub rows: Vec[SvRow],
+	/// Each row's basic variable.
+	pub basic: Vec[i64],
+	/// Each variable's row, `-1` where it is not basic.
+	pub row_of: Vec[i64],
+	pub values: Vec[SvDelta],
+	pub lower: Vec[SvSide],
+	pub upper: Vec[SvSide],
+	pub undo: Vec[SvUndo],
+	pub trail: Vec[u32],
+	/// Per level above zero: the undo stack's and the trail's length when
+	/// it began.
+	pub levels: Vec[i64],
+	pub marks: Vec[i64],
+	pub implied: Vec[SvImplied],
+	pub found: collections::BTreeMap[String, i64],
+	/// Whether `check` searches a split itself (branch-and-bound) or hands
+	/// it to the engine as a lemma.
+	pub branching: bool,
+	/// Pivots in one check before Bland's rule takes over.
+	pub bland_after: i64,
+	/// Pivots in one check before the check gives up.
+	pub pivot_limit: i64,
+	/// What the theory did, for the runner's work column.
+	pub pivots: i64,
+	pub splits: i64,
+	pub overflows: i64,
+}
+
+fn sv_simplex(names: Vec[String]) -> SvSimplex {
+	return SvSimplex {
+		names: names,
+		col_var: collections::BTreeMap(),
+		var_col: [],
+		slack_of: collections::BTreeMap(),
+		rows: [],
+		basic: [],
+		row_of: [],
+		values: [],
+		lower: [],
+		upper: [],
+		undo: [],
+		trail: [],
+		levels: [],
+		marks: [],
+		implied: [],
+		found: collections::BTreeMap(),
+		branching: true,
+		bland_after: 64,
+		pivot_limit: 100000,
+		pivots: 0,
+		splits: 0,
+		overflows: 0,
+	}
+}
+
+/// The parts of a Farkas sum with integer multipliers over their common
+/// denominator, divided by their gcd, written to the log as the clause of
+/// the negated literals it assumes. `null`, nothing written, where a step
+/// leaves `i64` or the sum is no contradiction.
+fn sv_sx_lemma(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause? {
+	let mut common: i64 = 1
+	for p in parts {
+		let a = p.scale.checked_abs() ?? return null
+		let g = sv_gcd(common, a) ?? return null
+		common = (common / g).checked_mul(a) ?? return null
+	}
+	let mut sources: Vec[SvSrc] = []
+	let mut ms: Vec[i64] = []
+	for p in parts {
+		let mut m = p.num.checked_mul(common / p.scale) ?? return null
+		if p.neg {
+			m = m.checked_neg() ?? return null
+		}
+		if m != 0 {
+			sources.push(p.src.clone())
+			ms.push(m)
+		}
+	}
+	let g = sv_content(ms) ?? return null
+	if g > 1 {
+		let mut reduced: Vec[i64] = []
+		for m in ms {
+			reduced.push(m / g)
+		}
+		ms = reduced
+	}
+	let mut row = sv_row_constant(0)
+	let mut equality = true
+	let mut strict = false
+	let mut assumed: Vec[u32] = []
+	let mut i = 0
+	while i < sources.len() {
+		let b = book.source(sources[i]) ?? return null
+		let m = ms[i]
+		let is_eq = match b.rel {
+			SvRel::Eq => true,
+			else => false,
+		}
+		let is_lt = match b.rel {
+			SvRel::Lt => true,
+			else => false,
+		}
+		if !is_eq && m < 0 {
+			return null
+		}
+		equality = equality && is_eq
+		strict = strict || (is_lt && m > 0)
+		row = sv_row_sum(1, row, m, b.row) ?? return null
+		assumed = sv_lits_union(assumed, b.assumed)
+		i += 1
+	}
+	if row.cols.len() > 0 {
+		return null
+	}
+	let c = row.constant
+	let closes = if equality { c != 0 } else if strict { c >= 0 } else { c > 0 }
+	if !closes {
+		return null
+	}
+	let mut lits: Vec[u32] = []
+	for l in assumed {
+		lits.push(sv_sx_not(l))
+	}
+	lits.sort()
+	let id = book.log.farkas(lits.clone(), sources, ms, 1)
+	return SvClause { id: id, lits: lits }
+}
+
+impl SvSimplex {
+	fn push(ref mut self) {
+		self.levels.push(self.undo.len())
+		self.marks.push(self.trail.len())
+	}
+
+	fn level(ref self) -> i64 {
+		return self.levels.len()
+	}
+
+	/// A new variable for query column `col` (`-1`: a slack), non-basic,
+	/// value zero, no bounds.
+	fn new_var(ref mut self, col: i64) -> i64 {
+		let v = self.var_col.len()
+		self.var_col.push(col)
+		self.row_of.push(-1)
+		self.values.push(sv_sx_zero())
+		self.lower.push(sv_sx_unset())
+		self.upper.push(sv_sx_unset())
+		return v
+	}
+
+	/// The variable of query column `col`, made where it is new.
+	fn column_var(ref mut self, col: u32) -> i64 {
+		let known: i64? = self.col_var.get(col)
+		// `known ?? 0` after the test, not `return known`: #1291.
+		if known != null {
+			return known ?? 0
+		}
+		let v = self.new_var(col as i64)
+		self.col_var.insert(col, v)
+		return v
+	}
+
+	/// The variable of a reading's form, `-1` where there is none yet.
+	fn find_var(ref self, form: ref SvRow) -> i64 {
+		if form.cols.len() == 1 && form.ks[0] == 1 {
+			let v: i64? = self.col_var.get(form.cols[0])
+			return v ?? -1
+		}
+		let s: i64? = self.slack_of.get(sv_row_text(form))
+		return s ?? -1
+	}
+
+	/// The variable of a reading's form: its column, or its slack, made with
+	/// its tableau row where it is new (`Σ aⱼ·xⱼ - s = 0`, its basic
+	/// variables replaced by their rows); `null` where a step leaves `i64`.
+	fn form_var(ref mut self, form: ref SvRow) -> i64? {
+		if form.cols.len() == 1 && form.ks[0] == 1 {
+			return self.column_var(form.cols[0])
+		}
+		let key = sv_row_text(form)
+		let known: i64? = self.slack_of.get(key.clone())
+		if known != null {
+			return known ?? 0
+		}
+		let mut terms: Vec[SvTerm] = []
+		let mut i = 0
+		while i < form.cols.len() {
+			let v = self.column_var(form.cols[i])
+			terms.push(SvTerm { col: v.checked_u32() ?? return null, k: form.ks[i] })
+			i += 1
+		}
+		let s = self.new_var(-1)
+		terms.push(SvTerm { col: s.checked_u32() ?? return null, k: -1 })
+		let mut row = sv_row_of(terms, 0) ?? return null
+		let cols = row.cols.clone()
+		for c in cols {
+			let at = self.row_of[c as i64]
+			if at >= 0 && sv_row_coef(row, c) != 0 {
+				row = sv_row_eliminate(row, self.rows[at], c) ?? return null
+			}
+		}
+		self.rows.push(row)
+		self.basic.push(s)
+		let r = self.rows.len() - 1
+		self.row_of[s] = r
+		self.values[s] = self.row_value(r) ?? return null
+		self.slack_of.insert(key, s)
+		return s
+	}
+
+	/// The value row `r` gives its basic variable, `Σ aⱼ·βⱼ / d`.
+	fn row_value(ref self, r: i64) -> SvDelta? {
+		let b = self.basic[r]
+		let mut sum = sv_sx_zero()
+		let mut d: i64 = 0
+		let mut i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let k = self.rows[r].ks[i]
+			if v == b {
+				d = k.checked_neg() ?? return null
+			} else {
+				let term = sv_delta_scale(self.values[v], sv_int(k)) ?? return null
+				sum = sv_delta_add(sum, term) ?? return null
+			}
+			i += 1
+		}
+		let inverse = sv_rat(1, d) ?? return null
+		return sv_delta_scale(sum, inverse)
+	}
+
+	/// Every basic variable's value from the non-basic ones; false where a
+	/// step leaves `i64`.
+	fn refresh(ref mut self) -> bool {
+		let mut r = 0
+		while r < self.rows.len() {
+			let b = self.basic[r]
+			self.values[b] = self.row_value(r) ?? return false
+			r += 1
+		}
+		return true
+	}
+
+	/// `assert(lit)`: the literal's bound holds from now on. A bound that
+	/// crosses the other side of its variable is a conflict at once.
+	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
+		self.trail.push(lit)
+		let b = book.lit_bound(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+		return self.bound(b.row, b.rel, SvSrc::Lit(lit), book)
+	}
+
+	/// A bound entry of the log that holds at every level, asserted before
+	/// the first `push` (a congruence's `x - a - d·q >= 0`).
+	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked {
+		let b = (book.bounds.get(id) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)).clone()
+		return self.bound(b.row, b.rel, SvSrc::Fact(id), book)
+	}
+
+	fn bound(ref mut self, row: SvRow, rel: SvRel, src: SvSrc, mut book: SvBook) -> SvChecked {
+		if row.cols.len() == 0 {
+			let c = row.constant
+			let fails = match rel {
+				SvRel::Le => c > 0,
+				SvRel::Lt => c >= 0,
+				SvRel::Eq => c != 0,
+			}
+			if !fails {
+				return SvChecked::Consistent
+			}
+			return self.conflict([SvPart { src: src, num: 1, scale: 1, neg: false }], book)
+		}
+		let reading = sv_reading(row, rel) ?? return self.overflow()
+		let v = self.form_var(reading.form) ?? return self.overflow()
+		if reading.upper {
+			let side = SvSide { set: true, value: reading.value.clone(), src: src.clone(), scale: reading.scale }
+			let done = self.tighten(v, true, side, book)
+			match done {
+				SvChecked::Consistent => {},
+				else => {
+					return done
+				},
+			}
+		}
+		if reading.lower {
+			let side = SvSide { set: true, value: reading.value.clone(), src: src.clone(), scale: reading.scale }
+			return self.tighten(v, false, side, book)
+		}
+		return SvChecked::Consistent
+	}
+
+	/// The side `side` on variable `v`, where it is tighter than the one it
+	/// has; a non-basic variable outside it moves onto it.
+	fn tighten(ref mut self, v: i64, upper: bool, side: SvSide, mut book: SvBook) -> SvChecked {
+		let had = if upper { self.upper[v].clone() } else { self.lower[v].clone() }
+		if had.set {
+			let order = sv_delta_cmp(had.value, side.value)
+			if (upper && order <= 0) || (!upper && order >= 0) {
+				return SvChecked::Consistent
+			}
+		}
+		let other = if upper { self.lower[v].clone() } else { self.upper[v].clone() }
+		if other.set {
+			let order = sv_delta_cmp(side.value, other.value)
+			if (upper && order < 0) || (!upper && order > 0) {
+				return self.conflict(
+					[sv_side_part(side, upper, 1), sv_side_part(other, !upper, 1)],
+					book,
+				)
+			}
+		}
+		self.undo.push(SvUndo { var: v, upper: upper, old: had })
+		let value = side.value.clone()
+		if upper {
+			self.upper[v] = side
+		} else {
+			self.lower[v] = side
+		}
+		if self.row_of[v] < 0 {
+			let order = sv_delta_cmp(self.values[v], value)
+			if (upper && order > 0) || (!upper && order < 0) {
+				self.values[v] = value
+				if !self.refresh() {
+					return self.overflow()
+				}
+			}
+		}
+		return SvChecked::Consistent
+	}
+
+	fn overflow(ref mut self) -> SvChecked {
+		self.overflows += 1
+		return SvChecked::Unknown(LgUnknown::Overflow)
+	}
+
+	/// The conflict the parts add up to, written as a Farkas lemma.
+	fn conflict(ref mut self, parts: Vec[SvPart], mut book: SvBook) -> SvChecked {
+		let clause = sv_sx_lemma(parts, book) ?? return self.overflow()
+		return SvChecked::Conflict(clause)
+	}
+
+	/// The bound row `r` puts on its basic variable from above (`up`) or
+	/// below, through the bounds of its other variables, as the parts of
+	/// that sum; `null` where one of them lacks the side it needs.
+	fn row_parts(ref self, r: i64, up: bool) -> Vec[SvPart]? {
+		let b = self.basic[r]
+		let mut parts: Vec[SvPart] = []
+		let mut i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let a = self.rows[r].ks[i]
+			i += 1
+			if v == b {
+				continue
+			}
+			// From above, `a > 0` needs `v`'s upper side; from below its lower.
+			// Two lines, not `(a > 0) == up`: the comparison is taken for a chain.
+			let positive = a > 0
+			let wants_upper = positive == up
+			let side = if wants_upper { self.upper[v].clone() } else { self.lower[v].clone() }
+			if !side.set {
+				return null
+			}
+			parts.push(sv_side_part(side, wants_upper, a.checked_abs() ?? return null))
+		}
+		return parts
+	}
+
+	/// The bound on row `r`'s basic variable from above or below that the
+	/// bounds of its other variables give, `Σ aⱼ·boundⱼ / d`; `null`
+	/// where a side is missing or a step leaves `i64`.
+	fn row_bound(ref self, r: i64, up: bool) -> SvDelta? {
+		let b = self.basic[r]
+		let mut sum = sv_sx_zero()
+		let mut d: i64 = 1
+		let mut i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let a = self.rows[r].ks[i]
+			i += 1
+			if v == b {
+				d = a.checked_neg() ?? return null
+				continue
+			}
+			// Two lines, not `(a > 0) == up`: the comparison is taken for a chain.
+			let positive = a > 0
+			let wants_upper = positive == up
+			let side = if wants_upper { self.upper[v].clone() } else { self.lower[v].clone() }
+			if !side.set {
+				return null
+			}
+			let term = sv_delta_scale(side.value, sv_int(a)) ?? return null
+			sum = sv_delta_add(sum, term) ?? return null
+		}
+		let inverse = sv_rat(1, d) ?? return null
+		return sv_delta_scale(sum, inverse)
+	}
+
+	/// Pivots row `r` on non-basic variable `j`: `j` basic in `r`, every
+	/// other row with `j` combined with it by the smallest multipliers.
+	/// False, nothing changed, where a row would leave `i64`.
+	fn pivot(ref mut self, r: i64, j: i64) -> bool {
+		let col = j.checked_u32() ?? return false
+		let mut pr = self.rows[r].clone()
+		if sv_row_coef(pr, col) > 0 {
+			pr = sv_row_scale(pr, -1) ?? return false
+		}
+		let mut changed: Vec[i64] = []
+		let mut made: Vec[SvRow] = []
+		let mut t = 0
+		while t < self.rows.len() {
+			if t != r && sv_row_coef(self.rows[t], col) != 0 {
+				made.push(sv_row_eliminate(self.rows[t], pr, col) ?? return false)
+				changed.push(t)
+			}
+			t += 1
+		}
+		self.rows[r] = pr
+		let mut i = 0
+		while i < changed.len() {
+			self.rows[changed[i]] = made[i].clone()
+			i += 1
+		}
+		let old = self.basic[r]
+		self.row_of[old] = -1
+		self.basic[r] = j
+		self.row_of[j] = r
+		return true
+	}
+
+	/// The lowest basic variable outside its bounds: its row, and whether it
+	/// lies below; `-1` where every one is inside.
+	fn violated(ref self) -> SvViolation {
+		let mut best = SvViolation { row: -1, var: -1, below: false }
+		let mut r = 0
+		while r < self.rows.len() {
+			let b = self.basic[r]
+			let below = self.lower[b].set && sv_delta_cmp(self.values[b], self.lower[b].value) < 0
+			let above = self.upper[b].set && sv_delta_cmp(self.values[b], self.upper[b].value) > 0
+			if (below || above) && (best.var < 0 || b < best.var) {
+				best = SvViolation { row: r, var: b, below: below }
+			}
+			r += 1
+		}
+		return best
+	}
+
+	/// The variables of row `r` that can move its basic variable up
+	/// (`below`) or down, in the order the rule tries them: smallest
+	/// coefficient first, or, under Bland's rule, lowest first.
+	fn entering(ref self, r: i64, below: bool, bland: bool) -> Vec[i64] {
+		let b = self.basic[r]
+		let mut out: Vec[i64] = []
+		let mut cost: Vec[i64] = []
+		let mut i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let a = self.rows[r].ks[i]
+			i += 1
+			if v == b {
+				continue
+			}
+			let can_rise = !self.upper[v].set || sv_delta_cmp(self.values[v], self.upper[v].value) < 0
+			let can_fall = !self.lower[v].set || sv_delta_cmp(self.values[v], self.lower[v].value) > 0
+			// `d·x_b = Σ a·x`: `x_b` rises with `x` where `a > 0`.
+			let rises_with = a > 0
+			let ok = if rises_with == below { can_rise } else { can_fall }
+			if !ok {
+				continue
+			}
+			let size = if bland { v } else { a.checked_abs() ?? continue }
+			// Insert by `(size, v)`; the columns come ascending, so a tie
+			// keeps the lower variable first.
+			let mut at = out.len()
+			while at > 0 && cost[at - 1] > size {
+				at -= 1
+			}
+			out.insert(at, v)
+			cost.insert(at, size)
+		}
+		return out
+	}
+
+	/// Pivots until every variable is inside its bounds (`Consistent`) or a
+	/// row shows they cannot be (`Conflict`).
+	fn feasible(ref mut self, mut book: SvBook) -> SvChecked {
+		let mut count = 0
+		while true {
+			let at = self.violated()
+			if at.row < 0 {
+				return SvChecked::Consistent
+			}
+			if count >= self.pivot_limit {
+				return SvChecked::Unknown(LgUnknown::TooManyCases)
+			}
+			let r = at.row
+			let b = at.var
+			let candidates = self.entering(r, at.below, count >= self.bland_after)
+			if candidates.len() == 0 {
+				// `d·x_b` cannot reach the violated side: the row's bound
+				// from the other side and that side add up to `c < 0`.
+				let mut parts = self.row_parts(r, at.below) ?? return self.overflow()
+				let d = sv_row_coef(self.rows[r], b.checked_u32() ?? 0).checked_neg()
+					?? return self.overflow()
+				let side = if at.below { self.lower[b].clone() } else { self.upper[b].clone() }
+				parts.push(sv_side_part(side, !at.below, d))
+				return self.conflict(parts, book)
+			}
+			let mut pivoted = false
+			for j in candidates {
+				if self.pivot(r, j) {
+					pivoted = true
+					break
+				}
+			}
+			if !pivoted {
+				return self.overflow()
+			}
+			let target = if at.below { self.lower[b].value.clone() } else { self.upper[b].value.clone() }
+			self.values[b] = target
+			if !self.refresh() {
+				return self.overflow()
+			}
+			count += 1
+			self.pivots += 1
+		}
+	}
+
+	/// The lowest query column whose value is no integer, `-1` where there
+	/// is none.
+	fn fractional(ref self) -> i64 {
+		let mut v = 0
+		while v < self.var_col.len() {
+			let value = self.values[v].clone()
+			if self.var_col[v] >= 0 && (value.c.den != 1 || value.k.num != 0) {
+				return v
+			}
+			v += 1
+		}
+		return -1
+	}
+
+	/// `check(final, limit)`: whether what is asserted has rational values
+	/// (not final) or integer ones (final, branch-and-bound within
+	/// `limit.cases` splits).
+	fn check(ref mut self, final: bool, limit: ref LgBudget, mut book: SvBook) -> SvChecked {
+		let relaxed = self.feasible(book)
+		match relaxed {
+			SvChecked::Consistent => {},
+			else => {
+				return relaxed
+			},
+		}
+		if !final {
+			return SvChecked::Consistent
+		}
+		let v = self.fractional()
+		if v < 0 {
+			self.found = self.integer_values()
+			return SvChecked::Consistent
+		}
+		if self.splits >= limit.cases {
+			return SvChecked::Unknown(LgUnknown::TooManyCases)
+		}
+		self.splits += 1
+		let col = self.var_col[v]
+		let value = self.values[v].clone()
+		// `⌊value⌋` in the order with `δ`: `3 - δ` lies below 3.
+		let floor = sv_rat_floor(value.c)
+		let k = if value.c.den == 1 && value.k.num < 0 { floor - 1 } else { floor }
+		let le = SvRow {
+			cols: [col.checked_u32() ?? return self.overflow()],
+			ks: [1],
+			constant: k.checked_neg() ?? return self.overflow(),
+		}
+		let ge = SvRow {
+			cols: [col.checked_u32() ?? return self.overflow()],
+			ks: [-1],
+			constant: k.checked_add(1) ?? return self.overflow(),
+		}
+		let split = book.split(le, ge) ?? return self.overflow()
+		if !self.branching {
+			return SvChecked::Lemmas([split])
+		}
+		let mut refuted: Vec[SvClause] = []
+		for side in split.lits {
+			let level = self.level()
+			self.push()
+			let mut got = self.assert(side, book)
+			match got {
+				SvChecked::Consistent => {
+					got = self.check(true, limit, book)
+				},
+				else => {},
+			}
+			self.backtrack(level)
+			match got {
+				SvChecked::Conflict(clause) => {
+					if !clause.lits.contains(sv_sx_not(side)) {
+						// Refuted without this side: so is the branch.
+						return SvChecked::Conflict(clause.clone())
+					}
+					refuted.push(clause.clone())
+				},
+				else => {
+					return got
+				},
+			}
+		}
+		// Each side's clause, unit on the side's negation, then the split's
+		// clause false: learned by unit propagation through the three.
+		let mut lits: Vec[u32] = []
+		for c in refuted {
+			for l in c.lits {
+				let side = sv_sx_not(l)
+				if !split.lits.contains(side) && !lits.contains(l) {
+					lits.push(l)
+				}
+			}
+		}
+		lits.sort()
+		let id = book.learn(lits.clone(), [refuted[0].id, refuted[1].id, split.id])
+		return SvChecked::Conflict(SvClause { id: id, lits: lits })
+	}
+
+	/// The query columns' values, by name, where every one is an integer.
+	fn integer_values(ref self) -> collections::BTreeMap[String, i64] {
+		let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		let mut v = 0
+		while v < self.var_col.len() {
+			let col = self.var_col[v]
+			if col >= 0 {
+				let c = col.checked_u32() ?? 0
+				out.insert(sv_column_name(c, self.names), self.values[v].c.num)
+			}
+			v += 1
+		}
+		return out
+	}
+
+	/// `propagate()`: each literal of the book's atoms, neither asserted nor
+	/// propagated yet, that a bound of its variable implies, or, for a basic
+	/// variable, the bounds of its row.
+	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32] {
+		let mut out: Vec[u32] = []
+		let count = book.atoms.len().checked_u32() ?? return out
+		let mut a: u32 = 0
+		while a < count {
+			for l in [sv_lit(a, false), sv_lit(a, true)] {
+				if self.trail.contains(l) || self.is_implied(l) {
+					continue
+				}
+				let mine = book.lit_bound(l) ?? continue
+				if mine.row.cols.len() == 0 {
+					continue
+				}
+				match mine.rel {
+					SvRel::Eq => continue,
+					else => {},
+				}
+				// The explanation needs the negation's bound.
+				if book.lit_bound(sv_sx_not(l)) == null {
+					continue
+				}
+				let reading = sv_reading(mine.row, mine.rel) ?? continue
+				// Every atom's form gets its variable here, as the theory
+				// registers the atoms up front in Dutertre and de Moura: a
+				// new slack is basic, so its row bound can imply the atom.
+				let v = self.form_var(reading.form) ?? continue
+				let up = reading.upper
+				let side = if up { self.upper[v].clone() } else { self.lower[v].clone() }
+				if side.set {
+					let order = sv_delta_cmp(side.value, reading.value)
+					if (up && order <= 0) || (!up && order >= 0) {
+						self.implied.push(SvImplied {
+							lit: l,
+							level: self.level(),
+							parts: [sv_side_part(side, up, 1)],
+							d: 1,
+						})
+						out.push(l)
+						continue
+					}
+				}
+				let r = self.row_of[v]
+				if r < 0 {
+					continue
+				}
+				let got = self.row_bound(r, up) ?? continue
+				let order = sv_delta_cmp(got, reading.value)
+				if (up && order <= 0) || (!up && order >= 0) {
+					let parts = self.row_parts(r, up) ?? continue
+					let d = sv_row_coef(self.rows[r], v.checked_u32() ?? continue).checked_neg() ?? continue
+					self.implied.push(SvImplied { lit: l, level: self.level(), parts: parts, d: d })
+					out.push(l)
+				}
+			}
+			a += 1
+		}
+		return out
+	}
+
+	fn is_implied(ref self, l: u32) -> bool {
+		for i in self.implied {
+			if i.lit == l {
+				return true
+			}
+		}
+		return false
+	}
+
+	/// `explain(lit)`: the clause behind a propagated literal, a Farkas
+	/// lemma of the bounds it follows from and its negation.
+	fn explain(ref mut self, lit: u32, mut book: SvBook) -> SvClause? {
+		for i in self.implied {
+			if i.lit != lit {
+				continue
+			}
+			let negation = sv_sx_not(lit)
+			let b = book.lit_bound(negation) ?? return null
+			let reading = sv_reading(b.row, b.rel) ?? return null
+			let mut parts = i.parts.clone()
+			parts.push(SvPart { src: SvSrc::Lit(negation), num: i.d, scale: reading.scale, neg: !reading.upper })
+			return sv_sx_lemma(parts, book)
+		}
+		return null
+	}
+
+	/// `backtrack(level)`: the bounds and the trail as they were when
+	/// `level` ended; the basis and the values stay.
+	fn backtrack(ref mut self, level: i64) {
+		if level >= self.levels.len() {
+			return
+		}
+		let keep = self.levels[level]
+		while self.undo.len() > keep {
+			let u = self.undo.pop() ?? break
+			if u.upper {
+				self.upper[u.var] = u.old
+			} else {
+				self.lower[u.var] = u.old
+			}
+		}
+		self.trail.truncate(self.marks[level])
+		self.levels.truncate(level)
+		self.marks.truncate(level)
+		let mut kept: Vec[SvImplied] = []
+		for i in self.implied {
+			if i.level <= level {
+				kept.push(i.clone())
+			}
+		}
+		self.implied = kept
+	}
+
+	/// `model()`: the integer values of the last final `check`, by name.
+	fn model(ref self) -> collections::BTreeMap[String, i64] {
+		return self.found.clone()
+	}
+
+	/// `shared()`: none while the simplex is the only theory (D13).
+	fn shared(ref self) -> Vec[u32] {
+		return []
+	}
+}
+
+/// The basic variable `check` repairs next.
+pub struct SvViolation {
+	pub row: i64,
+	pub var: i64,
+	pub below: bool,
+}
