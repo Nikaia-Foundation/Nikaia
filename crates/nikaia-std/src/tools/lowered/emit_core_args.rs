@@ -574,7 +574,7 @@ pub(crate) fn emit_async_group_name(group: i64) -> String {
 }
 
 pub(crate) fn emit_async_channel_holds_a_crash(channel: &str, at: Option<i64>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-    if channel.starts_with("nikaia_std::error::Thrown<") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async` yet in a function that throws one error type alone (#988): its channel cannot carry a task's crash."), at }, &"emit_async_channel_holds_a_crash")); }
+    if channel.starts_with("nikaia_std::error::Thrown<") && !channel.ends_with("task::Crashed>") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async` yet in a function that throws one error type alone (#988): its channel cannot carry a task's crash."), at }, &"emit_async_channel_holds_a_crash")); }
     Ok(())
 }
 

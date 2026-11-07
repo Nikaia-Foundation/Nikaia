@@ -958,10 +958,11 @@ fn emit_async_group_name(group: i64) -> String {
 }
 
 /// **A group's channel holds a task's crash** (ADR-328 D8): one error type
-/// alone, `Thrown<E>`, cannot. An inferred `throws` holds `task::Crashed`
+/// alone, `Thrown<E>`, cannot, unless that type is the crash itself (#1355):
+/// a set of `task::Crashed` alone. An inferred `throws` holds `task::Crashed`
 /// where a task starts; a declared one that names a single type is refused.
 fn emit_async_channel_holds_a_crash(channel: ref String, at: i64?) throws {
-    if channel.starts_with("nikaia_std::error::Thrown<") {
+    if channel.starts_with("nikaia_std::error::Thrown<") && !channel.ends_with("task::Crashed>") {
         throw EmitRefused { message: "The compiler can't translate `async` yet in a function that throws one error type alone (#988): its channel cannot carry a task's crash.", at: at }
     }
 }
