@@ -1,0 +1,11 @@
+// #1288: `.to_string()` of a view is that view (Part I 2.2, ADR-282 D8),
+// so a view of a temporary handed back as `String` is refused with NK1104,
+// and the help names the copy, `.clone()`.
+fn first(s: String) -> String {
+    let rest = s.replace(")", "").trim().to_string()
+    return rest
+}
+
+fn main() {
+    println(first("(sat) "))
+}

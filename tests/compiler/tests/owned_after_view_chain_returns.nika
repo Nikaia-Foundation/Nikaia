@@ -1,0 +1,30 @@
+// #1288: text handed back from a chain of views. A view of a temporary
+// (`s.replace(..).trim()`) is copied with `.clone()`; `.to_string()` of
+// text is the text itself (Part I 2.2, ADR-282 D8). A chain that ends in a
+// method making text of its own (`to_lowercase`, `to_uppercase`) needs no
+// copy, and a view of a `String` parameter is handed back as it is.
+fn first(s: String) -> String {
+    let rest = s.replace(")", "").trim().clone()
+    return rest
+}
+
+fn trimmed(s: String) -> String {
+    let rest = s.trim().to_string()
+    return rest
+}
+
+fn lowered(s: String) -> String {
+    let rest = s.replace(")", "").trim().to_lowercase()
+    return rest
+}
+
+fn upper(s: String) -> String {
+    return s.replace("(", "").trim().to_uppercase()
+}
+
+fn main() {
+    println(first("(sat) "))
+    println(trimmed("  x  "))
+    println(lowered(" (SAT) "))
+    println(upper(" (sat) "))
+}
