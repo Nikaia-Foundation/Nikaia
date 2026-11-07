@@ -9,6 +9,12 @@ goes to the owner. The cycle and the hand-over between main sessions are
 below, under *Running the lanes*; briefs and reports under *Briefs and
 reports*.
 
+* **Every message to the owner begins with the time** (owner, 2026-11-07):
+  `HH:MM` in the owner's time zone (Europe/Berlin, `TZ=Europe/Berlin date
+  +%H:%M`), before the first word, in replies, status updates and questions
+  alike. The owner reads the session later and on several devices; the time
+  says how fresh a status is.
+
 ## Watching CI
 
 * **The supervisor checks CI on `develop` with `nikaia run scripts/release.nika
