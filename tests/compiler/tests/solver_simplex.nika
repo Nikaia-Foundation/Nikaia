@@ -104,7 +104,7 @@ fn scenario(title: String, names: Vec[String], atoms: Vec[SvAtom], bland_after: 
 	let budget = lg_budget()
 	let mut theory = sv_simplex(names)
 	theory.bland_after = bland_after
-	theory.push()
+	theory.push_level()
 	let mut got = SvChecked::Consistent
 	let mut j: u32 = 0
 	while (j as i64) < n {
@@ -153,7 +153,7 @@ fn calls() {
 	let c1 = book.input(1)
 	let budget = lg_budget()
 	let mut theory = sv_simplex([\"x\"])
-	theory.push()
+	theory.push_level()
 	println(f\"assert x <= 2: {said_by(theory.assert(0, book))}\")
 	let implied = theory.propagate(book)
 	println(f\"propagate: {lits_text(implied)}\")
@@ -161,7 +161,7 @@ fn calls() {
 	println(f\"explain x <= 5: {lits_text(why.lits)}\")
 	let first = theory.check(true, budget, book)
 	println(f\"check: {said_by(first)}, model {model_text(theory.model())}\")
-	theory.push()
+	theory.push_level()
 	let conflict = theory.assert(4, book)
 	println(f\"assert x >= 3 at level {theory.level()}: {said_by(conflict)}\")
 	theory.backtrack(1)
@@ -189,7 +189,7 @@ fn through_a_row() {
 	let c1 = book.input(1)
 	let c2 = book.input(2)
 	let mut theory = sv_simplex([\"x\", \"y\"])
-	theory.push()
+	theory.push_level()
 	theory.assert(0, book)
 	theory.assert(2, book)
 	let implied = theory.propagate(book)
@@ -226,7 +226,7 @@ fn main() throws {
 	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
 	}
-	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_theory", "sv_elim", "sv_drive", "sv_rod", "sv_simplex"] {
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_smt", "sv_rod"] {
 		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
 	}
 	let mut uses: Vec[String] = []

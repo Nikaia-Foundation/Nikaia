@@ -58,9 +58,10 @@ struct SvLearned {
 	glue: i64,
 }
 
-/// The solver: its log, its clauses and its assignment.
+/// The solver: its book (the log, shared with a theory), its clauses and its
+/// assignment.
 pub struct SvSat {
-	pub log: SvLog,
+	pub book: SvBook,
 	pub stats: SvSatStats,
 	/// Whether the log holds the empty clause.
 	pub refuted: bool,
@@ -87,6 +88,9 @@ pub struct SvSat {
 	trail: Vec[u32],
 	/// Where each decision level starts on the trail.
 	limits: Vec[i64],
+	/// The shortest the trail was cut to by a backjump since `sv_smt.nika`
+	/// last looked (it hands the theory the trail from there again).
+	pub undone: i64,
 	/// The next trail entry to propagate.
 	head: i64,
 	activity: Vec[i64],
@@ -129,8 +133,14 @@ fn sv_luby(i: i64) -> i64 {
 
 /// A solver over `vars` variables writing to `log`.
 fn sv_sat(vars: u32, log: SvLog) -> SvSat {
+	return sv_sat_book(vars, SvBook { log: log, atoms: [], bounds: collections::BTreeMap() })
+}
+
+/// A solver over `vars` variables writing to `book`, which a theory shares
+/// (`sv_smt.nika`).
+fn sv_sat_book(vars: u32, book: SvBook) -> SvSat {
 	let mut s = SvSat {
-		log: log,
+		book: book,
 		stats: SvSatStats {
 			decisions: 0,
 			propagations: 0,
@@ -157,6 +167,7 @@ fn sv_sat(vars: u32, log: SvLog) -> SvSat {
 		trail: [],
 		limits: [],
 		head: 0,
+		undone: 0,
 		activity: [],
 		bump: 65536,
 		heap: [],
@@ -192,7 +203,7 @@ fn sv_sat_of(query: ref SvQuery) -> SvSat? {
 	let mut s = sv_sat(log.atoms, log)
 	let mut c: u32 = 0
 	for clause in query.clauses {
-		let id = s.log.input(c)
+		let id = s.book.log.input(c)
 		s.add_input(clause, id)
 		c += 1
 	}
@@ -265,7 +276,7 @@ impl SvSat {
 		let mut entry = id
 		if changed {
 			hints.push(id)
-			entry = self.log.learn(kept.clone(), hints)
+			entry = self.book.log.learn(kept.clone(), hints)
 			self.stats.learned += 1
 		}
 		if kept.len() == 0 {
@@ -336,7 +347,7 @@ impl SvSat {
 				k += 1
 			}
 			hints.push(self.clause_id(reason))
-			self.unit[v] = self.log.learn([l], hints) as i64
+			self.unit[v] = self.book.log.learn([l], hints) as i64
 			self.stats.learned += 1
 		}
 	}
@@ -348,7 +359,7 @@ impl SvSat {
 			if self.lit_value(l) < 0 {
 				// Its negation is a unit already: the two make the empty
 				// clause.
-				self.log.learn([], [self.unit[v] as u32, id])
+				self.book.log.learn([], [self.unit[v] as u32, id])
 				self.stats.learned += 1
 				self.refuted = true
 			}
@@ -553,6 +564,9 @@ impl SvSat {
 			}
 			at -= 1
 		}
+		if start < self.undone {
+			self.undone = start
+		}
 		self.trail.truncate(start)
 		self.limits.truncate(target)
 		self.head = start
@@ -569,7 +583,7 @@ impl SvSat {
 			k += 1
 		}
 		hints.push(self.clause_id(c))
-		self.log.learn([], hints)
+		self.book.log.learn([], hints)
 		self.stats.learned += 1
 		self.refuted = true
 	}
@@ -615,21 +629,7 @@ impl SvSat {
 					self.refute(conflict)
 					return SvSatAnswer::Unsat
 				}
-				let learned = self.analyze(conflict)
-				self.backjump(learned.level)
-				let id = self.log.learn(learned.lits.clone(), learned.hints)
-				self.stats.learned += 1
-				if learned.lits.len() == 1 {
-					self.assign_unit(learned.lits[0], id)
-				} else {
-					let first = learned.lits[0]
-					let c = self.attach(learned.lits, id, learned.glue, true)
-					self.assign(first, c as i64)
-				}
-				self.bump = self.bump + self.bump / 19
-				if self.bump > 1152921504606846976 {
-					self.rescale()
-				}
+				self.learn_conflict(conflict)
 				if met >= limit || self.stats.conflicts >= self.next_reduce
 					|| self.stats.conflicts >= budget
 				{
@@ -642,6 +642,121 @@ impl SvSat {
 			self.limits.push(self.trail.len())
 			self.assign(next, -1)
 		}
+	}
+
+	/// Learns from the conflicting clause `conflict` above level zero: the
+	/// first-UIP clause, the backjump, its first literal assigned.
+	fn learn_conflict(ref mut self, conflict: i64) {
+		let learned = self.analyze(conflict)
+		self.backjump(learned.level)
+		let id = self.book.log.learn(learned.lits.clone(), learned.hints)
+		self.stats.learned += 1
+		if learned.lits.len() == 1 {
+			self.assign_unit(learned.lits[0], id)
+		} else {
+			let first = learned.lits[0]
+			let c = self.attach(learned.lits, id, learned.glue, true)
+			self.assign(first, c as i64)
+		}
+		self.bump = self.bump + self.bump / 19
+		if self.bump > 1152921504606846976 {
+			self.rescale()
+		}
+	}
+
+	/// The trail's length and its `i`-th literal: what `sv_smt.nika` hands
+	/// the theory.
+	fn trail_len(ref self) -> i64 {
+		return self.trail.len()
+	}
+
+	fn trail_at(ref self, i: i64) -> u32 {
+		return self.trail[i]
+	}
+
+	/// The level literal `l`'s variable is assigned at.
+	fn level_of(ref self, l: u32) -> i64 {
+		return self.level[sv_sat_var(l)]
+	}
+
+	/// Whether `l`'s variable is one of the solver's.
+	fn knows(ref self, l: u32) -> bool {
+		return sv_sat_var(l) < self.value.len()
+	}
+
+	/// A decision: a new level, `l` true on it.
+	fn decide(ref mut self, l: u32) {
+		self.stats.decisions += 1
+		self.limits.push(self.trail.len())
+		self.assign(l, -1)
+	}
+
+	/// Adds the clause `lits`, entry `id` of the log, in the middle of the
+	/// search: a theory's conflict or explanation, every literal false but
+	/// at most one. False everywhere, it is the conflicting clause after a
+	/// backjump to the highest level among its literals (the name returned;
+	/// at level zero it refutes); with one open literal it implies that one
+	/// at the level of the highest false one. `-1` where there is no
+	/// conflict.
+	fn add_lemma(ref mut self, lits: ref Vec[u32], id: u32) -> i64 {
+		if self.refuted {
+			return -1
+		}
+		// The open and true literals first, then the false ones, the highest
+		// level first.
+		let mut ordered: Vec[u32] = []
+		let mut falsified: Vec[u32] = []
+		let mut holds = false
+		for l in lits {
+			let v = self.lit_value(l)
+			if v > 0 {
+				holds = true
+			}
+			if v >= 0 {
+				ordered.push(l)
+				continue
+			}
+			falsified.push(l)
+			let mut at = falsified.len() - 1
+			while at > 0 && self.level_of(falsified[at - 1]) < self.level_of(l) {
+				falsified[at] = falsified[at - 1]
+				at -= 1
+			}
+			falsified[at] = l
+		}
+		let open = ordered.len()
+		for l in falsified {
+			ordered.push(l)
+		}
+		if ordered.len() == 0 {
+			// The entry is the empty clause itself.
+			self.refuted = true
+			return -1
+		}
+		if ordered.len() == 1 {
+			self.backjump(0)
+			self.assign_unit(ordered[0], id)
+			return -1
+		}
+		if open == 0 {
+			let top = self.level_of(ordered[0])
+			self.backjump(top)
+			let c = self.attach(ordered, id, 2, true) as i64
+			if top == 0 {
+				self.refute(c)
+				return -1
+			}
+			return c
+		}
+		if open == 1 && !holds {
+			self.backjump(self.level_of(ordered[1]))
+			let first = ordered[0]
+			let c = self.attach(ordered, id, 2, true)
+			self.assign(first, c as i64)
+			return -1
+		}
+		self.attach(ordered, id, 2, true)
+		return -1
 	}
 
 	/// The next decision: the open variable of highest activity in its
@@ -682,7 +797,7 @@ impl SvSat {
 			let c = 4294967295 - key % 4294967296
 			self.arena[c + 1] = self.arena[c + 1] | 2
 			self.wasted += self.arena[c] as i64 + 3
-			self.log.delete(self.clause_id(c))
+			self.book.log.delete(self.clause_id(c))
 			self.stats.deleted += 1
 			going -= 1
 		}

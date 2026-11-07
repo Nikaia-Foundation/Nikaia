@@ -383,6 +383,6 @@ fn main() throws {
 // 		SvSatAnswer::Sat => "sat",
 // 		SvSatAnswer::Unknown => "unknown",
 // 	}
-// 	let v = sv_check(cnf.query, s.log.steps)
+// 	let v = sv_check(cnf.query, s.book.log.steps)
 // 	println(f"x <= y, y < x through the SAT core: {answer}, sv_check {if v.ok { "accepts" } else { v.reason }}")
 // }

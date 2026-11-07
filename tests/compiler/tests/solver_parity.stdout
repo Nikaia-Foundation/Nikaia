@@ -1,6 +1,6 @@
-even-odd.smt2: fm unknown (no contradiction); exact proved, log of 10 steps checked
-gcd.smt2: fm proved, log of 8 steps checked; exact proved, log of 8 steps checked
-even-even.smt2: fm unknown (no contradiction); exact refuted
-sum-4.smt2: fm proved, log of 75 steps checked; exact proved, log of 130 steps checked
-sum-8.smt2: fm proved, log of 467 steps checked; exact proved, log of 254 steps checked
-sum-12.smt2: fm unknown (cases); exact proved, log of 378 steps checked
+even-odd.smt2: simplex unknown (cases); fm proved, log of 10 steps checked; both proved, log of 10 steps checked
+gcd.smt2: simplex proved, log of 3 steps checked; fm proved, log of 3 steps checked; both proved, log of 3 steps checked
+even-even.smt2: simplex refuted; fm refuted; both refuted
+sum-4.smt2: simplex proved, log of 152 steps checked; fm proved, log of 106 steps checked; both proved, log of 106 steps checked
+sum-8.smt2: simplex proved, log of 510 steps checked; fm proved, log of 206 steps checked; both proved, log of 206 steps checked
+sum-12.smt2: simplex unknown (cases); fm proved, log of 306 steps checked; both proved, log of 306 steps checked

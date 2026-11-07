@@ -86,6 +86,17 @@ fn sv_unknown(why: LgUnknown) -> String {
 	}
 }
 
+/// The theory of a `new` engine: `new` both, `new-fm` and `new-simplex` one.
+fn sv_new_theory(engine: String) -> String {
+	if engine == "new-fm" {
+		return "fm"
+	}
+	if engine == "new-simplex" {
+		return "simplex"
+	}
+	return "both"
+}
+
 /// One file's answer and the work it took: `proved`, `refuted`, `unknown
 /// (why)` or `wrong (why)`, then the work.
 fn sv_line(source: String, engine: String) -> String {
@@ -99,8 +110,8 @@ fn sv_line(source: String, engine: String) -> String {
 	let mut arena = script.arena.clone()
 	let goal = arena.boolean(false)
 	let budget = lg_budget()
-	if engine == "new" {
-		return sv_new_line(arena, script.assertions, goal, budget, status)
+	if engine == "new" || engine == "new-fm" || engine == "new-simplex" {
+		return sv_new_line(arena, script.assertions, goal, budget, status, sv_new_theory(engine))
 	}
 	let run = sv_fm_check(arena, script.assertions, goal, budget)
 	let answer = match run.answer {
@@ -127,7 +138,7 @@ fn sv_line(source: String, engine: String) -> String {
 	return f"{answer} {run.work}"
 }
 
-/// The new engine's line (#1282): a *proved* is its proof log replayed by
+/// The new engine's line (#1282, #1283): a *proved* is its proof log replayed by
 /// `sv_check`, a model evaluated as Fourier-Motzkin's is.
 fn sv_new_line(
 	arena: ref TermArena,
@@ -135,8 +146,9 @@ fn sv_new_line(
 	goal: i64,
 	budget: ref LgBudget,
 	status: String,
+	theory: String,
 ) -> String {
-	let run = sv_engine(arena, facts, goal, budget, true)
+	let run = sv_smt_engine(arena, facts, goal, budget, theory)
 	let answer = match run.driven {
 		SvDriven::Proved(query, steps) => {
 			let verdict = sv_check(query, steps)
@@ -164,8 +176,9 @@ fn sv_new_line(
 }
 
 /// The program's entry: `ENGINE FILE...`, one line per file. The engine is
-/// `fm`, Fourier-Motzkin as the compiler runs it, or `new`, the theory
-/// interface's driver (#1282).
+/// `fm`, Fourier-Motzkin as the compiler runs it, or `new`, the CDCL(T)
+/// engine of `sv_smt.nika` over both theories (`new-fm`, `new-simplex`: over
+/// one).
 pub fn sv_rod_main() throws {
 	let mut args: Vec[String] = []
 	for a in cli::args() {

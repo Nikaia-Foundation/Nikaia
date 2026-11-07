@@ -265,15 +265,6 @@ fn sv_sx_lemma(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause? {
 }
 
 impl SvSimplex {
-	fn push(ref mut self) {
-		self.levels.push(self.undo.len())
-		self.marks.push(self.trail.len())
-	}
-
-	fn level(ref self) -> i64 {
-		return self.levels.len()
-	}
-
 	/// A new variable for query column `col` (`-1`: a slack), non-basic,
 	/// value zero, no bounds.
 	fn new_var(ref mut self, col: i64) -> i64 {
@@ -379,21 +370,6 @@ impl SvSimplex {
 		return true
 	}
 
-	/// `assert(lit)`: the literal's bound holds from now on. A bound that
-	/// crosses the other side of its variable is a conflict at once.
-	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
-		self.trail.push(lit)
-		let b = book.lit_bound(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
-		return self.bound(b.row, b.rel, SvSrc::Lit(lit), book)
-	}
-
-	/// A bound entry of the log that holds at every level, asserted before
-	/// the first `push` (a congruence's `x - a - d·q >= 0`).
-	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked {
-		let b = (book.bounds.get(id) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)).clone()
-		return self.bound(b.row, b.rel, SvSrc::Fact(id), book)
-	}
-
 	fn bound(ref mut self, row: SvRow, rel: SvRel, src: SvSrc, mut book: SvBook) -> SvChecked {
 		if row.cols.len() == 0 {
 			let c = row.constant
@@ -410,7 +386,12 @@ impl SvSimplex {
 		let reading = sv_reading(row, rel) ?? return self.overflow()
 		let v = self.form_var(reading.form) ?? return self.overflow()
 		if reading.upper {
-			let side = SvSide { set: true, value: reading.value.clone(), src: src.clone(), scale: reading.scale }
+			let side = SvSide {
+				set: true,
+				value: reading.value.clone(),
+				src: src.clone(),
+				scale: reading.scale,
+			}
 			let done = self.tighten(v, true, side, book)
 			match done {
 				SvChecked::Consistent => {},
@@ -420,7 +401,12 @@ impl SvSimplex {
 			}
 		}
 		if reading.lower {
-			let side = SvSide { set: true, value: reading.value.clone(), src: src.clone(), scale: reading.scale }
+			let side = SvSide {
+				set: true,
+				value: reading.value.clone(),
+				src: src.clone(),
+				scale: reading.scale,
+			}
 			return self.tighten(v, false, side, book)
 		}
 		return SvChecked::Consistent
@@ -597,8 +583,10 @@ impl SvSimplex {
 			if v == b {
 				continue
 			}
-			let can_rise = !self.upper[v].set || sv_delta_cmp(self.values[v], self.upper[v].value) < 0
-			let can_fall = !self.lower[v].set || sv_delta_cmp(self.values[v], self.lower[v].value) > 0
+			let can_rise = !self.upper[v].set
+				|| sv_delta_cmp(self.values[v], self.upper[v].value) < 0
+			let can_fall = !self.lower[v].set
+				|| sv_delta_cmp(self.values[v], self.lower[v].value) > 0
 			// `d·x_b = Σ a·x`: `x_b` rises with `x` where `a > 0`.
 			let rises_with = a > 0
 			let ok = if rises_with == below { can_rise } else { can_fall }
@@ -653,7 +641,9 @@ impl SvSimplex {
 			if !pivoted {
 				return self.overflow()
 			}
-			let target = if at.below { self.lower[b].value.clone() } else { self.upper[b].value.clone() }
+			let target = if at.below { self.lower[b].value.clone() } else {
+				self.upper[b].value.clone()
+			}
 			self.values[b] = target
 			if !self.refresh() {
 				return self.overflow()
@@ -675,6 +665,56 @@ impl SvSimplex {
 			v += 1
 		}
 		return -1
+	}
+
+	/// The query columns' values, by name, where every one is an integer.
+	fn integer_values(ref self) -> collections::BTreeMap[String, i64] {
+		let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+		let mut v = 0
+		while v < self.var_col.len() {
+			let col = self.var_col[v]
+			if col >= 0 {
+				let c = col.checked_u32() ?? 0
+				out.insert(sv_column_name(c, self.names), self.values[v].c.num)
+			}
+			v += 1
+		}
+		return out
+	}
+
+	fn is_implied(ref self, l: u32) -> bool {
+		for i in self.implied {
+			if i.lit == l {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+impl SvTh for SvSimplex {
+	fn push_level(ref mut self) {
+		self.levels.push(self.undo.len())
+		self.marks.push(self.trail.len())
+	}
+
+	fn level(ref self) -> i64 {
+		return self.levels.len()
+	}
+
+	/// `assert(lit)`: the literal's bound holds from now on. A bound that
+	/// crosses the other side of its variable is a conflict at once.
+	fn assert(ref mut self, lit: u32, mut book: SvBook) -> SvChecked {
+		self.trail.push(lit)
+		let b = book.lit_bound(lit) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+		return self.bound(b.row, b.rel, SvSrc::Lit(lit), book)
+	}
+
+	/// A bound entry of the log that holds at every level, asserted before
+	/// the first `push` (a congruence's `x - a - d·q >= 0`).
+	fn fact(ref mut self, id: u32, mut book: SvBook) -> SvChecked {
+		let b = (book.bounds.get(id) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)).clone()
+		return self.bound(b.row, b.rel, SvSrc::Fact(id), book)
 	}
 
 	/// `check(final, limit)`: whether what is asserted has rational values
@@ -722,7 +762,7 @@ impl SvSimplex {
 		let mut refuted: Vec[SvClause] = []
 		for side in split.lits {
 			let level = self.level()
-			self.push()
+			self.push_level()
 			let mut got = self.assert(side, book)
 			match got {
 				SvChecked::Consistent => {
@@ -758,21 +798,6 @@ impl SvSimplex {
 		lits.sort()
 		let id = book.learn(lits.clone(), [refuted[0].id, refuted[1].id, split.id])
 		return SvChecked::Conflict(SvClause { id: id, lits: lits })
-	}
-
-	/// The query columns' values, by name, where every one is an integer.
-	fn integer_values(ref self) -> collections::BTreeMap[String, i64] {
-		let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
-		let mut v = 0
-		while v < self.var_col.len() {
-			let col = self.var_col[v]
-			if col >= 0 {
-				let c = col.checked_u32() ?? 0
-				out.insert(sv_column_name(c, self.names), self.values[v].c.num)
-			}
-			v += 1
-		}
-		return out
 	}
 
 	/// `propagate()`: each literal of the book's atoms, neither asserted nor
@@ -827,7 +852,8 @@ impl SvSimplex {
 				let order = sv_delta_cmp(got, reading.value)
 				if (up && order <= 0) || (!up && order >= 0) {
 					let parts = self.row_parts(r, up) ?? continue
-					let d = sv_row_coef(self.rows[r], v.checked_u32() ?? continue).checked_neg() ?? continue
+					let d = sv_row_coef(self.rows[r], v.checked_u32() ?? continue).checked_neg()
+						?? continue
 					self.implied.push(SvImplied { lit: l, level: self.level(), parts: parts, d: d })
 					out.push(l)
 				}
@@ -835,15 +861,6 @@ impl SvSimplex {
 			a += 1
 		}
 		return out
-	}
-
-	fn is_implied(ref self, l: u32) -> bool {
-		for i in self.implied {
-			if i.lit == l {
-				return true
-			}
-		}
-		return false
 	}
 
 	/// `explain(lit)`: the clause behind a propagated literal, a Farkas
@@ -857,7 +874,12 @@ impl SvSimplex {
 			let b = book.lit_bound(negation) ?? return null
 			let reading = sv_reading(b.row, b.rel) ?? return null
 			let mut parts = i.parts.clone()
-			parts.push(SvPart { src: SvSrc::Lit(negation), num: i.d, scale: reading.scale, neg: !reading.upper })
+			parts.push(SvPart {
+				src: SvSrc::Lit(negation),
+				num: i.d,
+				scale: reading.scale,
+				neg: !reading.upper,
+			})
 			return sv_sx_lemma(parts, book)
 		}
 		return null

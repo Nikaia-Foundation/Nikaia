@@ -1,7 +1,7 @@
 // The solver's measuring rod (ADR-270 D17, #1281), run standalone against the
 // toolchain of the day: no compiler change, no `lower-std`, no rebuild.
 //
-//   nikaia run scripts/solver.nika -- run [--engine fm|new] [--summary] [--timeout S] DIR|FILE...
+//   nikaia run scripts/solver.nika -- run [--engine fm|new|new-fm|new-simplex] [--summary] [--timeout S] DIR|FILE...
 //   nikaia run scripts/solver.nika -- gen [DIR]
 //   nikaia run scripts/solver.nika -- oracle [--write] FILE...
 //   nikaia run scripts/solver.nika -- fuzz N SEED
@@ -29,10 +29,10 @@ fn solver_logic_files() -> Vec[String] {
 	return ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"]
 }
 
-// The new engine's files of `crates/nikaia-std/src/solver/` (#1282), in the
+// The new engine's files of `crates/nikaia-std/src/solver/` (#1282, #1283), in the
 // order the program takes them, before the driver.
 fn solver_engine_files() -> Vec[String] {
-	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_theory", "sv_elim", "sv_drive"]
+	return ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_sat", "sv_cnf", "sv_theory", "sv_elim", "sv_simplex", "sv_smt"]
 }
 
 // The work budget PAR-2 doubles: `lg_budget().cases`, the branches
@@ -231,8 +231,8 @@ fn solver_run(repo: String, nikaia: String, args: Vec[String]) throws {
 		}
 		i += 1
 	}
-	if engine != "fm" && engine != "new" {
-		println(f"unknown engine {engine}: fm or new")
+	if engine != "fm" && engine != "new" && engine != "new-fm" && engine != "new-simplex" {
+		println(f"unknown engine {engine}: fm, new, new-fm or new-simplex")
 		process::exit(2)
 	}
 	let mut files: Vec[(String, String)] = []

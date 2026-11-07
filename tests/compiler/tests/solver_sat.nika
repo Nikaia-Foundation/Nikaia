@@ -216,7 +216,7 @@ fn main() throws {
 // 	println(f"{name}: {answer_text(answer)}")
 // 	println(work(s.stats))
 // 	let mut longest = 0
-// 	for step in s.log.steps {
+// 	for step in s.book.log.steps {
 // 		match step {
 // 			SvStep::Learn(_, hints) => {
 // 				if hints.len() > longest {
@@ -228,8 +228,8 @@ fn main() throws {
 // 	}
 // 	match answer {
 // 		SvSatAnswer::Unsat => {
-// 			println(f"  log: {s.log.steps.len()} steps, longest hint chain {longest}")
-// 			println(f"  sv_check: {verdict(q, s.log.steps)}")
+// 			println(f"  log: {s.book.log.steps.len()} steps, longest hint chain {longest}")
+// 			println(f"  sv_check: {verdict(q, s.book.log.steps)}")
 // 		},
 // 		SvSatAnswer::Sat => println(f"  model: {satisfied(q, s)} of {q.clauses.len()} clauses true"),
 // 		SvSatAnswer::Unknown => {},
@@ -254,7 +254,7 @@ fn main() throws {
 // 	])
 // 	let mut s = sv_sat_of(chain) ?? return
 // 	println(f"chain: {answer_text(s.solve(100))}")
-// 	for step in s.log.steps {
+// 	for step in s.book.log.steps {
 // 		match step {
 // 			SvStep::Learn(lits, hints) => {
 // 				let text = hints.iter().join(" ")
@@ -263,7 +263,7 @@ fn main() throws {
 // 			else => {},
 // 		}
 // 	}
-// 	println(f"  sv_check: {verdict(chain, s.log.steps)}")
+// 	println(f"  sv_check: {verdict(chain, s.book.log.steps)}")
 //
 // 	let random = random3(150, 600, 7)
 // 	run("random 3-SAT, 150 variables, 600 clauses", random, sv_sat_of(random) ?? return, 100000)
@@ -279,7 +279,7 @@ fn main() throws {
 // 	broken.solve(100000)
 // 	let mut cut: Vec[SvStep] = []
 // 	let mut done = false
-// 	for step in broken.log.steps {
+// 	for step in broken.book.log.steps {
 // 		let taken = match step {
 // 			SvStep::Learn(lits, hints) => {
 // 				if !done && hints.len() > 1 {
