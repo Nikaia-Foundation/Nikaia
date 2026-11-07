@@ -1,0 +1,13 @@
+// A name used only in a match arm's guard is still a name the body uses
+// (#1352): the task takes `names`, so using it afterwards is NK2101.
+
+fn main() throws {
+	let names: Vec[String] = ["a", "b"]
+	let h = spawn fn {
+		match 1 {
+			n if n < names.len() => n,
+			else => 0,
+		}
+	}
+	println(f"{names.len()} {h.join()}")
+}

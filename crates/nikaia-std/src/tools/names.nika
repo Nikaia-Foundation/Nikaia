@@ -144,6 +144,8 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
                     MatchPattern::Literal(pattern) => names_in(pattern, words, out),
                     else => {}
                 }
+                // A name used only in the arm's guard is used too (#1352).
+                maybe_names_in(arm.guard, words, out)
                 names_in(arm.body, words, out)
             }
         }
