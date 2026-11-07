@@ -101,15 +101,20 @@ impl SvBook {
 
 	/// The combination kept as a bound entry; its id.
 	fn combine(ref mut self, sources: Vec[SvSrc], multipliers: Vec[i64]) -> u32? {
+		let b = self.sum(sources, multipliers) ?? return null
+		// A bound entry taken once is itself where the checker would not
+		// reduce it.
 		if sources.len() == 1 && multipliers[0] == 1 {
 			match sources[0] {
 				SvSrc::Fact(id) => {
-					return id
+					let had = self.bounds.get(id) ?? return null
+					if sv_row_same(had.row, b.row) {
+						return id
+					}
 				},
 				else => {},
 			}
 		}
-		let b = self.sum(sources, multipliers) ?? return null
 		let id = self.log.combine(sources, multipliers)
 		self.bounds.insert(id, b)
 		return id
@@ -223,6 +228,9 @@ pub struct SvTheory {
 	pub implied: Vec[u32],
 	pub implied_by: Vec[u32],
 	pub values: collections::BTreeMap[String, i64],
+	/// Bound entries that hold at every level: what the driver derived
+	/// before the search (a congruence's `x - a - d·q >= 0`).
+	pub facts: Vec[u32],
 	/// Whether `check` eliminates equalities before Fourier-Motzkin (#1282
 	/// item 6).
 	pub exact: bool,
@@ -236,6 +244,7 @@ fn sv_theory(names: Vec[String]) -> SvTheory {
 		implied: [],
 		implied_by: [],
 		values: collections::BTreeMap(),
+		facts: [],
 		exact: true,
 	}
 }
@@ -441,9 +450,13 @@ impl SvTheory {
 			let b = book.lit_bound(l) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
 			held.push(SvHeld { row: b.row, src: SvSrc::Lit(l) })
 		}
+		for f in self.facts {
+			let b = book.bounds.get(f) ?? return SvChecked::Unknown(LgUnknown::OutsideTheTheory)
+			held.push(SvHeld { row: b.row.clone(), src: SvSrc::Fact(f) })
+		}
 		let mut solved: Vec[SvSolved] = []
 		if self.exact {
-			let done = sv_eliminate(held, solved, self.names, book)
+			let done = sv_eliminate(held, solved, book)
 			match done {
 				SvChecked::Consistent => {},
 				else => {
@@ -523,15 +536,4 @@ fn sv_back_substituted(
 		out.insert(sv_column_name(s.column, names), value)
 	}
 	return out
-}
-
-/// Item 5 leaves equalities to Fourier-Motzkin; item 6 eliminates them
-/// here (`sv_elim.nika`).
-fn sv_eliminate(
-	mut held: Vec[SvHeld],
-	mut solved: Vec[SvSolved],
-	mut names: Vec[String],
-	mut book: SvBook,
-) -> SvChecked {
-	return SvChecked::Consistent
 }

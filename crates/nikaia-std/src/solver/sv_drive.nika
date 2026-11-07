@@ -221,6 +221,9 @@ fn sv_prepared(
 	mut shape: SvShape,
 	query: ref SvQuery,
 	mut book: SvBook,
+	exact: bool,
+	mut held: Vec[i64],
+	mut facts: Vec[u32],
 ) -> bool {
 	let mut entry: Vec[i64] = []
 	let mut c = 0
@@ -258,6 +261,116 @@ fn sv_prepared(
 			return false
 		}
 	}
+	if exact {
+		o = 0
+		while o < indexed.ors.len() {
+			if shape.or_guard[o] < 0 && shape.or_heads[o].len() > 1 {
+				sv_congruence(indexed, shape, o, book, held, facts) ?? return false
+			}
+			o += 1
+		}
+	}
+	return true
+}
+
+/// The equality of disjunction `o`'s alternatives `x = v_j`, where each is
+/// one: `x ≡ v_0 (mod d)` for `d` the gcd of the `v_j - v_0`, where `d > 1`,
+/// the fact the case split alone does not give Fourier-Motzkin (D5). With
+/// `q = ⌊(x - v_0) / d⌋` (an extension) and `T = x - v_0 - d·q`, the split
+/// `T <= 0 ∨ T >= 1`, and per alternative a Farkas lemma refuting `T >= 1`
+/// (`q <= k_j - 1` and `q >= k_j`, each a rounding), learned to `T <= 0`:
+/// its atom joins `held`, the extension's `d·q - (x - v_0) <= 0` `facts`.
+/// `true` where it does not apply; `null` where a step does not close.
+fn sv_congruence(
+	indexed: ref LgIndexed,
+	mut shape: SvShape,
+	o: i64,
+	mut book: SvBook,
+	mut held: Vec[i64],
+	mut facts: Vec[u32],
+) -> bool? {
+	let mut column: i64 = -1
+	let mut values: Vec[i64] = []
+	let mut ps: Vec[i64] = []
+	let mut ns: Vec[i64] = []
+	let mut j = 0
+	for alternative in indexed.ors[o] {
+		if alternative.len() != 2 || !alternative[0].atom || !alternative[1].atom {
+			return true
+		}
+		let mut p = alternative[0].n
+		let mut n = alternative[1].n
+		if book.atoms[p].row.ks != [1] {
+			p = alternative[1].n
+			n = alternative[0].n
+		}
+		let pr = book.atoms[p].row.clone()
+		let nr = book.atoms[n].row.clone()
+		if pr.ks != [1] || nr.ks != [-1] || pr.cols != nr.cols {
+			return true
+		}
+		let x = pr.cols[0] as i64
+		let sum = pr.constant.checked_add(nr.constant) ?? return true
+		let head = shape.or_heads[o][j] as i64
+		if sum != 0 || (column >= 0 && x != column) || shape.guard[p] != head
+			|| shape.guard[n] != head {
+				return true
+			}
+		column = x
+		values.push(pr.constant.checked_neg() ?? return true)
+		ps.push(p)
+		ns.push(n)
+		j += 1
+	}
+	let v0 = values[0]
+	let mut d = 0
+	for v in values {
+		d = sv_gcd(d, v.checked_sub(v0) ?? return true) ?? return true
+	}
+	if d < 2 {
+		return true
+	}
+	let x = column as u32
+	let l = SvRow { cols: [x], ks: [1], constant: v0.checked_neg() ?? return true }
+	let q = book.log.columns
+	let t = sv_row_sum(1, l, -d, SvRow { cols: [q], ks: [1], constant: 0 }) ?? return true
+	let not_t = sv_row_sum(-1, t, 1, sv_row_constant(1)) ?? return true
+	let ext = book.extend(l, d) ?? return null
+	let split = book.split(t, not_t) ?? return null
+	let first = (split.lits[0] / 2) as i64
+	for _ in [0, 1] {
+		shape.guard.push(-1)
+		shape.head.push(false)
+		shape.clause.push(-1)
+	}
+	let below = sv_lit(first as u32 + 1, false)
+	let mut cases: Vec[u32] = []
+	j = 0
+	while j < ps.len() {
+		let r1 = book.combine([SvSrc::Lit(below), SvSrc::Lit(sv_lit(ps[j] as u32, false))], [1, 1])
+			?? return null
+		let r2 = book.combine([
+			SvSrc::Fact(ext.first + 1),
+			SvSrc::Lit(sv_lit(ns[j] as u32, false)),
+		], [
+			1,
+			1,
+		]) ?? return null
+		let f1 = book.round(r1) ?? return null
+		let f2 = book.round(r2) ?? return null
+		let lemma = book.farkas([SvSrc::Fact(f1), SvSrc::Fact(f2)], [1, 1]) ?? return null
+		let head = shape.or_heads[o][j]
+		cases.push(book.learn(
+			sv_sorted([sv_not(below), sv_not(head)]),
+			[shape.clause[ps[j]] as u32, shape.clause[ns[j]] as u32, lemma.id],
+		))
+		j += 1
+	}
+	cases.push(shape.or_clause[o] as u32)
+	let no_gap = book.learn([sv_not(below)], cases)
+	shape.clause[first] = book.learn([sv_lit(first as u32, false)], [no_gap, split.id]) as i64
+	held.push(first)
+	facts.push(ext.first)
 	return true
 }
 
@@ -524,13 +637,15 @@ fn sv_engine(
 	let built = sv_built(indexed) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
 	let mut shape = built.shape.clone()
 	let mut book = sv_book(built.query) ?? return sv_engine_unknown(LgUnknown::Overflow, 0)
-	if !sv_prepared(indexed, shape, built.query, book) {
+	let mut held: Vec[i64] = []
+	let mut known: Vec[u32] = []
+	if !sv_prepared(indexed, shape, built.query, book, exact, held, known) {
 		return sv_engine_unknown(LgUnknown::OutsideTheTheory, 0)
 	}
 	let mut theory = sv_theory(built.names.clone())
 	theory.exact = exact
+	theory.facts = known
 	let mut search = SvSearch { budget: budget.clone(), work: 0 }
-	let mut held: Vec[i64] = []
 	let mut open: Vec[i64] = []
 	for item in indexed.top {
 		if item.atom {
