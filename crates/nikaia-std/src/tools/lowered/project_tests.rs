@@ -395,7 +395,10 @@ pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Resu
     Ok(())
 }
 
-pub(crate) fn project_tests_relocated(said: &[u8], entry: &std::path::Path, written: &str) -> String { said.text_lossy().replace(&nikaia_std::fs::path::display(&(entry)), &written).replace(&nikaia_std::fs::path::display(&(project_members_canonical(entry))), &written) }
+pub(crate) fn project_tests_relocated(said: &[u8], entry: &std::path::Path, written: &str, root: &std::path::Path) -> String {
+    let package = format!("{}/", nikaia_std::fs::path::display(&(project_members_canonical(root))));
+    said.text_lossy().replace(&nikaia_std::fs::path::display(&(entry)), &written).replace(&nikaia_std::fs::path::display(&(project_members_canonical(entry))), &written).replace(&package, &"")
+}
 
 pub(crate) fn project_tests_joined(first: &[u8], then: &[u8]) -> Bytes {
     let mut all: Vec<u8> = first.iter().copied().collect::<Vec<_>>();
@@ -424,12 +427,12 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     fs::write(&nikaia_std::fs::path::join(&(project), std::path::Path::new(&("nikaia.toml"))), &fs::Root::Anywhere, format!("[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{}", dependency), false, true).await?;
     let written = format!("tests/{}.nika", program.name);
     let mut off: String = String::from("");
-    if program.bounds.is_some() { off = project_tests_relocated(&host.bounds("prove-through-loops:off", &entry, own)?, &entry, &written); }
+    if program.bounds.is_some() { off = project_tests_relocated(&host.bounds("prove-through-loops:off", &entry, own)?, &entry, &written, root); }
     let mut on: String = String::from("");
-    if program.loops_bounds.is_some() { on = project_tests_relocated(&host.bounds("prove-through-loops:on", &entry, own)?, &entry, &written); }
+    if program.loops_bounds.is_some() { on = project_tests_relocated(&host.bounds("prove-through-loops:on", &entry, own)?, &entry, &written, root); }
     let built = host.compiler("build", setting, &project, own)?;
     if built.code != 0 {
-        let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written));
+        let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &off, &on));
     }
     let ran = match host.built(&project, own)? {
@@ -444,7 +447,7 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
         },
     };
     let (out, said) = ran;
-    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written));
+    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(&said, &entry, &written, root));
     Ok(project_tests_bounds_outcome(program, &outcome, &off, &on))
 }
 

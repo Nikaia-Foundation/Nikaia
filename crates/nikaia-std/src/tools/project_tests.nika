@@ -521,9 +521,12 @@ fn project_tests_empty_but(dir: ref fs::Path, keep: String) throws {
 }
 
 /// What a run of the program at `entry` said, read as UTF-8 lossily
-/// (#1182), with the program's path written `written` (`tests/NAME.nika`).
-fn project_tests_relocated(said: ref Bytes, entry: ref fs::Path, written: String) -> String {
-    return said.text_lossy().replace(entry.display(), written).replace(project_members_canonical(entry).display(), written)
+/// (#1182), with the program's path written `written` (`tests/NAME.nika`)
+/// and a file of the tested package at `root` written from there
+/// (`src/over.nika`), as a stop inside the package names it (#1351).
+fn project_tests_relocated(said: ref Bytes, entry: ref fs::Path, written: String, root: ref fs::Path) -> String {
+    let package = f"{project_members_canonical(root).display()}/"
+    return said.text_lossy().replace(entry.display(), written).replace(project_members_canonical(entry).display(), written).replace(package, "")
 }
 
 /// Both streams of a process, one after the other.
@@ -575,15 +578,15 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     // proved does not depend on the build's settings (ADR-306 D14).
     let mut off: String = ""
     if program.bounds != null {
-        off = project_tests_relocated(host.bounds("prove-through-loops:off", entry, own), entry, written)
+        off = project_tests_relocated(host.bounds("prove-through-loops:off", entry, own), entry, written, root)
     }
     let mut on: String = ""
     if program.loops_bounds != null {
-        on = project_tests_relocated(host.bounds("prove-through-loops:on", entry, own), entry, written)
+        on = project_tests_relocated(host.bounds("prove-through-loops:on", entry, own), entry, written, root)
     }
     let built = host.compiler("build", setting, project, own)
     if built.code != 0 {
-        let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written))
+        let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
         return project_tests_bounds_outcome(program, refused, off, on)
     }
     // Where the program is not where it is expected, `nikaia run` finds it.
@@ -599,7 +602,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
         }
     }
     let (out, said) = ran
-    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written))
+    let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written, root))
     return project_tests_bounds_outcome(program, outcome, off, on)
 }
 

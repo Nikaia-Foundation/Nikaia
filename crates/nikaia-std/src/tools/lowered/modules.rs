@@ -866,10 +866,16 @@ pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<Str
         rust.push_str(&body);
         rust.push_str("\n");
     }
-    if host.has_main() {
-        let table = emit_needs_abort_table(&rust, &host.map_rows(), shown, sources);
-        rust.push_str(&table);
+    let mut beside: Vec<String> = vec![];
+    for package in packages.iter() {
+        let name = match match package.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !nikaia_std::list::contains(&beside, &name) { beside.push(name); }
     }
+    let table = emit_needs_abort_table(&rust, &host.map_rows(), shown, sources, &beside, host.has_main());
+    rust.push_str(&table);
     Ok(rust)
 }
 

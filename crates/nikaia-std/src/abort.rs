@@ -25,6 +25,34 @@
 /// emitter can sort once at compile time instead of the program sorting at every
 /// start.
 pub type Site = (u32, &'static str, u32);
+
+/// **A package's table, and the tables of the packages it uses** (ADR-300 D9,
+/// #1351).
+///
+/// A package is a crate of its own beside the program (ADR-286 D19), so its
+/// lines are lines of *its* generated file, and a line number alone would be
+/// looked up in the wrong table. Each library publishes this as
+/// `__NIKAIA_PLACES`, `file` being its generated file as `file!()` names it,
+/// which is how a panic's location names it too; `beside` holds the tables of
+/// the packages it uses, so a program reaches every package through the ones
+/// it names. An empty `file` is the program's own table in its first form,
+/// which answers for any file.
+#[derive(Clone, Copy)]
+pub struct Places {
+    pub file: &'static str,
+    pub sites: &'static [Site],
+    pub beside: &'static [&'static Places],
+}
+
+impl From<&'static [Site]> for Places {
+    fn from(sites: &'static [Site]) -> Places {
+        Places {
+            file: "",
+            sites,
+            beside: &[],
+        }
+    }
+}
 /// **`panic(message)`**: the program says it has reached a state it has no
 /// answer for ([Part III A.2](../../../docs/specification/30-nikaia-tooling.md),
 /// Part I 1.3).
@@ -142,10 +170,16 @@ impl<T: ?Sized> ShownByNothing for &Operand<'_, T> {
 /// the lines the emitter wrote *from* a Nikaia line; a panic inside `std`'s own
 /// Rust, or inside a foreign crate, has no Nikaia line to name and should say so
 /// in the words of whoever wrote it.
-pub fn report_in_nikaia_terms(table: &'static [Site]) {
+///
+/// `table` is the program's own lines, or with the packages it uses their
+/// tables beside it ([`Places`]).
+pub fn report_in_nikaia_terms(table: impl Into<Places>) {
+    let table = table.into();
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let site = info.location().and_then(|at| lookup(table, at.line()));
+        let site = info
+            .location()
+            .and_then(|at| find(&table, at.file(), at.line()));
         match site {
             // **A task's panic ends the task** (ADR-326 D4), and the
             // sentence says which ended.
@@ -159,6 +193,20 @@ pub fn report_in_nikaia_terms(table: &'static [Site]) {
             None => previous(info),
         }
     }));
+}
+
+/// The `.nika` file and line for line `generated` of the generated file
+/// `file`: in the table of the package that file is, else in the program's.
+fn find(places: &Places, file: &str, generated: u32) -> Option<(&'static str, u32)> {
+    for beside in places.beside {
+        if let Some(site) = find(beside, file, generated) {
+            return Some(site);
+        }
+    }
+    if places.file.is_empty() || places.file == file {
+        return lookup(places.sites, generated);
+    }
+    None
 }
 
 /// The `.nika` file and line for a line of the generated file.
