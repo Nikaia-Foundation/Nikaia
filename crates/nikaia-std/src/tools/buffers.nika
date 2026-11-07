@@ -152,6 +152,9 @@ struct BufferWalk {
     last_seen: collections::BTreeMap[String, Local],
     /// A `let` of a struct of its own a call handed back, and its type.
     holders: collections::BTreeMap[i64, String],
+    /// The last expression of an arm, by the statement whose value it is
+    /// (#1289): a call's keep there stands before that statement.
+    hoisted: collections::BTreeMap[i64, i64],
 }
 
 fn open_scope(mut walk: BufferWalk) {
@@ -240,7 +243,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -989,9 +992,9 @@ fn escape_word(escaping: ref Escape) -> String {
 // their statements do, each as a block nested in this statement.
 fn nested_blocks(expr: ref Expr, at: i64, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
     match expr {
-        Expr::Block(block, _) => nested_keeping_statement(at, block, ask, holes_of, unaliased, walk),
+        Expr::Block(block, _) => nested_arm(at, block, ask, holes_of, unaliased, walk),
         Expr::AsyncGroup(block, _, _) => nested_keeping_statement(at, block, ask, holes_of, unaliased, walk),
-        Expr::Unsafe(block, _) => nested_keeping_statement(at, block, ask, holes_of, unaliased, walk),
+        Expr::Unsafe(block, _) => nested_arm(at, block, ask, holes_of, unaliased, walk),
         Expr::Overlap(block, _) => nested_keeping_statement(at, block, ask, holes_of, unaliased, walk),
         Expr::Closure { body, .. } => nested_keeping_statement(at, body, ask, holes_of, unaliased, walk),
         Expr::Call { func, args, config, .. } => {
@@ -1022,8 +1025,8 @@ fn nested_blocks(expr: ref Expr, at: i64, ask: ref BufferAsk, holes_of: fn(ref E
             }
         }
         Expr::If { then_branch, else_branch, .. } => {
-            nested_keeping_statement(at, then_branch, ask, holes_of, unaliased, walk)
-            nested_keeping_statement(at, else_branch ?? return, ask, holes_of, unaliased, walk)
+            nested_arm(at, then_branch, ask, holes_of, unaliased, walk)
+            nested_arm(at, else_branch ?? return, ask, holes_of, unaliased, walk)
         }
         Expr::TryCatch { expr, handler, .. } => {
             nested_blocks(expr, at, ask, holes_of, unaliased, walk)
@@ -1041,6 +1044,23 @@ fn nested_blocks(expr: ref Expr, at: i64, ask: ref BufferAsk, holes_of: fn(ref E
         }
         else => {}
     }
+}
+
+// **An arm's last expression is the statement's value** (#1289): what a call
+// there hands back leaves the arm, so the keep its buffers go into is
+// declared before the statement the arm is in, not inside the arm.
+fn nested_arm(at: i64, block: ref Block, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
+    if block.stmts.len() > 0 {
+        let last = block.stmts[block.stmts.len() - 1]
+        match last.node {
+            Stmt::Expr(_) => {
+                let outer = walk.hoisted.get(walk.statement) ?? walk.statement
+                walk.hoisted.insert(last.span.start as i64, outer)
+            }
+            else => {}
+        }
+    }
+    nested_keeping_statement(at, block, ask, holes_of, unaliased, walk)
 }
 
 fn nested_keeping_statement(at: i64, block: ref Block, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
@@ -2002,12 +2022,14 @@ fn decide_source(id: (i64, String), source: ref Source, path: ref Vec[(i64, bool
             // A call's buffers need a keep all the same; one declared just
             // before the statement lives as long as what the call hands back.
             Source::Call { at, .. } => {
-                keep = KeepAt::Local(at.clone())
-                plan.local_keeps.insert(at.clone())
+                let held = walk.hoisted.get(at) ?? at.clone()
+                keep = KeepAt::Local(held)
+                plan.local_keeps.insert(held)
             }
             Source::Argument { at, .. } => {
-                keep = KeepAt::Local(at.clone())
-                plan.local_keeps.insert(at.clone())
+                let held = walk.hoisted.get(at) ?? at.clone()
+                keep = KeepAt::Local(held)
+                plan.local_keeps.insert(held)
             }
         }
     }

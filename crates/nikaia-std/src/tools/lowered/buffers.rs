@@ -105,6 +105,7 @@ pub(crate) struct BufferWalk {
     pub(crate) result_carries: bool,
     pub(crate) last_seen: collections::BTreeMap<String, Local>,
     pub(crate) holders: collections::BTreeMap<i64, String>,
+    pub(crate) hoisted: collections::BTreeMap<i64, i64>,
 }
 
 pub(crate) fn open_scope(walk: &mut BufferWalk) { walk.frames.push(vec![]); }
@@ -184,7 +185,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         Item::Fn { ret_type, .. } => carries_maybe((ret_type).as_ref(), ask),
         _ => false,
     };
-    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new() };
+    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new() };
     open_scope(&mut walk);
     for arg in args.iter() {
         let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false, number: false, parts: vec![] };
@@ -749,9 +750,9 @@ pub(crate) fn escape_word(escaping: &Escape) -> String {
 
 pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) {
     match expr {
-        Expr::Block(block, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
+        Expr::Block(block, _) => { nested_arm(at, block, ask, &holes_of, &unaliased, walk); },
         Expr::AsyncGroup(block, _, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
-        Expr::Unsafe(block, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
+        Expr::Unsafe(block, _) => { nested_arm(at, block, ask, &holes_of, &unaliased, walk); },
         Expr::Overlap(block, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
         Expr::Closure { body, .. } => { nested_keeping_statement(at, body, ask, &holes_of, &unaliased, walk); },
         Expr::Call { func, args, config, .. } => {
@@ -773,8 +774,8 @@ pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_
             for setting in config.iter() { nested_blocks(&setting.value, at, ask, holes_of, unaliased, walk); }
         },
         Expr::If { then_branch, else_branch, .. } => {
-            nested_keeping_statement(at, then_branch, ask, &holes_of, &unaliased, walk);
-            nested_keeping_statement(at, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, ask, &holes_of, &unaliased, walk);
+            nested_arm(at, then_branch, ask, &holes_of, &unaliased, walk);
+            nested_arm(at, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, ask, &holes_of, &unaliased, walk);
         },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
@@ -785,6 +786,20 @@ pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_
         Expr::Select(arms, _) => { for arm in arms.iter() { nested_keeping_statement(at, &arm.body, ask, &holes_of, &unaliased, walk); } },
         _ => { },
     }
+}
+
+pub(crate) fn nested_arm(at: i64, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) {
+    if !block.stmts.is_empty() {
+        let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+        match &last.node {
+            Stmt::Expr(_) => {
+                let outer = nikaia_std::index::or(walk.hoisted.get(&walk.statement), || walk.statement.into());
+                walk.hoisted.insert(last.span.start as i64, outer);
+            },
+            _ => { },
+        }
+    }
+    nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk);
 }
 
 pub(crate) fn nested_keeping_statement(at: i64, block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) {
@@ -1493,13 +1508,15 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
             Source::Buffer { .. } => { return; },
             Source::Call { at, .. } => {
                 let at = *at;
-                keep = KeepAt::Local(at.clone());
-                plan.local_keeps.insert(at.clone());
+                let held = nikaia_std::index::or(walk.hoisted.get(&at), || at.clone().into());
+                keep = KeepAt::Local(held);
+                plan.local_keeps.insert(held);
             },
             Source::Argument { at, .. } => {
                 let at = *at;
-                keep = KeepAt::Local(at.clone());
-                plan.local_keeps.insert(at.clone());
+                let held = nikaia_std::index::or(walk.hoisted.get(&at), || at.clone().into());
+                keep = KeepAt::Local(held);
+                plan.local_keeps.insert(held);
             },
         }
     }

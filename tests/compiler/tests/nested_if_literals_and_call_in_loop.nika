@@ -1,0 +1,39 @@
+// #1289: an `if` of literals against a call result, under a declared
+// `String`, in a loop: the keep the call's argument goes into stands before
+// the `let`, not inside the arm, so it lives as long as the text.
+
+fn oracle(p: String) -> String {
+    return p.trim().to_string()
+}
+
+fn pick(i: i64, quick: bool) -> String {
+    let path = f" q{i} "
+    let got: String = match i % 2 {
+        0 => {
+            if quick { "even" } else { oracle(path.clone()) }
+        },
+        else => oracle(path.clone()),
+    }
+    return got.clone()
+}
+
+fn main() {
+    let self_test = true
+    let mut seen: Vec[String] = []
+    for i in 0..<3 {
+        let path = f" p{i} "
+        let z3: String = if self_test { if i % 3 == 0 { "unsat" } else { "sat" } } else { oracle(path.clone()) }
+        let against = z3 == "sat"
+        if against { seen.push(z3.clone()) }
+        println(f"{i} {z3}")
+    }
+    println(seen.len())
+    for i in 0..<2 {
+        let path = f" r{i} "
+        let real: String = if i == 0 { "none" } else { oracle(path.clone()) }
+        println(real)
+    }
+    println(pick(0, true))
+    println(pick(0, false))
+    println(pick(1, true))
+}
