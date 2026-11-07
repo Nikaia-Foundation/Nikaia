@@ -80,18 +80,18 @@ struct CheckWalksTask {
     operations: Vec[Operation]?,
 }
 
-/// The tasks of `group` started in `block`: in its own statements, and for an
-/// `async { }` (a group's node is never negative) in the blocks nested in it
-/// too, by the group `check_async_block` recorded for each.
-fn check_walks_tasks_in(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, block: ref Block, group: i64, mut out: Vec[CheckWalksTask]) {
+/// The `async` nodes of `group` started in `block`, lent from it: in its own
+/// statements, and for an `async { }` (a group's node is never negative) in
+/// the blocks nested in it too, by the group `check_async_block` recorded for
+/// each.
+fn check_walks_tasks_in(state: ref CheckState, block: ref Block, group: i64, mut out: Vec[ref Expr]) {
     for stmt in block.stmts {
         for each in check_visit_stmt(stmt.node) {
             match each {
-                Expr::Async(inner, _, _) => {
+                Expr::Async(_, _, _) => {
                     let wait = state.facts.async_waits.get(id_of(each) as i64) ?? continue
                     if wait.group == group {
-                        let task = check_walks_task(state, world, walking, id_of(each), inner) ?? continue
-                        out.push(task)
+                        out.push(each)
                     }
                 },
                 else => {},
@@ -99,7 +99,7 @@ fn check_walks_tasks_in(state: ref CheckState, world: ref CheckWorld, walking: r
         }
         if group >= 0 {
             for nested in check_visit_stmt_blocks(stmt.node) {
-                check_walks_tasks_in(state, world, walking, nested, group, out)
+                check_walks_tasks_in(state, nested, group, out)
             }
         }
     }
@@ -393,8 +393,18 @@ impl CheckState {
             return
         }
         let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
+        let mut started: Vec[ref Expr] = []
+        check_walks_tasks_in(self, block, group, started)
         let mut tasks: Vec[CheckWalksTask] = []
-        check_walks_tasks_in(self, world, walking, block, group, tasks)
+        for each in started {
+            match each {
+                Expr::Async(inner, _, _) => {
+                    let task = check_walks_task(self, world, walking, id_of(each), inner) ?? continue
+                    tasks.push(task)
+                },
+                else => {},
+            }
+        }
         let mut beside: Vec[CheckFinding] = []
         check_walks_window(self, world, walking, block, group, tasks, beside)
         self.findings.extend(beside.drain())
