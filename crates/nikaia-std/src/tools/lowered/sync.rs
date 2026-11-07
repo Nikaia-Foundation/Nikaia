@@ -109,11 +109,12 @@ pub struct SyncGraph {
 pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut SyncGraph) {
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { name, args, body, .. } => {
-                let name = *name;
+            Item::Fn { name, args, body, is_sync, sync_by, .. } => {
+                let is_sync = *is_sync; let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
                 let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
                 sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
+                declared_sync(is_sync, sync_by, &mut node);
                 graph.nodes.insert(key, node);
             },
             Item::Impl { trait_name, target, methods, .. } => {
@@ -121,11 +122,12 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
                 let owner = names.resolve(target.name).to_string();
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { name, args, body, .. } => {
-                            let name = *name;
+                        Item::Fn { name, args, body, is_sync, sync_by, .. } => {
+                            let is_sync = *is_sync; let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
                             let mut node = sync_node(&seen_in(body, names, unaliased, holes_of, &no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
                             sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
+                            declared_sync(is_sync, sync_by, &mut node);
                             declared_by((trait_name).as_ref(), &key_of_function((name).as_ref(), "", names), names, own, library, &mut node);
                             graph.nodes.insert(key, node);
                         },
@@ -148,6 +150,13 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
             _ => { },
         }
     }
+}
+
+pub(crate) fn declared_sync(is_sync: bool, sync_by: &[winnow_grammar::Symbol], node: &mut SyncNode) {
+    if !is_sync || !sync_by.is_empty() { return; }
+    node.reach.blocked = false;
+    node.reach.calls = collections::BTreeSet::new();
+    node.reach.through_code = collections::BTreeSet::new();
 }
 
 pub(crate) fn leaf(blocked: bool) -> SyncNode { SyncNode { reach: SyncReach { blocked, calls: collections::BTreeSet::new(), through_code: collections::BTreeSet::new(), pauses_here: false }, site: None, unit: 0 } }
