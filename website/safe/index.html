@@ -108,7 +108,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       </div>
       <div class="safe-tile safe-tile-b" id="conflicts">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-todo">Still being built</span> A file written inside a function that a task calls is not seen yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1354">#1354</a>); written in the task itself, two writes to one file are refused.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> A file is told apart by a name written in the program; two tasks writing paths worked out while the program runs are not refused.</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
 </details>
         <h3><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a></h3>
