@@ -7,7 +7,7 @@ pub const PROOFS_LONG_DIR: &str = "nikaia.proofs.d";
 
 pub const PROOFS_LONG: i64 = 4096;
 
-pub const PROOFS_SOLVER: &str = "fourier-motzkin-1";
+pub const PROOFS_SOLVER: &str = "fourier-motzkin-1+sv-1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofsAsked {
@@ -20,6 +20,7 @@ pub enum ProofsAsked {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofsEntry {
     Proved(String),
+    ProvedLog(String),
     Refuted(String),
     Unknown(String),
 }
@@ -246,6 +247,11 @@ pub(crate) fn proofs_read(normal: &LgNormal, entry: &ProofsEntry) -> Option<Proo
             if lg_verify(&normal.arena, &normal.facts, normal.goal, &certificate).is_some() { return None; }
             return Some(ProofsAsked::Proved);
         },
+        ProofsEntry::ProvedLog(text) => {
+            let log = match sv_log_of(text) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !sv_log_verified(&normal.arena, &normal.facts, normal.goal, &log) { return None; }
+            return Some(ProofsAsked::Proved);
+        },
         ProofsEntry::Refuted(text) => {
             let model = match lg_model_of(text) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if !lg_verify_model(&normal.arena, &normal.facts, normal.goal, &model) { return None; }
@@ -265,7 +271,17 @@ pub struct ProofsSearch {
 }
 
 pub(crate) fn proofs_search(normal: &LgNormal) -> ProofsSearch {
-    match lg_check(&normal.arena, &normal.facts, normal.goal, &lg_budget()) {
+    let answer = match sv_ask(&normal.arena, &normal.facts, normal.goal, &lg_budget()) {
+        SvDriven::Answer(answer) => answer,
+        SvDriven::Proved(_, ref steps) => {
+            let text = sv_log_text(steps);
+            let log = match sv_log_of(&text) { Some(__nikaia_value) => __nikaia_value, None => return ProofsSearch { asked: ProofsAsked::Rejected(String::from("the solver's proof did not read back, which is a fault of the compiler")), entry: None } };
+            if !sv_log_verified(&normal.arena, &normal.facts, normal.goal, &log) { return ProofsSearch { asked: ProofsAsked::Rejected(String::from("the solver's proof did not check, which is a fault of the compiler")), entry: None }; }
+            return ProofsSearch { asked: ProofsAsked::Proved, entry: Some(ProofsEntry::ProvedLog(text)) };
+        },
+        SvDriven::RealModel(_) => LgAnswer::Unknown { why: LgUnknown::NoContradiction },
+    };
+    match answer {
         LgAnswer::Proved { ref certificate } => {
             let why = lg_verify(&normal.arena, &normal.facts, normal.goal, certificate);
             if why.is_some() { return ProofsSearch { asked: ProofsAsked::Rejected(format!("the solver's proof did not check ({}), which is a fault of the compiler", why.as_ref().unwrap().debug())), entry: None }; }
@@ -410,7 +426,7 @@ pub async fn proofs_book_read(root: &std::path::Path) -> ProofsBook {
             if hash::sha256_hex(&pair.0.bytes().collect::<Vec<_>>()) == line.key { book.invariants.insert(pair.0.to_string(), pair.1.to_string()); }
             continue;
         }
-        if line.kind == "proved" { book.entries.insert(line.key.to_string(), ProofsEntry::Proved(line.body.to_string())); } else if line.kind == "refuted" { book.entries.insert(line.key.to_string(), ProofsEntry::Refuted(line.body.to_string())); } else { book.entries.insert(line.key.to_string(), ProofsEntry::Unknown(line.body.to_string())); }
+        if line.kind == "proved" && line.body.starts_with(SV_LOG_PREFIX) { book.entries.insert(line.key.to_string(), ProofsEntry::ProvedLog(line.body.to_string())); } else if line.kind == "proved" { book.entries.insert(line.key.to_string(), ProofsEntry::Proved(line.body.to_string())); } else if line.kind == "refuted" { book.entries.insert(line.key.to_string(), ProofsEntry::Refuted(line.body.to_string())); } else { book.entries.insert(line.key.to_string(), ProofsEntry::Unknown(line.body.to_string())); }
     }
     book
 }
@@ -421,6 +437,7 @@ pub fn proofs_book_render(book: &ProofsBook) -> PbRendered {
         if !book.asked.contains(key) { continue; }
         let line = match entry {
             ProofsEntry::Proved(text) => PbLine { key: key.to_string(), kind: String::from("proved"), body: text.to_string() },
+            ProofsEntry::ProvedLog(text) => PbLine { key: key.to_string(), kind: String::from("proved"), body: text.to_string() },
             ProofsEntry::Refuted(text) => PbLine { key: key.to_string(), kind: String::from("refuted"), body: text.to_string() },
             ProofsEntry::Unknown(solver) => PbLine { key: key.to_string(), kind: String::from("unknown"), body: solver.to_string() },
         };
