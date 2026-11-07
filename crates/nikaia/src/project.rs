@@ -713,6 +713,117 @@ pub fn lower_reading(
     packages: &[modules::Dependency],
     allowlist: Option<&Path>,
 ) -> Result<Lowered> {
+    let open = modules::Open::new();
+    let (out, proofs, exported) = with_lower_host(
+        input,
+        settings,
+        no_cache,
+        packages,
+        allowlist,
+        &open,
+        |host, in_project| match project_lower::project_lower_reading(host, in_project) {
+            Ok(out) => Ok((out, host.proofs.take(), host.exported.take())),
+            Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
+        },
+    )??;
+    let (rust, ledger) = (out.rust, out.ledger);
+
+    // **A library's entry points get their wrappers and their header**
+    // (ADR-284 D4, D7, D12), whether the cache answered or not; the header
+    // carries the digest of the ledger this lowering wrote.
+    let digest = crate::assets::digest(ledger.as_bytes());
+    let (rust, header, python, node) = match exported {
+        Some(exported) => (
+            rust + &exported.rust,
+            Some(
+                exported
+                    .header
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
+            ),
+            Some(
+                exported
+                    .python
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
+            ),
+            Some(
+                exported
+                    .node
+                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
+            ),
+        ),
+        None => (rust, None, None, None),
+    };
+
+    Ok(Lowered {
+        rust,
+        ledger,
+        derived: out.derived,
+        sources: out.sources,
+        reused: out.reused,
+        notes: out.notes,
+        proofs,
+        header,
+        python,
+        node,
+    })
+}
+
+/// **What `nikaia lsp` shows of the file `input`** (#1347): its program read
+/// as `nikaia check` reads it, the files in `open` as the editor holds them,
+/// and checked; then it stops - no emitter, no cache, no ledger written. Each
+/// finding comes back as data beside the file it is about, warnings too; a
+/// refusal that has no finding of its own (a manifest, a file that cannot be
+/// read) is one on `input`, with no code, at its first byte.
+pub fn diagnose(
+    input: &Path,
+    open: &modules::Open,
+) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+    let (checked, mut found) = diagnostics::collecting(|| -> Result<()> {
+        let settings = Settings::resolve(&Manifest::find(input)?, None, None)?;
+        let packages = packages_of_file(input)?;
+        with_lower_host(input, &settings, true, &packages, None, open, |host, _| {
+            use project_lower::ProjectLowerHost;
+            host.read_program()
+                .and_then(|()| host.check_units().map(|_| ()))
+                .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
+        })?
+    });
+    if let Err(error) = checked
+        && !found.iter().any(|(_, shown)| !shown.warning)
+    {
+        found.push((
+            input.display().to_string(),
+            diagnostics::refusal_shown(&format!("{error:#}"), 0),
+        ));
+    }
+    found
+}
+
+/// What `nikaia lsp` asks of the compiler (`tools/lsp.nika`, #1347):
+/// [`diagnose`].
+pub struct Lsp;
+
+impl nikaia_std::tools::lsp::LspHost for Lsp {
+    fn diagnose(
+        &self,
+        entry: &str,
+        open: &BTreeMap<String, String>,
+    ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
+        diagnose(Path::new(entry), open)
+    }
+}
+
+/// The [`LowerHost`] of a build of `input`, handed to `run` with whether the
+/// input is in a project: what [`lower_reading`] and [`diagnose`] share.
+fn with_lower_host<R>(
+    input: &Path,
+    settings: &Settings,
+    no_cache: bool,
+    packages: &[modules::Dependency],
+    allowlist: Option<&Path>,
+    open: &modules::Open,
+    run: impl FnOnce(&LowerHost<'_>, bool) -> R,
+) -> Result<R> {
     // `Layout` decides where the lock and the store go, and guarantees that
     // outside a `nikaia.toml` project nothing is written into the source tree.
     // It also names the unit relative to its root: an absolute path is D7's
@@ -762,6 +873,7 @@ pub fn lower_reading(
         unit,
         layout: &layout,
         program_test,
+        open,
         reads: &reads,
         choices: RefCell::new(Some(choices)),
         program: RefCell::new(None),
@@ -775,57 +887,7 @@ pub fn lower_reading(
         proofs: RefCell::new(None),
         failed: RefCell::new(None),
     };
-    let out = match project_lower::project_lower_reading(&host, layout.in_project) {
-        Ok(out) => out,
-        Err(error) => {
-            return Err(host
-                .failed
-                .into_inner()
-                .unwrap_or_else(|| anyhow!("{error}")));
-        }
-    };
-    let proofs = host.proofs.into_inner();
-    let exported = host.exported.into_inner();
-    let (rust, ledger) = (out.rust, out.ledger);
-
-    // **A library's entry points get their wrappers and their header**
-    // (ADR-284 D4, D7, D12), whether the cache answered or not; the header
-    // carries the digest of the ledger this lowering wrote.
-    let digest = crate::assets::digest(ledger.as_bytes());
-    let (rust, header, python, node) = match exported {
-        Some(exported) => (
-            rust + &exported.rust,
-            Some(
-                exported
-                    .header
-                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
-            ),
-            Some(
-                exported
-                    .python
-                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
-            ),
-            Some(
-                exported
-                    .node
-                    .replace(crate::cexport::LEDGER_DIGEST, &digest),
-            ),
-        ),
-        None => (rust, None, None, None),
-    };
-
-    Ok(Lowered {
-        rust,
-        ledger,
-        derived: out.derived,
-        sources: out.sources,
-        reused: out.reused,
-        notes: out.notes,
-        proofs,
-        header,
-        python,
-        node,
-    })
+    Ok(run(&host, layout.in_project))
 }
 
 /// What `project_lower_reading` asks of the compiler (`tools/project_lower.nika`,
@@ -841,6 +903,9 @@ struct LowerHost<'a> {
     layout: &'a Layout,
     /// Whether the input is a test program (ADR-269 D22, #972).
     program_test: bool,
+    /// The files an editor has open, read as it holds them (#1347): empty
+    /// for every build but `nikaia lsp`'s.
+    open: &'a modules::Open,
     reads: &'a assets::Reads,
     /// The key's choices; named with the program's paths once it is read.
     choices: RefCell<Option<Choices>>,
@@ -901,12 +966,14 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         let program =
             crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
                 match (self.settings.words.tests, self.layout.in_project) {
-                    _ if self.program_test => modules::Program::read_program_test(input, packages),
-                    (true, in_project) => {
-                        modules::Program::read_for_tests(input, packages, in_project)
+                    _ if self.program_test => {
+                        modules::Program::read_program_test_open(input, packages, self.open)
                     }
-                    (false, true) => modules::Program::read_with(input, packages),
-                    (false, false) => modules::Program::read_one(input),
+                    (true, in_project) => modules::Program::read_for_tests_open(
+                        input, packages, in_project, self.open,
+                    ),
+                    (false, true) => modules::Program::read_with_open(input, packages, self.open),
+                    (false, false) => modules::Program::read_one_open(input, self.open),
                 }
             });
         let mut program = self.held(program)?;
@@ -1036,7 +1103,10 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     }
 
     fn eprint(&self, text: &str) {
-        eprint!("{text}");
+        // `nikaia lsp` keeps the findings as data instead (#1347).
+        if !diagnostics::is_collecting() {
+            eprint!("{text}");
+        }
     }
 
     fn check_units(&self) -> HostResult<String> {
@@ -1449,7 +1519,10 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
     }
 
     fn eprint(&self, text: &str) {
-        eprint!("{text}");
+        // `nikaia lsp` keeps the findings as data instead (#1347).
+        if !diagnostics::is_collecting() {
+            eprint!("{text}");
+        }
     }
 }
 

@@ -448,7 +448,11 @@ pub fn render_sync_violation(
         unpromised: violation.unpromised,
         construct: violation.construct,
     };
-    nikaia_std::tools::render::rendered(&nikaia_std::tools::render::paused(&pause), path, source)
+    let shown = nikaia_std::tools::render::paused(&pause);
+    if is_collecting() {
+        collect(path, shown.clone());
+    }
+    nikaia_std::tools::render::rendered(&shown, path, source)
 }
 
 /// One of the type checker's findings, on the `.nika` line it is about.
@@ -466,7 +470,69 @@ pub fn render_finding(finding: &crate::check::Finding, path: &str, source: &str)
 
 /// [`render_finding`] over a source already split into its lines, for a caller that renders every finding of one file (#727).
 pub fn render_finding_in(finding: &crate::check::Finding, path: &str, lines: &[&str]) -> String {
+    collect_finding(path, finding);
     nikaia_std::tools::render::rendered_in(&shown(finding), path, lines)
+}
+
+thread_local! {
+    /// Where [`collecting`] keeps the findings, `None` outside it.
+    static COLLECTED: std::cell::RefCell<Option<Vec<(String, nikaia_std::tools::render::Shown)>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// **`run` with every finding kept as data, beside the file it is about**
+/// (#1347): what `nikaia lsp` publishes. The places that render a finding hand
+/// it to [`collect`] first, and the text sinks say nothing while this runs, so
+/// what `nikaia check` prints is untouched outside it.
+pub fn collecting<R>(
+    run: impl FnOnce() -> R,
+) -> (R, Vec<(String, nikaia_std::tools::render::Shown)>) {
+    let outer = COLLECTED.with(|kept| kept.borrow_mut().replace(Vec::new()));
+    let out = run();
+    let found = COLLECTED.with(|kept| std::mem::replace(&mut *kept.borrow_mut(), outer));
+    (out, found.unwrap_or_default())
+}
+
+/// Whether [`collecting`] is running: a text sink is then silent.
+pub fn is_collecting() -> bool {
+    COLLECTED.with(|kept| kept.borrow().is_some())
+}
+
+/// A finding about the file at `path`, kept where [`collecting`] runs.
+pub fn collect(path: &str, shown: nikaia_std::tools::render::Shown) {
+    COLLECTED.with(|kept| {
+        if let Some(kept) = kept.borrow_mut().as_mut() {
+            kept.push((path.to_string(), shown));
+        }
+    });
+}
+
+/// [`collect`] of a checker finding.
+pub fn collect_finding(path: &str, finding: &crate::check::Finding) {
+    if is_collecting() {
+        collect(path, shown(finding));
+    }
+}
+
+/// A refusal that has a message and no finding (a `use` line, a file that
+/// cannot be read), as a finding at byte `at` of the file at `path`.
+pub fn collect_refusal(path: &str, message: &str, at: usize) {
+    if is_collecting() {
+        collect(path, refusal_shown(message, at));
+    }
+}
+
+/// A refusal with no code, at byte `at`, as a finding.
+pub fn refusal_shown(message: &str, at: usize) -> nikaia_std::tools::render::Shown {
+    nikaia_std::tools::render::Shown {
+        warning: false,
+        code: String::new(),
+        message: message.to_string(),
+        notes: Vec::new(),
+        help: None,
+        span: Span::new(at, at),
+        labels: Vec::new(),
+    }
 }
 
 fn shown(finding: &crate::check::Finding) -> nikaia_std::tools::render::Shown {

@@ -1,0 +1,25 @@
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1}}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":1,"character":24},"end":{"line":1,"character":25}},"severity":1,"code":"NK1104","source":"nikaia","message":"You're returning `ref String`, but the function is declared to return `i64`.\nhelp: Make it an `i64`, or change the declaration to `ref String`."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":1,"character":25},"end":{"line":1,"character":26}},"severity":1,"code":"NK1104","source":"nikaia","message":"You're returning `ref String`, but the function is declared to return `i64`.\nhelp: Make it an `i64`, or change the declaration to `ref String`."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":4,"character":0},"end":{"line":4,"character":21}},"severity":2,"code":"NK1261","source":"nikaia","message":"`ref` is redundant here: a parameter written `ref String` says what `String` already says.\nnote: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.\nhelp: Write `String` without `ref`."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":4,"character":0},"end":{"line":4,"character":21}},"severity":2,"code":"NK1261","source":"nikaia","message":"`ref` is redundant here: a parameter written `ref String` says what `String` already says.\nnote: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.\nhelp: Write `String` without `ref`."}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":10}},"severity":1,"code":"NK1341","source":"nikaia","message":"There's no dependency called `nosuch`.\nhelp: Add it to the project's `[dependencies]` under that name:\n    [dependencies]\n    nosuch = { path = \"../nosuch\" }"}]}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":2,"result":null}
+exit 0
