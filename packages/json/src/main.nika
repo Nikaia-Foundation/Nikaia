@@ -468,3 +468,81 @@ pub fn as_f64(v: Value) -> f64 throws {
     }
     return x
 }
+
+// **The value as JSON text** (#1347): what `parse` reads back as the same
+// value. Members keep their order, a member given twice is written twice, a
+// number is written as the text it holds, and a string carries the escapes
+// RFC 8259 requires (`"`, `\` and the control characters below U+0020) and no
+// others. No blanks are written between tokens.
+pub fn to_string(v: ref Value) -> String {
+    let mut out = String()
+    write_value(v, out)
+    return out
+}
+
+fn write_value(v: ref Value, mut out: String) {
+    match v {
+        Value::Null => out.push_str("null")
+        Value::Bool(b) => out.push_str(if b { "true" } else { "false" })
+        Value::Number(t) => out.push_str(t)
+        Value::Str(s) => write_string(s, out)
+        Value::Array(items) => {
+            out.push('[')
+            let mut first = true
+            for item in items {
+                if !first {
+                    out.push(',')
+                }
+                first = false
+                write_value(item, out)
+            }
+            out.push(']')
+        }
+        Value::Object(members) => {
+            out.push('{')
+            let mut first = true
+            for m in members {
+                if !first {
+                    out.push(',')
+                }
+                first = false
+                write_string(m.key, out)
+                out.push(':')
+                write_value(m.value, out)
+            }
+            out.push('}')
+        }
+    }
+}
+
+// `s` as a JSON string: between quotes, `"` and `\` escaped, and each control
+// character below U+0020 as its short escape or as `\u00XX`.
+fn write_string(s: String, mut out: String) {
+    let digits: Vec[scalar] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+    out.push('"')
+    for c in s.chars() {
+        let code = c as i64
+        if c == '"' {
+            out.push_str("\\\"")
+        } else if c == '\\' {
+            out.push_str("\\\\")
+        } else if c == '\n' {
+            out.push_str("\\n")
+        } else if c == '\r' {
+            out.push_str("\\r")
+        } else if c == '\t' {
+            out.push_str("\\t")
+        } else if code == 8 {
+            out.push_str("\\b")
+        } else if code == 12 {
+            out.push_str("\\f")
+        } else if code < 32 {
+            out.push_str("\\u00")
+            out.push(digits[code / 16])
+            out.push(digits[code % 16])
+        } else {
+            out.push(c)
+        }
+    }
+    out.push('"')
+}

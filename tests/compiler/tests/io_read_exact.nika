@@ -1,0 +1,38 @@
+use std::io
+use std::text
+
+// Two framed messages back to back, then a third whose body is cut short:
+// `read_line` reads each header, `read_exact` each body (Part III 17.1).
+
+fn message() -> String? throws {
+    let mut length = 0
+    while true {
+        let line = io::read_line()
+        if line == null {
+            return null
+        }
+        let header = line ?? ""
+        if header.is_empty() {
+            break
+        }
+        let value = header.strip_prefix("Content-Length: ")
+        if value != null {
+            length = text::parse_i64(value ?? "0") ?? 0
+        }
+    }
+    let body = io::read_exact(length)
+    return body.text().clone()
+}
+
+fn main() throws {
+    let first = message() ?? "none"
+    println(f"first: {first}")
+    let second = message() ?? "none"
+    println(f"second: {second}")
+    let third = message() catch {
+        println(f"third: {error}")
+        return
+    }
+    let whole = third ?? "none"
+    println(f"third read whole: {whole}")
+}

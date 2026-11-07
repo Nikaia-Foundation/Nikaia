@@ -92,6 +92,17 @@ pub fn collect_with(entry: &Path, dependencies: &[Dependency]) -> Result<Vec<Uni
     )))
 }
 
+/// A test program alone and the packages it depends on
+/// (`modules_collect_program_test`, ADR-269 D22, #972).
+pub fn collect_program_test(entry: &Path, dependencies: &[Dependency]) -> Result<Vec<Unit>> {
+    let host = Parsing::default();
+    host.units(block_on(collecting::modules_collect_program_test(
+        entry,
+        dependencies,
+        &host,
+    )))
+}
+
 /// The entry and nothing beside it - a `.nika` file compiled on its own
 /// (`modules_collect_one`): outside a project a directory is not a package.
 pub fn collect_one(entry: &Path) -> Result<Vec<Unit>> {
@@ -453,6 +464,18 @@ impl Program {
     /// (see [`collect_one`]).
     pub fn read_one(entry: &Path) -> Result<Program> {
         Self::of(collect_one(entry)?, &[], &crate::contracts::Ledger::blank())
+    }
+
+    /// **A test program as `nikaia test` builds it**
+    /// ([ADR-269](../../../docs/specification/adr/adr-269.md) D22, #972):
+    /// the file alone, with the packages it depends on, and no ledger
+    /// described beside it, as in the project of its own the test builds.
+    pub fn read_program_test(entry: &Path, dependencies: &[Dependency]) -> Result<Program> {
+        Self::of(
+            collect_program_test(entry, dependencies)?,
+            dependencies,
+            &crate::contracts::Ledger::blank(),
+        )
     }
 
     /// **The program as `nikaia test` builds it**

@@ -1,0 +1,20 @@
+// #1347: `nikaia lsp` answers the lifecycle. Its standard input is this
+// test's own `.stdin`, a framed transcript: `initialize`, `initialized`, a
+// notification and a request it does not know, `shutdown`, `exit`. What it
+// writes is the framed answers, and it ends with 0 after a `shutdown`.
+use std::io
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let transcript = io::read_to_string()
+    let out = process::run(toolchain(), ["lsp"]; stdin: process::Input::Text(transcript))
+    println(out.stdout.replace("\r\n", "\\r\\n\n"))
+    println(f"exit {out.code}")
+    print(out.stderr)
+}

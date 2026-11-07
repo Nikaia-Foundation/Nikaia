@@ -1,0 +1,189 @@
+// crates/nikaia-std/src/tools/lsp.nika
+//
+// **`nikaia lsp`: the language server** (#1347, the first slice of #103). An
+// editor starts it and talks LSP's JSON-RPC on its standard input and output:
+// each message is a header, `Content-Length: N`, a blank line, and a body of
+// exactly `N` bytes of JSON, which `packages/json` reads and writes (#1163).
+// This slice answers the lifecycle (`initialize`, `shutdown`, `exit`); a
+// request it does not know is answered with `-32601`, a notification it does
+// not know is dropped.
+
+use json
+use std::io
+use std::text
+
+/// A message the editor sent that cannot be read as one.
+pub enum LspRefusal {
+    Framing(String),
+}
+
+impl Error for LspRefusal {
+    fn message(ref self) -> String {
+        return match self {
+            LspRefusal::Framing(why) => why.clone(),
+        }
+    }
+}
+
+/// **One message's body**: the header lines up to the blank one, then exactly
+/// the bytes its `Content-Length` names (Part III 17.1's `read_line` and
+/// `read_exact`); nothing where the input ends before a header.
+pub fn lsp_read_message() -> String? throws {
+    let mut length = -1
+    while true {
+        let line = io::read_line() ?? return null
+        if line.is_empty() {
+            break
+        }
+        let value = line.strip_prefix("Content-Length:")
+        if value != null {
+            length = text::parse_i64((value ?? "").trim()) ?? -1
+        }
+    }
+    if length < 0 {
+        throw LspRefusal::Framing("a message without a `Content-Length` header")
+    }
+    let body = io::read_exact(length)
+    let read = body.text() catch { throw LspRefusal::Framing("a message body that is not UTF-8") }
+    return read.clone()
+}
+
+/// **One message to the editor**: its header and its body. Standard output is
+/// flushed before the next read waits (`io::read_line`), so the editor has the
+/// answer before this waits for the next question.
+pub fn lsp_write_message(body: ref json::Value) {
+    let text = json::to_string(body)
+    print(f"Content-Length: {text.len()}\r\n\r\n{text}")
+}
+
+/// An object, its members in the order given.
+pub fn lsp_object(members: Vec[(ref String, json::Value)]) -> json::Value {
+    return json::Value::Object(members.iter().map(fn(member) { json::Member { key: member.0.clone(), value: member.1.clone() } }).collect())
+}
+
+/// A string value.
+pub fn lsp_string(text: ref String) -> json::Value {
+    return json::Value::Str(text.clone())
+}
+
+/// A whole number value.
+pub fn lsp_number(n: i64) -> json::Value {
+    return json::Value::Number(f"{n}")
+}
+
+/// The answer to the request `id`.
+pub fn lsp_respond(id: ref json::Value, result: json::Value) {
+    lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("result", result)]))
+}
+
+/// The request `id` refused with `code` and `message` (JSON-RPC 2.0, 5.1).
+pub fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) {
+    let error = lsp_object([("code", lsp_number(code)), ("message", lsp_string(message))])
+    lsp_write_message(lsp_object([("jsonrpc", lsp_string("2.0")), ("id", id.clone()), ("error", error)]))
+}
+
+/// What `initialize` answers: the whole text of a document is sent on each
+/// change (`textDocumentSync` 1), and nothing else is offered.
+pub fn lsp_capabilities() -> json::Value {
+    return lsp_object([("capabilities", lsp_object([("textDocumentSync", lsp_number(1))]))])
+}
+
+/// **The server**: messages are read and answered until `exit`. What it ends
+/// with is LSP's: `0` after a `shutdown`, `1` for an `exit` without one or an
+/// input that ended without `exit`.
+pub fn lsp_serve() -> i64 throws {
+    let mut shut_down = false
+    while true {
+        let body = lsp_read_message() ?? return 1
+        let message = json::parse(body) catch {
+            lsp_refuse(json::Value::Null, -32700, f"the message is not JSON: {error.message}")
+            continue
+        }
+        let method = cargo_json_text(cargo_json_member(message, "method")) ?? ""
+        let id = cargo_json_member(message, "id")
+        if method == "exit" {
+            return if shut_down { 0 } else { 1 }
+        }
+        match id {
+            // A notification: one it does not know is dropped.
+            null => {},
+            asked => {
+                if method == "initialize" {
+                    lsp_respond(asked, lsp_capabilities())
+                } else if method == "shutdown" {
+                    shut_down = true
+                    lsp_respond(asked, json::Value::Null)
+                } else {
+                    lsp_refuse(asked, -32601, f"no method `{method}`")
+                }
+            },
+        }
+    }
+    return 1
+}
+
+/// **The path a `file://` URI names**, each `%XX` decoded as the byte it
+/// writes; nothing for a URI of another scheme or one whose bytes are not
+/// UTF-8.
+pub fn lsp_uri_path(uri: ref String) -> String? {
+    let rest = uri.strip_prefix("file://") ?? return null
+    let given: Vec[u8] = rest.bytes().collect()
+    let mut decoded: Vec[u8] = []
+    let mut i = 0
+    while i < given.len() as i64 {
+        let b = given[i]
+        if b == 37 && i + 2 < given.len() as i64 {
+            let high = lsp_hex(given[i + 1])
+            let low = lsp_hex(given[i + 2])
+            if high >= 0 && low >= 0 {
+                decoded.push((high * 16 + low) as u8)
+                i += 3
+                continue
+            }
+        }
+        decoded.push(b)
+        i += 1
+    }
+    let bytes = Bytes(decoded)
+    let path = bytes.text() catch { return null }
+    return path.clone()
+}
+
+/// The value of one hex digit, `-1` for a byte that is none.
+fn lsp_hex(b: u8) -> i64 {
+    let d = b as i64
+    if d >= 48 && d <= 57 {
+        return d - 48
+    }
+    if d >= 65 && d <= 70 {
+        return d - 55
+    }
+    if d >= 97 && d <= 102 {
+        return d - 87
+    }
+    return -1
+}
+
+/// **LSP's place of the byte `at` in `source`**: the line from 0, and the
+/// column in UTF-16 code units from 0, as LSP counts by default. A span is in
+/// bytes; a character outside ASCII is more than one byte and one code unit,
+/// and one above U+FFFF is two code units.
+pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
+    let mut line = 0
+    let mut column = 0
+    let mut byte = 0
+    for c in source.chars() {
+        if byte >= at {
+            break
+        }
+        let code = c as i64
+        byte += if code < 128 { 1 } else if code < 2048 { 2 } else if code < 65536 { 3 } else { 4 }
+        if c == '\n' {
+            line += 1
+            column = 0
+        } else {
+            column += if code < 65536 { 1 } else { 2 }
+        }
+    }
+    return (line, column)
+}

@@ -371,8 +371,17 @@ pub fn packages_of(
     root: &Path,
     announce: bool,
 ) -> Result<Vec<modules::Dependency>> {
+    packages_of_view(&manifest_view(manifest), root, announce)
+}
+
+/// [`packages_of`] for a manifest already read as the walk reads one.
+fn packages_of_view(
+    view: &ProjectMembersManifest,
+    root: &Path,
+    announce: bool,
+) -> Result<Vec<modules::Dependency>> {
     let host = Manifests::default();
-    project_members::project_members_packages_of(&manifest_view(manifest), root, announce, &host)
+    project_members::project_members_packages_of(view, root, announce, &host)
         .map_err(|thrown| host.error(thrown))
 }
 
@@ -571,7 +580,12 @@ pub fn reads_for_file(input: &Path, allowlist: Option<&Path>) -> Result<assets::
 
 pub fn read_file(input: &Path) -> Result<(modules::Program, Vec<modules::Dependency>)> {
     let packages = packages_of_file(input)?;
-    match Layout::resolve(input).in_project {
+    let layout = Layout::resolve(input);
+    match layout.in_project {
+        _ if is_program_test(input, &layout) => Ok((
+            modules::Program::read_program_test(input, &packages)?,
+            packages,
+        )),
         false => Ok((modules::Program::read_one(input)?, packages)),
         true => Ok((modules::Program::read_with(input, &packages)?, packages)),
     }
@@ -588,7 +602,26 @@ pub fn packages_of_file(input: &Path) -> Result<Vec<modules::Dependency>> {
     let manifest = Manifest::read(&layout.root.join("nikaia.toml"))?;
     // Not announced: `Manifest::find` already read this manifest for the
     // settings, and a note said twice is noise.
-    packages_of(&manifest, &layout.root, false)
+    match is_program_test(input, &layout) {
+        // **A test program depends on the package** (ADR-269 D22, #972),
+        // under the manifest `nikaia test` builds it with.
+        true => packages_of_view(
+            &project_tests::project_tests_program_manifest(
+                &layout.root,
+                manifest.package_name().map(str::to_string),
+            ),
+            &layout.root,
+            false,
+        ),
+        false => packages_of(&manifest, &layout.root, false),
+    }
+}
+
+/// **Whether `input` is a test program** of the project `layout` found,
+/// `tests/NAME.nika` (ADR-269 D22, #972): a program of its own, not a file
+/// of a package `tests/` (`project_tests_is_program`).
+fn is_program_test(input: &Path, layout: &Layout) -> bool {
+    layout.in_project && project_tests::project_tests_is_program(input, &layout.root)
 }
 
 /// **The project `nikaia run <file>` builds** ([ADR-260](../../docs/specification/adr/adr-260.md) D4).
@@ -685,6 +718,13 @@ pub fn lower_reading(
     // It also names the unit relative to its root: an absolute path is D7's
     // first failure direction, a key that moves with the checkout.
     let layout = Layout::resolve(input);
+    // **A test program is read as `nikaia test` builds it** (ADR-269 D22,
+    // #972): alone, with the package as its dependency, in no project.
+    let program_test = is_program_test(input, &layout);
+    let layout = match program_test {
+        true => Layout::alone(input),
+        false => layout,
+    };
     let unit = layout.unit_name(input);
     // **What this build may read, resolved before anything is read**
     // ([ADR-310](../../docs/specification/adr/adr-310.md) D4, D5).
@@ -721,6 +761,7 @@ pub fn lower_reading(
         packages,
         unit,
         layout: &layout,
+        program_test,
         reads: &reads,
         choices: RefCell::new(Some(choices)),
         program: RefCell::new(None),
@@ -798,6 +839,8 @@ struct LowerHost<'a> {
     packages: &'a [modules::Dependency],
     unit: String,
     layout: &'a Layout,
+    /// Whether the input is a test program (ADR-269 D22, #972).
+    program_test: bool,
     reads: &'a assets::Reads,
     /// The key's choices; named with the program's paths once it is read.
     choices: RefCell<Option<Choices>>,
@@ -858,6 +901,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         let program =
             crate::comptime_run::defaults_compiled_in(self.reads.workshop().place(), || {
                 match (self.settings.words.tests, self.layout.in_project) {
+                    _ if self.program_test => modules::Program::read_program_test(input, packages),
                     (true, in_project) => {
                         modules::Program::read_for_tests(input, packages, in_project)
                     }
@@ -2585,20 +2629,42 @@ impl ProgramHost {
         })
     }
 
-    /// `program` run in `own` with no standard input and no
-    /// `CARGO_TARGET_DIR`, as `command` has it set up.
+    /// `program` run in `own` with `stdin` on its standard input (none where
+    /// it is empty) and no `CARGO_TARGET_DIR`, as `command` has it set up.
     fn ran(
         &self,
         program: &Path,
         mut command: std::process::Command,
         own: &Path,
+        stdin: &[u8],
     ) -> Result<project_tests::ProjectTestsRan> {
-        let out = command
-            .current_dir(own)
-            .env_remove("CARGO_TARGET_DIR")
-            .stdin(std::process::Stdio::null())
-            .output()
-            .with_context(|| format!("running {}", program.display()))?;
+        use std::io::Write;
+        command.current_dir(own).env_remove("CARGO_TARGET_DIR");
+        let out = if stdin.is_empty() {
+            command.stdin(std::process::Stdio::null()).output()
+        } else {
+            command
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    // Written beside the wait, so a program that prints before
+                    // it reads does not fill its pipe and stop; one that stops
+                    // reading early closes the pipe, which is its business.
+                    let mut input = child.stdin.take();
+                    let given = stdin.to_vec();
+                    let writing = std::thread::spawn(move || {
+                        if let Some(input) = input.as_mut() {
+                            let _ = input.write_all(&given);
+                        }
+                    });
+                    let out = child.wait_with_output();
+                    let _ = writing.join();
+                    out
+                })
+        }
+        .with_context(|| format!("running {}", program.display()))?;
         Ok(project_tests::ProjectTestsRan {
             code: exit_code(&out.status),
             stdout: out.stdout.into(),
@@ -2621,6 +2687,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         setting: &str,
         project: &Path,
         own: &Path,
+        stdin: &[u8],
     ) -> HostResult<project_tests::ProjectTestsRan> {
         let mut command = std::process::Command::new(&self.exe);
         command
@@ -2630,7 +2697,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, own))
+        self.held(self.ran(&self.exe, command, own, stdin))
     }
 
     fn bounds(
@@ -2643,13 +2710,14 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         command
             .args(["check", "--bounds", "--optimization", level])
             .arg(entry);
-        self.held(self.ran(&self.exe, command, own).map(|out| out.stdout))
+        self.held(self.ran(&self.exe, command, own, &[]).map(|out| out.stdout))
     }
 
     fn built(
         &self,
         project: &Path,
         own: &Path,
+        stdin: &[u8],
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
         let binary = project
             .join("target")
@@ -2661,7 +2729,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, own).map(Some))
+        self.held(self.ran(&binary, command, own, stdin).map(Some))
     }
 }
 

@@ -9,6 +9,39 @@ goes to the owner. The cycle and the hand-over between main sessions are
 below, under *Running the lanes*; briefs and reports under *Briefs and
 reports*.
 
+## Reporting to the owner
+
+* **Short, progress by topic** (owner, 2026-11-07). A status report to the
+  owner names the topics and how far each has got: what is finished, what is
+  being built now, what comes next, and what needs the owner. Each topic is
+  named by what it is ("the JSON reader for the tools", "the language
+  server"), with its issue number only in brackets after the name, never the
+  number alone.
+* **Left out**: the machinery of getting there, such as a suite that went red
+  and then green, a QA round, a merge conflict, a badge regenerated or a fix
+  of our own slip. These belong in the drive log and the reports. A report
+  mentions them only where they change what the owner sees: a topic is
+  delayed, blocked or needs the owner's decision.
+* **New findings** (a defect filed, a gap found) get one line each, by name,
+  with the issue number in brackets.
+
+## Pushing the supervisor's own commits
+
+* **The supervisor never pushes the shared `develop` while builders' commits
+  are on it untested** (owner, 2026-11-07: a doc commit pushed with `git push
+  origin develop` carried two builders' commits past the suite). While a lane's
+  `DIR/unpushed.txt` is not empty or a builder runs, `git log
+  origin/develop..develop` holds more than the supervisor's commit, so it
+  pushes only its own:
+  `git worktree add --detach ../push-tmp origin/develop`, `git -C ../push-tmp
+  cherry-pick <sha>`, `git -C ../push-tmp push origin HEAD:develop`, `git
+  worktree remove ../push-tmp`. The shared checkout then takes it back with
+  `git fetch origin develop && git merge origin/develop` (the same change, no
+  conflict). The builders' commits reach `develop` only through the driver,
+  after the suite.
+* **Before any push, look**: `git log --oneline origin/develop..develop`;
+  a commit that is not the supervisor's own means the step above.
+
 ## Watching CI
 
 * **The supervisor checks CI on `develop` with `nikaia run scripts/release.nika

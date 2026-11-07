@@ -1,0 +1,50 @@
+use json
+
+// `to_string` writes what `parse` reads back as the same value (#1347): each
+// value of the kinds, strings, numbers and member-order tests is parsed,
+// written, and parsed and written again; the two texts are the same, and the
+// first is printed.
+
+fn round(text: String) {
+    let v = json::parse(text) catch {
+        println(f"error {error.line}:{error.column}: {error.message}")
+        return
+    }
+    let written = json::to_string(v)
+    let again = json::parse(written) catch {
+        println(f"not read back: {written}: {error.message}")
+        return
+    }
+    let rewritten = json::to_string(again)
+    if rewritten != written {
+        println(f"changed: {written} -> {rewritten}")
+        return
+    }
+    println(written)
+}
+
+fn main() {
+    round("null")
+    round("true")
+    round("false")
+    round("\"text\"")
+    round("[]")
+    round("{}")
+    round("  [1, [2, [3]], {\"a\": [null]}]  ")
+    round("\"a\\nb\\t\\\"q\\\"\\\\ \\/\"")
+    round("\"\\u0041\\u00e9\\u20ac\"")
+    round("\"\\ud83d\\ude00\"")
+    round("\"\\u0001\\u001f\\b\\f\\r\"")
+    round("\"café\"")
+    round("1")
+    round("-7")
+    round("1.0")
+    round("1e3")
+    round("2.5E-1")
+    round("-0.5")
+    round("9223372036854775808")
+    round("[1, 1.0, 1e0]")
+    round("{\"z\": 1, \"a\": 2, \"m\": {\"y\": 0, \"b\": 1}}")
+    round("{\"a\": 1, \"a\": 2}")
+    round("{\"key \\\"quoted\\\"\": [true, false, null, \"\"]}")
+}

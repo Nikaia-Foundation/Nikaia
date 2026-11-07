@@ -643,9 +643,22 @@ pub async fn modules_collect_with<H: ModulesHost>(entry: &std::path::Path, depen
     let mut names: collections::BTreeSet<String> = dependencies.iter().map(|d| { d.name.to_string() }).collect();
     names.extend(modules_foreign_beside(entry, host));
     let mut units = modules_package_at(entry, None, &names, &collections::BTreeMap::new(), host).await?;
+    units.extend(modules_dependency_units(dependencies, host).await?);
+    Ok(units)
+}
+
+pub async fn modules_collect_program_test<H: ModulesHost>(entry: &std::path::Path, dependencies: &[ProjectMembersDependency], host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
+    let names: collections::BTreeSet<String> = dependencies.iter().map(|d| { d.name.to_string() }).collect();
+    let mut units: Vec<ModulesUnit> = vec![modules_read_unit(entry, None, &names, &collections::BTreeMap::new(), &ModulesStanding::InProject, host).await?];
+    units.extend(modules_dependency_units(dependencies, host).await?);
+    Ok(units)
+}
+
+pub(crate) async fn modules_dependency_units<H: ModulesHost>(dependencies: &[ProjectMembersDependency], host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
+    let mut units: Vec<ModulesUnit> = vec![];
     for dependency in dependencies.iter() {
         let src = nikaia_std::fs::path::join(&(dependency.root), std::path::Path::new(&(MODULES_SRC)));
-        if !modules_is_dir(&src) { return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(format!("`{}` is a dependency by path, but {} doesn't exist.\nA package is a directory with a `{}/` folder in it.", dependency.name, nikaia_std::fs::path::display(&(src)), MODULES_SRC)), &"modules_collect_with")); }
+        if !modules_is_dir(&src) { return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(format!("`{}` is a dependency by path, but {} doesn't exist.\nA package is a directory with a `{}/` folder in it.", dependency.name, nikaia_std::fs::path::display(&(src)), MODULES_SRC)), &"modules_dependency_units")); }
         let package: Option<String> = Some(dependency.name.to_string());
         units.extend(modules_package_at(&nikaia_std::fs::path::join(&(src), std::path::Path::new(&(MODULES_ENTRY))), (package).as_deref(), &dependency.reachable, &dependency.renames, host).await?);
     }
