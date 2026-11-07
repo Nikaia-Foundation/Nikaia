@@ -1,0 +1,283 @@
+// crates/nikaia-std/src/solver/sv_row.nika
+//
+// **Sparse rows over `u32` variables** (ADR-270 D10, #1282 item 3). A row is
+// `Σ ks[i]·x[cols[i]] + constant`: two parallel arrays, the columns
+// ascending and every coefficient non-zero, and the constant. Coefficients
+// are `i64` (D11): a tableau row over the rationals is kept integral, its
+// one denominator the coefficient of its basic column (`d·x_b = Σ aⱼxⱼ` is
+// the row `Σ aⱼxⱼ - d·x_b`), so every combination is integer multiply-add.
+// Two rows combine by a sorted merge, each result divided by its gcd; a step
+// that leaves `i64` answers `null` and is not taken (`sv_num.nika`).
+//
+// Atoms of `logic_lia.nika` (`LgLin`, names to coefficients) become rows
+// through `SvVars`, which numbers the names in the order they are first met.
+
+/// `Σ ks[i]·x[cols[i]] + constant`, `cols` ascending, no zero in `ks`.
+pub struct SvRow {
+	pub cols: Vec[u32],
+	pub ks: Vec[i64],
+	pub constant: i64,
+}
+
+/// A term of a row while it is built, before it is sorted.
+pub struct SvTerm {
+	pub col: u32,
+	pub k: i64,
+}
+
+/// The constant row `c`.
+fn sv_row_constant(c: i64) -> SvRow {
+	return SvRow { cols: [], ks: [], constant: c }
+}
+
+/// The row of `terms` in any order, a column named twice summed, zeros left
+/// out; `null` where a sum leaves `i64`.
+fn sv_row_of(terms: Vec[SvTerm], constant: i64) -> SvRow? {
+	let mut sorted = terms
+	sorted.sort_by_key(fn(t) { t.col })
+	let mut cols: Vec[u32] = []
+	let mut ks: Vec[i64] = []
+	for t in sorted {
+		let last = cols.len() - 1
+		if cols.len() > 0 && cols[last] == t.col {
+			ks[last] = ks[last].checked_add(t.k) ?? return null
+		} else {
+			cols.push(t.col)
+			ks.push(t.k)
+		}
+	}
+	let mut row = SvRow { cols: [], ks: [], constant: constant }
+	let mut i = 0
+	while i < cols.len() {
+		if ks[i] != 0 {
+			row.cols.push(cols[i])
+			row.ks.push(ks[i])
+		}
+		i += 1
+	}
+	return row
+}
+
+/// The coefficient of column `col`, `0` where the row does not hold it.
+fn sv_row_coef(r: ref SvRow, col: u32) -> i64 {
+	let mut lo = 0
+	let mut hi = r.cols.len()
+	while lo < hi {
+		let mid = (lo + hi) / 2
+		if r.cols[mid] == col {
+			return r.ks[mid]
+		}
+		if r.cols[mid] < col {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return 0
+}
+
+/// `a·r + b·s` by a sorted merge, zeros left out, not reduced; `null` where
+/// an entry leaves `i64`.
+fn sv_row_sum(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow? {
+	let mut out = SvRow {
+		cols: [],
+		ks: [],
+		constant: sv_mul_add(a, r.constant, b, s.constant) ?? return null,
+	}
+	let mut i = 0
+	let mut j = 0
+	while i < r.cols.len() || j < s.cols.len() {
+		let mut col: u32 = 0
+		let mut k: i64 = 0
+		if j >= s.cols.len() || (i < r.cols.len() && r.cols[i] < s.cols[j]) {
+			col = r.cols[i]
+			k = a.checked_mul(r.ks[i]) ?? return null
+			i += 1
+		} else if i >= r.cols.len() || s.cols[j] < r.cols[i] {
+			col = s.cols[j]
+			k = b.checked_mul(s.ks[j]) ?? return null
+			j += 1
+		} else {
+			col = r.cols[i]
+			k = sv_mul_add(a, r.ks[i], b, s.ks[j]) ?? return null
+			i += 1
+			j += 1
+		}
+		if k != 0 {
+			out.cols.push(col)
+			out.ks.push(k)
+		}
+	}
+	return out
+}
+
+/// `a·r + b·s`, divided by its gcd at once (D11).
+fn sv_row_combine(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow? {
+	let sum = sv_row_sum(a, r, b, s) ?? return null
+	return sv_row_reduced(sum)
+}
+
+/// `k·r`; `null` where an entry leaves `i64`.
+fn sv_row_scale(r: ref SvRow, k: i64) -> SvRow? {
+	return sv_row_sum(k, r, 0, sv_row_constant(0))
+}
+
+/// The gcd of the coefficients, without the constant; `null` where it is
+/// `2^63`.
+fn sv_row_content(r: ref SvRow) -> i64? {
+	return sv_content(r.ks)
+}
+
+/// `r` divided by the gcd of its coefficients and its constant: exact, so
+/// it says the same as `r` for `r = 0`, `r <= 0` and `r < 0`.
+fn sv_row_reduced(r: SvRow) -> SvRow {
+	let ks_gcd = sv_content(r.ks) ?? return r
+	let g = sv_gcd(ks_gcd, r.constant) ?? return r
+	if g <= 1 {
+		return r
+	}
+	let mut out = SvRow { cols: r.cols.clone(), ks: [], constant: r.constant / g }
+	for k in r.ks {
+		out.ks.push(k / g)
+	}
+	return out
+}
+
+/// `r <= 0` over integer variables divided by the gcd of its coefficients
+/// and its constant rounded towards the integers (Chvátal-Gomory, D5):
+/// `2x + 3 <= 0` is `x + 2 <= 0`. A row without columns stays as it is.
+fn sv_row_tightened(r: ref SvRow) -> SvRow {
+	let g = sv_row_content(r) ?? return r.clone()
+	if g <= 1 {
+		return r.clone()
+	}
+	let mut out = SvRow {
+		cols: r.cols.clone(),
+		ks: [],
+		constant: sv_ceil_div(r.constant, g) ?? r.constant,
+	}
+	for k in r.ks {
+		out.ks.push(k / g)
+	}
+	return out
+}
+
+/// Column `col` eliminated between `r` and `s` with the smallest multipliers
+/// that cancel it, the first one positive (`sv_cancelling`); `null` where
+/// either row lacks the column or an entry leaves `i64`.
+fn sv_row_eliminate(r: ref SvRow, s: ref SvRow, col: u32) -> SvRow? {
+	let ab = sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) ?? return null
+	return sv_row_combine(ab[0], r, ab[1], s)
+}
+
+/// The column to eliminate between `r` and `s`: one both hold (of opposite
+/// signs where `opposite`), a unit coefficient first, then the smallest
+/// product of the multipliers; `null` where there is none.
+fn sv_row_pick(r: ref SvRow, s: ref SvRow, opposite: bool) -> u32? {
+	let mut best: u32? = null
+	let mut best_cost: i64 = 0
+	let mut i = 0
+	let mut j = 0
+	while i < r.cols.len() && j < s.cols.len() {
+		if r.cols[i] < s.cols[j] {
+			i += 1
+		} else if s.cols[j] < r.cols[i] {
+			j += 1
+		} else {
+			let x_up = r.ks[i] > 0
+			let y_up = s.ks[j] > 0
+			if !opposite || x_up != y_up {
+				let cost = sv_column_cost(r.ks[i], s.ks[j])
+				if cost != null && (best == null || (cost ?? 0) < best_cost) {
+					best = r.cols[i]
+					best_cost = cost ?? 0
+				}
+			}
+			i += 1
+			j += 1
+		}
+	}
+	return best
+}
+
+/// The row's value where column `c` is `values[c]`; `null` where a column
+/// has no value or a step leaves `i64`.
+fn sv_row_eval(r: ref SvRow, values: ref Vec[SvRat]) -> SvRat? {
+	let mut sum = sv_int(r.constant)
+	let mut i = 0
+	while i < r.cols.len() {
+		let at = r.cols[i] as i64
+		if at >= values.len() {
+			return null
+		}
+		let term = sv_rat_mul(sv_int(r.ks[i]), values[at]) ?? return null
+		sum = sv_rat_add(sum, term) ?? return null
+		i += 1
+	}
+	return sum
+}
+
+/// Whether two rows are the same.
+fn sv_row_same(r: ref SvRow, s: ref SvRow) -> bool {
+	return r.constant == s.constant && r.cols == s.cols && r.ks == s.ks
+}
+
+/// `2·x0 - x3 + 4`, the columns named `x<n>`.
+fn sv_row_text(r: ref SvRow) -> String {
+	let mut out = ""
+	let mut i = 0
+	while i < r.cols.len() {
+		let k = r.ks[i]
+		let size = k.checked_abs() ?? 0
+		let sign = if k
+			< 0 { if i == 0 { "-" } else { " - " } } else if i
+			== 0 { "" } else { " + " }
+		let factor = if size == 1 { "" } else { f"{size}·" }
+		out.push_str(f"{sign}{factor}x{r.cols[i]}")
+		i += 1
+	}
+	if r.cols.len() == 0 {
+		return f"{r.constant}"
+	}
+	if r.constant > 0 {
+		out.push_str(f" + {r.constant}")
+	} else if r.constant < 0 {
+		out.push_str(f" - {r.constant.checked_abs() ?? 0}")
+	}
+	return out
+}
+
+/// The names of a query's variables, numbered in the order they are met.
+pub struct SvVars {
+	pub names: Vec[String],
+	pub index: collections::BTreeMap[String, u32],
+}
+
+fn sv_vars() -> SvVars {
+	return SvVars { names: [], index: collections::BTreeMap() }
+}
+
+impl SvVars {
+	/// The column of `name`, a new one for a name not met before; `null`
+	/// past `2^32` names.
+	fn column(ref mut self, name: String) -> u32? {
+		let known: u32? = self.index.get(name)
+		if known != null {
+			return known
+		}
+		let n = self.names.len().checked_u32() ?? return null
+		self.names.push(name.clone())
+		self.index.insert(name.clone(), n)
+		return n
+	}
+}
+
+/// The row of a linear atom of `logic_lia.nika`, its names numbered by
+/// `vars`; `null` past `2^32` names.
+fn sv_row_of_lin(lin: ref LgLin, mut vars: SvVars) -> SvRow? {
+	let mut terms: Vec[SvTerm] = []
+	for (name, k) in lin.terms {
+		terms.push(SvTerm { col: vars.column(name) ?? return null, k: k })
+	}
+	return sv_row_of(terms, lin.constant)
+}

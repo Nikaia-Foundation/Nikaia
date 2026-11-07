@@ -1,0 +1,40 @@
+// The fuzzer of the measuring rod (#1281, ADR-270 D17): `scripts/solver.nika
+// fuzz --self-test` generates eight queries from a fixed seed, answers them
+// with Fourier-Motzkin and compares with a stubbed oracle (z3 is not in CI):
+// the same seed gives the same queries, answers and disagreements.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	for args in [["fuzz", "--self-test"]] {
+		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
+		for a in args { all.push(a.clone()) }
+		let out = process::run(nikaia.clone(), all; dir: repo.clone())
+		println(out.stdout.trim())
+	}
+}

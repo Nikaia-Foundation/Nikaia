@@ -1,0 +1,141 @@
+// Exact equality elimination (ADR-270 D5, #1282 item 6): queries
+// Fourier-Motzkin leaves unknown over the integers - an even and an odd
+// value of one `x`, a gcd that does not divide, a sum of twelve values in
+// `{-1, 1}` that is odd - answered by the new engine with the elimination
+// and its extension, each proof a log `sv_check` replays; the sums' logs grow
+// linearly with the count. The logic layer's files, `solver/sv_*.nika` and
+// the driver below make one program, as `scripts/solver.nika` makes it.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+// The driver, run after the solver's files.
+fn driver() -> String {
+	return "// Each file answered by Fourier-Motzkin alone (`exact` off) and with the
+// exact equality elimination, the log of a proof replayed by `sv_check`.
+fn answer_kind(answer: ref LgAnswer) -> String {
+	return match answer {
+		LgAnswer::Proved { .. } => \"proved\",
+		LgAnswer::Refuted { .. } => \"refuted\",
+		LgAnswer::Unknown { why } => sv_unknown(why),
+	}
+}
+
+fn engine(arena: ref TermArena, facts: ref Vec[i64], goal: i64, exact: bool) -> String {
+	let run = sv_engine(arena, facts, goal, lg_budget(), exact)
+	return match run.driven {
+		SvDriven::Proved(query, steps) => {
+			let v = sv_check(query, steps)
+			if v.ok { f\"proved, log of {steps.len()} steps checked\" } else { f\"log rejected: {v.reason}\" }
+		},
+		SvDriven::Answer(answer) => answer_kind(answer),
+	}
+}
+
+fn both(path: String) throws {
+	let name = path.split(\"/\").last() ?? path
+	let script = match lg_smtlib_read(fs::read_to_string(path.clone(), fs::Root::Anywhere)) {
+		LgRead::Script(s) => s.clone(),
+		LgRead::Failed(_) => {
+			println(f\"{name}: unreadable\")
+			return
+		},
+	}
+	let mut arena = script.arena.clone()
+	let goal = arena.boolean(false)
+	let fm = engine(arena, script.assertions, goal, false)
+	let exact = engine(arena, script.assertions, goal, true)
+	println(f\"{name}: fm {fm}; exact {exact}\")
+}
+
+fn main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() {
+		args.push(a)
+	}
+	for i in 1..<args.len() {
+		both(args[i].clone())
+	}
+}
+"
+}
+
+// `Σ xᵢ = 1` over `n` values `xᵢ ∈ {-1, 1}`: unsat for an even `n`.
+fn sum(n: i64) -> String {
+	let mut text = "(set-logic QF_LIA)\n"
+	let mut terms = ""
+	for i in 1..n {
+		text = text + f"(declare-const x{i} Int)\n"
+		terms = terms + f" x{i}"
+	}
+	for i in 1..n {
+		text = text + f"(assert (or (= x{i} (- 1)) (= x{i} 1)))\n"
+	}
+	return text + f"(assert (= (+{terms}) 1))\n(check-sat)\n"
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let mut paths: Vec[String] = []
+	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia", "logic_horn", "logic_normal", "logic_search", "logic_smtlib", "logic_alethe"] {
+		paths.push(f"{repo}/crates/nikaia-std/src/tools/{name}.nika")
+	}
+	for name in ["sv_num", "sv_row", "sv_proof", "sv_check", "sv_theory", "sv_elim", "sv_drive", "sv_rod"] {
+		paths.push(f"{repo}/crates/nikaia-std/src/solver/{name}.nika")
+	}
+	let mut uses: Vec[String] = []
+	let mut body = ""
+	for p in paths {
+		// The text bound first: #1287.
+		let text = fs::read_to_string(p.clone(), fs::Root::Anywhere)
+		for line in text.lines() {
+			if line.starts_with("use std::") {
+				if !uses.contains(line.to_string()) { uses.push(line.to_string()) }
+			} else {
+				body = body + line + "\n"
+			}
+		}
+	}
+	fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, uses.join("\n") + "\n" + body + driver())
+	let decl = "(set-logic QF_LIA)\n(declare-const x Int)\n(declare-const n Int)\n(declare-const m Int)\n"
+	let files = [
+		("even-odd", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 2 m) 1)))\n(check-sat)\n"),
+		("gcd", decl + "(assert (= (+ (* 6 x) (* 9 n)) (+ (* 3 m) 2)))\n(check-sat)\n"),
+		("even-even", decl + "(assert (= x (* 2 n)))\n(assert (= x (+ (* 4 m) 2)))\n(check-sat)\n"),
+		("sum-4", sum(4)),
+		("sum-8", sum(8)),
+		("sum-12", sum(12)),
+	]
+	let mut args: Vec[String] = ["run", "main.nika", "--"]
+	for (name, text) in files {
+		fs::write(f"{tmp}/{name}.smt2", fs::Root::Anywhere, text)
+		args.push(f"{tmp}/{name}.smt2")
+	}
+	let out = process::run(nikaia, args; dir: tmp.clone())
+	println(out.stdout.trim())
+	process::run("rm", ["-rf", tmp])
+}

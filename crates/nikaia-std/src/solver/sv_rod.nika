@@ -1,0 +1,179 @@
+// crates/nikaia-std/src/solver/sv_rod.nika
+//
+// **The measuring rod's driver** (ADR-270 D17, #1281): `scripts/solver.nika`
+// puts this file after the logic layer's files of `tools/` into one program
+// and runs it on SMT-LIB 2 files. Each file is answered by the engine, every
+// *proved* is replayed by `lg_verify`, every *refuted* model is evaluated by
+// `lg_verify_model`, and the answer is held against the file's status. One
+// line per file: `answer work`. It stays here when the solver's files move to
+// `tools/`: it is the harness, not the solver.
+
+use std::cli
+use std::fs
+
+/// One answer and the work it took, counted in the engine's own units: the
+/// branches Fourier-Motzkin's search looked at (ADR-270 D14).
+struct SvRun {
+	answer: LgAnswer,
+	work: i64,
+}
+
+/// `lg_check`, with the work it did kept: the same steps, so the answer is the
+/// one the compiler gets.
+fn sv_fm_check(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+) -> SvRun {
+	let mut why = lg_why()
+	let read = lg_indexed(arena, facts, goal, why)
+	if read == null {
+		return SvRun { answer: LgAnswer::Unknown { why: why.unknown.clone() }, work: 0 }
+	}
+	let indexed = read
+		?? return SvRun { answer: LgAnswer::Unknown { why: LgUnknown::NoContradiction }, work: 0 }
+	let mut state = LgBranch { held_atoms: [], held_why: [], open_ors: [], open_why: [] }
+	let none: collections::BTreeSet[i64] = collections::BTreeSet()
+	state.absorb(indexed.top, none)
+	let mut work = LgWork { n: 0 }
+	let found = lg_search(indexed, state, budget, work)
+	let answer = match found {
+		LgSearched::Done { certificate, .. } => LgAnswer::Proved {
+			certificate: certificate.clone()
+		},
+		LgSearched::Consistent { found, values } => lg_consistent_answer(
+			arena,
+			facts,
+			goal,
+			found,
+			values,
+		),
+		LgSearched::Unknown(why_not) => LgAnswer::Unknown { why: why_not.clone() },
+	}
+	return SvRun { answer: answer, work: work.n }
+}
+
+/// The status a file states: `sat`, `unsat`, or empty where it states none.
+/// SMT-LIB's `(set-info :status ...)` first, else a `; EXPECT:` line.
+fn sv_status(source: String) -> String {
+	for raw in source.lines() {
+		let line = raw.trim()
+		if line.starts_with("(set-info :status ") {
+			let rest = line["(set-info :status ".len()..].replace(")", "").trim().clone()
+			if rest == "sat" || rest == "unsat" {
+				return rest
+			}
+		}
+		if line.starts_with("; EXPECT: ") {
+			let rest = line["; EXPECT: ".len()..].trim().clone()
+			if rest == "sat" || rest == "unsat" {
+				return rest
+			}
+		}
+	}
+	return ""
+}
+
+fn sv_unknown(why: LgUnknown) -> String {
+	return match why {
+		LgUnknown::OutsideTheTheory => "unknown (theory)",
+		LgUnknown::Overflow => "unknown (overflow)",
+		LgUnknown::TooManyCases => "unknown (cases)",
+		LgUnknown::TooManyBounds => "unknown (bounds)",
+		LgUnknown::NoContradiction => "unknown (no contradiction)",
+		else => "unknown",
+	}
+}
+
+/// One file's answer and the work it took: `proved`, `refuted`, `unknown
+/// (why)` or `wrong (why)`, then the work.
+fn sv_line(source: String, engine: String) -> String {
+	let status = sv_status(source)
+	let script = match lg_smtlib_read(source) {
+		LgRead::Script(s) => s.clone(),
+		LgRead::Failed(_) => {
+			return "unknown (unreadable) 0"
+		},
+	}
+	let mut arena = script.arena.clone()
+	let goal = arena.boolean(false)
+	let budget = lg_budget()
+	if engine == "new" {
+		return sv_new_line(arena, script.assertions, goal, budget, status)
+	}
+	let run = sv_fm_check(arena, script.assertions, goal, budget)
+	let answer = match run.answer {
+		LgAnswer::Proved { certificate } => {
+			if lg_verify(arena, script.assertions, goal, certificate) != null {
+				"wrong (certificate rejected)"
+			} else if status == "sat" {
+				"wrong (proved, status sat)"
+			} else {
+				"proved"
+			}
+		},
+		LgAnswer::Refuted { model } => {
+			if !lg_verify_model(arena, script.assertions, goal, model) {
+				"wrong (model rejected)"
+			} else if status == "unsat" {
+				"wrong (refuted, status unsat)"
+			} else {
+				"refuted"
+			}
+		},
+		LgAnswer::Unknown { why } => sv_unknown(why),
+	}
+	return f"{answer} {run.work}"
+}
+
+/// The new engine's line (#1282): a *proved* is its proof log replayed by
+/// `sv_check`, a model evaluated as Fourier-Motzkin's is.
+fn sv_new_line(
+	arena: ref TermArena,
+	facts: ref Vec[i64],
+	goal: i64,
+	budget: ref LgBudget,
+	status: String,
+) -> String {
+	let run = sv_engine(arena, facts, goal, budget, true)
+	let answer = match run.driven {
+		SvDriven::Proved(query, steps) => {
+			let verdict = sv_check(query, steps)
+			if !verdict.ok {
+				f"wrong (log rejected at {verdict.step}: {verdict.reason})"
+			} else if status == "sat" {
+				"wrong (proved, status sat)"
+			} else {
+				"proved"
+			}
+		},
+		SvDriven::Answer(LgAnswer::Refuted { model }) => {
+			if !lg_verify_model(arena, facts, goal, model) {
+				"wrong (model rejected)"
+			} else if status == "unsat" {
+				"wrong (refuted, status unsat)"
+			} else {
+				"refuted"
+			}
+		},
+		SvDriven::Answer(LgAnswer::Unknown { why }) => sv_unknown(why),
+		SvDriven::Answer(_) => "unknown",
+	}
+	return f"{answer} {run.work}"
+}
+
+/// The program's entry: `ENGINE FILE...`, one line per file. The engine is
+/// `fm`, Fourier-Motzkin as the compiler runs it, or `new`, the theory
+/// interface's driver (#1282).
+pub fn sv_rod_main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() {
+		args.push(a)
+	}
+	let engine = args[1].clone()
+	for i in 2..<args.len() {
+		let source = fs::read_to_string(args[i].clone(), fs::Root::Anywhere)
+		println(sv_line(source, engine))
+	}
+}

@@ -1,0 +1,457 @@
+// crates/nikaia-std/src/solver/sv_check.nika
+//
+// **The checker** (ADR-270 D5, #1282 item 4): replays a proof log of
+// `sv_proof.nika` against its query and accepts it when it derives the empty
+// clause. It never searches: a learned clause is checked by unit propagation
+// through exactly the clauses its hints name, in their order; a Farkas lemma
+// by adding up the bounds it names with the multipliers it names; a rounding,
+// a split and an extension by looking at their rows. Every number is `i64`
+// with the overflow check (`sv_num.nika`): a step whose replay would leave the
+// range is rejected, never wrapped. Each rejection names the step and why.
+//
+// Kept under 1 500 lines for clauses and linear integer arithmetic (D5); a
+// rule that would push it past needs a record.
+
+/// A bound `row REL 0` and the literals it assumes, ascending.
+pub struct SvBound {
+	pub row: SvRow,
+	pub rel: SvRel,
+	pub assumed: Vec[u32],
+}
+
+/// What an entry of the log holds.
+pub enum SvEntry {
+	Clause(Vec[u32]),
+	Bound(SvBound),
+	Gone,
+}
+
+/// The checker's answer: accepted, or the step that failed and why.
+pub struct SvVerdict {
+	pub ok: bool,
+	pub step: i64,
+	pub reason: String,
+}
+
+/// What the replay has built: the atoms (the query's, then the splits'), the
+/// entries, the columns, and whether the empty clause is among them.
+struct SvReplay {
+	atoms: Vec[SvAtom],
+	entries: Vec[SvEntry],
+	columns: u32,
+	refuted: bool,
+}
+
+/// A combination's result, or why there is none.
+struct SvSum {
+	bound: SvBound?,
+	why: String,
+}
+
+/// Replays `log` against `query`.
+fn sv_check(query: ref SvQuery, log: ref Vec[SvStep]) -> SvVerdict {
+	let mut replay = SvReplay {
+		atoms: query.atoms.clone(),
+		entries: [],
+		columns: query.columns,
+		refuted: false,
+	}
+	for atom in query.atoms {
+		let why = replay.row_known(atom.row)
+		if why != "" {
+			return SvVerdict { ok: false, step: -1, reason: f"a query atom: {why}" }
+		}
+	}
+	let mut at = 0
+	for step in log {
+		let why = replay.step(query, step)
+		if why != "" {
+			return SvVerdict { ok: false, step: at, reason: f"{sv_step_kind(step)}: {why}" }
+		}
+		at += 1
+	}
+	if !replay.refuted {
+		return SvVerdict { ok: false, step: at, reason: "the log ends without the empty clause" }
+	}
+	return SvVerdict { ok: true, step: at, reason: "" }
+}
+
+impl SvReplay {
+	/// Replays one step; `""` where it holds, else why not.
+	fn step(ref mut self, query: ref SvQuery, step: ref SvStep) -> String {
+		return match step {
+			SvStep::Input(c) => self.input(query, c),
+			SvStep::Learn(lits, hints) => self.learn(lits, hints),
+			SvStep::Delete(id) => self.delete(id),
+			SvStep::Farkas(lits, sources, multipliers, den) => self.farkas(
+				lits,
+				sources,
+				multipliers,
+				den,
+			),
+			SvStep::Combine(sources, multipliers) => {
+				let sum = self.combination(sources, multipliers)
+				let bound = sum.bound ?? return sum.why
+				self.entries.push(SvEntry::Bound(bound))
+				""
+			},
+			SvStep::Round(id, d) => self.round(id, d),
+			SvStep::Split(le, ge) => self.split(le, ge),
+			SvStep::Extend(l, m, q) => self.extend(l, m, q),
+		}
+	}
+
+	/// `""` where every column of `row` exists, else which does not.
+	fn row_known(ref self, row: ref SvRow) -> String {
+		for c in row.cols {
+			if c >= self.columns {
+				return f"x{c} is no column"
+			}
+		}
+		return ""
+	}
+
+	/// `""` where every literal names an atom, else which does not.
+	fn lits_known(ref self, lits: ref Vec[u32]) -> String {
+		for l in lits {
+			if (l / 2) as i64 >= self.atoms.len() {
+				return f"literal {l} names no atom"
+			}
+		}
+		return ""
+	}
+
+	/// Adds a clause; the empty one refutes the query.
+	fn add_clause(ref mut self, lits: Vec[u32]) -> String {
+		if lits.len() == 0 {
+			self.refuted = true
+		}
+		self.entries.push(SvEntry::Clause(lits))
+		return ""
+	}
+
+	fn input(ref mut self, query: ref SvQuery, c: u32) -> String {
+		let at = c as i64
+		if at >= query.clauses.len() {
+			return f"the query has no clause {c}"
+		}
+		let why = self.lits_known(query.clauses[at])
+		if why != "" {
+			return why
+		}
+		return self.add_clause(query.clauses[at].clone())
+	}
+
+	/// Reverse unit propagation: every literal of `lits` false, then each
+	/// hint in turn unit (its one open literal becomes true) until one is
+	/// false throughout.
+	fn learn(ref mut self, lits: ref Vec[u32], hints: ref Vec[u32]) -> String {
+		let why = self.lits_known(lits)
+		if why != "" {
+			return why
+		}
+		// Per atom: 0 open, 1 true, -1 false.
+		let mut value: Vec[i64] = []
+		for _ in self.atoms {
+			value.push(0)
+		}
+		for l in lits {
+			sv_assign(value, l ^ 1)
+		}
+		for h in hints {
+			let at = h as i64
+			if at >= self.entries.len() {
+				return f"hint {h} is no earlier entry"
+			}
+			let clause = match self.entries[at] {
+				SvEntry::Clause(c) => c,
+				else => return f"hint {h} is no clause",
+			}
+			let mut open: Vec[u32] = []
+			for l in clause {
+				let v = sv_value(value, l)
+				if v > 0 {
+					return f"hint {h} is already true"
+				}
+				if v == 0 {
+					open.push(l)
+				}
+			}
+			if open.len() == 0 {
+				return self.add_clause(lits.clone())
+			}
+			if open.len() > 1 {
+				return f"hint {h} is not unit: {open.len()} literals open"
+			}
+			sv_assign(value, open[0])
+		}
+		return "the hints end without a conflict"
+	}
+
+	fn delete(ref mut self, id: u32) -> String {
+		let at = id as i64
+		if at >= self.entries.len() {
+			return f"entry {id} does not exist"
+		}
+		let gone = match self.entries[at] {
+			SvEntry::Gone => true,
+			else => false,
+		}
+		if gone {
+			return f"entry {id} is already deleted"
+		}
+		self.entries[at] = SvEntry::Gone
+		return ""
+	}
+
+	/// The bound a source adds, or why there is none.
+	fn source(ref self, src: ref SvSrc) -> SvSum {
+		return match src {
+			SvSrc::Lit(l) => {
+				let at = (l / 2) as i64
+				if at >= self.atoms.len() {
+					return SvSum { bound: null, why: f"literal {l} names no atom" }
+				}
+				let atom = self.atoms[at].clone()
+				if l % 2 == 0 {
+					return SvSum {
+						bound: SvBound { row: atom.row, rel: atom.rel, assumed: [l] },
+						why: "",
+					}
+				}
+				// Over the integers: not `row <= 0` is `-row + 1 <= 0`, not
+				// `row < 0` is `-row <= 0`.
+				let shift: i64 = match atom.rel {
+					SvRel::Le => 1,
+					SvRel::Lt => 0,
+					SvRel::Eq => return SvSum {
+						bound: null,
+						why: f"literal {l} negates an equality, which is no bound",
+					},
+				}
+				let negated = sv_row_sum(-1, atom.row, shift, sv_row_constant(1))
+					?? return SvSum { bound: null, why: "overflow" }
+				SvSum { bound: SvBound { row: negated, rel: SvRel::Le, assumed: [l] }, why: "" }
+			},
+			SvSrc::Fact(id) => {
+				let at = id as i64
+				if at >= self.entries.len() {
+					return SvSum { bound: null, why: f"entry {id} is no earlier entry" }
+				}
+				match self.entries[at] {
+					SvEntry::Bound(b) => SvSum { bound: b.clone(), why: "" },
+					else => SvSum { bound: null, why: f"entry {id} is no bound" },
+				}
+			},
+		}
+	}
+
+	/// `Σ multipliers[i]·sources[i]`: an equality where every summand is
+	/// one, strict where a strict summand has a positive multiplier.
+	fn combination(ref self, sources: ref Vec[SvSrc], multipliers: ref Vec[i64]) -> SvSum {
+		if sources.len() != multipliers.len() {
+			return SvSum {
+				bound: null,
+				why: f"{multipliers.len()} multipliers for {sources.len()} sources",
+			}
+		}
+		if sources.len() == 0 {
+			return SvSum { bound: null, why: "nothing is combined" }
+		}
+		let mut row = sv_row_constant(0)
+		let mut equality = true
+		let mut strict = false
+		let mut assumed: Vec[u32] = []
+		let mut i = 0
+		while i < sources.len() {
+			let got = self.source(sources[i])
+			let b = got.bound ?? return SvSum { bound: null, why: got.why }
+			let m = multipliers[i]
+			let is_eq = match b.rel {
+				SvRel::Eq => true,
+				else => false,
+			}
+			if !is_eq && m < 0 {
+				return SvSum {
+					bound: null,
+					why: f"multiplier {m} of source {i} is negative on an inequality",
+				}
+			}
+			if m != 0 {
+				equality = equality && is_eq
+				let is_lt = match b.rel {
+					SvRel::Lt => true,
+					else => false,
+				}
+				strict = strict || (is_lt && m > 0)
+				row = sv_row_sum(1, row, m, b.row) ?? return SvSum { bound: null, why: "overflow" }
+				for l in b.assumed {
+					if !assumed.contains(l) {
+						assumed.push(l)
+					}
+				}
+			}
+			i += 1
+		}
+		assumed.sort()
+		let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le }
+		return SvSum {
+			bound: SvBound { row: sv_row_reduced(row), rel: rel, assumed: assumed },
+			why: "",
+		}
+	}
+
+	/// A theory lemma: the combination ends in a contradiction, and the
+	/// clause holds the negation of every literal it assumed.
+	fn farkas(
+		ref mut self,
+		lits: ref Vec[u32],
+		sources: ref Vec[SvSrc],
+		multipliers: ref Vec[i64],
+		den: i64,
+	) -> String {
+		if den <= 0 {
+			return f"denominator {den} is not positive"
+		}
+		let why = self.lits_known(lits)
+		if why != "" {
+			return why
+		}
+		let sum = self.combination(sources, multipliers)
+		let b = sum.bound ?? return sum.why
+		if b.row.cols.len() > 0 {
+			return f"x{b.row.cols[0]} is left in the combination"
+		}
+		let c = b.row.constant
+		let contradiction = match b.rel {
+			SvRel::Le => c > 0,
+			SvRel::Lt => c >= 0,
+			SvRel::Eq => c != 0,
+		}
+		if !contradiction {
+			return f"the combination ends in {c} {sv_rel_text(b.rel)} 0, no contradiction"
+		}
+		for l in b.assumed {
+			let negation = l ^ 1
+			if !lits.contains(negation) {
+				return f"the clause leaves out the negation of literal {l}"
+			}
+		}
+		return self.add_clause(lits.clone())
+	}
+
+	/// Chvátal-Gomory: a bound over the integers divided by `d`.
+	fn round(ref mut self, id: u32, d: i64) -> String {
+		if d == 0 {
+			return "a rounding by zero"
+		}
+		if d < 0 {
+			return f"a rounding by {d}, not positive"
+		}
+		let got = self.source(SvSrc::Fact(id))
+		let b = got.bound ?? return got.why
+		let mut ks: Vec[i64] = []
+		let mut i = 0
+		while i < b.row.ks.len() {
+			let k = b.row.ks[i]
+			if k % d != 0 {
+				return f"the coefficient {k} of x{b.row.cols[i]} is not divisible by {d}"
+			}
+			ks.push(k / d)
+			i += 1
+		}
+		let c = b.row.constant
+		let mut rel = SvRel::Le
+		let mut constant: i64 = 0
+		match b.rel {
+			SvRel::Le => { constant = sv_ceil_div(c, d) ?? return "overflow" },
+			SvRel::Lt => {
+				constant = sv_ceil_div(c.checked_add(1) ?? return "overflow", d)
+					?? return "overflow"
+			},
+			SvRel::Eq => {
+				if c % d != 0 {
+					// The GCD test: no integers make it hold.
+					ks = []
+					constant = 1
+				} else {
+					constant = c / d
+					rel = SvRel::Eq
+				}
+			},
+		}
+		let cols = if ks.len() == 0 { [] } else { b.row.cols.clone() }
+		let row = SvRow { cols: cols, ks: ks, constant: constant }
+		self.entries.push(SvEntry::Bound(SvBound {
+			row: row,
+			rel: rel,
+			assumed: b.assumed.clone(),
+		}))
+		return ""
+	}
+
+	/// `le <= 0 ∨ ge <= 0` with `le + ge = 1`: every integer value of `le`
+	/// is on one side.
+	fn split(ref mut self, le: ref SvRow, ge: ref SvRow) -> String {
+		let why = self.row_known(le)
+		if why != "" {
+			return why
+		}
+		let both = sv_row_sum(1, le, 1, ge) ?? return "overflow"
+		if both.cols.len() > 0 {
+			return f"the two sides are not one form: x{both.cols[0]} is left"
+		}
+		if both.constant > 1 {
+			return f"the split leaves out an alternative: its sides add up to {both.constant}, not 1"
+		}
+		if both.constant < 1 {
+			return "the split's sides overlap; it is not L <= k or L >= k + 1"
+		}
+		let first = self.atoms.len().checked_u32() ?? return "overflow"
+		self.atoms.push(SvAtom { row: le.clone(), rel: SvRel::Le })
+		self.atoms.push(SvAtom { row: ge.clone(), rel: SvRel::Le })
+		return self.add_clause([sv_lit(first, false), sv_lit(first + 1, false)])
+	}
+
+	/// `q = ⌊l / m⌋`: `0 <= l - m·q <= m - 1`.
+	fn extend(ref mut self, l: ref SvRow, m: i64, q: u32) -> String {
+		if m <= 0 {
+			return f"divisor {m} is not positive"
+		}
+		let why = self.row_known(l)
+		if why != "" {
+			return why
+		}
+		if q != self.columns {
+			return f"x{q} is not the next fresh column x{self.columns}"
+		}
+		self.columns += 1
+		let mq = SvRow { cols: [q], ks: [m], constant: 0 }
+		let below = sv_row_sum(-1, l, 1, mq) ?? return "overflow"
+		let above0 = sv_row_sum(1, l, -1, mq) ?? return "overflow"
+		let above = sv_row_sum(1, above0, -(m - 1), sv_row_constant(1)) ?? return "overflow"
+		self.entries.push(SvEntry::Bound(SvBound { row: below, rel: SvRel::Le, assumed: [] }))
+		self.entries.push(SvEntry::Bound(SvBound { row: above, rel: SvRel::Le, assumed: [] }))
+		return ""
+	}
+}
+
+/// Makes literal `l` true.
+fn sv_assign(mut value: Vec[i64], l: u32) {
+	let at = (l / 2) as i64
+	value[at] = if l % 2 == 0 { 1 } else { -1 }
+}
+
+/// `1` where literal `l` is true, `-1` where false, `0` where open.
+fn sv_value(value: ref Vec[i64], l: u32) -> i64 {
+	let v = value[(l / 2) as i64]
+	return if l % 2 == 0 { v } else { -v }
+}
+
+fn sv_rel_text(rel: SvRel) -> String {
+	return match rel {
+		SvRel::Le => "<=",
+		SvRel::Lt => "<",
+		SvRel::Eq => "=",
+	}
+}

@@ -1,0 +1,263 @@
+// crates/nikaia-std/src/solver/sv_elim.nika
+//
+// **Exact equality elimination** before Fourier-Motzkin (ADR-270 D5, #1282
+// item 6). An equality is two bounds `R <= 0` and `-R <= 0`. One with a
+// coefficient `±1` on a column is solved for it and substituted into every
+// other bound - each substitution a `Combine` of the bound and one side. One
+// without is first given such a column by D5's extension: for the smallest
+// coefficient `a` on `x_k`, `L = Σ (a_i mod a)·x_i + (c mod a)` and the fresh
+// `q = ⌊L / a⌋` make `S = x_k + Σ ⌊a_i / a⌋·x_i + ⌊c / a⌋ + q`, with
+// `S <= 0` the combination of `R <= 0` and `a·q - L <= 0` and `-S <= 0` the
+// rounded combination of `-R <= 0` and `L - a·q - (a - 1) <= 0`; the
+// coefficients left shrink, so it ends (the omega test's equality step).
+// Every bound is kept divided by its gcd and rounded (Chvátal-Gomory), so an
+// equality whose coefficients' gcd does not divide its constant shows as two
+// bounds whose sum is a positive constant: the GCD test, a Farkas lemma.
+
+/// Whether `r` and `s` have the same columns with opposite coefficients.
+fn sv_opposite(r: ref SvRow, s: ref SvRow) -> bool {
+	if r.cols != s.cols {
+		return false
+	}
+	let mut i = 0
+	while i < r.ks.len() {
+		let n = r.ks[i].checked_neg() ?? return false
+		if n != s.ks[i] {
+			return false
+		}
+		i += 1
+	}
+	return true
+}
+
+/// `h` divided by the gcd of its coefficients and constant, then by that of
+/// its coefficients with the constant rounded up; each a step where it
+/// changes the bound.
+fn sv_tidy(h: SvHeld, mut book: SvBook) -> SvHeld? {
+	let mut row = h.row.clone()
+	let mut src = h.src.clone()
+	if !sv_row_same(sv_row_reduced(row.clone()), row) {
+		let id = book.combine([src], [1]) ?? return null
+		row = (book.bounds.get(id) ?? return null).row.clone()
+		src = SvSrc::Fact(id)
+	}
+	let g = sv_row_content(row) ?? return null
+	if g > 1 && row.cols.len() > 0 {
+		let id = book.combine([src], [1]) ?? return null
+		let made = book.round(id) ?? return null
+		row = (book.bounds.get(made) ?? return null).row.clone()
+		src = SvSrc::Fact(made)
+	}
+	return SvHeld { row: row, src: src }
+}
+
+/// The column of `r` with a coefficient `±1` that most other bounds of
+/// `held` hold, the lowest on a tie; `null` where none has one.
+fn sv_unit_column(r: ref SvRow, held: ref Vec[SvHeld]) -> u32? {
+	let mut best: u32? = null
+	let mut best_uses = -1
+	let mut i = 0
+	while i < r.cols.len() {
+		let k = r.ks[i]
+		if k == 1 || k == -1 {
+			let c = r.cols[i]
+			let mut uses = 0
+			for h in held {
+				if sv_row_coef(h.row, c) != 0 {
+					uses += 1
+				}
+			}
+			if uses > best_uses {
+				best = c
+				best_uses = uses
+			}
+		}
+		i += 1
+	}
+	return best
+}
+
+/// `held` with column `x` substituted by the equality `lo` (`R <= 0`) and
+/// `hi` (`-R <= 0`), `R`'s coefficient `s = ±1` on `x`; the two sides
+/// dropped. `null`, and nothing written, where a row leaves `i64`.
+fn sv_substituted(
+	held: ref Vec[SvHeld],
+	lo: i64,
+	hi: i64,
+	x: u32,
+	s: i64,
+	mut book: SvBook,
+) -> Vec[SvHeld]? {
+	// The rows first, so an overflow writes nothing.
+	let mut i = 0
+	while i < held.len() {
+		let b = sv_row_coef(held[i].row, x)
+		if i != lo && i != hi && b != 0 {
+			// #1293: `(b > 0) == (s > 0)` loses its parentheses.
+			let same = b > 0
+			let side = if same == (s > 0) { hi } else { lo }
+			let m = b.checked_abs() ?? return null
+			sv_row_sum(1, held[i].row, m, held[side].row) ?? return null
+		}
+		i += 1
+	}
+	let mut out: Vec[SvHeld] = []
+	i = 0
+	while i < held.len() {
+		let b = sv_row_coef(held[i].row, x)
+		if i == lo || i == hi {
+			i += 1
+			continue
+		}
+		if b == 0 {
+			out.push(held[i].clone())
+			i += 1
+			continue
+		}
+		// #1293: `(b > 0) == (s > 0)` loses its parentheses.
+		let same = b > 0
+		let side = if same == (s > 0) { hi } else { lo }
+		let m = b.checked_abs() ?? return null
+		let id = book.combine([held[i].src.clone(), held[side].src.clone()], [1, m]) ?? return null
+		let row = (book.bounds.get(id) ?? return null).row.clone()
+		out.push(SvHeld { row: row, src: SvSrc::Fact(id) })
+		i += 1
+	}
+	return out
+}
+
+/// The equality `lo`, `hi` without a unit coefficient given one: the
+/// extension on its smallest coefficient and the two bounds of `S`, added to
+/// `held`. `false`, and `held` as it was, where a row leaves `i64`.
+fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> bool {
+	let mut low = lo
+	let mut high = hi
+	let r = held[lo].row.clone()
+	let mut k = 0
+	let mut i = 1
+	while i < r.ks.len() {
+		if (r.ks[i].checked_abs() ?? return false) < (r.ks[k].checked_abs() ?? return false) {
+			k = i
+		}
+		i += 1
+	}
+	if r.ks[k] < 0 {
+		low = hi
+		high = lo
+	}
+	let row = held[low].row.clone()
+	let a = row.ks[k].checked_abs() ?? return false
+	let mut terms: Vec[SvTerm] = []
+	i = 0
+	while i < row.cols.len() {
+		if i != k {
+			let rem = ((row.ks[i] % a) + a) % a
+			if rem != 0 {
+				terms.push(SvTerm { col: row.cols[i], k: rem })
+			}
+		}
+		i += 1
+	}
+	let l = sv_row_of(terms, ((row.constant % a) + a) % a) ?? return false
+	// The rows of `S` first, so an overflow writes nothing.
+	let mq = SvRow { cols: [book.log.columns], ks: [a], constant: 0 }
+	sv_row_sum(1, row, 1, sv_row_sum(-1, l, 1, mq) ?? return false) ?? return false
+	let ext = book.extend(l, a) ?? return false
+	let le = book.combine([held[low].src.clone(), SvSrc::Fact(ext.first)], [1, 1]) ?? return false
+	let ge0 = book.combine([held[high].src.clone(), SvSrc::Fact(ext.first + 1)], [1, 1])
+		?? return false
+	let ge = book.round(ge0) ?? return false
+	for id in [le, ge] {
+		let made = (book.bounds.get(id) ?? return false).row.clone()
+		held.push(SvHeld { row: made, src: SvSrc::Fact(id) })
+	}
+	return true
+}
+
+/// **The elimination**: `held` tidied, its constant bounds checked, its
+/// equalities solved and substituted one by one (a unit coefficient first,
+/// then the fewest columns), each solved column kept in `solved` for the
+/// model. A conflict on the way is the answer; else `Consistent`, and what
+/// is left in `held` goes to Fourier-Motzkin.
+fn sv_eliminate(
+	mut held: Vec[SvHeld],
+	mut solved: Vec[SvSolved],
+	mut book: SvBook,
+) -> SvChecked {
+	let mut skipped: Vec[SvRow] = []
+	let mut rounds = 0
+	while rounds < 4096 {
+		rounds += 1
+		let mut kept: Vec[SvHeld] = []
+		for h in held {
+			let t = sv_tidy(h.clone(), book) ?? return SvChecked::Unknown(LgUnknown::Overflow)
+			if t.row.cols.len() > 0 {
+				kept.push(t)
+				continue
+			}
+			if t.row.constant > 0 {
+				let clause = book.farkas([t.src], [1])
+					?? return SvChecked::Unknown(LgUnknown::Overflow)
+				return SvChecked::Conflict(clause)
+			}
+		}
+		held = kept
+		// The equality to solve: `lo` and `hi`, opposite rows whose
+		// constants cancel; opposite rows whose constants sum above zero
+		// refute at once.
+		let mut lo = -1
+		let mut hi = -1
+		let mut best = 0
+		let mut i = 0
+		while i < held.len() {
+			let mut j = i + 1
+			while j < held.len() {
+				if sv_opposite(held[i].row, held[j].row) {
+					let sum = held[i].row.constant.checked_add(held[j].row.constant)
+						?? return SvChecked::Unknown(LgUnknown::Overflow)
+					if sum > 0 {
+						let clause = book.farkas([held[i].src.clone(), held[j].src.clone()], [1, 1])
+							?? return SvChecked::Unknown(LgUnknown::Overflow)
+						return SvChecked::Conflict(clause)
+					}
+					let mut known = false
+					for s in skipped {
+						known = known || sv_row_same(s, held[i].row)
+					}
+					if sum == 0 && !known {
+						let unit = sv_unit_column(held[i].row, held) != null
+						let cost = 2 * held[i].row.cols.len() + if unit { 0 } else { 1 }
+						if lo < 0 || cost < best {
+							lo = i
+							hi = j
+							best = cost
+						}
+					}
+				}
+				j += 1
+			}
+			i += 1
+		}
+		if lo < 0 {
+			break
+		}
+		let column = sv_unit_column(held[lo].row, held)
+		if column == null {
+			if !sv_extended(held, lo, hi, book) {
+				skipped.push(held[lo].row.clone())
+			}
+			continue
+		}
+		let x = column ?? break
+		let s = sv_row_coef(held[lo].row, x)
+		let row = held[lo].row.clone()
+		let next = sv_substituted(held, lo, hi, x, s, book)
+		if next == null {
+			skipped.push(row)
+			continue
+		}
+		held = next ?? break
+		solved.push(SvSolved { column: x, row: row })
+	}
+	return SvChecked::Consistent
+}

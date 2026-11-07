@@ -1,0 +1,14 @@
+smoke/refused-function.smt2 unknown (unreadable) 0
+smoke/sat-interval.smt2 refuted 2
+smoke/unsat-bounds.smt2 proved 1
+smoke: 3 files, solved 2 (proved 1, refuted 1), unknown 1 (overflow 0, unreadable 1), wrong 0, PAR-2 683.6, certificates checked 1, models evaluated 1
+stress/blank: 12 files, solved 0 (proved 0, refuted 0), unknown 12 (overflow 0, unreadable 0), wrong 0, PAR-2 2048.0, certificates checked 0, models evaluated 0
+stress/disjunctions: 12 files, solved 12 (proved 6, refuted 6), unknown 0 (overflow 0, unreadable 0), wrong 0, PAR-2 4.0, certificates checked 6, models evaluated 6
+stress/guards: 12 files, solved 6 (proved 6, refuted 0), unknown 6 (overflow 0, unreadable 0), wrong 0, PAR-2 1024.5, certificates checked 6, models evaluated 0
+stress/parity: 11 files, solved 5 (proved 0, refuted 5), unknown 6 (overflow 0, unreadable 0), wrong 0, PAR-2 1120.7, certificates checked 0, models evaluated 5
+stress/steps: 12 files, solved 12 (proved 6, refuted 6), unknown 0 (overflow 0, unreadable 0), wrong 0, PAR-2 4.5, certificates checked 6, models evaluated 6
+all: 59 files, solved 35 (proved 18, refuted 17), unknown 24 (overflow 0, unreadable 0), wrong 0, PAR-2 835.5, certificates checked 18, models evaluated 17
+smoke/refused-function.smt2 unknown (unreadable) 0
+smoke/sat-interval.smt2 refuted 2
+smoke/unsat-bounds.smt2 proved 1
+smoke: 3 files, solved 2 (proved 1, refuted 1), unknown 1 (overflow 0, unreadable 1), wrong 0, PAR-2 683.6, certificates checked 1, models evaluated 1

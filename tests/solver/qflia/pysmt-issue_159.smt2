@@ -1,0 +1,7 @@
+(set-logic QF_LIA)
+(set-info :status sat)
+(declare-fun x () Int)
+(assert (let ((a x)
+              (b (+ a x)))
+          (> b a)))
+(check-sat)

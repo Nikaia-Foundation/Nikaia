@@ -1,0 +1,13 @@
+(set-logic QF_LIA)
+(declare-const x0 Int)
+(declare-const x1 Int)
+(declare-const x2 Int)
+(declare-const x3 Int)
+(declare-const x4 Int)
+(assert (= (+ (* (- 2) x0) (* 2 x3) (* 3 x4)) 10))
+(assert (< (+ (* (- 3) x0) (* (- 2) x3) (* 3 x4)) (- 2)))
+(assert (or (> (+ x0 (* 3 x3)) (- 3)) (< (+ (* (- 1) x1) x4) 0)))
+(check-sat)
+(exit)
+fuzz-7-6.smt2: engine refuted, z3 unsat
+8 queries (seed 7): proved 0, refuted 3, unknown 5, disagreements 1

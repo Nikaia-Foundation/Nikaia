@@ -1,0 +1,27 @@
+== accepted
+clauses (input, learn, delete): accepted (7 steps)
+farkas: accepted (4 steps)
+farkas, strict, over a denominator: accepted (4 steps)
+farkas, equality with a negative multiplier: accepted (4 steps)
+extension, combine, round and the GCD test: accepted (10 steps)
+split: accepted (6 steps)
+== rejected
+negative multiplier on an inequality: rejected at step 2: farkas: multiplier -1 of source 0 is negative on an inequality
+missing hint: rejected at step 6: learn: the hints end without a conflict
+split leaving out an alternative: rejected at step 2: split: the split leaves out an alternative: its sides add up to 2, not 1
+split with overlapping sides: rejected at step 2: split: the split's sides overlap; it is not L <= k or L >= k + 1
+rounding by zero: rejected at step 7: round: a rounding by zero
+rounding by an indivisible divisor: rejected at step 7: round: the coefficient -2 of x1 is not divisible by 3
+extension by zero: rejected at step 2: extend: divisor 0 is not positive
+extension on a column in use: rejected at step 2: extend: x1 is not the next fresh column x2
+farkas over a denominator of zero: rejected at step 2: farkas: denominator 0 is not positive
+farkas leaving a literal out of its clause: rejected at step 2: farkas: the clause leaves out the negation of literal 2
+farkas without a contradiction: rejected at step 2: farkas: the combination ends in -1 <= 0, no contradiction
+farkas leaving a variable: rejected at step 2: farkas: x0 is left in the combination
+farkas on a negated equality: rejected at step 0: farkas: literal 1 negates an equality, which is no bound
+input the query does not hold: rejected at step 0: input: the query has no clause 2
+learn without hints: rejected at step 1: learn: the hints end without a conflict
+hint that is a bound: rejected at step 1: learn: hint 0 is no clause
+deleting twice: rejected at step 2: delete: entry 0 is already deleted
+a combination leaving i64: rejected at step 0: combine: overflow
+a log without the empty clause: rejected at step 2: the log ends without the empty clause
