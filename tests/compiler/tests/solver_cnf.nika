@@ -12,16 +12,23 @@
 use std::fs
 use std::process
 
-fn toolchain(repo: String) -> String throws {
+// The running `nikaia`: the nearest ancestor whose executable has that name.
+// `nikaia run` replaces itself with its program, so the compiler is not
+// always the parent (#1305). No path is guessed: without one the test stops
+// and says why.
+fn toolchain() -> String throws {
 	let exe = process::run(
 		"sh",
 		[
 			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
 		],
 	).stdout.trim().clone()
-	if exe.len() > 0 { return exe }
-	return f"{repo}/target/fast/nikaia"
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
 }
 
 fn root() -> String throws {
@@ -55,7 +62,7 @@ fn driver(text: String) -> String {
 
 fn main() throws {
 	let repo = root()
-	let nikaia = toolchain(repo.clone())
+	let nikaia = toolchain()
 	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let mut paths: Vec[String] = []
 	for name in ["prover_arena", "solver_terms", "prove_text", "logic_lia"] {

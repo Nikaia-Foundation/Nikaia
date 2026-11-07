@@ -7,16 +7,23 @@
 use std::fs
 use std::process
 
-fn toolchain(repo: String) -> String throws {
+// The running `nikaia`: the nearest ancestor whose executable has that name.
+// `nikaia run` replaces itself with its program, so the compiler is not
+// always the parent (#1305). No path is guessed: without one the test stops
+// and says why.
+fn toolchain() -> String throws {
 	let exe = process::run(
 		"sh",
 		[
 			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
 		],
 	).stdout.trim().clone()
-	if exe.len() > 0 { return exe }
-	return f"{repo}/target/fast/nikaia"
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
 }
 
 fn root() -> String throws {
@@ -32,11 +39,17 @@ fn root() -> String throws {
 
 fn main() throws {
 	let repo = root()
-	let nikaia = toolchain(repo.clone())
+	let nikaia = toolchain()
 	for args in [["run", "--engine", "fm", "tests/solver/smoke"], ["run", "--engine", "fm", "--summary", "tests/solver/stress"], ["run", "tests/solver/smoke"], ["run", "tests/solver/pre"]] {
 		let mut all: Vec[String] = ["run", "scripts/solver.nika", "--"]
 		for a in args { all.push(a.clone()) }
-		let out = process::run(nikaia.clone(), all; dir: repo.clone())
+		let out = process::run(nikaia.clone(), all.clone(); dir: repo.clone())
 		println(out.stdout.trim())
+		// A failed inner run names its cause in the diff (#1305).
+		if !out.ok || out.stderr.trim().len() > 0 {
+			println(f"inner run `nikaia {all.join(" ")}` exited {out.code}, stderr:")
+			if out.stderr.trim().len()
+				== 0 { println("(empty)") } else { println(out.stderr.trim()) }
+		}
 	}
 }

@@ -61,8 +61,16 @@ fn solver_toolchain(repo: String) -> String throws {
 			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
 		],
 	).stdout.trim().clone()
-	if exe.len() > 0 { return exe }
-	return f"{repo}/target/fast/nikaia"
+	if exe.len() == 0 {
+		// Run by hand from a shell (`nikaia run` replaced itself with this
+		// program): the repository's own build, only where it exists (#1305).
+		for built in [f"{repo}/target/fast/nikaia", f"{repo}/target/release/nikaia"] {
+			if fs::exists(built.clone(), fs::Root::Anywhere) { return built }
+		}
+		eprintln(f"no nikaia found: none among this program's ancestors, none in {repo}/target/fast or target/release (#1305)")
+		process::exit(2)
+	}
+	return exe
 }
 
 fn solver_root() -> String throws {
