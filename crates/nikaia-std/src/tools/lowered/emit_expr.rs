@@ -141,7 +141,7 @@ impl EmitState {
             return Ok(());
         }
         if self.facts.wrapped.contains_key(&at) {
-            let (before, after) = emit_around_value(self.facts.wrapped.get(&at), node);
+            let (before, after) = emit_around(self.facts.wrapped.get(&at))?;
             out.push(&before);
             self.emit_expr_as_written(world, walk, out, host, node, depth, flow, scope)?;
             out.push(&after);

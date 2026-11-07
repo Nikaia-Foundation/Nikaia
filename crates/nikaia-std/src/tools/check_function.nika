@@ -486,7 +486,7 @@ fn check_function_every_end_is_a_value(expr: ref Expr) -> bool {
     }
 }
 
-fn check_function_is_branching(expr: ref Expr) -> bool {
+pub fn check_function_is_branching(expr: ref Expr) -> bool {
     return match expr {
         Expr::If { .. } => check_function_every_end_is_a_value(expr),
         Expr::Match { .. } => check_function_every_end_is_a_value(expr),
@@ -674,11 +674,6 @@ pub fn check_function_wrap_tail[H: CheckHost](mut state: CheckState, world: ref 
                 state.some_at_the_tails(value)
             } else {
                 state.facts.wrapped.insert(node, FactWrap::Constructor)
-            }
-        },
-        FactWrap::Conversion => {
-            if branches && nullable {
-                state.some_at_the_tails(value)
             }
         },
         FactWrap::Widen(into) => {

@@ -281,7 +281,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, || callee.to_string().into()), i);
-        let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node, arg);
+        let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node)?;
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
@@ -722,7 +722,7 @@ impl EmitState {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
                 if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
-                let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value), &passed.value);
+                let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value))?;
                 out.push(&before);
                 self.emit_expr(world, walk, out, host, &passed.value, depth, flow, scope)?;
                 out.push(&after);

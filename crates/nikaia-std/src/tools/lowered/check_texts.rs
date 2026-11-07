@@ -89,6 +89,23 @@ pub(crate) fn all_arms_text(arms: &[MatchArm]) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_texts_arm_leaves(body: &Expr) -> bool {
+    match body {
+        Expr::Throw(..) => false,
+        Expr::Block(block, _) => !check_texts_ends_in_a_jump(block) && !check_texts_ends_in_a_throw(block),
+        _ => true,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_texts_ends_in_a_throw(block: &Block) -> bool {
+    for tail in block_tail(block) { return matches!(tail, Expr::Throw(..)); }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn ends_in_null(expr: &Expr) -> bool {
     match expr {
         Expr::LitNull(_) => true,
@@ -232,10 +249,9 @@ impl CheckState {
                 }
             },
             Expr::Match { arms, .. } => {
-                if arms.is_empty() { return None; }
-                for arm in arms.iter() { if !check_texts_ends_in_literal(&arm.body, true) { return None; } }
                 let mut answered: Option<Ty> = None;
-                for arm in arms.iter() { answered = self.text_literal(world, want, &arm.body, owned); }
+                for arm in arms.iter() { if check_texts_arm_leaves(&arm.body) && !check_texts_ends_in_literal(&arm.body, true) { return None; } }
+                for arm in arms.iter() { if check_texts_arm_leaves(&arm.body) { answered = self.text_literal(world, want, &arm.body, owned); } }
                 return answered;
             },
             Expr::Block(block, _) => {

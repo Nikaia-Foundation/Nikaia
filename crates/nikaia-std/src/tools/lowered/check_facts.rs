@@ -4,7 +4,6 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FactWrap {
     Constructor,
-    Conversion,
     Path,
     PathView,
     Widen(String),
@@ -18,7 +17,6 @@ pub enum FactKeyForm {
     Handed,
     Lent,
     AsIs,
-    Either,
     Viewed,
 }
 

@@ -5,15 +5,19 @@
 // this was written - see `contracts::sync`.
 pub(crate) fn check_walked_unknown_last(state: &mut CheckState) {
     let mut other_error = false;
+    let mut untold = false;
     for f in state.findings.to_owned() {
         match f.severity {
-            CheckSeverity::Error => { if f.code != "NK1245" { other_error = true; } },
+            CheckSeverity::Error => { if f.code == "NK1245" { untold = true; } else if f.code != "NK1342" { other_error = true; } },
             _ => { },
         }
     }
-    if !other_error { return; }
+    if !other_error && !untold { return; }
     let mut kept: Vec<CheckFinding> = vec![];
-    for f in state.findings.to_owned() { if f.code != "NK1245" { kept.push(f); } }
+    for f in state.findings.to_owned() {
+        let dropped = f.code == "NK1342" || other_error && f.code == "NK1245";
+        if !dropped { kept.push(f); }
+    }
     state.findings = kept;
 }
 

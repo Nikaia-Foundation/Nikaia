@@ -12,27 +12,12 @@
 
 use std::collections
 
-/// `emit_around_value` for the wrap the checker recorded at `at`, if any.
-fn emit_leaf_wrapped(sites: ref collections::BTreeMap[i64, FactWrap], at: i64, value: ref Expr) -> (String, String) {
+/// `emit_around` for the wrap the checker recorded at `at`, if any.
+fn emit_leaf_wrapped(sites: ref collections::BTreeMap[i64, FactWrap], at: i64) -> (String, String) sync throws {
     if !sites.contains_key(at) {
         return emit_two("", "")
     }
     let held = sites.get(at) ?? return emit_two("", "")
-    let compound = match value {
-        Expr::Binary { .. } => true,
-        Expr::Unary { .. } => true,
-        Expr::Cast { .. } => true,
-        Expr::Range { .. } => true,
-        Expr::Coalesce { .. } => true,
-        else => false,
-    }
-    let conversion = match held {
-        FactWrap::Conversion => true,
-        else => false,
-    }
-    if compound && conversion {
-        return emit_two("(", ").into()")
-    }
     return emit_around_held(held)
 }
 
@@ -118,7 +103,6 @@ impl EmitState {
     /// holds (#659).
     pub fn emit_core_key[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, form: FactKeyForm, index: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let kind = match form {
-            FactKeyForm::Either => 1,
             FactKeyForm::Lent => 2,
             FactKeyForm::Viewed => 3,
             else => 0,
@@ -132,12 +116,6 @@ impl EmitState {
             if !emit_leaf_bare_key(index) {
                 out.push(")")
             }
-            out.push(")")
-            return
-        }
-        if kind == 1 {
-            out.push("nikaia_std::index::key(")
-            self.emit_expr(world, walk, out, host, index, depth, flow, scope)
             out.push(")")
             return
         }
@@ -259,7 +237,7 @@ impl EmitState {
     /// What a `return` or a tail hands back: the nullable wrap, the `Either`
     /// text, and the `&` of a value lent out of a field (ADR-282 D5).
     pub fn emit_core_handed_back[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        let (before, after) = emit_leaf_wrapped(self.facts.nullable_sites, at, value)
+        let (before, after) = emit_leaf_wrapped(self.facts.nullable_sites, at)
         out.push(before)
         // `null` is no text of either kind (ADR-282 D5), and goes as `None`.
         let is_null = match value {

@@ -1,0 +1,22 @@
+// What is not known is not written (#1322, ADR-005 D7): a value whose type
+// the compiler cannot tell does not go into a `String?` with a form left to
+// the language below to choose. `NK1342`, at an argument, a `let` read
+// later and a `return`.
+fn id[T](x: T) -> T {
+	return x
+}
+
+fn takes(v: String?) -> String {
+	return v ?? "n"
+}
+
+fn handed() -> String? {
+	return id(3)
+}
+
+fn main() {
+	println(takes(id(3)))
+	let n = id(4)
+	println(takes(n))
+	println(handed() ?? "n")
+}

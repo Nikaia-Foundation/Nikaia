@@ -601,12 +601,21 @@ impl CheckState {
     /// already. A map keyed by views, and one whose key type nothing pinned,
     /// is keyed by what goes in the brackets.
     pub fn a_map_key(ref mut self, world: ref CheckWorld, keys: ref Ty, found: ref Ty, index: ref Expr, writing: bool, span: ref Span) sync {
+        // **A map whose key type nothing pinned is keyed by what goes in the
+        // brackets** where that decides the form: a key written is handed
+        // over, a view goes in as it is, a number is lent. Text of its own is
+        // a key of its own or a view below, and the compiler does not leave
+        // which to the language below (#1322): `NK1342`.
         if keys.is_unknown() {
-            let mut form = FactKeyForm::Either
+            let mut form = FactKeyForm::Lent
             if writing {
                 form = FactKeyForm::Handed
             } else if found.is_a_view() {
                 form = FactKeyForm::AsIs
+            } else if !self.a_number_key(world, found, index) {
+                let shown = arith_shown(written_expression(world.words, index))
+                self.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type this map's keys are, so it can't tell how `{shown}` looks one up.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the map's type down where it is made, such as `let m: collections::HashMap[K, V] = collections::HashMap()`."))
+                return
             }
             self.facts.map_keys.insert((node_key(index), writing), form)
             return
@@ -638,6 +647,15 @@ impl CheckState {
             form = FactKeyForm::AsIs
         }
         self.facts.map_keys.insert((node_key(index), writing), form)
+    }
+
+    /// A key that is a number, of a type or one nothing typed (Part I 2.4).
+    fn a_number_key(ref self, world: ref CheckWorld, found: ref Ty, index: ref Expr) -> bool sync {
+        let named = match found {
+            Ty::Named { name, args, .. } => args.len() == 0 && (a_number_name(name) || name == "int"),
+            else => false,
+        }
+        return named || self.number_shaped(world, index)
     }
 
     fn a_key_read_as_it_is(ref self, world: ref CheckWorld, found: ref Ty, index: ref Expr) -> bool sync {

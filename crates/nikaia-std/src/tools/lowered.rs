@@ -2448,7 +2448,7 @@ pub mod check_arguments {
 }
 pub mod check_arith {
     #[allow(unused_imports)]
-    pub use super::{an_or_a_named, is_a_bool_type, text_or_bool_in_arithmetic};
+    pub use super::{an_or_a_named, arith_shown, is_a_bool_type, text_or_bool_in_arithmetic};
 }
 pub mod check_arm_leaves {
     #[allow(unused_imports)]
@@ -2588,7 +2588,7 @@ pub mod check_flow {
 }
 pub mod check_function {
     #[allow(unused_imports)]
-    pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_wrap_tail, check_function_function};
+    pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_is_branching, check_function_wrap_tail, check_function_function};
 }
 pub mod check_glue {
     #[allow(unused_imports)]
@@ -2659,7 +2659,7 @@ pub mod check_numbers5 {
 }
 pub mod check_overflow {
     #[allow(unused_imports)]
-    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_ends_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
+    pub use super::{check_wrap_for, check_wrap_undecided, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_ends_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
 }
 pub mod check_parts {}
 pub mod check_patterns {
@@ -2860,7 +2860,7 @@ pub mod emit_entry {}
 pub mod emit_expr {}
 pub mod emit_exprs {
     #[allow(unused_imports)]
-    pub use super::{emit_around, emit_around_held, emit_around_value};
+    pub use super::{emit_around, emit_around_held};
 }
 pub mod emit_fold {}
 pub mod emit_function {

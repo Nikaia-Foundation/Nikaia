@@ -206,7 +206,7 @@ pub(crate) fn arith_structural(expr: &Expr) -> bool { matches!(expr, Expr::Binar
 
 pub(crate) fn arith_a_name(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _)) }
 
-pub(crate) fn arith_shown(written: &str) -> String {
+pub fn arith_shown(written: &str) -> String {
     if (written.chars().count() as i64) <= 60 { return written.to_string(); }
     let mut shown: String = String::from("");
     let mut count = 0;

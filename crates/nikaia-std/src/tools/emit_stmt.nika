@@ -554,7 +554,7 @@ impl EmitState {
                 out.push("#[allow(unused_mut)] ")
             }
             out.push(f"let {pattern} = ")
-            let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+            let (before, after) = emit_around(self.facts.nullable_sites.get(at))
             out.push(before)
             // **Out of a place, the tuple is lent** (#465).
             if mut_word == "" && self.facts.lent_lets.contains(at) {
@@ -605,7 +605,7 @@ impl EmitState {
         // **The annotation is no longer the constructor** (ADR-281 D2).
         // Part I 2.3: a plain value standing in a nullable slot keeps its hull
         // in the compiler, because it is one a program cannot observe.
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         out.push(f"let {mut_word}{local}{annotation} = ")
         out.push(before)
         // **A `let mut` over a list's element is the `&mut` of it** (#959).
@@ -681,7 +681,7 @@ impl EmitState {
         if self.emit_stmt_assign_proven(world, walk, out, host, target, op, value, span, depth, flow, scope) {
             return
         }
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         // **A `mut` parameter assigned whole is written through** (ADR-094 D3,
         // #576): below it is a `&mut T`, and `n = n + 1` is `*n = *n + 1`.
         match target {
@@ -786,7 +786,7 @@ impl EmitState {
     /// before the write begins.
     fn emit_stmt_assign_index[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = span.start as i64
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         out.push("{ let __nikaia_stored = ")
         out.push(before)
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)
@@ -862,7 +862,7 @@ impl EmitState {
     /// into them, before it is stored.
     fn emit_stmt_assign_held[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, keeper: ref Expr, index: ref Expr, field: winnow_grammar::Symbol, op: ref BinaryOp?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = span.start as i64
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(at), value)
+        let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         out.push("{ let __nikaia_stored = ")
         out.push(before)
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)

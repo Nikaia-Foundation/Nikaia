@@ -374,7 +374,7 @@ pub(crate) fn check_function_every_end_is_a_value(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
+pub fn check_function_is_branching(expr: &Expr) -> bool {
     match expr {
         Expr::If { .. } => check_function_every_end_is_a_value(expr),
         Expr::Match { .. } => check_function_every_end_is_a_value(expr),
@@ -530,7 +530,6 @@ pub fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &Ch
     let node = id_of(value) as i64;
     match wrap {
         FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
-        FactWrap::Conversion => { if branches && nullable { state.some_at_the_tails(value); } },
         FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(into.to_string())); },
         FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(into.to_string())); },
         FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(into.to_string())); },

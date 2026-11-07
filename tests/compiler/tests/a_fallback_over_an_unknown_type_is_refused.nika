@@ -1,0 +1,10 @@
+// What is not known is not written (#1322, ADR-005 D7): a `??` over a `T?`
+// whose `T` nothing typed cannot tell what its text fallback becomes.
+fn nothing[T]() -> T? {
+	return null
+}
+
+fn main() {
+	let x = nothing() ?? "a"
+	println(x)
+}

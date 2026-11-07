@@ -96,16 +96,16 @@ fn emit_two(before: ref String, after: ref String) -> (String, String) {
     return (before.clone(), after.clone())
 }
 
-pub fn emit_around(how: ref FactWrap?) -> (String, String) {
+pub fn emit_around(how: ref FactWrap?) -> (String, String) sync throws {
     let held = how ?? return emit_two("", "")
     return emit_around_held(held)
 }
 
-/// The words a wrap puts around a value.
-pub fn emit_around_held(held: ref FactWrap) -> (String, String) {
+/// The words a wrap puts around a value. **Each is one the checker decided**
+/// (#1322): a value of no known type gets no wrap, it is refused (`NK1342`).
+pub fn emit_around_held(held: ref FactWrap) -> (String, String) sync throws {
     return match held {
         FactWrap::Constructor => emit_two("Some(", ")"),
-        FactWrap::Conversion => emit_two("", ".into()"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
         FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
         // The mapping at a count, whether it is held or lent (ADR-373 D3).
@@ -116,43 +116,25 @@ pub fn emit_around_held(held: ref FactWrap) -> (String, String) {
     }
 }
 
-fn emit_widen(into: ref String) -> String {
+/// **The integer types a narrower one widens into** (ADR-285 D32,
+/// `widened_into`): `u32`, `u64`, `i32` and `i64`, and no other (#1322).
+fn emit_widen(into: ref String) -> String sync throws {
     return match into {
         "u32" => "u32::from(",
         "u64" => "u64::from(",
         "i32" => "i32::from(",
-        else => "i64::from(",
+        "i64" => "i64::from(",
+        else => throw EmitRefused { message: f"NK1342: the compiler can't tell how a value is widened into `{into}`.", at: null },
     }
 }
 
-fn emit_unsigned(into: ref String) -> String {
+/// **The unsigned types a signed value proved not negative goes into**
+/// (D32, `unsigned_from_signed`): `u32` and `u64`, and no other (#1322).
+fn emit_unsigned(into: ref String) -> String sync throws {
     return match into {
         "u32" => "nikaia_std::num::u32_of(",
-        else => "nikaia_std::num::u64_of(",
-    }
-}
-
-/// As `emit_around`, but a conversion of a compound value is parenthesised.
-pub fn emit_around_value(how: ref FactWrap?, value: ref Expr) -> (String, String) {
-    let compound = match value {
-        Expr::Binary { .. } => true,
-        Expr::Unary { .. } => true,
-        Expr::Cast { .. } => true,
-        Expr::Range { .. } => true,
-        Expr::Coalesce { .. } => true,
-        else => false,
-    }
-    if compound && emit_a_conversion(how) {
-        return emit_two("(", ").into()")
-    }
-    return emit_around(how)
-}
-
-fn emit_a_conversion(how: ref FactWrap?) -> bool {
-    let held = how ?? return false
-    return match held {
-        FactWrap::Conversion => true,
-        else => false,
+        "u64" => "nikaia_std::num::u64_of(",
+        else => throw EmitRefused { message: f"NK1342: the compiler can't tell how a value goes into `{into}`.", at: null },
     }
 }
 

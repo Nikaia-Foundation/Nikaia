@@ -399,8 +399,12 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_map_key(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, keys: &Ty, found: &Ty, index: &Expr, writing: bool, span: &Span) {
         if keys.is_unknown() {
-            let mut form = FactKeyForm::Either;
-            if writing { form = FactKeyForm::Handed; } else if found.is_a_view() { form = FactKeyForm::AsIs; }
+            let mut form = FactKeyForm::Lent;
+            if writing { form = FactKeyForm::Handed; } else if found.is_a_view() { form = FactKeyForm::AsIs; } else if !self.a_number_key(world, found, index) {
+                let shown = arith_shown(&written_expression(world.words, index));
+                self.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type this map's keys are, so it can't tell how `{}` looks one up.", shown), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the map's type down where it is made, such as `let m: collections::HashMap[K, V] = collections::HashMap()`."))));
+                return;
+            }
             self.facts.map_keys.insert((node_key(index), writing), form);
             return;
         }
@@ -418,6 +422,15 @@ impl CheckState {
             form = FactKeyForm::Handed;
         } else if self.a_key_read_as_it_is(world, found, index) { form = FactKeyForm::AsIs; }
         self.facts.map_keys.insert((node_key(index), writing), form);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_number_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, index: &Expr) -> bool {
+        let named = match found {
+            Ty::Named { name, args, .. } => args.is_empty() && (a_number_name(name) || name == "int"),
+            _ => false,
+        };
+        named || self.number_shaped(world, index)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
