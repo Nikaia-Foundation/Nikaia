@@ -112,4 +112,5 @@ together with the specification section and an example test.
 * Nikaia's `a..b` includes `b`; use `0..<n` for n turns. (issue-1366)
 * After an interrupted build, `cargo test --test it` can fail at link time with "undefined hidden symbol"; delete only `target/fast/deps/it-*` and `target/fast/incremental/it-*`, then rebuild. (issue-1366)
 * NK2105 for loops is decided in `hands_over_path_of` and `CheckRepeats` (`check_takes.nika`, `check_state.nika`); `revived` there also drives narrowing (ADR-382), so a new exemption needs its own set. (issue-1366)
+* `a..b` is inclusive in Nikaia (lowered `0..=b`); write `a..<b` in probes for a half-open slice. (issue-1276)
 
