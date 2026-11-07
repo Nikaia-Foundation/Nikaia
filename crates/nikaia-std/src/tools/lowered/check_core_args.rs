@@ -215,6 +215,7 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         }
     }
     if !lends { lends = check_core_args_lent(world, callee, at); }
+    if !lends && state.changing_self && check_core_args_changes(callee, at) { lends = true; }
     let taken = !lends && state.changing_self && check_core_args_taken_from_self(state, world, host, arg, span);
     if !lends && !taken {
         check_core_a_field_of_a_borrowed_subject_given(state, world, host, arg, span, "passed", check_core_args_reads(callee, at));

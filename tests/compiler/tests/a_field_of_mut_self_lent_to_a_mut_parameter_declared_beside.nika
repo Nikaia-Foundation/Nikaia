@@ -1,0 +1,36 @@
+use compiler_tests
+
+// #1315: a field of `mut self` handed to a `mut` parameter is lent in place
+// (ADR-views-3 D3), not given away: no NK1131, whichever file declares the
+// callee (`src/mut_lent_beside_caller.nika` calls into
+// `src/mut_lent_beside.nika`) and whether or not the field's type has an
+// empty value to stand in for it (`Kind` has none).
+enum Kind { A, B }
+
+struct Vars { names: Vec[String], kind: Kind }
+
+impl Vars {
+	fn column(mut self, n: String) -> i64 {
+		self.names.push(n)
+		return self.names.len()
+	}
+}
+
+fn row_of(n: String, mut vars: Vars) -> i64 {
+	return vars.column(n)
+}
+
+struct Columns { vars: Vars }
+
+impl Columns {
+	fn diff(mut self, n: String) -> i64 {
+		return row_of(n, self.vars)
+	}
+}
+
+fn main() {
+	let mut beside = compiler_tests::MutLentColumns { vars: compiler_tests::MutLentVars { names: [] } }
+	println(f"{beside.diff("a")} {beside.diff("b")}")
+	let mut here = Columns { vars: Vars { names: [], kind: Kind::B } }
+	println(f"{here.diff("a")} {here.diff("b")} {here.vars.names.len()}")
+}

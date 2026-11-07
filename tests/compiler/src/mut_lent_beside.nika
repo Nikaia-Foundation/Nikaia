@@ -1,0 +1,14 @@
+/// A type and a function with a `mut` parameter, for a field of `mut self`
+/// another file of the package lends to it (#1315).
+pub struct MutLentVars { pub names: Vec[String] }
+
+impl MutLentVars {
+	pub fn column(mut self, n: String) -> i64 {
+		self.names.push(n)
+		return self.names.len()
+	}
+}
+
+pub fn mut_lent_row_of(n: String, mut vars: MutLentVars) -> i64 {
+	return vars.column(n)
+}
