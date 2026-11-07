@@ -850,7 +850,7 @@ impl EmitState {
         if fallback {
             let text = body.buf.to_string();
             body = EmitOut::empty();
-            if bound { body.push(&format!("{}.bound((async || -> Result<_, {}> {{ Ok({}) }})()).await", deadline, boxed, text)); } else if walk.async_pausing { body.push(&format!("(async || -> Result<_, {}> {{ Ok({}) }})().await", boxed, text)); } else { body.push(&format!("(|| -> Result<_, {}> {{ Ok({}) }})()", boxed, text)); }
+            if bound { body.push(&format!("{}.bound(nikaia_std::task::fell_paused(async || -> Result<_, {}> {{ Ok({}) }})).await", deadline, boxed, text)); } else if walk.async_pausing { body.push(&format!("nikaia_std::task::fell_paused(async || -> Result<_, {}> {{ Ok({}) }}).await", boxed, text)); } else { body.push(&format!("nikaia_std::task::fell(|| -> Result<_, {}> {{ Ok({}) }})", boxed, text)); }
         }
         if bound && !fallback {
             let text = body.buf.to_string();

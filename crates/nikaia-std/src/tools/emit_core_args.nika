@@ -1391,15 +1391,17 @@ impl EmitState {
         // once the deadline has passed, and ends with `task::TimedOut`; one
         // that never pauses runs to its end before any wait could see it.
         let bound = deadline != "" && body.buf.contains(".await")
+        // A panic in it is its failure, for the fallback alone: it cancels no
+        // sibling and is not the group's (D36, #1355: `task::fell`).
         if fallback {
             let text = body.buf.clone()
             body = EmitOut::empty()
             if bound {
-                body.push(f"{deadline}.bound((async || -> Result<_, {boxed}> {{ Ok({text}) }})()).await")
+                body.push(f"{deadline}.bound(nikaia_std::task::fell_paused(async || -> Result<_, {boxed}> {{ Ok({text}) }})).await")
             } else if walk.async_pausing {
-                body.push(f"(async || -> Result<_, {boxed}> {{ Ok({text}) }})().await")
+                body.push(f"nikaia_std::task::fell_paused(async || -> Result<_, {boxed}> {{ Ok({text}) }}).await")
             } else {
-                body.push(f"(|| -> Result<_, {boxed}> {{ Ok({text}) }})()")
+                body.push(f"nikaia_std::task::fell(|| -> Result<_, {boxed}> {{ Ok({text}) }})")
             }
         }
         if bound && !fallback {

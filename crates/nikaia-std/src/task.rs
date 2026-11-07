@@ -1742,6 +1742,30 @@ pub async fn group_paused_raised<T, E: crate::error::Joined>(
     uncrashed(group_paused(scope, async { body.await.map_err(OrCrash::Failed) }).await)
 }
 
+/// **The body of a task with a fallback** (ADR-async-5 D36, #1355): a panic
+/// in it is the task's failure, handed to its fallback, not a crash of the
+/// group, so it cancels no sibling and is not thrown where the group ends.
+pub fn fell<T>(
+    body: impl FnOnce() -> Result<T, Box<dyn std::error::Error>>,
+) -> Result<T, Box<dyn std::error::Error>> {
+    let mut ended = None;
+    match caught(|| ended = Some(body())) {
+        Err(crash) => Err(Box::new(crash)),
+        Ok(()) => ended.expect("a body that did not panic ended"),
+    }
+}
+
+/// [`fell`] for a body that pauses.
+pub async fn fell_paused<T, F>(body: impl FnOnce() -> F) -> Result<T, Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
+{
+    match caught_paused(body).await {
+        Err(crash) => Err(Box::new(crash)),
+        Ok(ended) => ended,
+    }
+}
+
 /// **The end of a task with a fallback** (ADR-async-5 D22, D35): its own
 /// failure and its crash alike, each for the fallback to take.
 pub fn fallen<T, E: Into<Box<dyn std::error::Error>>>(
