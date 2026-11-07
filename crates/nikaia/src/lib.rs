@@ -23,7 +23,6 @@ pub mod comptime_run;
 pub mod contracts;
 pub mod describe;
 pub mod diagnostics;
-pub mod dsl;
 pub mod emit;
 pub mod fixed;
 pub mod fmt;

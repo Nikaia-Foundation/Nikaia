@@ -1,0 +1,22 @@
+// #1261: a view pushed into a `Vec[String]`, a list literal of a view and a
+// list of views handed where `Vec[String]` is wanted all run: the list keeps
+// the views where the text outlives it (Part I 2.2, 6.6). A list that text of
+// its own also flows into is refused instead: see
+// a_view_pushed_beside_own_text_is_refused.
+fn count(names: Vec[String]) -> i64 { names.len() }
+
+fn main() {
+    let names = [" a b ", "c d"]
+    let mut briefs: Vec[String] = []
+    let urgent = names[0].trim()
+    briefs.push(urgent)
+    let mut views = []
+    for n in names {
+        views.push(n.trim())
+    }
+    briefs.push(names[1].trim())
+    println(count([urgent]))
+    println(count(views))
+    println(briefs.len())
+    println(briefs[1])
+}
