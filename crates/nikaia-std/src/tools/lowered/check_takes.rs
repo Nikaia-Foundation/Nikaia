@@ -77,14 +77,16 @@ impl CheckState {
     pub fn a_way_out(&mut self, how: &str, word: &str, span: &Span) {
         for around in self.repeats.iter() { if around.what == "lambda" { return; } }
         let mut loop_frame: i64 = -1;
-        if how == "break" || how == "continue" {
-            let mut at = self.repeats.len() as i64;
-            while at > 0 && loop_frame < 0 {
-                at = at - 1;
-                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).what == "loop" { loop_frame = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame; }
+        let mut in_loop: i64 = -1;
+        let mut at = self.repeats.len() as i64;
+        while at > 0 && in_loop < 0 {
+            at = at - 1;
+            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).what == "loop" {
+                in_loop = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).opened;
+                if how == "break" || how == "continue" { loop_frame = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame; }
             }
         }
-        self.ways_out.push(CheckWayOut { how: how.to_string(), word: word.to_string(), at: span.start as i64, seq: self.read_seq, choices: self.branch.to_owned(), span: span.clone(), loop_frame });
+        self.ways_out.push(CheckWayOut { how: how.to_string(), word: word.to_string(), at: span.start as i64, seq: self.read_seq, choices: self.branch.to_owned(), span: span.clone(), loop_frame, in_loop });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -212,12 +214,12 @@ impl CheckState {
         }
         -1
     }
-    pub(crate) fn around_a_repeat(&self, bound: i64, name: &str) -> i64 {
+    pub(crate) fn around_a_repeat(&self, bound: i64, path: &str) -> i64 {
         let mut at = self.repeats.len() as i64;
         while at > 0 {
             at = at - 1;
             if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame <= bound { return -1; }
-            if (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).takes_again(name) { return at; }
+            if (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).takes_again(path) { return at; }
         }
         -1
     }
@@ -266,13 +268,77 @@ impl CheckState {
         }
         let bound = self.frame_of(&root);
         if bound < 0 { return; }
-        let around = self.around_a_repeat(bound, &root);
-        if around < 0 { return; }
+        let around = self.around_a_repeat(bound, path);
+        if around < 0 {
+            self.held_in_a_loop(bound, path, ty, to, span);
+            return;
+        }
         let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string();
+        self.handed_over_again(&what, path, ty, to, span);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn handed_over_again(&mut self, what: &str, path: &str, ty: &Ty, to: &str, span: &Span) {
         let mut again: String = String::from("a lambda may run more than once, and the second run would find it gone");
         if what == "loop" { again = String::from("the next time round the loop it would be handed over again, but it's already gone"); } else if what == "guard" || what == "bound" { again = format!("a {} only reads the labels of its alternative: they stay the alternative's, for its action", what); }
         let copy = a_copy_said(path, ty);
         self.findings.push(check_refusal("NK2105", span, format!("`{}` is {} inside a {}, but it was declared outside it.", path, to, what), vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy - {}.", path, ty.text(), again), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("Hand over a copy each time: `{}`.", copy))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn held_in_a_loop(&mut self, bound: i64, path: &str, ty: &Ty, to: &str, span: &Span) {
+        let mut loops: Vec<i64> = vec![];
+        let mut holder: i64 = -1;
+        let mut at = self.repeats.len() as i64;
+        while at > 0 {
+            at = at - 1;
+            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).what != "loop" { return; }
+            loops.push(nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).opened);
+            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame > bound && holder < 0 {
+                if (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).revives(path) { return; }
+                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).leaves { holder = at; }
+            }
+        }
+        if holder < 0 { return; }
+        let held = CheckHeldTaking { path: path.to_string(), ty: ty.clone(), to: to.to_string(), span: span.clone(), choices: self.branch.to_owned(), from: self.ways_out.len() as i64, bound, loops };
+        self.repeats[nikaia_std::index::at(holder)].held.push(held);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_loop_ends(&mut self) {
+        let last = self.repeats.len() as i64 - 1;
+        if last < 0 { return; }
+        let ending = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).opened;
+        let held = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).held.to_owned();
+        self.repeats[nikaia_std::index::at(last)].held = vec![];
+        for taking in held.iter() {
+            if self.a_turn_follows(ending, taking) {
+                self.handed_over_again("loop", &taking.path, &taking.ty, &taking.to, &taking.span);
+                continue;
+            }
+            let mut out = last;
+            while out > 0 {
+                out = out - 1;
+                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(out)).frame <= taking.bound || (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(out))).revives(&taking.path) { break; }
+                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(out)).leaves {
+                    self.repeats[nikaia_std::index::at(out)].held.push(taking.clone());
+                    break;
+                }
+            }
+        }
+    }
+    pub(crate) fn a_turn_follows(&self, ending: i64, taking: &CheckHeldTaking) -> bool {
+        let mut at = taking.from;
+        while at < self.ways_out.len() as i64 {
+            let way = (*nikaia_std::index::get(&self.ways_out, nikaia_std::index::at(at))).clone();
+            at = at + 1;
+            if choices_apart(&taking.choices, &way.choices) { continue; }
+            if way.how == "continue" && way.in_loop == ending { return true; }
+            let leaves = way.how == "return" || way.how == "throw" || way.how == "break" && way.in_loop == ending;
+            let on_every_path = way.choices.iter().all(|choice| { taking.choices.contains(&choice) }) && taking.loops.contains(&way.in_loop);
+            if leaves && on_every_path { return false; }
+        }
+        true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

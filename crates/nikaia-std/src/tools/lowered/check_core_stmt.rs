@@ -1342,7 +1342,7 @@ pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &Check
     let at = check_span_at(world, cond, span);
     state.expect_bool(&cond_ty, &at, "A `while` loop repeats while a `bool` is `true`.");
     let depth = state.scope.len() as i64;
-    state.repeats.push(CheckRepeats::a_loop(world.words, depth, body));
+    state.repeats.push(CheckRepeats::a_loop(world.words, depth, span.start as i64, body));
     let proved = check_narrow_proved_here(state, world, cond, true);
     state.scope.push(proved);
     state.flow.loops += 1;
@@ -1351,6 +1351,7 @@ pub fn check_core_stmt_while<H: CheckHost>(state: &mut CheckState, world: &Check
     state.flow.loops -= 1;
     state.scope.pop();
     check_narrow_turn_ends(state);
+    state.a_loop_ends();
     state.repeats.pop();
     check_core_stmt_unit()
 }
@@ -1579,7 +1580,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     for local in frame.iter() { state.nameable(&local.name, span, "a `for` binding"); }
     let depth = state.scope.len() as i64;
-    state.repeats.push(CheckRepeats::a_loop(world.words, depth, body));
+    state.repeats.push(CheckRepeats::a_loop(world.words, depth, span.start as i64, body));
     check_narrow_turn_begins(state, depth);
     state.scope.push(frame);
     let frame_at = state.scope.len() as i64 - 1;
@@ -1602,6 +1603,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     }
     state.scope.pop();
     check_narrow_turn_ends(state);
+    state.a_loop_ends();
     state.repeats.pop();
     check_core_stmt_unit()
 }

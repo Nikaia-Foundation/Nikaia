@@ -459,7 +459,7 @@ impl CheckState {
         if what == "A guard" {
             word = "guard"
         }
-        self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet(), leaves: false })
+        self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet(), revived_parts: collections::BTreeSet(), leaves: false, opened: -1, held: [] })
         let found = check_core_expr(self, world, host, value, span)
         self.repeats.pop()
         self.scope.pop()

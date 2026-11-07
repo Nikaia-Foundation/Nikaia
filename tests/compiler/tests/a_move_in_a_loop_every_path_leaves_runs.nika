@@ -1,0 +1,90 @@
+// #1366: a value handed over in a loop is not handed over again when a
+// `return` or a `break` of the loop stands on every path after the taking,
+// nor when the loop gives the field it took a new value.
+
+struct Expr {
+    name: String,
+}
+
+struct Holder {
+    e: Expr,
+}
+
+fn kept(a: Expr, b: Expr) -> Expr {
+    if b.name.len() > 5 {
+        return b
+    }
+    return a
+}
+
+fn continue_before(x: Expr, c: bool) -> i64 {
+    let mut all: Vec[Expr] = []
+    for i in 0..<3 {
+        if c && i == 0 {
+            continue
+        }
+        all.push(x)
+        return all.len() as i64
+    }
+    return 0
+}
+
+fn same_arm(x: Expr, c: bool) -> i64 {
+    let mut all: Vec[Expr] = []
+    for _ in 0..<2 {
+        if c {
+            all.push(x)
+            return all.len() as i64
+        }
+    }
+    return 0
+}
+
+fn then_break(x: Expr) -> i64 {
+    let mut all: Vec[Expr] = []
+    for _ in 0..<2 {
+        all.push(x)
+        break
+    }
+    return all.len() as i64
+}
+
+fn inner_break_then_return(x: Expr) -> i64 {
+    let mut all: Vec[Expr] = []
+    for _ in 0..<2 {
+        for _ in 0..<2 {
+            all.push(x)
+            break
+        }
+        return all.len() as i64
+    }
+    return 0
+}
+
+fn field_given_back(c: bool) -> String {
+    let mut h = Holder { e: Expr { name: "a" } }
+    for _ in 0..<2 {
+        h.e = kept(h.e, Expr { name: "b" })
+        if !c {
+            return "left"
+        }
+    }
+    return h.e.name.clone()
+}
+
+fn field_given_back_each_turn() -> String {
+    let mut h = Holder { e: Expr { name: "a" } }
+    for _ in 0..<2 {
+        h.e = kept(h.e, Expr { name: "b" })
+    }
+    return h.e.name.clone()
+}
+
+fn main() {
+    println(continue_before(Expr { name: "a" }, true))
+    println(same_arm(Expr { name: "a" }, true))
+    println(then_break(Expr { name: "a" }))
+    println(inner_break_then_return(Expr { name: "a" }))
+    println(field_given_back(true))
+    println(field_given_back_each_turn())
+}
