@@ -64,7 +64,7 @@ impl SvTseitin {
     pub(crate) fn atom(&mut self, row: SvRow, strict: bool) -> Option<i64> {
         if row.cols.is_empty() {
             let holds = if strict { row.constant < 0 } else { row.constant <= 0 };
-            return if holds { -1 } else { -2 }.into();
+            return if holds { Some(-1) } else { Some(-2) };
         }
         if *nikaia_std::index::get(&row.ks, 0) < 0 {
             let negated = match sv_row_scale(&row, -1) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -167,7 +167,7 @@ impl SvTseitin {
     pub(crate) fn lit(&mut self, arena: &TermArena, id: i64, why: &mut LgWhy) -> Option<i64> {
         let node = arena.at(id);
         match node {
-            SolverTerm::Bool(b) => { return if b { -1 } else { -2 }.into(); },
+            SolverTerm::Bool(b) => { return if b { Some(-1) } else { Some(-2) }; },
             SolverTerm::Not(a) => {
                 let inner = match self.lit(arena, a, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(sv_cnf_not(inner));
@@ -188,8 +188,8 @@ impl SvTseitin {
             lits.push(if parts.conjunction { sv_cnf_not(l) } else { l });
         }
         let clause = sv_cnf_clause(&lits);
-        let either: Vec<u32> = match clause { Some(__nikaia_value) => __nikaia_value, None => return if parts.conjunction { -2 } else { -1 }.into() };
-        if either.is_empty() { return if parts.conjunction { -1 } else { -2 }.into(); }
+        let either: Vec<u32> = match clause { Some(__nikaia_value) => __nikaia_value, None => return if parts.conjunction { Some(-2) } else { Some(-1) } };
+        if either.is_empty() { return if parts.conjunction { Some(-1) } else { Some(-2) }; }
         if either.len() == 1 {
             let l = *nikaia_std::index::get(&either, 0) as i64;
             return Some(if parts.conjunction { sv_cnf_not(l) } else { l });
@@ -281,23 +281,23 @@ impl SvTseitin {
     }
     pub(crate) fn formula_lit(&mut self, formula: &LgFormula) -> Option<i64> {
         match formula {
-            LgFormula::True => -1,
-            LgFormula::False => -2,
+            LgFormula::True => Some(-1),
+            LgFormula::False => Some(-2),
             LgFormula::Le(lin) => {
                 let row = match sv_row_of_lin(lin, &mut self.vars) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                match self.atom(row, false) { Some(__nikaia_value) => __nikaia_value, None => return None }
+                Some(match self.atom(row, false) { Some(__nikaia_value) => __nikaia_value, None => return None })
             },
             LgFormula::And(items) => {
                 let mut lits: Vec<i64> = vec![];
                 for item in items.iter() { lits.push(match self.formula_lit(item) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
-                match self.junction(&SvParts { conjunction: true, lits }) { Some(__nikaia_value) => __nikaia_value, None => return None }
+                Some(match self.junction(&SvParts { conjunction: true, lits }) { Some(__nikaia_value) => __nikaia_value, None => return None })
             },
             LgFormula::Or(items) => {
                 let mut lits: Vec<i64> = vec![];
                 for item in items.iter() { lits.push(match self.formula_lit(item) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
-                match self.junction(&SvParts { conjunction: false, lits }) { Some(__nikaia_value) => __nikaia_value, None => return None }
+                Some(match self.junction(&SvParts { conjunction: false, lits }) { Some(__nikaia_value) => __nikaia_value, None => return None })
             },
-        }.into()
+        }
     }
 }
 

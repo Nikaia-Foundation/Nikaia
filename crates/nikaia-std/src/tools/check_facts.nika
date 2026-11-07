@@ -14,8 +14,6 @@ use std::collections
 pub enum FactWrap {
     /// `Some(value)`: the type is known and is not a `T?`.
     Constructor,
-    /// `value.into()`: the type is not known.
-    Conversion,
     /// Text where a file's name is asked: an `fs::Path` made from it.
     Path,
     /// ...and a view of one.
@@ -35,7 +33,6 @@ pub enum FactKeyForm {
     Handed,
     Lent,
     AsIs,
-    Either,
     /// Text of its own looked up in a map keyed by views of text: read as the
     /// `str` it holds, which every key of text borrows as (#659).
     Viewed,

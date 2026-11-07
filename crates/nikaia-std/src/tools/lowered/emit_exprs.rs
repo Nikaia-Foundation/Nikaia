@@ -61,49 +61,47 @@ pub(crate) fn emit_changes(contract: &FnContract, i: i64) -> bool {
 
 pub(crate) fn emit_two(before: &str, after: &str) -> (String, String) { (before.to_string(), after.to_string()) }
 
-pub fn emit_around(how: Option<&FactWrap>) -> (String, String) {
-    let held = match how { Some(__nikaia_value) => __nikaia_value, None => return emit_two("", "") };
-    emit_around_held(held)
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_around(how: Option<&FactWrap>) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
+    let held = match how { Some(__nikaia_value) => __nikaia_value, None => return Ok(emit_two("", "")) };
+    Ok(emit_around_held(held)?)
 }
 
-pub fn emit_around_held(held: &FactWrap) -> (String, String) {
-    match held {
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn emit_around_held(held: &FactWrap) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
+    Ok(match held {
         FactWrap::Constructor => emit_two("Some(", ")"),
-        FactWrap::Conversion => emit_two("", ".into()"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
         FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
         FactWrap::MappedBytes => emit_two("(", ").bytes()"),
-        FactWrap::Widen(into) => emit_two(&emit_widen(into), ")"),
-        FactWrap::Unsigned(into) => emit_two(&emit_unsigned(into), ")"),
-        FactWrap::WidenSome(into) => emit_two(&format!("Some({}", emit_widen(into)), "))"),
-    }
+        FactWrap::Widen(into) => emit_two(&emit_widen(into)?, ")"),
+        FactWrap::Unsigned(into) => emit_two(&emit_unsigned(into)?, ")"),
+        FactWrap::WidenSome(into) => emit_two(&format!("Some({}", emit_widen(into)?), "))"),
+    })
 }
 
-pub(crate) fn emit_widen(into: &str) -> String {
-    match into {
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_widen(into: &str) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    Ok(match into {
         "u32" => String::from("u32::from("),
         "u64" => String::from("u64::from("),
         "i32" => String::from("i32::from("),
-        _ => String::from("i64::from("),
-    }
+        "i64" => String::from("i64::from("),
+        _ => return Err(nikaia_std::error::throwing(EmitRefused { message: format!("NK1342: the compiler can't tell how a value is widened into `{}`.", into), at: None }, &"emit_widen")),
+    })
 }
 
-pub(crate) fn emit_unsigned(into: &str) -> String {
-    match into {
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn emit_unsigned(into: &str) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    Ok(match into {
         "u32" => String::from("nikaia_std::num::u32_of("),
-        _ => String::from("nikaia_std::num::u64_of("),
-    }
-}
-
-pub fn emit_around_value(how: Option<&FactWrap>, value: &Expr) -> (String, String) {
-    let compound = matches!(value, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Cast { .. } | Expr::Range { .. } | Expr::Coalesce { .. });
-    if compound && emit_a_conversion(how) { return emit_two("(", ").into()"); }
-    emit_around(how)
-}
-
-pub(crate) fn emit_a_conversion(how: Option<&FactWrap>) -> bool {
-    let held = match how { Some(__nikaia_value) => __nikaia_value, None => return false };
-    matches!(held, FactWrap::Conversion)
+        "u64" => String::from("nikaia_std::num::u64_of("),
+        _ => return Err(nikaia_std::error::throwing(EmitRefused { message: format!("NK1342: the compiler can't tell how a value goes into `{}`.", into), at: None }, &"emit_unsigned")),
+    })
 }
 
 impl EmitState {

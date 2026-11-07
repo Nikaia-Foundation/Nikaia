@@ -1,0 +1,39 @@
+// #1285 item 3, ADR-270 D9: with `NIKAIA_DUMP_QUERIES` naming a directory,
+// each question the compiler asks its solvers is written there as SMT-LIB 2
+// (`lg_smtlib_write`), one file per normal form, named by the key of
+// `nikaia.proofs` and stating the answer the compiler took as its
+// `:status` (`unsat` proved, `sat` refuted). `scripts/solver.nika run DIR`
+// measures them.
+use std::fs
+use std::process
+use std::text
+
+fn toolchain() -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
+		],
+	).stdout.trim().clone()
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn main() throws {
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let nikaia = toolchain()
+	process::run("mkdir", ["-p", f"{tmp}/src"])
+	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"dumped\"\nversion = \"0.1.0\"\n")
+	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn step(n: i64) -> i64 sync {\n\tif n > 0 && n < 10 {\n\t\tassert(n + 1 > 1)\n\t}\n\treturn 0\n}\n\nfn main() {\n\tprintln(step(3))\n}\n")
+	let built = process::run(nikaia, ["build", "--no-cache"]; dir: tmp.clone(), env: [("NIKAIA_DUMP_QUERIES", f"{tmp}/dump")])
+	println(f"built: {built.stderr.contains("error") == false}")
+	// Each file in the order of its name, a SHA-256 key: whether it is one,
+	// then the file.
+	let shown = process::run("sh", ["-c", "for f in dump/*.smt2; do echo \"named by a key: $(basename $f .smt2 | grep -cE '^[0-9a-f]{64}$')\"; cat $f; done"]; dir: tmp.clone())
+	print(shown.stdout)
+	process::run("rm", ["-rf", tmp])
+}

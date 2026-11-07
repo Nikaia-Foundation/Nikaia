@@ -2464,7 +2464,7 @@ pub mod check_arguments {
 }
 pub mod check_arith {
     #[allow(unused_imports)]
-    pub use super::{an_or_a_named, is_a_bool_type, text_or_bool_in_arithmetic};
+    pub use super::{an_or_a_named, arith_shown, is_a_bool_type, text_or_bool_in_arithmetic};
 }
 pub mod check_arm_leaves {
     #[allow(unused_imports)]
@@ -2604,7 +2604,7 @@ pub mod check_flow {
 }
 pub mod check_function {
     #[allow(unused_imports)]
-    pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_wrap_tail, check_function_function};
+    pub use super::{check_function_grown_text, check_function_mixed_text, check_function_grammar, check_function_is_branching, check_function_wrap_tail, check_function_function};
 }
 pub mod check_glue {
     #[allow(unused_imports)]
@@ -2675,7 +2675,7 @@ pub mod check_numbers5 {
 }
 pub mod check_overflow {
     #[allow(unused_imports)]
-    pub use super::{check_wrap_for, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_ends_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
+    pub use super::{check_wrap_for, check_wrap_undecided, check_widened_slot, check_overflow_list_into_nullables, check_overflow_tuple_into_nullables, check_overflow_ends_into_nullables, check_overflow_a_nullable, check_unsigned_slot_refused};
 }
 pub mod check_parts {}
 pub mod check_patterns {
@@ -2876,7 +2876,7 @@ pub mod emit_entry {}
 pub mod emit_expr {}
 pub mod emit_exprs {
     #[allow(unused_imports)]
-    pub use super::{emit_around, emit_around_held, emit_around_value};
+    pub use super::{emit_around, emit_around_held};
 }
 pub mod emit_fold {}
 pub mod emit_function {
@@ -3190,7 +3190,7 @@ pub mod project_write {
 }
 pub mod proofs_answers {
     #[allow(unused_imports)]
-    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
+    pub use super::{PROOFS_FILE, PROOFS_LONG_DIR, PROOFS_LONG, PROOFS_SOLVER, ProofsAsked, ProofsEntry, ProofsBook, proofs_book_empty, ProofsSoFar, ProofsKnown, ProofsWhere, proofs_nowhere, proofs_where, ProofsThread, proofs_thread, proofs_shown, proofs_written, proofs_ask, PROOFS_DUMP, ProofsSearch, proofs_invariants_here, proofs_record_at, proofs_asked_so_far, proofs_ask_again_from, proofs_place_of, proofs_byte_of, proofs_book_read, proofs_book_render, proofs_book_write, proofs_book_as_recorded, proofs_book_len};
 }
 pub mod proofs_book {
     #[allow(unused_imports)]

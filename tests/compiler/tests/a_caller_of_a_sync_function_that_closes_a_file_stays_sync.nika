@@ -1,0 +1,28 @@
+use std::fs
+
+// #1285: a function declared `sync` that writes and closes an `fs::File`
+// (#1317) holds its claim for its callers too (ADR-288 D1): `asks` is not
+// declared, calls only `written`, and so is inferred `sync`, which lets the
+// `sync` function `walk` call it. Before, the inference read `written`'s
+// body, took the file's `close` for a pause, and refused `walk` (NK2202).
+fn written(root: ref fs::Root, name: String, text: String) sync {
+	let mut file = fs::open(name, root; write: true, create: true, truncate: true) catch { return }
+	file.write(text) catch { println("write failed") }
+	file.close() catch { println("close failed") }
+}
+
+fn asks(root: ref fs::Root, n: i64) -> i64 {
+	written(root, "asked.txt", f"asked {n}\n")
+	return n + 1
+}
+
+fn walk(root: ref fs::Root, n: i64) -> i64 sync {
+	return asks(root, n) * 2
+}
+
+fn main() throws {
+	let root = fs::scratch()
+	println(walk(root, 3))
+	print(fs::read_to_string("asked.txt", root))
+	fs::remove("asked.txt", root)
+}

@@ -430,7 +430,7 @@ impl EmitState {
         // (a second call, a loop, a recursive call).
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(node) && self.keeps_code_at(method_callee?.clone() ?? callee.clone(), i)
         // Part I 2.3: a plain value in a parameter the callee declares nullable.
-        let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node, arg)
+        let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node)
         // **A count the language below wants in `usize`** (ADR-285 D15), not
         // where the argument is written only in literals, and a `usize` a C
         // declaration names is one too (ADR-302 D6).
@@ -1216,7 +1216,7 @@ impl EmitState {
                 if self.facts.lent_options.contains(node_key(passed.value)) {
                     out.push("&")
                 }
-                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value), passed.value)
+                let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(passed.value))
                 out.push(before)
                 self.emit_expr(world, walk, out, host, passed.value, depth, flow, scope)
                 out.push(after)

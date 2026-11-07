@@ -1,0 +1,9 @@
+error[NK1342]: The compiler can't tell what type this map's keys are, so it can't tell how `k` looks one up.
+   --> tests/a_map_key_of_unknown_type_is_refused.nika:14:2
+    |
+ 14 | 	println(m[k] ?? "n")
+    |  ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the map's type down where it is made, such as `let m: collections::HashMap[K, V] = collections::HashMap()`.
+1 type error

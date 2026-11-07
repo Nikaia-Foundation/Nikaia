@@ -10,24 +10,31 @@ use std::text
 /// **`NK1245` comes after every other refusal** (ADR-286 D41): a type nothing
 /// can tell is most often what another refusal left behind, so where the file
 /// holds another error that error is the one said.
+/// And so does `NK1342`, a value whose type is unknown (#1322).
 fn check_walked_unknown_last(mut state: CheckState) sync {
     let mut other_error = false
+    let mut untold = false
     for f in state.findings.clone() {
         match f.severity {
             CheckSeverity::Error => {
-                if f.code != "NK1245" {
+                if f.code == "NK1245" {
+                    untold = true
+                } else if f.code != "NK1342" {
                     other_error = true
                 }
             }
             else => {}
         }
     }
-    if !other_error {
+    if !other_error && !untold {
         return
     }
+    // A value whose type is unknown (`NK1342`) mostly follows from an
+    // expression the compiler cannot tell (`NK1245`): only the cause stays.
     let mut kept: Vec[CheckFinding] = []
     for f in state.findings.clone() {
-        if f.code != "NK1245" {
+        let dropped = f.code == "NK1342" || (other_error && f.code == "NK1245")
+        if !dropped {
             kept.push(f)
         }
     }

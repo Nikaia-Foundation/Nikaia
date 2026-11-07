@@ -92,26 +92,8 @@ impl EmitState {
 
     /// What a plain value in a field the struct declares nullable is put
     /// between (Part I 2.3), by the value's id.
-    fn emit_place_around(ref self, node: ref Expr, field: ref String, value: ref Expr?) -> (String, String) {
+    fn emit_place_around(ref self, node: ref Expr, field: ref String) -> (String, String) sync throws {
         let held = self.facts.nullable_fields.get((node_key(node), field.clone())) ?? return ("", "")
-        // A conversion of a compound value is parenthesised: `(a - 1).into()`.
-        // A field written by its name alone (`R { x }`) is a name.
-        let present = value ?? return emit_around_held(held)
-        let compound = match present {
-            Expr::Binary { .. } => true,
-            Expr::Unary { .. } => true,
-            Expr::Cast { .. } => true,
-            Expr::Range { .. } => true,
-            Expr::Coalesce { .. } => true,
-            else => false,
-        }
-        let conversion = match held {
-            FactWrap::Conversion => true,
-            else => false,
-        }
-        if compound && conversion {
-            return ("(", ").into()")
-        }
         return emit_around_held(held)
     }
 
@@ -253,7 +235,7 @@ impl EmitState {
             }
             // A part read off a place into a `ref T?` slot goes inside its
             // option (ADR-views-3 D5, #655).
-            let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(part), part)
+            let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(part))
             out.push(before)
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)
             out.push(after)
@@ -648,7 +630,7 @@ impl EmitState {
             // Part I 2.3: a plain value in a field the struct declares nullable,
             // by the value's id.
             let wrapped = self.facts.nullable_fields.contains_key((node_key(node), plain.clone()))
-            let (around_before, around_after) = self.emit_place_around(node, plain, field.value)
+            let (around_before, around_after) = self.emit_place_around(node, plain)
             // **A boxed field is built in its box** (ADR-246 D3), around
             // whatever else the value is wrapped in.
             let boxed = self.is_boxed_field(owner, plain)

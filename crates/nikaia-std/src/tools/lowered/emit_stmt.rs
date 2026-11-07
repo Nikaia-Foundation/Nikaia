@@ -397,7 +397,7 @@ impl EmitState {
             let pattern = emit_stmt_tuple_pattern(&bound, shape);
             if mut_word != "" { out.push("#[allow(unused_mut)] "); }
             out.push(&format!("let {} = ", pattern));
-            let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+            let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
             out.push(&before);
             if mut_word == "" && self.facts.lent_lets.contains(&at) { out.push("&"); }
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
@@ -435,7 +435,7 @@ impl EmitState {
             out.push(");");
             return Ok(());
         }
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
         out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
         out.push(&before);
         match value {
@@ -502,7 +502,7 @@ impl EmitState {
         }
         if self.emit_stmt_assign_slot(world, walk, out, host, target, op, value, span, depth, flow, scope)? { return Ok(()); }
         if self.emit_stmt_assign_proven(world, walk, out, host, target, op, value, span, depth, flow, scope)? { return Ok(()); }
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
         match target {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -566,7 +566,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_stmt_assign_index<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
@@ -622,7 +622,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_stmt_assign_held<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, keeper: &Expr, index: &Expr, field: winnow_grammar::Symbol, op: Option<&BinaryOp>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
-        let (before, after) = emit_around_value(self.facts.nullable_sites.get(&at), value);
+        let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;

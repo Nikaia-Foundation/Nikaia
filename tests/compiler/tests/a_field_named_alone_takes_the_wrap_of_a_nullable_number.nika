@@ -1,0 +1,20 @@
+// `P { x }` hands an open number to a field of `i64?`: it is `Some(x)`
+// (Part I 2.4), as `P { x: x }` is, and a struct of the same field name
+// holding a plain `i64` takes none (#1322).
+struct P {
+	x: i64?,
+}
+
+struct Q {
+	x: i64,
+}
+
+fn hold(a: ref P, b: ref Q) -> i64 {
+	return (a.x ?? 0) + b.x
+}
+
+fn main() {
+	let x = 1
+	let r = hold(P { x }, Q { x })
+	println(f"{r}")
+}
