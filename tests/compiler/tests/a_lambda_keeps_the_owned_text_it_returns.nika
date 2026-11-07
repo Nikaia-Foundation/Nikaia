@@ -1,0 +1,29 @@
+// A lambda handed where a function type's result owns its text keeps the
+// text it owns (#1264): a `.clone()` of a view of its parameter, a copy of a
+// capture, static text and text it built, as its last value or a `return`.
+
+fn apply(f: fn(s: String) -> String, s: String) -> String {
+	return f(s)
+}
+
+fn lend(f: fn(ref String) -> String, s: String) -> String {
+	return f(s)
+}
+
+fn main() {
+	let g: String = "  hi  "
+	let outer: String = "hi"
+	println(apply(fn(s) { s.trim().clone() }, g))
+	println(lend(fn(s) { s.trim().clone() }, g))
+	println(apply(fn(_s) { outer.clone() }, g))
+	println(apply(fn(_s) { "hi" }, g))
+	println(apply(fn(s) { f"{s.trim()}!" }, g))
+	println(apply(fn(s) {
+		if s.len() > 100 {
+			return "long"
+		}
+		s.trim().clone()
+	}, g))
+	let f: fn(s: String) -> String = fn(s) { s.trim().clone() }
+	println(f(g))
+}

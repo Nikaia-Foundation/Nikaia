@@ -1,0 +1,33 @@
+error[NK1104]: This lambda returns `ref String`, a view, but `fn(ref String) -> String` returns text of its own.
+   --> tests/a_lambda_that_returns_a_view_where_text_is_owned_is_refused.nika:18:24
+    |
+ 18 | 	println(apply(fn(s) { s.trim().to_string() }, g))
+    |                        ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.
+    = help: Hand back a copy with `.clone()`.
+error[NK1104]: This lambda returns `ref String`, a view, but `fn(ref String) -> String` returns text of its own.
+   --> tests/a_lambda_that_returns_a_view_where_text_is_owned_is_refused.nika:19:23
+    |
+ 19 | 	println(lend(fn(s) { s.trim().to_string() }, g))
+    |                       ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.
+    = help: Hand back a copy with `.clone()`.
+error[NK1104]: This lambda returns `ref String`, a view, but `fn(ref String) -> String` returns text of its own.
+   --> tests/a_lambda_that_returns_a_view_where_text_is_owned_is_refused.nika:22:4
+    |
+ 22 | 			return s.trim().to_string()
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.
+    = help: Hand back a copy with `.clone()`.
+error[NK1104]: This lambda returns `ref String`, a view, but `fn(ref String) -> String` returns text of its own.
+   --> tests/a_lambda_that_returns_a_view_where_text_is_owned_is_refused.nika:26:43
+    |
+ 26 | 	let f: fn(s: String) -> String = fn(s) { s.trim().to_string() }
+    |                                           ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.
+    = help: Hand back a copy with `.clone()`.
+4 type errors

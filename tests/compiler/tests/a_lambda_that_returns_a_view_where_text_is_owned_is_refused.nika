@@ -1,0 +1,28 @@
+// A lambda handed where a function type's result is `String` without `from`
+// hands back text of its own (#1264, ADR-views-3 D12, D14): `.to_string()` of
+// text is a view of the lambda's lent parameter (ADR-282 D8), so it is
+// `NK1104` with the help `.clone()`, whether the type writes the parameter
+// `s: String` or `ref String`, as a last value or a `return`, and where a
+// typed `let` holds the lambda.
+
+fn apply(f: fn(s: String) -> String, s: String) -> String {
+	return f(s)
+}
+
+fn lend(f: fn(ref String) -> String, s: String) -> String {
+	return f(s)
+}
+
+fn main() {
+	let g: String = "  hi  "
+	println(apply(fn(s) { s.trim().to_string() }, g))
+	println(lend(fn(s) { s.trim().to_string() }, g))
+	println(apply(fn(s) {
+		if s.len() > 100 {
+			return s.trim().to_string()
+		}
+		"short"
+	}, g))
+	let f: fn(s: String) -> String = fn(s) { s.trim().to_string() }
+	println(f(g))
+}
