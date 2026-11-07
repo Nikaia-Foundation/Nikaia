@@ -305,7 +305,7 @@ fn a_maps_decided_number_is_written_on_its_literals() {
          m.entry(3000000000).or_insert(1)\n    println(f\"{m[2] ?? 0}\")\n}\n",
     );
     assert!(rust.contains("entry(3000000000i64)"), "{rust}");
-    assert!(rust.contains("key(2i64)"), "{rust}");
+    assert!(rust.contains("&2i64"), "{rust}");
 }
 
 /// **A choice between numbers is one open number** (#497): `let taken = if c

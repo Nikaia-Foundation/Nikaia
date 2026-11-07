@@ -653,8 +653,8 @@ fn main() {
 
 /// **And a value it can type keeps the constructor**, which is what the second
 /// form is for: the generated Rust goes on saying `Some(…)` wherever the
-/// compiler knows enough to say it, so the conversion is what uncertainty
-/// costs rather than what every program pays.
+/// compiler knows enough to say it. What it cannot type is not converted by
+/// guess: it is refused with `NK1342` (#1322).
 ///
 /// The untypeable half used to be `self.name.clone()` and is
 /// `common::undescribed_value`'s method now:
@@ -665,29 +665,21 @@ fn main() {
 /// better, and a test that had been resting on it.
 #[test]
 fn a_value_of_known_type_still_gets_the_constructor() {
-    let unknown = common::undescribed_value("self.name");
-    let rust = lowered(&format!(
+    let rust = lowered(
         "\
-struct U {{ name: String }}
+struct U { name: String }
 
-impl U {{
-    fn known(ref self) -> String? {{ return \"lit\" }}
-    fn unknown(ref self) -> String? {{ return {unknown} }}
-}}
+impl U {
+    fn known(ref self) -> String? { return \"lit\" }
+}
 
-fn free() -> String? {{ return \"lit\" }}
+fn free() -> String? { return \"lit\" }
 ",
-    ));
+    );
     assert!(
         rust.contains("Some(\"lit\")"),
         "a known type keeps the constructor:\n{rust}"
     );
-    assert!(
-        rust.contains(&format!("{unknown}.into()")),
-        "an unknown one takes the conversion:\n{rust}"
-    );
-    // Two of the three are `Some(…)`, so the conversion is the exception rather
-    // than the rule - the `impl` and the free function alike.
     assert_eq!(rust.matches("Some(\"lit\")").count(), 2, "{rust}");
 }
 
