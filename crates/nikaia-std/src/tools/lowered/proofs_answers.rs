@@ -298,11 +298,21 @@ pub(crate) fn proofs_dump(normal: &LgNormal, asked: &ProofsAsked) { nikaia_std::
     };
     match file.write(text) {
         Ok(_) => {},
-        Err(error) => { eprintln!("{}: {}/{}.smt2: {}", PROOFS_DUMP, dir, key, error); },
+        Err(error) => {
+            match nikaia_std::io::eprintln(format_args!("{}: {}/{}.smt2: {}", PROOFS_DUMP, dir, key, error)) {
+                Ok(_) => {},
+                Err(_error) => { },
+            };
+        },
     };
     match file.close_sync() {
         Ok(_) => {},
-        Err(error) => { eprintln!("{}: {}/{}.smt2: {}", PROOFS_DUMP, dir, key, error); },
+        Err(error) => {
+            match nikaia_std::io::eprintln(format_args!("{}: {}/{}.smt2: {}", PROOFS_DUMP, dir, key, error)) {
+                Ok(_) => {},
+                Err(_error) => { },
+            };
+        },
     };
 }) }
 

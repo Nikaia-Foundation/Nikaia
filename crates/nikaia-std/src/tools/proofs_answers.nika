@@ -377,8 +377,8 @@ fn proofs_dump(normal: ref LgNormal, asked: ref ProofsAsked) sync {
     let key = hash::sha256_hex(normal.text().bytes().collect())
     fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { return }
     let mut file = fs::open(f"{dir}/{key}.smt2", fs::Root::Anywhere; write: true, create: true, truncate: true) catch { return }
-    file.write(text) catch { eprintln(f"{PROOFS_DUMP}: {dir}/{key}.smt2: {error}") }
-    file.close() catch { eprintln(f"{PROOFS_DUMP}: {dir}/{key}.smt2: {error}") }
+    file.write(text) catch { eprintln(f"{PROOFS_DUMP}: {dir}/{key}.smt2: {error}") catch {} }
+    file.close() catch { eprintln(f"{PROOFS_DUMP}: {dir}/{key}.smt2: {error}") catch {} }
 }
 
 /// The reference solver's answer, and what to record of it.
