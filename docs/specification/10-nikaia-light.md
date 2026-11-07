@@ -3778,7 +3778,8 @@ and cancels none.
 task whose body has no panic site, and calls nothing that can panic, adds no
 failure, so nothing is asked of the code around it; one that can panic makes
 the form throw `task::Crashed`, which is caught or declared with `throws` as
-any failure is ([ADR-async-5](adr/adr-async-5.md) D35). A task whose memory block is full ends with
+any failure is ([ADR-async-5](adr/adr-async-5.md) D35). A crash that the
+task's own fallback takes is handled there and cancels no sibling (D36). A task whose memory block is full ends with
 `task::OverBudget` (Part II, Chapter 12) and fails only itself.
 
 **A body that holds an `async` form pauses**, so it is not `sync`, whatever
