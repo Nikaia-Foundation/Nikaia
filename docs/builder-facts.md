@@ -103,4 +103,9 @@ together with the specification section and an example test.
 * A two-file package test puts the struct in `tests/compiler/src/X_beside.nika` and the user in `X_beside_caller.nika`, and the program in `tests/` calls it as `compiler_tests::fn`. (issue-1272)
 * `cargo test -p nikaia --lib text_tiers::` runs 0 tests; the tier pass is covered only by tests/compiler programs. (issue-1272)
 * The cycle in builder.md writes `target/fast/nikaia lower-std` first, but after a failed attempt that binary holds the bad logic; run `$S/old/nikaia lower-std` first. (issue-1274)
+* A new `sv_*.nika` must be added to `solver_engine_files()` and to the hard-coded file lists in ten `tests/compiler/tests/solver_*.nika`. (issue-1339)
+* `test` is a reserved word, and the error shows only once the concatenated solver program is built. (issue-1339)
+* When the before binary's `lower-std` fails on files nobody changed, put HEAD's version of your own `.rs` files back, build, lower, then restore them and build again. (issue-1350)
+* Test programs had only `.stdout`, `.stderr`, `.stops`, `.bounds` and `.loops.bounds` expectations until `.asserts` (#1350); a new report expectation goes through `project_tests_bounds_outcome` and the host's `explained(args)`. (issue-1350)
+* A change to the `check --asserts` header breaks `it` tests `assert::asserts_reports_every_claim` and `assume::asserts_lists_every_assume`, which match it exactly. (issue-1350)
 
