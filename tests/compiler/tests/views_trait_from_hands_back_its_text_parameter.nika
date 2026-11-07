@@ -1,0 +1,31 @@
+// A trait method whose result says `from` and hands back the text parameter
+// it names, whole, lends that parameter in the impl as the trait does
+// (ADR-views-3 D2, D8, #1250): `return a` under `from a` keeps nothing, so
+// the impl's `a: String` is lowered as the trait's view, with one lifetime.
+trait Pick {
+    fn pick(a: String) -> String from a
+    fn either(a: String, b: String, n: i64) -> String from a | b
+}
+
+struct P {}
+
+impl Pick for P {
+    fn pick(a: String) -> String from a {
+        return a
+    }
+    fn either(a: String, b: String, n: i64) -> String from a | b {
+        if n > 1 {
+            return a
+        }
+        return b
+    }
+}
+
+fn main() {
+    let t = "hi"
+    println(P::pick(t))
+    let mut u = "h"
+    u.push_str("o")
+    println(P::either(t, u, 2))
+    println(P::either(t, u, 0))
+}

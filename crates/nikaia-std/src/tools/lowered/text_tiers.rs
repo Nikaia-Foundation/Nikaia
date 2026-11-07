@@ -5274,17 +5274,19 @@ pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, V
     out
 }
 
-pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext) {
+pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let plain = hb_plain_enums(&program.items, words);
     let opted = keep_marks_opted_in_items(&program.items);
     let mut views: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
+    let mut made: collections::BTreeSet<String> = collections::BTreeSet::new();
     loop {
         let before = views.len() as i64;
-        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted, &mut views); }
+        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted, &mut views, &mut made); }
         if (views.len() as i64) == before { break; }
     }
     sf_slice_fields(program, words);
     sv_view_fields(program, words, &plain, opted);
+    made
 }
 
 pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext) {
@@ -5511,16 +5513,50 @@ pub(crate) fn sv_through_an_index(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>) {
+pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, made: &mut collections::BTreeSet<String>) {
     match item {
         Item::Fn { .. } => { hb_fn(item, words, plain, opted, views, true); },
-        Item::Impl { trait_name, methods, .. } => {
+        Item::Impl { trait_name, target, methods } => {
             let trait_name = *trait_name;
-            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted, views, false); } }
+            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted, views, false); } } else {
+                let owner = words.resolve(target.name).to_string();
+                for method in methods.iter_mut() { hb_trait_from(&mut (*method).node, words, &owner, made); }
+            }
         },
         _ => { },
     }
 }
+
+pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerContext, owner: &str, made: &mut collections::BTreeSet<String>) {
+    match item {
+        Item::Fn { name, args, ret_type, is_extern, ret_from, .. } => {
+            let is_extern = *is_extern; let name = *name;
+            if is_extern || ret_from.is_empty() { return; }
+            let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return };
+            let key = format!("{}::{}", owner, words.resolve(symbol));
+            let mut at = 0;
+            for arg in args.iter_mut() {
+                let named = ret_from.iter().any(|source| { words.resolve(*source) == words.resolve((*arg).name) });
+                if named && !(*arg).keep && !(*arg).mutable && hb_plain_text(&(*arg).ty, words) {
+                    hb_set(&mut (*arg).ty);
+                    made.insert(format!("param {} {}", key, at));
+                }
+                at += 1;
+            }
+            let text_result = match ret_type {
+                Some(t) => hb_plain_text(t, words),
+                None => false,
+            };
+            if text_result {
+                hb_set_maybe(&mut *ret_type);
+                made.insert(format!("result {}", key));
+            }
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn hb_plain_text(t: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_nullable && !t.is_mut && !t.is_slice && (*t.code).is_none() }
 
 pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
     match item {

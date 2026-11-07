@@ -7107,14 +7107,18 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// A call of a function of the file whose result is a view hands back a view
 /// of what it is given there (D8, #1266): `return rest(xs)` is a view of `xs`
 /// once `rest`'s result is one, so the pass runs until no result changes.
-pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) {
+/// It returns the text positions it made views in an impl of a trait
+/// (`hb_trait_from`), keyed as `tw_views` keys the tiers' own: they were
+/// written `String`, so `NK1261` does not read them as a written `ref`.
+pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
     let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
     let mut views: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    let mut made: collections::BTreeSet[String] = collections::BTreeSet()
     while true {
         let before = views.len()
         for mut item in program.items {
-            hb_item(item.node, words, plain, opted, views)
+            hb_item(item.node, words, plain, opted, views, made)
         }
         if views.len() == before {
             break
@@ -7122,6 +7126,7 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
     }
     sf_slice_fields(program, words)
     sv_view_fields(program, words, plain, opted)
+    return made
 }
 
 /// **A field `Array[T]` with no length that the file fills only with a place
@@ -7420,18 +7425,63 @@ fn sv_through_an_index(expr: ref Expr) -> bool {
 
 /// `views` holds, for each free function of the file whose result the pass
 /// made a view, the positions of the parameters it points into.
-fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]]) {
+fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
     match item {
         Item::Fn { .. } => hb_fn(item, words, plain, opted, views, true),
-        Item::Impl { trait_name, methods, .. } => {
+        Item::Impl { trait_name, target, methods } => {
             if trait_name == null {
                 for mut method in methods {
                     hb_fn(method.node, words, plain, opted, views, false)
+                }
+            } else {
+                let owner = words.resolve(target.name).clone()
+                for mut method in methods {
+                    hb_trait_from(method.node, words, owner, made)
                 }
             }
         },
         else => {},
     }
+}
+
+/// **An impl's method written `from` takes the trait's signature** (ADR-views-3
+/// D2, D8, D14, #1250): the trait lowers a plain `String` its `from` names,
+/// and a `String` result, as views (`emit_item_lent_view`), so the impl's are
+/// views too, whatever its body hands back; `return a` under `from a` then
+/// lends `a`. Only text: any other type keeps the lowering the trait gives it.
+fn hb_trait_from(mut item: Item, words: ref winnow_grammar::InternerContext, owner: ref String, mut made: collections::BTreeSet[String]) {
+    match item {
+        Item::Fn { name, args, ret_type, is_extern, ret_from, .. } => {
+            if is_extern || ret_from.is_empty() {
+                return
+            }
+            let symbol = name ?? return
+            let key = f"{owner}::{words.resolve(symbol)}"
+            let mut at = 0
+            for mut arg in args {
+                let named = ret_from.iter().any(fn(source) { words.resolve(source) == words.resolve(arg.name) })
+                if named && !arg.keep && !arg.mutable && hb_plain_text(arg.ty, words) {
+                    hb_set(arg.ty)
+                    made.insert(f"param {key} {at}")
+                }
+                at += 1
+            }
+            let text_result = match ret_type {
+                t => hb_plain_text(t, words),
+                null => false,
+            }
+            if text_result {
+                hb_set_maybe(ret_type)
+                made.insert(f"result {key}")
+            }
+        },
+        else => {},
+    }
+}
+
+/// A `String` written plain: no view yet, no option, no code, no slice.
+fn hb_plain_text(t: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+    return words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_nullable && !t.is_mut && !t.is_slice && t.code == null
 }
 
 /// `free`: a function of the file, not a method; only such a one is entered
