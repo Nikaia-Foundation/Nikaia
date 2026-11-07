@@ -635,6 +635,12 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             _ => { },
         }
     }
+    if ty.is_none() && names.len() == 1 && shape.is_empty() {
+        match found {
+            Ty::Named { ref name, ref args, view } => { if args.is_empty() && !view && is_whole_number(name) { state.facts.whole_lets.insert(span.start as i64, name.to_string()); } },
+            _ => { },
+        }
+    }
     if ty.is_some() && names.len() == 1 && shape.is_empty() {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let declared = written_ty(world.words, world.here.aliases, t);

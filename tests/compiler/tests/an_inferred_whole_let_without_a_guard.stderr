@@ -1,0 +1,10 @@
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.
+  --> tests/an_inferred_whole_let_without_a_guard.nika:8:5
+   |
+ 8 |     assert(n > 0)
+   |     ^^^^^^
+   |
+   = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+   = note: `nikaia check --asserts` lists every claim and why it is not proved.
+   = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+1 type error

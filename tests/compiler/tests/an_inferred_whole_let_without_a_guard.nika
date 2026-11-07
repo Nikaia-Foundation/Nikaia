@@ -1,0 +1,10 @@
+// Without the guard the claim about the inferred whole-number `let` is not
+// proved (#1358).
+use std::io
+use std::text
+fn main() throws {
+    let s = io::read_to_string()
+    let n = text::parse_i64(s.trim()) ?? 0
+    assert(n > 0)
+    println(f"{n}")
+}

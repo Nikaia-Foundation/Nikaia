@@ -17,6 +17,7 @@ pub struct ProverState {
     pub value_readers: collections::BTreeSet<String>,
     pub pinned: collections::BTreeMap<String, i64>,
     pub comptime_at: collections::BTreeMap<i64, i64>,
+    pub whole_lets: collections::BTreeMap<i64, String>,
     pub call_sites: collections::BTreeMap<String, Expr>,
     pub call_args: collections::BTreeMap<String, (String, Vec<i64>)>,
     pub wanted: collections::BTreeSet<String>,
@@ -40,7 +41,7 @@ pub struct ProverState {
 }
 
 impl ProverState {
-    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), value_readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
+    pub fn fresh() -> ProverState { ProverState { foreign: collections::BTreeMap::new(), preconditions: collections::BTreeMap::new(), known: collections::BTreeMap::new(), edges: collections::BTreeSet::new(), candidates: collections::BTreeMap::new(), postconditions: collections::BTreeMap::new(), broken: collections::BTreeSet::new(), before_return: collections::BTreeMap::new(), collecting: true, in_test: false, readers: collections::BTreeSet::new(), value_readers: collections::BTreeSet::new(), pinned: collections::BTreeMap::new(), comptime_at: collections::BTreeMap::new(), whole_lets: collections::BTreeMap::new(), call_sites: collections::BTreeMap::new(), call_args: collections::BTreeMap::new(), wanted: collections::BTreeSet::new(), not_run: collections::BTreeMap::new(), stopped: collections::BTreeMap::new(), summaries: collections::BTreeMap::new(), summing: vec![], unsummed: false, second_queries: 0, loops_found: collections::BTreeMap::new(), loops_failed: collections::BTreeSet::new(), loop_claims: 0, loop_queries: 0, loops_recorded: collections::BTreeMap::new(), loops_used: collections::BTreeMap::new(), loops_searched: 0, loops_read: 0, loops_unfound: 0, divisor_queries: 0, divisor_notes: collections::BTreeMap::new() } }
     pub fn reaches(&self, from: &str, to: &str) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut next: Vec<String> = vec![from.to_string()];

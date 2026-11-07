@@ -804,6 +804,18 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             else => {}
         }
     }
+    // **A whole number bound without a type is one to the prover** (#1358):
+    // `let n = text::parse_i64(s) ?? 0` is read as `let n: i64 = …` is.
+    if ty == null && names.len() == 1 && shape.len() == 0 {
+        match found {
+            Ty::Named { name, args, view } => {
+                if args.is_empty() && !view && is_whole_number(name) {
+                    state.facts.whole_lets.insert(span.start as i64, name.clone())
+                }
+            },
+            else => {}
+        }
+    }
     // **A map's read past a jump, bound to a declared type that owns its
     // value** (ADR-293 D15): refused or copied out as an assignment's is.
     if ty != null && names.len() == 1 && shape.len() == 0 {

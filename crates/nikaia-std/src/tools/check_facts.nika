@@ -171,6 +171,10 @@ pub struct CheckFacts {
     /// the bounds walk reads a path of fields to one as a number. And the
     /// calls of that type a `let` binds (#781).
     pub whole_fields: collections::BTreeSet[i64],
+    /// **Each `let` of one name without a written type whose value is a whole
+    /// number**, by the statement's start, with the type (#1358): the prover
+    /// reads the name as a whole number, as it reads `let n: i64`.
+    pub whole_lets: collections::BTreeMap[i64, String],
     /// **The `N` of each `Array[T, N]` read or counted**, by node (#711).
     pub array_lengths: collections::BTreeMap[i64, i64],
     pub char_codes: collections::BTreeSet[i64],
@@ -578,6 +582,7 @@ impl CheckFacts {
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),
             whole_fields: collections::BTreeSet(),
+            whole_lets: collections::BTreeMap(),
             array_lengths: collections::BTreeMap(),
             char_codes: collections::BTreeSet(),
             arithmetic: collections::BTreeMap(),
