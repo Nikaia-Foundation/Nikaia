@@ -5439,7 +5439,7 @@ pub(crate) fn lv_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, 
     match stmt {
         Stmt::Let { names, mutable, ty, value, .. } => {
             let mutable = *mutable;
-            if names.len() == 1 && !mutable && lv_a_piece(value, words, views) { lv_mark(&mut *ty, words); }
+            if names.len() == 1 && !mutable && lv_a_piece(value, words, views) { lv_mark(&mut *ty, words, lv_a_cut_or_call(value)); }
         },
         Stmt::For { body, .. } => { lv_block(&mut *body, words, views); },
         Stmt::While { body, .. } => { lv_block(&mut *body, words, views); },
@@ -5455,13 +5455,22 @@ pub(crate) fn lv_a_piece(value: &Expr, words: &winnow_grammar::InternerContext, 
     }
 }
 
-pub(crate) fn lv_mark(ty: &mut Option<Type>, words: &winnow_grammar::InternerContext) { if ty.is_some() { lv_mark_run(ty.as_mut().unwrap(), words); } }
+pub(crate) fn lv_a_cut_or_call(value: &Expr) -> bool {
+    match value {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); sf_a_cut(index) },
+        Expr::Call { .. } => true,
+        _ => false,
+    }
+}
 
-pub(crate) fn lv_mark_run(ty: &mut Type, words: &winnow_grammar::InternerContext) { if sf_a_run(&ty, words) { ty.is_view = true; } }
+pub(crate) fn lv_mark(ty: &mut Option<Type>, words: &winnow_grammar::InternerContext, cut_or_call: bool) { if ty.is_some() { lv_mark_run(ty.as_mut().unwrap(), words, cut_or_call); } }
+
+pub(crate) fn lv_mark_run(ty: &mut Type, words: &winnow_grammar::InternerContext, cut_or_call: bool) { if sf_a_run(&ty, words) || cut_or_call && sf_a_buffer(&ty, words) { ty.is_view = true; } }
 
 pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::InternerContext) {
     let mut filled: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
-    for item in program.items.iter() { sf_item(&item.node, words, &mut filled); }
+    let mut pieces: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for item in program.items.iter() { sf_item(&item.node, words, &mut filled, &mut pieces); }
     for item in program.items.iter_mut() {
         match &mut (*item).node {
             Item::Struct { name, fields, is_extern, .. } => {
@@ -5470,7 +5479,7 @@ pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::Int
                     let of = words.resolve(name).to_string();
                     for field in fields.iter_mut() {
                         let key = format!("{}.{}", of, words.resolve((*field).name));
-                        if sf_a_run(&(*field).ty, words) && nikaia_std::index::or(filled.get(&key), || false) { (*field).ty.is_view = true; }
+                        if sf_a_run(&(*field).ty, words) && nikaia_std::index::or(filled.get(&key), || false) { (*field).ty.is_view = true; } else if sf_a_buffer(&(*field).ty, words) && nikaia_std::index::or(pieces.get(&key), || false) { (*field).ty.is_view = true; }
                     }
                 }
             },
@@ -5479,15 +5488,28 @@ pub(crate) fn sf_slice_fields(program: &mut Program, words: &winnow_grammar::Int
     }
 }
 
-pub(crate) fn sf_item(item: &Item, words: &winnow_grammar::InternerContext, filled: &mut collections::BTreeMap<String, bool>) {
+pub(crate) fn sf_item(item: &Item, words: &winnow_grammar::InternerContext, filled: &mut collections::BTreeMap<String, bool>, pieces: &mut collections::BTreeMap<String, bool>) {
     match item {
-        Item::Fn { body, .. } => { sf_body(body, words, filled); },
-        Item::Impl { methods, .. } => { for method in methods.iter() { sf_item(&method.node, words, filled); } },
+        Item::Fn { args, body, .. } => {
+            let lent: Vec<String> = args.iter().filter(|&arg| { !arg.keep && !arg.mutable && !arg.ty.is_mut && !arg.ty.is_nullable && (*arg.ty.code).is_none() && arg.ty.generics.is_empty() && words.resolve(arg.ty.name) == "Bytes" }).map(|arg| { words.resolve(arg.name).to_string() }).collect::<Vec<_>>();
+            sf_body(body, words, &lent, filled, pieces);
+        },
+        Item::Impl { methods, .. } => { for method in methods.iter() { sf_item(&method.node, words, filled, pieces); } },
         _ => { },
     }
 }
 
-pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, filled: &mut collections::BTreeMap<String, bool>) {
+pub(crate) fn sf_a_piece(value: &Expr, words: &winnow_grammar::InternerContext, lent: &[String]) -> bool {
+    match value {
+        Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); sf_a_cut(index) && hb_place_root(value, words).is_some() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::list::contains(&lent, &words.resolve(name)) },
+        _ => false,
+    }
+}
+
+pub(crate) fn sf_a_cut(index: &Expr) -> bool { matches!(index, Expr::Range { .. }) }
+
+pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, lent: &[String], filled: &mut collections::BTreeMap<String, bool>, pieces: &mut collections::BTreeMap<String, bool>) {
     for expr in visited_in_block(body) {
         match expr {
             Expr::StructLit { name, fields, .. } => {
@@ -5498,8 +5520,14 @@ pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, fil
                         None => true,
                         Some(value) => hb_place_root(value, words).is_some(),
                     };
+                    let piece = match &init.value {
+                        None => nikaia_std::list::contains(&lent, &words.resolve(init.name)),
+                        Some(value) => sf_a_piece(value, words, lent),
+                    };
                     let key = format!("{}.{}", of, words.resolve(init.name));
                     let before = nikaia_std::index::or(filled.get(&key), || true);
+                    let cut_before = nikaia_std::index::or(pieces.get(&key), || true);
+                    pieces.insert(key.to_string(), cut_before && piece);
                     filled.insert(key, before && place);
                 }
             },
@@ -5507,6 +5535,8 @@ pub(crate) fn sf_body(body: &Block, words: &winnow_grammar::InternerContext, fil
         }
     }
 }
+
+pub(crate) fn sf_a_buffer(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && (*ty.code).is_none() && ty.generics.is_empty() && words.resolve(ty.name) == "Bytes" }
 
 pub(crate) fn sf_a_run(ty: &Type, words: &winnow_grammar::InternerContext) -> bool { !ty.is_view && !ty.is_slice && !ty.is_mut && !ty.is_nullable && ty.count.is_none() && (*ty.code).is_none() && ty.generics.len() == 1 && words.resolve(ty.name) == "Array" }
 

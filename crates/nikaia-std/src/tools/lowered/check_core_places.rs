@@ -666,6 +666,7 @@ pub(crate) fn check_core_places_a_local_lent(state: &CheckState, world: &CheckWo
     match value {
         Expr::Variable(name, _) => { let name = *name; state.binding(world.words.resolve(name)).is_some() },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); check_core_places_a_local_lent(state, world, base) },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); check_core_places_a_range(index) && check_core_places_a_local_lent(state, world, base) },
         _ => false,
     }
 }

@@ -1185,6 +1185,12 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     }
     if bytes_view {
         state.text_bytes_lets.insert(id)
+        // **A `let` that declares `Bytes` holds the view too** (ADR-views-3
+        // D15, #1271): `let b: Bytes = s.bytes` is written without its
+        // annotation, as `let b = s.bytes` is.
+        if ty != null {
+            state.facts.text_bytes_typed_lets.insert(span.start as i64)
+        }
     }
     // **A position a text handed out keeps where it came from** (ADR-320 D5).
     if !mutable && names.len() == 1 && shape.len() == 0 {
