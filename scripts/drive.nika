@@ -56,8 +56,8 @@
 //
 // Output: one line per agent run (`builder done ...`).
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
-// agent.nika, a stop line (above), `--max` agent runs (default 8), a push
-// rejected after one merge, a suite still red after 2 QA rounds. A RED line
+// agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
+// conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
 // with a builder queued goes on with it (the supervisor's fix-forward brief).
 //
 // `--ignore-ci-red`: a RED line of the cycle (CI red on develop) does not
@@ -121,9 +121,11 @@
 // sha CI already passed on a ci/ branch skips the heavy jobs (nikaia.yml).
 // Green: `git push origin <sha>:develop`, exactly the tested commit; when
 // rejected (other sessions push too), `git merge --autostash` of
-// `origin/develop` and push HEAD: the merge is CI's to judge (a merge, not a
-// rebase, 2026-11-05: a rebase replays the tested commits). Still rejected:
-// escalate. A conflicted merge is never left open in the shared checkout (2026-10-31: both
+// `origin/develop`, the short checks on the merge (`MERGE <sha8> short checks`:
+// the compiler built, the tests named after the changed scripts and the changed
+// tests) and push exactly the merge commit (a merge, not a rebase, 2026-11-05: a
+// rebase replays the tested commits). Short checks red, or rejected again:
+// nothing pushed, the merge stays in HEAD and the next suite tests it. A conflicted merge is never left open in the shared checkout (2026-10-31: both
 // lanes write docs/briefs/, and the checkout stayed mid-rebase until fixed by
 // hand): the conflicted paths are noted, `git merge --abort` (HEAD and the
 // autostash restored), and `ESCALATE drive: push rejected, merge conflicted in
@@ -321,11 +323,14 @@ fn drive_say(dry: bool, line: String) throws {
 	if dry { println(f"would run: {line}") }
 }
 
-// Pushes the tested commit; rejected, merges `origin/develop` once and pushes
-// HEAD (the merge is CI's to judge; a merge, not a rebase: a rebase replays the
-// tested commits and, on 2026-11-05, deleted every brief a replayed commit had
-// untracked). Prints `PUSHED <sha8>`. "head" when HEAD was pushed (after the
-// merge), "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
+// Pushes the tested commit; rejected, merges `origin/develop` once, runs the
+// short checks on the merge (drive_merge_check: two lanes each green alone can
+// be red together, and develop went red for hours that way on 2026-11-08) and
+// pushes exactly the merge commit only when they pass (a merge, not a rebase: a
+// rebase replays the tested commits and, on 2026-11-05, deleted every brief a
+// replayed commit had untracked). Red, or rejected again: nothing is pushed,
+// the merge stays in HEAD and the next suite tests it on CI ("none"). Prints
+// `PUSHED <sha8>`. "head" when the merge was pushed, "sha" when exactly `sha`. When HEAD has moved past `sha` (builders
 // went on while CI ran, owner 2026-11-06), a rejected push merges nothing: a
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
@@ -343,15 +348,65 @@ fn drive_push(sha: String) -> String throws {
 		// they are stashed around the merge, not a reason to stop (2026-10-28).
 		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
 		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
+		let base = process::run("git", ["merge-base", sha.clone(), "FETCH_HEAD"]).stdout.trim().clone()
 		let merged = process::run("git", ["merge", "-q", "--no-edit", "--autostash", "FETCH_HEAD"])
 		if !merged.ok { drive_merge_abort() }
-		let second = process::run("git", ["push", "origin", "HEAD:develop"])
-		if !second.ok { drive_escalate("push rejected after one merge") }
-		pushed = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
-		head = "head"
+		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		let failed = drive_merge_check(base, merge.clone())
+		if failed != "" {
+			println(f"SUITE {drive_short(sha)} green, merged with origin/develop red in the short checks: not pushed, the next suite tests the merge")
+			println(drive_tail(failed, 40))
+			return "none"
+		}
+		let second = process::run("git", ["push", "origin", f"{merge}:develop"])
+		if !second.ok {
+			println(f"SUITE {drive_short(sha)} green, push rejected again after the merge: the next suite pushes")
+			return "none"
+		}
+		pushed = merge.clone()
+		// Builders went on during the checks: their commits stay in unpushed.txt.
+		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		head = if now == merge { "head" } else { "sha" }
 	}
 	println(f"PUSHED {drive_short(pushed)}")
 	return head
+}
+
+// The short checks on a merge of `origin/develop` before it is pushed (owner,
+// 2026-11-08): the compiler built from the merged tree (the lowered `.rs` of
+// both sides meet rustc here), then the tests named after the scripts changed
+// on either side since BASE and the tests changed themselves. Red: the output,
+// else "".
+fn drive_merge_check(base: String, merge: String) -> String throws {
+	println(f"MERGE {drive_short(merge.clone())} short checks")
+	let built = process::run("sh", ["-c", "cargo build -q --profile fast -p nikaia 2>&1"])
+	if !built.ok { return "cargo build --profile fast -p nikaia\n" + built.stdout + built.stderr }
+	let mut paths: Vec[String] = []
+	let diff = process::run("git", ["diff", "--name-only", base, merge.clone()]).stdout
+	for line in diff.split("\n") {
+		let p = line.trim().clone()
+		if p != "" { paths.push(p) }
+	}
+	let failed = drive_local_tests(paths.clone())
+	if failed != "" { return failed }
+	let mut names: Vec[String] = []
+	for p in paths {
+		if !p.starts_with("tests/compiler/tests/") { continue }
+		let file = p.split("/").collect()[3].clone()
+		let name = file.split(".").collect()[0].clone()
+		if name != "" && !names.contains(name.clone()) { names.push(name) }
+	}
+	if names.len() == 0 { return "" }
+	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
+	let mut args: String = ""
+	for n in names.clone() { args = args + f" --filter '{n}'" }
+	println(f"LOCAL tests {names.join(" ")}")
+	let out = process::run(
+		"sh",
+		["-c", f"cd tests/compiler && NIKAIA_CACHE_LIMIT=2G '{exe}' test{args} 2>&1"],
+	)
+	if out.ok { return "" }
+	return out.stdout + out.stderr
 }
 
 // True when this driver's background suite has finished (its exit file is
