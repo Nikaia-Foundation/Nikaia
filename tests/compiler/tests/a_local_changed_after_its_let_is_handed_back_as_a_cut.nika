@@ -1,0 +1,32 @@
+// A local changed in place after its `let` and then handed back as a cut
+// goes into the keep after its last change, not at its `let` (#1363): a list
+// grown by `push`, text grown by `push_str` and cut at a position `find`
+// handed out, and a change inside an `if` before the return.
+
+fn pushed() -> ref Array[i64] {
+    let mut v: Vec[i64] = []
+    v.push(4)
+    return v[0..]
+}
+
+fn cut() -> String {
+    let mut s = String()
+    s.push_str("hello world")
+    let i = s.find(" ") ?? 0
+    return s[0..<i]
+}
+
+fn grown(n: i64) -> ref Array[i64] {
+    let mut v: Vec[i64] = []
+    v.push(4)
+    if n > 1 {
+        v.push(7)
+    }
+    return v[0..]
+}
+
+fn main() throws {
+    println(f"{pushed()[0]}")
+    println(cut())
+    println(f"{grown(2)[1]} {grown(1).len()}")
+}

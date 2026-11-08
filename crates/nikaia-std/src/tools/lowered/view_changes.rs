@@ -464,9 +464,11 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             view.made = at.clone();
             return Some(view);
         },
-        Expr::Index { .. } => {
+        Expr::Index { index, .. } => {
+            let index = nikaia_std::boxed::open(index);
             if ask.mut_viewed.contains(&(id_of(value) as i64)) { return vc_mut_view(at, name, value, outer, ask); }
-            if !ask.lent.contains(&(at.start as i64)) { return None; }
+            let cut = matches!(index, Expr::Range { .. });
+            if !cut && !ask.lent.contains(&(at.start as i64)) { return None; }
             return vc_place_view(at, name, value, outer, ask);
         },
         Expr::Field { .. } => {
