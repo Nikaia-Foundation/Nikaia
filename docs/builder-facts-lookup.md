@@ -246,6 +246,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
+* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist; `touch` them first. (issue-1397)
+* `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
+* The tools package is a library the Rust crate imports and writes (`emit/host.rs`), so under ADR-306 D22 its `pub` fields of `pub` types are never seen-only-by-Nikaia. Element-bound machinery: `fields_seen`, `fields_declared`, `bounds_fields`. (issue-1414)
 * Whether a body keeps a list's length is answered by `changes_length_in` plus `rebinds` (`bounds_body.nika`, `bounds_basic.nika`); parameters are registered in `prover_walk.nika`'s function walk, near `has_a_length`. (issue-1375)
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
