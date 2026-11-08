@@ -73,6 +73,7 @@ pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result:
             if a_sequence_type(&nikaia_std::index::get(&arguments, (at) as usize).1) {
                 ends = ends && shape_ends(nikaia_std::index::get(&found, (at) as usize));
                 sized = sized && shape_sized(nikaia_std::index::get(&found, (at) as usize));
+                timed = timed || shape_timed(nikaia_std::index::get(&found, (at) as usize));
             }
             at += 1;
         }

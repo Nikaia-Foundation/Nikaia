@@ -223,11 +223,13 @@ impl Run {
         }
     }
 
-    /// Says on this thread whether the walk ran out of its deadline, for the
-    /// [`ended`] around the step that ends it.
+    /// Says on this thread that the walk ran out of its deadline, for the
+    /// [`ended`] around the step that ends it. Only ever sets it: a walk
+    /// handed to another (`zip`, `chain`) settles first, and the walk that
+    /// ends both, in time itself, may not wipe that out (#1423).
     fn settle(&self) {
-        if self.deadline.is_some() {
-            TIMED_OUT.with(|t| t.set(self.expired.load(Atomic::Relaxed)));
+        if self.deadline.is_some() && self.expired.load(Atomic::Relaxed) {
+            TIMED_OUT.with(|t| t.set(true));
         }
     }
 
@@ -261,6 +263,7 @@ pub fn gated<'a, T: Sync, A>(
         None => (1, usize::MAX),
     };
     let run = Run::gated(limit, within);
+    TIMED_OUT.with(|t| t.set(false));
     let held = run.clone();
     Par(
         items

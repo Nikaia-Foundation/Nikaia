@@ -101,6 +101,9 @@ pub fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[
             if a_sequence_type(arguments[at].1) {
                 ends = ends && shape_ends(found[at])
                 sized = sized && shape_sized(found[at])
+                // **A walk handed to another carries its deadline into what
+                // they make** (`zip`, `chain`; ADR-async-5 D27, #1423).
+                timed = timed || shape_timed(found[at])
             }
             at += 1
         }
