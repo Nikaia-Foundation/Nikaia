@@ -399,7 +399,7 @@ grammar Yaml {
 	// Lines holding nothing but spaces and a comment.
 	rule Blanks = Blank* LastBlank? -> { }
 	rule Blank = (" " | "\t")* Comment? "\n" -> { }
-	rule LastBlank = (" " | "\t")* Comment eof -> { }
+	rule LastBlank = (" " | "\t")* Comment eof -> { } | s:count(" " | "\t") if(s > 0) eof -> { }
 
 	// A block node on the lines below its parent at indentation `n`, at the
 	// indentation of its first line, which exceeds `n` (`s-l+block-node`). A
@@ -409,6 +409,14 @@ grammar Yaml {
 	rule Block(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
 		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
 		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
+		| not(Marker) m:count(" ") if(m > n) Sep1 v:Spaced(ds, left, n; c: c, k: k) -> { v }
+	// A node after tabs past the indentation (`s-separate-in-line`): a tab
+	// never indents, so no block collection begins there (`s-indent` is
+	// spaces only), but properties, a block scalar or a flow node may.
+	rule Spaced(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		v:Propped(ds, left, n; c: c, k: k) -> { v }
+		| v:BlockScalar(n; k: k) Blanks -> { v }
+		| v:Inline(ds, left, n; k: k) Eol Blanks -> { v }
 
 	// A node whose first character is at column `m`, under a parent at `n`;
 	// it ends after its last line's break and the blank lines behind it.
@@ -1043,16 +1051,17 @@ grammar Yaml {
 	rule ChompInd -> Chomp = "-" -> { Chomp::Strip } | "+" -> { Chomp::Keep }
 	// The rest of the header's line: a comment, after a space.
 	rule HeadEnd = s:count(" " | "\t") (if(s > 0) Comment)? ("\n" | eof) -> { }
-	// The content lines; their indentation is the result, 0 where there is no
-	// text line. Without an indicator, the leading empty lines may not be
+	// The content lines; their indentation is the result, where there is no
+	// text line the most spaces an empty line holds, so each is empty. Without an indicator, the leading empty lines may not be
 	// indented past the first text line (`l-literal-content`).
 	rule BlockBody(n: i64, d: i64) -> i64 =
 		if(d > 0) BlockLine(explicit_indent(n, d))* -> { explicit_indent(n, d) }
 		| lead:LeadLine* not(Marker) m:count(" ") if(m > n && m >= most(lead)) x:any if(x != '\n') until("\n" | eof) ("\n" | eof) BlockLine(m)* -> {
 			m
 		}
-		| LeadLine* -> { 0 }
-	rule LeadLine -> i64 = s:count(" ") "\n" -> { s }
+		| lead:LeadLine* -> { most(lead) }
+	// An empty line; the last may end at the end of the input.
+	rule LeadLine -> i64 = s:count(" ") "\n" -> { s } | s:count(" ") if(s > 0) eof -> { s }
 	// A text line indented `k` or more, or an empty line indented less.
 	rule BlockLine(k: i64) =
 		not(Marker) " "{k} x:any if(x != '\n') until("\n" | eof) ("\n" | eof) -> { }
@@ -2297,21 +2306,30 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 	let mut lines: Vec[String] = []
 	let mut line = String()
 	let mut column = 0
+	// Whether the line read so far holds only spaces.
+	let mut blank = true
 	for c in raw.chars() {
 		if c == '\n' {
 			lines.push(line.clone())
 			line = String()
 			column = 0
+			blank = true
 		} else {
 			if column >= indent {
 				line.push(c)
 			}
+			if c != ' ' {
+				blank = false
+			}
 			column += 1
 		}
 	}
-	// The last line has no break only at the end of the input.
-	let broken = line.len() == 0
-	if !broken {
+	// The last line has no break only at the end of the input; one that
+	// holds only spaces there counts as broken, an empty line or one spaces
+	// past the indentation (`l-chomped-empty`), as the suite's reference
+	// parser reads it.
+	let broken = line.len() == 0 || blank
+	if column > 0 {
 		lines.push(line.clone())
 	}
 	let n = lines.len() as i64
