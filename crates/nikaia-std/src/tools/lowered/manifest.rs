@@ -122,17 +122,35 @@ pub struct ManifestFile {
     pub codegen: collections::BTreeMap<String, collections::BTreeMap<String, String>>,
     pub libraries: collections::BTreeMap<String, String>,
     pub features: Vec<ManifestFeature>,
+    pub rust_library: Option<ManifestRustLibrary>,
     pub notes: Vec<String>,
     pub root: Option<fs::Path>,
 }
 
-pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], notes: vec![], root: None } }
+pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], rust_library: None, notes: vec![], root: None } }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManifestFeature {
     pub name: String,
     pub entries: Vec<String>,
     pub listed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestRustLibrary {
+    pub root: Option<String>,
+    pub native: String,
+}
+
+pub(crate) fn manifest_rust_library(items: &[ManifestItem]) -> Option<ManifestRustLibrary> {
+    for item in items.iter() {
+        if item.section == "rust-library" && item.name.is_empty() {
+            let root = manifest_word_at(items, "rust-library", "root", "");
+            let native = nikaia_std::index::or(manifest_word_at(items, "rust-library", "native", ""), || "native".into());
+            return Some(ManifestRustLibrary { root, native });
+        }
+    }
+    None
 }
 
 pub(crate) fn manifest_features(items: &[ManifestItem]) -> Vec<ManifestFeature> {
@@ -162,6 +180,7 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
     manifest.dependencies = manifest_dependencies(items)?;
     manifest.libraries = manifest_libraries(items)?;
     manifest.features = manifest_features(items);
+    manifest.rust_library = manifest_rust_library(items);
     for value in items.iter() {
         if value.section != "build" || value.name.is_empty() || !value.key.is_empty() { continue; }
         if value.table {

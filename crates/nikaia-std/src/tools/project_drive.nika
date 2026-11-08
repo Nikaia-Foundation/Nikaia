@@ -68,6 +68,10 @@ pub trait ProjectDriveHost {
     /// The entry package as `cargo publish` takes it:
     /// `project_drive_publishable` over its root and its manifest.
     fn write_publishable(ref self) sync throws
+    /// The entry package's crate with its hand-written root (ADR-393 D7):
+    /// `project_drive_spliced` over its root and its manifest, into the
+    /// crate's `src` with the `lowered` package.
+    fn write_spliced(ref self, src: ref fs::Path, lowered: ref String) sync throws
     /// The switches file the cache keys on.
     fn switches_path(ref self) -> fs::Path sync
     /// `target/nikaia` of the project.
@@ -91,6 +95,8 @@ pub trait ProjectDriveHost {
     fn member_manifest(ref self, at: i64, rust: ref String) -> String sync throws
     /// `[features]` of the manifest (ADR-393 D2), as read.
     fn features(ref self) -> Vec[ManifestFeature] sync
+    /// `[rust-library]` of the manifest (ADR-393 D7), where it has the table.
+    fn rust_library(ref self) -> ManifestRustLibrary? sync
     /// The path of `nikaia.toml` and its text, for a refusal shown in it.
     fn manifest_text(ref self) -> (String, String) sync
     /// Whether the program can be built without Cargo (`run_fast`).
@@ -200,6 +206,14 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         let checked = features_lists_checked(features, host.package_name() ?? "")
         if checked != null {
             return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
+        }
+    }
+    // **`[rust-library]` is a rust-library's** (ADR-393 D7, `NK1348`), and
+    // its `root` a file of the package.
+    if !host.tests_build() && (subcommand == "build" || subcommand == "run") {
+        let splice_refused = project_drive_splice_checked(host, rust_library)
+        if splice_refused != 0 {
+            return (splice_refused, null)
         }
     }
     let entry = host.entry()
@@ -696,7 +710,13 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
         let dir = made.join(crate_name)
         project_drive_make_dir(dir.join("src"))
         host.write_if_changed(dir.join("Cargo.toml"), manifest)
-        host.write_if_changed(dir.join("src").join("lib.rs"), lowered)
+        // **A hand-written root** (D7) is the entry package's alone: its
+        // directory copied into `src/`, the lowered items under `native`.
+        if at > 0 || host.rust_library() == null {
+            host.write_if_changed(dir.join("src").join("lib.rs"), lowered)
+            continue
+        }
+        host.write_spliced(dir.join("src"), lowered)
     }
     let crate_dir = made.join(project_drive_rust_crate(members[0].name))
     let applied = checked ?? {
@@ -738,6 +758,100 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
     }
     println(f"rust-library: {crate_dir.display()}")
     return 0
+}
+
+/// **`[rust-library]` checked** (ADR-393 D7): `NK1348` where the artifact
+/// is not a rust-library, or `root` names no file of the package, shown at
+/// the table or at `root`; the exit code, 0 where nothing is refused.
+fn project_drive_splice_checked[H: ProjectDriveHost](host: ref H, rust_library: bool) -> i32 sync {
+    let table = host.rust_library() ?? { return 0 }
+    let (path, toml) = host.manifest_text()
+    let mut message: String = ""
+    let mut help: String = ""
+    let mut key: String = ""
+    if !rust_library {
+        message = "`[rust-library]` splices hand-written Rust into the crate a rust-library build writes, and this package is not built as one."
+        help = "Write `artifact = \"rust-library\"` under `[build]`, or remove `[rust-library]`."
+    } else {
+        let written = table.root ?? ""
+        let manifest: fs::Path = path.clone()
+        let package = manifest.parent() ?? { return 0 }
+        let meta = fs::metadata(package.join(written), fs::Root::Anywhere) catch { null }
+        if written.len() == 0 {
+            message = "`[rust-library]` needs `root`, the hand-written Rust file that becomes the crate root."
+            help = "Write `root = \"rust/lib.rs\"` under `[rust-library]`, naming a file of the package."
+        } else if !(meta?.is_file() ?? false) {
+            message = f"`[rust-library] root` names `{written}`, which is not a file of the package."
+            help = "Name the hand-written Rust file that becomes the crate root, relative to `nikaia.toml`."
+            key = "root"
+        }
+    }
+    if message.len() == 0 {
+        return 0
+    }
+    let span = project_drive_splice_span(toml, key)
+    let shown = Shown { warning: false, code: "NK1348", message: message, notes: [], help: help, span: span, labels: [] }
+    host.eprint(rendered(shown, path, toml))
+    return 1
+}
+
+/// Where a refusal of `[rust-library]` stands in `nikaia.toml`: at `key` in
+/// the table where it is written there, else at the table's header.
+pub fn project_drive_splice_span(toml: ref String, key: ref String) -> Span {
+    let mut offset = 0
+    let mut inside = false
+    let mut header = 0
+    for line in toml.split("\n") {
+        let trimmed = line.trim()
+        if trimmed.starts_with("[") {
+            inside = trimmed == "[rust-library]"
+            if inside { header = offset }
+        } else if inside && key.len() > 0 {
+            let name = trimmed.split("=").next() ?? ""
+            if name.trim() == key {
+                let start = offset + line.len() - line.trim_start().len()
+                return Span { start: start as u32, end: (start + key.len()) as u32 }
+            }
+        }
+        offset += line.len() + 1
+    }
+    return Span { start: header as u32, end: (header + 14) as u32 }
+}
+
+/// **The crate with a hand-written root** (ADR-393 D7), under the package
+/// `root` whose manifest is `file`: the directory holding `[rust-library]
+/// root` copied into `src` as it is, the `lowered` package written as
+/// `src/<native>/mod.rs`, and `root` made `src/lib.rs` with `pub mod
+/// <native>;` below it. Each file is written only where it changed.
+pub fn project_drive_spliced(root: ref fs::Path, file: ref ManifestFile, src: ref fs::Path, lowered: ref String) throws {
+    let table = file.rust_library ?? throw ProjectDriveRefusal::Failed("the manifest has no `[rust-library]`")
+    let hand_path = root.join(table.root ?? "")
+    let from = hand_path.parent() ?? root.clone()
+    let files = fs::walk(from, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {from.display()}: {error}") }
+    for name in files.iter() {
+        let to = src.join(name)
+        let text = fs::read_to_string(from.join(name), fs::Root::Anywhere) catch {
+            project_drive_make_dir(to.parent() ?? src.clone())
+            fs::copy(from.join(name), to, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"copying {from.join(name).display()}: {error}") }
+            continue
+        }
+        project_drive_written(to, text)
+    }
+    let hand = fs::read_to_string(hand_path, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {hand_path.display()}: {error}") }
+    project_drive_written(src.join(table.native).join("mod.rs"), lowered)
+    // At the end: above the file's `//!` and `#![...]` it would end them.
+    let parted = if hand.len() == 0 || hand.ends_with("\n") { "" } else { "\n" }
+    project_drive_written(src.join("lib.rs"), f"{hand}{parted}\npub mod {table.native};\n")
+}
+
+/// `text` written to `path`, its directory made, where the file holds
+/// something else.
+fn project_drive_written(path: ref fs::Path, text: ref String) throws {
+    project_drive_make_dir(path.parent() ?? throw ProjectDriveRefusal::Failed(f"{path.display()} has no directory"))
+    let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
+    if was != text {
+        fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectDriveRefusal::Failed(f"writing {path.display()}: {error}") }
+    }
 }
 
 /// **A refusal of `[features]`** (`NK1344`-`NK1347`) shown on its entry in
