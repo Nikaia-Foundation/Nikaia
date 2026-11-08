@@ -240,11 +240,11 @@ impl<T> Local<T> {
     }
 
     /// The borrow, for a door: refused when the value is held already
-    /// (re-entered) or was left by a panic (poisoned), and marked poisoned if
-    /// the block run under it panics.
+    /// (re-entered) or was left by a panic (poisoned), rebuilt first where it
+    /// is supervised.
     #[track_caller]
     #[inline]
-    fn held<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+    fn opened(&self) -> std::cell::RefMut<'_, T> {
         // **Re-entry first**: a door inside the block finds the value held,
         // and that is what it is told, not that the value is poisoned.
         let Ok(mut held) = self.inner.try_borrow_mut() else {
@@ -255,10 +255,19 @@ impl<T> Local<T> {
                 Some((build, phase)) => {
                     Phase::recover(phase);
                     *held = (build.0)();
+                    self.poisoned.set(false);
                 }
                 None => poisoned(),
             }
         }
+        held
+    }
+
+    /// The borrow, marked poisoned if the block run under it panics.
+    #[track_caller]
+    #[inline]
+    fn held<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        let mut held = self.opened();
         // **Set for as long as the block runs**, and cleared only when it
         // returns: a block that panics never returns, so the mark stays.
         // Counted with callgrind, a release `update` is 5 instructions with
@@ -268,6 +277,15 @@ impl<T> Local<T> {
         let result = f(&mut held);
         self.poisoned.set(false);
         result
+    }
+
+    /// **The borrow with no poison mark** (ADR-327 D11): for a block that
+    /// cannot leave the value half-changed, because it only reads it or works
+    /// on a copy. A panic in it releases the borrow and poisons nothing.
+    #[track_caller]
+    #[inline]
+    fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        f(&mut self.opened())
     }
 
     /// Part II 12.2's first door: a copy out. No code of the user's runs while
@@ -308,6 +326,18 @@ impl<T> Local<T> {
     #[track_caller]
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         self.held(f)
+    }
+
+    /// **`update` of a value that copies** (ADR-327 D11): the block works on
+    /// a copy, put in place at the block's end, so a panic in the block leaves
+    /// the value as it was and poisons nothing. The compiler writes it where
+    /// the value is a number, a `bool` or a `char`.
+    #[track_caller]
+    pub fn update_copied(&self, f: impl FnOnce(&mut T))
+    where
+        T: Copy,
+    {
+        self.unmarked(|held| on_a_copy(held, f))
     }
 
     /// **The one door for a stamped value**
@@ -361,9 +391,12 @@ impl<T> Local<T> {
     /// ways to agree, refusing is the one that keeps Part II 12.2's rule whole -
     /// re-entering a lock is a defect in code that is not well-formed, whichever
     /// door it happens through.
+    ///
+    /// **A read poisons nothing** (ADR-327 D11): the block cannot change the
+    /// value, so a panic in it leaves the value whole.
     #[track_caller]
     fn read<R>(&self, f: impl FnOnce(&T) -> R) -> R {
-        self.held(|held| f(held))
+        self.unmarked(|held| f(held))
     }
 }
 
@@ -445,10 +478,10 @@ impl<T> Crossing<T> {
     }
 
     /// **Reading in place** ([ADR-281](../../../docs/specification/adr/adr-281.md)
-    /// D1).
+    /// D1), poisoning nothing (ADR-327 D11).
     #[track_caller]
     pub fn access<R>(&self, f: impl FnOnce(&T) -> R) -> R {
-        self.hold(|slot| f(slot))
+        self.unmarked(|slot| f(slot))
     }
 
     /// **Where locked data changes**
@@ -459,6 +492,16 @@ impl<T> Crossing<T> {
     #[track_caller]
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         self.hold(f);
+    }
+
+    /// [`Local::update_copied`], where the value crosses threads: the copy is
+    /// put in place before the guard is released.
+    #[track_caller]
+    pub fn update_copied(&self, f: impl FnOnce(&mut T))
+    where
+        T: Copy,
+    {
+        self.unmarked(|slot| on_a_copy(slot, f))
     }
 
     /// **The one door for a stamped value**
@@ -535,6 +578,30 @@ impl<T> Crossing<T> {
         let _released = Released(&self.held_by);
         f(&mut guard)
     }
+
+    /// **The guard with no poison** (ADR-327 D11), for a block that cannot
+    /// leave the value half-changed: `std`'s mutex poisons itself when its
+    /// guard is dropped by a panic, so the panic is caught while the guard is
+    /// held, the guard is dropped as on any other way out, and the panic goes
+    /// on from there. The panic hook has run already where it began.
+    #[track_caller]
+    fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        let ended =
+            self.hold(|slot| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(slot))));
+        match ended {
+            Ok(result) => result,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
+}
+
+/// The block on a copy of `slot`, put in place where the block ends; a panic
+/// in it leaves `slot` as it was (ADR-327 D11).
+#[inline(always)]
+fn on_a_copy<T: Copy>(slot: &mut T, f: impl FnOnce(&mut T)) {
+    let mut copy = *slot;
+    f(&mut copy);
+    *slot = copy;
 }
 
 /// Clears [`Crossing`]'s owner mark when the block ends, however it ends.
@@ -954,6 +1021,12 @@ impl<T: Bits> Word<T> {
         f(&self.get())
     }
 
+    /// `update` of a value that copies (ADR-327 D11), which this shape's
+    /// `update` is already.
+    pub fn update_copied(&self, f: impl FnMut(&mut T)) {
+        self.update(f)
+    }
+
     /// **The block on a copy, swapped in; again on a collision**
     /// (ADR-281 D13, D14).
     pub fn update(&self, mut f: impl FnMut(&mut T)) {
@@ -1043,6 +1116,11 @@ pub trait Door {
     /// away: the block is handed the address, so nothing is moved and no slot
     /// is ever empty.
     fn changing<R>(&self, f: impl FnOnce(&mut Self::Held) -> R) -> R;
+
+    /// Open the lock with no poison mark (ADR-327 D11): only for a block that
+    /// reads, or works on copies and puts them in place at its end, so a
+    /// panic in it leaves the value as it was.
+    fn unmarked<R>(&self, f: impl FnOnce(&mut Self::Held) -> R) -> R;
 }
 
 impl<T> Door for Local<T> {
@@ -1061,6 +1139,11 @@ impl<T> Door for Local<T> {
     fn changing<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
         self.held(f)
     }
+
+    #[track_caller]
+    fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        Local::unmarked(self, f)
+    }
 }
 
 impl<T> Door for Crossing<T> {
@@ -1078,6 +1161,11 @@ impl<T> Door for Crossing<T> {
     #[track_caller]
     fn changing<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
         self.hold(f)
+    }
+
+    #[track_caller]
+    fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        Crossing::unmarked(self, f)
     }
 }
 
@@ -1104,6 +1192,11 @@ impl<D: Door> Door for std::rc::Rc<D> {
     fn changing<R>(&self, f: impl FnOnce(&mut Self::Held) -> R) -> R {
         (**self).changing(f)
     }
+
+    #[track_caller]
+    fn unmarked<R>(&self, f: impl FnOnce(&mut Self::Held) -> R) -> R {
+        (**self).unmarked(f)
+    }
 }
 
 impl<D: Door> Door for std::sync::Arc<D> {
@@ -1121,6 +1214,11 @@ impl<D: Door> Door for std::sync::Arc<D> {
     #[track_caller]
     fn changing<R>(&self, f: impl FnOnce(&mut Self::Held) -> R) -> R {
         (**self).changing(f)
+    }
+
+    #[track_caller]
+    fn unmarked<R>(&self, f: impl FnOnce(&mut Self::Held) -> R) -> R {
+        (**self).unmarked(f)
     }
 }
 
@@ -1154,6 +1252,9 @@ where
 /// It used to take the old values by value and hand back a pair. That is what
 /// made an empty slot a state — a block that panicked between the two left one
 /// lock without a value — and D18 takes the cause away rather than the symptom.
+///
+/// Where one value does not copy, a panic in the block poisons both: values
+/// changed in one door must agree (ADR-327 D11).
 #[track_caller]
 pub fn update_all<A, B>(a: &A, b: &B, f: impl FnOnce(&mut A::Held, &mut B::Held))
 where
@@ -1163,6 +1264,30 @@ where
     match a.ordering() <= b.ordering() {
         true => a.changing(|x| b.changing(|y| f(x, y))),
         false => b.changing(|y| a.changing(|x| f(x, y))),
+    }
+}
+
+/// **`update_all` where both values copy** (ADR-327 D11): the block works on
+/// copies, and both are put in place together while both locks are still
+/// held, so a panic in the block poisons neither. The compiler writes it
+/// where both values are numbers, `bool`s or `char`s.
+#[track_caller]
+pub fn update_all_copied<A, B>(a: &A, b: &B, f: impl FnOnce(&mut A::Held, &mut B::Held))
+where
+    A: Door,
+    B: Door,
+    A::Held: Copy,
+    B::Held: Copy,
+{
+    let both = |x: &mut A::Held, y: &mut B::Held| {
+        let (mut cx, mut cy) = (*x, *y);
+        f(&mut cx, &mut cy);
+        *x = cx;
+        *y = cy;
+    };
+    match a.ordering() <= b.ordering() {
+        true => a.unmarked(|x| b.unmarked(|y| both(x, y))),
+        false => b.unmarked(|y| a.unmarked(|x| both(x, y))),
     }
 }
 

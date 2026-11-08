@@ -1265,6 +1265,11 @@ impl EmitState {
                 out.push(".map(|s| ::core::convert::AsRef::<str>::as_ref(s))")
             }
             out.push(f".{written}")
+            // **An `update` of a value that copies** (ADR-327 D11) works on a
+            // copy, so a panic in its block poisons nothing.
+            if name == "update" && self.facts.copied_doors.contains(on_node) {
+                out.push("_copied")
+            }
             // **A `close()` that does not pause** (#1317): the value's cleanup
             // says `sync`, and the runtime runs it without an `.await`.
             let closes = self.facts.method_callees[on_node]?.clone() ?? ""
