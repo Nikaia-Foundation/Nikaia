@@ -78,6 +78,13 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn an_integer_limit(ty: &str, member: &str) -> bool {
+    if member != "MIN" && member != "MAX" { return false; }
+    ty == "int" || integer_named(&Ty::Named { name: ty.to_string(), args: vec![], view: false }).is_some()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn integer_named(ty: &Ty) -> Option<String> {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; if args.is_empty() && !view && (name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64") { Some(name.to_string()) } else { None } },

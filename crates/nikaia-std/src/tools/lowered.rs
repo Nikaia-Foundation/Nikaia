@@ -2661,7 +2661,7 @@ pub mod check_members {}
 pub mod check_name_in_text {}
 pub mod check_names {
     #[allow(unused_imports)]
-    pub use super::{integer_named, is_a_literal};
+    pub use super::{an_integer_limit, integer_named, is_a_literal};
 }
 pub mod check_narrow {
     #[allow(unused_imports)]
@@ -2849,7 +2849,7 @@ pub mod dump {
 }
 pub mod emit_below {
     #[allow(unused_imports)]
-    pub use super::{emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
+    pub use super::{integer_limit_below, emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
 }
 pub mod emit_build {
     #[allow(unused_imports)]
@@ -3391,7 +3391,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_plain_enums};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_type_may_be_a_view, hb_plain_enums};
 }
 pub mod threads {
     #[allow(unused_imports)]
