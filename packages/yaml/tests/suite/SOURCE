@@ -1,0 +1,10 @@
+yaml-test-suite, vendored unchanged (ADR-yaml-1 D9, #1382)
+
+Repository: https://github.com/yaml/yaml-test-suite
+Cases:      branch data, commit 6ad3d2c62885d82fc349026c136ef560838fdf3d
+Generated from: branch main, tag v2022-01-17, commit 45db50aecf9b1520f8258938c88f396e96f30831
+License:    MIT, the file License from main at v2022-01-17 (covers data, owner 2026-10-30, #928)
+Vendored:   2026-11-08
+
+Every file here except License and SOURCE is the data branch byte for byte.
+A failing case is fixed in the parser, never here.
