@@ -313,6 +313,28 @@ impl CheckState {
         self.findings.push(check_refusal("NK1206", span, f"`{written}` may be `null`, so a `for` can't walk it directly.", [note], help))
     }
 
+    /// `NK1206` too: a `for` over a value that holds no elements, a number,
+    /// a `bool` or a `struct` or `enum` the package declares (Part I 3.3: a
+    /// `for` walks a sequence; no `impl` gives a type one, NK1117). Without it
+    /// the lowering asked rustc for `.iter()` and NK1343 came back (#1421).
+    /// Fail-open: a type with arguments or one not known here passes.
+    pub fn a_loop_over_what_holds_no_elements(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+        let name: String = match over {
+            Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { return },
+            else => return,
+        }
+        let a_number = integer_named(Ty::Named { name: name.clone(), args: [], view: false }) != null || name == "int" || name == "f64" || name == "f32"
+        let a_scalar = a_number || name == "bool" || name == "char"
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.parts_beside.contains_key(name)
+        if !a_scalar && !declared {
+            return
+        }
+        let written = written_expression(world.words, iter)
+        let note = f"`{written}` is a `{name}`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3)."
+        let help = if a_number { f"Walk a range up to it: `for … in 0..<{written} {{ … }}`." } else if a_scalar { f"Test it with `if {written} {{ … }}`, or walk a list of such values." } else if self.enums.contains_key(name) { f"Put the values in a list and walk that: `for … in [{written}] {{ … }}`." } else { f"Walk a list the `{name}` holds, `for … in {written}.<field> {{ … }}`, or put the values in a list first." }
+        self.findings.push(check_refusal("NK1206", span, f"A `for` can't walk `{written}`: a `{name}` holds no elements.", [note], help))
+    }
+
     /// `NK1185`: a `??` whose left side is a view of what a map keeps and whose
     /// fallback is a value of its own. Fail-open: only where the held type is a
     /// declared one that moves.

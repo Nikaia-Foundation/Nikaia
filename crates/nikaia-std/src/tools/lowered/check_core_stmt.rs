@@ -1437,6 +1437,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates");
     let over = check_core_expr(state, world, host, iter, span);
     state.a_loop_over_a_nullable(world, &over, iter, span);
+    state.a_loop_over_what_holds_no_elements(world, &over, iter, span);
     if check_core_method_counted(&over) {
         state.facts.std_lengths.insert(id_of(iter) as i64);
         if state.elements_take_space(&over) { state.facts.sized_lengths.insert(id_of(iter) as i64); }

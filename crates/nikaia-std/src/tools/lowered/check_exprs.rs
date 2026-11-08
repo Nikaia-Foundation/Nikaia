@@ -232,6 +232,22 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+        let name: String = match over {
+            Ty::Named { name, args, .. } => if args.is_empty() { name.to_string() } else { return; },
+            _ => return,
+        };
+        let a_number = integer_named(&Ty::Named { name: name.to_string(), args: vec![], view: false }).is_some() || name == "int" || name == "f64" || name == "f32";
+        let a_scalar = a_number || name == "bool" || name == "char";
+        let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || self.parts_beside.contains_key(&name);
+        if !a_scalar && !declared { return; }
+        let written = written_expression(world.words, iter);
+        let note = format!("`{}` is a `{}`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3).", written, name);
+        let help = if a_number { format!("Walk a range up to it: `for … in 0..<{} {{ … }}`.", written) } else if a_scalar { format!("Test it with `if {} {{ … }}`, or walk a list of such values.", written) } else if self.enums.contains_key(&name) { format!("Put the values in a list and walk that: `for … in [{}] {{ … }}`.", written) } else { format!("Walk a list the `{}` holds, `for … in {}.<field> {{ … }}`, or put the values in a list first.", name, written) };
+        self.findings.push(check_refusal("NK1206", span, format!("A `for` can't walk `{}`: a `{}` holds no elements.", written, name), vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
         if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) { return; }
         let name = match held {
