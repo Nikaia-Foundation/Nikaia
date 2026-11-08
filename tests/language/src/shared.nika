@@ -11,7 +11,7 @@ fn shared_connect(host: String) -> SharedConnection {
     SharedConnection { host: host }
 }
 
-fn shared_serve(db: ref SharedConnection) -> String {
+fn shared_serve(db: SharedConnection) -> String {
     return f"serving {db.host}"
 }
 
@@ -61,15 +61,15 @@ fn shared_connect_conn(host: String) -> SharedConn {
     SharedConn { host: host }
 }
 
-fn shared_serve_conn(db: ref SharedConn) -> String {
+fn shared_serve_conn(db: SharedConn) -> String {
     return f"serving {db.host}"
 }
 
-fn shared_peek(db: ref Shared[SharedConn]) -> String {
+fn shared_peek(db: Shared[SharedConn]) -> String {
     return f"peeking {db.host}"
 }
 
-fn shared_keep(db: Shared[SharedConn]) -> SharedConnPool {
+fn shared_keep(keep db: Shared[SharedConn]) -> SharedConnPool {
     return SharedConnPool { db: db }
 }
 

@@ -164,12 +164,12 @@ test "a map read that does not copy is cloned out" {
 // Nikaia (#125).
 struct MapReadsEntry { size: i64 }
 
-fn map_reads_size_of(entry: ref MapReadsEntry?) -> i64 {
+fn map_reads_size_of(entry: MapReadsEntry?) -> i64 {
     let found = entry ?? return -1
     return found.size
 }
 
-fn map_reads_lookup(m: ref collections::BTreeMap[String, MapReadsEntry], key: ref String) -> i64 {
+fn map_reads_lookup(m: collections::BTreeMap[String, MapReadsEntry], key: String) -> i64 {
     let exact = m[key]
     if exact != null {
         return map_reads_size_of(exact)
@@ -191,7 +191,7 @@ test "a map read bound and handed on is the option" {
 // `r ?? spare` is over a `ref T?`. It was `NK1185`, which sent a program to
 // copy the map's list to read it (found moving `describe`'s draft into
 // Nikaia, #125).
-fn map_reads_count(items: ref Vec[String]) -> i64 {
+fn map_reads_count(items: Vec[String]) -> i64 {
     return items.len()
 }
 
@@ -216,7 +216,7 @@ test "a named fallback beside a map read is lent" {
 // as one**: `let at = m[k] ?? continue` binds a `&String`, so the next map
 // read, a `contains_key` and a call that only reads it take it as it is - a
 // `&` in front was a `&&String` with no `Borrow` (#125).
-fn map_reads_shout(text: ref String) -> String {
+fn map_reads_shout(text: String) -> String {
     return f"{text}!"
 }
 
@@ -244,7 +244,7 @@ test "a view bound beside a jump is handed on as it is" {
 // String)` that the body only reads is a `&(i64, String)` below, and a `&` in
 // front of it was a key the map has no `Borrow` for (found moving
 // `contracts::keep`'s plan into Nikaia, #125).
-fn map_reads_width(place: (i64, String), widths: ref collections::BTreeMap[(i64, String), i64]) -> i64 {
+fn map_reads_width(place: (i64, String), widths: collections::BTreeMap[(i64, String), i64]) -> i64 {
     return widths[place] ?? 0
 }
 
@@ -270,7 +270,7 @@ struct MapReadsSpan {
     hi: i64,
 }
 
-fn map_reads_pick(spans: ref collections::BTreeMap[String, MapReadsSpan], name: ref String) -> i64 {
+fn map_reads_pick(spans: collections::BTreeMap[String, MapReadsSpan], name: String) -> i64 {
     let mut chosen = MapReadsSpan { lo: 0, hi: 0 }
     if name.len() > 1 {
         chosen = spans[name] ?? return -1

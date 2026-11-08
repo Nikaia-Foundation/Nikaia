@@ -4,9 +4,9 @@
 
 // **A view put into the struct a function hands back** points into the one
 // buffer the result can view: the parameter's.
-struct ViewsKeptReading { name: ref String, temp: i64 }
+struct ViewsKeptReading { name: String, temp: i64 }
 
-fn views_kept_make(name: ref String, temp: i64) -> ViewsKeptReading {
+fn views_kept_make(name: String, temp: i64) -> ViewsKeptReading {
     return ViewsKeptReading { name: name, temp: temp }
 }
 
@@ -19,9 +19,9 @@ test "a view in a struct handed back is the parameters" {
 
 // **A view stored in a field of a struct the caller lends**, where the
 // struct holds views: the parameter is a view of that struct's buffer.
-struct ViewsKeptSummary { label: ref String, count: i64 }
+struct ViewsKeptSummary { label: String, count: i64 }
 
-fn views_kept_relabel(mut s: ViewsKeptSummary, name: ref String) {
+fn views_kept_relabel(mut s: ViewsKeptSummary, name: String) {
     s.label = name
 }
 
@@ -44,11 +44,11 @@ pub struct ViewsKeptShape {
 }
 
 impl ViewsKeptShape {
-    fn meets(ref self, wanted: ref ViewsKeptShape) -> bool {
+    fn meets(self, wanted: ViewsKeptShape) -> bool {
         return self.missing(wanted).len() == 0
     }
 
-    fn missing(ref self, wanted: ref ViewsKeptShape) -> Vec[String] {
+    fn missing(self, wanted: ViewsKeptShape) -> Vec[String] {
         let mut words: Vec[String] = []
         if wanted.ends && !self.ends {
             words.push("ends")
@@ -60,8 +60,8 @@ impl ViewsKeptShape {
 test "a call on a subject that holds no view keeps none" {
     let a = ViewsKeptShape { ends: true, sized: false }
     let b = ViewsKeptShape { ends: false, sized: true }
-    let ab = a.meets(ref b)
-    let ba = b.meets(ref a)
+    let ab = a.meets(b)
+    let ba = b.meets(a)
     assert(ab)
     assert(!ba)
 }
@@ -69,19 +69,19 @@ test "a call on a subject that holds no view keeps none" {
 // **Owned text is not a pattern**: `starts_with`, `ends_with` and `contains`
 // take a view of text or a character. Owned text handed to one is `NK1102`
 // (`views_kept.rs`), and each shape that is accepted runs.
-fn views_kept_lent(line: ref String, w: String) -> bool {
-    return line.starts_with(ref w)
+fn views_kept_lent(line: String, w: String) -> bool {
+    return line.starts_with(w)
 }
 
-fn views_kept_formatted(line: ref String, w: String) -> bool {
-    return line.starts_with(ref f"{w}")
+fn views_kept_formatted(line: String, w: String) -> bool {
+    return line.starts_with(f"{w}")
 }
 
-fn views_kept_literal(line: ref String, _w: String) -> bool {
+fn views_kept_literal(line: String, _w: String) -> bool {
     return line.starts_with("ab")
 }
 
-fn views_kept_character(line: ref String, _w: String) -> bool {
+fn views_kept_character(line: String, _w: String) -> bool {
     return line.starts_with('a')
 }
 
