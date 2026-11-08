@@ -69,8 +69,10 @@ impl EmitState {
         String::from("crate::")
     }
     pub fn sum_member_held(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, params: &str) -> String {
-        if self.borrows_named(world, member) { return sum_member_type(&self.declared_errors, world.library, member, params, self.is_std); }
-        sum_member_type(&self.declared_errors, world.library, member, "", self.is_std)
+        let mut written = String::new();
+        if self.borrows_named(world, member) { written = params.to_string(); }
+        if self.name_of_error(world, member) == 1 && error_kind(&self.declared_errors, world.library, member) == 0 { return format!("nikaia_std::error::Thrown<{}{}>", member, written); }
+        sum_member_type(&self.declared_errors, world.library, member, &written, self.is_std)
     }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }

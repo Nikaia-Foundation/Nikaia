@@ -137,11 +137,19 @@ impl EmitState {
 
     /// The type a member of a sum is held as, with the lifetime parameters of
     /// the sum where the member carries a view.
+    ///
+    /// **An error a dependency declares** (`json::Error`) is in its envelope
+    /// as the unit's own is (`name_of_error`): the dependency's functions
+    /// fail with `Thrown<json::Error>`, so `?` reaches the member only so.
     pub fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
+        let mut written = String()
         if self.borrows_named(world, member) {
-            return sum_member_type(self.declared_errors, world.library, member, params, self.is_std)
+            written = params.clone()
         }
-        return sum_member_type(self.declared_errors, world.library, member, "", self.is_std)
+        if self.name_of_error(world, member) == 1 && error_kind(self.declared_errors, world.library, member) == 0 {
+            return f"nikaia_std::error::Thrown<{member}{written}>"
+        }
+        return sum_member_type(self.declared_errors, world.library, member, written, self.is_std)
     }
 
     /// Write every generated sum, once, at the crate root: a module is its own
