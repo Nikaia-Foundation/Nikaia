@@ -96,7 +96,7 @@
 =VAL :~
 =VAL :null
 =VAL :True
-=VAL <!!int> "1
+=VAL <tag:yaml.org,2002:int> "1
 =VAL :1.5
 =VAL :
 =VAL "a\\b\rc\bd
@@ -109,7 +109,7 @@
 +SEQ
 =VAL &a :x
 =ALI *a
-+MAP {} &m <!!map>
++MAP {} &m <tag:yaml.org,2002:map>
 =VAL :k
 =VAL :v
 -MAP
@@ -149,7 +149,7 @@
 -MAP
 -DOC ...
 +DOC ---
-+SEQ <!!seq>
++SEQ <tag:yaml.org,2002:seq>
 =VAL &s :f
 -SEQ
 -DOC

@@ -83,6 +83,7 @@ impl EmitState {
 
     pub fn emit_function_body[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, body: ref Block, depth: i64, throws_: bool, returns_value: bool, awaited: ref Vec[winnow_grammar::Symbol], key: ref String, channel: ref String, counts_steps: bool, skip_free_at_exit: bool) sync throws {
         walk.keep_function = key.clone()
+        walk.kept_names = collections::BTreeSet()
         let mut locals: collections::BTreeSet[String] = collections::BTreeSet()
         let known = host.known_nonnegative(body)
         match known {

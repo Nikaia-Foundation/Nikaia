@@ -1,0 +1,8 @@
+ok: false
+`nikaia_fake`, the crate Cargo found for `fake`, is not a Nikaia package: it has no `nikaia.toml`, no `.nika` sources in `src/`, no `nikaia.contracts` (TMP/fake).
+ok: false
+in APP/nikaia.toml: Dependency `http-server` is a Nikaia package by version, and its key is the name a `use` line writes, so it has to be an identifier. Write `http_server`.
+ok: false
+in APP/nikaia.toml: Dependency `fake` has a key `features`, which a Nikaia package by version doesn't take. Its keys are: version, git, tag, branch, rev.
+ok: false
+in APP/nikaia.toml: Dependency `fake` says neither a `version` nor a `git`. A Nikaia package is named by a version (`fake = "1.2"`), by a table with `version` or `git`, or by a `path`; a Rust crate says `type = "rust"`.

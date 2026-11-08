@@ -76,9 +76,9 @@ pub enum Dependency {
     /// Relative to the manifest's own directory, because that is the only
     /// interpretation that survives the project being checked out somewhere else.
     Path(PathBuf),
-    /// `http-server = "1.2"`. Carried rather than resolved: a registry, a version
-    /// grammar and a distribution format are the three things ADR-002 D1 §5
-    /// refuses to guess at, and ADR-286 D15 keeps refusing.
+    /// `http_server = "1.2"` - a Nikaia package by version: the entry Cargo is
+    /// handed to find it, its renaming to the crate `nikaia_http_server`
+    /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D23, D24).
     Nikaia(toml::Value),
 }
 
@@ -269,7 +269,7 @@ fn dependency_of(declared: &decide::ManifestDependency) -> Dependency {
             Dependency::Rust(toml::Value::Table(table))
         }
         (decide::DependencyShape::Path, Some(path)) => Dependency::Path(PathBuf::from(path)),
-        _ => Dependency::Nikaia(value),
+        _ => Dependency::Nikaia(declared.cargo.as_deref().map(value_of).unwrap_or(value)),
     }
 }
 
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn a_rust_dependency_passes_through_without_its_marker() {
         let manifest = Manifest::parse(
-            "[dependencies]\nhttp-server = \"1.2\"\nregex = { type = \"rust\", version = \"1.5\" }\n",
+            "[dependencies]\nhttp_server = \"1.2\"\nregex = { type = \"rust\", version = \"1.5\" }\n",
         )
         .expect("parses");
 
@@ -343,9 +343,13 @@ mod tests {
             }
             other => panic!("regex is a Rust crate, not {other:?}"),
         }
-        assert!(matches!(
-            manifest.dependencies()["http-server"],
-            Dependency::Nikaia(_)
-        ));
+        // ADR-286 D24: a version is Cargo's renaming to `nikaia_<key>`.
+        match &manifest.dependencies()["http_server"] {
+            Dependency::Nikaia(value) => assert_eq!(
+                value.get("package").and_then(toml::Value::as_str),
+                Some("nikaia_http_server")
+            ),
+            other => panic!("http_server is a package by version, not {other:?}"),
+        }
     }
 }

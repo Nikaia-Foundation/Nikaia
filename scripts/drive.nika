@@ -28,7 +28,9 @@
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`.
 //
-// Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time:
+// Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
+// before each cycle the area's ready issues (the area being DIR's last name)
+// are queued as in --focus (drive_queue):
 //
 //     NEXT <brief> ...            the brief posted on its issue (once, the
 //                                 marker <brief>.posted), agent.nika --
@@ -532,7 +534,11 @@ fn drive_launch(dir: String) throws {
 	}
 	let failed = drive_local_tests(drive_unpushed_paths())
 	if failed != "" {
-		fs::write(log.clone(), fs::Root::Anywhere, "Gate: red local-tests\n" + drive_tail(failed, 200) + "\n")
+		fs::write(
+			log.clone(),
+			fs::Root::Anywhere,
+			"Gate: red local-tests\n" + drive_tail(failed, 200) + "\n",
+		)
 		fs::write(exit.clone(), fs::Root::Anywhere, "1\n")
 		fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
 		println(f"SUITE {drive_short(sha)} red locally (tests named after the changed scripts), not sent to CI")
@@ -587,7 +593,13 @@ fn drive_ci_wait(sha: String, log: String, exit: String) throws {
 
 // The red log text of CI run ID: per job matching the jq condition FILTER
 // what failed and its last 200 lines, then `Gate: red <job names>`.
-fn drive_ci_red(repo: String, id: String, url: String, conclusion: String, filter: String) -> String throws {
+fn drive_ci_red(
+	repo: String,
+	id: String,
+	url: String,
+	conclusion: String,
+	filter: String,
+) -> String throws {
 	let jobs = process::run(
 		"gh",
 		[
@@ -671,7 +683,16 @@ fn drive_ci_poll(sha: String) -> (String, bool) throws {
 			if count.ok && count.stdout.trim() != "" && count.stdout.trim() != "0" {
 				process::run("gh", ["api", "-X", "POST", f"repos/{repo}/actions/runs/{id}/cancel"])
 				let url = f"https://github.com/{repo}/actions/runs/{id}"
-				return (drive_ci_red(repo, id, url, "failure (cancelled at the first failed job)", failed), false)
+				return (
+					drive_ci_red(
+						repo,
+						id,
+						url,
+						"failure (cancelled at the first failed job)",
+						failed,
+					),
+					false,
+				)
 			}
 		}
 		if polls >= 30 && first == "" {
@@ -1282,11 +1303,18 @@ fn drive_wip_after(result: String, fixes: String, issue: String) -> String {
 fn drive_wip_end(dry: bool, brief: String) throws {
 	let issue = drive_issue(brief)
 	if issue == "" { return }
-	drive_say(dry, f"by the report's Result and Fixes: keep wip, or remove it (blocked: ready -> blocked) on #{issue}")
+	drive_say(
+		dry,
+		f"by the report's Result and Fixes: keep wip, or remove it (blocked: ready -> blocked) on #{issue}",
+	)
 	if dry { return }
 	let report = drive_report_of(brief.clone())
 	let body = if report == "" { "" } else { drive_read(report) }
-	let what = drive_wip_after(drive_field(body.clone(), "Result"), drive_field(body, "Fixes"), issue.clone())
+	let what = drive_wip_after(
+		drive_field(body.clone(), "Result"),
+		drive_field(body, "Fixes"),
+		issue.clone(),
+	)
 	if what == "keep" { return }
 	drive_label_remove(issue.clone(), "wip")
 	if what == "block" {
@@ -1329,8 +1357,10 @@ fn drive_found_title(found: String) -> String {
 fn drive_found_body(name: String, issue: String, found: String, needs: String) -> String {
 	let from = if issue == "" { f"the run of `{name}`" } else { f"the run of `{name}` (#{issue})" }
 	let mut body = f"Filed by the driver from the `Found:` of {from} (owner, 2026-11-06).\n\n## Found\n\n{found.trim()}\n"
-	if needs != "" && drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
-	body = body + "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/`.\n"
+	if needs != ""
+		&& drive_word(needs) != "none" { body = body + f"\n## Needs\n\n{needs.trim()}\n" }
+	body = body
+		+ "\n## To build\n\n- [ ] Reproduce the Found with a probe (`nikaia run scripts/probe.nika -- SNIPPET`).\n- [ ] Fix it where it lives, with a test in `tests/compiler/`.\n"
 	body = body + "\n## Done when\n\nThe probe gives the specified result and its test is green.\n"
 	return body + drive_footer()
 }
@@ -1352,7 +1382,14 @@ fn drive_found_file(dir: String, brief: String) throws {
 	let body = drive_found_body(name.clone(), drive_issue(brief), found.clone(), needs.clone())
 	let file = process::run("mktemp", []).stdout.trim().clone()
 	fs::write(file.clone(), fs::Root::Anywhere, body)
-	let mut call: Vec[String] = ["api", f"repos/{drive_repo()}/issues", "-f", f"title={drive_found_title(found)}", "-F", f"body=@{file}"]
+	let mut call: Vec[String] = [
+		"api",
+		f"repos/{drive_repo()}/issues",
+		"-f",
+		f"title={drive_found_title(found)}",
+		"-F",
+		f"body=@{file}",
+	]
 	for l in drive_found_labels(needs, area) { call.push(f"labels[]={l}") }
 	let mut args: Vec[String] = []
 	for a in call {
@@ -1668,7 +1705,15 @@ fn drive_facts(exe: String) throws {
 	if n == 0 { return }
 	let commit = process::run(
 		"git",
-		["commit", "-q", "-m", "docs: builder facts from the debriefs", "--", "docs/builder-facts.md", "docs/builder-facts-lookup.md"],
+		[
+			"commit",
+			"-q",
+			"-m",
+			"docs: builder facts from the debriefs",
+			"--",
+			"docs/builder-facts.md",
+			"docs/builder-facts-lookup.md",
+		],
 	)
 	if !commit.ok { println(f"facts commit failed: {commit.stderr.trim()}") }
 	println(f"FACTS {n} entered")
@@ -2070,6 +2115,12 @@ fn main() throws {
 			drive_settle(exe.clone(), dir)
 			println("RESTART drive: scripts/drive.nika changed")
 			process::exit(3)
+		}
+		// The lane's ready issues are queued here too, the area being DIR's
+		// last name (docs/briefs/yaml: yaml), as in --focus.
+		if !dry && lines_file == "" {
+			let parts: Vec[String] = dir.trim_end_matches("/").split("/").collect()
+			drive_queue(dir.clone(), parts[parts.len() - 1].clone())
 		}
 		let cyc = drive_cycle(exe.clone(), dir.clone(), lines_file)
 		let mut lines: Vec[String] = []

@@ -1879,15 +1879,17 @@ fn a_library_struct_of_views(name: ref String, ask: ref BufferAsk) -> bool {
 
 // **A call that hands back a view of its arguments makes no buffer**
 // (ADR-views-3 D8): `longest(longest(x, y), z)` points into `x`, `y` and `z`,
-// which the inner call's origins already carry.
+// which the inner call's origins already carry. So does one that hands back a
+// struct of views (#1378): `look(make(text))`, where `make` gives an `N`
+// viewing `text`, holds views, never a `'static` buffer a keep could hold.
 fn buffers_view_call(arg: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> bool {
     return match arg {
         Expr::Call { func, .. } => {
             let callee = written_callee(ask.names, func, unaliased)
             let named = callee?.clone() ?? ""
             match ask.own.functions.contains_key(named) {
-                true => buffers_hands_back_a_view(ask.own.functions[named]) && !a_static_view_result(ask.own.functions[named] ?? return false),
-                false => buffers_hands_back_a_view(ask.library.functions[named]),
+                true => buffers_hands_back_a_view(ask.own.functions[named], ask) && !a_static_view_result(ask.own.functions[named] ?? return false),
+                false => buffers_hands_back_a_view(ask.library.functions[named], ask),
             }
         }
         else => false,
@@ -1914,14 +1916,14 @@ fn a_static_view_result(contract: ref FnContract) -> bool {
     return true
 }
 
-fn buffers_hands_back_a_view(found: ref FnContract?) -> bool {
+fn buffers_hands_back_a_view(found: ref FnContract?, ask: ref BufferAsk) -> bool {
     let contract = found ?? return false
     if takes_a_keep(contract) {
         return false
     }
     let signature = contract.signature ?? return false
     let result = signature.result ?? return false
-    return result.is_a_view()
+    return a_result_of_views(result, ask)
 }
 
 // A value the argument itself makes: not a name, a part or an element of one,

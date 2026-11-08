@@ -12,7 +12,7 @@ description: >-
 
 <section class="home-section" id="check">
   <div class="home-inner">
-    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#promises" | relative_url }}">Very safe</a></p>
+    <p class="home-eyebrow home-eyebrow-center"><a href="{{ "/safe/#promises" | relative_url }}">Safe, secure, reliable</a></p>
     <h1 class="home-heading">Calls that break a function's contract</h1>
     <div class="limit-class">
         <dl class="limit-steps">
@@ -61,14 +61,14 @@ assert(n == 41)     // proved: the guard above handled the other case
       <h2>Go deeper</h2>
       <ul><li><a href="{{ "/guide/contracts.html" | relative_url }}">Guide: an assert the compiler checks</a></li><li><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">ADR-269: how a claim becomes a contract</a></li><li><a href="{{ "/docs/specification/adr/adr-270.html" | relative_url }}">ADR-270: the prover</a></li><li><a href="{{ "/docs/specification/adr/adr-361.html" | relative_url }}">ADR-361: loops and their invariants</a></li></ul>
     </div>
-    <p class="safe-others">More under Very safe: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/outside-data.html" | relative_url }}">Data from outside</a><a href="{{ "/safe/deadlines.html" | relative_url }}">A deadline for every wait</a></p>
+    <p class="safe-others">More under Safe, secure, reliable: <a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a><a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/outside-data.html" | relative_url }}">Data from outside</a><a href="{{ "/safe/deadlines.html" | relative_url }}">A deadline for every wait</a></p>
   </div>
 </section>
 
 <section class="home-section home-code-section" id="contracts">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · Contracts</p>
+      <p class="home-eyebrow">Safe, secure, reliable · Contracts</p>
       <h2>An <code>assert</code> is a contract.</h2>
       <p>
         There is no separate specification language. You write
@@ -163,7 +163,7 @@ fn main() throws {
 <section class="home-section home-section-alt home-code-section" id="loops">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · Loops</p>
+      <p class="home-eyebrow">Safe, secure, reliable · Loops</p>
       <h2>Loops are proved without written invariants</h2>
       <p>
         The <code>assert</code> after the loop in <code>steps</code> reads <code>total</code>,
@@ -226,7 +226,7 @@ fn main() throws {
 <section class="home-section home-code-section" id="outside">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · Data from outside</p>
+      <p class="home-eyebrow">Safe, secure, reliable · Data from outside</p>
       <h2>Checking outside data with a guard</h2>
       <p>
         What another program prints is not up to your program. If it is not what you expected,
@@ -284,7 +284,7 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75</code></pre>
 <section class="home-section home-section-alt home-code-section" id="report">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · The report</p>
+      <p class="home-eyebrow">Safe, secure, reliable · The report</p>
       <h2>The report of what was proved</h2>
       <p>
         <code>nikaia build --asserts</code> lists every <code>assert</code> and what became of
@@ -335,7 +335,7 @@ fn main() throws {
 <section class="home-section home-code-section" id="main-parameters">
   <div class="home-inner home-split">
     <div class="home-split-text">
-      <p class="home-eyebrow">Very safe · The command line</p>
+      <p class="home-eyebrow">Safe, secure, reliable · The command line</p>
       <h2><code>main</code>'s parameters are its command line.</h2>
       <p>
         <code>a</code> is a word the program needs. <code>times</code> comes after the

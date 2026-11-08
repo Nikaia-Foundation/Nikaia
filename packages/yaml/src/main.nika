@@ -44,10 +44,12 @@ pub struct Node {
 
 // A document of the stream: its root node, and whether `---` was written
 // before it (`start`) and `...` after it (`end`), as the events tell (D7).
+// `directives` are the document's own, where `events` resolves a tag.
 pub struct Document {
 	pub root: Node,
 	pub start: bool,
 	pub end: bool,
+	directives: Vec[Dir],
 }
 
 // A document as the grammar reads it after the first: whether `...` was
@@ -325,21 +327,26 @@ grammar Yaml {
 	rule NextDoc(left: i64) -> Next =
 		DocEnd+ v:AnyDoc(left) -> { Next { ended: true, doc: v } }
 		| v:Explicit([], left) -> {
-			Next { ended: false, doc: Document { root: v, start: true, end: false } }
+			Next {
+				ended: false,
+				doc: Document { root: v, start: true, end: false, directives: [] },
+			}
 		}
 	rule AnyDoc(left: i64) -> Document =
-		v:Directed(left) -> { Document { root: v, start: true, end: false } }
-		| v:Explicit([], left) -> { Document { root: v, start: true, end: false } }
-		| not(Marker) v:Block([], left, -1) -> { Document { root: v, start: false, end: false } }
+		v:Directed(left) -> { v }
+		| v:Explicit([], left) -> { Document { root: v, start: true, end: false, directives: [] } }
+		| not(Marker) v:Block([], left, -1) -> {
+			Document { root: v, start: false, end: false, directives: [] }
+		}
 	rule Explicit(ds: Vec[Dir], left: i64) -> Node = "---" v:DocAfter(ds, left) -> { v }
 
 	// `l-directive-document`: directives, then `---`; they hold for this
 	// document only. One `%YAML`, one `%TAG` per handle (YAML 1.2.2 6.8).
-	rule Directed(left: i64) -> Node =
+	rule Directed(left: i64) -> Document =
 		ds:Directive+
 		if(yaml_once(ds), "one %YAML directive")
 		if(handles_once(ds), "one %TAG directive per handle")
-		v:Explicit(ds, left) -> { v }
+		v:Explicit(ds, left) -> { Document { root: v, start: true, end: false, directives: ds } }
 	// `l-directive`: `%YAML` with a version of major 1 (`1.1`, `1.3` read as
 	// 1.2), `%TAG` with a handle and its prefix, or a reserved directive,
 	// ignored (6.8.1).
@@ -1960,8 +1967,9 @@ pub enum EventKind {
 // span (a document its root's), an end event the empty span at the node's
 // end, the stream's start 0 and its end the last document's end. `explicit`:
 // `---` written before the document (its start), `...` after it (its end).
-// `flow`: a flow collection's start. `anchor` and `tag` as the tree keeps
-// them (views); `style` and `value` a scalar's as written (`Node.raw`, a
+// `flow`: a flow collection's start. `anchor` as the tree keeps it (a view),
+// `tag` resolved to its full name by the document's directives (`!!int` is
+// `tag:yaml.org,2002:int`, a verbatim `!<t>` is `t`); `style` and `value` a scalar's as written (`Node.raw`, a
 // view), and `text` a `Value::Str`'s value through `text()` (null for every
 // other event); `value` is an alias's name; `""` and `Plain` elsewhere.
 pub struct Event {
@@ -1998,8 +2006,46 @@ fn marker(kind: EventKind, start: u32, end: u32, explicit: bool) -> Event sync {
 	}
 }
 
-// A node's start event: its span, anchor and tag.
-fn opening(kind: EventKind, n: ref Node) -> Event sync {
+// A node's tag resolved to its full name by the directives `ds` of its
+// document (YAML 1.2.2 6.8.2, D7): a shorthand's handle replaced by the prefix
+// a `%TAG` directive gives it, else `!!` by `tag:yaml.org,2002:` and the
+// primary `!` kept; a verbatim `!<t>` is `t`, the non-specific `!` stays. A
+// named handle no directive declares is refused while parsing.
+fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
+	let s = match t {
+		null => return null
+		x => x
+	}
+	if s == "!" {
+		return "!"
+	}
+	let rest = s.strip_prefix("!") ?? ""
+	let inner = rest.strip_prefix("<") ?? ""
+	let verbatim = inner.strip_suffix(">")
+	if verbatim != null {
+		return verbatim.clone()
+	}
+	let mut handle = "!"
+	if rest.starts_with("!") {
+		handle = "!!"
+	} else if rest.contains('!') {
+		let name = rest.split('!').next() ?? ""
+		handle = f"!{name}!"
+	}
+	let suffix = s.strip_prefix(handle) ?? ""
+	for d in ds {
+		if d.name == "TAG" && d.handle == handle {
+			return f"{d.prefix}{suffix}"
+		}
+	}
+	if handle == "!!" {
+		return f"tag:yaml.org,2002:{suffix}"
+	}
+	return s.clone()
+}
+
+// A node's start event: its span, anchor and tag (resolved, by `resolved`).
+fn opening(kind: EventKind, n: ref Node, ds: ref Vec[Dir]) -> Event sync {
 	return Event {
 		kind: kind,
 		start: n.start,
@@ -2007,7 +2053,7 @@ fn opening(kind: EventKind, n: ref Node) -> Event sync {
 		explicit: false,
 		flow: n.flow,
 		anchor: n.anchor,
-		tag: n.tag,
+		tag: resolved(ds, n.tag),
 		style: Style::Plain,
 		value: "",
 		text: null,
@@ -2016,21 +2062,21 @@ fn opening(kind: EventKind, n: ref Node) -> Event sync {
 
 // A node's events: a collection's start, its children's events and its end;
 // a scalar's or an alias's one event.
-fn walk(n: ref Node) -> Vec[Event] sync {
+fn walk(n: ref Node, ds: ref Vec[Dir]) -> Vec[Event] sync {
 	return match n.value {
 		Value::Seq(items) => {
-			let mut out: Vec[Event] = [opening(EventKind::SequenceStart, n)]
+			let mut out: Vec[Event] = [opening(EventKind::SequenceStart, n, ds)]
 			for x in items {
-				out.extend(walk(x))
+				out.extend(walk(x, ds))
 			}
 			out.push(bare(EventKind::SequenceEnd, n.end, n.end))
 			out
 		}
 		Value::Map(entries) => {
-			let mut out: Vec[Event] = [opening(EventKind::MappingStart, n)]
+			let mut out: Vec[Event] = [opening(EventKind::MappingStart, n, ds)]
 			for e in entries {
-				out.extend(walk(e.key))
-				out.extend(walk(e.value))
+				out.extend(walk(e.key, ds))
+				out.extend(walk(e.value, ds))
 			}
 			out.push(bare(EventKind::MappingEnd, n.end, n.end))
 			out
@@ -2057,7 +2103,7 @@ fn walk(n: ref Node) -> Vec[Event] sync {
 				explicit: false,
 				flow: false,
 				anchor: n.anchor,
-				tag: n.tag,
+				tag: resolved(ds, n.tag),
 				style: s.style,
 				value: n.raw,
 				text: text(s),
@@ -2071,7 +2117,7 @@ fn walk(n: ref Node) -> Vec[Event] sync {
 				explicit: false,
 				flow: false,
 				anchor: n.anchor,
-				tag: n.tag,
+				tag: resolved(ds, n.tag),
 				style: n.style,
 				value: n.raw,
 				text: null,
@@ -2087,7 +2133,7 @@ pub fn events(docs: ref Vec[Document]) -> Vec[Event] sync {
 	let mut last: u32 = 0
 	for d in docs {
 		out.push(marker(EventKind::DocumentStart, d.root.start, d.root.end, d.start))
-		out.extend(walk(d.root))
+		out.extend(walk(d.root, d.directives))
 		out.push(marker(EventKind::DocumentEnd, d.root.end, d.root.end, d.end))
 		last = d.root.end
 	}
@@ -2097,7 +2143,7 @@ pub fn events(docs: ref Vec[Document]) -> Vec[Event] sync {
 
 // An event's line in the yaml-test-suite's `test.event` form: `+STR`,
 // `+DOC ---`, `+MAP {} &a <tag>`, `=VAL &x :1`, `=ALI *x`. A tag is written
-// as the tree keeps it, between angle brackets (a verbatim `!<t>` as `<t>`).
+// as the event holds it, resolved, between angle brackets.
 pub fn event_line(e: ref Event) -> String sync {
 	return match e.kind {
 		EventKind::StreamStart => "+STR"
@@ -2132,14 +2178,7 @@ fn properties(e: ref Event) -> String sync {
 	}
 	let t = match e.tag {
 		null => ""
-		x => {
-			let inner = x.strip_prefix("!<") ?? ""
-			let verbatim = inner.strip_suffix(">")
-			match verbatim {
-				null => f" <{x}>"
-				v => f" <{v}>"
-			}
-		}
+		x => f" <{x}>"
 	}
 	return f"{a}{t}"
 }

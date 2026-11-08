@@ -610,7 +610,7 @@ grammar! {
     }
 }
 
-pub(crate) fn every_call(pieces: Vec<Called<'_>>) -> Vec<&str> {
+pub(crate) fn every_call<'r>(pieces: Vec<Called<'r>>) -> Vec<&'r str> {
     let mut all = Vec::new();
     for piece in pieces.into_iter() {
         match piece {
@@ -627,7 +627,7 @@ pub(crate) fn every_call(pieces: Vec<Called<'_>>) -> Vec<&str> {
     all
 }
 
-pub(crate) fn kept(found: Vec<Found<'_>>) -> Vec<RustItem<'_>> {
+pub(crate) fn kept<'r>(found: Vec<Found<'r>>) -> Vec<RustItem<'r>> {
     let mut all = Vec::new();
     for f in found.into_iter() {
         match f {

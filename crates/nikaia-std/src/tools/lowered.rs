@@ -3166,7 +3166,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_lower {
     #[allow(unused_imports)]
@@ -3174,7 +3174,7 @@ pub mod project_lower {
 }
 pub mod project_members {
     #[allow(unused_imports)]
-    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_by_version, project_members_unnamed, project_members_project_unnamed};
+    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_fetched_variable, project_members_fetched_text, project_members_fetched_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
 }
 pub mod project_settings {
     #[allow(unused_imports)]

@@ -1,0 +1,37 @@
+// A text `let` put into the frame's keep is a reference to it already: as a
+// lookup's key or a lent argument it is handed over as it is, never as
+// `&&String` (#99).
+use std::collections
+
+fn look(keys: ref Vec[String], m: ref collections::BTreeMap[String, String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for key in keys.iter() {
+        let named = f"n_{key}"
+        let at = m.get(named) ?? return []
+        out.push(at.clone())
+    }
+    return out
+}
+
+fn count(keys: ref Vec[String], m: ref collections::BTreeMap[String, String], s: ref collections::BTreeSet[String]) -> i64 {
+    let mut views: Vec[ref String] = []
+    let mut n = 0
+    for key in keys.iter() {
+        let named = f"n_{key}"
+        views.push(named.trim())
+        if m.get(named) != null { n += 1 }
+        if m.contains_key(named) { n += 1 }
+        if s.contains(named) { n += 1 }
+    }
+    return n + views.len() as i64
+}
+
+fn main() throws {
+    let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()
+    m.insert("n_a", "1")
+    m.insert("n_b", "2")
+    let mut s: collections::BTreeSet[String] = collections::BTreeSet()
+    s.insert("n_a")
+    println(look(["a", "b"], m).join(","))
+    println(count(["a", "c"], m, s))
+}

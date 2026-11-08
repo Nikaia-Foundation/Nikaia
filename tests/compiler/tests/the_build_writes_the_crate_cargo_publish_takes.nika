@@ -1,0 +1,44 @@
+// #99, ADR-286 D25: `nikaia build` writes the package as `cargo publish` takes
+// it to `target/nikaia/publish/`: the crate `nikaia_<name>`, its own packages
+// by version as the renaming, and the sources and the ledger, nothing lowered.
+// Checked with `cargo package --list`, offline; nothing is published.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/base/src", f"{tmp}/app/src/parts", f"{tmp}/app/.cargo"])
+    fs::write(f"{tmp}/base/Cargo.toml", fs::Root::Anywhere, "[package]\nname = \"nikaia_base\"\nversion = \"0.2.4\"\nedition = \"2024\"\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n")
+    fs::write(f"{tmp}/base/lib.rs", fs::Root::Anywhere, "")
+    fs::write(f"{tmp}/base/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"base\"\nversion = \"0.2.4\"\n")
+    fs::write(f"{tmp}/base/src/lib.nika", fs::Root::Anywhere, "pub fn one() -> i64 {\n    return 1\n}\n")
+    fs::write(f"{tmp}/base/nikaia.contracts", fs::Root::Anywhere, "")
+    fs::write(f"{tmp}/app/.cargo/config.toml", fs::Root::Anywhere, f"[patch.crates-io]\nnikaia_base = {{ path = \"{tmp}/base\" }}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"tally-up\"\nversion = \"0.3.0\"\nlicense = \"MIT\"\n\n[dependencies]\nbase = \"0.2\"\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use base\n\npub fn tally(x: i64) -> i64 {\n    return x + base::one()\n}\n\nfn main() throws {\n    println(tally(1))\n}\n")
+    fs::write(f"{tmp}/app/src/parts/more.nika", fs::Root::Anywhere, "pub fn more() -> i64 {\n    return 2\n}\n")
+    let built = process::run(nikaia, ["build"]; dir: f"{tmp}/app", env: [("CARGO_NET_OFFLINE", "true")])
+    println(f"built: {built.ok}")
+    if !built.ok {
+        println(built.stderr)
+    }
+    let stub = fs::read_to_string(f"{tmp}/app/target/nikaia/publish/Cargo.toml", fs::Root::Anywhere)
+    for line in stub.lines() {
+        if line.starts_with("name") || line.starts_with("version") || line.starts_with("license") || line.starts_with("base") {
+            println(line)
+        }
+    }
+    let listed = process::run("cargo", ["package", "--no-verify", "--list", "--offline", "--allow-dirty", "--manifest-path", f"{tmp}/app/target/nikaia/publish/Cargo.toml"]; dir: f"{tmp}/app")
+    println(listed.stdout.trim())
+    if !listed.ok {
+        println(listed.stderr)
+    }
+    process::run("rm", ["-rf", tmp])
+}
