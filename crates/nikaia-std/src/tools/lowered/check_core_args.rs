@@ -130,6 +130,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     let result = nikaia_std::boxed::open(result);
                     let pauses: bool = !is_sync;
                     let fails: bool = can_throw;
+                    if declared_here { state.a_lambda_hands_back_nothing(id, (result).as_ref()); }
                     check_core_args_lambda_says_mut(state, world, arg, params, mutable, given, &code, span);
                     if pauses && declared_here {
                         state.facts.future_lambdas.insert(id);

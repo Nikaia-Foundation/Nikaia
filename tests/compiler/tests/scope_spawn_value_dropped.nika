@@ -1,0 +1,32 @@
+// A lambda where the function type hands back nothing drops its body's
+// value, as a named function without a result type does (#1321): a task of
+// `task::scope`, code a function of the program runs, and code kept in a
+// field.
+use std::task
+
+struct Hook {
+	run: fn()
+}
+
+fn twice(f: fn()) {
+	f()
+	f()
+}
+
+fn three() -> i64 throws {
+	3
+}
+
+fn main() throws {
+	let r = task::scope fn(s) {
+		s.spawn fn { 1 }
+		s.spawn fn { three() }
+		2
+	}
+	println(r)
+	twice(fn { 4 })
+	let hook = Hook { run: fn { 5 } }
+	let run = hook.run
+	run()
+	println("done")
+}
