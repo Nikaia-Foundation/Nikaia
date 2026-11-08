@@ -181,6 +181,18 @@ struct BoundsWalk {
 	written: collections::BTreeMap[String, Range],
 	/// Keys a write this pass put something unbounded in.
 	poisoned: collections::BTreeSet[String],
+	/// **The lists each key's values lie below** (ADR-306 D21, #1397): `0
+	/// <= x < e.len()` for every value `x` of the key, with `e` a list the
+	/// body never changes. Found and checked as `assumed` is.
+	assumed_ends: collections::BTreeMap[String, collections::BTreeSet[String]],
+	/// Of those, what every write this pass saw was proved below, by key.
+	written_ends: collections::BTreeMap[String, collections::BTreeSet[String]],
+	/// What the whole body may change: an end is a list it changes nothing
+	/// of.
+	steady: BoundsChanged,
+	/// The names an end may be read of: the parameters, and the names a
+	/// statement of the body's own block binds once.
+	end_roots: collections::BTreeSet[String],
 	/// A pass that only finds bounds and proves nothing.
 	collecting: bool,
 	/// The first byte of the statement being walked: the key a compound
@@ -334,6 +346,7 @@ pub fn bounds_aggressive(
 			for (key, bound) in context.around.field_bounds {
 				walk.assumed.insert(key.clone(), bound.clone())
 			}
+			walk.assumed_ends = bounding_found_ends(walk)
 		}
 		walk.collecting = false
 		for _round in 0..<4 {
@@ -353,7 +366,27 @@ pub fn bounds_aggressive(
 				}
 			}
 			walk.assumed = kept
-			if walk.assumed.len() == before {
+			// An end every write was proved below stays (ADR-306 D21); a key
+			// this pass wrote nothing into keeps what it had.
+			let mut ends_kept = true
+			let mut ends: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+			for (key, lists) in walk.assumed_ends {
+				let seen = walk.written_ends.get(key) ?? {
+					ends.insert(key.clone(), lists.clone())
+					continue
+				}
+				let mut held: collections::BTreeSet[String] = collections::BTreeSet()
+				for list in lists {
+					if seen.contains(list) {
+						held.insert(list.clone())
+					} else {
+						ends_kept = false
+					}
+				}
+				ends.insert(key.clone(), held)
+			}
+			walk.assumed_ends = ends
+			if walk.assumed.len() == before && ends_kept {
 				settled = true
 				break
 			}
@@ -363,6 +396,7 @@ pub fn bounds_aggressive(
 		if !walk.shape.roots.is_empty() {
 			walk.assumed = context.around.field_bounds.clone()
 		}
+		walk.assumed_ends = collections::BTreeMap()
 		walk.proven = no_proofs()
 		bounding_pass(walk, args, body, context, program, words, ask)
 	}
@@ -522,6 +556,10 @@ fn bounding_new(
 		assumed: context.around.field_bounds.clone(),
 		written: collections::BTreeMap(),
 		poisoned: collections::BTreeSet(),
+		assumed_ends: collections::BTreeMap(),
+		written_ends: collections::BTreeMap(),
+		steady: bounding_changed(body, context, words),
+		end_roots: collections::BTreeSet(),
 		collecting: false,
 		at: 0,
 		growing: collections::BTreeSet(),
@@ -547,7 +585,24 @@ fn bounding_new(
 		let name = words.resolve(arg.name).clone()
 		let ty = words.resolve(arg.ty.name).clone()
 		if arg.ty.generics.is_empty() && is_whole_number(ty) && !walk.shape.twice.contains(name) {
-			walk.typed.insert(name, ty)
+			walk.typed.insert(name.clone(), ty)
+		}
+		if !walk.shape.twice.contains(name) {
+			walk.end_roots.insert(name)
+		}
+	}
+	walk.end_roots.insert("self")
+	for stmt in body.stmts {
+		match stmt.node {
+			Stmt::Let { names, .. } => {
+				for symbol in names {
+					let name = words.resolve(symbol)
+					if !walk.shape.twice.contains(name) {
+						walk.end_roots.insert(name.clone())
+					}
+				}
+			},
+			else => {},
 		}
 	}
 	return walk
@@ -566,6 +621,7 @@ fn bounding_pass(
 ) {
 	walk.written = collections::BTreeMap()
 	walk.poisoned = collections::BTreeSet()
+	walk.written_ends = collections::BTreeMap()
 	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [] }
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -614,6 +670,18 @@ fn bounding_found(walk: ref BoundsWalk) -> collections::BTreeMap[String, Range] 
 	for (key, bound) in walk.written {
 		if bound.is_bounded() && !bounding_poisoned(walk, key) && !key.starts_with(".") {
 			out.insert(key.clone(), bound.clone())
+		}
+	}
+	return out
+}
+
+/// The ends this pass found (ADR-306 D21): of each key, the lists every
+/// write into it was proved below.
+fn bounding_found_ends(walk: ref BoundsWalk) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+	let mut out: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+	for (key, lists) in walk.written_ends {
+		if !lists.is_empty() {
+			out.insert(key.clone(), lists.clone())
 		}
 	}
 	return out
@@ -669,6 +737,7 @@ fn bounding_write(
 		},
 		else => {},
 	}
+	bounding_end_write(walk, key, value, facts, context, program, words, ask)
 	let range = bounding_range(walk, value, facts, context, program, words, ask)
 	if range != null {
 		bounding_join(walk, key, range ?? Range::open())
@@ -685,6 +754,141 @@ fn bounding_write(
 		return
 	}
 	walk.poisoned.insert(key.clone())
+}
+
+/// **The lists `value`, written into `key`'s list, is proved to lie below**
+/// (ADR-306 D21, #1397): of the lengths the facts read, those of a list the
+/// body never changes, read through a name that is one thing all through
+/// it, `0 <= value < e.len()`. A value read out of a list takes that list's
+/// ends. What the key's writes so far were proved below keeps only these.
+fn bounding_end_write(
+	mut walk: BoundsWalk,
+	key: ref String,
+	value: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if key.contains("[") || key.starts_with(".") {
+		return
+	}
+	let mut below: collections::BTreeSet[String] = collections::BTreeSet()
+	let term = bounding_lin(walk, value, facts, context, program, words)
+	if term != null {
+		let v = term ?? 0
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		for fact in facts.facts {
+			walk.arena.variables(fact, read)
+		}
+		let zero = walk.arena.int(0)
+		for name in read {
+			let list = name.strip_suffix(".len()") ?? continue
+			if !bounding_end_list(walk, list, key) {
+				continue
+			}
+			let low = walk.arena.ge(v, zero)
+			let len = walk.arena.var(name)
+			let high = walk.arena.lt(v, len)
+			let goal = walk.arena.and([low, high])
+			if bounding_proves(walk, facts, goal, ask) {
+				below.insert(list.clone())
+			}
+		}
+	} else {
+		match value {
+			Expr::Index { base, .. } => {
+				let from = elements_key(walk.shape, base, words) ?? ""
+				below = walk.assumed_ends.get(from)?.clone() ?? collections::BTreeSet()
+			},
+			else => {},
+		}
+	}
+	let was = walk.written_ends.get(key)?.clone()
+	if was != null {
+		let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+		for list in was ?? collections::BTreeSet() {
+			if below.contains(list) {
+				kept.insert(list.clone())
+			}
+		}
+		below = kept
+	}
+	walk.written_ends.insert(key.clone(), below)
+}
+
+/// Whether `list` may be an end of `key`'s values: its root is one thing
+/// all through the body, and the body changes neither it, nor a value it is
+/// a part of, nor its length.
+fn bounding_end_list(walk: ref BoundsWalk, list: ref String, key: ref String) -> bool {
+	let root = path_root(list)
+	if root == key_root(key) || !walk.end_roots.contains(root) || walk.pinned.contains(root) {
+		return false
+	}
+	if walk.steady.lengths.contains(list) {
+		return false
+	}
+	for name in walk.steady.values {
+		if list == name || list.starts_with(f"{name}.") {
+			return false
+		}
+	}
+	for name in walk.steady.parts {
+		if list == name || list.starts_with(f"{name}.") {
+			return false
+		}
+	}
+	return true
+}
+
+/// **What `key`'s ends say of a value read out of it**, bound to `name`:
+/// `0 <= name < e.len()` for each (ADR-306 D21).
+fn bounding_end_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, key: ref String) {
+	let ends = walk.assumed_ends.get(key) ?? return
+	if ends.is_empty() {
+		return
+	}
+	let lists = ends.clone()
+	let n = walk.arena.var(name)
+	let zero = walk.arena.int(0)
+	facts.ints.insert(name.clone())
+	let low = walk.arena.ge(n, zero)
+	bounding_push(walk, facts, low)
+	for list in lists {
+		let len = walk.arena.var(length_of(list))
+		let high = walk.arena.lt(n, len)
+		bounding_push(walk, facts, high)
+	}
+}
+
+/// **An index read out of a list whose ends bound its values** (ADR-306
+/// D21): `list[xs[i]]` lies inside where `xs`'s ends do.
+fn bounding_end_inside(
+	mut walk: BoundsWalk,
+	len: i64,
+	index: ref Expr,
+	facts: ref BoundsFacts,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> bool {
+	let base = match index {
+		Expr::Index { base, .. } => base,
+		else => return false,
+	}
+	let key = elements_key(walk.shape, base, words) ?? return false
+	if !walk.assumed_ends.contains_key(key) {
+		return false
+	}
+	let mut known = BoundsFacts { ints: facts.ints.clone(), facts: facts.facts.clone() }
+	let each = f"{key}.end()"
+	bounding_end_facts(walk, known, each, key)
+	let n = walk.arena.var(each)
+	let zero = walk.arena.int(0)
+	let low = walk.arena.ge(n, zero)
+	let high = walk.arena.lt(n, len)
+	let goal = walk.arena.and([low, high])
+	return bounding_proves_goal(walk, known, goal, ask)
 }
 
 /// **The list fields a literal or a `with` gives** (ADR-306 D21), each the
@@ -2891,6 +3095,9 @@ fn bounding_inside(
 		if rules_element_inside(walk, len, index, facts, words, ask) {
 			return true
 		}
+		if bounding_end_inside(walk, len, index, facts, words, ask) {
+			return true
+		}
 		// A position read out of a list whose values are bounded (ADR-306
 		// D7), or one `%` keeps small (D3).
 		let range = bounding_range(walk, index, facts, context, program, words, ask) ?? return false
@@ -4763,6 +4970,15 @@ fn bounding_let(
 	// **What a rule between list fields says of the value** (ADR-369 D4):
 	// a method's result inside a list, an element of a list of positions.
 	rules_result_facts(walk, facts, name, value, context, words)
+	match value {
+		Expr::Index { base, .. } => {
+			let key = elements_key(walk.shape, base, words)
+			if key != null {
+				bounding_end_facts(walk, facts, name, key ?? "")
+			}
+		},
+		else => {},
+	}
 	rules_element_facts(walk, facts, name, value, words)
 	if whole {
 		facts.ints.insert(name.clone())
@@ -4993,6 +5209,8 @@ fn bounding_for(
 				inner.ints.insert(only.clone())
 				bounding_bounded(walk, inner, only, bound ?? Range::open())
 			}
+			let only = words.resolve(bindings[0]).clone()
+			bounding_end_facts(walk, inner, only, key ?? "")
 		}
 	}
 	// **A position a search hands back lies in the buffer** (ADR-375 D5):

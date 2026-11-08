@@ -1,0 +1,15 @@
+bounds in tests/prove_element_bound_end.nika: 10 indexes, 6 proved; 3 operations, 2 proved
+    15  values[at]        proved
+    19  values[at]        proved
+    19  count += 1        proved
+    27  table.values[at]  proved
+    31  kept[k]           proved
+    32  table.values[at]  proved
+    32  n + 1             checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    33  k += 1            proved
+    48  values[at]        proved
+    60  values[at]        checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    73  values[at]        checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    89  values[at]        checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+   101  values[at]        checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+  derived  first_over: 0 <= n, proved at the calls on lines 108
