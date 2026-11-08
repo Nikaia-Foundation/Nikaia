@@ -2236,6 +2236,52 @@ pub(crate) fn prover_reads_only(contract: &FnContract) -> bool {
     }
 }
 
+pub(crate) fn prover_length_keepers(program: &Program, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut keepers = readers.to_owned();
+    let mut candidates: Vec<String> = vec![];
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Fn { name, receiver, args, .. } => {
+                let name = *name;
+                if receiver.is_none() && name.is_some() {
+                    let mut lists = true;
+                    for arg in args.iter() { if arg.mutable && !has_a_length(words.resolve(arg.ty.name)) { lists = false; } }
+                    let n = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string();
+                    if lists && !readers.contains(&n) {
+                        keepers.insert(n.to_string());
+                        candidates.push(n);
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    let mut falling = true;
+    while falling {
+        falling = false;
+        for item in program.items.iter() {
+            match &item.node {
+                Item::Fn { name, receiver, args, body, .. } => {
+                    let name = *name;
+                    if receiver.is_some() || name.is_none() { continue; }
+                    let n = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string();
+                    if !nikaia_std::list::contains(&candidates, &n) || !keepers.contains(&n) { continue; }
+                    for arg in args.iter() {
+                        let arg_name = words.resolve(arg.name).to_string();
+                        if arg.mutable && (changes_length_in(body, &arg_name, &keepers, words) || rebinds(body, &arg_name, words)) {
+                            keepers.remove(&n);
+                            falling = true;
+                            break;
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    keepers
+}
+
 pub(crate) fn prover_readers(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut readers: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in program.items.iter() {
