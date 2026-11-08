@@ -60,6 +60,7 @@ pub fn bounds_around(
 		fields: collections::BTreeSet(),
 		field_writers: collections::BTreeSet(),
 		field_bounds: collections::BTreeMap(),
+		returning: collections::BTreeSet(),
 	}
 	for item in program.items {
 		match item.node {

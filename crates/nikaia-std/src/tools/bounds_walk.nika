@@ -93,10 +93,17 @@ pub struct BoundsContext {
 /// `sized` holds those of them whose length the callee's walk read as one
 /// of a list whose elements take space (#383): the caller's length of the
 /// list handed there is at most `length_below()` as well (#1465).
+///
+/// `range` is the bound D7 found on every element of the list returned
+/// (D24): `0 <= x < 10` of a list of digits. `pending` while the rounds
+/// collect: a call of one adds nothing to what it is written into, as a
+/// recursive call has not returned yet.
 pub struct BoundsReturns {
 	pub each: bool,
 	pub below: collections::BTreeSet[i64],
 	pub sized: collections::BTreeSet[i64],
+	pub range: Range?,
+	pub pending: bool,
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -2777,6 +2784,16 @@ fn bounding_each(
 				let len = bounding_length_named(walk, list, sized)
 				out.push(walk.arena.lt(item, len))
 			}
+			// And the range D7 found of its values (D24): `lo <= item <= hi`.
+			let range = bounding_returned_values(walk, iter, context, words) ?? return out
+			if range.lo != null && (range.lo ?? 0) >= 0 - solvable() {
+				let lo = walk.arena.int(range.lo ?? 0)
+				out.push(walk.arena.ge(item, lo))
+			}
+			if range.hi != null && (range.hi ?? 0) <= solvable() {
+				let hi = walk.arena.int(range.hi ?? 0)
+				out.push(walk.arena.le(item, hi))
+			}
 		},
 		else => {},
 	}
@@ -5136,6 +5153,7 @@ fn bounding_let(
 				words,
 				ask,
 			),
+			Expr::Call { .. } => bounding_call_root(walk, name, value, context, words),
 			else => {},
 		}
 	}
@@ -6929,10 +6947,17 @@ pub fn bounds_returns(
 						below.insert(k)
 					}
 				}
-				if below.is_empty() {
+				// A list of numbers may be bounded by its values alone (D24).
+				if below.is_empty() && !each {
 					continue
 				}
-				assumed.insert(words.resolve(symbol).clone(), BoundsReturns { each: each, below: below, sized: collections::BTreeSet() })
+				assumed.insert(words.resolve(symbol).clone(), BoundsReturns {
+					each: each,
+					below: below,
+					sized: collections::BTreeSet(),
+					range: null,
+					pending: each,
+				})
 				bodies.push(item)
 			},
 			else => {},
@@ -6941,52 +6966,143 @@ pub fn bounds_returns(
 	if assumed.is_empty() {
 		return
 	}
+	for (name, wanted) in assumed {
+		if wanted.each {
+			context.around.returning.insert(name.clone())
+		}
+	}
+	// **The values each returned list holds, collected** (D24, as D7's
+	// first passes): every candidate's call adds nothing, so a recursive
+	// one's base cases are what its values start from; the rounds below
+	// assume them and keep those proved.
+	context.returns = assumed.clone()
+	let collected = bounding_returns_round(context, bodies, assumed, program, words, ask)
+	let mut started: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+	for (name, wanted) in assumed {
+		let mut next = wanted.clone()
+		next.pending = false
+		next.range = collected.get(name)?.range?.clone()
+		started.insert(name.clone(), next)
+	}
+	assumed = started
 	// Each round keeps a part of the last one's bounds, so the rounds end
 	// where one keeps them all, or none is left.
 	let rounds = bounding_returns_count(assumed) + 1
 	for _round in 0..<rounds {
 		context.returns = assumed.clone()
-		let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
-		for item in bodies {
-			match item.node {
-				Item::Fn { name, args, body, .. } => {
-					let key = words.resolve(name ?? continue).clone()
-					let wanted = assumed.get(key) ?? continue
-					let mut walk = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
-					for k in 0..<args.len() {
-						let param = words.resolve(args[k].name).clone()
-						if wanted.below.contains(k) && walk.lists.contains(param) {
-							walk.return_params.push(param)
-						} else {
-							walk.return_params.push("")
-						}
-					}
-					walk.return_each = wanted.each
-					let proven = bounds_rounds(walk, args, body, context, program, words, ask)
-					let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
-					let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
-					for k in proven.returned ?? collections::BTreeSet() {
-						if wanted.below.contains(k) {
-							held.insert(k)
-							if walk.axioms.contains_key(length_of(walk.return_params[k])) {
-								sized.insert(k)
-							}
-						}
-					}
-					if !held.is_empty() {
-						found.insert(key, BoundsReturns { each: wanted.each, below: held, sized: sized })
-					}
-				},
-				else => {},
-			}
-		}
+		let found = bounding_returns_round(context, bodies, assumed, program, words, ask)
 		if bounding_returns_count(found) == bounding_returns_count(assumed) {
-			context.returns = found
+			bounding_returns_settle(context, found)
 			return
 		}
 		assumed = found
 	}
-	context.returns = collections::BTreeMap()
+	bounding_returns_settle(context, collections::BTreeMap())
+}
+
+/// **The returns found, settled**: the functions a `let` root may be bound
+/// to a call of are those found to return a list (ADR-306 D24).
+fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTreeMap[String, BoundsReturns]) {
+	context.around.returning = collections::BTreeSet()
+	for (name, wanted) in found {
+		if wanted.each {
+			context.around.returning.insert(name.clone())
+		}
+	}
+	context.returns = found
+}
+
+/// **One round of [`bounds_returns`]**: each body walked for the bounds
+/// `assumed` asks, with `context.returns` assumed of its calls; of each, the
+/// list parameters every return was proved below, and the range D7 found
+/// on the values of every list returned, held within the assumed one where
+/// one was assumed.
+fn bounding_returns_round(
+	context: ref BoundsContext,
+	bodies: ref Vec[ref Spanned[Item]],
+	assumed: ref collections::BTreeMap[String, BoundsReturns],
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> collections::BTreeMap[String, BoundsReturns] {
+	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+	for item in bodies {
+		match item.node {
+			Item::Fn { name, args, body, .. } => {
+				let key = words.resolve(name ?? continue).clone()
+				let wanted = assumed.get(key) ?? continue
+				let mut walk = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
+				for k in 0..<args.len() {
+					let param = words.resolve(args[k].name).clone()
+					if wanted.below.contains(k) && walk.lists.contains(param) {
+						walk.return_params.push(param)
+					} else {
+						walk.return_params.push("")
+					}
+				}
+				walk.return_each = wanted.each
+				let proven = bounds_rounds(walk, args, body, context, program, words, ask)
+				let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
+				let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
+				let returned = proven.returned != null
+				for k in proven.returned ?? collections::BTreeSet() {
+					if wanted.below.contains(k) {
+						held.insert(k)
+						if walk.axioms.contains_key(length_of(walk.return_params[k])) {
+							sized.insert(k)
+						}
+					}
+				}
+				let mut range: Range? = null
+				if wanted.each && returned {
+					range = bounding_returned_range(walk)
+				}
+				if range != null && !wanted.pending {
+					let seen = range ?? Range::open()
+					if !(wanted.range ?? Range::open()).holds(seen) || wanted.range == null {
+						range = null
+					} else {
+						range = wanted.range?.clone()
+					}
+				}
+				if !held.is_empty() || range != null {
+					found.insert(key, BoundsReturns {
+						each: wanted.each,
+						below: held,
+						sized: sized,
+						range: range,
+						pending: false,
+					})
+				}
+			},
+			else => {},
+		}
+	}
+	return found
+}
+
+/// **The range of every value of the lists a walk returned** (ADR-306
+/// D24): the join of what D7 found of each, nothing where one has none or
+/// only empty lists were returned. A list nothing was written into holds
+/// no value to join.
+fn bounding_returned_range(walk: ref BoundsWalk) -> Range? {
+	let mut out: Range? = null
+	for name in walk.return_names {
+		if !walk.written.contains_key(name) && !bounding_poisoned(walk, name) {
+			continue
+		}
+		let bound = walk.assumed.get(name) ?? return null
+		if out == null {
+			out = bound.clone()
+		} else {
+			out = (out ?? Range::open()).join(bound)
+		}
+	}
+	let range = out ?? return null
+	if !range.is_bounded() {
+		return null
+	}
+	return range
 }
 
 /// Whether a function returning `ty` is one D23 finds a bound of: `false`
@@ -7013,6 +7129,9 @@ fn bounding_returns_count(returns: ref collections::BTreeMap[String, BoundsRetur
 	let mut out = 0
 	for (_name, found) in returns {
 		out += found.below.len()
+		if found.range != null {
+			out += 1
+		}
 	}
 	return out
 }
@@ -7169,6 +7288,77 @@ fn bounding_returned_below(
 		else => {},
 	}
 	return out
+}
+
+/// **The range a call's list is found to hold its values in** (ADR-306
+/// D24), of a callee the walk does not bind again; nothing while the
+/// rounds collect or where none was found.
+fn bounding_returned_values(
+	walk: ref BoundsWalk,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> Range? {
+	return match value {
+		Expr::Call { func, .. } => {
+			let callee = bounding_callee(func, words) ?? return null
+			if walk.shape.bound.contains(callee) {
+				return null
+			}
+			let found = context.returns.get(callee) ?? return null
+			if !found.each || found.pending {
+				return null
+			}
+			found.range?.clone()
+		},
+		else => null,
+	}
+}
+
+/// **A `let` root bound to a call's list** (ADR-306 D24): its first values
+/// lie in the range the callee is found to return, below the lists it is
+/// found to return them below; while the rounds collect, they add nothing.
+fn bounding_call_root(
+	mut walk: BoundsWalk,
+	key: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let callee = match value {
+		Expr::Call { func, .. } => bounding_callee(func, words) ?? "",
+		else => "",
+	}
+	// **Only a call of a function found to return whole numbers** writes
+	// the root here: `collections::BTreeMap()` of an empty map is a call
+	// too, and its writes come later.
+	let found = context.returns.get(callee)
+	if found == null || !(found?.each ?? false) || (found?.pending ?? false) {
+		return
+	}
+	let range = bounding_returned_values(walk, value, context, words)
+	if range != null {
+		bounding_join(walk, key, range ?? Range::open())
+	} else {
+		walk.poisoned.insert(key.clone())
+	}
+	let mut below: collections::BTreeSet[String] = collections::BTreeSet()
+	for (list, _sized) in bounding_returned_below(walk, value, true, context, words) {
+		if bounding_end_list(walk, list, key) {
+			below.insert(list.clone())
+		}
+	}
+	let was = walk.written_ends.get(key)?.clone()
+	if was != null {
+		let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+		for list in was ?? collections::BTreeSet() {
+			if below.contains(list) {
+				kept.insert(list.clone())
+			}
+		}
+		below = kept
+	}
+	walk.written_ends.insert(key.clone(), below)
 }
 
 /// An argument's path, through a `ref`.

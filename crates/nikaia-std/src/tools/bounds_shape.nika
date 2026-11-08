@@ -67,6 +67,10 @@ pub struct Around {
 	pub fields: collections::BTreeSet[String],
 	pub field_writers: collections::BTreeSet[i64],
 	pub field_bounds: collections::BTreeMap[String, Range],
+	/// **The free functions found to return a list of whole numbers**
+	/// (ADR-306 D24, `bounds_returns`): a `let` bound to a call of one is a
+	/// root, whose first values are what the callee is found to return.
+	pub returning: collections::BTreeSet[String],
 }
 
 enum Look {
@@ -84,6 +88,7 @@ struct ShapeSeen {
 	bound: collections::BTreeMap[String, i64],
 	shape: BodyShape,
 	lost: collections::BTreeSet[String],
+	returning: collections::BTreeSet[String],
 }
 
 /// **The shape of `body`**, a function whose parameters are `args`, where
@@ -107,6 +112,7 @@ pub fn shape_of(
 			fields: around.fields.clone(),
 		},
 		lost: collections::BTreeSet(),
+		returning: around.returning.clone(),
 	}
 	for arg in args {
 		bind_name(words.resolve(arg.name), seen)
@@ -357,8 +363,24 @@ fn read_let(
 			seen.shape.constants.insert(name.clone(), n ?? 0)
 		}
 	}
-	if is_list_literal(value) || is_empty_map(value, words) {
+	if is_list_literal(value) || is_empty_map(value, words) || returning_call(value, seen.returning, words) {
 		seen.shape.roots.insert(name.clone())
+	}
+}
+
+/// **A call of a free function found to return a list** (ADR-306 D24):
+/// what it hands back is a list whose values the walk knows as a literal's.
+fn returning_call(
+	expr: ref Expr,
+	returning: ref collections::BTreeSet[String],
+	words: ref winnow_grammar::InternerContext,
+) -> bool {
+	return match expr {
+		Expr::Call { func, .. } => match func {
+			Expr::Variable(name, _) => returning.contains(words.resolve(name)),
+			else => false,
+		},
+		else => false,
 	}
 }
 
