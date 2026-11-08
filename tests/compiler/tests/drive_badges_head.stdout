@@ -1,0 +1,9 @@
+== unstaged deletion
+
+base
+ D BIG
+HEAD badges match HEAD
+== committed deletion
+BADGES regenerated and committed
+badges: regenerate for the tree under test
+HEAD badges match HEAD

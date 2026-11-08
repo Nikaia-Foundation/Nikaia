@@ -704,8 +704,20 @@ fn drive_ci_branch(dir: String) -> String {
 // The badges follow the tree they describe (the self-hosted share moves with
 // every move into Nikaia); a builder does not touch them, so the driver
 // regenerates them before each suite and commits only `assets/badges/`.
+// They are measured on an export of HEAD (`git archive`), not on the shared
+// working tree (#1348): another lane's unstaged deletion of a `.rs` moved the
+// self-hosted share there, so the committed badge did not match the committed
+// tree and CI's `badges.py --check` was red on it.
 fn drive_badges() throws {
-	let made = process::run("python3", ["scripts/badges.py"])
+	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let made = process::run(
+		"sh",
+		["-c", f"git archive HEAD | tar -x -C '{copy}' && cd '{copy}' && python3 scripts/badges.py"],
+	)
+	if made.ok {
+		process::run("sh", ["-c", f"cp '{copy}'/assets/badges/*.svg assets/badges/"])
+	}
+	process::run("rm", ["-rf", copy])
 	if !made.ok { drive_escalate(f"scripts/badges.py failed: {made.stderr.trim()}") }
 	let changed = process::run("git", ["status", "--porcelain", "assets/badges/"])
 	if changed.stdout.trim() == "" { return }
@@ -2255,6 +2267,11 @@ fn main() throws {
 		println(drive_found_title(args[4].clone()))
 		println(drive_found_labels(args[5].clone(), "views").join(","))
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
+		return
+	}
+	// The badges step alone (#1348), in the repository it runs in.
+	if args.len() == 2 && args[1] == "--badges" {
+		drive_badges()
 		return
 	}
 	if args.len() == 3 && args[1] == "--blocks" {
