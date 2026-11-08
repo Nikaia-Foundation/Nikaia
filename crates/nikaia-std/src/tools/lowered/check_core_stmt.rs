@@ -226,6 +226,18 @@ pub(crate) fn check_core_stmt_a_name_or_field(value: &Expr) -> bool { matches!(v
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_whole_run_viewed(found: &Ty, want: &Ty) -> bool {
+    match want {
+        Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; slice && !mutable && !found.is_a_view() && match found {
+            Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).fits(item),
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_call(value: &Expr) -> bool { matches!(value, Expr::Call { .. } | Expr::MethodCall { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -683,6 +695,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
         seen_through = !found.fits(&want) && state.fits_through_deref(world, &found, &want);
+        seen_through = seen_through || check_core_stmt_a_whole_run_viewed(&found, &want);
     }
     let mut element_view: i64 = 0;
     if names.len() == 1 && ty.is_some() {

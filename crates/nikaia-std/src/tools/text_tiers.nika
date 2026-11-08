@@ -7545,7 +7545,8 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
 /// `let r: Array[i64] = xs[1..]`, `= grid[0]` or `= rest(v)`, a call of a
 /// function of the file whose result is a view of what it is handed, is
 /// written as `ref Array[T]` and holds a view of the place, as a field or a
-/// result of that type does. A `mut` let, a tuple of names, and a value of
+/// result of that type does; so is `= v` or `= bag.items`, a whole list the
+/// checker lends to it (#1362). A `mut` let, a tuple of names, and a value of
 /// its own (a call of anything else, a literal) stay as written, and
 /// `NK1182` says the type needs a length. A `let` declared `Bytes` given a
 /// cut or such a call is a view the same way (ADR-views-3 D15, #1271).
@@ -7590,9 +7591,12 @@ fn lv_stmt(mut stmt: Stmt, words: ref winnow_grammar::InternerContext, views: re
 
 /// A piece of a buffer: an element or a piece of a place (`xs[1..]`,
 /// `grid[0]`), or a call whose result is a view of the places it is handed.
-/// A whole name or field is not: the `let` would take it over.
+/// A whole name or field is one too (#1362): the checker lends it to the
+/// `let`, whose `Array[T]` has no length to own with.
 fn lv_a_piece(value: ref Expr, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) -> bool {
     return match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
         Expr::Index { .. } => hb_place_root(value, words) != null,
         Expr::Call { .. } => hb_call_sources(value, words, views) != null,
         else => false,

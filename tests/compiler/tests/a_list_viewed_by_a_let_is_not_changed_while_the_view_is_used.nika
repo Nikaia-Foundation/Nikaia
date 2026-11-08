@@ -1,0 +1,10 @@
+// A list a `let` declared `Array[T]` views whole is not changed while the
+// view is still used (ADR-views-3 D11, #1362).
+struct Item { name: String }
+
+fn main() throws {
+    let mut v: Vec[Item] = [Item { name: "a" }]
+    let c: Array[Item] = v
+    v.push(Item { name: "b" })
+    println(f"{c.len()}")
+}

@@ -429,7 +429,7 @@ pub(crate) fn written_at_the_boundary(names: &winnow_grammar::InternerContext, t
     simd_written(names, &name, ty, span, out);
     if !a_parameter && !ty.is_view && !ty.is_slice && ty.count.is_none() && ty.generics.len() == 1 && name == "Array" {
         let element = names.resolve(nikaia_std::index::get(&ty.generics, 0).name).to_string();
-        out.push(refusal("NK1182", span.clone(), format!("`Array[{}]` needs a length here.", element), vec![format!("`Array[{}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from.", element)], format!("Use `Vec[{}]` for a list that can grow, `ref Array[{}]` to look at elements something else keeps, or `Array[{}, N]` to write the length down.", element, element, element)));
+        out.push(refusal("NK1182", span.clone(), format!("`Array[{}]` needs a length here.", element), vec![format!("`Array[{}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from.", element)], format!("Use `Vec[{}]` for a list that can grow, or `Array[{}, N]` to write the length down.", element, element)));
         return;
     }
     if ty.count.is_some() { return; }

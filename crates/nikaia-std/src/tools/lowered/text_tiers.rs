@@ -5604,6 +5604,8 @@ pub(crate) fn lv_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, 
 
 pub(crate) fn lv_a_piece(value: &Expr, words: &winnow_grammar::InternerContext, views: &collections::BTreeMap<String, Vec<i64>>) -> bool {
     match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
         Expr::Index { .. } => hb_place_root(value, words).is_some(),
         Expr::Call { .. } => hb_call_sources(value, words, views).is_some(),
         _ => false,
