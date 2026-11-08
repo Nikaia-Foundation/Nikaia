@@ -525,7 +525,7 @@ pub(crate) fn features_reader_path(name: &str) -> Option<String> {
 }
 
 pub(crate) fn features_reader_blanked(lines: &mut Vec<String>, item: &FeatureItem) {
-    for i in item.first..=item.last { { let __nikaia_stored = String::from(""); nikaia_std::index::set(&mut *lines, nikaia_std::index::at(i), __nikaia_stored); } }
+    for i in item.first..item.last + 1 { { let __nikaia_stored = String::from(""); nikaia_std::index::set(&mut *lines, nikaia_std::index::at(i), __nikaia_stored); } }
     let taken = format!("pub use super::{} as ", item.name);
     for i in 0..lines.len() as i64 { if (*nikaia_std::index::get(&lines, nikaia_std::index::at(i))).trim().starts_with(&taken) { { let __nikaia_stored = String::from(""); nikaia_std::index::set(&mut *lines, nikaia_std::index::at(i), __nikaia_stored); } } }
 }

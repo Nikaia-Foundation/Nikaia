@@ -688,7 +688,7 @@ fn features_reader_path(name: ref String) -> String? {
 /// **A reader left out**: its lines, and the line the module under the
 /// grammar's name takes it in with, blanked, so the place table's line count holds.
 fn features_reader_blanked(mut lines: Vec[String], item: ref FeatureItem) {
-    for i in item.first..item.last {
+    for i in item.first..<item.last + 1 {
         lines[i] = ""
     }
     let taken = f"pub use super::{item.name} as "
