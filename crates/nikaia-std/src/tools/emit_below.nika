@@ -75,6 +75,19 @@ fn emit_callee_text(world: ref EmitWorld, func: ref Expr) -> String? {
     return null
 }
 
+/// **`int`'s limits are `i64`'s below** (Part I 2.2, #1325): `int::MAX`,
+/// in an expression or a pattern, is written `i64::MAX`; any other path as it
+/// stands.
+pub fn integer_limit_below(path: ref String) -> String {
+    if path == "int::MIN" {
+        return "i64::MIN"
+    }
+    if path == "int::MAX" {
+        return "i64::MAX"
+    }
+    return path.clone()
+}
+
 impl EmitState {
     /// Whether `receiver.method(..)` enters a grammar: a receiver naming one of
     /// this file's grammars and a method naming one of its entries
@@ -401,6 +414,9 @@ impl EmitState {
         // Rust's `char`, which has no `from` over an `i64`.
         if segments.len() == 2 && segments[0] == "scalar" && segments[1] == "from" {
             return "nikaia_std::num::scalar_from"
+        }
+        if segments.len() == 2 && segments[0] == "int" && (segments[1] == "MIN" || segments[1] == "MAX") {
+            return integer_limit_below(segments.join("::"))
         }
         if segments.len() == 2 && segments[1] == "new" {
             if unpinned && (segments[0] == "HashMap" || segments[0] == "HashSet") {

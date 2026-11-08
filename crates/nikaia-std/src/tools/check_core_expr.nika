@@ -644,8 +644,12 @@ fn check_core_expr_path(mut state: CheckState, world: ref CheckWorld, segments: 
             }
         }
         // **An integer type's limits are values of that type** (Part I 2.2,
-        // #1294): `i64::MIN` is an `i64`, written below as it stands.
-        if (member == "MIN" || member == "MAX") && integer_named(check_core_expr_named(ty)) != null {
+        // #1294): `i64::MIN` is an `i64`, written below as it stands, and
+        // `int::MAX` is `int`'s, which is an `i64` (#1325).
+        if an_integer_limit(ty, member) {
+            if ty == "int" {
+                return check_core_expr_named("i64")
+            }
             return check_core_expr_named(ty)
         }
         state.a_member_this_type_does_not_have(world, ty, member, span)
