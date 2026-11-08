@@ -79,7 +79,7 @@ text-key = { path = "../unsafe/text-key" }
 # A task's memory block, 16 pages of 4 KiB each counting what it holds, and
 # the lists and text whose growth it may refuse (ADR-327 D4, D5, D12;
 # `src/block.rs`).
-task-block = { path = "../unsafe/task-block" }
+task-block = { path = "../unsafe/task-block", features = ["collect"] }
 # A child waited for with `wait4`, so `process::run` reports what that one
 # program used (ADR-368 D3).
 child-usage = { path = "../unsafe/child-usage" }

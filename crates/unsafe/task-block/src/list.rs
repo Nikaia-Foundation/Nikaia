@@ -479,6 +479,25 @@ impl<'a, T: Copy + 'a> Extend<&'a T> for List<T> {
     }
 }
 
+/// What a grammar's repetition collects into where the grammar says
+/// `collect List;` (winnow-grammar 0.2, #490): a new list outside every
+/// block (D9), each element through the list's fallible growth.
+#[cfg(feature = "collect")]
+impl<T> winnow_grammar::Collect<T> for List<T> {
+    #[inline(always)]
+    fn empty() -> List<T> {
+        List::new()
+    }
+    #[inline(always)]
+    fn push(&mut self, item: T) {
+        List::push(self, item)
+    }
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.items.len()
+    }
+}
+
 impl<T> IntoIterator for List<T> {
     type Item = T;
     type IntoIter = allocator_api2::vec::IntoIter<T, Place>;

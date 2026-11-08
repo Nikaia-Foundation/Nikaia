@@ -329,7 +329,7 @@ pub fn sysroot_package_assemble(names: ref Vec[String], lowered: ref Vec[String]
         if file_grammar {
             has_grammar = true
         }
-        let block_names = match file_grammar || !block_types_switched() {
+        let block_names = match !block_types_switched() {
             true => "",
             false => "    #[allow(unused_imports)]\n    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};\n",
         }

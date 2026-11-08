@@ -4,11 +4,7 @@
 pub fn block_types_switched() -> bool { false }
 
 impl EmitState {
-    pub fn on_block_types(&self) -> bool {
-        if !block_types_switched() { return false; }
-        if self.is_std { return self.grammars.is_empty(); }
-        !self.package_grammar
-    }
+    pub fn on_block_types(&self) -> bool { block_types_switched() }
 }
 
 pub fn block_types_import(on: bool) -> String {

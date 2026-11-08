@@ -21,21 +21,12 @@ impl EmitState {
     /// **Whether this file lowers to the block types** (ADR-327 D4, #490):
     /// `Vec`, `String`, `vec![…]` and `format!(…)` are `nikaia_std::block`'s
     /// `List`, `Text` and the two built in place, for programs and the tools
-    /// alike. The one exception is the grammar: the grammar macro writes
-    /// `Vec` unqualified in what it expands and collects with winnow's own
-    /// `Vec`, so a file that declares a grammar stays on Rust's types, and so
-    /// does a program with one, whose files share one namespace. Toward the
-    /// rest such a file is a Rust boundary, and its values convert there
-    /// with `From` (the supervisor, 2026-11-08). In `std` and the tools each
-    /// file is a module of its own, so the question is the file's.
+    /// alike, one rule for every file. A grammar's file too: winnow-grammar
+    /// 0.2 writes the standard library by full path in what it expands, and
+    /// the grammar says `collect nikaia_std::block::List;`, so its
+    /// repetitions collect into a block's list (`emit_grammar_over`).
     pub fn on_block_types(ref self) -> bool {
-        if !block_types_switched() {
-            return false
-        }
-        if self.is_std {
-            return self.grammars.is_empty()
-        }
-        return !self.package_grammar
+        return block_types_switched()
     }
 }
 

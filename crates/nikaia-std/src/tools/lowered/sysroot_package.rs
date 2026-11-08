@@ -269,7 +269,7 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
         }
         let file_grammar = nikaia_std::index::get(&views, (at) as usize).items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) });
         if file_grammar { has_grammar = true; }
-        let block_names = match file_grammar || !block_types_switched() {
+        let block_names = match !block_types_switched() {
             true => "",
             false => "    #[allow(unused_imports)]\n    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};\n",
         };
