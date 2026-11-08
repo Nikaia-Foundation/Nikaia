@@ -1,0 +1,22 @@
+// An `impl` of a trait whose result writes `from a` hands back the plain
+// parameter `b`: refused in the words of the trait's `from` (ADR-views-3
+// D14), not with the pre-views-3 "take it as `ref`" (#1280).
+
+trait Pick {
+    fn pick(self, a: String, b: String) -> String from a
+}
+
+struct P {
+    k: i64
+}
+
+impl Pick for P {
+    fn pick(self, a: String, b: String) -> String from a {
+        return b
+    }
+}
+
+fn main() throws {
+    let p = P { k: 1 }
+    println(p.pick("x", "y"))
+}

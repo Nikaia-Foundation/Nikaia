@@ -529,7 +529,7 @@ impl CheckState {
             let lends = if own { lends_in_own(contract, position, &vec![world.library]) } else { lends_in(contract, position, &vec![world.library]) };
             let kept = !(lends || i == 0 && is_a_lookup(key));
             if i >= found.len() as i64 { continue; }
-            let found_here = (*nikaia_std::index::get(&found, nikaia_std::index::at(i))).clone();
+            let found_here = check_arm_leaves_a_text_view(nikaia_std::index::get(&found, nikaia_std::index::at(i)));
             if generic && kept && self.a_view_of_what_does_not_copy(world, &found_here, &want) {
                 self.a_view_kept_whole(key, &name, &found_here, &want, span);
                 continue;
@@ -542,6 +542,15 @@ impl CheckState {
             let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
             if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(&&*nikaia_std::index::get(&given, nikaia_std::index::at(i))), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
         }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_arm_leaves_a_text_view(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && type_last_segment(name) == "String" { Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true } } else { ty.clone() } },
+        _ => ty.clone(),
     }
 }
 

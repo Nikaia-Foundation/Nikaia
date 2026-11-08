@@ -780,7 +780,10 @@ impl CheckState {
             if i >= found.len() {
                 continue
             }
-            let found_here = found[i].clone()
+            // **A view of a `String` slot is a view of text** (ADR-184 D2,
+            // #1316): `Vec[String].iter()` lends `ref String`, which a keeper
+            // asks as it asks the `ref String` a `for` lends.
+            let found_here = check_arm_leaves_a_text_view(found[i])
             if generic && kept && self.a_view_of_what_does_not_copy(world, found_here, want) {
                 self.a_view_kept_whole(key, name, found_here, want, span)
                 continue
@@ -807,6 +810,15 @@ impl CheckState {
                 self.expect_kept_asked(world, ty, want, null, keeper, span, "argument", fn(found, wanted) { f"`{key}` expects `{name}` to be `{wanted}` here, but you're passing `{found}`." })
             }
         }
+    }
+}
+
+/// A view of a `String` slot read as the view of text it is (ADR-184 D2);
+/// any other type as it is.
+fn check_arm_leaves_a_text_view(ty: ref Ty) -> Ty sync {
+    return match ty {
+        Ty::Named { name, args, view } => if view && args.len() == 0 && type_last_segment(name) == "String" { Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true } } else { ty.clone() },
+        else => ty.clone(),
     }
 }
 

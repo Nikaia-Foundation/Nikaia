@@ -63,7 +63,7 @@ pub(crate) struct FbWidths<'a> {
 impl<'a> FbWidths<'a> {
     pub(crate) fn rule(&mut self, words: &'a winnow_grammar::InternerContext, name: &str, boundary: u64) -> u64 {
         let found = self.known.get(name);
-        if found.is_some() { return nikaia_std::index::or(found, || 0); }
+        if found.is_some() { return nikaia_std::index::or(found, || 0u64); }
         if self.open.contains(name) { return 0u64; }
         self.open.insert(name.to_string());
         let held = self.rules.get(name).copied();
@@ -605,13 +605,13 @@ impl FbWalk {
     pub(crate) fn grow(&mut self, field: String, amount: u64, negative: bool) {
         if negative && amount > 0u64 { self.lowered.insert(field.to_string()); }
         if self.dead.contains(&field) { return; }
-        let before = nikaia_std::index::or(self.k.get(&field), || 0);
+        let before = nikaia_std::index::or(self.k.get(&field), || 0u64);
         let after = before.checked_add(amount);
         if after.is_none() {
             self.dead.insert(field);
             return;
         }
-        self.k.insert(field, nikaia_std::index::or(after, || 0));
+        self.k.insert(field, nikaia_std::index::or(after, || 0u64));
     }
     pub(crate) fn function<H: FbHost>(&mut self, host: &H, ix: &FbIndex<'_, '_, '_>, at: i64, looped: bool) {
         if self.stack.contains(&at) {
@@ -1390,8 +1390,8 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     let mut out: Vec<i64> = vec![];
     for field in fields.iter() {
         if step.dead.contains(field) || init.dead.contains(field) { continue; }
-        let k = nikaia_std::index::or(step.k.get(field), || 0);
-        let k0 = nikaia_std::index::or(init.k.get(field), || 0);
+        let k = nikaia_std::index::or(step.k.get(field), || 0u64);
+        let k0 = nikaia_std::index::or(init.k.get(field), || 0u64);
         if spec.parallel && k0 > 0u64 { continue; }
         if merge.bad.contains(field) { continue; }
         let owners = nikaia_std::index::or(match uses.touches.get(field) {

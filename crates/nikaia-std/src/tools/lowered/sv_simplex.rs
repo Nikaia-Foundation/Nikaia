@@ -178,7 +178,7 @@ impl SvSimplex {
     pub(crate) fn new_var(&mut self, col: i64) -> i64 {
         let v = self.var_col.len() as i64;
         self.var_col.push(col);
-        if col >= 0 { self.var_form.push(SvRow { cols: vec![nikaia_std::index::or(u32::try_from(col).ok(), || 0)], ks: vec![1], constant: 0 }); } else { self.var_form.push(sv_row_constant(0)); }
+        if col >= 0 { self.var_form.push(SvRow { cols: vec![nikaia_std::index::or(u32::try_from(col).ok(), || 0u32)], ks: vec![1], constant: 0 }); } else { self.var_form.push(sv_row_constant(0)); }
         self.row_of.push(-1);
         self.values.push(sv_sx_zero());
         self.lower.push(sv_sx_unset());
@@ -426,7 +426,7 @@ impl SvSimplex {
             let candidates = self.entering(r, at.below, count >= self.bland_after);
             if candidates.is_empty() {
                 let mut parts = match self.row_parts(r, at.below) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
-                let d = match sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), nikaia_std::index::or(u32::try_from(b).ok(), || 0)).checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
+                let d = match sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), nikaia_std::index::or(u32::try_from(b).ok(), || 0u32)).checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
                 let side = if at.below { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(b))).clone() } else { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(b))).clone() };
                 parts.push(sv_side_part(&side, !at.below, d));
                 return self.conflict(&parts, book);
@@ -505,7 +505,7 @@ impl SvSimplex {
         while ((v) as usize) < self.var_col.len() {
             let col = *nikaia_std::index::get(&self.var_col, (v) as usize);
             if col >= 0 {
-                let c = nikaia_std::index::or(u32::try_from(col).ok(), || 0);
+                let c = nikaia_std::index::or(u32::try_from(col).ok(), || 0u32);
                 out.insert(sv_column_name(c, &self.names), nikaia_std::index::get(&self.values, (v) as usize).c.num);
             }
             v += 1;

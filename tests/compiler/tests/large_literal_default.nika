@@ -1,0 +1,18 @@
+// A `??` default literal above `i32::MAX` takes the type of what the optional
+// holds where it fits (#1297, Part I 2.2): a `u32` and a `u64` map read.
+use std::collections
+
+fn main() throws {
+	let mut small: collections::BTreeMap[String, u32] = collections::BTreeMap()
+	small.insert("a", 3)
+	let k: u32 = small.get("b") ?? 4294967295
+	println(f"{k}")
+	let mut wide: collections::BTreeMap[String, u64] = collections::BTreeMap()
+	wide.insert("a", 3)
+	let j: u64 = wide.get("b") ?? 9223372036854775808
+	println(f"{j}")
+	let unwritten = small.get("c") ?? 4000000000
+	println(f"{unwritten}")
+	let held = small.get("a") ?? 4000000000
+	println(f"{held}")
+}

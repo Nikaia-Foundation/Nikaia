@@ -107,6 +107,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
   in `crates/nikaia/src` and `tests/it`: `grep` for them before the bootstrap
   (v18b).
 * `let c: ref Array[T] = v` (or `= x.field`) of a `Vec` local moves it (NK2105 on the next use); only an index or piece (`v[1..]`, `v[0]`) lends. (issue-1270)
+* A by-value parameter handed back is marked `=x` (owned text, no refusal, ADR-282 D12) in a free function, but `!x` (NK2302) in an `impl` of a trait whose result writes `from`, because the contract follows the trait. (issue-1280)
+* In that `impl` case the checker also gives NK1104 with the help "write `ref`"; following it leaves only NK2302, and `it` test `views_handed_back::following_nk1104s_help_is_a_program` checks that help word for word. (issue-1280)
 
 ### Lowering and lower-std
 

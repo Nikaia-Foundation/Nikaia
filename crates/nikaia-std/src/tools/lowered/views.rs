@@ -2447,6 +2447,14 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
         for each in way.reach.iter() {
             if each.starts_with('!') {
                 let owned = nikaia_std::index::or(each.strip_prefix('!'), || "");
+                if trait_name.is_some() && !trait_from.is_empty() {
+                    let written = trait_from.join(" | ");
+                    let message = format!("{} implements a trait method that hands back views of `{}` only, but this hands back a view of `{}`, which it takes by value.", of, written, owned);
+                    let note = format!("The trait's result says `from {}`, so `{}` is not lent: it is moved into {} and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).", written, owned, of);
+                    let help = format!("Hand back a view of what the trait names, or write `from {} | {}` on the trait's result.", written, owned);
+                    out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, vec![note], help));
+                    return;
+                }
                 let message = format!("{} hands back a view of `{}`, which it takes by value, so the data is gone when the call returns.", of, owned);
                 let note = format!("`{}` is moved into {} and ends with it; a view of it can't outlive the call.", owned, of);
                 let help: String = String::from("Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`.");
