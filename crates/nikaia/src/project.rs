@@ -2753,17 +2753,17 @@ impl ProgramHost {
         })
     }
 
-    /// `program` run in `own` with `stdin` on its standard input (none where
+    /// `program` run in `dir` with `stdin` on its standard input (none where
     /// it is empty) and no `CARGO_TARGET_DIR`, as `command` has it set up.
     fn ran(
         &self,
         program: &Path,
         mut command: std::process::Command,
-        own: &Path,
+        dir: &Path,
         stdin: &[u8],
     ) -> Result<project_tests::ProjectTestsRan> {
         use std::io::Write;
-        command.current_dir(own).env_remove("CARGO_TARGET_DIR");
+        command.current_dir(dir).env_remove("CARGO_TARGET_DIR");
         let out = if stdin.is_empty() {
             command.stdin(std::process::Stdio::null()).output()
         } else {
@@ -2810,6 +2810,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         verb: &str,
         setting: &str,
         project: &Path,
+        dir: &Path,
         own: &Path,
         stdin: &[u8],
     ) -> HostResult<project_tests::ProjectTestsRan> {
@@ -2821,7 +2822,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         if verb == "build" {
             command.env("CARGO_TERM_QUIET", "true");
         }
-        self.held(self.ran(&self.exe, command, own, stdin))
+        self.held(self.ran(&self.exe, command, dir, stdin))
     }
 
     fn explained(
@@ -2838,6 +2839,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
     fn built(
         &self,
         project: &Path,
+        dir: &Path,
         own: &Path,
         stdin: &[u8],
     ) -> HostResult<Option<project_tests::ProjectTestsRan>> {
@@ -2851,7 +2853,7 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
         }
         let mut command = std::process::Command::new(&binary);
         command.env(nikaia_std::fs::TEST_DIR_VAR, own);
-        self.held(self.ran(&binary, command, own, stdin).map(Some))
+        self.held(self.ran(&binary, command, dir, stdin).map(Some))
     }
 }
 

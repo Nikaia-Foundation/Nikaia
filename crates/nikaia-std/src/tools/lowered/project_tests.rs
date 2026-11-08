@@ -426,9 +426,9 @@ pub struct ProjectTestsRan {
 
 pub trait ProjectTestsProgramHost {
     fn package_name(&self, root: &std::path::Path) -> Result<Option<String>, Box<dyn std::error::Error>>;
-    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
+    fn compiler(&self, verb: &str, setting: &str, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<ProjectTestsRan, Box<dyn std::error::Error>>;
     fn explained(&self, args: &[String], entry: &std::path::Path, own: &std::path::Path) -> Result<Bytes, Box<dyn std::error::Error>>;
-    fn built(&self, project: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
+    fn built(&self, project: &std::path::Path, dir: &std::path::Path, own: &std::path::Path, stdin: &[u8]) -> Result<Option<ProjectTestsRan>, Box<dyn std::error::Error>>;
 }
 
 pub(crate) fn project_tests_empty_but(dir: &std::path::Path, keep: &str) -> Result<(), nikaia_std::error::Thrown<ProjectTestsRefusal>> {
@@ -484,14 +484,14 @@ pub async fn project_tests_program_test<H: ProjectTestsProgramHost>(host: &H, pr
     if program.loops_bounds.is_some() { on = project_tests_relocated(&host.explained(&vec![String::from("--bounds"), String::from("--optimization"), String::from("prove-through-loops:on")], &entry, own)?, &entry, &written, root); }
     let mut asserts: String = String::from("");
     if program.asserts.is_some() { asserts = project_tests_relocated(&host.explained(&vec![String::from("--asserts")], &entry, own)?, &entry, &written, root); }
-    let built = host.compiler("build", setting, &project, own, &Bytes(vec![]))?;
+    let built = host.compiler("build", setting, &project, own, own, &Bytes(vec![]))?;
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, &project_tests_relocated(&built.stderr, &entry, &written, root));
         return Ok(project_tests_bounds_outcome(program, &refused, &off, &on, &asserts));
     }
-    let ran = match host.built(&project, own, &program.stdin)? {
+    let ran = match host.built(&project, root, own, &program.stdin)? {
         None => {
-            let out = host.compiler("run", setting, &project, own, &program.stdin)?;
+            let out = host.compiler("run", setting, &project, root, own, &program.stdin)?;
             let said = out.stderr.copy_of();
             (out, said)
         },
