@@ -125,4 +125,9 @@ together with the specification section and an example test.
 * The checker has two text-view forms, `Named{"str", view:true}` and `Named{"String", view:true}` (the latter from `ref $T` with T=String, e.g. `.iter()` and `or_insert`), and both print as `ref String`. (issue-1316)
 * Do not merge the two text-view forms in `ty.nika` `substituted`: the `String`-slot form means `&String`/`&mut String` to the emitter, and writes through `or_insert` break; normalise in the one check that needs it. (issue-1316)
 * An NK1103 that says "is `ref String`, but the `let` declares `ref String`" is the two view forms meeting, not a tier question. (issue-1316)
+* A `from` fix in a trait must change both sides together: the impl's types in `hb_trait_from` (`text_tiers.nika`) and the trait's in `emit_item_lent_view` (`emit_item.nika`); one alone gives rustc a trait/impl mismatch. (issue-1327)
+* `nikaia fmt` or `fmt --check` on a file outside a project formats with tabs, and the committed `tests/compiler` tests fail `--check` too; it proves nothing about a new test. (issue-1327)
+* A `Found:` filed from an earlier run: read that run's commit message (`git log --grep=#N`) first; it often holds the cause and a path already dropped. (issue-1327)
+* A `tests/compiler/tests/*.nika` program only runs under `nikaia test --project tests/compiler --filter NAME` (`nikaia run` refuses it as not the entry, and its `toolchain()` finds the compiler through its parent process). (issue-539)
+* `fs::read` returns `Bytes`, so a `catch { "" }` on it is NK1103; in a test program, read text with `process::run("cat", …).stdout`. (issue-539)
 
