@@ -1,0 +1,20 @@
+// #1334: a `String` parameter one `return` hands back and a later statement
+// hands to `own` goes into a mixed `String?` result (ADR-views-3 D8). Where
+// one statement calls the function twice with the same text, the first
+// result still views it at the second call, so the text is lent there too,
+// not moved out from under that view.
+
+fn own(s: String) -> String? { return s + "!" }
+
+fn early(a: String, c: i64) -> String? {
+    if c == 0 { return null }
+    if c == 1 { return a }
+    let o = own(a) ?? return null
+    return o
+}
+
+fn main() throws {
+    println(early("x", 1) ?? "none")
+    let x = f"x{1}"
+    println(f"{early(x, 0) ?? "-"} {early(x, 1) ?? "-"} {early(x, 2) ?? "-"}")
+}

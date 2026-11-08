@@ -3867,12 +3867,17 @@ struct TierLate {
     /// keeps: where the position holds text of its own they stay moves,
     /// unrefused.
     held_moves: collections::BTreeSet[i64],
+    /// The bindings a call's result made earlier in the statement being
+    /// walked may view, by `name serial` (#1334): that result lives to the
+    /// statement's end, so handing such a binding over later in the
+    /// statement is a read before it, not its last.
+    temporaries: collections::BTreeSet[String],
 }
 
 /// The arms that are a name still read after their choice, or in a later turn
 /// of a loop around the choice but not around the name, by their nodes.
 fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet() }
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet(), temporaries: collections::BTreeSet() }
     for (key, function) in declared.fns {
         let result = function.result ?? continue
         if late_holds_text(result, declared, ask, 0) {
@@ -3948,6 +3953,7 @@ fn late_body(body: ref Block, names: Vec[String], ask: ref TierAsk, mut late: Ti
     late.views = collections::BTreeMap()
     late.viewers = collections::BTreeMap()
     late.held = collections::BTreeMap()
+    late.temporaries = collections::BTreeSet()
     late_open(late)
     late.params_from = late.serial
     for name in names {
@@ -4084,7 +4090,11 @@ fn late_block(block: ref Block, leaf: bool, ask: ref TierAsk, mut late: TierLate
     let mut at = 0
     for stmt in block.stmts {
         at += 1
+        // What a statement's calls hand back ends with it; an enclosing
+        // statement's still lives.
+        let outer = late.temporaries.clone()
         late_stmt(stmt.node, leaf && at == block.stmts.len(), ask, late)
+        late.temporaries = outer
     }
     late_close(late)
 }
@@ -4222,7 +4232,11 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             let held = late_choice_opened(leaf, late)
             let outer = late_branches_opened(late)
             let mut gathered: Vec[TierLateArm] = []
+            // What one arm's calls hand back is not there in another arm.
+            let before = late.temporaries.clone()
+            let mut made = before.clone()
             for arm in arms {
+                late.temporaries = before.clone()
                 late_open(late)
                 late_pattern(arm.pattern, ask, late)
                 if arm.guard != null {
@@ -4231,7 +4245,9 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
                 late_expr(arm.body, true, ask, late)
                 late_close(late)
                 late_branch_ended(gathered, late)
+                made.extend(late.temporaries.clone())
             }
+            late.temporaries = made
             late_branches_closed(outer, gathered, late)
             late_choice_closed(leaf, held, late)
         }
@@ -4255,6 +4271,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             for arg in args {
                 late_argument(arg, ask, late)
             }
+            late_temporary(expr, ask, late)
             let callee = tier_callee(func, ask) ?? ""
             if late.variants.contains(callee) {
                 let (of, variant) = variant_named(callee)
@@ -4268,6 +4285,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
         Expr::MethodCall { receiver, args, .. } => {
             late_expr(receiver, false, ask, late)
             late_all(args, ask, late)
+            late_temporary(expr, ask, late)
         }
         Expr::SafeMethod { receiver, args, .. } => {
             late_expr(receiver, false, ask, late)
@@ -4373,11 +4391,20 @@ fn late_argument(arg: ref Expr, ask: ref TierAsk, mut late: TierLate) {
         return
     }
     let loops = late_loops(word, late)
-    if late.loops > loops {
+    if late.loops > loops || late.temporaries.contains(f"{word} {serial}") {
         late.args.insert(node_key(arg))
         return
     }
     late_defer(TierLateArm { at: node_key(arg), name: word.clone(), serial: serial, loops: loops, argument: true }, late)
+}
+
+/// **A call's result that may view a binding lives to the statement's end**
+/// (#1334): `f"{e1(x, 1) ?? "-"} {e1(x, 2) ?? "-"}"` reads the first
+/// result after the second call, so `x` is not handed over there.
+fn late_temporary(call: ref Expr, ask: ref TierAsk, mut late: TierLate) {
+    for key in late_sources(call, ask, late) {
+        late.temporaries.insert(key)
+    }
 }
 
 // --- A text moved into a literal while a view of it lives (ADR-views-3 D9) ---

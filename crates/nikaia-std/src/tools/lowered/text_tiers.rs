@@ -2733,10 +2733,11 @@ pub(crate) struct TierLate {
     pub(crate) text_fields: collections::BTreeSet<String>,
     pub(crate) held: collections::BTreeMap<String, Vec<(i64, (String, String))>>,
     pub(crate) held_moves: collections::BTreeSet<i64>,
+    pub(crate) temporaries: collections::BTreeSet<String>,
 }
 
 pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new() };
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new() };
     for (key, function) in declared.fns.iter() {
         let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if late_holds_text(result, declared, ask, 0) { late.viewing.insert(key.to_string()); }
@@ -2795,6 +2796,7 @@ pub(crate) fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_
     late.views = collections::BTreeMap::new();
     late.viewers = collections::BTreeMap::new();
     late.held = collections::BTreeMap::new();
+    late.temporaries = collections::BTreeSet::new();
     late_open(late);
     late.params_from = late.serial;
     for name in names.iter() { late_bind(name.to_string(), late); }
@@ -2883,7 +2885,9 @@ pub(crate) fn late_block(block: &Block, leaf: bool, ask: &TierAsk<'_, '_, '_, '_
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
         at += 1;
+        let outer = late.temporaries.to_owned();
         late_stmt(&stmt.node, leaf && ((at) as usize) == block.stmts.len(), ask, late);
+        late.temporaries = outer;
     }
     late_close(late);
 }
@@ -2994,14 +2998,19 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             let held = late_choice_opened(leaf, late);
             let outer = late_branches_opened(late);
             let mut gathered: Vec<TierLateArm> = vec![];
+            let before = late.temporaries.to_owned();
+            let mut made = before.to_owned();
             for arm in arms.iter() {
+                late.temporaries = before.to_owned();
                 late_open(late);
                 late_pattern(&arm.pattern, ask, late);
                 if arm.guard.is_some() { late_maybe(Option::as_ref(&arm.guard), ask, late); }
                 late_expr(&arm.body, true, ask, late);
                 late_close(late);
                 late_branch_ended(&mut gathered, late);
+                made.extend(late.temporaries.iter().cloned());
             }
+            late.temporaries = made;
             late_branches_closed(outer, &gathered, late);
             late_choice_closed(leaf, held, late);
         },
@@ -3022,6 +3031,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             late_expr(func, false, ask, late);
             late_all(args, ask, late);
             for arg in args.iter() { late_argument(arg, ask, late); }
+            late_temporary(expr, ask, late);
             let callee = nikaia_std::index::or(tier_callee(func, ask), || "".into());
             if late.variants.contains(&callee) {
                 let (of, variant) = variant_named(&callee);
@@ -3036,6 +3046,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             let receiver = nikaia_std::boxed::open(receiver);
             late_expr(receiver, false, ask, late);
             late_all(args, ask, late);
+            late_temporary(expr, ask, late);
         },
         Expr::SafeMethod { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -3143,12 +3154,14 @@ pub(crate) fn late_argument(arg: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late:
     let serial = late_serial(&word, &late);
     if serial < 0 { return; }
     let loops = late_loops(&word, &late);
-    if late.loops > loops {
+    if late.loops > loops || late.temporaries.contains(&format!("{} {}", word, serial)) {
         late.args.insert(node_key(arg));
         return;
     }
     late_defer(TierLateArm { at: node_key(arg), name: word.to_string(), serial, loops, argument: true }, late);
 }
+
+pub(crate) fn late_temporary(call: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { for key in late_sources(call, ask, &late) { late.temporaries.insert(key); } }
 
 pub(crate) fn late_holds_text(ty: &Type, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_>, depth: i64) -> bool {
     if depth > 4 { return false; }
