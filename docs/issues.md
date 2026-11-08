@@ -36,6 +36,9 @@ it, like the checks in `docs/supervisor.md`.
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
   (`CLAUDE.md`, *A missing form stops the work*).
+  A step that rests on a decision says whether it is built (the function
+  that does it) or text only; text only is a dependency, named by its issue
+  (I4) and built first (#1453).
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
