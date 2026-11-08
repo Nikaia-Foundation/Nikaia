@@ -330,6 +330,11 @@ pub enum Command {
         language: String,
         #[arg(long)]
         project: Option<PathBuf>,
+        /// The features of `[features]` the binding carries, with the core,
+        /// separated by `,`; without it, `default`'s
+        /// ([ADR-393](../../../docs/specification/adr/adr-393.md) D5).
+        #[arg(long, value_name = "A,B")]
+        features: Option<String>,
     },
     /// Compile the project and run it, or compile and run one `.nika` file.
     ///
@@ -659,7 +664,11 @@ fn describe(crate_name: &str, project: Option<PathBuf>) -> Result<i32> {
 fn project_command(args: &Cli, command: &Command) -> Result<i32> {
     let (subcommand, directory, program_args) = match command {
         Command::Build { project } => ("build", project.clone(), Vec::new()),
-        Command::Bind { language, project } => {
+        Command::Bind {
+            language,
+            project,
+            features,
+        } => {
             if let Some(why) = cli_commands::cli_commands_bind_refusal(language) {
                 refuse!("{why}");
             }
@@ -672,13 +681,22 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
                 args.target.as_deref(),
                 args.user_parallelism.as_deref(),
             )?;
-            if !project.settings.library() {
+            // `--features` on a program is the drive's `NK1346` (ADR-393 D5).
+            let program = features.is_some() && project.settings.words.artifact != "rust-library";
+            if !project.settings.library() && !program {
                 refuse!(
                     "`nikaia bind` writes a binding over a library: set `artifact = \"c-library\"` \
                      in `[build]` (ADR-284 D4, D26)."
                 );
             }
             project.settings.words.bind = Some(language.clone());
+            project.settings.words.bind_features = features.as_deref().map(|list| {
+                list.split(',')
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            });
             project.settings.optimize(&args.optimization)?;
             project.settings.choose_cpu(args.cpu.as_deref())?;
             return drive(args, &project, "build", &[]);

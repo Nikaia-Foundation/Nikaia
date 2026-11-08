@@ -57,6 +57,9 @@ pub fn bounds_around(
 		frames: collections::BTreeMap(),
 		rules: [],
 		derived: no_derived(),
+		fields: collections::BTreeSet(),
+		field_writers: collections::BTreeSet(),
+		field_bounds: collections::BTreeMap(),
 	}
 	for item in program.items {
 		match item.node {
@@ -115,6 +118,11 @@ pub fn bounds_around(
 	context.around.rules = rules
 	// **The private functions their callers may bound** (ADR-391 D1).
 	context.around.derived = derived_of(program, beside, beside_words, words)
+	// **The list fields whose every write the walks see** (ADR-306 D21):
+	// their bounds are found by `bounds_fields`, before the bodies' walks.
+	let seen = fields_seen(program, beside, beside_words, words)
+	context.around.fields = seen.keys
+	context.around.field_writers = seen.writers
 	return context.around
 }
 
@@ -532,4 +540,350 @@ pub fn frame_writes(frame: ref BoundsChanged, root: ref String) -> bool {
 
 fn frame_from(entry: ref String, root: ref String) -> bool {
 	return path_root(frame_list(entry)) == root
+}
+
+/// **The list fields every write of which a walk sees** (ADR-306 D21,
+/// #1397): a private field of whole numbers, of a type with no parameters,
+/// with no default, named by no other field and by nothing beside; each
+/// written only by a literal, a `with`, an assignment of the field, an
+/// assignment of one of its elements or a method that puts one value in
+/// (`writes_a_value`), and touched otherwise only by a method that keeps
+/// its values or only removes some, an index or a `for`, in a function's
+/// body. Any other mention may hand it on, and takes it out. `keys` are
+/// written `.name`; `writers` are where the bodies that write one start.
+pub struct FieldsSeen {
+	pub keys: collections::BTreeSet[String],
+	pub writers: collections::BTreeSet[i64],
+}
+
+struct FieldsScan {
+	live: collections::BTreeMap[String, bool],
+	/// Inside a body the walks go through, rather than a lambda, a task,
+	/// a test or a file beside.
+	walked: bool,
+	/// The body being scanned wrote a field.
+	wrote: bool,
+}
+
+pub fn fields_seen(
+	program: ref Program,
+	beside: ref Vec[ref Program],
+	beside_words: ref Vec[ref winnow_grammar::InternerContext],
+	words: ref winnow_grammar::InternerContext,
+) -> FieldsSeen {
+	let mut scan = FieldsScan { live: collections::BTreeMap(), walked: false, wrote: false }
+	fields_declared(program, words, true, scan)
+	for (k, other) in beside.iter().enumerate() {
+		fields_declared(other, beside_words[k], false, scan)
+	}
+	let mut writers: collections::BTreeSet[i64] = collections::BTreeSet()
+	for item in program.items {
+		fields_item(item, words, scan, writers)
+	}
+	for (k, other) in beside.iter().enumerate() {
+		let mut ignored: collections::BTreeSet[i64] = collections::BTreeSet()
+		for item in other.items {
+			fields_item(item, beside_words[k], scan, ignored)
+		}
+	}
+	let mut keys: collections::BTreeSet[String] = collections::BTreeSet()
+	for (name, live) in scan.live {
+		if live {
+			keys.insert(f".{name}")
+		}
+	}
+	return FieldsSeen { keys, writers }
+}
+
+/// Every field a struct declares: a candidate where `here` and it is one.
+fn fields_declared(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	here: bool,
+	mut scan: FieldsScan,
+) {
+	for item in program.items {
+		match item.node {
+			Item::Struct { generics, fields, is_extern, .. } => {
+				for field in fields {
+					let name = words.resolve(field.name).clone()
+					let ty = ref field.ty
+					let mut fits = here && generics.is_empty() && !is_extern && !field.is_public
+						&& field.default == null && field.attributes.is_empty()
+					let list = words.resolve(ty.name)
+					fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1
+					if fits {
+						let inner = ref ty.generics[0]
+						fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name))
+					}
+					let was = scan.live.get(name) ?? true
+					scan.live.insert(name, was && fits)
+				}
+			},
+			else => {},
+		}
+	}
+}
+
+/// One item: a function's or a method's body is walked, and where it
+/// writes a field it is one of `writers`; anything else is not.
+fn fields_item(
+	item: ref Spanned[Item],
+	words: ref winnow_grammar::InternerContext,
+	mut scan: FieldsScan,
+	mut writers: collections::BTreeSet[i64],
+) {
+	match item.node {
+		Item::Fn { config, body, .. } => {
+			scan.walked = false
+			for param in config {
+				fields_expr(param.default, words, scan)
+			}
+			scan.walked = true
+			scan.wrote = false
+			fields_block(body, words, scan)
+			if scan.wrote {
+				writers.insert(item.span.start)
+			}
+			scan.walked = false
+		},
+		Item::Impl { methods, .. } => {
+			for method in methods {
+				fields_item(method, words, scan, writers)
+			}
+		},
+		Item::Struct { rules, .. } => {
+			for rule in rules {
+				fields_expr(rule.node, words, scan)
+			}
+		},
+		Item::Test { body, .. } => fields_block(body, words, scan),
+		Item::Bench { body, .. } => fields_block(body, words, scan),
+		Item::Comptime { value, .. } => fields_expr(value, words, scan),
+		Item::Grammar(def) => {
+			for rule in def.rules {
+				for param in rule.config {
+					fields_expr(param.default, words, scan)
+				}
+				for alt in rule.alts {
+					let action = alt.action ?? continue
+					fields_block(action, words, scan)
+				}
+			}
+		},
+		else => {},
+	}
+}
+
+/// The field `name` is written here: seen where a walk goes, lost elsewhere.
+fn fields_write(name: ref String, mut scan: FieldsScan) {
+	if !(scan.live.get(name) ?? false) {
+		return
+	}
+	if scan.walked {
+		scan.wrote = true
+	} else {
+		scan.live.insert(name.clone(), false)
+	}
+}
+
+/// The field `name` is mentioned where it may be handed on.
+fn fields_lose(name: ref String, mut scan: FieldsScan) {
+	if scan.live.get(name) ?? false {
+		scan.live.insert(name.clone(), false)
+	}
+}
+
+fn fields_block(block: ref Block, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	for stmt in block.stmts {
+		fields_stmt(stmt.node, words, scan)
+	}
+}
+
+fn fields_stmt(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	match stmt {
+		Stmt::Let { value, .. } => fields_expr(value, words, scan),
+		Stmt::Comptime { value, .. } => fields_expr(value, words, scan),
+		Stmt::Assign { target, op, value } => {
+			fields_expr(value, words, scan)
+			match target {
+				Expr::Field { base, name, .. } => {
+					let text = words.resolve(name)
+					if op == null {
+						fields_write(text, scan)
+					} else {
+						fields_lose(text, scan)
+					}
+					fields_expr(base, words, scan)
+				},
+				Expr::Index { base: list, index, .. } => {
+					match list {
+						Expr::Field { base: owner, name, .. } => {
+							let text = words.resolve(name)
+							if op == null {
+								fields_write(text, scan)
+							} else {
+								fields_lose(text, scan)
+							}
+							fields_expr(owner, words, scan)
+						},
+						else => fields_expr(list, words, scan),
+					}
+					fields_expr(index, words, scan)
+				},
+				else => fields_expr(target, words, scan),
+			}
+		},
+		Stmt::For { iter, body, .. } => {
+			match iter {
+				Expr::Field { base, .. } => fields_expr(base, words, scan),
+				else => fields_expr(iter, words, scan),
+			}
+			fields_block(body, words, scan)
+		},
+		Stmt::While { cond, body } => {
+			fields_expr(cond, words, scan)
+			fields_block(body, words, scan)
+		},
+		Stmt::Return(value) => fields_maybe(value, words, scan),
+		Stmt::Expr(inner) => fields_expr(inner, words, scan),
+		else => {},
+	}
+}
+
+fn fields_maybe(expr: ref Expr?, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	fields_expr(expr ?? return, words, scan)
+}
+
+fn fields_all(all: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	for each in all {
+		fields_expr(each, words, scan)
+	}
+}
+
+/// A lambda's or a task's body: the walks do not go through it.
+fn fields_unwalked(block: ref Block, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	let was = scan.walked
+	scan.walked = false
+	fields_block(block, words, scan)
+	scan.walked = was
+}
+
+fn fields_inits(fields: ref Vec[FieldInit], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	for field in fields {
+		fields_write(words.resolve(field.name), scan)
+		fields_maybe(field.value, words, scan)
+	}
+}
+
+fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+	match expr {
+		Expr::Field { base, name, .. } => {
+			fields_lose(words.resolve(name), scan)
+			fields_expr(base, words, scan)
+		},
+		Expr::SafeField { base, name, .. } => {
+			fields_lose(words.resolve(name), scan)
+			fields_expr(base, words, scan)
+		},
+		Expr::Index { base, index, .. } => {
+			match base {
+				Expr::Field { base: owner, .. } => fields_expr(owner, words, scan),
+				else => fields_expr(base, words, scan),
+			}
+			fields_expr(index, words, scan)
+		},
+		Expr::MethodCall { receiver, method, args, .. } => {
+			let called = words.resolve(method)
+			match receiver {
+				Expr::Field { base: owner, name, .. } => {
+					let text = words.resolve(name)
+					if writes_a_value(called, args.len()) != null {
+						fields_write(text, scan)
+					} else if !keeps_length(called) && !only_removes(called) {
+						fields_lose(text, scan)
+					}
+					fields_expr(owner, words, scan)
+				},
+				else => fields_expr(receiver, words, scan),
+			}
+			fields_all(args, words, scan)
+		},
+		Expr::SafeMethod { receiver, args, .. } => {
+			fields_expr(receiver, words, scan)
+			fields_all(args, words, scan)
+		},
+		Expr::StructLit { fields, .. } => fields_inits(fields, words, scan),
+		Expr::With { base, fields, .. } => {
+			fields_expr(base, words, scan)
+			fields_inits(fields, words, scan)
+		},
+		Expr::Block(block, _) => fields_block(block, words, scan),
+		Expr::Unsafe(block, _) => fields_block(block, words, scan),
+		Expr::Overlap(block, _) => fields_block(block, words, scan),
+		Expr::AsyncGroup(block, _, _, _, _) => fields_unwalked(block, words, scan),
+		Expr::Closure { body, .. } => fields_unwalked(body, words, scan),
+		Expr::Spawn { body, .. } => {
+			let was = scan.walked
+			scan.walked = false
+			fields_expr(body, words, scan)
+			scan.walked = was
+		},
+		Expr::Async(inner, _, _) => {
+			let was = scan.walked
+			scan.walked = false
+			fields_expr(inner, words, scan)
+			scan.walked = was
+		},
+		Expr::If { cond, then_branch, else_branch, .. } => {
+			fields_expr(cond, words, scan)
+			fields_block(then_branch, words, scan)
+			if else_branch != null {
+				fields_block(else_branch ?? return, words, scan)
+			}
+		},
+		Expr::Call { func, args, .. } => {
+			fields_expr(func, words, scan)
+			fields_all(args, words, scan)
+		},
+		Expr::Match { value, arms, .. } => {
+			fields_expr(value, words, scan)
+			for arm in arms {
+				fields_maybe(arm.guard, words, scan)
+				fields_expr(arm.body, words, scan)
+			}
+		},
+		Expr::Tuple(parts, _) => fields_all(parts, words, scan),
+		Expr::ListLit { items, .. } => fields_all(items, words, scan),
+		Expr::ListRepeat { value, count, .. } => {
+			fields_expr(value, words, scan)
+			fields_expr(count, words, scan)
+		},
+		Expr::Unary { expr: inner, .. } => fields_expr(inner, words, scan),
+		Expr::Binary { lhs, rhs, .. } => {
+			fields_expr(lhs, words, scan)
+			fields_expr(rhs, words, scan)
+		},
+		Expr::Try(inner, _) => fields_expr(inner, words, scan),
+		Expr::Throw(inner, _) => fields_expr(inner, words, scan),
+		Expr::Return(value, _) => fields_maybe(value, words, scan),
+		Expr::Cast { expr: inner, .. } => fields_expr(inner, words, scan),
+		Expr::Coalesce { value, fallback, .. } => {
+			fields_expr(value, words, scan)
+			fields_expr(fallback, words, scan)
+		},
+		Expr::TryCatch { expr: inner, handler, .. } => {
+			fields_expr(inner, words, scan)
+			fields_block(handler, words, scan)
+		},
+		Expr::LitInterpolated { parts, .. } => {
+			for part in parts {
+				match part {
+					FPart::Hole { expr: hole, .. } => fields_expr(hole, words, scan),
+					else => {},
+				}
+			}
+		},
+		else => {},
+	}
 }

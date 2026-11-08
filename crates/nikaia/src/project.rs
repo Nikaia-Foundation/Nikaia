@@ -748,7 +748,10 @@ pub fn lower_reading(
         &open,
         false,
         |host, in_project| match project_lower::project_lower_reading(host, in_project) {
-            Ok(out) => Ok((out, host.proofs.take(), host.exported.take())),
+            Ok(out) => {
+                host.bound(&out.rust)?;
+                Ok((out, host.proofs.take(), host.exported.take()))
+            }
             Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
         },
     )??;
@@ -1042,6 +1045,52 @@ struct LowerHost<'a> {
 type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 impl LowerHost<'_> {
+    /// **The binding of `nikaia bind` narrowed to its features** (ADR-393
+    /// D5): with `[features]`, the bindings are written again over the entry
+    /// points the core and the chosen features reach in the lowered `rust`
+    /// (`features_kept`); the library and its header stay whole.
+    fn bound(&self, rust: &str) -> Result<()> {
+        let settings = self.settings;
+        if !settings.library() || settings.words.bind.is_none() {
+            return Ok(());
+        }
+        let Ok(manifest) = Manifest::read(&self.layout.root.join("nikaia.toml")) else {
+            return Ok(());
+        };
+        let features = &manifest.file().features;
+        if features.is_empty() || self.exported.borrow().is_none() {
+            return Ok(());
+        }
+        let package = manifest
+            .package_name()
+            .map(str::to_string)
+            .unwrap_or_else(|| settings.words.symbol_prefix.clone());
+        let kept = nikaia_std::tools::project_features::features_kept(
+            rust,
+            features,
+            &package,
+            settings.words.bind_features.as_ref(),
+        )
+        .map_err(|refusal| anyhow!("{refusal}"))?;
+        let narrowed = crate::cexport::export(
+            &self.program(),
+            &settings.words.symbol_prefix,
+            &package,
+            settings.words.user_parallelism == "yes",
+            &settings.words.target,
+            Some(&kept),
+        )?;
+        if let Some(exported) = self.exported.borrow_mut().as_mut() {
+            let (python, node) = match narrowed {
+                Some(narrowed) => (narrowed.python, narrowed.node),
+                None => (String::new(), String::new()),
+            };
+            exported.python = python;
+            exported.node = node;
+        }
+        Ok(())
+    }
+
     /// `result` for the Nikaia side, its error kept to be handed back.
     fn held<T>(&self, result: Result<T>) -> HostResult<T> {
         result.map_err(|error| {
@@ -1161,6 +1210,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             &package,
             settings.words.user_parallelism == "yes",
             &settings.words.target,
+            None,
         );
         *self.exported.borrow_mut() = self.held(exported)?;
         Ok(())
@@ -3200,6 +3250,16 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         )
     }
 
+    fn features(&self) -> Vec<nikaia_std::tools::manifest::ManifestFeature> {
+        self.project.manifest.file().features.clone()
+    }
+
+    fn manifest_text(&self) -> (String, String) {
+        let path = self.project.root.join("nikaia.toml");
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        (path.display().to_string(), text)
+    }
+
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool {
         self.project
             .runs_without_cargo(&self.members.borrow(), link_flags)
@@ -3319,6 +3379,10 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
 
     fn bind(&self) -> Option<String> {
         self.project.settings.words.bind.clone()
+    }
+
+    fn bind_features(&self) -> Option<Vec<String>> {
+        self.project.settings.words.bind_features.clone()
     }
 
     fn own_copy(&self, built: &Path) -> HostResult<PathBuf> {

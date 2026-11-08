@@ -1,0 +1,31 @@
+// `nikaia bind --features` is checked before anything is built (ADR-393 D5,
+// #1394): a name `[features]` does not declare is `NK1347`, and the flag on
+// a program, which has no user who chooses its parts, is `NK1346`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// Binds a package with `[build]` `build` and the rest of its manifest
+/// `table` with `--features` `features`, and says how it ended.
+fn bound(nikaia: String, build: String, table: String, features: String) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"geo\"\nversion = \"0.1.0\"\n\n[build]\n{build}\n{table}")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub extern fn area(w: i64, h: i64) -> i64 {\n    return w * h\n}\n\nfn main() {\n    println(f\"{area(2, 3)}\")\n}\n")
+    let out = process::run(nikaia, ["bind", "python", "--features", features]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    println(out.stderr.trim().replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    bound(nikaia, "artifact = \"c-library\"\n", "[features]\nshapes = [\"geo::area\"]\n", "shape")
+    bound(nikaia, "artifact = \"c-library\"\n", "", "shapes")
+    bound(nikaia, "", "", "shapes")
+}

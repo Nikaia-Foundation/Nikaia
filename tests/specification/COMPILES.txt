@@ -51,7 +51,7 @@
 10-nikaia-light.md #115 compiles
 20-nikaia-advance.md #5 compiles
 20-nikaia-advance.md #10 refused
-20-nikaia-advance.md #19 refused
+20-nikaia-advance.md #19 compiles
 20-nikaia-advance.md #24 compiles
 20-nikaia-advance.md #25 compiles
 20-nikaia-advance.md #26 compiles

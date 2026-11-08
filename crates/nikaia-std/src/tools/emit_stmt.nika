@@ -192,16 +192,20 @@ impl EmitState {
             let mut rendered = EmitOut::empty()
             let st = rendered.mark()
             let keeps = walk.async_keeps
+            let rests = walk.async_rests.len()
             walk.async_keeps = false
             self.emit_stmt(world, walk, rendered, host, block.stmts[0].node, block.stmts[0].span, depth, tail, flow, scope)
             walk.async_keeps = keeps
             rendered.record(block.stmts[0].span, st)
-            if !rendered.buf.contains("\n") {
+            // A statement task's cell is waited for at the block's end
+            // (ADR-async-5 D37), which only the long form writes.
+            if !rendered.buf.contains("\n") && walk.async_rests.len() == rests {
                 out.push("{ ")
                 out.append(rendered)
                 out.push(" }")
                 return
             }
+            walk.async_rests.truncate(rests)
             walk.preluded = declared
             walk.async_bound = bound
         }
@@ -269,15 +273,26 @@ impl EmitState {
             out.push(inner_pad)
             self.emit_async_joins(walk, out, block.stmts[i].span.start as i64, inner_pad)
             let here = tail.at(i, last)
-            let ending = i == last && walk.async_rests.len() > rests
             walk.async_keeps = i < last
-            if ending && here.is_value() {
-                out.push("let __nikaia_rested = { ")
-            }
+            let before = walk.async_rests.len()
             let st = out.mark()
             self.emit_stmt(world, walk, out, host, block.stmts[i].node, block.stmts[i].span, depth + 1, here, flow, scope)
             out.record(block.stmts[i].span, st)
+            // **The value of a block that waits for cells at its end** is
+            // taken before the waits; the cells the last statement asked for
+            // (a statement task's, ADR-async-5 D37) are declared outside it.
+            let ending = i == last && walk.async_rests.len() > rests
             if ending && here.is_value() {
+                let mut at = st
+                if walk.async_rests.len() > before {
+                    let cell = walk.async_rests[walk.async_rests.len() - 1].clone()
+                    let declared = f"let {cell} = nikaia_std::task::Rest::new(); "
+                    let found = out.buf.find(declared) ?? -1
+                    if found >= st {
+                        at = found + declared.len()
+                    }
+                }
+                out.insert_at(at, "let __nikaia_rested = { ")
                 out.push(" };")
             }
             out.push(self.emit_stmt_late_puts(walk, scope.function, block.stmts[i].span.start as i64))
@@ -1283,12 +1298,15 @@ fn emit_stmt_declare_slots(mut walk: EmitWalk, mut out: EmitOut, mark: i64, slot
 
 /// **The end of a block that declared cells of rests** (Part I 8.2, #987):
 /// each still running is waited for here, in the order they started; the
-/// cells leave the walk.
+/// cells leave the walk. Under a gate the group's tasks run meanwhile, and
+/// those still waiting for a place start as places free (ADR-async-5 D37).
 fn emit_stmt_finish_rests(mut walk: EmitWalk, rests: i64, pad: ref String) -> String {
     let mut finished = ""
+    let line = emit_async_line(walk.async_gates)
     while walk.async_rests.len() > rests {
         let cell = walk.async_rests.pop() ?? break
-        finished = f"{pad}{cell}.finish().await;\n{finished}"
+        let wait = emit_async_during(line, f"{cell}.finish()")
+        finished = f"{pad}{wait};\n{finished}"
     }
     return finished
 }

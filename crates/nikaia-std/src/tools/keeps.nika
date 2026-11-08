@@ -278,7 +278,7 @@ fn reached_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext, con
             }
         }
         Expr::Block(block, _) => reached_by_last(block, interner, context, own, library, walk, through_calls, found),
-        Expr::AsyncGroup(block, _, _) => reached_by_last(block, interner, context, own, library, walk, through_calls, found),
+        Expr::AsyncGroup(block, _, _, _, _) => reached_by_last(block, interner, context, own, library, walk, through_calls, found),
         Expr::Variable(ident, _) => {
             let name = interner.resolve(ident).clone()
             if context.parameters.contains(name) {
@@ -357,7 +357,7 @@ fn keeps_viewed_of(expr: ref Expr, interner: ref winnow_grammar::InternerContext
             }
         }
         Expr::Block(block, _) => viewed_by_last(block, interner, context, own, library, walk, found),
-        Expr::AsyncGroup(block, _, _) => viewed_by_last(block, interner, context, own, library, walk, found),
+        Expr::AsyncGroup(block, _, _, _, _) => viewed_by_last(block, interner, context, own, library, walk, found),
         else => {}
     }
     return found
@@ -573,7 +573,7 @@ fn keeps_maybe(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, h
 fn keeps_blocks_in(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     match expr {
         Expr::Block(block, _) => keeps_block(block, interner, holes_of, context, own, library, walk),
-        Expr::AsyncGroup(block, _, _) => keeps_block(block, interner, holes_of, context, own, library, walk),
+        Expr::AsyncGroup(block, _, _, _, _) => keeps_block(block, interner, holes_of, context, own, library, walk),
         Expr::Unsafe(block, _) => keeps_block(block, interner, holes_of, context, own, library, walk),
         Expr::Overlap(block, _) => keeps_block(block, interner, holes_of, context, own, library, walk),
         Expr::Closure { body, .. } => keeps_block(body, interner, holes_of, context, own, library, walk),
@@ -1074,7 +1074,7 @@ fn keep_what_a_task_names(body: ref Expr, interner: ref winnow_grammar::Interner
     let seen = match body {
         Expr::Closure { body, .. } => seen_in(body, interner, name_as_it_is, holes_of, no_root, true),
         Expr::Block(block, _) => seen_in(block, interner, name_as_it_is, holes_of, no_root, true),
-        Expr::AsyncGroup(block, _, _) => seen_in(block, interner, name_as_it_is, holes_of, no_root, true),
+        Expr::AsyncGroup(block, _, _, _, _) => seen_in(block, interner, name_as_it_is, holes_of, no_root, true),
         else => {
             walk.uses.kept.extend(context.parameters.clone())
             return
@@ -1463,7 +1463,7 @@ fn hands_on_a_bound_name(value: ref Expr, interner: ref winnow_grammar::Interner
             one => hands_on_a_bound_name(one, interner, bound),
         },
         Expr::Block(block, _) => hands_on_a_bound_tail(block, interner, bound),
-        Expr::AsyncGroup(block, _, _) => hands_on_a_bound_tail(block, interner, bound),
+        Expr::AsyncGroup(block, _, _, _, _) => hands_on_a_bound_tail(block, interner, bound),
         Expr::If { then_branch, else_branch, .. } => hands_on_a_bound_tail(then_branch, interner, bound) || match else_branch {
             null => false,
             other => hands_on_a_bound_tail(other, interner, bound),

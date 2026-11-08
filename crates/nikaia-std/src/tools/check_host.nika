@@ -726,7 +726,7 @@ impl CheckState {
                 is_block = true
                 empty = block.stmts.len() == 0
             },
-            Expr::AsyncGroup(block, _, _) => {
+            Expr::AsyncGroup(block, _, _, _, _) => {
                 is_block = true
                 empty = block.stmts.len() == 0
             },
@@ -754,7 +754,7 @@ impl CheckState {
                         bound_again = true
                     }
                 },
-                Expr::AsyncGroup(inner, _, _) => {
+                Expr::AsyncGroup(inner, _, _, _, _) => {
                     if lent_binds_again(world, inner, lent) {
                         bound_again = true
                     }
@@ -781,7 +781,7 @@ impl CheckState {
                             bound_again = true
                         }
                     },
-                    Expr::AsyncGroup(inner, _, _) => {
+                    Expr::AsyncGroup(inner, _, _, _, _) => {
                         if lent_binds_again(world, inner, lent) {
                             bound_again = true
                         }
@@ -828,7 +828,7 @@ impl CheckState {
                         bound_again = true
                     }
                 },
-                Expr::AsyncGroup(inner, _, _) => {
+                Expr::AsyncGroup(inner, _, _, _, _) => {
                     if lent_binds_again(world, inner, lent) {
                         bound_again = true
                     }

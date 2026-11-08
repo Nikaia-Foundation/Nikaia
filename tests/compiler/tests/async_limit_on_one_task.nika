@@ -1,0 +1,13 @@
+// `limit:` on a form that starts one task is NK2112 (ADR-async-5 D15, #986).
+fn f() -> i64 {
+	return 1
+}
+
+fn main() throws {
+	let x = async {
+		let a = async(limit: 2) f()
+		let b = f()
+		a + b
+	}
+	println(f"{x}")
+}

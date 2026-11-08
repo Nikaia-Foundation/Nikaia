@@ -1829,6 +1829,14 @@ mod project_drive_lowered {
 #[allow(unused_imports)]
 pub use project_drive_lowered::*;
 
+mod project_features_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/project_features.rs");
+}
+#[allow(unused_imports)]
+pub use project_features_lowered::*;
+
 mod project_lower_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2391,7 +2399,7 @@ pub mod bounds_derived {
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
-    pub use super::{bounds_around, frame_at_call, frame_writes};
+    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, fields_seen};
 }
 pub mod bounds_interval {
     #[allow(unused_imports)]
@@ -2419,7 +2427,7 @@ pub mod bounds_shape {
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive};
+    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields};
 }
 pub mod buffers {
     #[allow(unused_imports)]
@@ -2451,7 +2459,7 @@ pub mod cexport_mirror {
 }
 pub mod cexport_model {
     #[allow(unused_imports)]
-    pub use super::{CxRefused, CxByValue, CxIn, CxLent, CxOut, cx_out_index, CxRecord, CxAlternative, CxPart, cx_element, CxPlain, CxHold, CxVariantOf, CxEntry, CxHandled, CxShown, CxRaising, CxCode, cx_escaped, cx_not_yet, cx_nothing_exported, cx_by_value, cx_records, cx_record_of, cx_records_in_order, cx_plain_enums, cx_choice, cx_handle_of, cx_taken, cx_handed, cx_parameter_names, cx_handled_structs, cx_result_of, CxResult, cx_entries_in, cx_variant_codes, cx_std_codes, cx_errno};
+    pub use super::{CxRefused, CxByValue, CxIn, CxLent, CxOut, cx_out_index, CxRecord, CxAlternative, CxPart, cx_element, CxPlain, CxHold, CxVariantOf, CxEntry, CxHandled, CxShown, CxRaising, CxCode, cx_escaped, cx_not_yet, cx_nothing_exported, cx_by_value, cx_records, cx_record_of, cx_records_in_order, cx_plain_enums, cx_choice, cx_handle_of, cx_taken, cx_handed, cx_parameter_names, cx_handled_structs, cx_result_of, CxResult, cx_entries_in, cx_entries_bound, cx_variant_codes, cx_std_codes, cx_errno};
 }
 pub mod cexport_node {
     #[allow(unused_imports)]
@@ -2863,7 +2871,10 @@ pub mod emit_contracts {
     #[allow(unused_imports)]
     pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state, EmitReachGraphs, emit_contracts_package_graphs};
 }
-pub mod emit_core_args {}
+pub mod emit_core_args {
+    #[allow(unused_imports)]
+    pub use super::{emit_async_line, emit_async_pause, emit_async_during};
+}
 pub mod emit_core_below {
     #[allow(unused_imports)]
     pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
@@ -3102,7 +3113,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -3142,7 +3153,7 @@ pub mod parse_errors {
 }
 pub mod parse_findings {
     #[allow(unused_imports)]
-    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_refusal, parse_findings_types_refusal};
+    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_one_task_limit, parse_findings_refusal, parse_findings_types_refusal};
 }
 pub mod parse_notes {
     #[allow(unused_imports)]
@@ -3179,6 +3190,10 @@ pub mod project_check {
 pub mod project_drive {
     #[allow(unused_imports)]
     pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+}
+pub mod project_features {
+    #[allow(unused_imports)]
+    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_chosen_checked, features_applied, features_kept, features_manifest, features_blamed, features_first_error, features_span};
 }
 pub mod project_lower {
     #[allow(unused_imports)]

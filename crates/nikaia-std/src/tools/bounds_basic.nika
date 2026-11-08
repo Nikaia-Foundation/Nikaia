@@ -295,7 +295,7 @@ fn counted_children(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winno
 fn counted_blocks(expr: ref Expr, over: ref Vec[CountedLoop], words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[i64]) {
     match expr {
         Expr::Block(b, _) => counted_block(b, copied(over), words, out),
-        Expr::AsyncGroup(b, _, _) => counted_block(b, copied(over), words, out),
+        Expr::AsyncGroup(b, _, _, _, _) => counted_block(b, copied(over), words, out),
         Expr::Overlap(b, _) => counted_block(b, copied(over), words, out),
         Expr::Unsafe(b, _) => counted_block(b, copied(over), words, out),
         Expr::If { then_branch, else_branch, .. } => {
@@ -573,7 +573,7 @@ fn seek_expr(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::Interner
         Expr::Coalesce { value, fallback, .. } => seek_expr(value, seek, words) || seek_expr(fallback, seek, words),
         Expr::Select(arms, _) => seek_select(arms, seek, words),
         Expr::Block(b, _) => seek_block(b, seek, words),
-        Expr::AsyncGroup(b, _, _) => seek_block(b, seek, words),
+        Expr::AsyncGroup(b, _, _, _, _) => seek_block(b, seek, words),
         Expr::Overlap(b, _) => seek_block(b, seek, words),
         Expr::Unsafe(b, _) => seek_block(b, seek, words),
         Expr::Closure { body, .. } => seek_block(body, seek, words),

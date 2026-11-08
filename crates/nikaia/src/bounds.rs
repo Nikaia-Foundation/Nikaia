@@ -239,6 +239,16 @@ pub fn proven(
         through_loops,
         decided: decided(parsed, comptime_values),
     };
+    // **The list fields' bounds, found program-wide** (ADR-306 D21):
+    // `tools/bounds_walk.nika`.
+    walk::bounds_fields(
+        &mut context,
+        &parsed.program,
+        &parsed.interner,
+        &|arena, facts, goal| {
+            crate::proofs::ask(arena, facts, goal) == crate::proofs::Asked::Proved
+        },
+    );
     let mut bodies: Vec<&Spanned<Item>> = Vec::new();
     for item in &parsed.program.items {
         match &item.node {

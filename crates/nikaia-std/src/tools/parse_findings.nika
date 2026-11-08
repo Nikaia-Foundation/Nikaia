@@ -107,6 +107,14 @@ pub fn parse_findings_misplaced_async(at: i64, word: String) -> Finding {
     return Finding { code: "NK2115", span: span, message: message.clone(), notes: [note.clone()], help: help.clone(), warning: false, labels: [CheckLabel { span: span, word: "async", text: "", main: true }] }
 }
 
+/// **`limit:` on a form that starts one task** (`NK2112`, ADR-async-5 D15):
+/// `async e`, `async fn { … }` and the handle forms run one task, which a limit
+/// on how many run at once does not concern.
+pub fn parse_findings_one_task_limit(at: i64) -> Finding {
+    let span = Span { start: at as u32, end: (at + 5) as u32 }
+    return Finding { code: "NK2112", span: span, message: "`limit:` stands on a form that starts one task.", notes: ["`limit: n` says how many tasks of one form run at once, and this form starts only one."], help: "Remove `limit:`, or write it on the `async { … }` around the tasks it should hold back.", warning: false, labels: [CheckLabel { span: span, word: "limit", text: "", main: true }] }
+}
+
 /// **The refusal a parse error travels as**: the finding, and the line with
 /// its position, 1-based line and column in characters, for whoever has no
 /// path to render it at.

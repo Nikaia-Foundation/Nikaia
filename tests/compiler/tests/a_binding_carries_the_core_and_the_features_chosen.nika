@@ -1,0 +1,57 @@
+// `nikaia bind <language> --features a,b` (ADR-393 D5, #1394): the binding
+// carries the core and the features named, and `default`'s without the flag;
+// the C library is built whole. Here `extra` reaches `doubled`, `shapes`
+// reaches `make_box`, `Box` and its method, `area` and its helper, and
+// `version` is the core.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// The functions and classes of the Python binding, and its methods.
+fn bound(tmp: String) throws {
+    let module = fs::read_to_string(f"{tmp}/target/nikaia/c-library/geo/__init__.py", fs::Root::Anywhere)
+    for line in module.lines() {
+        let named = line.starts_with("def ") || line.starts_with("class ") || line.starts_with("    def ")
+        if !named || line.contains("def _") || line.contains("Error") { continue }
+        let name = line.split("(").next() ?? ""
+        if name.ends_with("init") || name.ends_with("shutdown") || name.ends_with("close") { continue }
+        println(f"  {name.trim_end_matches(":")}")
+    }
+}
+
+/// Binds the package with `args` after `bind python`, and shows the binding.
+fn bind(nikaia: String, tmp: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["bind", "python"]
+    for arg in args { all.push(arg.clone()) }
+    let out = process::run(nikaia, all; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"bind python {args.join(" ")}: exit {out.code}")
+    if out.code != 0 { println(out.stderr.trim().replace(tmp, "TMP")) }
+    bound(tmp)
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"geo\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n\n[features]\ndefault = [\"shapes\"]\nshapes = [\"geo::make_box\", \"geo::area\"]\nextra = [\"geo::doubled\"]\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "pub struct Box {\n    pub w: i64,\n}\n\nimpl Box {\n    pub extern fn wide(ref self) -> i64 {\n        return self.w\n    }\n}\n\npub extern fn make_box(w: i64) -> Box {\n    return Box { w: w }\n}\n\npub extern fn area(w: i64, h: i64) -> i64 {\n    return helper(w) * h\n}\n\npub extern fn doubled(v: i64) -> i64 {\n    return v * 2\n}\n\npub extern fn version() -> i64 {\n    return 1\n}\n\nfn helper(v: i64) -> i64 {\n    return v\n}\n")
+    bind(nikaia, tmp.clone(), ["--features", "extra"])
+    // The library is whole: every entry point is in its header.
+    let header = fs::read_to_string(f"{tmp}/target/nikaia/c-library/geo.h", fs::Root::Anywhere)
+    let mut entries: Vec[String] = []
+    for line in header.lines() {
+        if !line.starts_with("int geo_") { continue }
+        let name = line.split("(").next() ?? ""
+        let name = name.replace("int geo_", "")
+        if name != "last_error" && name != "init" && name != "shutdown" && name != "set_allocator" { entries.push(name) }
+    }
+    println(f"geo.h: {entries.join(", ")}")
+    bind(nikaia, tmp.clone(), [])
+    bind(nikaia, tmp.clone(), ["--features", "shapes,extra"])
+    process::run("rm", ["-rf", tmp])
+}

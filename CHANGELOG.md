@@ -8,6 +8,21 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1361] — 2026-11-08
+
+**async { … } takes limit: and admission:; a task waiting for a place does not stop the main line (ADR-async-5 D15, D18, D37, D38; #986)**
+- `async(limit: n) { … }` lets at most n of its tasks run at once; the others wait unstarted, in written order, and the main line goes on (D37). A value below 1 stops the program naming the option; `limit:` on a form that starts one task is NK2112; a literal `limit: 1` runs its tasks one at a time and they are not checked against each other (D7).
+- `admission:` names a `task::Admission` strategy; every group of a function that pauses is under std's `task::Adaptive()`. `task::Load` and `task::Decision` carry what the runtime counts (memory joins with #490).
+- A task started inside another task is under every gate around it, and a task waiting for its own children gives its place back (D38); a statement task queues like any other.
+- Left open: the options on the `par_iter` chain, and inner tasks of a closure task under the outer gates (#986).
+
+## [0.0.1360] — 2026-11-08
+
+**Builders' changes (#1382, #1393, #1398)**
+- yaml: the package runs the whole yaml-test-suite (402 cases) and passes 365; a pass list keeps them passing.
+- Features of a Rust library: [features] in a rust-library's nikaia.toml names roots (the package or a pub item); the build derives #[cfg] for every item a feature reaches, Cargo features with default and implications, optional dependencies as dep:<name>, and checks the core, each feature and all together (NK1344-NK1347).
+- nikaia test: a test program (tests/NAME.nika) now runs with its package's directory as working directory, as a test block does, and writes under fs::scratch(); output tests keep their empty directory (ADR-269 D22, #1398).
+
 ## [0.0.1359] — 2026-11-08
 
 **Packages by version through crates.io, and two lowering fixes (#99)**

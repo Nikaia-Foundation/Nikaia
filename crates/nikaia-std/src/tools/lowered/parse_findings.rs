@@ -55,6 +55,11 @@ pub fn parse_findings_misplaced_async(at: i64, word: &str) -> Finding {
     Finding { code: String::from("NK2115"), span, message: message.to_string(), notes: vec![note.to_string()], help: Some(help.to_string()), warning: false, labels: vec![CheckLabel { span, word: String::from("async"), text: String::from(""), main: true }] }
 }
 
+pub fn parse_findings_one_task_limit(at: i64) -> Finding {
+    let span = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at + 5).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+    Finding { code: String::from("NK2112"), span, message: String::from("`limit:` stands on a form that starts one task."), notes: vec![String::from("`limit: n` says how many tasks of one form run at once, and this form starts only one.")], help: Some(String::from("Remove `limit:`, or write it on the `async { … }` around the tasks it should hold back.")), warning: false, labels: vec![CheckLabel { span, word: String::from("limit"), text: String::from(""), main: true }] }
+}
+
 pub fn parse_findings_refusal(finding: Finding, source: &str) -> ParseFindingsRefusal {
     let end = (finding.span.start as i64).min(source.len() as i64);
     let mut from = end;

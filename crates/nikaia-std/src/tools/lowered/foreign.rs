@@ -197,7 +197,7 @@ pub(crate) fn statement_blocks(stmt: &Stmt, names: &winnow_grammar::InternerCont
 pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &dyn Fn(&str) -> String, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, root_at: &dyn Fn(&str) -> i64, found: &mut Walked) {
     match expr {
         Expr::Block(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
-        Expr::AsyncGroup(block, _, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
+        Expr::AsyncGroup(block, _, _, _, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Unsafe(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Overlap(block, _) => { block_names(block, names, &unaliased, &holes_of, &root_at, found); },
         Expr::Closure { body, .. } => { block_names(body, names, &unaliased, &holes_of, &root_at, found); },

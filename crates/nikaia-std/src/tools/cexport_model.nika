@@ -868,6 +868,13 @@ pub fn cx_entries_in(words: ref winnow_grammar::InternerContext, items: ref Vec[
     }
 }
 
+/// **The entry points a binding narrowed to some features carries**
+/// (ADR-393 D5): a function whose item `kept` names, and a method of a type
+/// it names (its `impl` comes with the type). The library keeps them all.
+pub fn cx_entries_bound(found: ref Vec[CxEntry], kept: ref Vec[String]) -> Vec[CxEntry] {
+    return found.iter().filter(fn(entry) { kept.contains(entry.owner?.clone() ?? entry.name.clone()) }).map(fn(entry) { entry.clone() }).collect()
+}
+
 fn cx_take(words: ref winnow_grammar::InternerContext, owner: String?, item: ref Item, first: bool, mut out: Vec[CxEntry]) throws {
     match item {
         Item::Fn { name, receiver, args, ret_type, is_extern, .. } => {

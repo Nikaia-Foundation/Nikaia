@@ -808,7 +808,7 @@ pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::I
             grammar_types_walk_fields(&mut *fields, words, &intern, walk);
         },
         Expr::Block(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
-        Expr::AsyncGroup(block, _, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
+        Expr::AsyncGroup(block, _, _, _, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
         Expr::Unsafe(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
         Expr::Overlap(block, _) => { grammar_types_walk_block(&mut *block, words, &intern, walk); },
         Expr::Closure { body, .. } => { grammar_types_walk_block(&mut *body, words, &intern, walk); },

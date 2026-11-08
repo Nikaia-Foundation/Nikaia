@@ -32,6 +32,7 @@ pub struct ProjectWords {
     pub symbol_prefix: String,
     pub tests: bool,
     pub bind: Option<String>,
+    pub bind_features: Option<Vec<String>>,
     pub cpu: Option<String>,
 }
 
@@ -169,7 +170,7 @@ pub(crate) fn project_settings_checked(target: String, user_parallelism: String,
     let refuted_claims = refuted_claims(refuted)?;
     let unproved_claims = unproved_claims(unproved)?;
     let artifact = artifact(made)?;
-    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, cpu })
+    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, bind_features: None, cpu })
 }
 
 pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<String>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, Box<dyn std::error::Error>> {

@@ -1,0 +1,19 @@
+bind python --features extra: exit 0
+  def doubled
+  def version
+geo.h: Box_free, Box_wide, make_box, area, doubled, version, Box_w
+bind python : exit 0
+  class Box
+      def wide
+      def w
+  def make_box
+  def area
+  def version
+bind python --features shapes,extra: exit 0
+  class Box
+      def wide
+      def w
+  def make_box
+  def area
+  def doubled
+  def version

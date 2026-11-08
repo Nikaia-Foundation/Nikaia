@@ -323,7 +323,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
         }
         out.push(")");
-        if pauses { out.push(".await"); }
+        if pauses { out.push(&emit_async_pause(&walk)); }
         if flow.can_throw && !flow.caught && self.method_can_fail(node_key(receiver)) { out.push("?"); }
         Ok(true)
     }

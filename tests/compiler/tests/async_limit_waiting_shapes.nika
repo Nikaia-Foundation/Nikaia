@@ -1,0 +1,51 @@
+// Shapes of tasks that wait for a place (ADR-async-5 D37, #986): a task that
+// never pauses queued behind one that does, tasks of one call's arguments, a
+// gated group inside another (under both gates), and statement tasks after a
+// bound one, each started in written order as places free.
+use std::time
+
+fn work(n: i64) -> i64 {
+	time::sleep(1.millis())
+	return n
+}
+
+fn double(n: i64) -> i64 {
+	return n * 2
+}
+
+fn add(a: i64, b: i64) -> i64 {
+	return a + b
+}
+
+fn say(n: i64) throws {
+	time::sleep(1.millis())
+	println(f"task {n}")
+}
+
+fn main() throws {
+	let total = async(limit: 1) {
+		let a = async work(1)
+		let d = async double(3)
+		let s = add(async work(10), async work(20))
+		a + d + s
+	}
+	println(f"total {total}")
+	let inner = async(limit: 2) {
+		let a = async work(1)
+		let b = async work(2)
+		let more = async(limit: 1) {
+			let c = async work(3)
+			let e = async work(4)
+			c + e
+		}
+		a + b + more
+	}
+	println(f"nested {inner}")
+	let x = async(limit: 1) {
+		let a = async work(5)
+		async say(1)
+		async say(2)
+		a
+	}
+	println(f"x {x}")
+}

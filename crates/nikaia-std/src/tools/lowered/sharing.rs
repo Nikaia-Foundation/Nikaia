@@ -619,7 +619,7 @@ pub fn named_handle(expr: &Expr, names: &winnow_grammar::InternerContext, scope:
     match expr {
         Expr::Variable(name, _) => { let name = *name; a_handle_in_scope(names.resolve(name), scope) },
         Expr::Block(block, _) => a_handle_at_the_tail(block, names, scope),
-        Expr::AsyncGroup(block, _, _) => a_handle_at_the_tail(block, names, scope),
+        Expr::AsyncGroup(block, _, _, _, _) => a_handle_at_the_tail(block, names, scope),
         _ => None,
     }
 }
@@ -912,7 +912,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
             sharing_block(body, asked, &holes_of, &ty_of, walk);
         },
         Expr::Block(block, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
-        Expr::AsyncGroup(block, _, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
+        Expr::AsyncGroup(block, _, _, _, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
         Expr::Overlap(block, _) => { sharing_block(block, asked, &holes_of, &ty_of, walk); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);

@@ -128,16 +128,18 @@ impl EmitState {
             let mut rendered = EmitOut::empty();
             let st = rendered.mark();
             let keeps = walk.async_keeps;
+            let rests = walk.async_rests.len() as i64;
             walk.async_keeps = false;
             self.emit_stmt(world, walk, &mut rendered, host, &nikaia_std::index::get(&block.stmts, 0).node, &nikaia_std::index::get(&block.stmts, 0).span, depth, &tail, flow, scope)?;
             walk.async_keeps = keeps;
             rendered.record(&nikaia_std::index::get(&block.stmts, 0).span, st);
-            if !rendered.buf.contains("\n") {
+            if !rendered.buf.contains("\n") && (walk.async_rests.len() as i64) == rests {
                 out.push("{ ");
                 out.append(&rendered);
                 out.push(" }");
                 return Ok(());
             }
+            walk.async_rests.truncate(nikaia_std::count::of(rests));
             walk.preluded = declared;
             walk.async_bound = bound;
         }
@@ -188,13 +190,23 @@ impl EmitState {
             out.push(&inner_pad);
             self.emit_async_joins(walk, out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64, &inner_pad);
             let here = tail.at(i, last);
-            let ending = i == last && (walk.async_rests.len() as i64) > rests;
             walk.async_keeps = i < last;
-            if ending && here.is_value() { out.push("let __nikaia_rested = { "); }
+            let before = walk.async_rests.len() as i64;
             let st = out.mark();
             self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, &here, flow, scope)?;
             out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
-            if ending && here.is_value() { out.push(" };"); }
+            let ending = i == last && (walk.async_rests.len() as i64) > rests;
+            if ending && here.is_value() {
+                let mut at = st;
+                if (walk.async_rests.len() as i64) > before {
+                    let cell = (*nikaia_std::index::get(&walk.async_rests, nikaia_std::index::at(walk.async_rests.len() as i64 - 1))).to_string();
+                    let declared = format!("let {} = nikaia_std::task::Rest::new(); ", cell);
+                    let found = nikaia_std::index::or(nikaia_std::search::find(&out.buf, &declared, 0), || -1);
+                    if found >= st { at = found + declared.len() as i64; }
+                }
+                out.insert_at(at, "let __nikaia_rested = { ");
+                out.push(" };");
+            }
             out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
             out.push("\n");
             pos += 1;
@@ -939,9 +951,11 @@ pub(crate) fn emit_stmt_declare_slots(walk: &mut EmitWalk, out: &mut EmitOut, ma
 
 pub(crate) fn emit_stmt_finish_rests(walk: &mut EmitWalk, rests: i64, pad: &str) -> String {
     let mut finished = String::from("");
+    let line = emit_async_line(&walk.async_gates);
     while (walk.async_rests.len() as i64) > rests {
         let cell = match walk.async_rests.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
-        finished = format!("{}{}.finish().await;\n{}", pad, cell, finished);
+        let wait = emit_async_during(&line, &format!("{}.finish()", cell));
+        finished = format!("{}{};\n{}", pad, wait, finished);
     }
     finished
 }

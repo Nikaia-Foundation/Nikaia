@@ -1,5 +1,5 @@
-// `admission:` on an `async` form (ADR-async-5 D15, D18) is refused until the
-// checker handles it (#986).
+// `admission:` on a form that starts one task (ADR-async-5 D15, D18) is
+// refused until it is built (#986); on `async { … }` it is.
 
 fn main() throws {
 	let h = async(detached, admission: task::Admission::Eager) fn { 1 }

@@ -1,0 +1,47 @@
+// The items of `demo`, and the feature each lands in: `core_add` names no
+// root (the core), `helper` is reached by `tree` and `stream`, `label`
+// reaches `make` (so `show` implies `tree`), and only `doubled` uses `util`
+// (an optional dependency). `whole` names the package itself.
+use util
+
+pub fn core_add(a: i64, b: i64) -> i64 sync {
+    return a + b
+}
+
+fn helper(v: i64) -> i64 sync {
+    return v + 1
+}
+
+pub struct Node {
+    pub v: i64,
+}
+
+pub fn make(v: i64) -> Node sync {
+    return Node { v: helper(v) }
+}
+
+pub trait Show {
+    fn show(ref self) -> String sync
+}
+
+impl Show for Node {
+    fn show(ref self) -> String sync {
+        return f"node {self.v}"
+    }
+}
+
+pub fn label(v: i64) -> String sync {
+    return make(v).show()
+}
+
+pub struct Event {
+    pub at: i64,
+}
+
+pub fn event(at: i64) -> Event sync {
+    return Event { at: helper(at) }
+}
+
+pub fn doubled(v: i64) -> i64 sync {
+    return util::twice(v)
+}

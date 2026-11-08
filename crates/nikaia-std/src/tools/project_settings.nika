@@ -62,6 +62,10 @@ pub struct ProjectWords {
     /// [ADR-284](../../../docs/specification/adr/adr-284.md) D26): `python` or `node`,
     /// or none for a plain build.
     pub bind: String?,
+    /// **The features the binding carries** (`nikaia bind --features a,b`,
+    /// [ADR-393](../../../docs/specification/adr/adr-393.md) D5), with the
+    /// core; none binds `default`'s.
+    pub bind_features: Vec[String]?,
     /// **The CPU level `--cpu` named** ([ADR-002](../../../docs/specification/adr/adr-002.md)
     /// D6), where it is not the target's baseline: the build may use every
     /// instruction it has, in the program and in `std`. None is the baseline,
@@ -268,7 +272,7 @@ fn project_settings_checked(target: String, user_parallelism: String, reentrancy
     let refuted_claims = refuted_claims(refuted)
     let unproved_claims = unproved_claims(unproved)
     let artifact = artifact(made)
-    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, cpu: cpu }
+    return ProjectWords { target: target, user_parallelism: user_parallelism, reentrancy_check: reentrancy_check, optimization: optimization, refuted_claims: refuted_claims, unproved_claims: unproved_claims, artifact: artifact, symbol_prefix: symbol_prefix, tests: tests, bind: null, bind_features: null, cpu: cpu }
 }
 
 /// **The words, flag over manifest over built-in default.** `manifest` is

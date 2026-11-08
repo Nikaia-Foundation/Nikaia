@@ -647,7 +647,7 @@ pub(crate) fn list_shaped(value: &Expr) -> bool {
             true
         },
         Expr::Block(block, _) => list_shaped_block(block),
-        Expr::AsyncGroup(block, _, _) => list_shaped_block(block),
+        Expr::AsyncGroup(block, _, _, _, _) => list_shaped_block(block),
         _ => false,
     }
 }
@@ -799,7 +799,7 @@ pub(crate) fn handed_back(unit: &Unit, asked: &Asked<'_, '_, '_>, value: &Expr, 
             for arm in arms.iter() { handed_back(unit, asked, &arm.body, span, own_buffer, here); }
         },
         Expr::Block(block, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
-        Expr::AsyncGroup(block, _, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
+        Expr::AsyncGroup(block, _, _, _, _) => { walk_block(unit, asked, block, true, &own_buffer, here); },
         _ => { stores(unit, asked, value, span, &own_buffer, here); },
     }
 }
@@ -1127,7 +1127,7 @@ pub(crate) fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node
         Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); mentions(unit, asked, here, value) || arms_mention(unit, asked, here, arms) },
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); mentions(unit, asked, here, cond) || block_mentions(unit, asked, here, then_branch) || maybe_block_mentions(unit, asked, here, (else_branch).as_ref()) },
         Expr::Block(block, _) => block_mentions(unit, asked, here, block),
-        Expr::AsyncGroup(block, _, _) => block_mentions(unit, asked, here, block),
+        Expr::AsyncGroup(block, _, _, _, _) => block_mentions(unit, asked, here, block),
         Expr::Unsafe(block, _) => block_mentions(unit, asked, here, block),
         Expr::Overlap(block, _) => block_mentions(unit, asked, here, block),
         Expr::Closure { body, .. } => block_mentions(unit, asked, here, body),
@@ -1299,7 +1299,7 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
             walk_maybe_block(unit, asked, (else_branch).as_ref(), &own_buffer, here);
         },
         Expr::Block(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
-        Expr::AsyncGroup(block, _, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
+        Expr::AsyncGroup(block, _, _, _, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
         Expr::Unsafe(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
         Expr::Overlap(block, _) => { walk_block(unit, asked, block, false, &own_buffer, here); },
         Expr::Closure { body, .. } => { walk_block(unit, asked, body, false, &own_buffer, here); },
@@ -1609,7 +1609,7 @@ pub(crate) fn rsrc_eval(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kno
     rsrc_derived(&reach)
 }
 
-pub(crate) fn rsrc_passes_whole(node: &Expr) -> bool { matches!(node, Expr::Variable(_, _) | Expr::Block(_, _) | Expr::AsyncGroup(_, _, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _) | Expr::If { .. } | Expr::Match { .. } | Expr::Coalesce { .. } | Expr::Return(_, _)) }
+pub(crate) fn rsrc_passes_whole(node: &Expr) -> bool { matches!(node, Expr::Variable(_, _) | Expr::Block(_, _) | Expr::AsyncGroup(_, _, _, _, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _) | Expr::If { .. } | Expr::Match { .. } | Expr::Coalesce { .. } | Expr::Return(_, _)) }
 
 pub(crate) fn rsrc_derived(reach: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out = rsrc_none();
@@ -1641,7 +1641,7 @@ pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); rsrc_call(unit, asked, here, known, &own_buffer, func, args, config, flow) },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); rsrc_return(unit, asked, here, known, &own_buffer, (value).as_ref(), flow) },
         Expr::Block(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
-        Expr::AsyncGroup(block, _, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
+        Expr::AsyncGroup(block, _, _, _, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
         Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
         Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, &own_buffer, block, flow),
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); rsrc_if(unit, asked, here, known, &own_buffer, cond, then_branch, (else_branch).as_ref(), flow) },

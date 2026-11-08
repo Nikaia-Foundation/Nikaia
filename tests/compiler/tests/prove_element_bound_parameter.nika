@@ -1,0 +1,21 @@
+/// Every value a list parameter holds is bounded by its callers (ADR-306
+/// D21, #1397): the only call hands `eval` positions of `values`, so the
+/// value read out of `atoms` indexes `values` with no check, and `--bounds`
+/// names the found precondition on the list's values.
+fn eval(atoms: ref Vec[i64], values: ref Vec[bool]) -> bool {
+	let mut k = 0
+	while k < atoms.len() {
+		let atom = atoms[k]
+		if values[atom] {
+			return true
+		}
+		k += 1
+	}
+	return false
+}
+
+fn main() throws {
+	let atoms = [0, 2, 1]
+	let values = [false, false, true]
+	println(f"{eval(atoms, values)}")
+}

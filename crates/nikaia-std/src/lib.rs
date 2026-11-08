@@ -322,6 +322,8 @@ pub mod runtime {
     clippy::let_unit_value,
     clippy::identity_op,
     clippy::unnecessary_cast,
+    clippy::vec_init_then_push,
+    clippy::manual_split_once,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):
@@ -695,7 +697,10 @@ pub mod prelude {
     // ([ADR-269](../../../docs/specification/adr/adr-269.md) D2): the emitter
     // writes `.shown()` on each, and a method needs its trait in scope.
     pub use crate::abort::{ShownByDebug as _, ShownByNothing as _};
+    // **A pause of a gated group's main line** (ADR-async-5 D37): the
+    // emitter writes `.on_line(&line)` on the future it awaits.
     pub use crate::bytes::Bytes;
+    pub use crate::task::OnLine as _;
     // `bytes::ByteSet` and its searches (ADR-375).
     pub use crate::bytes;
     // The reads of a `Bytes` on a `&[u8]` (ADR-320 D11).
