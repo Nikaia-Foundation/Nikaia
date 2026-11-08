@@ -15,7 +15,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
   (several `--filter`s allowed, #1238). Without `--filter` it runs everything:
   write the output to a file and grep it, never `| tail` (b933).
 * **`--bless` creates a missing `.stdout`**, never a `.stderr`; `--bless-stderr`
-  does both. With `--filter` it blesses only that test. A new test is run
+  does both. Exception: a program the compiler refuses (a refusal test) is
+  blessed by plain `--bless` into its `.stderr` only, no `.stdout`; so a test
+  meant to run that `--bless` turns into a `.stderr` is a refusal to fix, not
+  a missing flag (`project_tests_bless_program`, #1238; issue-1431). With `--filter` it blesses only that test. A new test is run
   through `nikaia test`, not only `nikaia run`: `print` writes no newline and
   the `.stdout` holds the bytes exactly (7c1643d).
 * **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
@@ -246,7 +249,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
-* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist (a refused program gets a `.stderr` instead); `touch` them first. (issue-1397)
+* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist; `touch` them first. (issue-1397)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
 * **`f.rank[f.find(c)]` (a `ref mut` method call in an index of the same value) passes the checker and fails rustc (E0502)**: a defect, #1445; until it lands, a test probe binds the call to a `let`, and no code under `tools/` relies on the form. (issue-1414)
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
