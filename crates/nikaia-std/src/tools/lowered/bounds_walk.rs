@@ -67,6 +67,7 @@ pub struct BoundsChanged {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BoundsWalk {
     pub(crate) arena: TermArena,
+    pub(crate) lists: collections::BTreeSet<String>,
     pub(crate) proven: BoundsProven,
     pub(crate) axioms: collections::BTreeMap<String, Vec<i64>>,
     pub(crate) unsized_names: collections::BTreeSet<String>,
@@ -260,27 +261,35 @@ pub(crate) fn bounding_new(args: &[FnArg], body: &Block, nonnegative: collection
             _ => { },
         }
     }
-    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), assumed_ends: collections::BTreeMap::new(), written_ends: collections::BTreeMap::new(), steady: bounding_changed(body, context, words), end_roots: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new() };
+    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), assumed_ends: collections::BTreeMap::new(), written_ends: collections::BTreeMap::new(), steady: bounding_changed(body, context, words), end_roots: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new(), lists: collections::BTreeSet::new() };
     for arg in args.iter() {
         let name = words.resolve(arg.name).to_string();
         let ty = words.resolve(arg.ty.name).to_string();
+        if bounding_is_list_type(&arg.ty, words) && !walk.shape.twice.contains(&name) { walk.lists.insert(name.to_string()); }
         if arg.ty.generics.is_empty() && is_whole_number(&ty) && !walk.shape.twice.contains(&name) { walk.typed.insert(name.to_string(), ty); }
         if !walk.shape.twice.contains(&name) { walk.end_roots.insert(name); }
     }
     walk.end_roots.insert(String::from("self"));
     for stmt in body.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { names, .. } => {
+            Stmt::Let { names, ty, .. } => {
                 for symbol in names.iter() {
                     let symbol = *symbol;
                     let name = words.resolve(symbol);
                     if !walk.shape.twice.contains(name) { walk.end_roots.insert(name.to_string()); }
                 }
+                let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if names.len() == 1 && bounding_is_list_type(declared, words) && !walk.shape.twice.contains(words.resolve(*nikaia_std::index::get(&names, 0))) { walk.lists.insert(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()); }
             },
             _ => { },
         }
     }
     walk
+}
+
+pub(crate) fn bounding_is_list_type(ty: &Type, words: &winnow_grammar::InternerContext) -> bool {
+    let name = words.resolve(ty.name);
+    !ty.is_nullable && !ty.is_tuple && (name == "Vec" || name == "List" || name == "Array")
 }
 
 pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {

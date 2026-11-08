@@ -151,6 +151,10 @@ pub struct BoundsChanged {
 
 struct BoundsWalk {
 	arena: TermArena,
+	/// **The names the body never binds again that are lists by their
+	/// stated type**: a parameter, a `let` with its type written. Past a
+	/// read of one, its position lies inside (`rules_read_inside`).
+	lists: collections::BTreeSet[String],
 	proven: BoundsProven,
 	/// **What every length the walk read of a container whose elements take
 	/// space is**, by the length's name: `0 <= len(x) <= 2^60` (#383). A fact
@@ -585,10 +589,14 @@ fn bounding_new(
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
+		lists: collections::BTreeSet(),
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
 		let ty = words.resolve(arg.ty.name).clone()
+		if bounding_is_list_type(arg.ty, words) && !walk.shape.twice.contains(name) {
+			walk.lists.insert(name.clone())
+		}
 		if arg.ty.generics.is_empty() && is_whole_number(ty) && !walk.shape.twice.contains(name) {
 			walk.typed.insert(name.clone(), ty)
 		}
@@ -599,18 +607,30 @@ fn bounding_new(
 	walk.end_roots.insert("self")
 	for stmt in body.stmts {
 		match stmt.node {
-			Stmt::Let { names, .. } => {
+			Stmt::Let { names, ty, .. } => {
 				for symbol in names {
 					let name = words.resolve(symbol)
 					if !walk.shape.twice.contains(name) {
 						walk.end_roots.insert(name.clone())
 					}
 				}
+				let declared = ty ?? continue
+				if names.len() == 1 && bounding_is_list_type(declared, words) && !walk.shape.twice.contains(words.resolve(names[0])) {
+					walk.lists.insert(words.resolve(names[0]).clone())
+				}
 			},
 			else => {},
 		}
 	}
 	return walk
+}
+
+/// Whether `ty` is a `Vec`, a `List` or an `Array`: an index into one stops
+/// the program where it lies outside (Part III A.2), where a map's hands
+/// back `null`.
+fn bounding_is_list_type(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+	let name = words.resolve(ty.name)
+	return !ty.is_nullable && !ty.is_tuple && (name == "Vec" || name == "List" || name == "Array")
 }
 
 /// One pass over the body: proofs into `proven`, what is written into

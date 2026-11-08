@@ -1,0 +1,37 @@
+// ADR-306 D23 (#1414): a read of a list stops the program where its
+// position lies outside, so past it the position lies inside, as past an
+// `assert`: the second read of `xs[at]` is proved, and `ys[at]` where `ys`
+// is at least as long. A map's read hands back `null` instead of stopping,
+// so past `counts[at]` nothing is known and `ys[at]` stays checked. Both
+// are `pub`, so no caller bounds `at` (ADR-391 D1).
+use std::collections
+
+pub fn twice(xs: ref Vec[i64], ys: ref Vec[i64], at: i64) -> i64 {
+	if xs.len() > ys.len() {
+		return 0
+	}
+	let first = xs[at]
+	if xs[at] > 0 {
+		return ys[at]
+	}
+	return first
+}
+
+pub fn keyed(counts: ref collections::BTreeMap[i64, i64], ys: ref Vec[i64], at: i64) -> i64 {
+	if counts.len() > ys.len() {
+		return 0
+	}
+	let seen = counts[at] ?? 0
+	if seen > 0 {
+		return ys[at]
+	}
+	return seen
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let ys = [4, 5, 6, 7]
+	let mut counts: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+	counts.insert(9, 1)
+	println(f"{twice(xs, ys, 1)} {keyed(counts, ys, 2)}")
+}
