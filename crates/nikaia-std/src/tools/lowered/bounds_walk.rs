@@ -1133,6 +1133,7 @@ pub(crate) fn bounding_after_change(walk: &mut BoundsWalk, facts: &mut BoundsFac
     for name in changed.lengths.iter() { bounding_forget_length(&walk, facts, name); }
     for name in changed.parts.iter() { bounding_forget_parts(&walk, facts, name); }
     for place in changed.elements.iter() { bounding_forget_element(&walk, facts, place, false); }
+    rules_elements_kept(walk, facts, "");
 }
 
 pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
@@ -1887,6 +1888,7 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
             let at = walk.at;
             bounding_expr(walk, value, facts, context, program, words, &ask);
             bounding_place(walk, target, facts, context, program, words, &ask);
+            rules_element_write(walk, &facts, target, (op).as_ref(), value, context, program, words, &ask);
             bounding_compound(walk, (op).as_ref(), target, value, at, &facts, context, program, words, &ask);
             if op.is_none() {
                 match target {
@@ -1920,6 +1922,7 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
                 },
                 _ => { },
             }
+            rules_element_kept(walk, facts, target, words);
             return false;
         },
         Stmt::For { .. } => {
@@ -3205,6 +3208,7 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             bounding_expr(walk, base, facts, context, program, words, ask);
             bounding_expr(walk, index, facts, context, program, words, ask);
             bounding_index(walk, base, index, &facts, context, program, words, &ask);
+            rules_read_inside(walk, base, index, facts, context, program, words);
         },
         Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); bounding_binary(walk, op, lhs, rhs, span.start as i64, facts, context, program, words, &ask); },
         Expr::If { cond, then_branch, else_branch, .. } => {
