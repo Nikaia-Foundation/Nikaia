@@ -1,0 +1,105 @@
+# [ : empty key ]
++STR
++DOC
++SEQ []
++MAP {}
+=VAL :
+=VAL :empty key
+-MAP
+-SEQ
+-DOC
+-STR
+# [: another empty key]
++STR
++DOC
++SEQ []
++MAP {}
+=VAL :
+=VAL :another empty key
+-MAP
+-SEQ
+-DOC
+-STR
+# [ : ]
++STR
++DOC
++SEQ []
++MAP {}
+=VAL :
+=VAL :
+-MAP
+-SEQ
+-DOC
+-STR
+# [a, : b]
++STR
++DOC
++SEQ []
+=VAL :a
++MAP {}
+=VAL :
+=VAL :b
+-MAP
+-SEQ
+-DOC
+-STR
+# { key: value, : empty key }
++STR
++DOC
++MAP {}
+=VAL :key
+=VAL :value
+=VAL :
+=VAL :empty key
+-MAP
+-DOC
+-STR
+# { : }
++STR
++DOC
++MAP {}
+=VAL :
+=VAL :
+-MAP
+-DOC
+-STR
+# {a: 1, :}
++STR
++DOC
++MAP {}
+=VAL :a
+=VAL :1
+=VAL :
+=VAL :
+-MAP
+-DOC
+-STR
+# key: value\n: empty key\n
++STR
++DOC
++MAP
+=VAL :key
+=VAL :value
+=VAL :
+=VAL :empty key
+-MAP
+-DOC
+-STR
+# :\n
++STR
++DOC
++MAP
+=VAL :
+=VAL :
+-MAP
+-DOC
+-STR
+# # empty key and value\n:\n
++STR
++DOC
++MAP
+=VAL :
+=VAL :
+-MAP
+-DOC
+-STR

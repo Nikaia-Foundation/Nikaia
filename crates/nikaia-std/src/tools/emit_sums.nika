@@ -137,11 +137,14 @@ impl EmitState {
 
     /// The type a member of a sum is held as, with the lifetime parameters of
     /// the sum where the member carries a view.
+    /// **An error a dependency declares** is held in its envelope, as the
+    /// dependency's functions hand it (#1418).
     pub fn sum_member_held(ref self, world: ref EmitWorld, member: ref String, params: ref String) -> String {
+        let kind = self.name_of_error(world, member)
         if self.borrows_named(world, member) {
-            return sum_member_type(self.declared_errors, world.library, member, params, self.is_std)
+            return sum_member_type(kind, member, params, self.is_std)
         }
-        return sum_member_type(self.declared_errors, world.library, member, "", self.is_std)
+        return sum_member_type(kind, member, "", self.is_std)
     }
 
     /// Write every generated sum, once, at the crate root: a module is its own

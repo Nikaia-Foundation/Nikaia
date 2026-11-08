@@ -726,7 +726,12 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
     }
     if !linked {
         let mut flowed = kinds.clone();
-        if plain && kinds.view && value.is_some() {
+        if plain && value.is_some() {
+            let read = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            let to = position_word(&owner, &path);
+            if reads_back(read, &to, ask, walk) { flowed = nikaia_std::index::or(coalesce_beside(read, &to, ask, walk), || flowed.into()); }
+        }
+        if plain && flowed.view && value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             if views_a_temporary(given, ask, walk) || unkept_root(given, ask, walk) { flowed = owned_kinds(); }
         }
@@ -851,6 +856,37 @@ pub(crate) fn element_text_word(base: &Expr, index: &Expr, ask: &TierAsk<'_, '_,
     if a_map(ask.names, &ty) { at = 1; }
     if ty.generics.len() <= ((at) as usize) || !plain_string(ask.names, nikaia_std::index::get(&ty.generics, (at) as usize)) { return None; }
     Some(seen(&found.owner, &vec![at], walk))
+}
+
+pub(crate) fn reads_back(value: &Expr, to: &str, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            return reads_back(first, to, ask, walk) || reads_back(fallback, to, ask, walk);
+        },
+        _ => { },
+    }
+    if !tier_a_name(Some(value)) { return false; }
+    let back = match text_source_word(Some(value), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    back == to
+}
+
+pub(crate) fn coalesce_beside(value: &Expr, to: &str, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<Kinds> {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
+            let a = match coalesce_beside(first, to, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let b = match coalesce_beside(fallback, to, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(kinds_joined(&a, &b));
+        },
+        _ => { },
+    }
+    if a_null(value) { return Some(no_kinds()); }
+    if !tier_a_name(Some(value)) { return None; }
+    let back = nikaia_std::index::or(text_source_word(Some(value), ask, walk), || "".into());
+    if back == to { return Some(no_kinds()); }
+    let found = match place_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(kinds_of_declared(&found, ask, walk))
 }
 
 pub(crate) fn tier_a_jump(value: &Expr) -> bool { matches!(value, Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)) }

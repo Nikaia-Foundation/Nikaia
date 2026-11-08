@@ -1,0 +1,33 @@
+// #1418: a function that fails with a dependency's own error and with
+// `io::IoError` fails with a sum of the two (ADR-280 D15); the dependency
+// hands its error in the envelope, so the sum holds it so, a `?` reaches it
+// and `main` ending with it prints its long form.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub struct Fault {\n\tpub line: i64,\n}\n\nimpl Error for Fault {\n\tfn message(ref self) -> String {\n\t\treturn f\"fault at line {self.line}\"\n\t}\n}\n\npub fn parse(text: String) -> i64 throws {\n\tif text.len() > 3 {\n\t\tthrow Fault { line: 7 }\n\t}\n\treturn text.len() as i64\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use std::fs\nuse lib\n\nfn main() throws {\n\tlet root = fs::Root::Dir(\".\")\n\tfor name in [\"short.txt\", \"long.txt\"] {\n\t\tlet text = fs::read_to_string(name, root)\n\t\tlet n = lib::parse(text) catch {\n\t\t\tprintln(f\"caught at line {error.line}\")\n\t\t\tcontinue\n\t\t}\n\t\tprintln(f\"{n}\")\n\t}\n\tlet text = fs::read_to_string(\"long.txt\", root)\n\tprintln(f\"{lib::parse(text)}\")\n}\n")
+    fs::write(f"{tmp}/app/short.txt", fs::Root::Anywhere, "ab")
+    fs::write(f"{tmp}/app/long.txt", fs::Root::Anywhere, "abcdef")
+    let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        if !line.trim().starts_with("Compiling") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

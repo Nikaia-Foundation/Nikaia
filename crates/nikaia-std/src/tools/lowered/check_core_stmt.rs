@@ -1476,7 +1476,10 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         }
         state.stored_code.insert(to, entry);
     }
-    let a_seq = matches!(over, Ty::Seq { .. });
+    let a_seq = match over {
+        Ty::Seq { .. } => true,
+        _ => the_command_line(&over),
+    };
     let owned = is_a_place(iter) && a_seq;
     if owned { state.facts.owned_loops.insert(span.start as i64); }
     let lent = is_a_place(iter) && !owned;

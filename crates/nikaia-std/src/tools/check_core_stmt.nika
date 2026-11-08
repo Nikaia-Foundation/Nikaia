@@ -2031,7 +2031,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     // **A name that holds a sequence is handed over, not lent** (ADR-293 D19).
     let a_seq = match over {
         Ty::Seq { .. } => true,
-        else => false,
+        else => the_command_line(over),
     }
     let owned = is_a_place(iter) && a_seq
     if owned {
