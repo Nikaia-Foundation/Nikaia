@@ -1229,6 +1229,7 @@ impl EmitState {
                 for arg in args.iter() {
                     if at > 0 { out.push(", "); }
                     at += 1;
+                    if self.facts.lent_args.contains(&node_key(arg)) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node_key(arg))) || self.facts.lent_literals.contains(&node_key(arg))) { out.push("&"); }
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
                 }
                 out.push(")");

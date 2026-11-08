@@ -135,7 +135,7 @@ fn main() throws { println(User { username: f"Ada" }.name()) }
 fn a_bound_reaches_the_generated_file() {
     let rust = lowered("a bound", SUMMARIZE);
     assert!(
-        rust.contains("fn shout<T: Summarize>(x: T)"),
+        rust.contains("fn shout<T: Summarize>(x: &T)"),
         "the parameter carries its bound:\n{rust}"
     );
 }
@@ -187,7 +187,7 @@ fn main() throws {
 "#,
     );
     assert!(
-        rust.contains("fn both<T: Named + Aged>(x: T)"),
+        rust.contains("fn both<T: Named + Aged>(x: &T)"),
         "both bounds, in the order written:\n{rust}"
     );
 }
