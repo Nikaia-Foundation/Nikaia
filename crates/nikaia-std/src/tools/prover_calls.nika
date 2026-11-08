@@ -188,6 +188,13 @@ pub fn from_outside(expr: ref Expr, tainted: ref collections::BTreeSet[String], 
                 return true
             }
         },
+        // **A source method marked `trusted: true`** (ADR-365 D2): what it
+        // hands back is the operator's, whatever its receiver came from.
+        Expr::MethodCall { method, config, .. } => {
+            if says_trusted(words, config) && a_source_method(library, words.resolve(method)) {
+                return false
+            }
+        },
         else => {},
     }
     for hole in holes_of(expr) {
@@ -297,6 +304,20 @@ fn outside_source_named(func: ref Expr, words: ref winnow_grammar::InternerConte
         },
         else => null,
     }
+}
+
+/// Whether `name` is the last name of a method `library` calls an untrusted
+/// source (ADR-010 D2): the prover reads the tree, not the receiver's type.
+fn a_source_method(library: ref Ledger, name: ref String) -> bool {
+    let tail = f"::{name}"
+    for (key, contract) in library.functions {
+        let provenance = contract.provenance ?? continue
+        let a_method = contract.signature?.takes_a_receiver() ?? false
+        if provenance == Provenance::Untrusted && a_method && key.ends_with(tail) {
+            return true
+        }
+    }
+    return false
 }
 
 fn untrusted(library: ref Ledger, name: ref String) -> bool {

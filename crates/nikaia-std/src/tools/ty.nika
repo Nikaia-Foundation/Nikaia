@@ -1178,6 +1178,10 @@ pub struct FnContract {
     /// Whether `touches` is what somebody wrote rather than what was inferred.
     pub touches_known: bool,
     pub provenance: Provenance?,
+    /// **Where its body wrote `trusted: true`** (ADR-365 D2, ADR-010 D3,
+    /// Part III 13.5 `trusted`): each marked call of a source, as
+    /// `SOURCE at FILE:LINE`, sorted by place. Empty where it marks none.
+    pub trusted: Vec[String],
     pub signature: Signature?,
     pub borrows: Vec[String],
     /// **Each view's own sources, by its path** (ADR-views-3 D8, D10):
@@ -1250,6 +1254,7 @@ impl FnContract {
             touches: [],
             touches_known: false,
             provenance: null,
+            trusted: [],
             signature: null,
             borrows: [],
             returns: "",

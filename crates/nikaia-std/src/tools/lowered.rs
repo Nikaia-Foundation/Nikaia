@@ -3434,7 +3434,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, Place, render, MapPlan, trusted_maps};
+    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, SourceCall, source_calls, mark_trusted, Place, render, MapPlan, trusted_maps};
 }
 pub mod ty {
     #[allow(unused_imports)]

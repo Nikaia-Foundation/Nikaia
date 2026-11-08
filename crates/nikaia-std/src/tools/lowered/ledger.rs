@@ -362,7 +362,7 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
         for one in entries(value, n)? { touches.push(touch_of(&one)?); }
         entry.touches = touches;
         entry.touches_known = true;
-    } else if key == "provenance" { entry.provenance = Some(provenance_of(&unquoted(value, n)?, n)?); } else if key == "views" {
+    } else if key == "provenance" { entry.provenance = Some(provenance_of(&unquoted(value, n)?, n)?); } else if key == "trusted" { entry.trusted = entries(value, n)?; } else if key == "views" {
         let mut views: Vec<Held> = vec![];
         for held in entries(value, n)? {
             let read = held_of(&held);

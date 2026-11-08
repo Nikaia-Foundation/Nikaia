@@ -136,6 +136,10 @@ pub fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>, words:
             let source = outside_source_named(func, words);
             if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) { return true; }
         },
+        Expr::MethodCall { method, config, .. } => {
+            let method = *method;
+            if says_trusted(words, config) && a_source_method(library, words.resolve(method)) { return false; }
+        },
         _ => { },
     }
     for hole in holes_of(expr) { if from_outside(&hole, tainted, words, library, holes_of) { return true; } }
@@ -213,6 +217,19 @@ pub(crate) fn outside_source_named(func: &Expr, words: &winnow_grammar::Interner
         },
         _ => None,
     }
+}
+
+pub(crate) fn a_source_method(library: &Ledger, name: &str) -> bool {
+    let tail = format!("::{}", name);
+    for (key, contract) in library.functions.iter() {
+        let provenance = match contract.provenance { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let a_method = nikaia_std::index::or(match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.takes_a_receiver()),
+            None => None,
+        }, || false);
+        if provenance == Provenance::Untrusted && a_method && key.ends_with(&tail) { return true; }
+    }
+    false
 }
 
 pub(crate) fn untrusted(library: &Ledger, name: &str) -> bool {

@@ -59,6 +59,117 @@ pub fn says_trusted(names: &winnow_grammar::InternerContext, config: &[ConfigArg
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceCall {
+    pub function: String,
+    pub source: String,
+    pub method: bool,
+    pub marked: bool,
+    pub at: i64,
+}
+
+pub fn source_calls(program: &Program, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Vec<SourceCall> {
+    let mut out: Vec<SourceCall> = vec![];
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Fn { name, body, .. } => {
+                let name = *name;
+                let key = key_of_function((name).as_ref(), "", names);
+                sc_block(&key, body, names, library, callees, holes_of, &mut out);
+            },
+            Item::Impl { target, methods, .. } => {
+                let owner = names.resolve(target.name).to_string();
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, body, .. } => {
+                            let name = *name;
+                            let key = key_of_function((name).as_ref(), &owner, names);
+                            sc_block(&key, body, names, library, callees, holes_of, &mut out);
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn sc_block(function: &str, block: &Block, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, out: &mut Vec<SourceCall>) {
+    for stmt in block.stmts.iter() {
+        let at = stmt.span.start as i64;
+        for expr in check_visit_stmt(&stmt.node) { sc_expr(function, expr, at, names, library, callees, &holes_of, out); }
+        for inner in check_visit_stmt_blocks(&stmt.node) { sc_block(function, inner, names, library, callees, holes_of, out); }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sc_expr(function: &str, expr: &Expr, at: i64, names: &winnow_grammar::InternerContext, library: &Ledger, callees: &collections::BTreeMap<i64, String>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, out: &mut Vec<SourceCall>) {
+    match expr {
+        Expr::Call { func, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            let name = match func {
+                Expr::Variable(one, _) => { let one = *one; names.resolve(one).to_string() },
+                Expr::Path(segments, _) => written_path(names, segments),
+                _ => String::from(""),
+            };
+            if a_source(library, &name) { out.push(sc_call(function, &name, false, config, at, names)); }
+        },
+        Expr::MethodCall { receiver, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let key: String = nikaia_std::index::or(match callees.get(&(id_of(receiver) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into());
+            if a_source(library, &key) { out.push(sc_call(function, &key, true, config, at, names)); }
+        },
+        Expr::Spawn { body, .. } => {
+            let body = nikaia_std::boxed::open(body);
+            for inner in check_visit_expr_blocks(body) { sc_block(function, inner, names, library, callees, &holes_of, out); }
+        },
+        _ => { },
+    }
+    if check_visit_has_holes(expr) { for hole in holes_of(expr) { for inner in check_visit_preorder(&hole) { sc_expr(function, inner, at, names, library, callees, holes_of, out); } } }
+}
+
+pub(crate) fn sc_call(function: &str, source: &str, method: bool, config: &[ConfigArg], at: i64, names: &winnow_grammar::InternerContext) -> SourceCall { SourceCall { function: function.to_string(), source: source.to_string(), method, marked: says_trusted(names, config), at } }
+
+pub fn mark_trusted(ledger: &mut Ledger, calls: &[SourceCall], file: &str, text: &str) {
+    let mut marks: Vec<(String, i64, String)> = vec![];
+    for call in calls.iter() {
+        if call.marked && ledger.functions.contains_key(&call.function) {
+            let line = line_of_byte(text, call.at);
+            marks.push((call.function.to_string(), call.at, format!("{} at {}:{}", call.source, file, line)));
+        }
+    }
+    marks.sort();
+    for (function, _, mark) in marks.iter() {
+        let mut entry = match match ledger.functions.get(function) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        entry.trusted.push(mark.to_string());
+        ledger.functions.insert(function.to_string(), entry);
+    }
+}
+
+pub(crate) fn a_source(library: &Ledger, name: &str) -> bool {
+    let contract = match *nikaia_std::index::get(&library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    contract.provenance.is_some()
+}
+
+pub(crate) fn line_of_byte(text: &str, at: i64) -> i64 {
+    let mut line: i64 = 1;
+    let mut i: i64 = 0;
+    for b in text.bytes() {
+        if i >= at { break; }
+        if b == 10 { line += 1; }
+        i += 1;
+    }
+    line
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Place {
     pub line: i64,
     pub column: i64,
@@ -700,10 +811,10 @@ pub(crate) fn tm_deps_of(value: &Expr, words: &winnow_grammar::InternerContext, 
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); tm_join(&tm_deps_of(base, words, library, env, walk), &tm_deps_of(index, words, library, env, walk)) },
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); tm_join(&tm_deps_of(value, words, library, env, walk), &tm_deps_of(fallback, words, library, env, walk)) },
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); tm_call_deps(func, args, config, words, library, env, walk) },
-        Expr::MethodCall { receiver, method, args, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let name = words.resolve(method);
-            if env.sources.contains(name) || env.own.contains(name) { tm_never() } else { tm_join(&tm_deps_of(receiver, words, library, env, walk), &tm_all_deps(args, words, library, env, walk)) }
+            if env.sources.contains(name) && !env.own.contains(name) && says_trusted(words, config) { tm_nothing() } else if env.sources.contains(name) || env.own.contains(name) { tm_never() } else { tm_join(&tm_deps_of(receiver, words, library, env, walk), &tm_all_deps(args, words, library, env, walk)) }
         },
         _ => tm_never(),
     }
