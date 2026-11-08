@@ -42,7 +42,7 @@ use nikaia::emit::Build;
 const KNOWN: &[(&str, &str)] = &[
     // Left to `rustc` on purpose.
     (
-        "d4364f4f2ea3f337",
+        "2a5e3432c2390622",
         "fold_lambdas: `par_fold` over a rule that is not a frame, the grammar backend's refusal (ADR-296 D9)",
     ),
     (
@@ -51,7 +51,7 @@ const KNOWN: &[(&str, &str)] = &[
     ),
     // Open issues.
     (
-        "a10522b5e28c4937",
+        "a3eef463dc58ce78",
         "#730 item 5: `Shared(Vec())` whose first use is a read (E0282)",
     ),
 ];
