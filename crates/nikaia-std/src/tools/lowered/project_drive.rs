@@ -105,7 +105,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         let lowered = host.lower_member(at, no_cache)?;
         let own: Vec<fs::Path> = lowered.sources.iter().filter(|&s| { nikaia_std::fs::path::starts_with(&(s), &member.root) && !members.iter().any(|other| { !nikaia_std::fs::path::same(&(other.root), &(member.root)) && nikaia_std::fs::path::starts_with(&(other.root), &member.root) && nikaia_std::fs::path::starts_with(&(s), &other.root) }) }).map(|s| { nikaia_std::fs::path::clone(&(s)) }).collect::<Vec<_>>();
         for flag in host.check_libraries(at, &own)? { if !nikaia_std::list::contains(&link_flags, &flag) { link_flags.push(flag.to_string()); } }
-        if !(at == 0 && host.tests_build()) { host.write_ledgers(at, locked)?; }
+        if !(at == 0 && host.tests_build()) && member.fetched.is_none() { host.write_ledgers(at, locked)?; }
         if at == 0 {
             host.eprint(&lowered.notes);
             header = match lowered.header.as_ref() {
@@ -152,7 +152,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         }
     }
     let shared = nikaia_std::index::or(env::var("CARGO_TARGET_DIR"), || "".into()) == "";
-    let env = project_drive_cargo_env(host, &link_flags, no_cache, shared)?;
+    let env = project_drive_cargo_env(host, &link_flags, no_cache, shared, project_members_fetched_text(&members))?;
     let mut unset: Vec<String> = vec![];
     let mut env = env;
     match host.cpu_rustflags()? {
@@ -218,12 +218,13 @@ pub fn project_drive_no_std_for(triple: &str) -> String { format!("cannot build 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags: &[String], no_cache: bool, shared: bool) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags: &[String], no_cache: bool, shared: bool, fetched: String) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
     let mut env = host.settings_env();
     env.push((String::from("NIKAIA_RUSTC_WRAPPER"), String::from("1")));
     env.push((String::from("NIKAIA_GEN_DIR"), nikaia_std::fs::path::to_text(&(host.gen_dir()))?));
     if shared { env.push((String::from("NIKAIA_PROGRAM_TAG"), format!("_{}", host.root_tag()))); }
     env.push((String::from("NIKAIA_LINK_FLAGS"), link_flags.join("\u{1f}")));
+    if !fetched.is_empty() { env.push((project_members_fetched_variable(), fetched)); }
     if no_cache { env.push((String::from("NIKAIA_NO_CACHE"), String::from("1"))); }
     match host.shown_as() {
         None => { },
@@ -371,8 +372,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple33887| {
-        let (a, b) = __nikaia_tuple33887;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple34406| {
+        let (a, b) = __nikaia_tuple34406;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

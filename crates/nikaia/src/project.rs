@@ -381,8 +381,11 @@ fn packages_of_view(
     announce: bool,
 ) -> Result<Vec<modules::Dependency>> {
     let host = Manifests::default();
-    project_members::project_members_packages_of(view, root, announce, &host)
-        .map_err(|thrown| host.error(thrown))
+    // Async because it may run `cargo metadata` (ADR-286 D24).
+    nikaia_std::rt::exec::block_on(project_members::project_members_packages_of(
+        view, root, announce, &host,
+    ))
+    .map_err(|thrown| host.error(thrown))
 }
 
 /// What `tools/project_members.nika` reads of a manifest (P4a): `Manifest`
@@ -398,6 +401,12 @@ fn manifest_view(manifest: &Manifest) -> ProjectMembersManifest {
                 Dependency::Path(path) => Some((name.clone(), path.clone())),
                 _ => None,
             })
+            .collect(),
+        versions: manifest
+            .file()
+            .dependencies
+            .iter()
+            .filter_map(|(name, declared)| Some((name.clone(), declared.cargo.clone()?)))
             .collect(),
         foreign: manifest.foreign_crates().into_iter().collect(),
         has_build: manifest.has_build_section(),
@@ -464,6 +473,7 @@ pub struct Member {
     pub manifest: Manifest,
     pub entry: PathBuf,
     pub dependencies: Vec<modules::Dependency>,
+    pub fetched: Option<String>,
 }
 
 /// Every package of this build, the entry first
@@ -471,11 +481,11 @@ pub struct Member {
 /// `project_members_members_of`; each member gets the manifest it read.
 pub fn members_of(entry_manifest: &Manifest, entry_root: &Path) -> Result<Vec<Member>> {
     let host = Manifests::default();
-    let members = project_members::project_members_members_of(
+    let members = nikaia_std::rt::exec::block_on(project_members::project_members_members_of(
         &manifest_view(entry_manifest),
         entry_root,
         &host,
-    )
+    ))
     .map_err(|thrown| host.error(thrown))?;
     let read = host.read.into_inner();
     members
@@ -494,6 +504,7 @@ pub fn members_of(entry_manifest: &Manifest, entry_root: &Path) -> Result<Vec<Me
                 manifest,
                 entry: member.entry,
                 dependencies: member.dependencies,
+                fetched: member.fetched,
             })
         })
         .collect()
@@ -2038,8 +2049,19 @@ impl Project {
                 // different crates and never meet, and one package reached
                 // through two parents is one crate - which is ADR-286 D15 rule 3
                 // holding because Cargo already works that way.
-                Dependency::Path(path) => {
-                    let root = canonical(&member.root.join(path));
+                // **A package by version is a path once Cargo has fetched it**
+                // (ADR-286 D25): the walk resolved it to where it landed, and
+                // it is a member of this workspace like any other package.
+                Dependency::Path(_) | Dependency::Nikaia(_) => {
+                    let root = match value {
+                        Dependency::Path(path) => canonical(&member.root.join(path)),
+                        _ => member
+                            .dependencies
+                            .iter()
+                            .find(|found| found.name == *dependency)
+                            .map(|found| canonical(&found.root))
+                            .ok_or_else(|| anyhow!("`{dependency}` was not resolved"))?,
+                    };
                     let named = self.crate_named(&root)?;
                     let mut table = toml::value::Table::new();
                     table.insert("package".to_string(), toml::Value::String(named.clone()));
@@ -2052,14 +2074,6 @@ impl Project {
                     );
                     dependencies.insert(dependency.clone(), toml::Value::Table(table));
                 }
-                // A registry, a name space and a distribution format are all
-                // undecided, and guessing at one here would be inventing the
-                // answer in the place it is hardest to review
-                // ([ADR-002](../../docs/specification/adr/adr-002.md) D1 §5).
-                Dependency::Nikaia(_) => refuse!(
-                    "{}",
-                    project_members::project_members_by_version(dependency)
-                ),
             }
         }
 
@@ -2935,6 +2949,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
                 root: m.root.clone(),
                 entry: m.entry.clone(),
                 dependencies: m.dependencies.clone(),
+                fetched: m.fetched.clone(),
             })
             .collect();
         *self.members.borrow_mut() = members;

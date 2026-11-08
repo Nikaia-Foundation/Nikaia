@@ -229,7 +229,7 @@ pub fn project_tests_program_manifest(root: ref fs::Path, package: String?) -> P
             paths.push((name, project_members_canonical(root)))
         },
     }
-    return ProjectMembersManifest { name: "program_test", keys: keys, paths: paths, foreign: [], has_build: false }
+    return ProjectMembersManifest { name: "program_test", keys: keys, paths: paths, versions: [], foreign: [], has_build: false }
 }
 
 /// The package's test programs, by name.

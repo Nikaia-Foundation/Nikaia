@@ -8,9 +8,12 @@
 // And a build's foreign boundary (P4b): the Rust crates it declares and
 // their descriptions, read through `ProjectMembersForeignHost`.
 
+use json
 use std::collections
+use std::env
 use std::fs
 use std::hash
+use std::process
 
 /// What the walk reads of a package's `nikaia.toml`; the Rust `Manifest` hands
 /// it over.
@@ -22,6 +25,10 @@ pub struct ProjectMembersManifest {
     /// The keys that name a Nikaia package by path, sorted, with the path as
     /// written (relative to the manifest's own directory).
     pub paths: Vec[(String, fs::Path)],
+    /// The keys that name a Nikaia package by version, sorted, with the entry
+    /// Cargo is handed for it: its renaming to the crate `nikaia_<key>`
+    /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D23, D24).
+    pub versions: Vec[(String, String)],
     /// The Rust crates it declares, under the name a call writes them by
     /// ([ADR-290](../../../docs/specification/adr/adr-290.md) D1).
     pub foreign: Vec[String],
@@ -114,7 +121,16 @@ pub struct ProjectMembersDependency {
 /// named on the program's side of the overflow checks, beside the exception
 /// that turns them off for every foreign package.
 pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, announce: bool, host: ref H) -> Vec[ProjectMembersDependency] throws {
+    let fetched = project_members_fetched_of(manifest, root, host)
+    return project_members_packages_in(manifest, root, announce, fetched, host)
+}
+
+/// `project_members_packages_of` with the packages by version already
+/// resolved: `fetched` is `project_members_fetched_of`'s answer for the whole
+/// build, so a package Cargo fetched is read where it landed.
+fn project_members_packages_in[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, announce: bool, fetched: ref collections::BTreeMap[String, fs::Path], host: ref H) -> Vec[ProjectMembersDependency] throws {
     let mut out: Vec[ProjectMembersDependency] = []
+    let located = project_members_located(manifest, root, fetched)
     let mut seen: collections::HashMap[fs::Path, String] = collections::HashMap()
 
     // **What this build calls each package**, before any of them is read, so
@@ -122,11 +138,11 @@ pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectM
     // whichever of the two was resolved first
     // ([ADR-286](../../docs/specification/adr/adr-286.md) D20).
     let mut here: collections::HashMap[fs::Path, String] = collections::HashMap()
-    for (name, path) in manifest.paths.iter() {
+    for (name, path) in located.iter() {
         here.insert(project_members_canonical(root.join(path)), name.clone())
     }
 
-    for (name, path) in manifest.paths.iter() {
+    for (name, path) in located.iter() {
         let root = project_members_canonical(root.join(path))
 
         let first = seen.get(root)
@@ -155,7 +171,7 @@ pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectM
         // A Rust crate among them under the name a call writes it by.
         let mut reachable: collections::BTreeSet[String] = dependency.keys.iter().map(fn(x) { x.clone() }).collect()
         reachable.extend(dependency.foreign.clone())
-        out.push(ProjectMembersDependency { name: name.clone(), renames: project_members_renames_in(dependency, root, here, host), root: root, reachable: reachable })
+        out.push(ProjectMembersDependency { name: name.clone(), renames: project_members_renames_in(dependency, root, here, fetched, host), root: root, reachable: reachable })
     }
     return out
 }
@@ -181,9 +197,9 @@ pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectM
 /// One level deep, because one level is what is read: a dependency's own
 /// dependencies are its crate's business (D3), and nothing below it is in this
 /// program's ledger to be renamed.
-fn project_members_renames_in[H: ProjectMembersHost](dependency: ref ProjectMembersManifest, dependency_root: ref fs::Path, here: ref collections::HashMap[fs::Path, String], host: ref H) -> collections::BTreeMap[String, String] throws {
+fn project_members_renames_in[H: ProjectMembersHost](dependency: ref ProjectMembersManifest, dependency_root: ref fs::Path, here: ref collections::HashMap[fs::Path, String], fetched: ref collections::BTreeMap[String, fs::Path], host: ref H) -> collections::BTreeMap[String, String] throws {
     let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
-    for (key, path) in dependency.paths.iter() {
+    for (key, path) in project_members_located(dependency, dependency_root, fetched).iter() {
         let at = project_members_canonical(dependency_root.join(path))
         let canonical: String = match here.get(at) {
             ours => ours.clone(),
@@ -218,6 +234,9 @@ pub struct ProjectMembersMember {
     pub entry: fs::Path,
     /// Its **own** packages, under its **own** manifest keys.
     pub dependencies: Vec[ProjectMembersDependency],
+    /// The crate Cargo fetched it as, where it is a package by version
+    /// (`nikaia_<name>`, ADR-286 D25); null for one by path.
+    pub fetched: String?,
 }
 
 /// The members in an order where every package comes after the packages it
@@ -281,6 +300,8 @@ pub fn project_members_members_of[H: ProjectMembersHost](entry_manifest: ref Pro
     let mut out: Vec[ProjectMembersMember] = []
     let mut seen: collections::HashMap[fs::Path, i64] = collections::HashMap()
     let mut queue: Vec[(ProjectMembersManifest, fs::Path)] = [(entry_manifest.clone(), project_members_canonical(entry_root))]
+    // One resolution for the whole build (ADR-286 D27), from the entry.
+    let fetched = project_members_fetched_of(entry_manifest, entry_root, host)
 
     while !queue.is_empty() {
         let (manifest, root) = queue.remove(0)
@@ -303,16 +324,166 @@ pub fn project_members_members_of[H: ProjectMembersHost](entry_manifest: ref Pro
         // Announced only for the entry: this walk reads every manifest of the
         // build, and a note about an ignored `[build]` is about the package
         // that carries it, said once.
-        let dependencies = project_members_packages_of(manifest, root, out.is_empty(), host)
+        let dependencies = project_members_packages_in(manifest, root, out.is_empty(), fetched, host)
         for dependency in dependencies.iter() {
             let manifest = host.manifest_at(dependency.root.join("nikaia.toml")) ?? throw ProjectMembersRefusal::Manifest
             queue.push((manifest, project_members_canonical(dependency.root)))
         }
 
         seen.insert(root.clone(), out.len())
-        out.push(ProjectMembersMember { name: name, entry: project_members_crate_root_of(root), root: root, dependencies: dependencies })
+        let found_as: String? = fetched.iter().find(fn(pair) { project_members_canonical(pair.1) == root })?.0?.clone()
+        out.push(ProjectMembersMember { name: name, entry: project_members_crate_root_of(root), root: root, dependencies: dependencies, fetched: found_as })
     }
     return out
+}
+
+/// The variable a build hands Cargo's `rustc` wrapper where each package by
+/// version landed, one `crate=directory` line each, so the wrapper reads the
+/// driver's resolution rather than asking Cargo again from inside its build.
+pub fn project_members_fetched_variable() -> String {
+    return "NIKAIA_FETCHED"
+}
+
+/// `members`' packages by version, as `project_members_fetched_variable()` carries them.
+pub fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> String {
+    let mut lines: Vec[String] = []
+    for m in members.iter() {
+        let named = m.fetched ?? continue
+        lines.push(f"{named}={m.root.display()}")
+    }
+    return lines.join("\n")
+}
+
+/// **Every package `manifest` depends on, and where it is**: its packages by
+/// path as written, and each package by version at the directory Cargo put
+/// the crate `nikaia_<key>` in, refused where that crate is not a Nikaia
+/// package ([ADR-286](../../docs/specification/adr/adr-286.md) D25, D26).
+fn project_members_located(manifest: ref ProjectMembersManifest, root: ref fs::Path, fetched: ref collections::BTreeMap[String, fs::Path]) -> Vec[(String, fs::Path)] throws {
+    let mut out: Vec[(String, fs::Path)] = manifest.paths.clone()
+    for (key, entry) in manifest.versions.iter() {
+        let at = fetched.get(f"nikaia_{key}") ?? throw ProjectMembersRefusal::Refused(f"`{key}` is a Nikaia package by version, and Cargo found no crate `nikaia_{key}` for it in {root.display()}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `nikaia_{key}` there.")
+        project_members_a_nikaia_package(key, f"nikaia_{key}", at)
+        out.push((key.clone(), at.clone()))
+    }
+    out.sort()
+    return out
+}
+
+/// **A crate under the prefix is believed only with what makes it a package**
+/// ([ADR-286](../../docs/specification/adr/adr-286.md) D26): `nikaia.toml`,
+/// `.nika` sources in `src/` and `nikaia.contracts`. `nikaia_` is a
+/// convention crates.io does not enforce, so the crate is refused by name.
+fn project_members_a_nikaia_package(key: ref String, named: ref String, at: ref fs::Path) throws {
+    let mut missing: Vec[String] = []
+    if !project_tests_is_file(at.join("nikaia.toml")) {
+        missing.push("no `nikaia.toml`")
+    }
+    let sources = fs::read_dir(at.join("src"), fs::Root::Anywhere) catch { [] }
+    if !sources.iter().any(fn(name) { (name.extension()?.text_of() ?? "") == "nika" }) {
+        missing.push("no `.nika` sources in `src/`")
+    }
+    if !project_tests_is_file(at.join("nikaia.contracts")) {
+        missing.push("no `nikaia.contracts`")
+    }
+    if missing.is_empty() {
+        return
+    }
+    let said = missing.join(", ")
+    throw ProjectMembersRefusal::Refused(f"`{named}`, the crate Cargo found for `{key}`, is not a Nikaia package: it has {said} ({at.display()}).\nA Nikaia package on crates.io carries its `nikaia.toml`, its `src/*.nika` and its `nikaia.contracts`. Depend on another version, or on the package by path.")
+}
+
+/// **Where each Nikaia package by version landed** (ADR-286 D24, D25): the
+/// crate name `nikaia_<key>`, and the directory Cargo put it in.
+///
+/// **One resolution for the whole build** (D27): the entries by version of
+/// the package at `root` and of every package it reaches by path go into one
+/// generated `Cargo.toml` under `target/nikaia/resolve/`, and `cargo metadata`
+/// over it fetches them, and every crate their own published `Cargo.toml`
+/// names, where Cargo would. Its `Cargo.lock` stays there, so a version once
+/// resolved is the one the next build reads. With nothing by version, no
+/// Cargo runs. Under a build, the `rustc` wrapper is handed the answer in
+/// `project_members_fetched_variable()` instead.
+pub fn project_members_fetched_of[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, host: ref H) -> collections::BTreeMap[String, fs::Path] throws {
+    let mut out: collections::BTreeMap[String, fs::Path] = collections::BTreeMap()
+    match env::var(project_members_fetched_variable()) {
+        null => {},
+        handed => {
+            for line in handed.lines() {
+                let parts: Vec[String] = line.splitn(2, "=").map(fn(part) { part.to_string() }).collect()
+                if parts.len() == 2 {
+                    out.insert(parts[0].clone(), cargo_json_path(parts[1].clone()))
+                }
+            }
+            return out
+        },
+    }
+
+    // The entries by version over the packages reached by path.
+    let mut entries: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut seen: collections::HashSet[fs::Path] = collections::HashSet()
+    let mut queue: Vec[(ProjectMembersManifest, fs::Path)] = [(manifest.clone(), project_members_canonical(root))]
+    while !queue.is_empty() {
+        let (read, at) = queue.remove(0)
+        if seen.contains(at) {
+            continue
+        }
+        seen.insert(at.clone())
+        for (_, entry) in read.versions.iter() {
+            entries.insert(entry.clone())
+        }
+        for (_, path) in read.paths.iter() {
+            let dir = project_members_canonical(at.join(path))
+            let below = host.manifest_at(dir.join("nikaia.toml")) ?? throw ProjectMembersRefusal::Manifest
+            queue.push((below, dir))
+        }
+    }
+    if entries.is_empty() {
+        return out
+    }
+
+    let dir = root.join("target").join("nikaia").join("resolve")
+    fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { throw ProjectMembersRefusal::Unreadable { what: f"cannot make {dir.display()}", why: f"{error}" } }
+    let cargo_toml = dir.join("Cargo.toml")
+    let mut text = "# Written by `nikaia` to find the packages by version (ADR-286 D24); never built.\n[package]\nname = \"nikaia-resolve\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n"
+    let mut at = 0
+    for entry in entries.iter() {
+        text = f"{text}p{at} = {entry}\n"
+        at += 1
+    }
+    project_members_write(cargo_toml, text)
+    project_members_write(dir.join("lib.rs"), "")
+    let cargo = env::var("CARGO") ?? "cargo"
+    let said = process::run(cargo, ["metadata", "--format-version", "1", "--manifest-path", cargo_toml.display()]; dir: root.display()) catch { throw ProjectMembersRefusal::Refused(f"Running Cargo to find the packages by version failed: {error}") }
+    if !said.ok {
+        throw ProjectMembersRefusal::Refused(f"Cargo could not find the packages by version in {root.display()}/nikaia.toml:\n{said.stderr.trim()}")
+    }
+    let metadata = json::parse(said.stdout) catch { throw ProjectMembersRefusal::Refused(f"`cargo metadata` wrote something that is not JSON: {error}") }
+    let whole: json::Value? = metadata
+    for package in cargo_json_items(cargo_json_member(whole, "packages")).iter() {
+        let one: json::Value? = package.clone()
+        let named = cargo_json_text(cargo_json_member(one, "name")) ?? continue
+        if !named.starts_with("nikaia_") {
+            continue
+        }
+        let manifest_path = cargo_json_path(cargo_json_text(cargo_json_member(one, "manifest_path")) ?? continue)
+        let landed = manifest_path.parent() ?? continue
+        match out.get(named) {
+            null => {},
+            first => throw ProjectMembersRefusal::Refused(f"Cargo found two versions of `{named}`, at {first.display()} and {landed.display()}.\nA package is one crate in a build: ask for versions of it that one version satisfies."),
+        }
+        out.insert(named, landed)
+    }
+    return out
+}
+
+/// `text` into `path` where it is not there already, so Cargo sees no change
+/// when there is none.
+fn project_members_write(path: ref fs::Path, text: ref String) throws {
+    let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
+    if was == text {
+        return
+    }
+    fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectMembersRefusal::Unreadable { what: f"cannot write {path.display()}", why: f"{error}" } }
 }
 
 /// `path`, resolved where the filesystem lets us. The same fallback
@@ -567,14 +738,6 @@ pub fn project_members_proofs_digest[H: ProjectMembersForeignHost](root: ref fs:
 /// let a boundary be described by something nobody can read.
 fn project_members_description_at[H: ProjectMembersForeignHost](root: ref fs::Path, name: String, host: ref H) -> Ledger? {
     return host.read_beside(root.join("contracts").join(f"{name}.contracts"))
-}
-
-/// **A Nikaia package given by version, refused**: a registry, a name space
-/// and a distribution format are all undecided
-/// ([ADR-002](../../../docs/specification/adr/adr-002.md) D1 §5); the two
-/// forms that work.
-pub fn project_members_by_version(dependency: String) -> String {
-    return f"`{dependency}` is a Nikaia package given by version, but there's no package registry yet.\nDepend on it by path: `{dependency} = {{ path = \"../{dependency}\" }}`. (A crate from crates.io is written `{dependency} = {{ type = \"rust\", version = \"…\" }}`.)"
 }
 
 /// The package at `root` names itself nowhere: its crate has no name.

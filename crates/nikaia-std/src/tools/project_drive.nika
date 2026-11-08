@@ -227,7 +227,11 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         // package's. A consumer reads the ledger the program's build
         // writes, and `nikaia test` in a package must leave its committed
         // files as they were.
-        if !(at == 0 && host.tests_build()) {
+        //
+        // **Nor a package Cargo fetched** (ADR-286 D25): its ledger is the
+        // one it was published with, read where it landed, and the
+        // directory is Cargo's.
+        if !(at == 0 && host.tests_build()) && member.fetched == null {
             host.write_ledgers(at, locked)
         }
         // **The note is the entry's** (ADR-288 D29): what a dependency's
@@ -318,7 +322,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // it is set: it is Cargo's own documented override, and a build that
     // asked for a directory has to get it. Set to nothing, it asked for none.
     let shared = (env::var("CARGO_TARGET_DIR") ?? "") == ""
-    let env = project_drive_cargo_env(host, link_flags, no_cache, shared)
+    let env = project_drive_cargo_env(host, link_flags, no_cache, shared, project_members_fetched_text(members))
     let mut unset: Vec[String] = []
     let mut env = env
     match host.cpu_rustflags() {
@@ -437,7 +441,7 @@ pub fn project_drive_no_std_for(triple: String) -> String {
 /// marker that makes this compiler the wrapper, where the generated Rust is,
 /// the program's tag in the `shared` directory, the libraries' flags, the
 /// cache switch, the name a loose file is shown as and the allowlist.
-fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, link_flags: ref Vec[String], no_cache: bool, shared: bool) -> Vec[(String, String)] sync throws {
+fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, link_flags: ref Vec[String], no_cache: bool, shared: bool, fetched: String) -> Vec[(String, String)] sync throws {
     let mut env = host.settings_env()
     env.push(("NIKAIA_RUSTC_WRAPPER", "1"))
     env.push(("NIKAIA_GEN_DIR", host.gen_dir().to_text()))
@@ -447,6 +451,11 @@ fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, link_flags: ref Vec
         env.push(("NIKAIA_PROGRAM_TAG", f"_{host.root_tag()}"))
     }
     env.push(("NIKAIA_LINK_FLAGS", link_flags.join("\u{1f}")))
+    // Where Cargo put each package by version (ADR-286 D25): the wrapper
+    // reads this build's resolution rather than asking Cargo from inside it.
+    if fetched.len() > 0 {
+        env.push((project_members_fetched_variable(), fetched))
+    }
     if no_cache {
         env.push(("NIKAIA_NO_CACHE", "1"))
     }

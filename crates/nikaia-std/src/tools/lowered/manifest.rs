@@ -109,6 +109,7 @@ pub struct ManifestDependency {
     pub shape: DependencyShape,
     pub text: String,
     pub path: Option<String>,
+    pub cargo: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,9 +230,50 @@ pub(crate) fn manifest_dependencies(items: &[ManifestItem]) -> Result<collection
         let typed = kind.is_some();
         let has_path = path.is_some();
         let shape = dependency(&value.name, typed, nikaia_std::index::or(kind.as_deref(), || ""), has_path)?;
-        out.insert(value.name.to_string(), ManifestDependency { shape, text: value.text.to_string(), path });
+        let cargo: Option<String> = match shape {
+            DependencyShape::Nikaia => Some(manifest_by_version(items, value)?),
+            _ => None,
+        };
+        out.insert(value.name.to_string(), ManifestDependency { shape, text: value.text.to_string(), path, cargo });
     }
     Ok(out)
+}
+
+pub(crate) fn by_version_keys() -> Vec<String> { vec![String::from("version"), String::from("git"), String::from("tag"), String::from("branch"), String::from("rev")] }
+
+pub(crate) fn manifest_by_version(items: &[ManifestItem], value: &ManifestItem) -> Result<String, nikaia_std::error::Thrown<Refused>> {
+    let key = value.name.to_string();
+    if !manifest_an_identifier(&key) {
+        let word = key.replace('-', "_");
+        return Err(nikaia_std::error::throwing(Refused::Because(format!("Dependency `{}` is a Nikaia package by version, and its key is the name a `use` line writes, so it has to be an identifier. Write `{}`.", key, word)), &"manifest_by_version"));
+    }
+    let shapes = format!("A Nikaia package is named by a version (`{} = \"1.2\"`), by a table with `version` or `git`, or by a `path`; a Rust crate says `type = \"rust\"`.", key);
+    if !value.table {
+        if value.word.is_none() { return Err(nikaia_std::error::throwing(Refused::Because(format!("Dependency `{}` is `{}`. {}", key, value.text, shapes)), &"manifest_by_version")); }
+        return Ok(format!("{{ package = \"nikaia_{}\", version = {} }}", key, value.text));
+    }
+    let mut out = format!("{{ package = \"nikaia_{}\"", key);
+    let mut located = false;
+    for item in items.iter() {
+        if item.section != "dependencies" || item.name != key || item.key.is_empty() { continue; }
+        if !contains(&by_version_keys(), &item.key) {
+            let expected = choices(&by_version_keys());
+            return Err(nikaia_std::error::throwing(Refused::Because(format!("Dependency `{}` has a key `{}`, which a Nikaia package by version doesn't take. Its keys are: {}.", key, item.key, expected)), &"manifest_by_version"));
+        }
+        located = located || item.key == "version" || item.key == "git";
+        out = format!("{}, {} = {}", out, item.key, item.text);
+    }
+    if !located { return Err(nikaia_std::error::throwing(Refused::Because(format!("Dependency `{}` says neither a `version` nor a `git`. {}", key, shapes)), &"manifest_by_version")); }
+    Ok(format!("{} }}", out))
+}
+
+pub(crate) fn manifest_an_identifier(word: &str) -> bool {
+    let mut first = true;
+    for c in word.chars() {
+        if !(c.is_alphanumeric() || c == '_') || first && c >= '0' && c <= '9' { return false; }
+        first = false;
+    }
+    !first
 }
 
 #[cfg(test)]
