@@ -345,8 +345,9 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
             for arg in args.iter() { thrown_in(arg, names, holes_of, contribution_of, in_a_handler, caught, out); }
             for setting in config.iter() { thrown_in(&setting.value, names, holes_of, contribution_of, in_a_handler, caught, out); }
         },
-        Expr::MethodCall { receiver, args, config, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !caught && names.resolve(method) == "par_iter" && config.iter().any(|setting| { names.resolve(setting.name) == "within" }) { out.direct.insert(String::from("task::TimedOut")); }
             thrown_in(receiver, names, holes_of, contribution_of, in_a_handler, caught, out);
             for arg in args.iter() { thrown_in(arg, names, holes_of, contribution_of, in_a_handler, caught, out); }
             for setting in config.iter() { thrown_in(&setting.value, names, holes_of, contribution_of, in_a_handler, caught, out); }

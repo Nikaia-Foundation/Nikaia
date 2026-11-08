@@ -678,13 +678,31 @@ pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     if adds && !args.is_empty() { code_keys = check_core_places_code_keys(&state, world, receiver); }
     for arg in args.iter() { check_core_method_code_lent(state, world, arg); }
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
-    let found = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
+    let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
+    let found = check_core_method_deadline(&state, world, receiver, config, walked);
     check_core_method_option_names(state, world, receiver, &name, config, span);
     if !code_keys.is_empty() {
         let last = args.len() as i64 - 1;
         check_core_places_stored_keys(state, world, host, Some(nikaia_std::index::get(&args, nikaia_std::index::at(last))), &code_keys);
     }
     found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, config: &[ConfigArg], found: Ty) -> Ty {
+    let key = match match state.facts.method_callees.get(&(id_of(receiver) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return found };
+    if key != "Vec::par_iter" { return found; }
+    let mut within = false;
+    for option in config.iter() { if world.words.resolve(option.name) == "within" { within = true; } }
+    if !within { return found; }
+    match found {
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } } },
+        _ => found,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

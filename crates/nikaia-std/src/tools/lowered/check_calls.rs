@@ -55,6 +55,7 @@ pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result:
     let mut ends = true;
     let mut sized = true;
     let mut on_every_core = parallel;
+    let mut timed = false;
     if contract.signature.is_some() {
         let signature = nikaia_std::index::or(match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -64,6 +65,7 @@ pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result:
             ends = ends && shape_ends(receiver);
             sized = sized && shape_sized(receiver);
             on_every_core = on_every_core || shape_parallel(receiver);
+            timed = shape_timed(receiver);
         }
         let arguments = call_arguments(&signature);
         let mut at: i64 = 0;
@@ -71,17 +73,25 @@ pub fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result:
             if a_sequence_type(&nikaia_std::index::get(&arguments, (at) as usize).1) {
                 ends = ends && shape_ends(nikaia_std::index::get(&found, (at) as usize));
                 sized = sized && shape_sized(nikaia_std::index::get(&found, (at) as usize));
+                timed = timed || shape_timed(nikaia_std::index::get(&found, (at) as usize));
             }
             at += 1;
         }
     }
     ends = ends && (!contract.ends_by_length || sized);
-    Ty::Seq { item: Box::new(item), is_sync, pauses, can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays } }
+    Ty::Seq { item: Box::new(item), is_sync, pauses, can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed } }
 }
 
 pub(crate) fn shape_parallel(ty: &Ty) -> bool {
     match ty {
         Ty::Seq { parallel, .. } => { let parallel = *parallel; parallel },
+        _ => false,
+    }
+}
+
+pub fn shape_timed(ty: &Ty) -> bool {
+    match ty {
+        Ty::Seq { shape, .. } => shape.timed,
         _ => false,
     }
 }
@@ -114,7 +124,7 @@ pub fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
         _ => false,
     };
     match result {
-        Ty::Seq { ref item, can_throw, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(item.clone()), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel, shape: Shape { ends: false, sized: false, replays: shape.replays } } },
+        Ty::Seq { ref item, can_throw, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(item.clone()), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed } } },
         _ => result,
     }
 }

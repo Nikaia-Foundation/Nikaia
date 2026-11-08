@@ -813,7 +813,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)?;
             out.push(";\n");
             out.push(&inner);
-            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next().await ", allowed, bound));
+            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next(){} ", allowed, bound, emit_async_pause(&walk)));
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))?;
             out.push("\n");
             out.push(&pad);
@@ -821,8 +821,11 @@ impl EmitState {
             return Ok(());
         }
         out.push(&format!("{}for {} in ", allowed, bound));
-        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at);
+        let timed = self.facts.timed_loops.contains(&at);
+        if timed { out.push("nikaia_std::par::listed("); }
+        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at) && !timed;
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)?;
+        if timed { out.push(")?"); }
         if lends && viewed { out.push(".iter_mut()"); } else if lends {
             out.push(".iter()");
             if self.reads_through_handle(world, &walk, &scope.function, iter) { out.push(".map(|held| held.get())"); }

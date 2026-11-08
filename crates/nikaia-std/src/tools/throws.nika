@@ -543,7 +543,12 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
                 thrown_in(setting.value, names, holes_of, contribution_of, in_a_handler, caught, out)
             }
         }
-        Expr::MethodCall { receiver, args, config, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            // **`xs.par_iter(within: d)`** (ADR-async-5 D27): the step that
+            // ends the walk throws `task::TimedOut` once `d` ran out.
+            if !caught && names.resolve(method) == "par_iter" && config.iter().any(fn(setting) { names.resolve(setting.name) == "within" }) {
+                out.direct.insert("task::TimedOut")
+            }
             thrown_in(receiver, names, holes_of, contribution_of, in_a_handler, caught, out)
             for arg in args {
                 thrown_in(arg, names, holes_of, contribution_of, in_a_handler, caught, out)

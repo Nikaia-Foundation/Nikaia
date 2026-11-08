@@ -140,6 +140,10 @@ pub struct BoundsChanged {
 	/// Of `values`, those changed otherwise than by taking from them
 	/// (#1329): a name in `jumps` and not here only falls.
 	pub drops: collections::BTreeSet[String],
+	/// Of `lengths`, those that may fall (#1414): changed otherwise than
+	/// by a method that only adds to the list. A list in `lengths` and not
+	/// here only grows.
+	pub falls: collections::BTreeSet[String],
 	/// Places written through an element (#781), as `list|at|.fields`:
 	/// the same fields of every element of `list` may change.
 	pub elements: collections::BTreeSet[String],
@@ -310,6 +314,7 @@ fn nothing_changed() -> BoundsChanged {
 		parts: collections::BTreeSet(),
 		jumps: collections::BTreeSet(),
 		drops: collections::BTreeSet(),
+		falls: collections::BTreeSet(),
 		elements: collections::BTreeSet(),
 	}
 }
@@ -826,7 +831,9 @@ fn bounding_end_list(walk: ref BoundsWalk, list: ref String, key: ref String) ->
 	if root == key_root(key) || !walk.end_roots.contains(root) || walk.pinned.contains(root) {
 		return false
 	}
-	if walk.steady.lengths.contains(list) {
+	// A list that only grows stays an end (#1414): a value below its
+	// length at the write stays below it.
+	if walk.steady.falls.contains(list) {
 		return false
 	}
 	for name in walk.steady.values {
@@ -834,8 +841,9 @@ fn bounding_end_list(walk: ref BoundsWalk, list: ref String, key: ref String) ->
 			return false
 		}
 	}
+	// A change to the parts of the list itself leaves its length aside.
 	for name in walk.steady.parts {
-		if list == name || list.starts_with(f"{name}.") {
+		if list.starts_with(f"{name}.") {
 			return false
 		}
 	}
@@ -5305,10 +5313,12 @@ fn bounding_for(
 		parts: changed.parts.clone(),
 		jumps: changed.jumps.clone(),
 		drops: changed.drops.clone(),
+		falls: changed.falls.clone(),
 		elements: changed.elements.clone(),
 	}
 	for list in filled {
 		outer.lengths.remove(list)
+		outer.falls.remove(list)
 	}
 	// **Past the loop, its counters are bounded by the turns it ended**
 	// (ADR-361 D10, D13): with no `break`, the loop leaves at the head of
@@ -6328,6 +6338,7 @@ fn bounding_extend(mut changed: BoundsChanged, other: BoundsChanged) {
 	changed.parts.extend(other.parts.clone())
 	changed.jumps.extend(other.jumps.clone())
 	changed.drops.extend(other.drops.clone())
+	changed.falls.extend(other.falls.clone())
 	changed.elements.extend(other.elements.clone())
 }
 
@@ -6385,6 +6396,7 @@ fn changed_in_block(
 						out.drops.insert(name.clone())
 					}
 					out.lengths.insert(name.clone())
+					out.falls.insert(name.clone())
 					out.values.insert(name)
 				}
 				bounding_element_changed(target, words, out)
@@ -6589,6 +6601,7 @@ fn changed_by(
 				// A vector's load reads its bytes and changes nothing.
 				if hands_on(callee, at) && !context.simd_loads.contains_key(node_key(func)) {
 					out.lengths.insert(handed.clone())
+					out.falls.insert(handed.clone())
 					out.jumps.insert(handed.clone())
 					out.drops.insert(handed.clone())
 					out.values.insert(handed)
@@ -6622,6 +6635,9 @@ fn changed_by_method(
 		let name = receiver_path ?? ""
 		if !keeps_length(method) {
 			out.lengths.insert(name.clone())
+			if !only_adds(method) {
+				out.falls.insert(name.clone())
+			}
 		}
 		// A method that may change its receiver changes the paths of fields
 		// from it (ADR-306 D17).
@@ -6637,6 +6653,7 @@ fn changed_by_method(
 			out.values.insert(text.clone())
 			out.jumps.insert(text.clone())
 			out.drops.insert(text.clone())
+			out.falls.insert(text.clone())
 			out.lengths.insert(text)
 		}
 	}

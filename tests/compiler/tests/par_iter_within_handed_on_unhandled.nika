@@ -1,0 +1,12 @@
+// A walk with `within:` handed to `zip` (ADR-async-5 D27, #1423): the step
+// that ends the zipped walk throws `task::TimedOut`, so a function that
+// neither handles it nor says `throws` is refused.
+use std::time
+
+fn pairs(xs: ref Vec[i64], ys: ref Vec[i64]) -> i64 {
+    return ys.iter().zip(xs.par_iter(within: 1.seconds())).count()
+}
+
+fn main() throws {
+    println(f"{pairs([1, 2], [3, 4])}")
+}

@@ -109,6 +109,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * `let c: ref Array[T] = v` (or `= x.field`) of a `Vec` local moves it (NK2105 on the next use); only an index or piece (`v[1..]`, `v[0]`) lends. (issue-1270)
 * A by-value parameter handed back is marked `=x` (owned text, no refusal, ADR-282 D12) in a free function, but `!x` (NK2302) in an `impl` of a trait whose result writes `from`, because the contract follows the trait. (issue-1280)
 * In that `impl` case the checker also gives NK1104 with the help "write `ref`"; following it leaves only NK2302, and `it` test `views_handed_back::following_nk1104s_help_is_a_program` checks that help word for word. (issue-1280)
+* `unviewed_type` of the text view must give owned `String`, not `str`, or `.cloned().collect()` comes out as `Vec[str]`. (issue-1388)
 
 ### Lowering and lower-std
 
@@ -169,6 +170,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A buffer changed after its `let` now carries `late_puts` and is put by a shadowing `let` after its last change; the reassignment puts (#293 reputs) before that point are dropped. (issue-1276)
 * `std` contracts write `fn(T)` for code whose result they leave open (`Seq::filter`), so a `Ty::Fn` with `result == null` means "hands back nothing" only for the program's own types. (issue-1321)
 * A lambda body is written in several places (`emit_core_flow` plain, failing and kept paths, and the pausing path in `emit_core_args`), and an emitter fix must cover each one. (issue-1321)
+* A list of string literals is tiered to `Vec<&'static str>`, so `ref $T` binds `T` to a view and a walk gives `&&str`; `AsRef::<str>::as_ref` treats `&str`, `&&str` and `&String` alike. (issue-1388)
 
 ### Grammar
 

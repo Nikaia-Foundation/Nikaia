@@ -1,0 +1,27 @@
+// ADR-306 D22 (#1414): a `pub` field has a found bound where no other
+// package can write it. This file is a program, so no package imports
+// it: the `pub` field of a `pub` struct, written only by literals the
+// walks see, bounds its values, and `eval`'s derived precondition is
+// proved at the call. A field of a library's `pub` type stays checked:
+// `prove_element_bound_pub_field_library`.
+pub struct Clause {
+	pub atoms: Vec[i64],
+}
+
+fn eval(clause: ref Clause, values: ref Vec[bool]) -> bool {
+	let mut k = 0
+	while k < clause.atoms.len() {
+		let atom = clause.atoms[k]
+		if values[atom] {
+			return true
+		}
+		k += 1
+	}
+	return false
+}
+
+fn main() throws {
+	let clause = Clause { atoms: [0, 2, 1] }
+	let values = [false, false, true]
+	println(f"{eval(clause, values)}")
+}

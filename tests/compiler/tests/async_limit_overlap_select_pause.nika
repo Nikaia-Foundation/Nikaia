@@ -1,0 +1,44 @@
+// An `overlap` or a `select` on a gated main line is a pause like any other
+// (ADR-async-5 D37, #986): under `limit: 1`, while the main line waits in one,
+// the first task ends and the next ones start.
+use std::time
+
+fn work(n: i64, started: SharedMut[i64]) -> i64 {
+	started.update fn(mut v) { v += 1 }
+	time::sleep(2.millis())
+	return n
+}
+
+fn nap(ms: i64) -> i64 {
+	time::sleep(ms.millis())
+	return ms
+}
+
+fn main() throws {
+	let started = SharedMut(0)
+	let total = async(limit: 1) {
+		let a = async work(1, started)
+		let b = async work(2, started)
+		let c = async work(3, started)
+		println(f"before the overlap, {started.get()} started")
+		let both = overlap {
+			nap(30)
+			nap(40)
+		}
+		println(f"after the overlap, {started.get()} started, {both.0 + both.1}")
+		a + b + c
+	}
+	let others = SharedMut(0)
+	let more = async(limit: 1) {
+		let a = async work(1, others)
+		let b = async work(2, others)
+		println(f"before the select, {others.get()} started")
+		select {
+			x = nap(40) => { println(f"select {x}") }
+			y = nap(60) => { println(f"select {y}") }
+		}
+		println(f"after the select, {others.get()} started")
+		a + b
+	}
+	println(f"total {total} {more}")
+}

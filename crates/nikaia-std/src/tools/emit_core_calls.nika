@@ -1116,6 +1116,39 @@ impl EmitState {
         // a value below 1 panics at both.
         if name == "par_iter" && args.len() == 0 && emit_candidates(self.own_contracts, "par_iter").len() == 0 {
             let piece = emit_call_option_named(world, config, "piece")
+            // **`limit:`, `within:` and `admission:` go with the walk to the
+            // step that ends it** (ADR-async-5 D15, D27).
+            let limit = emit_call_option_named(world, config, "limit")
+            let within = emit_call_option_named(world, config, "within")
+            let admission = emit_call_option_named(world, config, "admission")
+            if limit.len() > 0 || within.len() > 0 || admission.len() > 0 {
+                if host.user_parallelism() {
+                    out.push("nikaia_std::par::gated(&")
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                } else {
+                    out.push("nikaia_std::par::gated_in_order(")
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+                    out.push(".iter()")
+                }
+                let strategy = admission.len() > 0
+                for option in [piece, limit, within, admission] {
+                    if option.len() > 0 {
+                        out.push(", Some(")
+                        self.emit_expr(world, walk, out, host, option[0], depth, flow, scope)
+                        out.push(")")
+                    } else {
+                        out.push(", None")
+                    }
+                }
+                if !strategy {
+                    out.push("::<()>")
+                }
+                out.push(")")
+                if boxed {
+                    out.push(")")
+                }
+                return
+            }
             if host.user_parallelism() {
                 if piece.len() > 0 {
                     out.push("nikaia_std::par::iter_in_pieces(&")
@@ -1205,6 +1238,12 @@ impl EmitState {
         // **A lambda that pauses, handed to a `std` entry** (ADR-233 D1, D2): the
         // entry's counterpart in `nikaia_std::seq`, which takes the `async`
         // closure the lambda is written as.
+        // **The step that ends a walk with `within:`** (ADR-async-5 D27):
+        // `par::ended` turns a deadline that ran out into `task::TimedOut`.
+        let timed = self.facts.timed_ends.contains(on_node)
+        if timed {
+            out.push("nikaia_std::par::ended(")
+        }
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
         if kind == 1 {
             out.push(f"nikaia_std::seq::{entry}(")
@@ -1343,6 +1382,12 @@ impl EmitState {
                 throw EmitRefused { message: f"This lambda calls `{name}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{name}` outside the lambda and pass in the value.", at: flow.statement }
             }
             out.push(emit_async_pause(walk))
+        }
+        if timed {
+            if length {
+                out.push(" as i64")
+            }
+            out.push(")")
         }
         let fails = self.method_can_fail(on_node)
         if flow.can_throw && !flow.caught && fails {
