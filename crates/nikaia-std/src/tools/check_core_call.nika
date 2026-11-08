@@ -156,7 +156,7 @@ fn check_core_call_declared(contract: ref FnContract) -> Ty? {
 
 /// What a `ref` parameter of code takes is lent to it (D20), unless it is a
 /// view already: a map's read past a jump is.
-fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
+pub fn check_core_call_lent(mut state: CheckState, world: ref CheckWorld, args: ref Vec[Expr], params: ref Vec[Ty], found: ref Vec[Ty], name: ref String, span: ref Span) sync {
     let mut i = -1
     for given in args {
         i += 1

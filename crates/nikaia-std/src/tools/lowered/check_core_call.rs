@@ -99,7 +99,7 @@ pub(crate) fn check_core_call_declared(contract: &FnContract) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty], name: &str, span: &Span) {
+pub fn check_core_call_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty], found: &[Ty], name: &str, span: &Span) {
     let mut i: i64 = -1;
     for given in args.iter() {
         i += 1;

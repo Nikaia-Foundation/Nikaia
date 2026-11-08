@@ -717,7 +717,8 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
             let result = nikaia_std::boxed::open(result);
             let pauses: bool = !is_sync;
             let fails: bool = can_throw;
-            check_core_arguments_to_code(state, world, host, args, params, span);
+            let found = check_core_arguments_to_code(state, world, host, args, &unlent_each(params), span);
+            check_core_call_lent(state, world, args, params, &found, world.words.resolve(method), span);
             state.kept_arguments_are_its_own(world, args, params);
             match on {
                 Ty::Named { name, .. } => {
