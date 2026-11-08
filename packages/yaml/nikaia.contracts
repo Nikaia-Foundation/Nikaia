@@ -464,6 +464,13 @@ panics = false
 touches = []
 signature = "(c: scalar) -> String"
 
+[fn."one_line"]
+sync = true
+panics = false
+touches = []
+views = ["t: borrowed"]
+signature = "(t: ref String) -> bool"
+
 [fn."opening"]
 sync = true
 returns = "anchor: ref(n)"
