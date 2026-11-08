@@ -109,6 +109,14 @@ mod bounds_matched_lowered {
 #[allow(unused_imports)]
 pub use bounds_matched_lowered::*;
 
+mod bounds_proven_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_proven.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_proven_lowered::*;
+
 mod bounds_reasons_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2408,6 +2416,10 @@ pub mod bounds_interval {
 pub mod bounds_matched {
     #[allow(unused_imports)]
     pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_required, bm_each, bm_changing_methods};
+}
+pub mod bounds_proven {
+    #[allow(unused_imports)]
+    pub use super::{BoundsAllProven, bounds_proven};
 }
 pub mod bounds_reasons {
     #[allow(unused_imports)]

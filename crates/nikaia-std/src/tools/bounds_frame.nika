@@ -155,6 +155,7 @@ fn frame_context(
 		array_lengths: collections::BTreeMap(),
 		through_loops: false,
 		decided: collections::BTreeMap(),
+		list_indices: collections::BTreeSet(),
 	}
 }
 

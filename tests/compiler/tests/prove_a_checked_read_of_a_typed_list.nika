@@ -1,0 +1,34 @@
+// ADR-306 D23 (#1431): past a read of a list the position lies inside, also
+// where only the checker knows the base is a list - a `let` without a type
+// bound by a call, or a name a pattern binds. The second read of each is
+// proved. `at` is a `pub` function's parameter, so no caller bounds it
+// (ADR-391 D1).
+fn made(n: i64) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	for k in 0..<n {
+		out.push(k * 2)
+	}
+	return out
+}
+
+pub fn from_call(n: i64, at: i64) -> i64 {
+	let xs = made(n)
+	let first = xs[at]
+	return first + xs[at]
+}
+
+pub fn from_pattern(pairs: ref Vec[(String, Vec[i64])], at: i64) -> i64 {
+	let mut sum = 0
+	for (name, xs) in pairs {
+		let first = xs[at]
+		if name.len() > 0 {
+			sum += first - xs[at]
+		}
+	}
+	return sum
+}
+
+fn main() throws {
+	let pairs: Vec[(String, Vec[i64])] = [("a", [1, 2, 3]), ("b", [4, 5, 6])]
+	println(f"{from_call(4, 2)} {from_pattern(pairs, 1)}")
+}

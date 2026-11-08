@@ -51,6 +51,9 @@ pub struct ProverState {
     /// **A `let` without a written type that binds a whole number**, by its
     /// statement's start, with the type the checker gave it (#1358).
     pub whole_lets: collections::BTreeMap[i64, String],
+    /// **The `std` entry each method call resolved to**, by its receiver's
+    /// node, as the checker's `method_callees` keys it (#1446).
+    pub method_callees: collections::BTreeMap[i64, String],
     /// **Each call with arguments the build knows** that a claim or a
     /// binding read (ADR-359 D11), by `call_result_name`: the call as
     /// written, and the callee with its arguments' values.
@@ -123,6 +126,7 @@ impl ProverState {
             pinned: collections::BTreeMap(),
             comptime_at: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),
+            method_callees: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),
             call_args: collections::BTreeMap(),
             wanted: collections::BTreeSet(),

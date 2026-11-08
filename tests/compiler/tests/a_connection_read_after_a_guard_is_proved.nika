@@ -1,0 +1,16 @@
+// After the guard its help writes, the claim about `conn.read()` is proved
+// (#1446, ADR-365); `trusted: true` at the read makes it a claim the prover
+// checks as any other. The function is not called, so nothing connects.
+use std::net
+
+pub fn talk(addr: String) -> i64 throws {
+    let mut conn = net::connect(addr)
+    let n = conn.read().len()
+    return 0 if !(n > 0)
+    assert(n > 0)
+    return n
+}
+
+fn main() throws {
+    println("proved")
+}

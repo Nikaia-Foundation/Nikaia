@@ -116,7 +116,7 @@ pub fn infer(
             crate::bounds::proven(
                 units[at],
                 &beside,
-                &crate::bounds::Sites::of(facts),
+                facts,
                 &[own, library],
                 &BTreeSet::new(),
                 // What the ledger says does not depend on an optimization
