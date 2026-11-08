@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1360] — 2026-11-08
+
+**Builders' changes (#1382, #1393, #1398)**
+- yaml: the package runs the whole yaml-test-suite (402 cases) and passes 365; a pass list keeps them passing.
+- Features of a Rust library: [features] in a rust-library's nikaia.toml names roots (the package or a pub item); the build derives #[cfg] for every item a feature reaches, Cargo features with default and implications, optional dependencies as dep:<name>, and checks the core, each feature and all together (NK1344-NK1347).
+- nikaia test: a test program (tests/NAME.nika) now runs with its package's directory as working directory, as a test block does, and writes under fs::scratch(); output tests keep their empty directory (ADR-269 D22, #1398).
+
 ## [0.0.1359] — 2026-11-08
 
 **Packages by version through crates.io, and two lowering fixes (#99)**
