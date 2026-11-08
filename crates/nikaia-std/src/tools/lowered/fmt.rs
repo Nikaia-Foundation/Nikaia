@@ -524,8 +524,10 @@ impl FmtPrinter {
             if inner > 0 { return inner - 1; }
             return 0;
         }
+        let starts_rule = fmt_starts_rule(&first.text);
+        if self.in_grammar() && starts_rule { return inner; }
         if self.hanging { return inner + 1; }
-        if self.in_grammar() && !fmt_starts_rule(&first.text) { return inner + 1; }
+        if self.in_grammar() { return inner + 1; }
         let after_item = self.tail == "," || self.tail == "" || self.tail == ";" || self.tail_kind == FmtKind::Open;
         if first.kind == FmtKind::Punct && fmt_operator_starts(&first.text) && !after_item { return inner + 1; }
         inner

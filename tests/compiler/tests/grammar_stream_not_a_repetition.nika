@@ -1,0 +1,39 @@
+// An `@stream` entry's body repeats one item on a fixed path (ADR-grammar-2
+// D7, #1440): each body here is NK1349, for the reason its grammar is named after.
+
+struct Item {
+	word: String,
+}
+
+grammar NoRepeat {
+	@stream entry rule items -> Item = item
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+}
+
+grammar TwoRepeats {
+	@stream entry rule items -> Item = item* "|" item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+}
+
+grammar WithAction {
+	@stream entry rule items -> Item = all:item* -> { Item { word: "" } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+}
+
+grammar TwoAlternatives {
+	@stream entry rule items -> Item = item* | "-"
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+}
+
+grammar OtherType {
+	@stream entry rule items -> Item = word*
+	rule word -> String = w:until(";") ";" -> { w.to_string() }
+}
+
+grammar NoType {
+	@stream entry rule items = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+}
+
+fn main() {
+}

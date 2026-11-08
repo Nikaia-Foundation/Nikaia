@@ -149,7 +149,7 @@ fn numbers_item(item: Item, mut st: NodeNumbersState) -> Item {
                 let alts = numbers_alts(rule.alts, st)
                 let args = numbers_fn_args(rule.args, st)
                 let config = numbers_config_params(rule.config, st)
-                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts: alts, span: rule.span, args: args, config: config, generics: rule.generics })
+                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, stream: rule.stream, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts: alts, span: rule.span, args: args, config: config, generics: rule.generics })
             }
             return Item::Grammar(GrammarDef { name: def.name, rules: rules, public: def.public })
         },

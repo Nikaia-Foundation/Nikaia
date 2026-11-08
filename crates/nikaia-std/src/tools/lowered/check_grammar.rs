@@ -64,6 +64,83 @@ pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
 // this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
+pub fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
+    let entry = world.words.resolve(rule.name).to_string();
+    let wanted: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown);
+    if wanted.is_unknown() { return Some(grammar_stream_refusal(&entry, &rule.span, "it names no item type", format!("Write the type of one item after the arrow: `@stream entry rule {} -> Item = item*`.", entry))); }
+    if rule.alts.len() != 1 { return Some(grammar_stream_refusal(&entry, &rule.span, &format!("it has {} alternatives", rule.alts.len() as i64), String::from("Put the choice into the item's rule, and leave the entry one repetition: `item*`."))); }
+    if nikaia_std::index::get(&rule.alts, 0).action.is_some() { return Some(grammar_stream_refusal(&entry, &rule.span, "it has an action", String::from("Leave the action out: each item goes to the caller as it is parsed, so there is no list for an action to read."))); }
+    let found = grammar_stream_paths(world, &nikaia_std::index::get(&rule.alts, 0).pattern.node, &wanted, results, rules);
+    if found == 1 { return None; }
+    let item = wanted.text();
+    if found == 0 { return Some(grammar_stream_refusal(&entry, &rule.span, &format!("no element of it repeats a rule of type `{}`", item), format!("Repeat the rule of one item: `item*`, `item+` or `list(item, \",\")`, where `item` is a rule `-> {}`.", item))); }
+    Some(grammar_stream_refusal(&entry, &rule.span, &format!("{} of its elements repeat a rule of type `{}`", found, item), String::from("Stream one repetition, and fold the others into the item's rule.")))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_stream_refusal(entry: &str, span: &Span, why: &str, help: String) -> CheckFinding {
+    let notes: Vec<String> = vec![String::from("A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.")];
+    check_refusal("NK1349", span, format!("`{}` is `@stream`, so its body has to repeat one item on a fixed path, but {}.", entry, why), notes, Some(help))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_stream_paths(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, wanted: &Ty, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> i64 {
+    match pattern {
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); return grammar_stream_paths(world, &inner.node, wanted, results, rules) },
+        Pattern::Seq(parts) => {
+            let mut count: i64 = 0;
+            for part in parts.iter() { count += grammar_stream_paths(world, &part.node, wanted, results, rules); }
+            return count;
+        },
+        Pattern::Repeat { pat, rep } => {
+            let pat = nikaia_std::boxed::open(pat);
+            if *rep != Repeat::Optional && grammar_stream_item(world, &pat.node, wanted, results, rules) { return 1; }
+            return 0;
+        },
+        Pattern::Counted { pat, .. } => {
+            let pat = nikaia_std::boxed::open(pat);
+            if grammar_stream_item(world, &pat.node, wanted, results, rules) { return 1; }
+            return 0;
+        },
+        Pattern::Ref { name, generics, args } => {
+            let name = *name;
+            let called = world.words.resolve(name).to_string();
+            if called == "list" && !rules.contains(&called) && generics.is_empty() && args.len() == 2 && grammar_stream_item(world, &nikaia_std::index::get(&args, 0).node, wanted, results, rules) { return 1; }
+            return 0;
+        },
+        _ => return 0,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, wanted: &Ty, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> bool {
+    let mut called: String = String::from("");
+    match pattern {
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); return grammar_stream_item(world, &inner.node, wanted, results, rules); },
+        Pattern::Ref { name, generics, .. } => {
+            let name = *name;
+            if generics.is_empty() { called = world.words.resolve(name).to_string(); }
+        },
+        Pattern::Call { name, .. } => {
+            let name = *name;
+            called = world.words.resolve(name).to_string();
+        },
+        _ => { },
+    }
+    if called == "" || !rules.contains(&called) { return false; }
+    let declared: Ty = match match *nikaia_std::index::get(&results, &called) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return false };
+    declared.text() == wanted.text()
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -312,6 +312,12 @@ pub fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref Ch
         }
     }
     for rule in gram.rules {
+        if rule.stream {
+            match grammar_stream_refused(world, rule, state.rule_results, rules) {
+                refused => state.findings.push(refused),
+                null => {},
+            }
+        }
         let mut expected: Ty? = null
         let written: Type? = rule.ret_type?.clone()
         if written != null {

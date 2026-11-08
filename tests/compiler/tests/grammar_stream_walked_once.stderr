@@ -1,0 +1,10 @@
+error[NK2702]: `all` is a sequence, and it was already used up.
+   --> tests/grammar_stream_walked_once.nika:38:2
+    |
+ 38 | 	for it in all {
+    |  ^
+    |
+    = note: A sequence of `Item` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.
+    = note: A `Vec` is different: it already holds its elements and can be walked as often as you like.
+    = help: Collect it first and walk the collection: `let all = all.collect()`.
+1 sequence walked a second time

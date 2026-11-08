@@ -2644,7 +2644,7 @@ pub mod check_glue {
 }
 pub mod check_grammar {
     #[allow(unused_imports)]
-    pub use super::{grammar_positions_over_text};
+    pub use super::{grammar_stream_refused, grammar_positions_over_text};
 }
 pub mod check_host {
     #[allow(unused_imports)]

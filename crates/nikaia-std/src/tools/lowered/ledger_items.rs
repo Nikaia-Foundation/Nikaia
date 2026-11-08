@@ -81,6 +81,10 @@ pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &colle
             let written = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
             result = Some(written_ty(words, aliases, written));
         }
+        if rule.stream && result.is_some() {
+            let item = nikaia_std::index::or(result, || Ty::Unknown);
+            result = Some(Ty::Seq { item: Box::new(item), is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() });
+        }
         let mut params: Vec<(String, Ty)> = vec![(String::from("input"), Ty::Unknown)];
         for arg in rule.args.iter() { params.push((words.resolve(arg.name).to_string(), written_ty(words, aliases, &arg.ty))); }
         let mut options: Vec<ConfigContract> = vec![];

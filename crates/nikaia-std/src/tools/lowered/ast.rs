@@ -390,6 +390,7 @@ pub struct GrammarDef {
 pub struct GrammarRule {
     pub name: winnow_grammar::Symbol,
     pub is_entry: bool,
+    pub stream: bool,
     pub frame: Option<FrameAttr>,
     pub ret_type: Option<Type>,
     pub label: Option<String>,
