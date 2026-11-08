@@ -2,14 +2,14 @@
 //! D15, D18): the gate of an `async(limit: n, admission: s) { … }`.
 //!
 //! The main line starts the tasks of a group in written order. Where the gate
-//! of the group has no free place, the next task waits there, unstarted,
-//! while the main line polls the running ones ([`Waiting::place`]) - a task
-//! of a group is polled where it is waited for (D20), so nothing else would -
-//! until one of them ends. A place is free where fewer than `n` hold one and
-//! the strategy ([`Admission`]) lets one more start; where none runs, one
-//! starts whatever the strategy says, so a group always ends. A task is under
-//! every gate around it in its function and holds a place in each until it
-//! ends, is cancelled or crashes ([`Gate::occupy`]).
+//! of the group has no free place, the next task is queued, unstarted, and
+//! the main line goes on (D37); where it next waits, the running tasks are
+//! polled and the queued ones start as places free, in written order
+//! ([`Waiting`]). A place is free where fewer than `n` hold one and the
+//! strategy ([`Admission`]) lets one more start; where none runs, one starts
+//! whatever the strategy says, so a group always ends. A task is under every
+//! gate around it in its function and holds a place in each until it ends,
+//! is cancelled or crashes ([`Gate::occupy`]).
 
 use std::cell::RefCell;
 use std::rc::Weak;
@@ -93,33 +93,38 @@ pub fn admitted(strategy: impl Admission + 'static) -> Box<dyn Admission> {
 /// **The rest of a task, as a gate polls it**: `true` where it ended.
 pub trait Pollable {
     fn poll_here(&self, cx: &mut std::task::Context<'_>) -> bool;
-    /// Whether it has not ended yet.
+    /// Whether it started and has not ended yet.
     fn running(&self) -> bool;
+    /// Whether it waits, unstarted, for a place (D37).
+    fn queued(&self) -> bool;
+    /// Start it, a place being free: it runs to its first pause. `true`
+    /// where it ended there.
+    fn begin(&self, cx: &mut std::task::Context<'_>) -> bool;
 }
 
 impl Pollable for super::group::Rested<'_> {
     fn poll_here(&self, cx: &mut std::task::Context<'_>) -> bool {
-        let Ok(mut held) = self.try_borrow_mut() else {
-            return false;
-        };
-        let Some(task) = held.as_mut() else {
-            return false;
-        };
-        if task.as_mut().poll(cx).is_ready() {
-            *held = None;
-            return true;
-        }
-        false
+        self.is_running() && self.poll_in_place(cx)
     }
 
     fn running(&self) -> bool {
-        self.try_borrow().map_or(true, |held| held.is_some())
+        self.is_running()
+    }
+
+    fn queued(&self) -> bool {
+        self.is_queued()
+    }
+
+    fn begin(&self, cx: &mut std::task::Context<'_>) -> bool {
+        Rested::begin(self, cx)
     }
 }
 
-/// **The gate of one `async { … }` with `limit:` or `admission:`** (D15,
-/// D18): the places, how many are held, and the strategy. The tasks hold a
-/// place through it ([`Gate::occupy`]); it keeps nothing of theirs.
+use super::group::Rested;
+
+/// **The gate of one `async { … }`** (D15, D18, D37): the places, how many
+/// are held, and the strategy. The tasks hold a place through it
+/// ([`Gate::occupy`]); it keeps nothing of theirs.
 pub struct Gate {
     limit: usize,
     admission: RefCell<Box<dyn Admission>>,
@@ -145,9 +150,14 @@ impl Gate {
         }
     }
 
-    /// Whether the next task may start now: fewer than `limit` hold a place
-    /// and the strategy lets one more start, or none holds one.
+    /// Whether the next task may start now, `waiting` of them wanting to:
+    /// fewer than `limit` hold a place and the strategy lets one more start,
+    /// or none holds one. A start it allows is counted.
     pub fn room(&self) -> bool {
+        self.room_for(1)
+    }
+
+    fn room_for(&self, waiting: i64) -> bool {
         let mut state = self.state.borrow_mut();
         if state.running >= self.limit {
             return false;
@@ -155,7 +165,7 @@ impl Gate {
         if state.allowance <= 0 {
             let load = Load {
                 running: state.running as i64,
-                waiting: 1,
+                waiting,
                 descriptors_in_use: descriptors_in_use(),
                 descriptors_allowed: descriptors_allowed(),
             };
@@ -172,8 +182,7 @@ impl Gate {
     }
 
     /// **The place a task holds** from its start to its end, its cancel or
-    /// its crash; taken where the task starts, once [`Waiting::place`] or
-    /// [`Gate::room`] found one.
+    /// its crash; taken where the task starts.
     pub fn occupy(&self) -> Placed<'_> {
         self.state.borrow_mut().running += 1;
         Placed { gate: self }
@@ -193,59 +202,104 @@ impl Drop for Placed<'_> {
     }
 }
 
-/// **The running tasks of a gate, as its main line sees them** (D15, D20):
-/// the cells of their rests, held weakly, so the main line can poll them
-/// while the next task waits, unstarted, for a place. Declared inside the
-/// group's function before its first task, and used on its main line only.
+/// **What starts the waiting tasks of a group** (D37): asked wherever its
+/// main line waits.
+pub trait Line {
+    /// Poll the running tasks, and start the waiting ones a place frees for,
+    /// first in first out.
+    fn pump(&self, cx: &mut std::task::Context<'_>);
+}
+
+/// **The tasks of a gated group, as its main line sees them** (D15, D18,
+/// D37): the cells of their rests, held weakly, in written order, those that
+/// run and those that wait, unstarted, for a place. Declared inside the
+/// group's function right after its gate, and used on its main line only.
+///
+/// A task over the limit, or one the strategy does not admit yet, is queued
+/// in its own cell and the main line goes on. Where the main line waits -
+/// a `join`, the end of a block, a statement task's start
+/// ([`Waiting::during`], [`Waiting::place`]) - the running tasks are polled,
+/// and the waiting ones start as places free, in written order. A group
+/// inside another gated one of the same function is under both gates
+/// ([`Waiting::nested`]).
 pub struct Waiting<'x> {
+    gates: Vec<&'x Gate>,
+    outer: Option<&'x (dyn Line + 'x)>,
     members: RefCell<Vec<Weak<dyn Pollable + 'x>>>,
 }
 
 impl<'x> Waiting<'x> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    /// The tasks of the group whose gate is `gate`.
+    pub fn new(gate: &'x Gate) -> Self {
         Waiting {
+            gates: vec![gate],
+            outer: None,
             members: RefCell::new(Vec::new()),
         }
     }
 
-    /// **Wait for a place in `gate`**, polling the running tasks until one
-    /// ends and the gate has room, in written order since the main line
-    /// starts the tasks one after the other. Where none of them can be polled
-    /// any more, the task starts: nothing it could wait for is left.
-    pub async fn place(&self, gate: &Gate) {
+    /// The tasks of a group inside the gated group of `outer`, in the same
+    /// function: each needs a place in every gate around it (D15).
+    pub fn nested<'y: 'x>(outer: &'x Waiting<'y>, gate: &'x Gate) -> Self {
+        let mut gates: Vec<&'x Gate> = outer.gates.clone();
+        gates.push(gate);
+        Waiting {
+            gates,
+            outer: Some(outer),
+            members: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Whether a place is free in every gate, `waiting` tasks wanting one.
+    fn room(&self, waiting: i64) -> bool {
+        self.gates.iter().all(|gate| gate.room_for(waiting))
+    }
+
+    fn queued_members(&self) -> i64 {
+        self.members
+            .borrow()
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|member| member.queued())
+            .count() as i64
+    }
+
+    /// **Whether the next task waits for a place** (D37): one before it waits
+    /// still, so written order keeps it waiting, or a gate has no room. Asked
+    /// where it starts; a start it allows is counted.
+    pub fn queues(&self) -> bool {
+        let waiting = self.queued_members();
+        waiting > 0 || !self.room(waiting + 1)
+    }
+
+    /// **The main line waits here for `wait`**, a `join` or the end of a
+    /// block, and the group's tasks run meanwhile: the running ones are
+    /// polled, the waiting ones start as places free (D37).
+    pub async fn during<F: std::future::Future>(&self, wait: F) -> F::Output {
+        let mut wait = std::pin::pin!(wait);
         std::future::poll_fn(|cx| {
-            loop {
-                if gate.room() {
-                    return std::task::Poll::Ready(());
-                }
-                let members: Vec<_> = self
-                    .members
-                    .borrow()
-                    .iter()
-                    .filter_map(Weak::upgrade)
-                    .collect();
-                if !members.iter().any(|member| member.running()) {
-                    return std::task::Poll::Ready(());
-                }
-                let mut ended = false;
-                for member in &members {
-                    ended |= member.poll_here(cx);
-                }
-                drop(members);
-                self.members
-                    .borrow_mut()
-                    .retain(|member| member.strong_count() > 0);
-                if !ended {
-                    return std::task::Poll::Pending;
-                }
-            }
+            self.pump(cx);
+            wait.as_mut().poll(cx)
         })
         .await
     }
 
-    /// **A pausing task started under the gate**: its rest is kept, to poll it
-    /// while a later task waits for a place.
+    /// **A statement task waits for its place** before it runs to its end
+    /// where it starts (D9, D20): until every task written before it has
+    /// started and a gate has room for it.
+    pub async fn place(&self) {
+        std::future::poll_fn(|cx| {
+            self.pump(cx);
+            if self.queues() {
+                return std::task::Poll::Pending;
+            }
+            std::task::Poll::Ready(())
+        })
+        .await
+    }
+
+    /// **A task started under the gate**, at once or waiting for a place: its
+    /// rest is kept, to poll it, or start it, where the main line waits.
     pub fn keep<'h: 'x, T: 'h, E: 'h>(
         &self,
         handle: super::ChildHandle<'h, T, E>,
@@ -253,6 +307,47 @@ impl<'x> Waiting<'x> {
         let cell: Weak<dyn Pollable + 'x> = handle.pollable();
         self.members.borrow_mut().push(cell);
         handle
+    }
+}
+
+impl Line for Waiting<'_> {
+    fn pump(&self, cx: &mut std::task::Context<'_>) {
+        if let Some(outer) = self.outer {
+            outer.pump(cx);
+        }
+        loop {
+            let members: Vec<_> = self
+                .members
+                .borrow()
+                .iter()
+                .filter_map(Weak::upgrade)
+                .collect();
+            let mut waiting = members.iter().filter(|member| member.queued()).count() as i64;
+            let mut progressed = false;
+            let mut blocked = false;
+            for member in &members {
+                if member.queued() {
+                    // First in first out: none starts before one written
+                    // earlier that still waits.
+                    if blocked || !self.room(waiting) {
+                        blocked = true;
+                        continue;
+                    }
+                    waiting -= 1;
+                    member.begin(cx);
+                    progressed = true;
+                } else if member.running() && member.poll_here(cx) {
+                    progressed = true;
+                }
+            }
+            drop(members);
+            self.members
+                .borrow_mut()
+                .retain(|member| member.strong_count() > 0);
+            if !progressed {
+                return;
+            }
+        }
     }
 }
 

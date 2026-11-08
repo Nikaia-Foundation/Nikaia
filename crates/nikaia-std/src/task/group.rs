@@ -152,6 +152,9 @@ struct Slot<T, E> {
     /// The handle asked for a cancel (D14); a pausing task stops at its next
     /// pause.
     cancel: bool,
+    /// Its place in start order, for a task that waited for a place
+    /// (ADR-async-5 D37) and so took it after its handle was made.
+    at: Option<usize>,
 }
 
 type Shared<T, E> = std::sync::Arc<std::sync::Mutex<Slot<T, E>>>;
@@ -162,6 +165,7 @@ fn empty_slot<T, E>() -> Shared<T, E> {
         joiner: None,
         unclaimed: false,
         cancel: false,
+        at: None,
     }))
 }
 
@@ -303,6 +307,29 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     settle(group, &slot, at, end);
 }
 
+/// **A pausing task that waited for a place** (ADR-async-5 D37): it takes
+/// its place in start order where its gate starts it, which is still the
+/// written order, since its gate starts the waiting ones first in first out;
+/// a crash before that cancelled it.
+async fn queued_task<'g, T: 'g, E: 'g, F>(
+    group: &'g dyn Receiver<E>,
+    slot: Shared<T, E>,
+    body: impl FnOnce() -> F + 'g,
+) where
+    F: std::future::Future<Output = Result<T, E>> + 'g,
+{
+    let Some(at) = group.place() else {
+        let mut held = locked(&slot);
+        held.ended = Some(Ended::Cancelled);
+        if let Some(joiner) = held.joiner.take() {
+            joiner.wake();
+        }
+        return;
+    };
+    locked(&slot).at = Some(at);
+    held_task(group, slot, at, body).await;
+}
+
 /// **`task::ChildHandle[T]`** (D11): the handle of a child task, bound to its
 /// group. It has `join()` and `cancel()`, both of which take it, and
 /// `start()` where it is deferred (D12). One dropped neither joined nor
@@ -365,22 +392,91 @@ pub struct Rest<'b> {
 /// **Where the rest of a pausing task lives** after its first pause: shared
 /// with the gates of `limit:` and `admission:` around it (ADR-async-5 D15,
 /// D18), which poll it while a sibling waits for a place.
-pub(super) type Rested<'b> =
-    std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'b>>>>;
+pub(super) struct Rested<'b> {
+    task: std::cell::RefCell<Option<Paused<'b>>>,
+    /// **It waits for a place** (D37): unstarted, and polled by nobody until
+    /// its gate starts it.
+    queued: std::cell::Cell<bool>,
+}
+
+type Paused<'b> = std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'b>>;
+
+impl<'b> Rested<'b> {
+    fn empty() -> std::rc::Rc<Self> {
+        std::rc::Rc::new(Rested {
+            task: std::cell::RefCell::new(None),
+            queued: std::cell::Cell::new(false),
+        })
+    }
+
+    /// A task that waits, unstarted, for its gate to start it (D37).
+    fn queue(&self, task: Paused<'b>) {
+        *self.task.borrow_mut() = Some(task);
+        self.queued.set(true);
+    }
+
+    /// The task, taken out: it is dropped, at its pause, or never starts.
+    fn take(&self) -> Option<Paused<'b>> {
+        self.queued.set(false);
+        self.task.take()
+    }
+
+    /// **Poll it in place** where it runs; `true` where nothing of it is left
+    /// to wait for. One that waits for a place is not polled: its gate starts
+    /// it (D37). One polled already, further up the same poll, is skipped.
+    pub(super) fn poll_in_place(&self, cx: &mut std::task::Context<'_>) -> bool {
+        if self.queued.get() {
+            return false;
+        }
+        let Ok(mut held) = self.task.try_borrow_mut() else {
+            return false;
+        };
+        let Some(task) = held.as_mut() else {
+            return true;
+        };
+        if task.as_mut().poll(cx).is_ready() {
+            *held = None;
+            return true;
+        }
+        false
+    }
+
+    /// Whether it waits for a place.
+    pub(super) fn is_queued(&self) -> bool {
+        self.queued.get() && self.task.try_borrow().is_ok_and(|held| held.is_some())
+    }
+
+    /// Whether it started and has not ended yet.
+    pub(super) fn is_running(&self) -> bool {
+        !self.queued.get() && self.task.try_borrow().map_or(true, |held| held.is_some())
+    }
+
+    /// **Its gate starts it** (D37): from here it runs as any started task,
+    /// to its first pause now.
+    pub(super) fn begin(&self, cx: &mut std::task::Context<'_>) -> bool {
+        self.queued.set(false);
+        self.poll_in_place(cx)
+    }
+}
 
 impl Rest<'_> {
     pub fn new() -> Self {
         Rest {
-            held: std::rc::Rc::new(std::cell::RefCell::new(None)),
+            held: Rested::empty(),
         }
     }
 
     /// **The block's end**: the rest still running, if any, is waited for.
+    /// One still waiting for a place is started by its gate, which polls
+    /// this wait ([`super::Waiting::during`]).
     pub async fn finish(&self) {
-        let rest = self.held.take();
-        if let Some(rest) = rest {
-            rest.await;
-        }
+        std::future::poll_fn(|cx| {
+            if self.held.queued.get() || !self.held.poll_in_place(cx) {
+                return std::task::Poll::Pending;
+            }
+            std::task::Poll::Ready(())
+        })
+        .await
     }
 }
 
@@ -392,12 +488,7 @@ impl Default for Rest<'_> {
 
 impl Polled for Rest<'_> {
     fn poll_rest(&self, cx: &mut std::task::Context<'_>) {
-        let mut held = self.held.borrow_mut();
-        if let Some(task) = held.as_mut()
-            && task.as_mut().poll(cx).is_ready()
-        {
-            *held = None;
-        }
+        self.held.poll_in_place(cx);
     }
 
     fn cancel_rest(&self) {
@@ -419,7 +510,7 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             deferred: None,
             is_deferred: false,
             claimed: std::cell::Cell::new(false),
-            held: std::rc::Rc::new(std::cell::RefCell::new(None)),
+            held: Rested::empty(),
             kept: None,
         }
     }
@@ -445,7 +536,8 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             return handle;
         };
         handle.at = Some(at);
-        *rest.held.borrow_mut() = Some(Box::pin(held_task(group, handle.slot.clone(), at, body)));
+        *rest.held.task.borrow_mut() =
+            Some(Box::pin(held_task(group, handle.slot.clone(), at, body)));
         std::future::poll_fn(|cx| {
             rest.poll_rest(cx);
             std::task::Poll::Ready(())
@@ -474,8 +566,42 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             std::future::poll_fn(|cx| std::task::Poll::Ready(task.as_mut().poll(cx).is_ready()))
                 .await;
         if !ended {
-            *handle.held.borrow_mut() = Some(task);
+            *handle.held.task.borrow_mut() = Some(task);
         }
+        handle
+    }
+
+    /// **A handle to a pausing task of `async e` that waits for a place**
+    /// (ADR-async-5 D37): unstarted, it is queued in its own cell, and the
+    /// main line goes on; its gate starts it when a place frees.
+    pub(super) fn held_queued<F>(group: &'g dyn Receiver<E>, body: impl FnOnce() -> F + 'g) -> Self
+    where
+        F: std::future::Future<Output = Result<T, E>> + 'g,
+    {
+        let handle = ChildHandle::new(group, empty_slot());
+        handle
+            .held
+            .queue(Box::pin(queued_task(group, handle.slot.clone(), body)));
+        handle
+    }
+
+    /// [`ChildHandle::held_queued`] for a bound task whose rest lives in
+    /// `rest` (Part I 8.2, #987).
+    pub(super) fn kept_queued<'b, F>(
+        group: &'b dyn Receiver<E>,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> Self
+    where
+        'b: 'g,
+        T: 'b,
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let mut handle = ChildHandle::new(group, empty_slot());
+        handle.kept = Some(rest);
+        rest.held
+            .queue(Box::pin(queued_task(group, handle.slot.clone(), body)));
         handle
     }
 
@@ -595,15 +721,11 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             "a deferred task was joined before its start()"
         );
         let slot = self.slot.clone();
-        let mut rest = self.held.take();
         let end = std::future::poll_fn(|cx| {
             // A pausing task of `async e` is polled here, where it is waited
-            // for (#1226).
-            if let Some(task) = rest.as_mut()
-                && task.as_mut().poll(cx).is_ready()
-            {
-                rest = None;
-            }
+            // for (#1226); one waiting for a place, once its gate started it
+            // (D37).
+            self.held.poll_in_place(cx);
             if let Some(kept) = self.kept {
                 kept.poll_rest(cx);
             }
@@ -644,14 +766,9 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
         );
         let slot = self.slot.clone();
         let mut sleeping = std::pin::pin!(crate::time::sleep(span));
-        let mut rest = self.held.take();
         let end = std::future::poll_fn(|cx| {
             // A pausing task of `async e` is polled here, as in `join`.
-            if let Some(task) = rest.as_mut()
-                && task.as_mut().poll(cx).is_ready()
-            {
-                rest = None;
-            }
+            self.held.poll_in_place(cx);
             if let Some(kept) = self.kept {
                 kept.poll_rest(cx);
             }
@@ -674,7 +791,6 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             }
             None => {
                 // The task runs on: the handle keeps what is left of it.
-                *self.held.borrow_mut() = rest;
                 locked(&self.slot).joiner = None;
                 if on_timeout == OnTimeout::Cancel {
                     self.cancel_here();
@@ -717,8 +833,9 @@ impl<T, E> Drop for ChildHandle<'_, T, E> {
         let mut held = locked(&self.slot);
         held.unclaimed = true;
         let end = held.ended.take();
+        let at = self.at.or(held.at);
         drop(held);
-        match (end, self.at) {
+        match (end, at) {
             (Some(Ended::Failed(error)), Some(at)) => self.group.unread(at, error),
             (Some(Ended::Crashed(crash)), Some(at)) => self.group.unread_crash(at, crash),
             _ => {}

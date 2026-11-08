@@ -2851,7 +2851,10 @@ pub mod emit_contracts {
     #[allow(unused_imports)]
     pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state, EmitReachGraphs, emit_contracts_package_graphs};
 }
-pub mod emit_core_args {}
+pub mod emit_core_args {
+    #[allow(unused_imports)]
+    pub use super::{emit_async_line, emit_async_during};
+}
 pub mod emit_core_below {
     #[allow(unused_imports)]
     pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};

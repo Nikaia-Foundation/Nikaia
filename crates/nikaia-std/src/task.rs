@@ -31,7 +31,7 @@ mod gate;
 mod group;
 
 pub use gate::{
-    Adaptive, Admission, Decision, Gate, Load, Placed, Pollable, Waiting, admitted, limit,
+    Adaptive, Admission, Decision, Gate, Line, Load, Placed, Pollable, Waiting, admitted, limit,
 };
 pub use group::{ChildHandle, Deferred, Ended, Polled, Receiver, Rest};
 use group::{Group, ended, ran};
@@ -1518,6 +1518,42 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         E: 'b,
         F: std::future::Future<Output = Result<T, E>> + 'b,
     {
+        ChildHandle::kept(self, rest, body).await
+    }
+
+    /// **`async e` whose task pauses, under a gate** (ADR-async-5 D15, D18,
+    /// D37): as [`Scope::start_paused`] where `queued` is `false`; else the
+    /// task waits, unstarted, for a place, and the main line goes on. Its
+    /// gate's [`Waiting`] starts it when a place frees.
+    pub async fn start_paused_gated<'g, T: 'g, F>(
+        &'g self,
+        queued: bool,
+        body: impl FnOnce() -> F + 'g,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'g,
+        F: std::future::Future<Output = Result<T, E>> + 'g,
+    {
+        if queued {
+            return ChildHandle::held_queued(self, body);
+        }
+        ChildHandle::held(self, body).await
+    }
+
+    /// [`Scope::start_kept`] under a gate, as [`Scope::start_paused_gated`].
+    pub async fn start_kept_gated<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        queued: bool,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        if queued {
+            return ChildHandle::kept_queued(self, rest, body);
+        }
         ChildHandle::kept(self, rest, body).await
     }
 

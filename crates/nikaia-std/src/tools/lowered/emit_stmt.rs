@@ -939,9 +939,11 @@ pub(crate) fn emit_stmt_declare_slots(walk: &mut EmitWalk, out: &mut EmitOut, ma
 
 pub(crate) fn emit_stmt_finish_rests(walk: &mut EmitWalk, rests: i64, pad: &str) -> String {
     let mut finished = String::from("");
+    let line = emit_async_line(&walk.async_gates);
     while (walk.async_rests.len() as i64) > rests {
         let cell = match walk.async_rests.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
-        finished = format!("{}{}.finish().await;\n{}", pad, cell, finished);
+        let wait = emit_async_during(&line, &format!("{}.finish()", cell));
+        finished = format!("{}{};\n{}", pad, wait, finished);
     }
     finished
 }

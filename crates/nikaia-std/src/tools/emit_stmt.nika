@@ -1283,12 +1283,15 @@ fn emit_stmt_declare_slots(mut walk: EmitWalk, mut out: EmitOut, mark: i64, slot
 
 /// **The end of a block that declared cells of rests** (Part I 8.2, #987):
 /// each still running is waited for here, in the order they started; the
-/// cells leave the walk.
+/// cells leave the walk. Under a gate the group's tasks run meanwhile, and
+/// those still waiting for a place start as places free (ADR-async-5 D37).
 fn emit_stmt_finish_rests(mut walk: EmitWalk, rests: i64, pad: ref String) -> String {
     let mut finished = ""
+    let line = emit_async_line(walk.async_gates)
     while walk.async_rests.len() > rests {
         let cell = walk.async_rests.pop() ?? break
-        finished = f"{pad}{cell}.finish().await;\n{finished}"
+        let wait = emit_async_during(line, f"{cell}.finish()")
+        finished = f"{pad}{wait};\n{finished}"
     }
     return finished
 }
