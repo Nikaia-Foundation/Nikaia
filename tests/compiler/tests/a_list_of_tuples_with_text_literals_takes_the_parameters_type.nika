@@ -1,0 +1,36 @@
+// #1449: a list literal of tuples holding text literals takes the type of the
+// parameter it goes to (ADR-282 D3, D16): written at the call, bound by a
+// `let` without a type, or filled after an empty `let`, lent to a `ref` list
+// or kept by a published function.
+pub fn count(p: ref Vec[(String, Vec[i64])]) -> i64 {
+    return p.len() as i64
+}
+
+pub fn names(p: ref Vec[String]) -> i64 {
+    return p.len() as i64
+}
+
+pub fn pairs(p: ref Vec[(String, i64)]) -> i64 {
+    return p.len() as i64
+}
+
+pub fn kept(p: Vec[String]) -> i64 {
+    return p.len() as i64
+}
+
+fn main() throws {
+    let pairs_of = [("a", [1])]
+    println(count(pairs_of))
+    println(count([("b", [2, 3]), ("c", [])]))
+    println(pairs([("d", 4)]))
+    let words = ["e", "f"]
+    println(names(words))
+    let mut filled = []
+    filled.push(("g", [5]))
+    println(count(filled))
+    for (s, v) in filled {
+        println(f"{s} {v.len()}")
+    }
+    let more = ["h", "i", "j"]
+    println(kept(more))
+}

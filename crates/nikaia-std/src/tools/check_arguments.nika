@@ -329,8 +329,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 found_here = array ?? found_here.clone()
             } else {
                 // **A tuple with text literals beside other parts** (#750):
-                // each literal is text of its own, as in an all-literal one.
-                found_here = state.text_literal(world, literal_wants, value, kept) ?? state.tuple_literal(world, found_here, literal_wants, value) ?? found_here.clone()
+                // each literal is text of its own, as in an all-literal one,
+                // and in a list of such tuples (#1449).
+                found_here = state.text_literal(world, literal_wants, value, kept) ?? state.tuple_literal(world, found_here, literal_wants, value) ?? state.tuple_list_literal(world, found_here, literal_wants, value) ?? found_here.clone()
             }
             // **A text literal a method lends is the view it is** (ADR-282
             // D5, ADR-views-3 D2, #1230): a method call walks its arguments
