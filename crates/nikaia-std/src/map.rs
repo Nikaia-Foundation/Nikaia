@@ -28,11 +28,19 @@ use std::iter::FusedIterator;
 
 use hashbrown::hash_table::{self, HashTable};
 
+use crate::block::Place;
 use crate::hash::{Fast, Keyed};
 
 /// A table from keys to values, with the hasher `S`.
+///
+/// **Its table is placed by a [`Place`]** (ADR-327 D4, #490): outside every
+/// block, with `std`'s global allocator, unless it is made with
+/// [`HashMap::with_hasher_in`] and [`Place::Block`]. A table in the running
+/// task's block grows only through `try_reserve`, and a refusal ends the task
+/// ([`crate::block::full`]); a table outside grows as `hashbrown`'s does, by
+/// the same calls, so it holds its entries where it held them before.
 pub struct HashMap<K, V, S = Keyed> {
-    table: HashTable<(K, V)>,
+    table: HashTable<(K, V), Place>,
     hash_builder: S,
 }
 
@@ -145,12 +153,32 @@ fn long_eq(a: &[u8], b: &[u8]) -> bool {
 // The map
 // ---------------------------------------------------------------------------
 
+/// **Room for `more` entries in a table in a block, or the task ends**
+/// (ADR-327 D6): the block refuses, and the task ends here, outside the
+/// allocator. A table outside is left to `hashbrown`'s own growth, so this
+/// costs it one compare of its place.
+#[inline(always)]
+fn room<K, V>(table: &mut HashTable<(K, V), Place>, more: usize, hasher: impl Fn(&(K, V)) -> u64) {
+    if *table.allocator() == Place::Block
+        && table.capacity() - table.len() < more
+        && table.try_reserve(more, hasher).is_err()
+    {
+        crate::block::full()
+    }
+}
+
 impl<K, V, S> HashMap<K, V, S> {
     /// An empty map with the hasher given.
     #[inline]
     pub const fn with_hasher(hash_builder: S) -> Self {
+        Self::with_hasher_in(hash_builder, Place::Outside)
+    }
+
+    /// An empty map with the hasher given, its table placed at `place`.
+    #[inline]
+    pub const fn with_hasher_in(hash_builder: S, place: Place) -> Self {
         Self {
-            table: HashTable::new(),
+            table: HashTable::new_in(place),
             hash_builder,
         }
     }
@@ -159,7 +187,7 @@ impl<K, V, S> HashMap<K, V, S> {
     #[inline]
     pub fn with_capacity_and_hasher(capacity: usize, hash_builder: S) -> Self {
         Self {
-            table: HashTable::with_capacity(capacity),
+            table: HashTable::with_capacity_in(capacity, Place::Outside),
             hash_builder,
         }
     }
@@ -284,13 +312,21 @@ impl<K: Eq + Hash, V, S: BuildHasher> HashMap<K, V, S> {
     #[inline]
     pub fn reserve(&mut self, additional: usize) {
         let hash_builder = &self.hash_builder;
+        room(&mut self.table, additional, |(k, _)| {
+            hash_of(hash_builder, k)
+        });
         self.table
             .reserve(additional, |(k, _)| hash_of(hash_builder, k));
     }
 
-    /// As little room as the entries need.
+    /// As little room as the entries need. A table in a block keeps its room:
+    /// `hashbrown` cannot shrink fallibly, and the block counts what the
+    /// task holds either way (ADR-327 D10).
     #[inline]
     pub fn shrink_to_fit(&mut self) {
+        if *self.table.allocator() == Place::Block {
+            return;
+        }
         let hash_builder = &self.hash_builder;
         self.table.shrink_to_fit(|(k, _)| hash_of(hash_builder, k));
     }
@@ -389,6 +425,7 @@ impl<K: Eq + Hash, V, S: BuildHasher> HashMap<K, V, S> {
         let hash_builder = &self.hash_builder;
         let hash = hash_of(hash_builder, &key);
         let table = &mut self.table;
+        room(table, 1, |(k, _)| hash_of(hash_builder, k));
         let place = with_key_eq!(&key, |eq| match table
             .entry(hash, eq, |(k, _)| hash_of(hash_builder, k))
         {
@@ -440,8 +477,19 @@ impl<K, V, S: Default> Default for HashMap<K, V, S> {
     }
 }
 
+/// **A copy of a map in a block is built outside** (ADR-327 D9: where the
+/// compiler cannot tell where a value goes, it is outside): `hashbrown`
+/// copies a table without asking whether it may, and outside it may.
 impl<K: Clone, V: Clone, S: Clone> Clone for HashMap<K, V, S> {
     fn clone(&self) -> Self {
+        if *self.table.allocator() == Place::Block {
+            let mut table = HashTable::new_in(Place::Outside);
+            table.clone_from(&self.table);
+            return Self {
+                table,
+                hash_builder: self.hash_builder.clone(),
+            };
+        }
         Self {
             table: self.table.clone(),
             hash_builder: self.hash_builder.clone(),
@@ -565,14 +613,14 @@ pub enum Entry<'a, K, V, S> {
 
 /// A place that holds an entry.
 pub struct OccupiedEntry<'a, K, V> {
-    elem: hash_table::OccupiedEntry<'a, (K, V)>,
+    elem: hash_table::OccupiedEntry<'a, (K, V), Place>,
 }
 
 /// A place a key names that holds nothing yet.
 pub struct VacantEntry<'a, K, V, S> {
     hash: u64,
     key: K,
-    table: &'a mut HashTable<(K, V)>,
+    table: &'a mut HashTable<(K, V), Place>,
     hash_builder: &'a S,
 }
 
@@ -717,6 +765,7 @@ impl<'a, K: Hash, V, S: BuildHasher> VacantEntry<'a, K, V, S> {
     #[inline]
     pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V> {
         let hash_builder = self.hash_builder;
+        room(self.table, 1, |(k, _)| hash_of(hash_builder, k));
         let elem = self
             .table
             .insert_unique(self.hash, (self.key, value), |(k, _)| {
@@ -808,19 +857,19 @@ iterator!(
 );
 iterator!(
     /// The entries of a map, the map consumed.
-    IntoIter<K, V>, hash_table::IntoIter<(K, V)>, (K, V), |e| e
+    IntoIter<K, V>, hash_table::IntoIter<(K, V), Place>, (K, V), |e| e
 );
 iterator!(
     /// The keys of a map, the map consumed.
-    IntoKeys<K, V>, hash_table::IntoIter<(K, V)>, K, |(k, _)| k
+    IntoKeys<K, V>, hash_table::IntoIter<(K, V), Place>, K, |(k, _)| k
 );
 iterator!(
     /// The values of a map, the map consumed.
-    IntoValues<K, V>, hash_table::IntoIter<(K, V)>, V, |(_, v)| v
+    IntoValues<K, V>, hash_table::IntoIter<(K, V), Place>, V, |(_, v)| v
 );
 iterator!(
     /// The entries taken out of a map, which is left empty.
-    Drain<'a, K, V>, hash_table::Drain<'a, (K, V)>, (K, V), |e| e
+    Drain<'a, K, V>, hash_table::Drain<'a, (K, V), Place>, (K, V), |e| e
 );
 
 impl<K, V> Clone for Iter<'_, K, V> {

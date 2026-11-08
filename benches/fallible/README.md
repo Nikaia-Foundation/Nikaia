@@ -11,7 +11,7 @@ Two workloads, each written twice, the same steps on both sides:
 
 | binary | what |
 |---|---|
-| `brc_std`, `brc_fallible` | 1BRC's aggregation: a map from station to min/max/sum/count, then the sorted names written out. The map's table, the list of names and the output text are the collections; the map uses Nikaia's trusted hash on both sides |
+| `brc_std`, `brc_fallible` | 1BRC's aggregation: a map from station to min/max/sum/count, then the sorted names written out. The map's table, the list of names and the output text are the collections; the map is `nikaia-std`'s own, with the trusted hash, on both sides: outside on `brc_std`, placed in the block on `brc_fallible` |
 | `tasks_std`, `tasks_fallible` | `benches/taskblock`'s workload: many short tasks, each building a request and parsing it into owned parts, then writing a response (22 allocations and 7 reallocations a task) |
 
 The fallible side is `nikaia-std`'s own (`nikaia_std::block`, #490 step 3,
@@ -35,20 +35,32 @@ row or per task.
 
 ## The table
 
-On `nikaia_std::block` (0.0.1366, #490 step 3):
+On `nikaia_std::block`, `std`'s map placed by its handle (#490 step 3, its
+second part):
 
 | program | instructions | mispredicted |
 |---|---:|---:|
-| `brc_std` (per row) | 381.1 | 3.52 |
-| `brc_fallible` (per row) | 385.3 | 3.66 |
+| `brc_std` (per row) | 383.1 | 3.53 |
+| `brc_fallible` (per row) | 374.5 | 3.53 |
 | `tasks_std` (per task) | 17872.4 | 162.70 |
 | `tasks_fallible` (per task) | 11114.0 | 91.83 |
 
 - **A task on its block costs 37.8% fewer instructions** than on `malloc`,
   with 44% fewer mispredicted branches: what `benches/taskblock` measured for
   `pages` (-38.5%), now through `allocator-api2`'s collections and a handle.
-- **Outside a task the handle costs 1.1%** on 1BRC (4.2 instructions a row),
-  where step 1's budget count cost 0.2%.
+- **Outside a task the handle costs nothing a row.** Both sides do the same
+  work a row (a search that finds the station); the 2% between them is where
+  the code lands, not work. The first part's +1.1% (385.3 against 381.1) was
+  not the handle: `brc_fallible` asked the map for room before every row (3.0
+  of its 4.2 instructions, measured by leaving the ask out). The map now asks
+  only where it inserts, and only when its table is in a block.
+
+The first part (0.0.1366), with `hashbrown`'s map and a room check a row:
+
+| program | instructions | mispredicted |
+|---|---:|---:|
+| `brc_std` (per row) | 381.1 | 3.52 |
+| `brc_fallible` (per row) | 385.3 | 3.66 |
 
 Step 1's allocator counted every byte against a budget and refused past it,
 with the system's memory (0.0.603):

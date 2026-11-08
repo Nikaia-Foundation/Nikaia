@@ -22,5 +22,7 @@ pub use task_block::{
     BLOCK, Block, Entered, List, Place, Text, enter, extend, full, list, push, reserve,
 };
 
-/// **A map whose table may be refused**: `hashbrown`'s, placed by its handle.
-pub type Map<K, V, S> = hashbrown::HashMap<K, V, S, Place>;
+/// **A map whose table may be refused**: `std`'s own map
+/// ([`crate::map::HashMap`]), whose table is placed by its handle and grows
+/// in a block only through `try_reserve`.
+pub type Map<K, V, S> = crate::map::HashMap<K, V, S>;

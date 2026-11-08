@@ -43,9 +43,6 @@ fn main() {
             continue;
         };
         let t = tenths(&line[at + 1..]);
-        if stations.len() == stations.capacity() && stations.try_reserve(1).is_err() {
-            budget::spent()
-        }
         let stats = stations.entry(&line[..at]).or_insert(Stats {
             min: t,
             max: t,
