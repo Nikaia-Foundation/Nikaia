@@ -727,8 +727,9 @@ grammar Yaml {
 	rule FlowNext(ds: Vec[Dir], left: i64, n: i64) -> Node = "," Fs(n) v:FlowItem(ds, left, n) Fs(n) -> {
 		v
 	}
-	// A flow sequence's entry may be a single pair, `[a: b]` or `[? a : b]`, a
-	// mapping that takes a nesting level.
+	// A flow sequence's entry may be a single pair, `[a: b]`, `[? a : b]` or
+	// `[: b]` with an empty key (`c-ns-flow-map-empty-key-entry`), a mapping
+	// that takes a nesting level.
 	rule FlowItem(ds: Vec[Dir], left: i64, n: i64) -> Node =
 		if(left > 0, "nesting within the depth limit") a:here "?" not(PlainSafe(true)) Fs(n) p:FlowExplicit(ds, left - 1, n) -> {
 			let b = p.value.end
@@ -762,6 +763,33 @@ grammar Yaml {
 						value: Value::Map([Entry { key: k, value: v }]),
 					}
 				}
+			}
+		}
+		| if(left > 0, "nesting within the depth limit") a:here t:FlowTail(ds, left - 1, n; pair: true) -> {
+			let b = t.end
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Map([
+					Entry {
+						key: Node {
+							start: a,
+							end: a,
+							anchor: null,
+							tag: null,
+							flow: false,
+							raw: "",
+							style: Style::Plain,
+							value: Value::Null,
+						},
+						value: t,
+					},
+				]),
 			}
 		}
 	// A pair's `:` and its value, or none, `Null` where the `:` ends
@@ -849,7 +877,8 @@ grammar Yaml {
 				},
 			}
 		}
-	// `{a: b}`, `{a: }`, `{a}` and `{: b}`: a missing key or value is `Null`.
+	// `{a: b}`, `{a: }`, `{a}`, `{: b}` and `{:}`: a missing key or value is
+	// `Null`.
 	rule FlowImplicit(ds: Vec[Dir], left: i64, n: i64) -> Entry =
 		k:FlowAny(ds, left, n) t:FlowTail(ds, left, n)? -> {
 			let b = k.end
@@ -868,7 +897,7 @@ grammar Yaml {
 					},
 			}
 		}
-		| a:here ":" Fs(n) v:FlowAny(ds, left, n) -> {
+		| a:here t:FlowTail(ds, left, n) -> {
 			Entry {
 				key: Node {
 					start: a,
@@ -880,7 +909,7 @@ grammar Yaml {
 					style: Style::Plain,
 					value: Value::Null,
 				},
-				value: v,
+				value: t,
 			}
 		}
 
