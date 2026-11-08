@@ -1,0 +1,25 @@
+// A method's options are handed over as a function's are (#1446): a text
+// literal given to a `String` option is built, and a plain value given to
+// a nullable option goes inside it.
+struct P {
+    x: i64,
+}
+
+impl P {
+    fn named(ref self; label: String = "none") -> String {
+        return f"{label}{self.x}"
+    }
+
+    fn maybe(ref self; n: i64? = null) -> i64 {
+        return (n ?? 0) + self.x
+    }
+}
+
+fn main() throws {
+    let p = P { x: 1 }
+    println(p.named(label: "lit"))
+    println(p.named())
+    println(p.maybe(n: 3))
+    println(p.maybe())
+    println("abcb".find("b"; from: 2) ?? -1)
+}

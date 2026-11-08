@@ -448,7 +448,15 @@ impl EmitState {
             let mut found = false
             for a in config {
                 if !found && emit_text(world, a.name) == option {
+                    // **Lent, or wrapped into a nullable option** (#1446),
+                    // as the checker said, as at a function's option.
+                    if self.facts.lent_options.contains(node_key(a.value)) {
+                        out.push("&")
+                    }
+                    let (before, after) = emit_leaf_wrapped(self.facts.nullable_args, node_key(a.value))
+                    out.push(before)
                     self.emit_expr(world, walk, out, host, a.value, depth, flow, scope)
+                    out.push(after)
                     found = true
                 }
             }

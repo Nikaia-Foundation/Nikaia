@@ -49,8 +49,12 @@ impl CheckState {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         if signature.config.is_empty() { return; }
         let mut options: Vec<(String, String)> = vec![];
-        for option in signature.config.iter() {
+        for option in lowered_options(contract) {
             if contract.provenance.is_some() && option.name == "trusted" { continue; }
+            if option.default.starts_with("\"") && a_plain_string(&option.ty) {
+                options.push((option.name.to_string(), format!("String::from({})", option.default)));
+                continue;
+            }
             options.push((option.name.to_string(), option.default.to_string()));
         }
         if options.is_empty() { return; }

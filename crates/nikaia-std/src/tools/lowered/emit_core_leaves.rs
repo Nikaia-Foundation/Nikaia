@@ -314,7 +314,11 @@ impl EmitState {
             let mut found = false;
             for a in config.iter() {
                 if !found && emit_text(world, a.name) == *option {
+                    if self.facts.lent_options.contains(&node_key(&a.value)) { out.push("&"); }
+                    let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&a.value))?;
+                    out.push(&before);
                     self.emit_expr(world, walk, out, host, &a.value, depth, flow, scope)?;
+                    out.push(&after);
                     found = true;
                 }
             }

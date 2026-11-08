@@ -1,0 +1,18 @@
+// An option at a method call is typed against the entry it resolves to
+// (#1446): `str::find`'s `from:` takes an `i64`, and so does `P::at`'s `by:`.
+struct P {
+    x: i64,
+}
+
+impl P {
+    fn at(ref self; by: i64 = 1) -> i64 {
+        return self.x + by
+    }
+}
+
+fn main() throws {
+    let s = "abcb"
+    println(s.find("b"; from: "x") ?? -1)
+    let p = P { x: 1 }
+    println(p.at(by: "x"))
+}
