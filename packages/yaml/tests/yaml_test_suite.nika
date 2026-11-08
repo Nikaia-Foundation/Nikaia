@@ -1,0 +1,88 @@
+// The yaml-test-suite (ADR-yaml-1 D9, #1382), vendored unchanged in
+// `tests/suite`, run case by case: a case with an `error` file must be refused,
+// any other must give the events of its `test.event`. The cases the parser
+// passes are listed in `tests/suite-pass.txt`; a listed case that fails ends
+// the program with exit 1, a passing case missing from the list is a hint.
+use std::fs
+use std::process
+use yaml
+
+// The suite's own files beside the case directories.
+fn is_a_case(name: String) -> bool {
+	return name != "License" && name != "SOURCE" && name != "name" && name != "tags"
+}
+
+fn names(dir: String, root: fs::Root) -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	for entry in fs::read_dir(dir, root) {
+		out.push(entry.to_text())
+	}
+	out.sort()
+	return out
+}
+
+// Whether the case in `dir` passes.
+fn passes(dir: String, root: fs::Root) -> bool throws {
+	let input = fs::read(f"{dir}/in.yaml", root)
+	let refused = fs::exists(f"{dir}/error", root)
+	let docs = yaml::documents(input) catch {
+		return refused
+	}
+	if refused {
+		return false
+	}
+	let mut got = ""
+	for e in yaml::events(docs) {
+		got = f"{got}{yaml::event_line(e)}\n"
+	}
+	return got == fs::read_to_string(f"{dir}/test.event", root)
+}
+
+fn main() throws {
+	let root = fs::Root::Dir("tests")
+	let mut listed: Vec[String] = []
+	for line in fs::read_to_string("suite-pass.txt", root).lines() {
+		if line != "" {
+			listed.push(line.clone())
+		}
+	}
+	let mut total = 0
+	let mut passed: Vec[String] = []
+	let mut lost: Vec[String] = []
+	for name in names("suite", root) {
+		if !is_a_case(name) {
+			continue
+		}
+		let dir = f"suite/{name}"
+		let mut ids: Vec[String] = []
+		if fs::exists(f"{dir}/in.yaml", root) {
+			ids.push(name.clone())
+		} else {
+			for sub in names(dir, root) {
+				ids.push(f"{name}/{sub}")
+			}
+		}
+		for id in ids {
+			total += 1
+			if passes(f"suite/{id}", root) {
+				passed.push(id.clone())
+			} else if listed.contains(id) {
+				lost.push(id.clone())
+			}
+		}
+	}
+	println(f"passed {passed.len()} of {total}")
+	for id in passed {
+		if listed.contains(id) {
+			println(f"pass {id}")
+		} else {
+			println(f"pass {id} (new: add it to tests/suite-pass.txt)")
+		}
+	}
+	for id in lost {
+		println(f"FAIL {id} (listed in tests/suite-pass.txt)")
+	}
+	if lost.len() > 0 {
+		process::exit(1)
+	}
+}
