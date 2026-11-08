@@ -185,11 +185,24 @@ fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerC
         }
         Stmt::For { iter, .. } => keeps_expression(iter, interner, holes_of, context, own, library, walk),
         Stmt::While { cond, .. } => keeps_expression(cond, interner, holes_of, context, own, library, walk),
+        // **`return p ?? e` of a view result hands back a view of `p`**
+        // (ADR-views-3 D2, D7, #1254): the option is read, not moved, as in
+        // a `let` of one.
         Stmt::Return(value) => {
             let returned = value ?? return
-            keeps_expression(returned, interner, holes_of, context, own, library, walk)
+            if context.returns_a_view && a_read_option(returned, interner, context) {
+                keeps_read_option(returned, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(returned, interner, holes_of, context, own, library, walk)
+            }
         }
-        Stmt::Expr(value) => keeps_expression(value, interner, holes_of, context, own, library, walk),
+        Stmt::Expr(value) => {
+            if context.returns_a_view && a_read_option(value, interner, context) {
+                keeps_read_option(value, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(value, interner, holes_of, context, own, library, walk)
+            }
+        }
         else => {}
     }
     match stmt {
@@ -859,6 +872,12 @@ fn keep_method_options(config: ref Vec[ConfigArg], interner: ref winnow_grammar:
 // asked the same, for the parameters it points into: a method that takes it
 // whole may hand it on.
 fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    // **A call through a field that holds code reads the field** (#1254):
+    // `p.parse("12")` of `p: Parser` with `parse: fn(String) -> i64` keeps
+    // nothing of `p`; the bare name matched `std`'s `parse`.
+    if keeps_code_field(receiver, method, interner, context) != null {
+        return
+    }
     let mut names: Vec[String] = []
     match receiver {
         Expr::Variable(ident, _) => {
@@ -947,6 +966,22 @@ fn takes_its_receiver(contract: ref FnContract) -> bool {
 // A library's candidates answer from their ledger, and no candidate at all
 // keeps (D2).
 fn keep_method_arguments(receiver: ref Expr, args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    // **What a field's code takes as a view or `mut` is lent to it**
+    // (ADR-views-3 D2, D14), as the call lowers it; what it takes whole it
+    // keeps.
+    let code = keeps_code_field(receiver, method, interner, context)
+    if code != null {
+        let params: Vec[Ty] = code ?? []
+        for k in 0..<args.len() {
+            if k < params.len() && (params[k].is_a_view() || lent_mut(params[k]) != null) {
+                continue
+            }
+            for name in keeps_handed(args[k], interner, context, own, library, walk) {
+                walk.uses.kept.insert(name.clone())
+            }
+        }
+        return
+    }
     let owner = keeps_owner_of(receiver, method, interner, context, own, library)
     let ours = candidate_keys(own, context.own_methods, method, owner, args.len())
     for k in 0..<args.len() {
@@ -1387,6 +1422,22 @@ fn not_self(name: String) -> String? {
         return null
     }
     return name
+}
+
+// The parameters of the code a parameter's field holds, where `receiver.method`
+// is a call of that field and not a method.
+fn keeps_code_field(receiver: ref Expr, method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> Vec[Ty]? {
+    match receiver {
+        Expr::Variable(ident, _) => {
+            let fields = context.fields[interner.resolve(ident)] ?? return null
+            let ty = fields[method] ?? return null
+            return match ty {
+                Ty::Fn { params, .. } => params.clone(),
+                else => null,
+            }
+        }
+        else => return null,
+    }
 }
 
 fn a_field_that_copies(parameter: ref String, field: ref String, context: ref KeepsBody) -> bool {

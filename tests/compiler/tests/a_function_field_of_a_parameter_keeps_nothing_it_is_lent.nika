@@ -1,0 +1,25 @@
+// A call of a function field of a parameter keeps only the arguments its
+// type keeps; a plain text parameter is lent (ADR-views-3 D2, D14, #1254).
+struct Parser {
+    parse: fn(s: String) -> i64 sync,
+}
+
+fn length(s: String) -> i64 sync {
+    return s.len()
+}
+
+fn stored(keep s: String) -> Vec[String] {
+    return [s]
+}
+
+fn twice(p: Parser, text: String) -> i64 {
+    return p.parse(text) + p.parse("12")
+}
+
+fn main() throws {
+    let p = Parser { parse: length }
+    let t = f"a{1}"
+    println(twice(p, t))
+    println(twice(p, t))
+    println(stored("s").len())
+}

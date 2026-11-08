@@ -1,0 +1,17 @@
+// `return name ?? "none"` on a lent parameter keeps nothing: the literal
+// side is static text (ADR-282 D29), the other a view of `name` (#1254).
+fn stored(keep s: String) -> Vec[String] {
+    return [s]
+}
+
+fn shown(name: String?) -> String {
+    return name ?? "none"
+}
+
+fn main() throws {
+    let n: String? = f"a{1}"
+    println(shown(n))
+    println(shown(n))
+    println(shown(null))
+    println(stored("s").len())
+}

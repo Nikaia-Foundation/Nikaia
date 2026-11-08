@@ -3005,7 +3005,9 @@ fn lendable_sides(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out
         Expr::Throw(_, _) => return true,
         else => {}
     }
-    if a_null(value) {
+    // **A literal side is static text** (ADR-282 D29, #1254): `name ??
+    // "none"` hands back a view of `name` or of the literal.
+    if a_null(value) || a_literal_text(value) {
         return true
     }
     let through = lent_through_code(value, ask, walk)

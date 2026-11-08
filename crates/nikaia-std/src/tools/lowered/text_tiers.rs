@@ -2127,7 +2127,7 @@ pub(crate) fn lendable_sides(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wa
         Expr::Throw(_, _) => { return true; },
         _ => { },
     }
-    if a_null(value) { return true; }
+    if a_null(value) || a_literal_text(value) { return true; }
     let through = lent_through_code(value, ask, &walk);
     if through.is_some() {
         let argument = match through { Some(__nikaia_value) => __nikaia_value, None => return false };
