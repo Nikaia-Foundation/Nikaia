@@ -335,9 +335,11 @@ pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::Interne
                     if field.is_public && is_public { reached.insert(name.to_string()); }
                     let mut fits = here && generics.is_empty() && !is_extern && field.default.is_none() && field.attributes.is_empty();
                     let list = words.resolve(ty.name);
-                    fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1;
+                    let map_name: String = nikaia_std::index::or(list.split("::").last(), || "").to_string();
+                    let map = (map_name == "BTreeMap" || map_name == "HashMap") && ty.generics.len() == 2;
+                    fits = fits && ((list == "Vec" || list == "List") && ty.generics.len() == 1 || map);
                     if fits {
-                        let inner = nikaia_std::index::get(&ty.generics, 0);
+                        let inner = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(ty.generics.len() as i64 - 1));
                         fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name));
                     }
                     let was = nikaia_std::index::or(scan.live.get(&name), || true);

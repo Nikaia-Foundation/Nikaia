@@ -249,7 +249,7 @@ pub(crate) fn counted_blocks(expr: &Expr, over: &[CountedLoop], words: &winnow_g
     }
 }
 
-pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be" | "find_all") }
+pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be" | "find_all" | "contains_key" | "keys" | "values") }
 
 pub fn bytes_word_width(method: &str) -> i64 {
     match method {

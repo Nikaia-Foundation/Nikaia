@@ -985,6 +985,10 @@ fn bounding_field_list(
 		},
 		else => {},
 	}
+	// An empty map writes no value (ADR-306 D24).
+	if is_empty_map(value, words) {
+		return
+	}
 	let elements = elements_key(walk.shape, value, words)
 	if elements != null {
 		let bound = bounding_assumed(walk, elements ?? "")
@@ -1189,6 +1193,12 @@ fn bounding_range(
 				}
 				return into
 			}
+			// **A value read out of a map lies where every value put into it
+			// does** (ADR-306 D24), as one read out of a list.
+			if args.len() == 1 && words.resolve(method) == "get" {
+				let key = elements_key(walk.shape, receiver, words) ?? return null
+				return bounding_assumed(walk, key)
+			}
 		},
 		Expr::Index { base, .. } => {
 			let key = elements_key(walk.shape, base, words) ?? return null
@@ -1210,6 +1220,10 @@ fn bounding_range(
 		Expr::Coalesce { value, fallback, .. } => {
 			let held = bounding_range(walk, value, facts, context, program, words, ask)
 				?? return null
+			// `x ?? return`, `?? continue`, `?? break` leave: `x` is read.
+			if bounding_leaves(fallback) {
+				return held
+			}
 			let otherwise = bounding_range(walk, fallback, facts, context, program, words, ask)
 				?? return null
 			let joined = held.join(otherwise)
@@ -5005,14 +5019,12 @@ fn bounding_let(
 	// **What a rule between list fields says of the value** (ADR-369 D4):
 	// a method's result inside a list, an element of a list of positions.
 	rules_result_facts(walk, facts, name, value, context, words)
-	match value {
-		Expr::Index { base, .. } => {
-			let key = elements_key(walk.shape, base, words)
-			if key != null {
-				bounding_end_facts(walk, facts, name, key ?? "")
-			}
-		},
-		else => {},
+	let read_from = bounding_read_out_of(value, words)
+	if read_from != null {
+		let key = elements_key(walk.shape, read_from ?? value, words)
+		if key != null {
+			bounding_end_facts(walk, facts, name, key ?? "")
+		}
 	}
 	rules_element_facts(walk, facts, name, value, words)
 	if whole {
@@ -5052,6 +5064,38 @@ fn bounding_let(
 			),
 			else => {},
 		}
+	}
+}
+
+/// **What `value` is an element of**: `xs` of `xs[i]` and of a map's
+/// `m.get(k)`, through a `??` that leaves (ADR-306 D21, D24).
+fn bounding_read_out_of(value: ref Expr, words: ref winnow_grammar::InternerContext) -> ref Expr? {
+	return match value {
+		Expr::Index { base, .. } => base,
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if args.len() == 1 && words.resolve(method) == "get" {
+				return receiver
+			}
+			return null
+		},
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if bounding_leaves(fallback) {
+				return bounding_read_out_of(inner, words)
+			}
+			return null
+		},
+		else => null,
+	}
+}
+
+/// Whether evaluating `expr` leaves where it stands: `return`, `continue`,
+/// `break`.
+fn bounding_leaves(expr: ref Expr) -> bool {
+	return match expr {
+		Expr::Return(_, _) => true,
+		Expr::Continue(_) => true,
+		Expr::Break(_) => true,
+		else => false,
 	}
 }
 

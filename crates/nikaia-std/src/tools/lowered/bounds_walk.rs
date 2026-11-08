@@ -510,6 +510,7 @@ pub(crate) fn bounding_field_list(walk: &mut BoundsWalk, key: &str, value: &Expr
         },
         _ => { },
     }
+    if is_empty_map(value, words) { return; }
     let elements = elements_key(&walk.shape, value, words);
     if elements.is_some() {
         let bound = bounding_assumed(&walk, nikaia_std::index::or(elements.as_deref(), || ""));
@@ -630,6 +631,10 @@ pub(crate) fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsF
                 if into.holds(&got) { return Some(got); }
                 return Some(into);
             }
+            if args.len() == 1 && words.resolve(method) == "get" {
+                let key = match elements_key(&walk.shape, receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return bounding_assumed(&walk, &key);
+            }
         },
         Expr::Index { base, .. } => {
             let base = nikaia_std::boxed::open(base);
@@ -640,6 +645,7 @@ pub(crate) fn bounding_range(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsF
         Expr::Coalesce { value, fallback, .. } => {
             let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
             let held = match bounding_range(walk, value, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if bounding_leaves(fallback) { return Some(held); }
             let otherwise = match bounding_range(walk, fallback, facts, context, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let joined = held.join(&otherwise);
             if joined.is_bounded() { return Some(joined); }
@@ -2778,13 +2784,10 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
     let held = walk.arena.var(&bounding_element_of(&name));
     for fact in bounding_each(walk, value, held, &facts, context, program, words) { bounding_push(&walk, facts, fact); }
     rules_result_facts(walk, facts, &name, value, context, words);
-    match value {
-        Expr::Index { base, .. } => {
-            let base = nikaia_std::boxed::open(base);
-            let key = elements_key(&walk.shape, base, words);
-            if key.is_some() { bounding_end_facts(walk, facts, &name, nikaia_std::index::or(key.as_deref(), || "")); }
-        },
-        _ => { },
+    let read_from = bounding_read_out_of(value, words);
+    if read_from.is_some() {
+        let key = elements_key(&walk.shape, nikaia_std::index::or(read_from, || value.into()), words);
+        if key.is_some() { bounding_end_facts(walk, facts, &name, nikaia_std::index::or(key.as_deref(), || "")); }
     }
     rules_element_facts(walk, facts, &name, value, words);
     if whole {
@@ -2809,6 +2812,25 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
         }
     }
 }
+
+pub(crate) fn bounding_read_out_of<'r>(value: &'r Expr, words: &winnow_grammar::InternerContext) -> Option<&'r Expr> {
+    match value {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); Some(base) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if args.len() == 1 && words.resolve(method) == "get" { return Some(receiver); }
+            return None;
+        },
+        Expr::Coalesce { value: inner, fallback, .. } => {
+            let inner = nikaia_std::boxed::open(inner); let fallback = nikaia_std::boxed::open(fallback);
+            if bounding_leaves(fallback) { return bounding_read_out_of(inner, words); }
+            return None;
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn bounding_leaves(expr: &Expr) -> bool { matches!(expr, Expr::Return(_, _) | Expr::Continue(_) | Expr::Break(_)) }
 
 pub(crate) fn bounding_declared_whole(ty: Option<&Type>, words: &winnow_grammar::InternerContext) -> Option<bool> {
     let t = match ty { Some(__nikaia_value) => __nikaia_value, None => return None };

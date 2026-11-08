@@ -2435,7 +2435,7 @@ pub mod bounds_rules {
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]
-    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_adds, only_removes, key_root, root_name, is_unsigned, is_whole_number};
+    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_adds, only_removes, key_root, root_name, is_unsigned, is_whole_number, is_empty_map};
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]

@@ -197,7 +197,26 @@ pub(crate) fn read_let(name: &str, mutable: bool, ty: Option<&Type>, value: &Exp
         let n = literal_count(value);
         if n.is_some() { seen.shape.constants.insert(name.to_string(), nikaia_std::index::or(n, || 0)); }
     }
-    if is_list_literal(value) { seen.shape.roots.insert(name.to_string()); }
+    if is_list_literal(value) || is_empty_map(value, words) { seen.shape.roots.insert(name.to_string()); }
+}
+
+pub fn is_empty_map(expr: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if !args.is_empty() { return false; }
+            let last = match func {
+                Expr::Path(segments, _) => {
+                    if segments.is_empty() { return false; }
+                    words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string()
+                },
+                Expr::Variable(n, _) => { let n = *n; words.resolve(n).to_string() },
+                _ => return false,
+            };
+            last == "BTreeMap" || last == "HashMap"
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn read_alias(name: &str, value: &Expr, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {

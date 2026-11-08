@@ -357,8 +357,32 @@ fn read_let(
 			seen.shape.constants.insert(name.clone(), n ?? 0)
 		}
 	}
-	if is_list_literal(value) {
+	if is_list_literal(value) || is_empty_map(value, words) {
 		seen.shape.roots.insert(name.clone())
+	}
+}
+
+/// **A map made empty** (ADR-306 D24): `collections::BTreeMap()` or
+/// `HashMap()`, whose values the walk sees written as a list's.
+pub fn is_empty_map(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+	return match expr {
+		Expr::Call { func, args, .. } => {
+			if !args.is_empty() {
+				return false
+			}
+			let last = match func {
+				Expr::Path(segments, _) => {
+					if segments.is_empty() {
+						return false
+					}
+					words.resolve(segments[segments.len() - 1]).clone()
+				},
+				Expr::Variable(n, _) => words.resolve(n).clone(),
+				else => return false,
+			}
+			last == "BTreeMap" || last == "HashMap"
+		},
+		else => false,
 	}
 }
 
