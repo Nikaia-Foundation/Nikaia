@@ -75,7 +75,8 @@ pub(crate) fn emit_item_trait_method(world: &EmitWorld<'_, '_, '_, '_>, trait_na
 pub(crate) fn emit_item_lent_view(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> Option<Type> {
     if (*ty.code).is_some() || ty.is_slice { return None; }
     if ty.is_view { return Some(ty.clone()); }
-    if emit_text(world, ty.name) != "String" || !ty.generics.is_empty() || ty.is_nullable || ty.is_mut { return None; }
+    let text = emit_text(world, ty.name) == "String" && ty.generics.is_empty() && !ty.is_nullable && !ty.is_mut;
+    if !text && !hb_type_may_be_a_view(ty, world.words, &hb_plain_enums(world.items, world.words)) { return None; }
     let mut viewed = ty.clone();
     viewed.is_view = true;
     Some(viewed)
@@ -446,7 +447,7 @@ impl EmitState {
         for arg in method.args.iter() {
             let mut reference = if arg.mutable && !foreign { "&mut " } else { "" };
             let mut written: String = String::from("");
-            let lent_source = if !arg.mutable && nikaia_std::list::contains(&from_names, &emit_text(world, arg.name)) { emit_item_lent_view(world, &arg.ty) } else { None };
+            let lent_source = if !arg.mutable && !arg.keep && nikaia_std::list::contains(&from_names, &emit_text(world, arg.name)) { emit_item_lent_view(world, &arg.ty) } else { None };
             if lent_source.is_some() {
                 let source = nikaia_std::index::or(lent_source, || arg.ty.clone().into());
                 written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &source, &EmitLifetimes::Shared));

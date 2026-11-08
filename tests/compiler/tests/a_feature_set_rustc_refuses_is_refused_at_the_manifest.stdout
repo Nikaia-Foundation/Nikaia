@@ -1,0 +1,9 @@
+exit 1
+error: could not compile `nikaia_demo` (lib) due to 1 previous error
+error[NK1345]: The crate does not build with the core alone. rustc says: function `spare` is never used.
+  --> TMP/nikaia.toml:8:1
+   |
+ 8 | [features]
+   | ^^^^^^^^^^
+   |
+   = help: The items no root reaches are the core, and rustc refuses them before any feature is added: fix the core first.

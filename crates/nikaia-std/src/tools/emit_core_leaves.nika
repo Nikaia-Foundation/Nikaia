@@ -227,6 +227,14 @@ impl EmitState {
             Expr::Field { .. } => true,
             else => false,
         }
+        // **A name read again is lent** (#1324): `&*` reads the text an owned
+        // `String`, a view or a shared capture holds, and gives up nothing.
+        if self.facts.lent_concatenated.contains(node_key(side)) {
+            out.push("::core::convert::AsRef::<str>::as_ref(&*")
+            self.emit_expr(world, walk, out, host, side, depth, flow, scope)
+            out.push(")")
+            return
+        }
         if indexed {
             out.push("::core::convert::AsRef::<str>::as_ref(&")
             self.emit_expr(world, walk, out, host, side, depth, flow, scope)

@@ -213,6 +213,10 @@ impl CheckState {
         if resolve_call(world, f"{ty}::{member}") != null {
             return
         }
+        // **An integer type's limits** (Part I 2.2, #1325): `int::MAX` too.
+        if an_integer_limit(ty, member) {
+            return
+        }
         // **A type parameter is a type this compiler has not read either**, so
         // it fails open - except for the name a reader of Part II 10.3 writes.
         if self.type_parameters.contains_key(ty) {

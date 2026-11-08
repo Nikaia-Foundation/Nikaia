@@ -125,4 +125,10 @@ together with the specification section and an example test.
 * The checker has two text-view forms, `Named{"str", view:true}` and `Named{"String", view:true}` (the latter from `ref $T` with T=String, e.g. `.iter()` and `or_insert`), and both print as `ref String`. (issue-1316)
 * Do not merge the two text-view forms in `ty.nika` `substituted`: the `String`-slot form means `&String`/`&mut String` to the emitter, and writes through `or_insert` break; normalise in the one check that needs it. (issue-1316)
 * An NK1103 that says "is `ref String`, but the `let` declares `ref String`" is the two view forms meeting, not a tier question. (issue-1316)
+* When `commit.nika` refuses another agent's staged file, commit only yours with `git commit --only -F MSG -- FILES`, which leaves their index entry as it was. (issue-1375)
+* A test whose assert is refused (NK1300) does not build, so it cannot sit beside a `.stdout`: put the refused case in its own test with a `.stderr`. (issue-1375)
+* When a mass migration such as `print-throws` rewrites test programs, the `accepted_sweep.rs` allow-list hashes change. The sweep's failure log pairs each new refused hash with the old "no longer checked" one, so replace the old hash with the new one. (qa-task)
+* `commit.nika` refuses when another agent's file (even an unmerged `UU` one) is staged. `git commit -- PATH` commits only your path, and the report should say so under `Deviation:`. (qa-task)
+* the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
+* pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
 

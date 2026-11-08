@@ -1,0 +1,76 @@
+// `[features]` of a rust-library (ADR-393 D2-D3, D6, #1393): the package
+// `rust_library_features/demo` names roots, and the build derives the rest:
+// `#[cfg]` on each item a feature reaches (`any` for the helper two reach),
+// `show = ["tree"]` because `show` reaches all of `tree`'s roots, and `util`
+// optional, listed as `dep:util` by the one feature that uses it. The Rust
+// crate `user` takes `default-features = false` and `stream`. Last, a feature
+// whose root is the package itself takes every item.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn shown(text: String, from: String) throws {
+    let mut inside = false
+    for line in text.lines() {
+        if line.starts_with("[") { inside = line == from }
+        if inside && line.len() > 0 && !line.starts_with("nikaia-std") { println(f"  {line}") }
+    }
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let from = f"{repo}/tests/compiler/rust_library_features"
+    process::run("cp", ["-r", f"{from}/demo", f"{from}/util", f"{from}/user", tmp.clone()])
+    let cache = f"{repo}/target/nikaia-project-tests/rust-library-user"
+    let mut env: Vec[(String, String)] = []
+    env.push(("CARGO_TARGET_DIR", cache.clone()))
+    env.push(("CARGO_NET_OFFLINE", "true"))
+    let built = process::run(nikaia, ["build"]; dir: f"{tmp}/demo", env: env.clone())
+    println(built.stdout.trim().replace(tmp, "TMP"))
+    if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
+    let made = f"{tmp}/demo/target/rust-library/nikaia_demo"
+    let manifest = fs::read_to_string(f"{made}/Cargo.toml", fs::Root::Anywhere)
+    println("Cargo.toml:")
+    shown(manifest, "[dependencies]")
+    shown(manifest, "[features]")
+    println("src/lib.rs:")
+    let lib = fs::read_to_string(f"{made}/src/lib.rs", fs::Root::Anywhere)
+    // An item whose first line is an attribute shows its header too.
+    let mut attribute = false
+    for line in lib.lines() {
+        if attribute { println(f"    {line.split(" {").next() ?? ""}") }
+        attribute = false
+        if line.starts_with("#[cfg(") || line.starts_with("beside:") {
+            let head = line.split(" {").next() ?? ""
+            println(f"  {head}")
+            attribute = head.ends_with("]")
+        }
+    }
+    let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: env.clone())
+    println(ran.stdout.trim())
+    if ran.code != 0 { println(ran.stderr.trim()) }
+    // The package as a root: every `pub` item, so every other feature.
+    let toml = fs::read_to_string(f"{tmp}/demo/nikaia.toml", fs::Root::Anywhere)
+    let whole = toml.split("[features]").next() ?? ""
+    fs::write(f"{tmp}/demo/nikaia.toml", fs::Root::Anywhere, f"{whole}[features]\nwhole = [\"demo\"]\ntree = [\"demo::make\"]\n")
+    let again = process::run(nikaia, ["build"]; dir: f"{tmp}/demo", env: env.clone())
+    if again.code != 0 { println(again.stderr.trim().replace(tmp, "TMP")) }
+    println("with `whole = [\"demo\"]`:")
+    shown(fs::read_to_string(f"{made}/Cargo.toml", fs::Root::Anywhere), "[features]")
+    process::run("rm", ["-rf", tmp])
+}

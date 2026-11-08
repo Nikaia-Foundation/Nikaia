@@ -1082,6 +1082,7 @@ pub(crate) fn check_core_flow_arm<H: CheckHost>(state: &mut CheckState, world: &
     let mut owned_text: collections::BTreeSet<String> = collections::BTreeSet::new();
     if lent_parts { owned_text = check_core_flow_owned_texts(state, world, &arm.pattern, typed, &arm.body); }
     let frame = check_core_flow_frame(state, world, &arm.pattern, id_of(&arm.body) as i64, &parts, lent_parts, &owned_text);
+    for local in frame.iter() { state.declared_binding(local.id, span, &local.name); }
     if typed.is_a_view() || through_the_reference {
         for local in frame.iter() {
             let an_option = matches!(local.ty, Ty::Nullable(_));

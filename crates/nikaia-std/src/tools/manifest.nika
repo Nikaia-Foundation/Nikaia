@@ -185,8 +185,8 @@ fn choices(words: ref Array[String]) -> String {
 
 /// One value of `nikaia.toml`, in the plain words the `toml` reader gives it
 /// (MF). The adapter walks the document once, in the file's key order, and
-/// hands over the four sections this module reads (`package`, `dependencies`,
-/// `library`, `build`), their entries, and each key of an entry that is a
+/// hands over the five sections this module reads (`package`, `dependencies`,
+/// `library`, `build`, `features`), their entries, and each key of an entry that is a
 /// table. Nothing deeper: no reader looks further in.
 pub struct ManifestItem {
     /// The top-level table it is in.
@@ -253,6 +253,8 @@ pub struct ManifestFile {
     /// names, with the `pkg-config` name it is found by (Part III 13.4,
     /// [ADR-324](../../../docs/specification/adr/adr-324.md) D2, D3).
     pub libraries: collections::BTreeMap[String, String],
+    /// `[features]` (ADR-393 D2): read only for a rust-library build.
+    pub features: Vec[ManifestFeature],
     /// What this manifest carries that the compiler no longer reads, and where
     /// it went. Printed once per build rather than returned as an error:
     /// failing a manifest somebody already wrote to the specification would
@@ -265,11 +267,49 @@ pub struct ManifestFile {
 
 /// The manifest of no project: every section empty.
 pub fn manifest_empty() -> ManifestFile {
-    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), notes: [], root: null }
+    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], notes: [], root: null }
 }
 
-/// `[package]`, `[dependencies]`, `[build]` and the `[build.<target>]`
-/// codegen tables.
+/// **One entry of `[features]`** (ADR-393 D2, Part III 13.3): a feature and
+/// the roots it lists, or `default` and the features it lists, as written.
+/// What each root names is decided where the crate is written
+/// (`tools/project_features.nika`).
+pub struct ManifestFeature {
+    pub name: String,
+    /// The list's texts, in order.
+    pub entries: Vec[String],
+    /// Whether the value was a list of texts: anything else is `NK1347`.
+    pub listed: bool,
+}
+
+/// `[features]`, in the file's order. A list's texts are read off the text
+/// TOML writes of it, `["a", "b::c"]`; a value that is no such list keeps no
+/// entries and is marked unlisted.
+fn manifest_features(items: ref Vec[ManifestItem]) -> Vec[ManifestFeature] {
+    let mut out: Vec[ManifestFeature] = []
+    for item in items {
+        if item.section != "features" || item.name.len() == 0 || item.key.len() > 0 {
+            continue
+        }
+        let text = item.text.trim()
+        let listed = text.starts_with("[") && text.ends_with("]") && !text.contains("\\")
+        let mut entries: Vec[String] = []
+        if listed {
+            let mut at = 0
+            for piece in text.split("\"") {
+                if at % 2 == 1 {
+                    entries.push(piece.clone())
+                }
+                at += 1
+            }
+        }
+        out.push(ManifestFeature { name: item.name.clone(), entries: entries, listed: listed })
+    }
+    return out
+}
+
+/// `[package]`, `[dependencies]`, `[build]`, the `[build.<target>]`
+/// codegen tables and `[features]`.
 pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     let mut manifest = manifest_empty()
     for item in items {
@@ -281,6 +321,7 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     manifest.version = manifest_word_at(items, "package", "version", "") ?? "0.0.0"
     manifest.dependencies = manifest_dependencies(items)
     manifest.libraries = manifest_libraries(items)
+    manifest.features = manifest_features(items)
 
     for value in items {
         if value.section != "build" || value.name.len() == 0 || value.key.len() > 0 {

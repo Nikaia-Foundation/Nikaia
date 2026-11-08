@@ -408,7 +408,7 @@ impl EmitState {
                         null => world.library.types.contains_key(named),
                         else => true,
                     }
-                    out.push(if whole { "_" } else { named.clone() })
+                    out.push(if whole { "_" } else { integer_limit_below(named) })
                 }
             },
             // **The parts are patterns**, so this recurses (ADR-291 D10). An empty

@@ -1,0 +1,29 @@
+// A root of `[features]` names the package or one of its `pub` items
+// (ADR-393 D2, #1393): a misspelt item is `NK1344` with the closest `pub`
+// path, and an item that is not `pub` is `NK1344` too.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// Builds a package with `[features]` `table`, and says how it ended.
+fn built(nikaia: String, build: String, table: String, source: String) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[build]\n{build}\n[features]\n{table}")
+    fs::write(f"{tmp}/src/{source}", fs::Root::Anywhere, "pub fn make(v: i64) -> i64 sync {\n    return helper(v)\n}\n\nfn helper(v: i64) -> i64 sync {\n    return v + 1\n}\n")
+    let out = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    println(out.stderr.trim().replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    built(nikaia.clone(), "artifact = \"rust-library\"\n", "tree = [\"demo::mak\"]\n", "demo.nika")
+    built(nikaia, "artifact = \"rust-library\"\n", "tree = [\"demo::helper\"]\n", "demo.nika")
+}

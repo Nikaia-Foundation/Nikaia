@@ -15,3 +15,38 @@ error 4:10
 error 3:10
 error 2:1
 str(a %YAML 1.2) | str(b)
+# %TAG !e! tag:example.com,2000:\n%TAG !! tag:example.com,2000:app/\n---\n- !e!foo "bar"\n- !!str x\n- !local y\n- !<tag:v> z\n- ! w\n
++STR
++DOC ---
++SEQ
+=VAL <tag:example.com,2000:foo> "bar
+=VAL <tag:example.com,2000:app/str> :x
+=VAL <!local> :y
+=VAL <tag:v> :z
+=VAL <!> :w
+-SEQ
+-DOC
+-STR
+# %TAG ! tag:example.com,2000:local/\n--- !local [!!str x]\n--- !local [!!str x]\n
++STR
++DOC ---
++SEQ [] <tag:example.com,2000:local/local>
+=VAL <tag:yaml.org,2002:str> :x
+-SEQ
+-DOC
++DOC ---
++SEQ [] <!local>
+=VAL <tag:yaml.org,2002:str> :x
+-SEQ
+-DOC
+-STR
+# %TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 a\n- !!x%2Fy b\n- !l%C3%A9 c\n
++STR
++DOC ---
++SEQ
+=VAL <tag:example.com,2000:app/tag!> :a
+=VAL <tag:yaml.org,2002:x/y> :b
+=VAL <!lé> :c
+-SEQ
+-DOC
+-STR

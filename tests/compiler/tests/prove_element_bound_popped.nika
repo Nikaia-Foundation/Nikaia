@@ -1,0 +1,22 @@
+/// A found bound on a list's values against another list's length holds
+/// only while that list does not shrink (ADR-306 D21, #1397): `eval` pops
+/// `values` before reading it, so `values[atom]` keeps its check though the
+/// call proves the precondition.
+fn eval(atoms: ref Vec[i64], mut values: Vec[bool]) -> bool {
+	values.pop()
+	let mut k = 0
+	while k < atoms.len() {
+		let atom = atoms[k]
+		if values[atom] {
+			return true
+		}
+		k += 1
+	}
+	return false
+}
+
+fn main() throws {
+	let atoms = [0, 2, 1]
+	let mut values = [false, false, true, true]
+	println(f"{eval(atoms, values)}")
+}

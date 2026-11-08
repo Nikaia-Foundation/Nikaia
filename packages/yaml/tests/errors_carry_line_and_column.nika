@@ -26,6 +26,10 @@ fn main() throws {
 	fails("k: \"\\U00110000\"")
 	fails("k: \"x \\x4G\"")
 	fails("k: \"\\u12\"")
+	// a named tag handle no %TAG directive of its document declares (YAML
+	// 1.2.2 6.8.2.1)
+	fails("a: 1\nk: !e!foo x\n")
+	fails("%TAG !e! tag:a:\n--- !e!x 1\n--- [b, !e!y 2]\n")
 	// a byte that is not UTF-8
 	let mut bad: Vec[u8] = []
 	for b in "k: é".bytes() {

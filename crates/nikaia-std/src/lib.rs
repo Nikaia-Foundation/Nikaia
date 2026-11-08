@@ -322,6 +322,8 @@ pub mod runtime {
     clippy::let_unit_value,
     clippy::identity_op,
     clippy::unnecessary_cast,
+    clippy::vec_init_then_push,
+    clippy::manual_split_once,
     unreachable_patterns
 )]
 /// **The compiler's Nikaia** (ADR-294), behind the `compiler` feature (#723):
@@ -339,10 +341,11 @@ pub mod tools {
     include!("tools/lowered.rs");
 
     /// The text tiers' conversions, which a lowered `String` local reassigned
-    /// from a view calls (`rest = rest.strip_prefix(..).into_either()`): a
+    /// from a view calls (`rest = rest.strip_prefix(..).into_either()`), and a
+    /// list of texts collected from views (`.either_items()`, #1396): a
     /// program gets them from its own prelude, a tool has none (#563).
     #[allow(unused_imports)]
-    use crate::either_text::{IntoEither, IntoEitherMaybe};
+    use crate::either_text::{EitherItems, EitherPairs, IntoEither, IntoEitherMaybe};
 
     /// `scalar`, which the lowered files write for one character (ADR-320).
     #[allow(unused_imports)]

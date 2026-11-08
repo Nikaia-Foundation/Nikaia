@@ -1,0 +1,31 @@
+// #1380: an owned parameter of a type with several view lifetimes, handed
+// back whole or by a matched payload, names one lifetime for them all;
+// `'_` cannot say which of them the result is of.
+
+struct N { raw: String, key: String, value: V }
+
+enum V { Leaf, Map(Vec[N]) }
+
+fn make(s: String, t: String) -> N {
+    return N { raw: s.trim(), key: t.trim(), value: V::Map([N { raw: t.trim(), key: s.trim(), value: V::Leaf }]) }
+}
+
+fn kids(m: N) -> Vec[N] sync {
+    return match m.value {
+        V::Map(es) => es
+        else => []
+    }
+}
+
+fn back(m: N) -> N sync {
+    return m
+}
+
+fn main() throws {
+    let s = "  hi  "
+    let t = " there "
+    let k = kids(make(s, t))
+    println(k.len())
+    println(k[0].raw)
+    println(back(make(s, t)).key)
+}

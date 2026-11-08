@@ -1,0 +1,284 @@
+// crates/nikaia-std/src/tools/check_declared.nika
+//
+// **Where a name is declared** (#1396, "go to definition" in `nikaia lsp`,
+// #103). While it resolves a name, the checker notes what the use names
+// (`CheckFacts::declared`) and where each local was bound
+// (`CheckFacts::bound_at`); nothing in a build reads either. Asked for a
+// place in a file, `declared_site` takes the innermost use there and finds the
+// declaration it names, in that file or in one beside it: a local's binding, a
+// function's or a method's item, a field, a type, a variant. Only the item is
+// looked up by the name the checker resolved; no scope is decided here.
+
+/// **What a use names**, as the checker resolved it.
+pub enum CheckDeclared {
+    /// A local or a parameter, by its binding (`CheckLocal::id`).
+    Binding(i64),
+    /// A function or a method, by the key the ledger records it under
+    /// (`helper`, `json::read`, `Holder::put`).
+    Function(String),
+    /// A field: the struct, as the checker names its type, and the field.
+    Field(String, String),
+    /// A struct or an enum.
+    Type(String),
+    /// A variant: the enum and the variant.
+    Variant(String, String),
+}
+
+impl CheckState {
+    /// Where binding `id` of `name` was written.
+    pub fn declared_binding(ref mut self, id: i64, span: ref Span, name: ref String) sync {
+        self.facts.bound_at.insert(id, (span.clone(), name.clone()))
+    }
+
+    /// What the use `expr` names.
+    pub fn declared_use(ref mut self, expr: ref Expr, what: CheckDeclared) sync {
+        self.facts.declared.insert(node_key(expr), what)
+    }
+
+    /// **What a call's callee names**: a local holding code, a variant, a
+    /// function or a method (a constructor too), or a struct written like a
+    /// call.
+    pub fn declared_callee(ref mut self, world: ref CheckWorld, func: ref Expr, name: ref String) sync {
+        let bound: i64? = match func {
+            Expr::Variable(_, _) => self.binding_id(name),
+            else => null,
+        }
+        if bound != null {
+            self.declared_use(func, CheckDeclared::Binding(bound ?? -1))
+            return
+        }
+        if self.declared_a_variant(func, name) {
+            return
+        }
+        match resolve_call(world, name) {
+            null => {},
+            resolved => {
+                self.declared_use(func, CheckDeclared::Function(resolved.key.clone()))
+                return
+            },
+        }
+        if self.structs.contains_key(name) {
+            self.declared_use(func, CheckDeclared::Type(name.clone()))
+        }
+    }
+
+    /// **Where a callee stands**, where the grammar gave it no span: from
+    /// the start of its call, as wide as the name written.
+    pub fn declared_callee_at(ref mut self, world: ref CheckWorld, call: ref Expr, func: ref Expr) sync {
+        let node = node_key(func)
+        if world.here.spans[node as u32] != null {
+            return
+        }
+        let at = world.here.spans[node_key(call) as u32] ?? return
+        let written: String = match func {
+            Expr::Variable(word, _) => f"{world.words.resolve(word)}",
+            Expr::Path(segments, _) => check_core_call_joined(world, segments),
+            else => return,
+        }
+        self.facts.declared_at.insert(node, Span { start: at.start, end: at.start + written.len() as u32 })
+    }
+
+    /// **A path written as a value**: a variant, or a function or a method
+    /// handed over.
+    pub fn declared_path(ref mut self, world: ref CheckWorld, expr: ref Expr, name: ref String) sync {
+        if self.declared_a_variant(expr, name) {
+            return
+        }
+        match resolve_call(world, name) {
+            null => {},
+            resolved => self.declared_use(expr, CheckDeclared::Function(resolved.key.clone())),
+        }
+    }
+
+    /// `Enum::Variant` as the variant it is, where it is one.
+    pub fn declared_a_variant(ref mut self, expr: ref Expr, name: ref String) -> bool sync {
+        let at = name.rfind("::") ?? return false
+        let owner = name[0..<at].clone()
+        let member = name[at + 2..<name.len()].clone()
+        if !self.is_variant(owner, member) {
+            return false
+        }
+        self.declared_use(expr, CheckDeclared::Variant(owner, member))
+        return true
+    }
+}
+
+/// **The declaration the use at byte `offset` of `units[here_at]` names**
+/// (#1396): the file it is in, by its place in `units`, the span of its
+/// binding or item, and the name declared there. The use is the innermost one recorded whose span holds
+/// the offset, its end included (a cursor right after a name). Nothing where
+/// no recorded use is there, or what it names is declared in no unit (a
+/// function of `std`).
+pub fn declared_site(units: ref Vec[ParsedView], here_at: i64, facts: ref CheckFacts, offset: i64) -> (i64, Span, String)? {
+    if here_at < 0 || here_at >= units.len() as i64 {
+        return null
+    }
+    let here = units[here_at]
+    let mut best: CheckDeclared? = null
+    let mut width = -1
+    for (node, what) in facts.declared {
+        let span = facts.declared_at[node] ?? here.spans[node as u32] ?? continue
+        let start = span.start as i64
+        let end = span.end as i64
+        if start <= offset && offset <= end && (width < 0 || end - start < width) {
+            width = end - start
+            best = what.clone()
+        }
+    }
+    let found = best ?? return null
+    let package = site_package_of(here)
+    return match found {
+        CheckDeclared::Binding(id) => {
+            let at = facts.bound_at[id] ?? return null
+            (here_at, at.0.clone(), at.1.clone())
+        },
+        CheckDeclared::Function(key) => {
+            let (owner, parts) = site_split(units, package, key)
+            let last = parts.len() - 1
+            let place: (i64, Span)? = if parts.len() == 1 {
+                site_function(units, owner, parts[0])
+            } else if parts.len() == 2 {
+                site_member(units, owner, parts[0], parts[1], 0)
+            } else {
+                null
+            }
+            site_named(place, parts[last])
+        },
+        CheckDeclared::Field(ty, field) => site_named(site_typed(units, package, ty, field, 1), field),
+        CheckDeclared::Type(ty) => {
+            let words: Vec[String] = ty.split("::").map(fn(part) { part.to_string() }).collect()
+            site_named(site_typed(units, package, ty, "", 2), words[words.len() - 1])
+        },
+        CheckDeclared::Variant(ty, variant) => site_named(site_typed(units, package, ty, variant, 3), variant),
+    }
+}
+
+/// A place found, with the name declared there.
+fn site_named(place: (i64, Span)?, name: ref String) -> (i64, Span, String)? {
+    let found = place ?? return null
+    return (found.0, found.1.clone(), name.clone())
+}
+
+/// The package a unit is a file of, `""` for the program's own.
+fn site_package_of(unit: ref ParsedView) -> String {
+    return match unit.package {
+        null => "",
+        named => named.clone(),
+    }
+}
+
+/// **The package a qualified name starts with, and the rest of it**:
+/// `json::read` is `json`'s `read` where a unit of `json` is among `units`;
+/// any other name is `package`'s, whole.
+fn site_split(units: ref Vec[ParsedView], package: ref String, name: ref String) -> (String, Vec[String]) {
+    let parts: Vec[String] = name.split("::").map(fn(part) { part.to_string() }).collect()
+    if parts.len() >= 2 {
+        let head = parts[0].clone()
+        if units.iter().any(fn(unit) { site_package_of(unit) == head }) {
+            let rest: Vec[String] = parts.iter().skip(1).map(fn(part) { part.clone() }).collect()
+            return (head, rest)
+        }
+    }
+    return (package.clone(), parts)
+}
+
+/// A type's member by the checker's name of the type: `what` is 1 for a
+/// field, 2 for the type itself, 3 for a variant.
+fn site_typed(units: ref Vec[ParsedView], package: ref String, ty: ref String, member: ref String, what: i64) -> (i64, Span)? {
+    let (owner, parts) = site_split(units, package, ty)
+    if parts.len() != 1 {
+        return null
+    }
+    return site_member(units, owner, parts[0], member, what)
+}
+
+/// **A function declared at the top of a file of `package`.**
+fn site_function(units: ref Vec[ParsedView], package: ref String, name: ref String) -> (i64, Span)? {
+    let mut at = -1
+    for unit in units {
+        at += 1
+        if site_package_of(unit) != package {
+            continue
+        }
+        for item in unit.items {
+            match item.node {
+                Item::Fn { name: written, .. } => {
+                    let sym = written ?? continue
+                    if unit.text(sym) == name {
+                        return (at, item.span.clone())
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return null
+}
+
+/// **What the type `ty` of `package` declares**: with `what` 0 its method
+/// `member` (`new` is also the anonymous constructor), 1 its field, 2 the
+/// type itself, 3 its variant.
+fn site_member(units: ref Vec[ParsedView], package: ref String, ty: ref String, member: ref String, what: i64) -> (i64, Span)? {
+    let mut at = -1
+    for unit in units {
+        at += 1
+        if site_package_of(unit) != package {
+            continue
+        }
+        for item in unit.items {
+            match item.node {
+                Item::Impl { target, methods, .. } => {
+                    if what != 0 || unit.text(target.name) != ty {
+                        continue
+                    }
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { name: written, .. } => {
+                                let found = match written {
+                                    null => member == "new",
+                                    sym => unit.text(sym) == member,
+                                }
+                                if found {
+                                    return (at, method.span.clone())
+                                }
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                Item::Struct { name, fields, .. } => {
+                    if unit.text(name) != ty {
+                        continue
+                    }
+                    if what == 2 {
+                        return (at, item.span.clone())
+                    }
+                    if what == 1 {
+                        for field in fields {
+                            if unit.text(field.name) == member {
+                                return (at, field.span.clone())
+                            }
+                        }
+                    }
+                },
+                Item::Enum { name, variants, .. } => {
+                    if unit.text(name) != ty {
+                        continue
+                    }
+                    if what == 2 {
+                        return (at, item.span.clone())
+                    }
+                    if what == 3 {
+                        for variant in variants {
+                            if unit.text(variant.name) == member {
+                                return (at, variant.span.clone())
+                            }
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return null
+}

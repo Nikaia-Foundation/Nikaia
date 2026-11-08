@@ -287,7 +287,8 @@ impl EmitState {
                         let loan = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view || self.emit_fn_lends(world, &key, at + recv);
                         let mut inside = false;
                         for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) { inside = true; } }
-                        if receiver.is_some() || lowered_views > 1 || has_kept || loan && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && (self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || inside) { source_at = Some(at); }
+                        let owned = !loan && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty);
+                        if receiver.is_some() || lowered_views > 1 || has_kept || owned || loan && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && (self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || inside) { source_at = Some(at); }
                     }
                 }
                 let mut several_at: Vec<i64> = vec![];

@@ -928,7 +928,10 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         state.in_parallel = Some(nikaia_std::index::or(state.in_parallel, || depth.into()));
         state.scoped_task = false;
     }
-    if key == "task::Scope::spawn" { check_crossings_a_task_of_a_scope(state, args); }
+    if key == "task::Scope::spawn" {
+        check_crossings_a_task_of_a_scope(state, args);
+        for arg in args.iter() { state.a_lambda_hands_back_nothing(id_of(arg) as i64, None); }
+    }
     let items: Option<i64> = state.open_items_of(world, receiver);
     let outer_params = state.flow.open_params.to_owned();
     state.flow.open_params = state.open_walk_params(world, contract, args, items);
@@ -1022,6 +1025,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
     check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     let substituted = substitute(&result, &bound);
+    state.flow.text_slot = views_text_slots(&result, &bound, true);
+    state.flow.text_walk = views_text_slots(&result, &bound, false);
     let shaped = shape_through(contract, on, &found, substituted);
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
     state.stamped_through(contract, &found, paused)

@@ -1,0 +1,28 @@
+// `int` names its limits like the fixed widths (Part I 2.2, #1325):
+// `int::MIN` and `int::MAX` are values of `int`, an `i64`, in an
+// expression, an argument, a field, a comparison and a pattern.
+struct Box {
+    n: int,
+}
+
+fn take(n: int) -> int {
+    return n
+}
+
+fn main() throws {
+    println(int::MAX)
+    println(int::MIN)
+    let wide: i64 = int::MAX
+    println(wide == i64::MAX)
+    println(take(int::MIN))
+    let b = Box { n: int::MAX }
+    println(b.n)
+    let x: int = int::MAX
+    let s = match x {
+        int::MAX => "max",
+        else => "other",
+    }
+    println(s)
+    println(5 < int::MAX)
+    println(f"{int::MIN} {int::MAX}")
+}

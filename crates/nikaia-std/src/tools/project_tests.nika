@@ -571,17 +571,18 @@ pub trait ProjectTestsProgramHost {
     /// none.
     fn package_name(ref self, root: ref fs::Path) -> String? sync throws
     /// This compiler's `VERB --user-parallelism SETTING --project PROJECT`,
-    /// with `own` as the test's directory and `stdin` on its standard input
-    /// (none where it is empty); a `build` keeps Cargo quiet.
-    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan sync throws
+    /// run in `dir`, with `own` as the test's directory (where `fs::scratch`
+    /// makes its directories) and `stdin` on its standard input (none where it
+    /// is empty); a `build` keeps Cargo quiet.
+    fn compiler(ref self, verb: ref String, setting: ref String, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan sync throws
     /// This compiler's `check ARGS ENTRY` (`--bounds --optimization LEVEL`,
     /// `--asserts`): what it printed.
     fn explained(ref self, args: ref Vec[String], entry: ref fs::Path, own: ref fs::Path) -> Bytes sync throws
     /// The program the build of `project` made, run directly where the build
-    /// puts it (`project_settings_own_copy`'s place, with no variant); nothing
-    /// where it is not there. `stdin` goes to its standard input, none where it
-    /// is empty.
-    fn built(ref self, project: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan? sync throws
+    /// puts it (`project_settings_own_copy`'s place, with no variant), in
+    /// `dir`, with `own` as the test's directory; nothing where it is not
+    /// there. `stdin` goes to its standard input, none where it is empty.
+    fn built(ref self, project: ref fs::Path, dir: ref fs::Path, own: ref fs::Path, stdin: ref Bytes) -> ProjectTestsRan? sync throws
 }
 
 /// Remove everything in `dir` but the entry named `keep`; a `dir` that cannot
@@ -666,15 +667,18 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     if program.asserts != null {
         asserts = project_tests_relocated(host.explained(["--asserts"], entry, own), entry, written, root)
     }
-    let built = host.compiler("build", setting, project, own, Bytes([]))
+    let built = host.compiler("build", setting, project, own, own, Bytes([]))
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
         return project_tests_bounds_outcome(program, refused, off, on, asserts)
     }
-    // Where the program is not where it is expected, `nikaia run` finds it.
-    let ran = match host.built(project, own, program.stdin) {
+    // **The program runs in the package's directory** (ADR-269 D22, #1398),
+    // as a `test` block does, so it reads the package's files by relative
+    // name; what it writes goes under `fs::scratch()`, inside `own`. Where
+    // the program is not where it is expected, `nikaia run` finds it.
+    let ran = match host.built(project, root, own, program.stdin) {
         null => {
-            let out = host.compiler("run", setting, project, own, program.stdin)
+            let out = host.compiler("run", setting, project, root, own, program.stdin)
             let said = out.stderr.clone()
             (out, said)
         }

@@ -1,0 +1,16 @@
+exit 1
+error[NK1344]: The root `demo::mak` of the feature `tree` names nothing: a root is the package `demo`, standing for all its `pub` items, or one `pub` item written `demo::<name>`.
+  --> TMP/nikaia.toml:9:9
+   |
+ 9 | tree = ["demo::mak"]
+   |         ^^^^^^^^^^^
+   |
+   = help: The closest `pub` path is `demo::make`.
+exit 1
+error[NK1344]: The root `demo::helper` of the feature `tree` is not `pub`: a Rust user can take only what the package offers.
+  --> TMP/nikaia.toml:9:9
+   |
+ 9 | tree = ["demo::helper"]
+   |         ^^^^^^^^^^^^^^
+   |
+   = help: Make `helper` `pub`, or name a `pub` item that uses it.

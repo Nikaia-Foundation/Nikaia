@@ -1,0 +1,7 @@
+asserts in tests/prove_loop_monotone_closed_form.nika: 5 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 5 (proved 2, through a loop 2, preconditions proved at every call 3); derived from the callers 1
+  tests/prove_loop_monotone_closed_form.nika:15  assert(lo <= i)  proved through the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && i <= j`, found by closed forms and octagons and checked by three queries
+  tests/prove_loop_monotone_closed_form.nika:16  assert(i <= hi)  proved through the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && i <= j`, found by closed forms and octagons and checked by three queries
+  tests/prove_loop_monotone_closed_form.nika:6  assert(0 <= lo)  precondition of `pick`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/prove_loop_monotone_closed_form.nika:7  assert(lo <= hi)  precondition of `pick`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/prove_loop_monotone_closed_form.nika:8  assert(hi < a.len())  precondition of `pick`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/prove_loop_monotone_closed_form.nika  derived  pick: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 22

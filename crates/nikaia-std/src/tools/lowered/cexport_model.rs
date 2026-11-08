@@ -639,6 +639,15 @@ pub fn cx_entries_in(words: &winnow_grammar::InternerContext, items: &[Spanned<I
     Ok(())
 }
 
+pub fn cx_entries_bound(found: &[CxEntry], kept: &[String]) -> Vec<CxEntry> {
+    found.iter().filter(|&entry| {
+        kept.contains(&nikaia_std::index::or(match entry.owner.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || entry.name.to_string().into()))
+    }).map(|entry| { entry.clone() }).collect::<Vec<_>>()
+}
+
 pub(crate) fn cx_take(words: &winnow_grammar::InternerContext, owner: Option<String>, item: &Item, first: bool, out: &mut Vec<CxEntry>) -> Result<(), nikaia_std::error::Thrown<CxRefused>> {
     match item {
         Item::Fn { name, receiver, args, ret_type, is_extern, .. } => {

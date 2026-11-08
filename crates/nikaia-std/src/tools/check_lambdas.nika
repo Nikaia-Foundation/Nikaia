@@ -62,6 +62,16 @@ fn kept_result_spelling(ty: ref Ty) -> String? sync {
 }
 
 impl CheckState {
+    /// **Code that hands back nothing drops its body's value** (#1321): a
+    /// function type without `-> R`, as a named function without a result
+    /// type does, so `s.spawn fn { 1 }` runs its body and hands back
+    /// nothing.
+    pub fn a_lambda_hands_back_nothing(ref mut self, id: i64, result: ref Ty?) sync {
+        if result == null {
+            self.facts.valueless_lambdas.insert(id)
+        }
+    }
+
     /// **A pausing kept lambda's integer result is recorded** (#1029): its
     /// boxed future is cast to `BoxedIn<'_, i64>`, not `<'_, _>`, or each bare
     /// literal it hands back is `rustc`'s `i32`. One that may fail keeps `_`.

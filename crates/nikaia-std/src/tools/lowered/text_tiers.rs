@@ -5763,14 +5763,14 @@ pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, 
             let trait_name = *trait_name;
             if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted, views, false); } } else {
                 let owner = words.resolve(target.name).to_string();
-                for method in methods.iter_mut() { hb_trait_from(&mut (*method).node, words, &owner, made); }
+                for method in methods.iter_mut() { hb_trait_from(&mut (*method).node, words, plain, &owner, made); }
             }
         },
         _ => { },
     }
 }
 
-pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerContext, owner: &str, made: &mut collections::BTreeSet<String>) {
+pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, owner: &str, made: &mut collections::BTreeSet<String>) {
     match item {
         Item::Fn { name, args, ret_type, is_extern, ret_from, .. } => {
             let is_extern = *is_extern; let name = *name;
@@ -5783,7 +5783,7 @@ pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerCon
                 if named && !(*arg).keep && !(*arg).mutable && hb_plain_text(&(*arg).ty, words) {
                     hb_set(&mut (*arg).ty);
                     made.insert(format!("param {} {}", key, at));
-                }
+                } else if named && !(*arg).keep && !(*arg).mutable && !(*arg).ty.is_view && hb_type_may_be_a_view(&(*arg).ty, words, plain) { hb_set(&mut (*arg).ty); }
                 at += 1;
             }
             let text_result = match ret_type {
@@ -5793,7 +5793,7 @@ pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerCon
             if text_result {
                 hb_set_maybe(&mut *ret_type);
                 made.insert(format!("result {}", key));
-            }
+            } else if hb_result_may_be_a_view((ret_type).as_ref(), words, plain) { hb_set_maybe(&mut *ret_type); }
         },
         _ => { },
     }
@@ -5862,7 +5862,7 @@ pub(crate) fn hb_result_may_be_a_view(ty: Option<&Type>, words: &winnow_grammar:
     !t.is_view && hb_type_may_be_a_view(t, words, plain)
 }
 
-pub(crate) fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
+pub fn hb_type_may_be_a_view(t: &Type, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || (*t.code).is_some() || t.count.is_some() || t.either || t.lasting { return false; }
     let name = words.resolve(t.name);
     if plain.contains(name) { return false; }

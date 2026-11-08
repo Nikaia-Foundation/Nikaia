@@ -26,6 +26,13 @@ pub(crate) fn check_reference_a_library_text_view(world: &CheckWorld<'_, '_, '_,
     !world.own.functions.contains_key(&callee) && world.library.functions.contains_key(&callee)
 }
 
+pub(crate) fn check_reference_a_plain_text_view(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == TEXT_VIEW },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_reference_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
 pub(crate) fn check_reference_nullable_view(ty: &Ty) -> bool {
@@ -81,6 +88,19 @@ impl CheckState {
                 let name = world.words.resolve(symbol).to_string();
                 let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 self.flow.mut_view_bindings.contains(&found.id)
+            },
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_text_slot_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+        match expr {
+            Expr::Variable(symbol, _) => {
+                let symbol = *symbol;
+                let name = world.words.resolve(symbol).to_string();
+                let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                self.flow.text_slot_bindings.contains(&found.id)
             },
             _ => false,
         }
@@ -192,7 +212,7 @@ impl CheckState {
         } else {
             fits = found.fits(want) || self.fits_through_deref(world, found, want);
             if !fits && wrote_a_reference { for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { fits = true; } } }
-            if !fits && !wrote_a_reference && found.is_a_view() {
+            if !fits && !wrote_a_reference && found.is_a_view() && !check_reference_a_plain_text_view(found) {
                 let owned = unviewed_type(found);
                 if owned.fits(want) || self.fits_through_deref(world, &owned, want) {
                     already_a_view = true;

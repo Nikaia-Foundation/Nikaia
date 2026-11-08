@@ -21,12 +21,16 @@ use std::collections
 
 /// **One claim over a function's parameters**: `left <= right`, or `<`
 /// where `strict`; an empty `left` is `0`, and `right` stands for its length
-/// where `length`.
+/// where `length`. Where `each` (ADR-306 D21, #1397), a side that is not
+/// a length names a list, a parameter or a path of fields from one, and
+/// stands for every value it holds: `0 <= atoms[..]`, `atoms[..] <
+/// values.len()`.
 pub struct DerivedClaim {
 	pub left: String,
 	pub strict: bool,
 	pub right: String,
 	pub length: bool,
+	pub each: bool,
 }
 
 /// **A private function its callers may bound**: its parameters, the
@@ -110,12 +114,12 @@ pub fn derived_of(
 			Item::Impl { methods, .. } => {
 				for method in methods {
 					match method.node {
-						Item::Fn { config, body, .. } => called.push(derived_body(
-							config,
-							body,
-							words,
-							everywhere,
-						)),
+						Item::Fn { name, config, body, .. } => {
+							called.push(derived_body(config, body, words, everywhere))
+							let named = name ?? continue
+							let text = words.resolve(named).clone()
+							defined.insert(text.clone(), (defined[text] ?? 0) + 1)
+						},
 						else => called.push(collections::BTreeSet()),
 					}
 				}
@@ -141,51 +145,77 @@ pub fn derived_of(
 	let mut position = 0
 	for item in program.items {
 		match item.node {
-			Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
-				let at = position
+			Item::Fn { .. } => {
+				derived_candidate(derived, item.node, position, false, defined, everywhere, words)
 				position += 1
-				let named = name ?? continue
-				let text = words.resolve(named).clone()
-				if is_public
-					|| is_extern
-					|| receiver != null
-					|| spread != null
-					|| !config.is_empty()
-					|| args.is_empty() {
-						continue
-					}
-				if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
-					continue
-				}
-				let sites = everywhere.calls[text] ?? continue
-				let claims = derived_claims(args, body, words)
-				if sites.is_empty() || claims.is_empty() {
-					continue
-				}
-				let mut params: Vec[String] = []
-				for arg in args {
-					params.push(words.resolve(arg.name).clone())
-				}
-				derived.functions.insert(
-					text.clone(),
-					DerivedFunction {
-						name: text.clone(),
-						key: args[0].span.start as i64,
-						position: at,
-						params: params,
-						claims: claims,
-						sites: sites.clone(),
-					},
-				)
 			},
-			Item::Impl { methods, .. } => {
-				position += methods.len()
+			Item::Impl { trait_name, methods, .. } => {
+				for method in methods {
+					// A trait's method is called wherever the trait is.
+					if trait_name == null {
+						derived_candidate(derived, method.node, position, true, defined, everywhere, words)
+					}
+					position += 1
+				}
 			},
 			else => {},
 		}
 	}
 	derived.order = derived_callers_first(derived, called)
 	return derived
+}
+
+/// **`item` as a candidate**, at `position` among the bodies: a private
+/// free function, or where `method` a private method on `self` of an
+/// inherent `impl`, defined once, named nowhere but as a callee, called, and
+/// with claims its body could use.
+fn derived_candidate(
+	mut derived: Derived,
+	item: ref Item,
+	position: i64,
+	method: bool,
+	defined: ref collections::BTreeMap[String, i64],
+	everywhere: ref DerivedScan,
+	words: ref winnow_grammar::InternerContext,
+) {
+	match item {
+		Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
+			let named = name ?? return
+			let text = words.resolve(named).clone()
+			if is_public
+				|| is_extern
+				|| (receiver != null) != method
+				|| spread != null
+				|| !config.is_empty()
+				|| args.is_empty() {
+					return
+				}
+			if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
+				return
+			}
+			let sites = everywhere.calls[text] ?? return
+			let claims = derived_claims(args, body, method, words)
+			if sites.is_empty() || claims.is_empty() {
+				return
+			}
+			let mut params: Vec[String] = []
+			for arg in args {
+				params.push(words.resolve(arg.name).clone())
+			}
+			derived.functions.insert(
+				text.clone(),
+				DerivedFunction {
+					name: text.clone(),
+					key: args[0].span.start as i64,
+					position: position,
+					params: params,
+					claims: claims,
+					sites: sites.clone(),
+				},
+			)
+		},
+		else => {},
+	}
 }
 
 /// One body's calls, kept in `scan` with every other name it meets; the
@@ -274,10 +304,12 @@ fn derived_callers_first(
 /// **The claims a body could use**, from the shapes it is written in: each
 /// whole-number parameter compared or used as an index is `>= 0`, at most
 /// each list's length, below it where the list is indexed, and at most or
-/// below each other one compared.
+/// below each other one compared. Of a `method`, a list field of `self` the
+/// body indexes counts as a list.
 fn derived_claims(
 	args: ref Vec[FnArg],
 	body: ref Block,
+	method: bool,
 	words: ref winnow_grammar::InternerContext,
 ) -> Vec[DerivedClaim] {
 	let mut ints: Vec[String] = []
@@ -313,6 +345,15 @@ fn derived_claims(
 					Expr::Variable(name, _) => {
 						indexed.insert(words.resolve(name).clone())
 					},
+					// A method's list field, `self.arms[at]`, is bounded
+					// at a call by the receiver's (ADR-391 D1).
+					Expr::Field { .. } => {
+						let path = path_of(base, words) ?? ""
+						if method && path.starts_with("self.") && !lists.contains(path) {
+							indexed.insert(path.clone())
+							lists.push(path)
+						}
+					},
 					else => {},
 				}
 				names_in(index, words, compared)
@@ -326,7 +367,7 @@ fn derived_claims(
 			continue
 		}
 		if !unsigned.contains(p) {
-			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false })
+			claims.push(DerivedClaim { left: "", strict: false, right: p.clone(), length: false, each: false })
 		}
 		for list in lists {
 			if indexed.contains(list) {
@@ -335,12 +376,14 @@ fn derived_claims(
 					strict: false,
 					right: list.clone(),
 					length: true,
+					each: false,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
 					strict: true,
 					right: list.clone(),
 					length: true,
+					each: false,
 				})
 			}
 		}
@@ -351,20 +394,133 @@ fn derived_claims(
 					strict: false,
 					right: q.clone(),
 					length: false,
+					each: false,
 				})
 				claims.push(DerivedClaim {
 					left: p.clone(),
 					strict: true,
 					right: q.clone(),
 					length: false,
+					each: false,
 				})
 			}
 		}
+	}
+	for claim in derived_element_claims(args, body, words) {
+		claims.push(claim)
 	}
 	while claims.len() > most_claims() {
 		claims.pop()
 	}
 	return claims
+}
+
+/// **The claims on every value of a list the body reads positions out of**
+/// (ADR-306 D21, #1397): where a value read out of `s` (`let atom =
+/// s[k]`, or `s[k]` itself) indexes `m`, `0 <= s[..]` and `s[..] <
+/// m.len()`. `s` is a parameter the body never changes - not `mut`, never
+/// bound again - or a path of fields from one; `m` a parameter or a path
+/// from one.
+fn derived_element_claims(
+	args: ref Vec[FnArg],
+	body: ref Block,
+	words: ref winnow_grammar::InternerContext,
+) -> Vec[DerivedClaim] {
+	let mut fixed: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut params: collections::BTreeSet[String] = collections::BTreeSet()
+	for arg in args {
+		let name = words.resolve(arg.name).clone()
+		params.insert(name.clone())
+		if !arg.mutable {
+			fixed.insert(name)
+		}
+	}
+	let mut read: collections::BTreeMap[String, String] = collections::BTreeMap()
+	let mut bound: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	derived_element_lets(body, words, read, bound)
+	for e in visited_in_block(body) {
+		match e {
+			Expr::If { then_branch, else_branch, .. } => {
+				derived_element_lets(then_branch, words, read, bound)
+				if else_branch != null {
+					derived_element_lets(else_branch ?? continue, words, read, bound)
+				}
+			},
+			Expr::Block(inner, _) => derived_element_lets(inner, words, read, bound),
+			Expr::Unsafe(inner, _) => derived_element_lets(inner, words, read, bound),
+			else => {},
+		}
+	}
+	let mut pairs: collections::BTreeSet[(String, String)] = collections::BTreeSet()
+	for e in visited_in_block(body) {
+		match e {
+			Expr::Index { base, index, .. } => {
+				let m = path_of(base, words) ?? continue
+				if !params.contains(path_root(m)) {
+					continue
+				}
+				let s = match index {
+					Expr::Variable(name, _) => {
+						let text = words.resolve(name)
+						if (bound[text] ?? 0) != 1 {
+							continue
+						}
+						(read[text] ?? continue).clone()
+					},
+					Expr::Index { base: inner, .. } => path_of(inner, words) ?? continue,
+					else => continue,
+				}
+				let root = path_root(s)
+				if s != m && fixed.contains(root) && (bound[root] ?? 0) == 0 {
+					pairs.insert((s, m))
+				}
+			},
+			else => {},
+		}
+	}
+	let mut out: Vec[DerivedClaim] = []
+	let mut floors: collections::BTreeSet[String] = collections::BTreeSet()
+	for (s, m) in pairs {
+		if !floors.contains(s) {
+			floors.insert(s.clone())
+			out.push(DerivedClaim { left: "", strict: false, right: s.clone(), length: false, each: true })
+		}
+		out.push(DerivedClaim { left: s.clone(), strict: true, right: m.clone(), length: true, each: true })
+	}
+	return out
+}
+
+/// The names `block` binds by a `let`, in it and in the loops inside it,
+/// how often each is bound, and of those bound to a value read out of a
+/// list (`let atom = s[k]`), the list's path.
+fn derived_element_lets(
+	block: ref Block,
+	words: ref winnow_grammar::InternerContext,
+	mut read: collections::BTreeMap[String, String],
+	mut bound: collections::BTreeMap[String, i64],
+) {
+	for stmt in block.stmts {
+		match stmt.node {
+			Stmt::Let { names, value, .. } => {
+				for symbol in names {
+					let text = words.resolve(symbol).clone()
+					bound.insert(text.clone(), (bound[text] ?? 0) + 1)
+				}
+				if names.len() == 1 {
+					match value {
+						Expr::Index { base, .. } => {
+							let list = path_of(base, words) ?? continue
+							read.insert(words.resolve(names[0]).clone(), list)
+						},
+						else => {},
+					}
+				}
+			},
+			Stmt::For { body: inner, .. } => derived_element_lets(inner, words, read, bound),
+			Stmt::While { body: inner, .. } => derived_element_lets(inner, words, read, bound),
+			else => {},
+		}
+	}
 }
 
 /// **The order the bodies are walked in**, as positions into `starts` (the
@@ -431,9 +587,16 @@ pub fn derived_note(mut around: Around, walked: ref BoundsProven) {
 
 /// A claim as `--bounds` writes it.
 pub fn derived_written(claim: ref DerivedClaim) -> String {
-	let left = if claim.left == "" { "0" } else { claim.left.clone() }
+	let mut left = if claim.left == "" { "0" } else { claim.left.clone() }
+	if claim.each && claim.left != "" {
+		left = f"{left}[..]"
+	}
 	let op = if claim.strict { "<" } else { "<=" }
-	let right = if claim.length { f"{claim.right}.len()" } else { claim.right.clone() }
+	let right = if claim.length { f"{claim.right}.len()" } else if claim.each {
+		f"{claim.right}[..]"
+	} else {
+		claim.right.clone()
+	}
 	return f"{left} {op} {right}"
 }
 
@@ -564,6 +727,20 @@ fn derived_symbol(
 	scan.values.insert(words.resolve(named).clone())
 }
 
+/// A method call `call` of `method`, kept with the calls of that name.
+fn derived_method_site(
+	call: ref Expr,
+	method: winnow_grammar::Symbol,
+	at: i64,
+	words: ref winnow_grammar::InternerContext,
+	mut scan: DerivedScan,
+) {
+	let text = words.resolve(method).clone()
+	let mut sites = scan.calls[text]?.clone() ?? []
+	sites.push((node_key(call), at))
+	scan.calls.insert(text, sites)
+}
+
 /// Each call of a name in `expr`, with the byte its statement starts at, and
 /// every other name it mentions.
 fn derived_expr(
@@ -594,12 +771,16 @@ fn derived_expr(
 			derived_all(args, at, words, scan)
 			derived_settings(config, at, words, scan)
 		},
-		Expr::MethodCall { receiver, args, config, .. } => {
+		// A method's name is a call of every method so named: one of a
+		// type the scan cannot tell apart only adds a site to be proved.
+		Expr::MethodCall { receiver, method, args, config, .. } => {
+			derived_method_site(expr, method, at, words, scan)
 			derived_expr(receiver, at, words, scan)
 			derived_all(args, at, words, scan)
 			derived_settings(config, at, words, scan)
 		},
-		Expr::SafeMethod { receiver, args, config, .. } => {
+		Expr::SafeMethod { receiver, method, args, config, .. } => {
+			derived_method_site(expr, method, at, words, scan)
 			derived_expr(receiver, at, words, scan)
 			derived_all(args, at, words, scan)
 			derived_settings(config, at, words, scan)

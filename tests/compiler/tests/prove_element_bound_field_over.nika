@@ -1,0 +1,25 @@
+// ADR-306 D21 (#1397): one literal writes the field `5`, past `values`;
+// the field's bound takes it in and `values[atom]` stays checked.
+struct Clause {
+	atoms: Vec[i64],
+}
+
+fn eval(clause: ref Clause, values: ref Vec[bool]) -> bool {
+	let mut k = 0
+	while k < clause.atoms.len() {
+		let atom = clause.atoms[k]
+		if values[atom] {
+			return true
+		}
+		k += 1
+	}
+	return false
+}
+
+fn main() throws {
+	let clause = Clause { atoms: [0, 2, 1] }
+	let other = Clause { atoms: [5] }
+	println(f"{other.atoms.len()}")
+	let values = [false, false, true]
+	println(f"{eval(clause, values)}")
+}

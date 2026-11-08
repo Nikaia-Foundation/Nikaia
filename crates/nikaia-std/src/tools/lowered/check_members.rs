@@ -115,6 +115,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, member: &str, span: &Span) {
         if resolve_call(world, &format!("{}::{}", ty, member)).is_some() { return; }
+        if an_integer_limit(ty, member) { return; }
         if self.type_parameters.contains_key(ty) {
             if member == "fields" || member == "variants" { self.a_shape_that_is_not_reachable_yet(ty, member, span); }
             return;

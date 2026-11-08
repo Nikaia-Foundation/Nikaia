@@ -7801,7 +7801,7 @@ fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: re
             } else {
                 let owner = words.resolve(target.name).clone()
                 for mut method in methods {
-                    hb_trait_from(method.node, words, owner, made)
+                    hb_trait_from(method.node, words, plain, owner, made)
                 }
             }
         },
@@ -7813,8 +7813,11 @@ fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: re
 /// D2, D8, D14, #1250): the trait lowers a plain `String` its `from` names,
 /// and a `String` result, as views (`emit_item_lent_view`), so the impl's are
 /// views too, whatever its body hands back; `return a` under `from a` then
-/// lends `a`. Only text: any other type keeps the lowering the trait gives it.
-fn hb_trait_from(mut item: Item, words: ref winnow_grammar::InternerContext, owner: ref String, mut made: collections::BTreeSet[String]) {
+/// lends `a`. **A `from` result is a view of any type** (D8, #1327): a
+/// parameter or result a free function's `from` makes a view
+/// (`hb_type_may_be_a_view`) is one here too, as the trait lowers it. Only
+/// the text positions go into `made`: they were written `String`.
+fn hb_trait_from(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], owner: ref String, mut made: collections::BTreeSet[String]) {
     match item {
         Item::Fn { name, args, ret_type, is_extern, ret_from, .. } => {
             if is_extern || ret_from.is_empty() {
@@ -7828,6 +7831,8 @@ fn hb_trait_from(mut item: Item, words: ref winnow_grammar::InternerContext, own
                 if named && !arg.keep && !arg.mutable && hb_plain_text(arg.ty, words) {
                     hb_set(arg.ty)
                     made.insert(f"param {key} {at}")
+                } else if named && !arg.keep && !arg.mutable && !arg.ty.is_view && hb_type_may_be_a_view(arg.ty, words, plain) {
+                    hb_set(arg.ty)
                 }
                 at += 1
             }
@@ -7838,6 +7843,8 @@ fn hb_trait_from(mut item: Item, words: ref winnow_grammar::InternerContext, own
             if text_result {
                 hb_set_maybe(ret_type)
                 made.insert(f"result {key}")
+            } else if hb_result_may_be_a_view(ret_type, words, plain) {
+                hb_set_maybe(ret_type)
             }
         },
         else => {},
@@ -7961,7 +7968,7 @@ fn hb_result_may_be_a_view(ty: ref Type?, words: ref winnow_grammar::InternerCon
 /// already: not text, not a word copied at a read, nothing a place cannot be.
 /// `Bytes` can: a piece of a lent `Bytes` handed back is a view of it, as a
 /// piece of an `Array[T]` is (ADR-views-3 D15, D11).
-fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
+pub fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String]) -> bool {
     if t.is_nullable || t.is_tuple || t.is_slice || t.is_mut || t.code != null || t.count != null || t.either || t.lasting {
         return false
     }

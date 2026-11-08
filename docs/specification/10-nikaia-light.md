@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1359 (Draft)
+**Version:** 0.0.1360 (Draft)
 **Date:** 2026-11-08
 
 ---
@@ -375,9 +375,9 @@ widths `i64`, `i32`, `u8`, `u64` and `u32`. A fixed width is written where the
 width is the point; neither is a warning anywhere. The specification does not
 offer others: a written `usize`,
 `isize`, `i8`, `i16`, `u16`, `i128` or `u128` is refused with `NK1135`, and so is
-`str`, outside an `extern "C"` declaration (Part III 15.1). Each fixed width
+`str`, outside an `extern "C"` declaration (Part III 15.1). Each integer type
 names its limits, `T::MIN` and `T::MAX`, values of type `T`: `i64::MIN` is
-`-9223372036854775808`, `u8::MAX` is `255`. A **length** is an `i64`:
+`-9223372036854775808`, `u8::MAX` is `255`, and `int::MAX` is `i64::MAX`. A **length** is an `i64`:
 `for i in 0..<xs.len()` gives an `i64`, `xs[i]` takes one, and neither
 conversion is written, because the compiler emits both. A negative index
 reports as an access out of bounds (Part III, A.2).

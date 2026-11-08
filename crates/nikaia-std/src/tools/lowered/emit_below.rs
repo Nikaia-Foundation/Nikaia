@@ -51,6 +51,12 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
     None
 }
 
+pub fn integer_limit_below(path: &str) -> String {
+    if path == "int::MIN" { return String::from("i64::MIN"); }
+    if path == "int::MAX" { return String::from("i64::MAX"); }
+    path.to_string()
+}
+
 impl EmitState {
     pub fn enters_a_grammar(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
         match receiver {
@@ -258,6 +264,7 @@ impl EmitState {
 impl EmitState {
     pub fn path(&self, world: &EmitWorld<'_, '_, '_, '_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "scalar" && *nikaia_std::index::get(&segments, 1) == "from" { return String::from("nikaia_std::num::scalar_from"); }
+        if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "int" && (*nikaia_std::index::get(&segments, 1) == "MIN" || *nikaia_std::index::get(&segments, 1) == "MAX") { return integer_limit_below(&segments.join("::")); }
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
             if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
             let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));

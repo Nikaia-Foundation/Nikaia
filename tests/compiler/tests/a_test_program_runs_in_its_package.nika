@@ -1,0 +1,15 @@
+// A test program runs with its package's directory as its working directory,
+// as a `test` block does, so it reads the package's data under `tests/` by a
+// relative name; what it writes goes under `fs::scratch()` (ADR-269 D22,
+// Part III 14.1, #1398).
+use std::fs
+
+fn main() throws {
+    let data = fs::read_to_string("tests/a_test_program_runs_in_its_package.txt", fs::Root::Anywhere)
+    print(data)
+    println(fs::exists("nikaia.toml", fs::Root::Anywhere))
+    let root = fs::scratch()
+    fs::write("out.txt", root, "written under the scratch directory")
+    println(fs::read_to_string("out.txt", root))
+    println(fs::exists("out.txt", fs::Root::Anywhere))
+}

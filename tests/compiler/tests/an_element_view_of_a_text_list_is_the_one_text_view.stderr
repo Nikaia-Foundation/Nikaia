@@ -1,0 +1,16 @@
+warning[NK1261]: `ref` is redundant here: a `let` written `ref String` says what `String` already says.
+   --> tests/an_element_view_of_a_text_list_is_the_one_text_view.nika:28:9
+    |
+ 28 |         let t: ref String = w
+    |         ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref` where the value is text of its own, and leave the type out where it is a view.
+warning[NK1261]: `ref` is redundant here: a `let` written `ref String` says what `String` already says.
+   --> tests/an_element_view_of_a_text_list_is_the_one_text_view.nika:34:9
+    |
+ 34 |         let key: ref String = k
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref` where the value is text of its own, and leave the type out where it is a view.

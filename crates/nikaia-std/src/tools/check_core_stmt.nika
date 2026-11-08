@@ -1323,6 +1323,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         },
         else => {},
     }
+    state.declared_binding(id, span, name)
     let mut local = CheckLocal::free(name, bound, id)
     // **A name bound to an element a list or a map keeps is a view of it**
     // (#1044, Part III `NK1131`): handed back whole, it is refused as a `for
@@ -1353,6 +1354,11 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // parameter, it is lent on again.
     if mutable && state.facts.mut_view_reads.contains_key(id_of(value) as i64) {
         state.flow.mut_view_bindings.insert(id)
+    }
+    // **A `let mut` of a view of a `String` slot writes owned text through
+    // it** (#1388), whatever the one text view it is typed says.
+    if mutable && state.flow.text_slot_views.contains(id_of(check_core_stmt_slot_read(value)) as i64) {
+        state.flow.text_slot_bindings.insert(id)
     }
     // **A name bound to views and text of its own holds `EitherText`**
     // (ADR-282 D14, #1310): a choice of both, or a literal later given both.
@@ -1673,14 +1679,17 @@ pub fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref Ch
     state.narrowing.target = saved_target
     // **A `let mut` view is written through** (#976): `*c = v`, `*c += 1`,
     // and what it is assigned is the value it views. A view of text stays
-    // one: the slot holds what its tier says.
+    // one: the slot holds what its tier says, and a `String` slot owned text
+    // (#1388).
     if state.a_mut_view_name(world, target) {
         state.facts.view_derefs.insert(node_key(target))
         let of_text = match into {
             Ty::Named { name, .. } => name == "str",
             else => false,
         }
-        if !of_text {
+        if state.a_text_slot_name(world, target) {
+            into = Ty::Named { name: TEXT.clone(), args: [], view: false }
+        } else if !of_text {
             into = unviewed_type(into)
         }
     }
@@ -2115,6 +2124,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         if !lent && name != "_" && (state.flow.lent_walks.contains(id_of(iter) as i64) || element.is_a_view()) && check_owned_text(bound) {
             state.flow.lent_text_params.insert(id)
         }
+        state.declared_binding(id, span, name)
         let mut local = CheckLocal::free(name, bound, id)
         local.written_mut = mutable
         if mut_view {
@@ -2790,5 +2800,13 @@ fn check_async_computes(expr: ref Expr) -> bool sync {
         Expr::Variable(_, _) => false,
         Expr::Path(_, _) => false,
         else => true,
+    }
+}
+
+/// The read a `let` binds, past a `??` (#1388): `m.get(k) ?? return`.
+fn check_core_stmt_slot_read(value: ref Expr) -> ref Expr {
+    return match value {
+        Expr::Coalesce { value: read, .. } => read,
+        else => value,
     }
 }

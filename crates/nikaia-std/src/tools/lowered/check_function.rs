@@ -431,6 +431,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         } else { ty = check_walked_declared(state, world, &arg.ty, &arg.span); }
         check_reflected_field_kept(state, world, &arg.ty, &arg.span, true);
         let id = state.a_new_binding();
+        state.declared_binding(id, &arg.span, &name);
         let mut local = CheckLocal::free(name, ty.erase(parameters), id);
         if !arg.mutable { local.without_mut = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: String::from("") }); }
         local.changing = arg.mutable;
@@ -696,6 +697,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.a_sequence_was_walked_twice();
     state.failing_cleanups_said();
     state.a_part_left_out();
+    state.concatenated_names_read_again();
     state.data_handed_over_is_used_again();
     state.reads_on_paths.clear();
     state.flow.read_index = collections::BTreeMap::new();

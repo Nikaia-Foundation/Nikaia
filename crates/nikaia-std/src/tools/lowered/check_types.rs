@@ -37,7 +37,7 @@ pub fn viewed_from_type(view: &Ty) -> Vec<Ty> {
 
 pub fn unviewed_type(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, .. } => Ty::Named { name: name.to_string(), args: args.to_owned(), view: false },
+        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && name == TEXT_VIEW { Ty::Named { name: TEXT.to_string(), args: vec![], view: false } } else { Ty::Named { name: name.to_string(), args: args.to_owned(), view: false } } },
         _ => ty.clone(),
     }
 }
@@ -236,7 +236,7 @@ pub fn element_walked(over: &Ty, bindings: i64) -> Ty {
         Ty::Named { name, args, view } => {
             let view = *view;
             let last = type_last_segment(name);
-            if args.len() == 1 { if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } } else if !args.is_empty() && !view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else if args.is_empty() && last == "Bytes" { Ty::Named { name: String::from("u8"), args: vec![], view: false } } else { Ty::Unknown }
+            if args.len() == 1 { if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" || view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } } else if !args.is_empty() && !view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else if args.is_empty() && last == "Bytes" { Ty::Named { name: String::from("u8"), args: vec![], view: false } } else { Ty::Unknown }
         },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { item.clone() } else { Ty::Unknown } },
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },

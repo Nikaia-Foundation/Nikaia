@@ -438,7 +438,11 @@ impl EmitState {
                                 inside = true
                             }
                         }
-                        if receiver != null || lowered_views > 1 || has_kept || (loan && self.carries_a_view(world, args[at].ty) && (self.borrows(world, args[at].ty.name) || inside)) {
+                        // **An owned one handed back, or a part of it**
+                        // (#1380): `fn kids<'r>(m: N<'r, 'r>) -> Vec<N<'r, 'r>>`,
+                        // as `'_` cannot say which of its lifetimes it is.
+                        let owned = !loan && !self.emit_fn_changes(key, emit_text(world, args[at].name)) && self.carries_a_view(world, args[at].ty)
+                        if receiver != null || lowered_views > 1 || has_kept || owned || (loan && self.carries_a_view(world, args[at].ty) && (self.borrows(world, args[at].ty.name) || inside)) {
                             source_at = at
                         }
                     }

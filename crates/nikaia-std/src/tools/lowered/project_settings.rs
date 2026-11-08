@@ -32,6 +32,7 @@ pub struct ProjectWords {
     pub symbol_prefix: String,
     pub tests: bool,
     pub bind: Option<String>,
+    pub bind_features: Option<Vec<String>>,
     pub cpu: Option<String>,
 }
 
@@ -77,8 +78,8 @@ pub(crate) fn project_settings_renamed(level: &str) -> &'static str {
 
 pub fn artifact(word: String) -> Result<String, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     Ok(match &*word {
-        "program" | "c-library" => word,
-        _ => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`artifact` is `program` or `c-library`, not `{}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body.", word)), &"artifact")),
+        "program" | "c-library" | "rust-library" => word,
+        _ => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`artifact` is `program`, `c-library` or `rust-library`, not `{}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body; `rust-library` writes the package as the Rust lib crate `nikaia_<name>`.", word)), &"artifact")),
     })
 }
 
@@ -169,7 +170,7 @@ pub(crate) fn project_settings_checked(target: String, user_parallelism: String,
     let refuted_claims = refuted_claims(refuted)?;
     let unproved_claims = unproved_claims(unproved)?;
     let artifact = artifact(made)?;
-    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, cpu })
+    Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, bind_features: None, cpu })
 }
 
 pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<String>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, Box<dyn std::error::Error>> {

@@ -35,7 +35,7 @@
 use anyhow::Result;
 
 use nikaia_std::tools::cexport::{CX_LEDGER_DIGEST, cx_export};
-use nikaia_std::tools::cexport_model::{CxEntry, cx_entries_in};
+use nikaia_std::tools::cexport_model::{CxEntry, cx_entries_bound, cx_entries_in};
 use nikaia_std::tools::cexport_node::cx_node_gyp;
 
 use crate::modules::Program;
@@ -70,14 +70,17 @@ pub fn nothing_exported() -> anyhow::Error {
 /// declare.
 ///
 /// `concurrent` is `user_parallelism = yes`: the runtime the library starts
-/// has a pool for user code. Everything it writes is `tools/cexport*.nika`'s
-/// (ADR-294, #125); this reads the program's files and hands them over.
+/// has a pool for user code. `kept` narrows the entry points to the items a
+/// binding of some features carries (ADR-393 D5), for its bindings only.
+/// Everything it writes is `tools/cexport*.nika`'s (ADR-294, #125); this
+/// reads the program's files and hands them over.
 pub fn export(
     program: &Program,
     prefix: &str,
     package: &str,
     concurrent: bool,
     target: &str,
+    kept: Option<&[String]>,
 ) -> Result<Option<Exported>> {
     let mut found: Vec<CxEntry> = Vec::new();
     for (at, unit) in program.units.iter().enumerate() {
@@ -87,6 +90,9 @@ pub fn export(
         let parsed = &unit.parsed;
         cx_entries_in(&parsed.interner, &parsed.program.items, at == 0, &mut found)
             .map_err(|refusal| anyhow::anyhow!("{refusal}"))?;
+    }
+    if let Some(kept) = kept {
+        found = cx_entries_bound(&found, kept);
     }
     let Some(unit) = program.units.first() else {
         return Ok(None);

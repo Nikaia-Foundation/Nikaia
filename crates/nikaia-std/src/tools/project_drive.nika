@@ -86,6 +86,13 @@ pub trait ProjectDriveHost {
     fn toolchain_can_build_for(ref self, triple: ref String) -> bool sync
     /// Writes the generated workspace of the members as lowered: its manifest.
     fn write_workspace(ref self, rust: ref Vec[String]) -> fs::Path sync throws
+    /// **Member `at`'s manifest as a library** of the generated workspace,
+    /// over its lowered `rust`: the dependency tables a build writes for it.
+    fn member_manifest(ref self, at: i64, rust: ref String) -> String sync throws
+    /// `[features]` of the manifest (ADR-393 D2), as read.
+    fn features(ref self) -> Vec[ManifestFeature] sync
+    /// The path of `nikaia.toml` and its text, for a refusal shown in it.
+    fn manifest_text(ref self) -> (String, String) sync
     /// Whether the program can be built without Cargo (`run_fast`).
     fn runs_without_cargo(ref self, link_flags: ref Vec[String]) -> bool sync
     /// Compiles the entry's Rust against `std` as a dynamic library; null
@@ -118,6 +125,8 @@ pub trait ProjectDriveHost {
     fn package_name(ref self) -> String? sync
     /// The binding asked for (`--bind`), where one was.
     fn bind(ref self) -> String? sync
+    /// The features `nikaia bind --features` named, where it did (ADR-393 D5).
+    fn bind_features(ref self) -> Vec[String]? sync
     /// The program built in the shared directory, under the project's name.
     fn own_copy(ref self, built: ref fs::Path) -> fs::Path sync throws
     /// Records the versions Cargo resolved in `nikaia.lock`: why it could
@@ -160,11 +169,46 @@ impl Error for ProjectDriveRefusal {
 /// the second is a cache hit, so the work is done once even though the
 /// decision is made in two places.
 pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: String, no_cache: bool, locked: bool) -> (i32, fs::Path?) sync throws {
+    // **A package offered to Rust** (ADR-393 D1, Part III 15.2) is built as
+    // a lib crate and has no entry point: what it offers is its `pub` items.
+    let rust_library = project_drive_artifact(host) == "rust-library"
+    if rust_library && subcommand == "run" {
+        throw ProjectDriveRefusal::Refused("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")
+    }
+    let crate_build = rust_library && subcommand == "build" && !host.tests_build()
+    // **`[features]` is a library's** (ADR-393 D5): a program has no user
+    // who chooses parts (`NK1346`), a C library is built whole and only its
+    // binding is narrowed; a feature list, and `nikaia bind --features`, are
+    // checked before anything is lowered (`NK1347`).
+    let features = host.features()
+    let chosen = host.bind_features()
+    if chosen != null && !host.tests_build() {
+        if !host.is_library() {
+            let refusal = FeaturesRefusal { code: "NK1346", feature: "", entry: "", message: "`--features` chooses the parts of a library a binding carries, and a program has no user who chooses its parts.", help: "Write `artifact = \"c-library\"` under `[build]` to bind the package, or leave out `--features`." }
+            return (project_drive_features_refused(host, refusal), null)
+        }
+        let checked = features_chosen_checked(features, chosen ?? [])
+        if checked != null {
+            return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
+        }
+    }
+    if features.len() > 0 && !host.tests_build() && (subcommand == "build" || subcommand == "run") {
+        if !rust_library && !host.is_library() {
+            let refusal = FeaturesRefusal { code: "NK1346", feature: "", entry: "", message: "`[features]` is for a package built as a Rust library: a program has no user who chooses its parts.", help: "Write `artifact = \"rust-library\"` under `[build]`, or remove `[features]`." }
+            return (project_drive_features_refused(host, refusal), null)
+        }
+        let checked = features_lists_checked(features, host.package_name() ?? "")
+        if checked != null {
+            return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
+        }
+    }
     let entry = host.entry()
     let not_there = f"{entry.display()} is not there. A project's entry point is `src/main.nika`."
-    let meta = fs::metadata(entry, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Refused(not_there) }
-    if !meta.is_file() {
-        throw ProjectDriveRefusal::Refused(not_there)
+    if !crate_build {
+        let meta = fs::metadata(entry, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Refused(not_there) }
+        if !meta.is_file() {
+            throw ProjectDriveRefusal::Refused(not_there)
+        }
     }
 
     // Before the build, because an explanation is about the program and a
@@ -252,6 +296,12 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
             node = lowered.node?.clone()
         }
         rust[at] = lowered.rust.clone()
+    }
+
+    // **The crates, and no Cargo** (ADR-393 D1): a Rust crate that depends
+    // on the library builds it.
+    if crate_build {
+        return (project_drive_rust_library(host, members, rust), null)
     }
 
     // **The generated Rust, before Cargo starts** (#280). The wrapper
@@ -599,6 +649,146 @@ fn project_drive_c_library[H: ProjectDriveHost](host: ref H, header: ref String,
         fs::copy(built, made.join(name), fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"copying {built.display()}: {error}") }
     }
     println(f"library: {made.display()}")
+}
+
+/// The build's `[build] artifact`, as the settings hand it to the wrapper.
+fn project_drive_artifact[H: ProjectDriveHost](host: ref H) -> String sync {
+    for (key, value) in host.settings_env() {
+        if key == PROJECT_SETTINGS_ARTIFACT_VAR {
+            return value
+        }
+    }
+    return "program"
+}
+
+/// The crate a package is offered to Rust as (ADR-286 D23): `nikaia_<name>`,
+/// `-` written `_`.
+pub fn project_drive_rust_crate(name: ref String) -> String {
+    return f"nikaia_{name.replace("-", "_")}"
+}
+
+/// **The package as a Rust lib crate** (ADR-393 D1, Part III 15.2): each
+/// member written as `target/rust-library/nikaia_<name>/`, its `Cargo.toml`
+/// and its lowered Rust as `src/lib.rs`, and the entry's directory printed.
+/// The manifest is the member's in the generated workspace, which holds the
+/// dependency tables (`nikaia-std` by path, a Rust crate as written, a Nikaia
+/// package as the crate beside it), made the lib crate by
+/// `project_drive_rust_manifest`. The next build overwrites each file.
+fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec[ProjectMembersMember], rust: ref Vec[String]) -> i32 sync throws {
+    let target = host.own_dir().parent() ?? throw ProjectDriveRefusal::Failed(f"{host.own_dir().display()} has no directory")
+    let made = target.join("rust-library")
+    let features = host.features()
+    let mut checked: FeaturesMade? = null
+    for at in 0..<members.len() {
+        let crate_name = project_drive_rust_crate(members[at].name)
+        let mut manifest = project_drive_rust_manifest(host.member_manifest(at, rust[at]), crate_name, members)
+        let mut lowered = rust[at].clone()
+        // **The features** (ADR-393 D2-D3) are the package's own: the
+        // members it depends on are built whole.
+        if at == 0 && features.len() > 0 {
+            let applied = features_applied(rust[at], manifest, features, members[0].name) catch {
+                return project_drive_features_refused(host, error)
+            }
+            manifest = features_manifest(manifest, applied)
+            lowered = applied.rust.clone()
+            checked = applied
+        }
+        let dir = made.join(crate_name)
+        project_drive_make_dir(dir.join("src"))
+        host.write_if_changed(dir.join("Cargo.toml"), manifest)
+        host.write_if_changed(dir.join("src").join("lib.rs"), lowered)
+    }
+    let crate_dir = made.join(project_drive_rust_crate(members[0].name))
+    let applied = checked ?? {
+        println(f"rust-library: {crate_dir.display()}")
+        return 0
+    }
+    // **Every feature alone, the core, and all together** (D6): what rustc
+    // refuses is the feature's, reported on its root.
+    // Cargo's own wrapper is left out: the crate is plain Rust now.
+    let check_dir = env::var("CARGO_TARGET_DIR") ?? target.join("rust-library-check").display()
+    let mut check_env: Vec[(String, String)] = []
+    check_env.push(("CARGO_TARGET_DIR", check_dir))
+    check_env.push(("RUSTC_WORKSPACE_WRAPPER", ""))
+    let unset: Vec[String] = []
+    host.make_cargo(crate_dir.join("Cargo.toml"), check_env, unset, false)
+    let mut runs: Vec[(String, Vec[String])] = [("", ["--no-default-features"])]
+    for name in applied.names {
+        runs.push((name.clone(), ["--no-default-features", "--features", name.clone()]))
+    }
+    if applied.names.len() > 1 {
+        runs.push(("*", ["--all-features"]))
+    }
+    for run in runs {
+        let mut args: Vec[String] = ["--quiet"]
+        for arg in run.1 { args.push(arg.clone()) }
+        let (code, said) = host.cargo_messages("check", args)
+        if code == 0 { continue }
+        // A feature alone is that feature's; the core or all together is the
+        // feature whose item rustc names, else the table's.
+        let blamed = if run.0.len() > 0 && run.0 != "*" { run.0.clone() } else { features_blamed(said, applied, "") }
+        let alone = if run.0.len() == 0 { "the core alone" } else if run.0 == "*" { "all the features together" } else { f"the feature `{run.0}` alone" }
+        let mut entry: String = ""
+        for feature in features {
+            if feature.name == blamed && feature.entries.len() > 0 { entry = feature.entries[0].clone() }
+        }
+        let help = if blamed.len() > 0 { f"What `{blamed}` reaches is derived from its roots, and rustc found something the derivation missed: name the item it lacks as a root of `{blamed}`." } else { "The items no root reaches are the core, and rustc refuses them before any feature is added: fix the core first." }
+        let refusal = FeaturesRefusal { code: "NK1345", feature: blamed.clone(), entry: entry, message: f"The crate does not build with {alone}. rustc says: {features_first_error(said)}", help: help }
+        return project_drive_features_refused(host, refusal)
+    }
+    println(f"rust-library: {crate_dir.display()}")
+    return 0
+}
+
+/// **A refusal of `[features]`** (`NK1344`-`NK1347`) shown on its entry in
+/// `nikaia.toml`; the exit code.
+fn project_drive_features_refused[H: ProjectDriveHost](host: ref H, refusal: ref FeaturesRefusal) -> i32 sync {
+    let (path, toml) = host.manifest_text()
+    let span = features_span(toml, refusal.feature, refusal.entry)
+    let shown = Shown { warning: false, code: refusal.code.clone(), message: refusal.message.clone(), notes: [], help: refusal.help?.clone(), span: span, labels: [] }
+    host.eprint(rendered(shown, path, toml))
+    return 1
+}
+
+/// **A generated member manifest made the lib crate `crate_name`**: the
+/// `[package] name` renamed, the lib's target `src/lib.rs`, each Nikaia
+/// package it depends on the crate `nikaia_<name>` beside it, and a
+/// `[workspace]` of its own, so that a Rust crate in any workspace takes it by
+/// path. `generated` is as `CargoProject::render` writes it.
+pub fn project_drive_rust_manifest(generated: ref String, crate_name: ref String, members: ref Vec[ProjectMembersMember]) -> String {
+    let mut out = "# Written by `nikaia build` (`artifact = \"rust-library\"`, ADR-393 D1) from\n# `nikaia.toml`. Do not edit: every build rewrites it.\n"
+    let mut section: String = ""
+    for line in generated.lines() {
+        if line.starts_with("#") {
+            continue
+        }
+        if line.starts_with("[") {
+            section = line.trim().clone()
+            if section == "[[bin]]" || section == "[lib]" {
+                out = f"{out}[lib]\nname = \"{crate_name}\"\npath = \"src/lib.rs\"\n"
+            } else {
+                out = f"{out}{line}\n"
+            }
+            continue
+        }
+        // The target's name and path, written above.
+        if (section == "[[bin]]" || section == "[lib]") && line.trim().len() > 0 {
+            continue
+        }
+        if section == "[package]" && line.starts_with("name = ") {
+            out = f"{out}name = \"{crate_name}\"\n"
+            continue
+        }
+        let mut kept = line.clone()
+        if section == "[dependencies]" {
+            for member in members.iter() {
+                let beside = project_drive_rust_crate(member.name)
+                kept = kept.replace(f"package = \"{member.name}\", path = \"../{member.name}\"", f"package = \"{beside}\", path = \"../{beside}\"")
+            }
+        }
+        out = f"{out}{kept}\n"
+    }
+    return f"{out}\n[workspace]\n"
 }
 
 /// **Whether Cargo's messages hold one of the compiler's** (a
