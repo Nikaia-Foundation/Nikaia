@@ -90,9 +90,13 @@ pub struct BoundsContext {
 /// **A callee's found postcondition** (ADR-306 D23): the list parameters, by
 /// position, that what it returns lies below the length of, `0 <= result <
 /// p.len()`; with `each`, every element of the list it returns does (D24).
+/// `sized` holds those of them whose length the callee's walk read as one
+/// of a list whose elements take space (#383): the caller's length of the
+/// list handed there is at most `length_below()` as well (#1465).
 pub struct BoundsReturns {
 	pub each: bool,
 	pub below: collections::BTreeSet[i64],
+	pub sized: collections::BTreeSet[i64],
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -2766,9 +2770,11 @@ fn bounding_each(
 		// D23, D24): `0 <= item < p.len()`.
 		Expr::Call { .. } => {
 			let zero = walk.arena.int(0)
-			for list in bounding_returned_below(walk, iter, true, context, words) {
+			// The length is one as `len()` hands back (ADR-385 D1), so that
+			// `item + 1` is proved as after a counted loop (#1465).
+			for (list, sized) in bounding_returned_below(walk, iter, true, context, words) {
 				out.push(walk.arena.ge(item, zero))
-				let len = walk.arena.var(length_of(list))
+				let len = bounding_length_named(walk, list, sized)
 				out.push(walk.arena.lt(item, len))
 			}
 		},
@@ -6926,7 +6932,7 @@ pub fn bounds_returns(
 				if below.is_empty() {
 					continue
 				}
-				assumed.insert(words.resolve(symbol).clone(), BoundsReturns { each: each, below: below })
+				assumed.insert(words.resolve(symbol).clone(), BoundsReturns { each: each, below: below, sized: collections::BTreeSet() })
 				bodies.push(item)
 			},
 			else => {},
@@ -6958,13 +6964,17 @@ pub fn bounds_returns(
 					walk.return_each = wanted.each
 					let proven = bounds_rounds(walk, args, body, context, program, words, ask)
 					let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
+					let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
 					for k in proven.returned ?? collections::BTreeSet() {
 						if wanted.below.contains(k) {
 							held.insert(k)
+							if walk.axioms.contains_key(length_of(walk.return_params[k])) {
+								sized.insert(k)
+							}
 						}
 					}
 					if !held.is_empty() {
-						found.insert(key, BoundsReturns { each: wanted.each, below: held })
+						found.insert(key, BoundsReturns { each: wanted.each, below: held, sized: sized })
 					}
 				},
 				else => {},
@@ -7058,7 +7068,7 @@ fn bounding_returned(
 		if param.is_empty() {
 			continue
 		}
-		if called.contains(param) {
+		if called.contains_key(param) {
 			below.insert(k)
 			continue
 		}
@@ -7126,15 +7136,16 @@ fn bounding_returns_found(
 
 /// **The lists a call's result lies below** (ADR-306 D23): of a function
 /// the file found a bound of (`each` for a list's elements), the arguments
-/// at its positions that are paths the walk reads.
+/// at its positions that are paths the walk reads, each with whether its
+/// length is a sized one (`BoundsReturns.sized`).
 fn bounding_returned_below(
 	walk: ref BoundsWalk,
 	value: ref Expr,
 	each: bool,
 	context: ref BoundsContext,
 	words: ref winnow_grammar::InternerContext,
-) -> collections::BTreeSet[String] {
-	let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+) -> collections::BTreeMap[String, bool] {
+	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
 	match value {
 		Expr::Call { func, args, .. } => {
 			let callee = bounding_callee(func, words) ?? return out
@@ -7151,7 +7162,7 @@ fn bounding_returned_below(
 				}
 				let path = bounding_argument_path(args[k], words) ?? continue
 				if !walk.pinned.contains(path_root(path)) {
-					out.insert(path)
+					out.insert(path, found.sized.contains(k))
 				}
 			}
 		},
@@ -7186,8 +7197,8 @@ fn bounding_returned_facts(
 	let zero = walk.arena.int(0)
 	let low = walk.arena.ge(n, zero)
 	bounding_push(walk, facts, low)
-	for list in lists {
-		let len = walk.arena.var(length_of(list))
+	for (list, sized) in lists {
+		let len = bounding_length_named(walk, list, sized)
 		let high = walk.arena.lt(n, len)
 		bounding_push(walk, facts, high)
 	}
