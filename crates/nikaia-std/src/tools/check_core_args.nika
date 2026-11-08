@@ -169,6 +169,12 @@ fn check_core_args_lambda[H: CheckHost](mut state: CheckState, world: ref CheckW
                 Ty::Fn { params: given, result, is_sync, can_throw } => {
                     let pauses: bool = !is_sync
                     let fails: bool = can_throw
+                    // `std`'s signatures write `fn(T)` for code whose result
+                    // they leave open (`filter`), so only the program's own
+                    // say "nothing" by it.
+                    if declared_here {
+                        state.a_lambda_hands_back_nothing(id, result)
+                    }
                     check_core_args_lambda_says_mut(state, world, arg, params, mutable, given, code, span)
                     if pauses && declared_here {
                         state.facts.future_lambdas.insert(id)

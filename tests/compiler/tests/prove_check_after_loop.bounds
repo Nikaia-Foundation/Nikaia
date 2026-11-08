@@ -1,0 +1,21 @@
+bounds in tests/prove_check_after_loop.nika: 13 indexes, 9 proved; 4 operations, 4 proved
+    14  a[j]      proved
+    15  i + 1     proved
+    18  a[i]      checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    25  a[hi]     proved
+    28  a[j]      proved
+    29  a[i]      proved
+    30  a[i]      proved
+    30  a[j]      proved
+    31  a[j]      proved
+    32  i + 1     proved
+    35  a[i]      checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    36  a[i]      checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    36  a[hi]     proved
+    37  a[hi]     proved
+    47  k + 1     proved
+    49  a[k - 1]  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+    49  k - 1     proved
+  derived  count2: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 54
+  derived  last: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 60
+  derived  partition: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 56

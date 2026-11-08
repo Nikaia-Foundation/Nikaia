@@ -67,6 +67,9 @@ pub(crate) fn kept_result_spelling(ty: &Ty) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_lambda_hands_back_nothing(&mut self, id: i64, result: Option<&Ty>) { if result.is_none() { self.facts.valueless_lambdas.insert(id); } }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_kept_lambdas_result(&mut self, id: i64, result: Option<&Ty>, pauses: bool, fails: bool) {
         if !pauses || fails { return; }
         let declared: Ty = nikaia_std::index::or(match result {

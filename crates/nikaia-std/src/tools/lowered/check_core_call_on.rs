@@ -928,7 +928,10 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         state.in_parallel = Some(nikaia_std::index::or(state.in_parallel, || depth.into()));
         state.scoped_task = false;
     }
-    if key == "task::Scope::spawn" { check_crossings_a_task_of_a_scope(state, args); }
+    if key == "task::Scope::spawn" {
+        check_crossings_a_task_of_a_scope(state, args);
+        for arg in args.iter() { state.a_lambda_hands_back_nothing(id_of(arg) as i64, None); }
+    }
     let items: Option<i64> = state.open_items_of(world, receiver);
     let outer_params = state.flow.open_params.to_owned();
     state.flow.open_params = state.open_walk_params(world, contract, args, items);
