@@ -674,6 +674,30 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        if receiver.is_some() && lent_pattern && self.on_block_types() && nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.starts_with("str::")),
+            None => None,
+        }, || false) {
+            let lent = match nikaia_std::index::get(&args, 0) {
+                Expr::Unary { op: UnaryOp::Ref, expr, .. } => { let expr = nikaia_std::boxed::open(expr); Some(expr) },
+                _ => None,
+            };
+            match lent {
+                Some(text_arg) => {
+                    let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                    self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
+                    out.push(&format!(".{}(&*", name));
+                    self.emit_core_nested(world, walk, out, host, text_arg, 255, depth, flow, scope)?;
+                    if args.len() == 2 {
+                        out.push(", ");
+                        self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow, scope)?;
+                    }
+                    out.push(")");
+                    return Ok(());
+                },
+                None => { },
+            }
+        }
         if name == "drain" && args.is_empty() && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.stays_the_callers(world, &scope.function, on) || self.facts.kept_drains.contains(&node_key(on)) {
@@ -1109,8 +1133,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple82755| {
-        let (i, word) = __nikaia_tuple82755;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple83940| {
+        let (i, word) = __nikaia_tuple83940;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

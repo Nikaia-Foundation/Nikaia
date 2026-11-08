@@ -990,6 +990,30 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **A text lent with `ref` to a pattern of `str`** (#490): on the
+        // block types `ref t` of a block's text is a `&Text`, which Rust's
+        // `Pattern` does not take; `&*` lends the `str` it holds.
+        if receiver != null && lent_pattern && self.on_block_types() && (self.facts.method_callees[on_node]?.starts_with("str::") ?? false) {
+            let lent = match args[0] {
+                Expr::Unary { op: UnaryOp::Ref, expr, .. } => expr,
+                else => null,
+            }
+            match lent {
+                text_arg => {
+                    let text = receiver ?? return
+                    self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+                    out.push(f".{name}(&*")
+                    self.emit_core_nested(world, walk, out, host, text_arg, 255, depth, flow, scope)
+                    if args.len() == 2 {
+                        out.push(", ")
+                        self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
+                    }
+                    out.push(")")
+                    return
+                },
+                null => {},
+            }
+        }
         // **Where the container stays the caller's, `drain` empties it** (#564,
         // ADR-094 D3, D4): `drain(..)` neither takes the elements away nor hands
         // out owned ones, and leaves the list empty in the caller's hands.

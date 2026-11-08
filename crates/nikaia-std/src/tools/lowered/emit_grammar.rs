@@ -232,7 +232,10 @@ impl EmitState {
         if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push(&format!("#[doc(hidden)]\n#[allow(non_snake_case)]\nmod {} {{ use super::*; grammar! {{\n", emit_stream_grammar_module(name))); } else { out.push("grammar! {\n"); }
         out.push(&format!("    grammar {} {{\n", name));
         if bytes { out.push("        input bytes;\n"); }
-        if self.on_block_types() { out.push("        collect nikaia_std::block::List;\n"); }
+        if self.on_block_types() {
+            out.push("        collect nikaia_std::block::List;\n");
+            out.push("        use nikaia_std::block::names::{format, vec};\n");
+        }
         walk.grammar_bytes = bytes;
         self.emit_grammar_body(world, walk, out, host, def, name, bytes)?;
         walk.grammar_bytes = false;
