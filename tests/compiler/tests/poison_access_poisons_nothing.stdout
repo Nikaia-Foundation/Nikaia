@@ -1,0 +1,8 @@
+the first task runs
+the access panicked: true
+the second task runs
+a second task reads: 3
+the third task runs
+the access_all panicked: true
+the fourth task runs
+a fourth task reads both: 34

@@ -2235,7 +2235,9 @@ impl EmitState {
         // `std`'s, because it is about addresses at run time and not about
         // anything this compiler can see.
         if (text == "access_all" || text == "update_all") && args.len() > 0 {
-            out.push(f"nikaia_std::lock::{text}(")
+            // Over two values that copy, the block works on copies (ADR-327 D11).
+            let copied = if text == "update_all" && self.facts.copied_doors.contains(node_key(args[0])) { "_copied" } else { "" }
+            out.push(f"nikaia_std::lock::{text}{copied}(")
             let last = args.len() - 1
             let mut at = 0
             for lock in args {

@@ -18,7 +18,7 @@ description: >-
     <h1 class="home-heading">Safe, secure, reliable</h1>
     <p class="safe-lead home-intro">Safety is more than one check. A program fails when something goes wrong while it runs and nothing handles it, when data from outside is not what it expected, when a part is used outside what it was made for, when a change quietly breaks a rule another part relies on, and when a service it waits for is slow or gone.</p>
     <p class="safe-lead home-intro">Nikaia looks at all five, at compile time wherever it can. For each one this page says what the compiler checks and where the check stops, and every topic has a page with the whole program and the message the compiler gives.</p>
-    <p class="safe-others">The five layers: <a href="#running">While the program runs</a><a href="#outside">Data from outside</a><a href="#logic">Parts that keep their promises</a><a href="#changes">Changes, by people and by models</a><a href="#load">Under load and failure</a></p>
+    <p class="safe-others">The five layers: <a href="#running">Errors that have to be handled</a><a href="#outside">Input checked where it arrives</a><a href="#logic">Contracts kept at every call</a><a href="#changes">Every change held to the rules</a><a href="#load">Steady under load and failure</a></p>
     <p class="safe-others">Also: <a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/easy/" | relative_url }}">Easy to understand</a><a href="{{ "/good/" | relative_url }}">Made for good</a></p>
   </div>
 </section>
@@ -26,7 +26,7 @@ description: >-
 <section class="home-section home-section-alt" id="running">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 1</p>
-    <h2 class="home-heading">While the program runs</h2>
+    <h2 class="home-heading">Errors that have to be handled</h2>
     <p class="safe-lead home-intro">A file is missing, an index is past the end of a list, a task fails. A program meets states nobody planned for, and what matters is that each is handled where it happens, and that one failing part does not take the rest of the program with it.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b" id="errors">
@@ -57,11 +57,11 @@ description: >-
 <section class="home-section" id="outside">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 2</p>
-    <h2 class="home-heading">Data from outside</h2>
+    <h2 class="home-heading">Input checked where it arrives</h2>
     <p class="safe-lead home-intro">What a request carries, what another program prints or what a person types is not up to your program. Nikaia knows which values come from outside, and asks for them to be checked where they arrive, before the rest of the program relies on them.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
 <p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows, and it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
@@ -91,7 +91,7 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
 <section class="home-section home-section-alt" id="logic">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 3</p>
-    <h2 class="home-heading">Parts that keep their promises</h2>
+    <h2 class="home-heading">Contracts kept at every call</h2>
     <p class="safe-lead home-intro">A function is written for certain inputs, and a value shared between tasks is meant to change in a certain way. Nikaia lets these rules be written in the code, and checks them when the program is built, so a state the program relies on is not broken unnoticed.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b" id="promises">
@@ -107,7 +107,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b" id="conflicts">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
 <p><span class="why why-limit">Beyond what a compiler sees</span> A file is told apart by a name written in the program; two tasks writing paths worked out while the program runs are not refused.</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
 </details>
@@ -126,7 +126,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
 <section class="home-section" id="changes">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 4</p>
-    <h2 class="home-heading">Changes, by people and by models</h2>
+    <h2 class="home-heading">Every change held to the rules</h2>
     <p class="safe-lead home-intro">More and more changes are made by a model or an agent, often faster than a person can read them closely. Such a change can look right line by line and still break a rule that another part of the program relies on.</p>
     <p class="safe-lead home-intro">In Nikaia those rules are part of the code, such as the <code>assert</code> that states what a function expects, the <code>throws</code> that says it can fail and the directory a path may not leave. The compiler checks every change against all of them on every build, whoever wrote it. A change that calls a function outside its precondition, lets an error through unhandled or starts two tasks that change the same value is refused, and the message says what to write instead, so an agent can fix the code and build again.</p>
     <div class="safe-tiles">
@@ -151,7 +151,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
 <section class="home-section home-section-alt" id="load">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 5</p>
-    <h2 class="home-heading">Under load and failure</h2>
+    <h2 class="home-heading">Steady under load and failure</h2>
     <p class="safe-lead home-intro">A service the program depends on gets slow, a connection stops answering, one task uses more than its share. The program should answer in time with what it has, and the trouble should stay with the part that has it.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
@@ -163,7 +163,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/deadlines.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b" id="stuck">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
 </details>
         <h3><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a></h3>

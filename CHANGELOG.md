@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1366] — 2026-11-08
+
+**No needless poisoning, and the task block measured (ADR-327 D10, D11; #490 steps 1-2)**
+- A panic in an `update` of a number, `bool` or `char`, in an `update_all` of two such values, or in `access`/`access_all` no longer poisons the value: the copying doors work on a copy put back at the end, and a reading door sets no mark (ADR-327 D11).
+- `benches/taskblock` counts three blocks that reuse freed memory against `malloc` and the bump block, on short tasks and one long task (D10); the choice of block is the owner's.
+
 ## [0.0.1365] — 2026-11-08
 
 **Data from outside through a method, and options at a method call are checked (#1446)**

@@ -48,17 +48,17 @@ description: >-
     <p class="safe-lead home-intro">A program fails in more than one way. Nikaia looks at five of them, checks at compile time wherever it can, and says for each where its checks stop.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-part">Partly checked</span>
-        <h3><a href="{{ "/safe/#running" | relative_url }}">While the program runs</a></h3>
-        <p>An error nobody handles is refused when the program is built. A task that can panic ends alone, and whoever waits for it handles the crash; the compiler works out which tasks can.</p>
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/#running" | relative_url }}">Errors that have to be handled</a></h3>
+        <p>A call that can fail is handled or passed on, or the program is not built. What a function can fail with is worked out from its body, so its signature says <code>throws</code> and not a list of every error. A task that can panic ends alone, and whoever waits for it handles the crash.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
         <a class="safe-more" href="{{ "/safe/#running" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-part">Partly checked</span>
-        <h3><a href="{{ "/safe/#outside" | relative_url }}">Data from outside</a></h3>
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/#outside" | relative_url }}">Input checked where it arrives</a></h3>
         <p>A claim about data from outside waits for a guard where the data arrives, and a path from outside stays in the directory the call names.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
 let n: int = out.stdout.len()
@@ -67,7 +67,7 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#logic" | relative_url }}">Parts that keep their promises</a></h3>
+        <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
         <p>An <code>assert</code> is a contract, and a call that breaks it is refused. Two tasks that change the same value are refused too.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
     assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
@@ -79,15 +79,15 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked on every build</span>
-        <h3><a href="{{ "/safe/#changes" | relative_url }}">Changes, by people and by models</a></h3>
+        <h3><a href="{{ "/safe/#changes" | relative_url }}">Every change held to the rules</a></h3>
         <p>Every change is checked against the rules the code states, whoever wrote it. A change that breaks one is refused, with what to write instead. A change to a rule itself shows in the diff and in the reports.</p>
 <div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
   …/src/main.nika:10  assert(n == 41)  proved</code></pre></div>
         <a class="safe-more" href="{{ "/safe/#changes" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-part">Partly checked</span>
-        <h3><a href="{{ "/safe/#load" | relative_url }}">Under load and failure</a></h3>
+        <span class="safe-chip safe-chip-part">Memory budget still being built</span>
+        <h3><a href="{{ "/safe/#load" | relative_url }}">Steady under load and failure</a></h3>
         <p>A wait with a deadline has to handle its timeout. A lock held across a pause is refused. A memory budget for every task is specified and not built yet.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let price = async(within: 100.millis()) lookup()
     catch { "cached price" }</code></pre></div>

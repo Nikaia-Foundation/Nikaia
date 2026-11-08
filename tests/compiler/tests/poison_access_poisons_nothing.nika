@@ -1,0 +1,41 @@
+// `access` and `access_all` cannot change a value (ADR-327 D11, #490): a
+// panic in their block poisons nothing, and the values stay readable.
+fn look(list: SharedMut[Vec[i64]]) -> i64 {
+	let n = list.access fn(v) {
+		if v.len() > 2 { panic("while reading") }
+		v.len()
+	}
+	return n
+}
+
+fn look_both(list: SharedMut[Vec[i64]], count: SharedMut[i64]) -> i64 {
+	return access_all(list, count) fn(v, c) {
+		if v.len() > 2 { panic("while reading both") }
+		v.len() * 10 + c
+	}
+}
+
+fn read(list: SharedMut[Vec[i64]]) -> i64 {
+	return list.get().len()
+}
+
+fn read_both(list: SharedMut[Vec[i64]], count: SharedMut[i64]) -> i64 {
+	return list.get().len() * 10 + count.get()
+}
+
+fn main() throws {
+	let list: SharedMut[Vec[i64]] = SharedMut([1, 2, 3])
+	let a = async look(list) catch { 0 }
+	println("the first task runs")
+	println(f"the access panicked: {a == 0}")
+	let b = async read(list) catch { -1 }
+	println("the second task runs")
+	println(f"a second task reads: {b}")
+	let count = SharedMut(4)
+	let c = async look_both(list, count) catch { 0 }
+	println("the third task runs")
+	println(f"the access_all panicked: {c == 0}")
+	let d = async read_both(list, count) catch { -1 }
+	println("the fourth task runs")
+	println(f"a fourth task reads both: {d}")
+}

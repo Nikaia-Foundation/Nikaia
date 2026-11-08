@@ -1,0 +1,33 @@
+// An `update_all` over a number and a list copies neither (ADR-327 D11,
+// #490): values changed in one door must agree, so a panic in its block
+// poisons both.
+fn move(a: SharedMut[i64], b: SharedMut[Vec[i64]]) -> i64 {
+	update_all(a, b) fn(mut x, mut y) {
+		x -= 10
+		if x < 100 { panic("after the first") }
+		y.push(x)
+	}
+	return 1
+}
+
+fn read_a(a: SharedMut[i64]) -> i64 {
+	return a.get()
+}
+
+fn read_b(b: SharedMut[Vec[i64]]) -> i64 {
+	return b.get().len()
+}
+
+fn main() throws {
+	let a = SharedMut(105)
+	let b: SharedMut[Vec[i64]] = SharedMut([1])
+	let t = async move(a, b) catch { 0 }
+	println("the first task runs")
+	println(f"the update_all panicked: {t == 0}")
+	let x = async read_a(a) catch { -1 }
+	println("the second task runs")
+	println(f"the number is poisoned: {x == -1}")
+	let y = async read_b(b) catch { -1 }
+	println("the third task runs")
+	println(f"the list is poisoned: {y == -1}")
+}

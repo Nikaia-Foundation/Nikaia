@@ -445,6 +445,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
         at += 1;
     }
     if !params.is_empty() && (params.len() as i64) != count { check_core_args_no_door(state, writing, "The block takes one value per lock, in the order the locks are written.", span); }
+    if writing && count == 2 && a_copy_by_value(nikaia_std::index::get(&held, 0)) && a_copy_by_value(nikaia_std::index::get(&held, 1)) { state.facts.copied_doors.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
     if writing {
         state.an_update_block_returns_nothing(body, span);
         state.an_update_block_reads_what_it_writes(world, params, body, span);

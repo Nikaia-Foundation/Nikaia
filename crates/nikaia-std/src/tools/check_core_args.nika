@@ -635,6 +635,10 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
     if params.len() > 0 && params.len() != count {
         check_core_args_no_door(state, writing, "The block takes one value per lock, in the order the locks are written.", span)
     }
+    // **Both values copy: the block works on copies** (ADR-327 D11).
+    if writing && count == 2 && a_copy_by_value(held[0]) && a_copy_by_value(held[1]) {
+        state.facts.copied_doors.insert(id_of(args[0]) as i64)
+    }
     // D6 is D1 widened, so the same two questions are asked of this block.
     if writing {
         state.an_update_block_returns_nothing(body, span)
