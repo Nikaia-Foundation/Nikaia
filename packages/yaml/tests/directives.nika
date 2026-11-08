@@ -48,6 +48,20 @@ fn line(text: String) throws {
 	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
 	println(parts.join(" | "))
 }
+// The events of `text`, one per line, after a header: tags resolved by the
+// directives of the node's document (ADR-yaml-1 D7).
+fn events(text: String) throws {
+	println(f"# {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::documents(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	for e in yaml::events(docs) {
+		println(yaml::event_line(e))
+	}
+}
+
 fn main() throws {
 	// a reserved directive (example 6.13)
 	line("%FOO  bar baz # Should be ignored\n              # with a warning.\n--- \"foo\"\n")
@@ -79,4 +93,9 @@ fn main() throws {
 	// inside a document a `%` line is no directive: here it continues a plain
 	// scalar (yaml-test-suite XLQ9)
 	line("a\n%YAML 1.2\n--- b\n")
+	// the events resolve a tag by its document's %TAG directives: a named
+	// handle, `!!` given another prefix, the primary `!` given one; the next
+	// document has none, so `!!` is `tag:yaml.org,2002:` and `!` stays local
+	events("%TAG !e! tag:example.com,2000:\n%TAG !! tag:example.com,2000:app/\n---\n- !e!foo \"bar\"\n- !!str x\n- !local y\n- !<tag:v> z\n- ! w\n")
+	events("%TAG ! tag:example.com,2000:local/\n--- !local [!!str x]\n--- !local [!!str x]\n")
 }
