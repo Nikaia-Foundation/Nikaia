@@ -18,6 +18,26 @@ fn check_exprs_part_name(index: i64) -> String {
     return f"p{index}"
 }
 
+/// The ledger entry of `name` (`yaml::Node`) where it is a type a package
+/// this file `use`s declares, with the fields or variants it records (#1422):
+/// not a `std` module's, which this file reached with `use std::…`, and not a
+/// Rust crate's, which the ledger records with neither. A dependency's entries
+/// are in the program's ledger or in `library`, under its qualified name.
+fn check_exprs_package_type(world: ref CheckWorld, std_in_scope: ref collections::BTreeSet[String], name: ref String) -> TypeContract? sync {
+    let parts: Vec[ref String] = name.split("::").collect()
+    let head = parts[0].to_string()
+    if std_in_scope.contains(head) || !imports_a_package(world.here, head) {
+        return null
+    }
+    for ledger in [world.own, world.library] {
+        let contract = ledger.types.get(name) ?? continue
+        if contract.fields.len() > 0 || contract.variants.len() > 0 {
+            return contract.clone()
+        }
+    }
+    return null
+}
+
 /// Whether a type is exactly `String`, held.
 pub fn a_plain_string(ty: ref Ty) -> bool {
     return match ty {
@@ -225,12 +245,24 @@ impl CheckState {
                     self.findings.push(check_refusal("NK1201", span, message, [note], out))
                     return
                 }
-                if name.contains("::") || name == "Self" {
+                if name == "Self" {
                     return
                 }
-                let is_enum = self.enums.contains_key(name)
-                let is_struct = self.structs.contains_key(name)
-                if !is_enum && !is_struct && !world.own.types.contains_key(name) {
+                // **A struct or `enum` of a package this file `use`s** (#1422):
+                // its ledger says what it is made of, and the lowering writes
+                // a text form only for an error of it, as for one of this
+                // package. A `std` type or a Rust crate's is left alone.
+                let mut package_type: TypeContract? = null
+                if name.contains("::") {
+                    package_type = check_exprs_package_type(world, self.std_in_scope, name)
+                }
+                let from_a_package = package_type != null
+                if name.contains("::") && !from_a_package {
+                    return
+                }
+                let is_enum = !from_a_package && self.enums.contains_key(name)
+                let is_struct = !from_a_package && self.structs.contains_key(name)
+                if !is_enum && !is_struct && !from_a_package && !world.own.types.contains_key(name) {
                     return
                 }
                 let own = world.own.implementations.get("Error")
@@ -251,6 +283,15 @@ impl CheckState {
                     for field in own_fields {
                         fields.push(field.name.clone())
                     }
+                } else if from_a_package {
+                    // Only what another package lets a program read is offered.
+                    let contract = package_type ?? return
+                    for field in contract.fields {
+                        if field.public {
+                            fields.push(field.name.clone())
+                        }
+                    }
+                    an_enum = contract.variants.len() > 0
                 } else if !is_enum {
                     let contract = world.own.types.get(name) ?? return
                     for field in contract.fields {

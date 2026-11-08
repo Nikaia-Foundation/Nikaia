@@ -1,0 +1,4 @@
+Error: fault at line 7
+  raised at step
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+exit 1
