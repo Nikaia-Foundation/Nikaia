@@ -182,8 +182,21 @@ are refused here.
 
 It lowers to the engine's `#[stream]`. A JSON Lines file is read in parallel by
 `par_fold` over a generic `@frame` rule, `init`, `step` and `merge` handed in as
-rule values (ADR-grammar-1 D2). Reading from a pipe or a socket is not decided
-here: an entry takes `String` or `Bytes` (`NK1282`).
+rule values (ADR-grammar-1 D2). An entry takes `String` or `Bytes` (`NK1282`).
+
+*Amended November 8, 2026 (owner's decision on #1428, options Q1-A, Q2-A, Q3):*
+
+* **The call is a sequence walked once.** `for ev in Yaml::events(bytes)` walks
+  the items as the parser produces them; it lowers to `#[stream(each)]`, and a
+  `break` in the loop becomes `ControlFlow::Break` and stops the parse. A
+  result held without walking it is that sequence's value, not a list.
+* **The items are owned.** An item does not borrow from the input, so it may
+  outlive the step that produced it (yaml's `Event` owns its text).
+* **A reader is the Rust side's for now.** Where a feature reaches the entry
+  (ADR-393 D4), the lowering also writes `parse_<rule>_reader` over a
+  `std::io::Read`, so a Rust user reads stdin or a socket. A Nikaia entry still
+  takes `String` or `Bytes`; a reader type in `std` for Nikaia callers is a
+  question of its own.
 
 ### D8 — Writing stays a function per type.
 
@@ -271,4 +284,5 @@ there is no text to parse while running.
   naming an exact type, or one guarded by a bound. A decision round of its own
   ([#1020](https://github.com/Nikaia-Foundation/Nikaia/issues/1020)).
 * **The JSON form of a variant that carries a payload** (D13).
-* **A reader input** (a pipe, a socket) for an entry (D7).
+* **A reader type in `std`** for a Nikaia caller of a `@stream` entry (D7, as
+  amended).
