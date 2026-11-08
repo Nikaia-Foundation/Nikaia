@@ -353,15 +353,22 @@ struct TextDeclared {
     /// The program's `comptime` constants of type `String`: views of text
     /// fixed at build time (ADR-views-3 D15, #1254).
     comptime_texts: collections::BTreeSet[String],
+    /// The structs this program declares and does not publish: the only ones a
+    /// text field handed back lends (#1341), as their fields' text is the
+    /// program's own to decide.
+    private_structs: collections::BTreeSet[String],
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet(), comptime_texts: collections::BTreeSet() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet(), comptime_texts: collections::BTreeSet(), private_structs: collections::BTreeSet() }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
                 let owner = names.resolve(name).clone()
                 declared.types.insert(owner.clone())
+                if !is_public {
+                    declared.private_structs.insert(owner.clone())
+                }
                 for field in fields {
                     let key = (owner.clone(), names.resolve(field.name).clone())
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public })
@@ -6091,7 +6098,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     // A plain struct parameter a field of which is handed back is read as
     // `ref`, as the hand-back pass writes it (#1341, `hb_text_field_roots`).
     let of_a_trait = walk.declared.fns[key]?.of_a_trait ?? false
-    let lent_fields: collections::BTreeSet[String] = if of_a_trait { collections::BTreeSet() } else { hb_text_field_roots(item, ask.names) }
+    let lent_fields: collections::BTreeSet[String] = if of_a_trait { collections::BTreeSet() } else { hb_text_field_roots(item, ask.names, walk.declared.private_structs) }
     let mut at = 0
     for arg in args {
         let owner = TextOwner::Param(key.clone(), at)
@@ -7353,12 +7360,13 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerContext, package: ref SliceFills) -> collections::BTreeSet[String] {
     let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
+    let private = hb_private_structs(program.items, words)
     let mut views: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
     let mut made: collections::BTreeSet[String] = collections::BTreeSet()
     while true {
         let before = views.len()
         for mut item in program.items {
-            hb_item(item.node, words, plain, opted, views, made)
+            hb_item(item.node, words, plain, private, opted, views, made)
         }
         if views.len() == before {
             break
@@ -7825,13 +7833,13 @@ fn sv_through_an_index(expr: ref Expr) -> bool {
 
 /// `views` holds, for each free function of the file whose result the pass
 /// made a view, the positions of the parameters it points into.
-fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
+fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
     match item {
-        Item::Fn { .. } => hb_fn(item, words, plain, opted, views, true),
+        Item::Fn { .. } => hb_fn(item, words, plain, private, opted, views, true),
         Item::Impl { trait_name, target, methods } => {
             if trait_name == null {
                 for mut method in methods {
-                    hb_fn(method.node, words, plain, opted, views, false)
+                    hb_fn(method.node, words, plain, private, opted, views, false)
                 }
             } else {
                 let owner = words.resolve(target.name).clone()
@@ -7893,8 +7901,8 @@ fn hb_plain_text(t: ref Type, words: ref winnow_grammar::InternerContext) -> boo
 
 /// `free`: a function of the file, not a method; only such a one is entered
 /// in `views`, where a call names it.
-fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
-    let lent_fields = hb_text_field_roots(item, words)
+fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
+    let lent_fields = hb_text_field_roots(item, words, private)
     if !lent_fields.is_empty() {
         match item {
             Item::Fn { args, .. } => {
@@ -7967,7 +7975,7 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
 /// one is the walk's (`lendable_parameter`). A published function keeps its
 /// text of its own (ADR-282 D29), and a trait's method the trait's
 /// signature.
-fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContext, private: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     let (args, ret_type, body, is_extern, ret_from, is_public) = match item {
         Item::Fn { args, ret_type, body, is_extern, ret_from, is_public, .. } => (args, ret_type, body, is_extern, ret_from, is_public),
@@ -8010,7 +8018,7 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
     }
     for value in handed {
         let root = hb_field_chain_root(value, words) ?? continue
-        let lendable = args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null && hb_type_may_be_a_view(arg.ty, words, none) })
+        let lendable = args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null && private.contains(words.resolve(arg.ty.name)) && hb_type_may_be_a_view(arg.ty, words, none) })
         if lendable && !rebinds(body, root, words) && hb_only_field_reads(root, visited, reads, words) {
             out.insert(root)
         }
@@ -8314,6 +8322,24 @@ fn hb_returns_of_maybe(block: ref Block?) -> Vec[ref Expr] {
 
 fn hb_maybe(expr: ref Expr?) -> Vec[ref Expr] {
     return [expr ?? return []]
+}
+
+/// The structs of the program that are not published: a struct declared
+/// beside, or published, has fields whose text is its own, so a field of it
+/// handed back is moved out of it, not lent (#1341).
+fn hb_private_structs(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for item in items {
+        match item.node {
+            Item::Struct { name, is_public, .. } => {
+                if !is_public {
+                    out.insert(words.resolve(name).clone())
+                }
+            },
+            else => {},
+        }
+    }
+    return out
 }
 
 /// The enums whose variants hold nothing: copied at a read, never a view.

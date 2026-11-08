@@ -217,16 +217,18 @@ pub(crate) struct TextDeclared {
     pub(crate) methods: collections::BTreeMap<String, Vec<String>>,
     pub(crate) rules: collections::BTreeSet<String>,
     pub(crate) comptime_texts: collections::BTreeSet<String>,
+    pub(crate) private_structs: collections::BTreeSet<String>,
 }
 
 pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new(), comptime_texts: collections::BTreeSet::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new(), comptime_texts: collections::BTreeSet::new(), private_structs: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
                 let is_public = *is_public; let name = *name;
                 let owner = names.resolve(name).to_string();
                 declared.types.insert(owner.to_string());
+                if !is_public { declared.private_structs.insert(owner.to_string()); }
                 for field in fields.iter() {
                     let key = (owner.to_string(), names.resolve(field.name).to_string());
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public });
@@ -4421,7 +4423,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
     walk.hole_text = -1;
     open_tier_scope(walk);
     let of_a_trait = nikaia_std::index::or((*nikaia_std::index::get(&walk.declared.fns, &key)).as_ref().map(|__nikaia_it| __nikaia_it.of_a_trait), || false);
-    let lent_fields: collections::BTreeSet<String> = if of_a_trait { collections::BTreeSet::new() } else { hb_text_field_roots(item, ask.names) };
+    let lent_fields: collections::BTreeSet<String> = if of_a_trait { collections::BTreeSet::new() } else { hb_text_field_roots(item, ask.names, &walk.declared.private_structs) };
     let mut at = 0;
     for arg in args.iter() {
         let owner = TextOwner::Param(key.to_string(), at);
@@ -5445,11 +5447,12 @@ pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, V
 pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext, package: &SliceFills) -> collections::BTreeSet<String> {
     let plain = hb_plain_enums(&program.items, words);
     let opted = keep_marks_opted_in_items(&program.items);
+    let private = hb_private_structs(&program.items, words);
     let mut views: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
     let mut made: collections::BTreeSet<String> = collections::BTreeSet::new();
     loop {
         let before = views.len() as i64;
-        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted, &mut views, &mut made); }
+        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, &private, opted, &mut views, &mut made); }
         if (views.len() as i64) == before { break; }
     }
     sf_slice_fields(program, words, package);
@@ -5773,12 +5776,12 @@ pub(crate) fn sv_through_an_index(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, made: &mut collections::BTreeSet<String>) {
+pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, private: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, made: &mut collections::BTreeSet<String>) {
     match item {
-        Item::Fn { .. } => { hb_fn(item, words, plain, opted, views, true); },
+        Item::Fn { .. } => { hb_fn(item, words, plain, private, opted, views, true); },
         Item::Impl { trait_name, target, methods } => {
             let trait_name = *trait_name;
-            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted, views, false); } } else {
+            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, private, opted, views, false); } } else {
                 let owner = words.resolve(target.name).to_string();
                 for method in methods.iter_mut() { hb_trait_from(&mut (*method).node, words, plain, &owner, made); }
             }
@@ -5818,8 +5821,8 @@ pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerCon
 
 pub(crate) fn hb_plain_text(t: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_nullable && !t.is_mut && !t.is_slice && (*t.code).is_none() }
 
-pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
-    let lent_fields = hb_text_field_roots(&item, words);
+pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, private: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
+    let lent_fields = hb_text_field_roots(&item, words, private);
     if !lent_fields.is_empty() {
         match item {
             Item::Fn { args, .. } => { for arg in args.iter_mut() { if lent_fields.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } } },
@@ -5852,7 +5855,7 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
     }
 }
 
-pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerContext, private: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let (args, ret_type, body, is_extern, ret_from, is_public) = match item {
         Item::Fn { args, ret_type, body, is_extern, ret_from, is_public, .. } => { let is_extern = *is_extern; let is_public = *is_public; (args, ret_type, body, is_extern, ret_from, is_public) },
@@ -5892,7 +5895,7 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
     for value in handed.iter() {
         let value = *value;
         let root = match hb_field_chain_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let lendable = args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() && hb_type_may_be_a_view(&arg.ty, words, &none) });
+        let lendable = args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() && private.contains(words.resolve(arg.ty.name)) && hb_type_may_be_a_view(&arg.ty, words, &none) });
         if lendable && !rebinds(body, &root, words) && hb_only_field_reads(&root, &visited, &reads, words) { out.insert(root); }
     }
     out
@@ -6105,6 +6108,20 @@ pub(crate) fn hb_returns_of(block: &Block) -> Vec<&Expr> {
 pub(crate) fn hb_returns_of_maybe(block: Option<&Block>) -> Vec<&Expr> { hb_returns_of(match block { Some(__nikaia_value) => __nikaia_value, None => return vec![] }) }
 
 pub(crate) fn hb_maybe(expr: Option<&Expr>) -> Vec<&Expr> { vec![match expr { Some(__nikaia_value) => __nikaia_value, None => return vec![] }] }
+
+pub(crate) fn hb_private_structs(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Struct { name, is_public, .. } => {
+                let is_public = *is_public; let name = *name;
+                if !is_public { out.insert(words.resolve(name).to_string()); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
 
 pub fn hb_plain_enums(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut plain: collections::BTreeSet<String> = collections::BTreeSet::new();
