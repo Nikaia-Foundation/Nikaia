@@ -835,8 +835,64 @@ pub fn diagnose(
     found
 }
 
+/// **Where the name at byte `offset` of `input` is declared** (#1396): its
+/// program read and checked as [`diagnose`] does, then the use there looked up
+/// in what the check of `input` resolved (`tools/check_declared.nika`). The
+/// file's path, the declaration's span and the name it declares; nothing where
+/// the place names nothing resolved or `input` was not checked (it does not
+/// parse).
+pub fn definition(
+    input: &Path,
+    open: &modules::Open,
+    alone: bool,
+    offset: i64,
+) -> Option<(String, crate::ast::Span, String)> {
+    let (found, _) =
+        diagnostics::collecting(|| -> Result<Option<(String, crate::ast::Span, String)>> {
+            let (manifest, packages) = match alone {
+                true => (Manifest::default(), Vec::new()),
+                false => (Manifest::find(input)?, packages_of_file(input)?),
+            };
+            let settings = Settings::resolve(&manifest, None, None)?;
+            with_lower_host(
+                input,
+                &settings,
+                true,
+                &packages,
+                None,
+                open,
+                alone,
+                |host, _| {
+                    use project_lower::ProjectLowerHost;
+                    host.read_program().ok()?;
+                    // A refusal still leaves the facts of what was checked.
+                    let _ = host.check_units();
+                    let program = host.program.borrow();
+                    let program = program.as_ref()?;
+                    let at = program.units.iter().position(|unit| unit.path == input)?;
+                    let facts = host.unit_facts.borrow();
+                    let facts = facts.get(&at)?;
+                    let views: Vec<_> = program
+                        .units
+                        .iter()
+                        .map(|unit| crate::check::parsed_view_of(&unit.parsed))
+                        .collect();
+                    let (file, span, name) = nikaia_std::tools::check_declared::declared_site(
+                        &views, at as i64, facts, offset,
+                    )?;
+                    Some((
+                        program.units[file as usize].path.display().to_string(),
+                        span,
+                        name,
+                    ))
+                },
+            )
+        });
+    found.ok().flatten()
+}
+
 /// What `nikaia lsp` asks of the compiler (`tools/lsp.nika`, #1347):
-/// [`diagnose`].
+/// [`diagnose`] and [`definition`].
 pub struct Lsp;
 
 impl nikaia_std::tools::lsp::LspHost for Lsp {
@@ -847,6 +903,16 @@ impl nikaia_std::tools::lsp::LspHost for Lsp {
         alone: bool,
     ) -> Vec<(String, nikaia_std::tools::render::Shown)> {
         diagnose(Path::new(entry), open, alone)
+    }
+
+    fn definition(
+        &self,
+        entry: &str,
+        open: &BTreeMap<String, String>,
+        alone: bool,
+        offset: i64,
+    ) -> Option<(String, crate::ast::Span, String)> {
+        definition(Path::new(entry), open, alone, offset)
     }
 }
 
@@ -923,6 +989,7 @@ fn with_lower_host<R>(
         foreign: RefCell::new(None),
         book: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
+        unit_facts: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
         proofs: RefCell::new(None),
         failed: RefCell::new(None),
@@ -958,6 +1025,9 @@ struct LowerHost<'a> {
     /// The prover's book between the check and the emitter.
     book: RefCell<Option<crate::proofs::Book>>,
     checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
+    /// Each unit's facts, by its place in the program, for `nikaia lsp`'s
+    /// [`definition`] (#1396): empty for every other build.
+    unit_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
     published: RefCell<BTreeMap<String, crate::prove::Published>>,
     /// The book as the lowering left it, in a project.
     proofs: RefCell<Option<crate::proofs::Book>>,
@@ -1224,7 +1294,11 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 };
                 let mut facts = None;
                 let keep = facts_reusable && unit.package.is_none();
-                warnings += &crate::proofs::for_unit(
+                // **`nikaia lsp` asks where a name is declared** (#1396): every
+                // unit's facts, a refused unit's too, kept apart from the
+                // emitter's.
+                let lsp = diagnostics::is_collecting();
+                let checked = crate::proofs::for_unit(
                     &unit.path,
                     &unit.source,
                     unit.package.is_some(),
@@ -1240,11 +1314,15 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                             &settings.words.refuted_claims,
                             &settings.words.unproved_claims,
                             settings.library(),
-                            keep.then_some(&mut facts),
+                            (keep || lsp).then_some(&mut facts),
                         )
                     },
-                )?;
-                if let Some(facts) = facts {
+                );
+                if lsp && let Some(facts) = &facts {
+                    self.unit_facts.borrow_mut().insert(at, facts.clone());
+                }
+                warnings += &checked?;
+                if keep && let Some(facts) = facts {
                     checked_facts.insert(at, facts);
                 }
             }

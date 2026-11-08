@@ -875,6 +875,7 @@ pub fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref Chec
             return Ty::Unknown
         }
     }
+    state.declared_callee(world, func, name)
     // **A kept function value called by name.**
     if check_core_call_is_variable(func) && !state.run_code.contains(name) {
         let mut looked: Ty = state.lookup(name) ?? Ty::Unknown

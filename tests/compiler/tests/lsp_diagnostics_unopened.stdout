@@ -1,6 +1,6 @@
 Content-Length: ok\r\n
 \r\n
-{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1}}}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1,"definitionProvider":true}}}
 Content-Length: ok\r\n
 \r\n
 {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file://<scratch>/pk/src/main.nika","diagnostics":[]}}

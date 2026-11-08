@@ -671,6 +671,7 @@ pub fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: &CheckW
             return Ty::Unknown;
         },
     }
+    state.declared_callee(world, func, &name);
     if check_core_call_is_variable(func) && !state.run_code.contains(&name) {
         let mut looked: Ty = nikaia_std::index::or(state.lookup(&name), || Ty::Unknown);
         match looked {

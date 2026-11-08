@@ -10,7 +10,8 @@
 // each `didOpen`, `didChange` and `didSave` it publishes what `nikaia check`
 // says of that file's package - checked in this process, over the editor's
 // text (`LspHost`) - as `textDocument/publishDiagnostics`, each finding on the
-// file it is about.
+// file it is about. It answers `textDocument/definition` with the place the
+// name under the cursor is declared, as the same check resolved it (#1396).
 
 use json
 use std::collections
@@ -24,8 +25,14 @@ use std::text
 /// checked; nothing emitted, cached or written. Each finding comes with the
 /// path of the file it is about, warnings too. `alone` checks `entry` as a
 /// single file, in no package: a document with no `file://` path (#1365).
+///
+/// `definition` checks the same program and gives where the name at byte
+/// `offset` of `entry` is declared (#1396): the file's path, the span of the
+/// declaration and the name declared there; nothing on a place that names
+/// nothing it resolved, or where the file does not parse.
 pub trait LspHost {
     fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool) -> Vec[(String, Shown)] sync
+    fn definition(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool, offset: i64) -> (String, Span, String)? sync
 }
 
 /// A message the editor sent that cannot be read as one.
@@ -99,9 +106,9 @@ pub fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) throws {
 }
 
 /// What `initialize` answers: the whole text of a document is sent on each
-/// change (`textDocumentSync` 1), and nothing else is offered.
+/// change (`textDocumentSync` 1), and "go to definition" is offered (#1396).
 pub fn lsp_capabilities() -> json::Value {
-    return lsp_object([("capabilities", lsp_object([("textDocumentSync", lsp_number(1))]))])
+    return lsp_object([("capabilities", lsp_object([("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))])
 }
 
 /// **The server**: messages are read and answered until `exit`. What it ends
@@ -176,6 +183,8 @@ pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
                 } else if method == "shutdown" {
                     shut_down = true
                     lsp_respond(asked, json::Value::Null)
+                } else if method == "textDocument/definition" {
+                    lsp_respond(asked, lsp_definition(host, cargo_json_member(message, "params"), open, uris))
                 } else {
                     lsp_refuse(asked, -32601, f"no method `{method}`")
                 }
@@ -249,6 +258,53 @@ pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
         }
     }
     return (line, column)
+}
+
+/// **Where the name at a `TextDocumentPositionParams` is declared** (#1396):
+/// a `Location`, or `null` where the place names nothing the check resolved.
+fn lsp_definition[H: LspHost](host: ref H, params: ref json::Value?, open: ref collections::BTreeMap[String, String], uris: ref collections::BTreeMap[String, String]) -> json::Value {
+    let document = cargo_json_member(params, "textDocument")
+    let uri = cargo_json_text(cargo_json_member(document, "uri")) ?? return json::Value::Null
+    let position = cargo_json_member(params, "position")
+    let line = cargo_json_number(cargo_json_member(position, "line")) ?? return json::Value::Null
+    let character = cargo_json_number(cargo_json_member(position, "character")) ?? return json::Value::Null
+    let alone = !uri.starts_with("file://")
+    let path = if alone { uri.clone() } else { lsp_uri_path(uri) ?? return json::Value::Null }
+    let offset = lsp_offset(lsp_text_of(path, open), line, character)
+    let (file, span, name) = host.definition(path, open, alone, offset) ?? return json::Value::Null
+    return lsp_object([("uri", lsp_string(lsp_uri_of(file, uris))), ("range", lsp_range(lsp_text_of(file, open), span, name))])
+}
+
+/// The text of the file at `path`: the editor's where it has it open, else
+/// the disk's.
+fn lsp_text_of(path: ref String, open: ref collections::BTreeMap[String, String]) -> String {
+    return match open.get(path) {
+        null => fs::read_to_string(path, fs::Root::Anywhere) catch { "" },
+        held => held.clone(),
+    }
+}
+
+/// **The byte of `source` at LSP's place** `line`, `character` (both from 0,
+/// the column in UTF-16 code units): `lsp_position` turned around. A column
+/// past the line's end is its end.
+pub fn lsp_offset(source: ref String, line: i64, character: i64) -> i64 {
+    let mut at_line = 0
+    let mut column = 0
+    let mut byte = 0
+    for c in source.chars() {
+        if at_line == line && (column >= character || c == '\n') {
+            break
+        }
+        let code = c as i64
+        byte += if code < 128 { 1 } else if code < 2048 { 2 } else if code < 65536 { 3 } else { 4 }
+        if c == '\n' {
+            at_line += 1
+            column = 0
+        } else if at_line == line {
+            column += if code < 65536 { 1 } else { 2 }
+        }
+    }
+    return byte
 }
 
 /// **What the check of `path`'s program says, published** (#1347): one
