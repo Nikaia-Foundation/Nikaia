@@ -182,6 +182,8 @@ fn the_generated_manifest_checks_the_program_and_not_its_dependencies() {
 /// The generated workspace root's `Cargo.toml` - the one that carries the
 /// profile ([ADR-286](../../../docs/specification/adr/adr-286.md) D19). A member's
 /// is one directory further down and carries none, so the shallowest wins.
+/// The publish manifest (ADR-286 D25) sits as shallow and is no workspace, so
+/// only a manifest that declares `[workspace]` counts.
 fn find_manifest(under: &Path) -> Option<std::path::PathBuf> {
     let mut stack = vec![(0usize, under.to_path_buf())];
     let mut best: Option<(usize, std::path::PathBuf)> = None;
@@ -191,6 +193,8 @@ fn find_manifest(under: &Path) -> Option<std::path::PathBuf> {
             if path.is_dir() {
                 stack.push((depth + 1, path));
             } else if path.file_name().is_some_and(|n| n == "Cargo.toml")
+                && std::fs::read_to_string(&path)
+                    .is_ok_and(|text| text.lines().any(|line| line.trim() == "[workspace]"))
                 && best.as_ref().is_none_or(|(at, _)| depth < *at)
             {
                 best = Some((depth, path));
