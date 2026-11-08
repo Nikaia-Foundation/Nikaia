@@ -118,4 +118,7 @@ together with the specification section and an example test.
 * `nikaia test --filter NAME --bless` creates no `.stderr` when none exists; `touch NAME.stderr` first, then bless. (issue-1361)
 * The LSP test programs in `tests/compiler/tests/` are already unformatted on HEAD; `fmt --check` on them proves nothing about your change. (issue-1361)
 * NK1111's doubled-brace and hole warnings are both in `unmarked_hole` (`tools/check_host.nika`), and the brace scanning helpers are in `tools/check_words.nika`. (issue-1361)
+* A `let` of a choice mixing owned text and a view is typed `ref String` by the checker but emitted as `EitherText`; a missing `&` at a call is a `lent_args` question in `check_arguments.nika`, not an emitter one. (issue-1310)
+* In cargo test output, grep `test result:` with the colon; `^test result` also matches `it` tests named `result_source::…`. (issue-1310)
+* `.to_string()` of a text slice is a view in the checker as well (NK1105 when assigned to a `String` local), not only in the emitter. (issue-1310)
 
