@@ -378,7 +378,7 @@ impl EmitState {
         self.emit_core_called(world, walk, out, host, func, args, config, unchecked, depth, flow, scope)?;
         if hull { out.push(")"); }
         if boxed { out.push(")"); }
-        if pausing.is_some() || awaits_a_parameter || decided && !settled { out.push(".await"); }
+        if pausing.is_some() || awaits_a_parameter || decided && !settled { out.push(&emit_async_pause(&walk)); }
         if settled { out.push(")"); }
         let code_fails = self.facts.run_code_fails.contains(&node_key(func));
         if flow.can_throw && !flow.caught && (code_fails || call_can_fail(world.words, &self.own_contracts, world.library, &self.described, func)) {
@@ -419,7 +419,7 @@ impl EmitState {
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
                 }
                 out.push(")");
-                if pauses { out.push(".await"); }
+                if pauses { out.push(&emit_async_pause(&walk)); }
                 if fails && flow.can_throw && !flow.caught {
                     out.push(&self.box_into_channel(world, scope));
                     out.push("?");
@@ -882,7 +882,7 @@ impl EmitState {
         if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
         if self.method_pauses(on_node) {
             if flow.in_lambda { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
-            out.push(".await");
+            out.push(&emit_async_pause(&walk));
         }
         let fails = self.method_can_fail(on_node);
         if flow.can_throw && !flow.caught && fails { out.push("?"); }
@@ -1068,8 +1068,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78730| {
-        let (i, word) = __nikaia_tuple78730;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple78772| {
+        let (i, word) = __nikaia_tuple78772;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

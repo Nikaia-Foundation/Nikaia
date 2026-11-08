@@ -553,7 +553,7 @@ impl EmitState {
         // choice: the future is what can fail, so it has to be driven before
         // there is a `Result` to propagate. `f().await?` and never `f()?.await`.
         if pausing != null || awaits_a_parameter || (decided && !settled) {
-            out.push(".await")
+            out.push(emit_async_pause(walk))
         }
         if settled {
             out.push(")")
@@ -622,7 +622,7 @@ impl EmitState {
                 }
                 out.push(")")
                 if pauses {
-                    out.push(".await")
+                    out.push(emit_async_pause(walk))
                 }
                 if fails && flow.can_throw && !flow.caught {
                     out.push(self.box_into_channel(world, scope))
@@ -1336,7 +1336,7 @@ impl EmitState {
             if flow.in_lambda {
                 throw EmitRefused { message: f"This lambda calls `{name}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{name}` outside the lambda and pass in the value.", at: flow.statement }
             }
-            out.push(".await")
+            out.push(emit_async_pause(walk))
         }
         let fails = self.method_can_fail(on_node)
         if flow.can_throw && !flow.caught && fails {

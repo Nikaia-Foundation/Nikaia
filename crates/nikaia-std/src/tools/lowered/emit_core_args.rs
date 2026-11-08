@@ -574,9 +574,8 @@ pub(crate) fn emit_call_scope_channel(channel: &str) -> String {
     channel.to_string()
 }
 
-pub(crate) fn emit_async_wait(gates: &[i64], pausing: bool) -> String {
+pub(crate) fn emit_async_wait(gates: &[i64]) -> String {
     if gates.is_empty() { return String::from(""); }
-    if pausing { return format!("{}.place().await; ", emit_async_line(gates)); }
     let mut out: String = String::from("");
     for group in gates.iter() {
         let group = nikaia_std::num::value(group);
@@ -588,6 +587,12 @@ pub(crate) fn emit_async_wait(gates: &[i64], pausing: bool) -> String {
 pub fn emit_async_line(gates: &[i64]) -> String {
     if gates.is_empty() { return String::from(""); }
     format!("{}_waiting", emit_async_group_name(*nikaia_std::index::get(&gates, nikaia_std::index::at(gates.len() as i64 - 1))))
+}
+
+pub fn emit_async_pause(walk: &EmitWalk) -> String {
+    let line = emit_async_line(&walk.async_gates);
+    if line == "" { return String::from(".await"); }
+    format!(".on_line(&{}).await", line)
 }
 
 pub fn emit_async_during(line: &str, wait: &str) -> String {
@@ -899,29 +904,33 @@ impl EmitState {
         }
         let name = emit_async_group_name(group);
         let line = emit_async_line(&gates);
-        if body.buf.contains(".await") || line != "" && walk.async_pausing && kind != "spawn" {
-            let enter = emit_async_occupy(&gates);
-            let wait = emit_async_wait(&gates, true);
+        let gated = line != "" && walk.async_pausing;
+        if body.buf.contains(".await") || gated {
+            if kind == "spawn" && gated {
+                let cell = format!("__rest_{}", id);
+                out.push(&format!("{{ let _ = {}.keep({}.start_kept_gated(&{}, &{}, async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await); }}", line, name, cell, line, channel, body.buf));
+                walk.async_kept.push(cell);
+                return Ok(());
+            }
             if kind == "spawn" {
-                let spawned = format!("{}.spawn_paused_here(async || -> Result<(), {}> {{ {}let _ = {}; Ok(()) }}).await", name, channel, enter, body.buf);
-                if wait != "" { out.push(&format!("async {{ {}{} }}.await", wait, spawned)); } else { out.push(&spawned); }
+                out.push(&format!("{}.spawn_paused_here(async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await", name, channel, body.buf));
                 return Ok(());
             }
             let mut start: String = String::from("start_paused(");
-            if line != "" { start = format!("start_paused_gated({}.queues(), ", line); }
-            let mut held = format!("{}.{}async || -> Result<_, {}> {{ {}let __value = {}; Ok(__value) }}).await", name, start, channel, enter, body.buf);
+            if line != "" { start = format!("start_paused_gated(&{}, ", line); }
+            let mut held = format!("{}.{}async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, start, channel, body.buf);
             if kind == "handle" && walk.async_keeps {
                 let cell = format!("__rest_{}", id);
                 let mut kept = format!("start_kept(&{}, ", cell);
-                if line != "" { kept = format!("start_kept_gated(&{}, {}.queues(), ", cell, line); }
-                held = format!("{}.{}async || -> Result<_, {}> {{ {}let __value = {}; Ok(__value) }}).await", name, kept, channel, enter, body.buf);
+                if line != "" { kept = format!("start_kept_gated(&{}, &{}, ", cell, line); }
+                held = format!("{}.{}async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, kept, channel, body.buf);
                 walk.async_kept.push(cell);
             }
             if line != "" { held = format!("async {{ {}.keep({}) }}.await", line, held); }
             if kind == "join" { out.push(&emit_async_joined_paused(&held, &channel, fallback, &line)); } else { out.push(&held); }
             return Ok(());
         }
-        let enter = format!("{}{}", emit_async_wait(&gates, walk.async_pausing), emit_async_occupy(&gates));
+        let enter = format!("{}{}", emit_async_wait(&gates), emit_async_occupy(&gates));
         if kind == "spawn" {
             let spawned = format!("{}.spawn_here(|| -> Result<(), {}> {{ let _ = {}; Ok(()) }})", name, channel, body.buf);
             if enter != "" { out.push(&format!("{{ {}{} }}", enter, spawned)); } else { out.push(&spawned); }
