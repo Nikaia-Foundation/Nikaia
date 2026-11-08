@@ -294,14 +294,18 @@ pub(crate) struct FieldsScan {
     pub(crate) live: collections::BTreeMap<String, bool>,
     pub(crate) walked: bool,
     pub(crate) wrote: bool,
+    pub(crate) here: bool,
 }
 
 pub fn fields_seen(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], words: &winnow_grammar::InternerContext) -> FieldsSeen {
-    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false };
-    fields_declared(program, words, true, &mut scan);
-    for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) { fields_declared(other, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), false, &mut scan); }
+    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false, here: true };
+    let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut a_program = fields_declared(program, words, true, &mut scan, &mut reached);
+    for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) { a_program = fields_declared(other, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), false, &mut scan, &mut reached) || a_program; }
+    if !a_program { for name in reached.iter() { fields_lose(name, &mut scan); } }
     let mut writers: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for item in program.items.iter() { fields_item(item, words, &mut scan, &mut writers); }
+    scan.here = false;
     for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) {
         let mut ignored: collections::BTreeSet<i64> = collections::BTreeSet::new();
         for item in other.items.iter() { fields_item(item, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), &mut scan, &mut ignored); }
@@ -314,15 +318,22 @@ pub fn fields_seen(program: &Program, beside: &[&Program], beside_words: &[&winn
     FieldsSeen { keys, writers }
 }
 
-pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::InternerContext, here: bool, scan: &mut FieldsScan) {
+pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::InternerContext, here: bool, scan: &mut FieldsScan, reached: &mut collections::BTreeSet<String>) -> bool {
+    let mut has_main = false;
     for item in program.items.iter() {
         match &item.node {
-            Item::Struct { generics, fields, is_extern, .. } => {
-                let is_extern = *is_extern;
+            Item::Fn { name, .. } => {
+                let name = *name;
+                let named = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                has_main = has_main || words.resolve(named) == "main";
+            },
+            Item::Struct { generics, fields, is_extern, is_public, .. } => {
+                let is_extern = *is_extern; let is_public = *is_public;
                 for field in fields.iter() {
                     let name = words.resolve(field.name).to_string();
                     let ty = &field.ty;
-                    let mut fits = here && generics.is_empty() && !is_extern && !field.is_public && field.default.is_none() && field.attributes.is_empty();
+                    if field.is_public && is_public { reached.insert(name.to_string()); }
+                    let mut fits = here && generics.is_empty() && !is_extern && field.default.is_none() && field.attributes.is_empty();
                     let list = words.resolve(ty.name);
                     fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1;
                     if fits {
@@ -336,6 +347,7 @@ pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::Interne
             _ => { },
         }
     }
+    has_main
 }
 
 pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan, writers: &mut collections::BTreeSet<i64>) {
@@ -369,7 +381,7 @@ pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::Interner
 
 pub(crate) fn fields_write(name: &str, scan: &mut FieldsScan) {
     if !nikaia_std::index::or(scan.live.get(name), || false) { return; }
-    if scan.walked { scan.wrote = true; } else { scan.live.insert(name.to_string(), false); }
+    if scan.walked && scan.here { scan.wrote = true; } else { scan.live.insert(name.to_string(), false); }
 }
 
 pub(crate) fn fields_lose(name: &str, scan: &mut FieldsScan) { if nikaia_std::index::or(scan.live.get(name), || false) { scan.live.insert(name.to_string(), false); } }

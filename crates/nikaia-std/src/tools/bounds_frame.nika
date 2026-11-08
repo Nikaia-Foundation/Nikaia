@@ -552,8 +552,9 @@ fn frame_from(entry: ref String, root: ref String) -> bool {
 }
 
 /// **The list fields every write of which a walk sees** (ADR-306 D21,
-/// #1397): a private field of whole numbers, of a type with no parameters,
-/// with no default, named by no other field and by nothing beside; each
+/// #1397): a field of whole numbers no other package writes (D22), of a
+/// type with no parameters, with no default, named by no other field and
+/// written by nothing beside (#1414); each
 /// written only by a literal, a `with`, an assignment of the field, an
 /// assignment of one of its elements or a method that puts one value in
 /// (`writes_a_value`), and touched otherwise only by a method that keeps
@@ -572,6 +573,9 @@ struct FieldsScan {
 	walked: bool,
 	/// The body being scanned wrote a field.
 	wrote: bool,
+	/// Scanning the file being proved: a write in a file beside, whose
+	/// bodies `bounds_fields` does not walk, takes the field out (#1414).
+	here: bool,
 }
 
 pub fn fields_seen(
@@ -580,15 +584,25 @@ pub fn fields_seen(
 	beside_words: ref Vec[ref winnow_grammar::InternerContext],
 	words: ref winnow_grammar::InternerContext,
 ) -> FieldsSeen {
-	let mut scan = FieldsScan { live: collections::BTreeMap(), walked: false, wrote: false }
-	fields_declared(program, words, true, scan)
+	let mut scan = FieldsScan { live: collections::BTreeMap(), walked: false, wrote: false, here: true }
+	let mut reached: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut a_program = fields_declared(program, words, true, scan, reached)
 	for (k, other) in beside.iter().enumerate() {
-		fields_declared(other, beside_words[k], false, scan)
+		a_program = fields_declared(other, beside_words[k], false, scan, reached) || a_program
+	}
+	// **A `pub` field of a `pub` type** is written only by this package's
+	// files where the package is a program, which no other package
+	// imports (ADR-306 D22); a library's may be written anywhere.
+	if !a_program {
+		for name in reached {
+			fields_lose(name, scan)
+		}
 	}
 	let mut writers: collections::BTreeSet[i64] = collections::BTreeSet()
 	for item in program.items {
 		fields_item(item, words, scan, writers)
 	}
+	scan.here = false
 	for (k, other) in beside.iter().enumerate() {
 		let mut ignored: collections::BTreeSet[i64] = collections::BTreeSet()
 		for item in other.items {
@@ -604,20 +618,31 @@ pub fn fields_seen(
 	return FieldsSeen { keys, writers }
 }
 
-/// Every field a struct declares: a candidate where `here` and it is one.
+/// Every field a struct declares: a candidate where `here` and it is one,
+/// a `pub` field of a `pub` struct in `reached` (ADR-306 D22). Whether the
+/// file declares the function `main`.
 fn fields_declared(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 	here: bool,
 	mut scan: FieldsScan,
-) {
+	mut reached: collections::BTreeSet[String],
+) -> bool {
+	let mut has_main = false
 	for item in program.items {
 		match item.node {
-			Item::Struct { generics, fields, is_extern, .. } => {
+			Item::Fn { name, .. } => {
+				let named = name ?? continue
+				has_main = has_main || words.resolve(named) == "main"
+			},
+			Item::Struct { generics, fields, is_extern, is_public, .. } => {
 				for field in fields {
 					let name = words.resolve(field.name).clone()
 					let ty = ref field.ty
-					let mut fits = here && generics.is_empty() && !is_extern && !field.is_public
+					if field.is_public && is_public {
+						reached.insert(name.clone())
+					}
+					let mut fits = here && generics.is_empty() && !is_extern
 						&& field.default == null && field.attributes.is_empty()
 					let list = words.resolve(ty.name)
 					fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1
@@ -632,6 +657,7 @@ fn fields_declared(
 			else => {},
 		}
 	}
+	return has_main
 }
 
 /// One item: a function's or a method's body is walked, and where it
@@ -689,7 +715,7 @@ fn fields_write(name: ref String, mut scan: FieldsScan) {
 	if !(scan.live.get(name) ?? false) {
 		return
 	}
-	if scan.walked {
+	if scan.walked && scan.here {
 		scan.wrote = true
 	} else {
 		scan.live.insert(name.clone(), false)

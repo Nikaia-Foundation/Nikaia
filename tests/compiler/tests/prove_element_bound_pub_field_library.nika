@@ -1,0 +1,35 @@
+// ADR-306 D22 (#1414): in a library, a `pub` field of a `pub` type may be
+// written by a package the compiler does not see, so its values stay
+// checked; a `pub` field of a type private to the package has a found
+// bound. A field written in another file of the package, whose bodies the
+// proof of this file does not walk, stays checked too.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"clauses\"\nversion = \"0.1.0\"\n")
+    let reads = "    let values = [1, 2, 3]\n    let mut k = 0\n    while k < c.atoms.len() {\n        let atom = c.atoms[k]\n        if values[atom] > 1 { return atom }\n        k += 1\n    }\n    return -1\n}\n"
+    let mut lib = "pub struct Open {\n    pub atoms: Vec[i64],\n}\n\nstruct Inner {\n    pub atoms_in: Vec[i64],\n}\n\nstruct Spoiled {\n    atoms_out: Vec[i64],\n}\n\n"
+    lib += f"pub fn open(c: ref Open) -> i64 {{\n{reads}\n"
+    lib += f"fn inner(c: ref Inner) -> i64 {{\n{reads.replace("atoms", "atoms_in")}\n"
+    lib += f"fn spoiled(c: ref Spoiled) -> i64 {{\n{reads.replace("atoms", "atoms_out")}\n"
+    lib += "pub fn made() -> i64 {\n    return inner(Inner { atoms_in: [0, 2] }) + spoiled(Spoiled { atoms_out: [1] })\n}\n"
+    fs::write(f"{tmp}/src/lib.nika", fs::Root::Anywhere, lib)
+    fs::write(f"{tmp}/src/beside.nika", fs::Root::Anywhere, "fn spoil(mut c: Spoiled) {\n    c.atoms_out.push(7)\n}\n")
+    let out = process::run(nikaia, ["check", "--bounds", "src/lib.nika"]; dir: tmp.clone())
+    for line in out.stdout.lines() {
+        if line.contains("values[atom]") {
+            println(line.trim())
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}
