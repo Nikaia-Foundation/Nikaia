@@ -1,0 +1,28 @@
+// #1422: an error that leaves `main` through a sum of error types (ADR-280
+// D15) is printed in its member's long form, the message and its site,
+// without the sum's variant around it (Part I 7.1).
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "struct Fault {\n\tline: i64,\n}\n\nimpl Error for Fault {\n\tfn message(ref self) -> String {\n\t\treturn f\"fault at line {self.line}\"\n\t}\n}\n\nstruct Other {}\n\nimpl Error for Other {\n\tfn message(ref self) -> String {\n\t\treturn \"other\"\n\t}\n}\n\nfn step(x: i64) throws {\n\tif x == 1 {\n\t\tthrow Fault { line: 7 }\n\t}\n\tif x == 2 {\n\t\tthrow Other {}\n\t}\n}\n\nfn main() throws {\n\tstep(1)\n}\n")
+    let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        if !line.trim().starts_with("Compiling") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

@@ -7,6 +7,19 @@ pub(crate) fn check_exprs_part_name(index: i64) -> String {
     format!("p{}", index)
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_exprs_package_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, std_in_scope: &collections::BTreeSet<String>, name: &str) -> Option<TypeContract> {
+    let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
+    let head = (*nikaia_std::index::get(&parts, 0));
+    if std_in_scope.contains(head) || !imports_a_package(&world.here, head) { return None; }
+    for ledger in [world.own, world.library] {
+        let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !contract.fields.is_empty() || !contract.variants.is_empty() { return Some(contract.clone()); }
+    }
+    None
+}
+
 pub fn a_plain_string(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && name == "String" },
@@ -161,10 +174,14 @@ impl CheckState {
                     self.findings.push(check_refusal("NK1201", span, message, vec![note], Some(out)));
                     return;
                 }
-                if name.contains("::") || name == "Self" { return; }
-                let is_enum = self.enums.contains_key(name);
-                let is_struct = self.structs.contains_key(name);
-                if !is_enum && !is_struct && !world.own.types.contains_key(name) { return; }
+                if name == "Self" { return; }
+                let mut package_type: Option<TypeContract> = None;
+                if name.contains("::") { package_type = check_exprs_package_type(world, &self.std_in_scope, name); }
+                let from_a_package = package_type.is_some();
+                if name.contains("::") && !from_a_package { return; }
+                let is_enum = !from_a_package && self.enums.contains_key(name);
+                let is_struct = !from_a_package && self.structs.contains_key(name);
+                if !is_enum && !is_struct && !from_a_package && !world.own.types.contains_key(name) { return; }
                 let own = world.own.implementations.get("Error");
                 if own.is_some() && nikaia_std::index::or(match own {
                     Some(__nikaia_it) => Some(__nikaia_it.contains(name)),
@@ -181,6 +198,10 @@ impl CheckState {
                 if is_struct {
                     let own_fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
                     for field in own_fields.iter() { fields.push(field.name.to_string()); }
+                } else if from_a_package {
+                    let contract = match package_type { Some(__nikaia_value) => __nikaia_value, None => return };
+                    for field in contract.fields.iter() { if field.public { fields.push(field.name.to_string()); } }
+                    an_enum = !contract.variants.is_empty();
                 } else if !is_enum {
                     let contract = match world.own.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
                     for field in contract.fields.iter() { fields.push(field.name.to_string()); }
@@ -229,6 +250,22 @@ impl CheckState {
         let note = format!("`{}` is a `{}`: a `{}` or nothing, and a `for` walks a list, not the maybe of one.", written, over.text(), inner);
         let help = format!("Say what `null` walks first: `for … in {} ?? [] {{ … }}`, or check it for `null` before the loop.", written);
         self.findings.push(check_refusal("NK1206", span, format!("`{}` may be `null`, so a `for` can't walk it directly.", written), vec![note], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+        let name: String = match over {
+            Ty::Named { name, args, .. } => if args.is_empty() { name.to_string() } else { return; },
+            _ => return,
+        };
+        let a_number = integer_named(&Ty::Named { name: name.to_string(), args: vec![], view: false }).is_some() || name == "int" || name == "f64" || name == "f32";
+        let a_scalar = a_number || name == "bool" || name == "char";
+        let declared = self.structs.contains_key(&name) || self.enums.contains_key(&name) || self.parts_beside.contains_key(&name);
+        if !a_scalar && !declared { return; }
+        let written = written_expression(world.words, iter);
+        let note = format!("`{}` is a `{}`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3).", written, name);
+        let help = if a_number { format!("Walk a range up to it: `for … in 0..<{} {{ … }}`.", written) } else if a_scalar { format!("Test it with `if {} {{ … }}`, or walk a list of such values.", written) } else if self.enums.contains_key(&name) { format!("Put the values in a list and walk that: `for … in [{}] {{ … }}`.", written) } else { format!("Walk a list the `{}` holds, `for … in {}.<field> {{ … }}`, or put the values in a list first.", name, written) };
+        self.findings.push(check_refusal("NK1206", span, format!("A `for` can't walk `{}`: a `{}` holds no elements.", written, name), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

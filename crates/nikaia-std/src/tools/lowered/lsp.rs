@@ -8,7 +8,6 @@
 // `non_camel_case_types` is allowed rather than avoided: the name is spelled
 // so that nothing a program declares collides with it, and a warning about
 // this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).
-#[derive(Debug)]
 #[allow(non_camel_case_types)]
 pub enum __NikaiaThrows_LspRefusal__io_IoError {
     LspRefusal(nikaia_std::error::Thrown<LspRefusal>),
@@ -32,6 +31,14 @@ impl std::fmt::Display for __NikaiaThrows_LspRefusal__io_IoError {
     }
 }
 impl std::error::Error for __NikaiaThrows_LspRefusal__io_IoError {}
+impl std::fmt::Debug for __NikaiaThrows_LspRefusal__io_IoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(e) => std::fmt::Debug::fmt(e, f),
+            __NikaiaThrows_LspRefusal__io_IoError::io_IoError(e) => std::fmt::Debug::fmt(e, f),
+        }
+    }
+}
 impl nikaia_std::error::Joined for __NikaiaThrows_LspRefusal__io_IoError {
     fn joined_by(&mut self, later: Self) {
         #[allow(unreachable_patterns)]
