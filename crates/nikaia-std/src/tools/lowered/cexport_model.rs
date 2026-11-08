@@ -363,7 +363,7 @@ pub fn cx_record_of(words: &winnow_grammar::InternerContext, records: &[CxRecord
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
     while ((at) as usize) < records.len() {
-        if nikaia_std::index::get(&records, (at) as usize).name == name { return at.into(); }
+        if nikaia_std::index::get(&records, (at) as usize).name == name { return Some(at); }
         at += 1;
     }
     None
@@ -424,7 +424,7 @@ pub fn cx_choice(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ty
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
     while ((at) as usize) < plains.len() {
-        if nikaia_std::index::get(&plains, (at) as usize).name == name { return at.into(); }
+        if nikaia_std::index::get(&plains, (at) as usize).name == name { return Some(at); }
         at += 1;
     }
     None
@@ -435,7 +435,7 @@ pub fn cx_handle_of(words: &winnow_grammar::InternerContext, handles: &[CxHandle
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
     while ((at) as usize) < handles.len() {
-        if nikaia_std::index::get(&handles, (at) as usize).name == name { return at.into(); }
+        if nikaia_std::index::get(&handles, (at) as usize).name == name { return Some(at); }
         at += 1;
     }
     None

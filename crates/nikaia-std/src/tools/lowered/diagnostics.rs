@@ -8,6 +8,7 @@
 pub struct DiagnosticsRead {
     pub level: String,
     pub message: String,
+    pub code: Option<String>,
     pub generated_line: Option<i64>,
     pub label: Option<String>,
     pub byte_start: Option<i64>,
@@ -35,7 +36,7 @@ pub fn diagnostics_read_json(json: &str) -> Vec<DiagnosticsRead> {
             Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
             None => None,
         };
-        read.push(DiagnosticsRead { level: nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(&value), "level")).as_ref()), || "".into()), message: nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(&value), "message")).as_ref()), || "".into()), generated_line: cargo_json_number((cargo_json_member((primary).as_ref(), "line_start")).as_ref()), label: cargo_json_text((cargo_json_member((primary).as_ref(), "label")).as_ref()), byte_start: cargo_json_number((cargo_json_member((primary).as_ref(), "byte_start")).as_ref()), located: false, unit: 0, span: Span { start: 0, end: 0 }, children: cargo_json_items((cargo_json_member(Some(&value), "children")).as_ref()).iter().map(|child| { DiagnosticsChild { level: cargo_json_text((cargo_json_member(Some(&child.clone()), "level")).as_ref()), message: cargo_json_text((cargo_json_member(Some(&child.clone()), "message")).as_ref()) } }).collect::<Vec<_>>() });
+        read.push(DiagnosticsRead { level: nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(&value), "level")).as_ref()), || "".into()), message: nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(&value), "message")).as_ref()), || "".into()), code: cargo_json_text((cargo_json_member((cargo_json_member(Some(&value), "code")).as_ref(), "code")).as_ref()), generated_line: cargo_json_number((cargo_json_member((primary).as_ref(), "line_start")).as_ref()), label: cargo_json_text((cargo_json_member((primary).as_ref(), "label")).as_ref()), byte_start: cargo_json_number((cargo_json_member((primary).as_ref(), "byte_start")).as_ref()), located: false, unit: 0, span: Span { start: 0, end: 0 }, children: cargo_json_items((cargo_json_member(Some(&value), "children")).as_ref()).iter().map(|child| { DiagnosticsChild { level: cargo_json_text((cargo_json_member(Some(&child.clone()), "level")).as_ref()), message: cargo_json_text((cargo_json_member(Some(&child.clone()), "message")).as_ref()) } }).collect::<Vec<_>>() });
     }
     read
 }
@@ -64,6 +65,7 @@ pub struct DiagnosticsPlaced {
     pub notes: Vec<String>,
     pub internal: Option<String>,
     pub label: Option<String>,
+    pub about_the_program: bool,
 }
 
 pub fn diagnostics_placed(read: &[DiagnosticsRead], sources: &[&str]) -> Vec<DiagnosticsPlaced> {
@@ -80,7 +82,7 @@ pub fn diagnostics_placed(read: &[DiagnosticsRead], sources: &[&str]) -> Vec<Dia
             Some(written) => Some(in_this_language(written)),
         };
         let notes: Vec<String> = one.children.iter().filter(|&c| { diagnostics_a_note(c) }).map(|c| { in_this_language(nikaia_std::index::or(c.message.as_deref(), || "")) }).collect::<Vec<_>>();
-        let mut placed = DiagnosticsPlaced { level: one.level.to_string(), message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes, internal, label };
+        let mut placed = DiagnosticsPlaced { level: one.level.to_string(), message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes, internal, label, about_the_program: false };
         if one.located && one.unit >= 0 && one.unit < starts.len() as i64 {
             let at = one.span.start as i64;
             let line = diagnostics_line_of(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), at);
@@ -89,10 +91,22 @@ pub fn diagnostics_placed(read: &[DiagnosticsRead], sources: &[&str]) -> Vec<Dia
             placed.column = at - *nikaia_std::index::get(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), nikaia_std::index::at(line)) + 1;
             placed.span = one.span.clone();
             placed.unit = one.unit;
+            placed.about_the_program = one.code.is_none() && diagnostics_in_a_grammar(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), *nikaia_std::index::get(&sources, nikaia_std::index::at(one.unit)), at);
         }
         out.push(placed);
     }
     out
+}
+
+pub(crate) fn diagnostics_in_a_grammar(starts: &[i64], source: &str, at: i64) -> bool {
+    let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
+    let mut line = diagnostics_line_of(starts, at);
+    while line >= 0 && line < lines.len() as i64 {
+        let first = nikaia_std::index::or((*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).chars().next(), || ' '.into());
+        if first.is_alphabetic() { return (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).starts_with("grammar ") || (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).starts_with("pub grammar "); }
+        line -= 1;
+    }
+    false
 }
 
 pub(crate) fn diagnostics_a_note(child: &DiagnosticsChild) -> bool {

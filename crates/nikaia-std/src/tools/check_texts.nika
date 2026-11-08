@@ -118,6 +118,26 @@ fn all_arms_text(arms: ref Vec[MatchArm]) -> bool sync {
     return true
 }
 
+/// Whether an arm's body leaves a value: not a `throw`, nor a block that
+/// ends in one or in a jump.
+fn check_texts_arm_leaves(body: ref Expr) -> bool sync {
+    return match body {
+        Expr::Throw(..) => false,
+        Expr::Block(block, _) => !check_texts_ends_in_a_jump(block) && !check_texts_ends_in_a_throw(block),
+        else => true,
+    }
+}
+
+fn check_texts_ends_in_a_throw(block: ref Block) -> bool sync {
+    for tail in block_tail(block) {
+        return match tail {
+            Expr::Throw(..) => true,
+            else => false,
+        }
+    }
+    return false
+}
+
 /// Whether an expression's value is `null` at its end.
 pub fn ends_in_null(expr: ref Expr) -> bool sync {
     return match expr {
@@ -274,17 +294,17 @@ impl CheckState {
                 }
             },
             Expr::Match { arms, .. } => {
-                if arms.len() == 0 {
-                    return null
-                }
+                // An arm that throws or jumps leaves no value (#1322).
+                let mut answered: Ty? = null
                 for arm in arms {
-                    if !check_texts_ends_in_literal(arm.body, true) {
+                    if check_texts_arm_leaves(arm.body) && !check_texts_ends_in_literal(arm.body, true) {
                         return null
                     }
                 }
-                let mut answered: Ty? = null
                 for arm in arms {
-                    answered = self.text_literal(world, want, arm.body, owned)
+                    if check_texts_arm_leaves(arm.body) {
+                        answered = self.text_literal(world, want, arm.body, owned)
+                    }
                 }
                 return answered
             },

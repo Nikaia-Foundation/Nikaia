@@ -73,7 +73,7 @@ assert(n == 41)     // proved: the guard above handled the other case
       <p>
         There is no separate specification language. You write
         <code>assert(whole &gt; 0)</code> at the top of <code>percent</code>, and it becomes a
-        precondition: each caller has to show that <code>whole</code> is positive.
+        precondition, so each caller has to show that <code>whole</code> is positive.
       </p>
       <p>
         <code>share</code> only passes its <code>total</code> on, so the duty passes on with it.
@@ -87,7 +87,7 @@ assert(n == 41)     // proved: the guard above handled the other case
       </p>
       <p>
         A call whose arguments are all known is run while the program is built. So
-        <code>assert(fib(10) == 54)</code> does not build: <code>fib(10)</code> is 55.
+        <code>assert(fib(10) == 54)</code> does not build, because <code>fib(10)</code> is 55.
       </p>
       <p><a href="{{ "/docs/specification/adr/adr-269.html" | relative_url }}">How a claim becomes a contract →</a></p>
     </div>
@@ -171,8 +171,8 @@ fn main() throws {
         Here nobody did.
       </p>
       <p>
-        The compiler looks for such a fact itself, then checks it three times: it holds before
-        the first turn, each turn keeps it, and when the loop ends it gives the claim.
+        The compiler looks for such a fact itself, then checks it three times, namely that it holds before
+        the first turn, that each turn keeps it, and that when the loop ends it gives the claim.
         <code>--asserts</code> prints the fact it found and how it found it.
       </p>
       <p>
@@ -294,7 +294,7 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75</code></pre>
       <p>
         <em>Refused</em> means the prover could not read the claim. It reads sums,
         differences and comparisons, not the product of two names like <code>w * h</code>. Such
-        a claim stops the build with <code>NK1300</code>: not proved is not false, but nothing
+        a claim stops the build with <code>NK1300</code>. Not proved is not false, but nothing
         has shown it. A build that says <code>unproved-claims = "warn"</code> builds it with a
         warning, and the program checks it when it runs.
       </p>
@@ -339,7 +339,7 @@ fn main() throws {
       <h2><code>main</code>'s parameters are its command line.</h2>
       <p>
         <code>a</code> is a word the program needs. <code>times</code> comes after the
-        <code>;</code>, so it is named: on the command line it is the option
+        <code>;</code>, so it is named. On the command line it is the option
         <code>--times</code>, and 4 where it is left out.
       </p>
       <p>

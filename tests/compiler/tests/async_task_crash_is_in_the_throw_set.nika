@@ -1,7 +1,7 @@
-// A function that starts a task throws `task::Crashed` besides what its body
-// throws (Part II 12.7, ADR-328 D8, #988): its inferred error channel holds a
-// task's crash, as it does for a `task::scope`, so a task's own error reaches
-// the caller through it.
+// A task's own error reaches the caller through the function that starts
+// it (Part II 12.7, ADR-328 D8, #988). `work` cannot panic, so `run` throws
+// no `task::Crashed` (ADR-async-5 D35, #1355): the task fails in `run`'s
+// own channel.
 
 enum Bad { Oops(i64) }
 impl Error for Bad {

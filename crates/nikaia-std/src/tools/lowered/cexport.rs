@@ -224,7 +224,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
 pub(crate) fn cx_handle_named(handles: &[CxHandled], name: &str) -> Option<i64> {
     let mut at: i64 = 0;
     while ((at) as usize) < handles.len() {
-        if nikaia_std::index::get(&handles, (at) as usize).name == name { return at.into(); }
+        if nikaia_std::index::get(&handles, (at) as usize).name == name { return Some(at); }
         at += 1;
     }
     None

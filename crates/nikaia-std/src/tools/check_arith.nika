@@ -294,7 +294,7 @@ fn arith_a_name(expr: ref Expr) -> bool {
 }
 
 /// The text of what is shown, cut to 60 characters.
-fn arith_shown(written: ref String) -> String {
+pub fn arith_shown(written: ref String) -> String {
     if written.chars().count() <= 60 {
         return written.clone()
     }

@@ -138,7 +138,7 @@ pub(crate) fn code_point(c: &[scalar], from: i64, to: i64) -> Option<i64> {
         at += 1;
     }
     if digits > 6 { return None; }
-    value.into()
+    Some(value)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

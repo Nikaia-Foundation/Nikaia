@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1357 (Draft)
-**Date:** 2026-11-07
+**Version:** 0.0.1358 (Draft)
+**Date:** 2026-11-08
 
 ---
 

@@ -103,17 +103,22 @@ file as a DSL body, which is a worse way to learn about it than a compiler error
 ## Trying it in VS Code
 
 ```sh
+cd editors/vscode
+npm install --omit=dev
 mkdir -p ~/.vscode/extensions
-cp -r editors/vscode ~/.vscode/extensions/nikaia-0.0.7
+cp -r . ~/.vscode/extensions/nikaia-0.0.7
 ```
 
 Then restart VS Code and open any `.nika` file. `Developer: Inspect Editor
 Tokens and Scopes` from the command palette shows which rule coloured what,
 which is the fastest way to check a change.
 
-There is no language server here and this is not a step towards one: this
-extension contributes a grammar and a language configuration (comment character,
-brackets, indentation) and no code at all.
+**The language server.** `extension.js` starts `nikaia lsp` for every `.nika`
+document, and the editor marks what `nikaia check` finds in the text as it is
+typed (Part III, `nikaia lsp`). It looks `nikaia` up on `PATH`; the setting
+`nikaia.server.path` names another binary. The server's log is in the
+*Output* panel under *Nikaia*. The client is JavaScript because VS Code loads
+nothing else; everything it shows comes from the compiler.
 
 ## The tests
 

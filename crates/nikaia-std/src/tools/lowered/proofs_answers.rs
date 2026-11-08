@@ -90,7 +90,7 @@ pub(crate) fn proofs_here(t: &ProofsThread) -> (Option<String>, Option<i64>, Opt
             let b = nikaia_std::num::value(b);
             if b < at { before += 1; }
         }
-        line = (before + 1).into();
+        line = Some(before + 1);
     }
     (match t.at.file.as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),

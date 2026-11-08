@@ -587,6 +587,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     let nullable = check_core_ops_nullable(&left);
     let inner = check_core_ops_inside(&left);
     let place = check_core_ops_place(value);
+    if nullable && inner.is_unknown() && !state.jumps(world, fallback) && !state.number_shaped(world, fallback) {
+        let shown = arith_shown(&written_expression(world.words, value));
+        state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` holds, so it can't tell what the fallback of this `??` becomes.", shown), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T? = …`."))));
+    }
     if from_a_map && nullable && moves(&inner) && state.jumps(world, fallback) { state.facts.map_read_views.insert(id_of(expr) as i64); }
     if nullable && leaves && check_core_ops_a_word(&inner) && (check_core_stmt_an_index(value) || check_core_stmt_a_get(world, value)) { state.facts.copied_jump_reads.insert(id_of(expr) as i64); }
     if lending && !from_a_map && check_core_ops_index(value) && (state.jumps(world, fallback) || state.facts.lent_coalesces.contains_key(&(id_of(fallback) as i64))) && nullable && state.takes_away(world, &inner.unseen()) {

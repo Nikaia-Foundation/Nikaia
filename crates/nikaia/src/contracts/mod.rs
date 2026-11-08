@@ -805,6 +805,7 @@ impl nikaia_std::tools::ledger_items::LedgerInferHost for InferHost<'_> {
                 self.library,
                 &self.resolved.borrow(),
                 &self.stored.borrow(),
+                &self.checked.borrow(),
             )
         });
     }

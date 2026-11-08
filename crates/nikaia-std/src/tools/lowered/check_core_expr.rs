@@ -265,6 +265,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.flow.async_depth -= 1;
             state.flow.loops = loops;
             state.flow.barrier = barrier;
+            check_core_async_crash(state, world, host, inner, span);
             let mut at = changed_from;
             while at < state.changed.len() as i64 {
                 let name = (*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string();
@@ -592,13 +593,27 @@ pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, worl
     let mut found = walked.clone();
     if walked.is_unknown() && state.number_shaped(world, d) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
     state.expect_type(world, &found, &want, span, "argument", &|found_text, wanted_text| { format!("This deadline is `{}`, but `within:` takes a `{}`.", found_text, wanted_text) });
-    check_core_async_deadline_fails(state, span);
+    let function = nikaia_std::index::or(match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).", &format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function));
+}
+
+pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: &Expr, span: &Span) {
+    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.to_owned(), negations: state.facts.negations.to_owned(), shifts: state.facts.shifts.to_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new() };
+    if !panics_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
+    let function = nikaia_std::index::or(match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_async_deadline_fails(state: &mut CheckState, span: &Span) {
-    let fails: Vec<String> = vec![String::from("task::TimedOut")];
+pub(crate) fn check_core_async_fails(state: &mut CheckState, span: &Span, error: &str, message: &str, note: &str, help: &str) {
+    let fails: Vec<String> = vec![error.to_string()];
     if state.flow.guarded.is_some() {
         let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -623,10 +638,7 @@ pub(crate) fn check_core_async_deadline_fails(state: &mut CheckState, span: &Spa
         }
     }
     if state.flow.throwing || state.flow.caught || state.inside_an_action.is_some() { return; }
-    let function = match match state.current.as_ref() {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return };
-    state.findings.push(check_refusal("NK2605", span, String::from("This function can fail, because the deadline of `within:` can run out."), vec![String::from("When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).")], Some(format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function))));
+    if state.current.is_none() { return; }
+    state.findings.push(check_refusal("NK2605", span, message.to_string(), vec![note.to_string()], Some(help.to_string())));
 }
 

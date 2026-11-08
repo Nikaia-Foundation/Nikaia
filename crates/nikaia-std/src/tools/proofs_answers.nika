@@ -360,6 +360,7 @@ pub comptime PROOFS_DUMP: ref String = "NIKAIA_DUMP_QUERIES"
 /// the book's key, so a question asked twice is one file. Its `:status` is
 /// the answer the compiler took (`unsat` proved, `sat` refuted); an unknown
 /// states none. A file that cannot be written is said and skipped.
+/// A failed write to standard error is not written again (ADR-392 D2).
 fn proofs_dump(normal: ref LgNormal, asked: ref ProofsAsked) sync {
     let dir = env::var(PROOFS_DUMP) ?? return
     let status = match asked {

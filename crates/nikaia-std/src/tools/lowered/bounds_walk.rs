@@ -487,7 +487,7 @@ pub(crate) fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr
             let width = nikaia_std::index::or(bounding_bits(ty), || 0);
             if ty.starts_with('u') && width > 0 && k >= 1 && k < width {
                 let most = (1 << (width - k).min(62)) - 1;
-                widest = Some(Range { lo: Some(0), hi: most.into() });
+                widest = Some(Range { lo: Some(0), hi: Some(most) });
             }
             if ty.starts_with('i') && width > 0 && k >= 1 && k < width {
                 let by = width - 1 - k;
@@ -508,7 +508,7 @@ pub(crate) fn bounding_range_of(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr
             let b = match bounding_range(walk, rhs, facts, context, program, words, &ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let m = match bounding_sign_bits(&a) { Some(__nikaia_value) => __nikaia_value, None => return None }.max(match bounding_sign_bits(&b) { Some(__nikaia_value) => __nikaia_value, None => return None });
             let half = 1 << m;
-            return Some(Range { lo: (-half).into(), hi: (half - 1).into() });
+            return Some(Range { lo: Some(-half), hi: Some(half - 1) });
         },
         BinaryOp::BitAnd => {
             let mut mask: Option<i64> = None;
@@ -529,7 +529,7 @@ pub(crate) fn bounding_sign_bits(range: &Range) -> Option<i64> {
     let hi = match range.hi { Some(__nikaia_value) => __nikaia_value, None => return None };
     for m in 0..63 {
         let half: i64 = 1 << m;
-        if lo >= -half && hi < half { return m.into(); }
+        if lo >= -half && hi < half { return Some(m); }
     }
     None
 }

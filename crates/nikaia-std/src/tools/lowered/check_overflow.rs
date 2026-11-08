@@ -131,7 +131,60 @@ pub fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<FactWrap> 
     };
     if !inner_into.is_empty() { return Some(FactWrap::WidenSome(inner_into.to_string())); }
     if !found.is_unknown() || literal { return Some(FactWrap::Constructor); }
-    Some(FactWrap::Conversion)
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_overflow_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    if state.jumps(world, expr) { return true; }
+    match expr {
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if !check_overflow_leaves_none(state, world, &arm.body) { return false; } }
+            return !arms.is_empty();
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            return check_overflow_block_leaves_none(state, world, then_branch) && check_overflow_block_leaves_none(state, world, other);
+        },
+        Expr::Block(block, _) => return check_overflow_block_leaves_none(state, world, block),
+        _ => return false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_overflow_block_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
+    if block.stmts.is_empty() { return false; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(tail) => check_overflow_leaves_none(state, world, tail),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_wrap_undecided(found: &Ty, want: &Ty, literal: bool) -> bool {
+    if literal || !found.is_unknown() { return false; }
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); widened_into(found, inner).is_none() },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_overflow_a_number_inside(want: &Ty) -> bool {
+    match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Ty::Named { name, args, .. } => args.is_empty() && (a_number_name(name) || name == "int"),
+            _ => false,
+        } },
+        _ => false,
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -158,6 +211,25 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
         if check_overflow_list_into_nullables(state, given, found, want) || a_collect_into_an_option(world, found, want, given) { return None; }
+    }
+    if check_wrap_undecided(found, want, literal) {
+        if value.is_none() {
+            if check_overflow_a_number_inside(want) { return Some(FactWrap::Constructor); }
+            let wanted = want.text();
+            state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type this value is, so it can't put it into a `{}`.", wanted), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T = …`."))));
+            return None;
+        }
+        let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if check_overflow_leaves_none(&state, world, given) { return None; }
+        if check_function_is_branching(given) {
+            state.some_at_the_tails(given);
+            return None;
+        }
+        if check_overflow_a_number_inside(want) { return Some(FactWrap::Constructor); }
+        let shown = arith_shown(&written_expression(world.words, given));
+        let wanted = want.text();
+        state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` is, so it can't put it into a `{}`.", shown, wanted), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T = …`."))));
+        return None;
     }
     let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let widen: String = match how {

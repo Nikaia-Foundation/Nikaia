@@ -1,0 +1,52 @@
+// A task that cannot panic but throws fails in the channel of the function
+// that starts it (ADR-async-5 D35, #1355): `run` and `grouped` throw `Bad`
+// alone, no `task::Crashed`, and the failure of a task that pauses reaches
+// their callers through it, from `async e` and from `async { }`.
+use std::time
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return match self {
+            Bad::Oops(n) => f"task {n} failed",
+        }
+    }
+}
+
+fn slow(n: i64) -> i64 throws {
+    time::sleep(1.millis())
+    if n > 5 {
+        throw Bad::Oops(n)
+    }
+    return n
+}
+
+fn run(n: i64) -> i64 throws {
+    let a = async slow(n)
+    let b = async slow(1)
+    return a + b
+}
+
+fn grouped(n: i64) -> i64 throws {
+    let mut s = 0
+    async {
+        let a = async slow(n)
+        let b = async slow(2)
+        s = a + b
+    }
+    return s
+}
+
+fn main() throws {
+    for n in [1, 7] {
+        let m = run(n) catch {
+            println(f"caught: {error}")
+            0
+        }
+        let g = grouped(n) catch {
+            println(f"group caught: {error}")
+            0
+        }
+        println(f"{m} {g}")
+    }
+}

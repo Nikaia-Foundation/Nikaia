@@ -1,0 +1,25 @@
+error[NK1342]: The compiler can't tell what type `id(3)` is, so it can't put it into a `String?`.
+   --> tests/a_value_of_unknown_type_into_a_nullable_is_refused.nika:14:2
+    |
+ 14 | 	return id(3)
+    |  ^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `id(3)` is, so it can't put it into a `String?`.
+   --> tests/a_value_of_unknown_type_into_a_nullable_is_refused.nika:18:2
+    |
+ 18 | 	println(takes(id(3)))
+    |  ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `n` is, so it can't put it into a `String?`.
+   --> tests/a_value_of_unknown_type_into_a_nullable_is_refused.nika:20:2
+    |
+ 20 | 	println(takes(n))
+    |  ^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+3 type errors

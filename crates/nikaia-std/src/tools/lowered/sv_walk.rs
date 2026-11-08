@@ -154,7 +154,7 @@ impl SvWalk {
         }
         self.touched.clear();
         if overflow { return None; }
-        change.into()
+        Some(change)
     }
     pub(crate) fn apply(&mut self, m: &SvMove) {
         self.values[nikaia_std::index::at(m.col)] += m.delta;

@@ -236,6 +236,27 @@ pub(crate) fn after_help(note: &str) -> String {
     after_help(rest)
 }
 
+pub(crate) fn rustc_refused(message: &Relayed, at: &str, path: &str, source: &str) -> String {
+    let mut notes: Vec<String> = vec![];
+    match &message.internal {
+        None => { notes.push(format!("rustc output: {}", message.message)); },
+        Some(original) => {
+            notes.push(String::from("The compiler generated two different types for one of yours."));
+            notes.push(format!("rustc output: {}", original));
+        },
+    }
+    for note in message.notes.iter() { notes.push(note.to_string()); }
+    let help: String = String::from("This is a bug in Nikaia, not in your program: the checker accepted it, and Rust refused the code it became. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues.");
+    if message.located {
+        let shown = Shown { warning: false, code: String::from("NK1343"), message: String::from("internal compiler error"), notes, help: Some(help), span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: message.word.to_string(), text: String::from(""), main: true }] };
+        return rendered(&shown, path, source);
+    }
+    let mut out = format!("error[NK1343]: internal compiler error\n  --> {} (no Nikaia source maps to this)\n", at);
+    for note in notes.iter() { out.push_str(&format!("   = note: {}\n", note)); }
+    out.push_str(&format!("   = help: {}\n", help));
+    out
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Relayed {
     pub level: String,
@@ -246,11 +267,13 @@ pub struct Relayed {
     pub span: Span,
     pub word: String,
     pub notes: Vec<String>,
+    pub about_the_program: bool,
 }
 
 pub fn relayed(message: &Relayed, path: &str, source: &str, generated_path: &str) -> String {
     let mut at = generated_path.to_string();
     if message.generated_line > 0 { at = format!("{}:{}", generated_path, message.generated_line); }
+    if message.level == "error" && !message.about_the_program { return rustc_refused(message, &at, path, source); }
     if message.internal.is_some() {
         let original = match message.internal.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         if message.located {

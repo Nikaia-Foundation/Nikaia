@@ -130,8 +130,13 @@ pub trait Receiver<E> {
     /// The next task's place in start order, or `None` where a crash
     /// cancelled it.
     fn place(&self) -> Option<usize>;
-    /// A task panicked: the group throws [`Crashed`] at its end.
-    fn crashed(&self, at: usize, crash: Crashed);
+    /// A task panicked: the tasks not yet started are cancelled (ADR-328
+    /// D8). The crash itself is the task's end, read where it arrives like
+    /// any failure (ADR-async-5 D22, D35); only one nobody reads is the
+    /// group's at its end ([`Receiver::unread_crash`]).
+    fn crashed(&self, at: usize);
+    /// A crash nobody read, kept until the group's end (D21).
+    fn unread_crash(&self, at: usize, crash: Crashed);
     /// A failure nobody read, kept until the group's end (D21).
     fn unread(&self, at: usize, error: E);
 }
@@ -166,8 +171,10 @@ fn settle<T, E>(group: &dyn Receiver<E>, slot: &Shared<T, E>, at: usize, end: En
     let mut held = locked(slot);
     if held.unclaimed {
         drop(held);
-        if let Ended::Failed(error) = end {
-            group.unread(at, error);
+        match end {
+            Ended::Failed(error) => group.unread(at, error),
+            Ended::Crashed(crash) => group.unread_crash(at, crash),
+            _ => {}
         }
         return;
     }
@@ -191,7 +198,7 @@ fn run_now<T, E>(
     let mut outcome = None;
     let end = match caught(|| outcome = Some(body())) {
         Err(crash) => {
-            group.crashed(at, crash.clone());
+            group.crashed(at);
             Ended::Crashed(crash)
         }
         Ok(()) => match outcome {
@@ -286,7 +293,7 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     drop(running);
     let end = match outcome {
         Err(crash) => {
-            group.crashed(at, crash.clone());
+            group.crashed(at);
             Ended::Crashed(crash)
         }
         Ok(None) => Ended::Cancelled,
@@ -688,8 +695,10 @@ impl<T, E> Drop for ChildHandle<'_, T, E> {
         held.unclaimed = true;
         let end = held.ended.take();
         drop(held);
-        if let (Some(Ended::Failed(error)), Some(at)) = (end, self.at) {
-            self.group.unread(at, error);
+        match (end, self.at) {
+            (Some(Ended::Failed(error)), Some(at)) => self.group.unread(at, error),
+            (Some(Ended::Crashed(crash)), Some(at)) => self.group.unread_crash(at, crash),
+            _ => {}
         }
     }
 }

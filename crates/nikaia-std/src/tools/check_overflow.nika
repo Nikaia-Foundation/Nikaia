@@ -200,7 +200,70 @@ pub fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? s
     if !found.is_unknown() || literal {
         return FactWrap::Constructor
     }
-    return FactWrap::Conversion
+    // **A value of no known type takes no wrap** (#1322): where the slot is a
+    // `T?`, `check_wrap_undecided` says so and the caller decides or refuses.
+    return null
+}
+
+/// **A value of no known type into a `T?`** (#1322, `NK1342`): neither a
+/// widening nor a value of a type the compiler can name, so how it goes in is
+/// not decided by its type.
+/// Whether an expression leaves no value at any end: it jumps, or every
+/// arm or branch of it does.
+fn check_overflow_leaves_none(state: ref CheckState, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    if state.jumps(world, expr) {
+        return true
+    }
+    match expr {
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                if !check_overflow_leaves_none(state, world, arm.body) {
+                    return false
+                }
+            }
+            return arms.len() > 0
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = else_branch ?? return false
+            return check_overflow_block_leaves_none(state, world, then_branch) && check_overflow_block_leaves_none(state, world, other)
+        },
+        Expr::Block(block, _) => return check_overflow_block_leaves_none(state, world, block),
+        else => return false,
+    }
+}
+
+fn check_overflow_block_leaves_none(state: ref CheckState, world: ref CheckWorld, block: ref Block) -> bool sync {
+    if block.stmts.len() == 0 {
+        return false
+    }
+    return match block.stmts[block.stmts.len() - 1].node {
+        Stmt::Return(_) => true,
+        Stmt::Break => true,
+        Stmt::Continue => true,
+        Stmt::Expr(tail) => check_overflow_leaves_none(state, world, tail),
+        else => false,
+    }
+}
+
+pub fn check_wrap_undecided(found: ref Ty, want: ref Ty, literal: bool) -> bool sync {
+    if literal || !found.is_unknown() {
+        return false
+    }
+    return match want {
+        Ty::Nullable(inner) => widened_into(found, inner) == null,
+        else => false,
+    }
+}
+
+/// The number type a `T?` holds, where it holds one.
+fn check_overflow_a_number_inside(want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Nullable(inner) => match inner {
+            Ty::Named { name, args, .. } => args.len() == 0 && (a_number_name(name) || name == "int"),
+            else => false,
+        },
+        else => false,
+    }
 }
 
 /// **The wrap a value takes into a slot of another type**, where it takes one.
@@ -232,6 +295,41 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
         if check_overflow_list_into_nullables(state, given, found, want) || a_collect_into_an_option(world, found, want, given) {
             return null
         }
+    }
+    // **A number nothing typed into a slot of a number's `T?` is that number**
+    // (Part I 2.4): `Some(n)`, and its use types it. Anything else of no known
+    // type is not written as a guess (#1322): `NK1342`.
+    if check_wrap_undecided(found, want, literal) {
+        // A field written by its name alone (`P { x }`) has no value of its own
+        // to show: the name is the value, and it is wrapped the same way.
+        if value == null {
+            if check_overflow_a_number_inside(want) {
+                return FactWrap::Constructor
+            }
+            let wanted = want.text()
+            state.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type this value is, so it can't put it into a `{wanted}`.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the type down where the value is made, such as `let x: T = …`."))
+            return null
+        }
+        let given = value ?? return null
+        if check_overflow_leaves_none(state, world, given) {
+            return null
+        }
+        // **Branches unknown only because they differ** (`a` beside
+        // `own(a)`) are decided at each end, as a plain arm beside a `null`
+        // is (ADR-279).
+        if check_function_is_branching(given) {
+            state.some_at_the_tails(given)
+            return null
+        }
+        // A number nothing typed takes the type its use asks for (Part I
+        // 2.4): into a number's `T?` it is that number, wrapped.
+        if check_overflow_a_number_inside(want) {
+            return FactWrap::Constructor
+        }
+        let shown = arith_shown(written_expression(world.words, given))
+        let wanted = want.text()
+        state.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type `{shown}` is, so it can't put it into a `{wanted}`.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the type down where the value is made, such as `let x: T = …`."))
+        return null
     }
     let how = check_wrap_for(found, want, literal) ?? return null
     let widen: String = match how {
