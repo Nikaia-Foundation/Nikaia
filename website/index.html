@@ -59,7 +59,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#outside" | relative_url }}">Input checked where it arrives</a></h3>
-        <p>A claim about data from outside waits for a guard where the data arrives, and a path from outside stays in the directory the call names.</p>
+        <p>A claim about data from outside waits for a guard where the data arrives, a path from outside stays in the directory the call names, and formats are read by parsers built from a grammar.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
 let n: int = out.stdout.len()
 assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>
@@ -88,7 +88,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-part">Memory budget still being built</span>
         <h3><a href="{{ "/safe/#load" | relative_url }}">Steady under load and failure</a></h3>
-        <p>A wait with a deadline has to handle its timeout. A lock held across a pause is refused. A memory budget for every task is specified and not built yet.</p>
+        <p>A wait with a deadline has to handle its timeout. A lock held across a pause is refused, and a value a task was changing when it crashed is not read half-changed. A memory budget for every task is specified and not built yet.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let price = async(within: 100.millis()) lookup()
     catch { "cached price" }</code></pre></div>
         <a class="safe-more" href="{{ "/safe/#load" | relative_url }}">Read more →</a>
