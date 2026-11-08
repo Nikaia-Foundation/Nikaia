@@ -1,0 +1,61 @@
+// A `match` over a field of a name a `let` bound to an owned parameter, whose
+// arm hands on what it binds, moves the field out of what the parameter
+// handed over: the parameter is kept, not lent (#928, `yaml::merge`). Before,
+// `inner` lowered as `fn inner(m: &N)` and rustc refused the move out of
+// `w.value` behind a shared reference. Both the bare `let w = m` and the
+// result of a call over `m` that views it, `let w = walk(m, input)`.
+struct N { raw: String, value: V }
+enum V { Leaf, Map(Vec[N]) }
+
+fn walk(n: N, input: ref Bytes) -> N sync {
+	let value = match n.value {
+		V::Map(es) => {
+			let mut out: Vec[N] = []
+			for e in es.drain() {
+				for x in inner(e, input).drain() {
+					out.push(x)
+				}
+			}
+			V::Map(out)
+		}
+		else => n.value
+	}
+	return N { raw: n.raw, value: value }
+}
+
+// The kids of `m` after the walk, `m` itself where it has none.
+fn inner(m: N, input: ref Bytes) -> Vec[N] sync {
+	let w = walk(m, input)
+	return match w.value {
+		V::Map(es) => es
+		else => [w]
+	}
+}
+
+// The bare `let`, over a type that holds no view.
+struct O { name: String, value: W }
+enum W { Leaf, Map(Vec[O]) }
+
+fn kids(m: O) -> Vec[O] sync {
+	let w = m
+	return match w.value {
+		W::Map(os) => os
+		else => []
+	}
+}
+
+fn make(s: String) -> N {
+	let t = s.trim()
+	let leaf = N { raw: t, value: V::Leaf }
+	let mid = N { raw: t, value: V::Map([leaf]) }
+	return N { raw: t, value: V::Map([mid]) }
+}
+
+fn main() throws {
+	let text = "  hello  "
+	let input = Bytes(text.bytes().collect())
+	let m = walk(make(text), input)
+	let o = O { name: "o", value: W::Map([O { name: "p", value: W::Leaf }]) }
+	let n = kids(o).len()
+	println(f"{m.raw} {n}")
+}

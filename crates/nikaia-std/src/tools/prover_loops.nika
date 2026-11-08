@@ -35,6 +35,10 @@ pub struct LoopRecord {
     /// value over the head of the turn: the input of the turn-indexed
     /// intervals (ADR-361 D12).
     pub turns: Vec[LoopTurn],
+    /// **The claims of the `assert`s in the body that read a state name**,
+    /// each read over the head of the turn on the path that reaches it:
+    /// candidates of their own (ADR-361 D3, D5.4).
+    pub asserts: Vec[i64],
 }
 
 /// One path through a turn that reaches the next head: the conditions it
@@ -57,6 +61,8 @@ struct LoopPath {
     values: collections::BTreeMap[String, i64],
     /// Locals of the body that are no whole number the prover reads.
     unread: collections::BTreeSet[String],
+    /// The claims of the `assert`s the path passed, read over the head.
+    asserted: Vec[i64],
 }
 
 /// A path that left the turn: `turn` (its end or a `continue`), `break` or
@@ -140,7 +146,7 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
         let begins = arena.substitute(low, before)
         fixed.push(arena.equal(ghost, begins))
     }
-    let first = LoopPath { constraints: [], values: head, unread: collections::BTreeSet() }
+    let first = LoopPath { constraints: [], values: head, unread: collections::BTreeSet(), asserted: [] }
     let mut ends: Vec[LoopEnd] = []
     let live = loop_block(arena, body, [first], ends, state, ints, pinned, words, claims, throwing, holes_of) ?? return null
     for path in live {
@@ -218,8 +224,32 @@ fn loop_record_of(mut arena: TermArena, start: i64, outer: ref Vec[String], fact
     if !turns.is_empty() {
         step = arena.or(turns)
     }
+    // An `assert` that reads a state name and nothing the path made up.
+    let mut asserts: Vec[i64] = []
+    let mut asserted_texts: collections::BTreeSet[String] = collections::BTreeSet()
+    for end in ends {
+        for claim in end.path.asserted {
+            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+            arena.variables(claim, read)
+            let mut reads_state = false
+            let mut made_up = false
+            for n in read {
+                if state.contains(n) {
+                    reads_state = true
+                }
+                if n.contains("~") {
+                    made_up = true
+                }
+            }
+            let text = arena.text(claim)
+            if reads_state && !made_up && !asserted_texts.contains(text) {
+                asserted_texts.insert(text)
+                asserts.push(claim)
+            }
+        }
+    }
     let problem = LgLoop { state: state.clone(), fixed: fixed, entry: entry, condition: condition, step: step, exits: exits, goals: [] }
-    return LoopRecord { start: start, problem: problem, steps: steps, counter: counter.clone(), turns: kept_turns }
+    return LoopRecord { start: start, problem: problem, steps: steps, counter: counter.clone(), turns: kept_turns, asserts: asserts }
 }
 
 /// What a turn adds to `name` where `value` is it plus a constant: the same
@@ -432,6 +462,7 @@ fn loop_expr_stmt(mut arena: TermArena, expr: ref Expr, span: Span, path: ref Lo
                 let c = loop_read(arena, args[0], p, ints, pinned, words, true)
                 if c != null {
                     p.constraints.push(c ?? 0)
+                    p.asserted.push(c ?? 0)
                 }
                 next.push(p)
                 return true
@@ -583,8 +614,82 @@ pub fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(
             found.push((arena.ge(here, l), "intervals"))
         }
     }
+    // The program's own `assert`s in the body (D5.4).
+    for claim in record.asserts {
+        found.push((claim, "asserts"))
+    }
+    found.extend(loop_octagons(arena, record))
     found.extend(loop_unrolled(arena, record, steady, proved, asked))
     return found
+}
+
+/// **Differences of two state names that keep a sign** (ADR-361 D5.2, the
+/// first octagons): where on every path the step of `x` is at most that of
+/// `y`, `x - y` never grows past its start, `x - y <= x@ - y@`; the other
+/// way round it never falls below it. Two names that both step by one
+/// constant are the closed forms' already.
+fn loop_octagons(mut arena: TermArena, record: ref LoopRecord) -> Vec[(i64, String)] sync {
+    let mut found: Vec[(i64, String)] = []
+    let origin: String = "octagons"
+    let mut names: Vec[String] = []
+    for (name, _) in record.steps {
+        names.push(name.clone())
+    }
+    for a in 0..<names.len() {
+        for b in (a + 1)..<names.len() {
+            let x = names[a].clone()
+            let y = names[b].clone()
+            let dx = record.steps[x] ?? continue
+            let dy = record.steps[y] ?? continue
+            if dx.is_empty() || dx.len() != dy.len() {
+                continue
+            }
+            let mut at_most = true
+            let mut at_least = true
+            let mut x_steady = true
+            let mut y_steady = true
+            for k in 0..<dx.len() {
+                if dx[k] > dy[k] {
+                    at_most = false
+                }
+                if dx[k] < dy[k] {
+                    at_least = false
+                }
+                if dx[k] != dx[0] {
+                    x_steady = false
+                }
+                if dy[k] != dy[0] {
+                    y_steady = false
+                }
+            }
+            if (x_steady && y_steady) || (at_most && at_least) {
+                continue
+            }
+            // `x - x@ <= y - y@`, said `x <= y` where both start alike.
+            let mut left = arena.var(x)
+            let mut right = arena.var(y)
+            let sx = loop_start_of(arena, record, x)
+            let sy = loop_start_of(arena, record, y)
+            if arena.text(sx) != arena.text(sy) {
+                left = arena.sub(left, sx)
+                right = arena.sub(right, sy)
+            }
+            if at_most {
+                found.push((arena.le(left, right), origin.clone()))
+            }
+            if at_least {
+                found.push((arena.ge(left, right), origin.clone()))
+            }
+        }
+    }
+    return found
+}
+
+/// What a state name was when the loop was reached: the term the facts
+/// before it pin, or the name of that value.
+fn loop_start_of(mut arena: TermArena, record: ref LoopRecord, name: ref String) -> i64 sync {
+    let ghost = loop_before_name(name, record.start)
+    return loop_start_term(arena, record.problem.fixed, ghost) ?? arena.var(ghost)
 }
 
 /// The most turns a loop may take for the turn-indexed intervals
