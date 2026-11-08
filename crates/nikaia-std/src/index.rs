@@ -226,6 +226,23 @@ where
     }
 }
 
+/// **A block's list is indexed as a `Vec` is** (ADR-327 D4, #490): a
+/// number or a range, through the run it derefs to.
+impl<V, I> Get<I> for crate::block::List<V>
+where
+    I: std::slice::SliceIndex<[V]> + 'static,
+{
+    type Out<'a>
+        = &'a I::Output
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get(&self, key: I) -> &I::Output {
+        &self.as_slice()[key]
+    }
+}
+
 impl<V, I, const N: usize> Get<I> for [V; N]
 where
     // **`'static` on the index**, which costs nothing and is what lets the
@@ -377,6 +394,23 @@ where
 }
 
 impl<I> Get<I> for String
+where
+    I: std::slice::SliceIndex<str> + TextCut + 'static,
+{
+    type Out<'a>
+        = &'a I::Output
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get(&self, key: I) -> &I::Output {
+        text_cut(self, &key);
+        &self.as_str()[key]
+    }
+}
+
+/// **A block's text is sliced as a `String` is** (ADR-327 D4, #490).
+impl<I> Get<I> for crate::block::Text
 where
     I: std::slice::SliceIndex<str> + TextCut + 'static,
 {
@@ -701,6 +735,19 @@ impl<V> GetMut<usize> for Vec<Option<V>> {
     }
 }
 
+/// A block's list of optional values, as a `Vec`'s (#490).
+impl<V> GetMut<usize> for crate::block::List<Option<V>> {
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get_mut(&mut self, key: usize) -> Option<&mut V> {
+        self[key].as_mut()
+    }
+}
+
 /// The emitted spelling: `nikaia_std::index::get_mut(&mut m, nikaia_std::index::at(k))`.
 #[track_caller]
 pub fn get_mut<T, K>(target: &mut T, key: K) -> T::Out<'_>
@@ -784,6 +831,27 @@ impl<'a> Or<&'a str> for Option<&'a String> {
 /// as a map's is (ADR-293 D28).
 impl<'a> Or<&'a str> for &'a Option<String> {
     fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.as_deref().unwrap_or_else(fallback)
+    }
+}
+
+/// **A block's text, read, with a literal after `??`**, as a `String`'s
+/// (#490): a view of text, nothing copied.
+impl<'a> Or<&'a str> for Option<&'a crate::block::Text> {
+    fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.map(crate::block::Text::as_str)
+            .unwrap_or_else(fallback)
+    }
+}
+
+impl<'a> Or<&'a str> for &'a Option<crate::block::Text> {
+    fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.as_deref().unwrap_or_else(fallback)
+    }
+}
+
+impl<'a, T> Or<&'a [T]> for &'a Option<crate::block::List<T>> {
+    fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
         self.as_deref().unwrap_or_else(fallback)
     }
 }
@@ -891,6 +959,14 @@ pub trait Set<K, V> {
 }
 
 impl<V> Set<usize, V> for Vec<V> {
+    #[track_caller]
+    fn set(&mut self, key: usize, value: V) {
+        self[key] = value;
+    }
+}
+
+/// A block's list is written in place as a `Vec` is (#490).
+impl<V> Set<usize, V> for crate::block::List<V> {
     #[track_caller]
     fn set(&mut self, key: usize, value: V) {
         self[key] = value;

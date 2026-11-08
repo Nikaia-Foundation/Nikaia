@@ -286,6 +286,21 @@ impl AsRef<str> for Text {
     }
 }
 
+/// A text names a file as a `String` does (`Path::new(&text)`).
+impl AsRef<std::ffi::OsStr> for Text {
+    #[inline]
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.as_str().as_ref()
+    }
+}
+
+impl AsRef<std::path::Path> for Text {
+    #[inline]
+    fn as_ref(&self) -> &std::path::Path {
+        self.as_str().as_ref()
+    }
+}
+
 impl AsRef<[u8]> for Text {
     #[inline]
     fn as_ref(&self) -> &[u8] {

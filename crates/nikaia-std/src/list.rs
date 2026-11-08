@@ -3,13 +3,24 @@
 /// `xs.map fn { … }` (Kap 5.3) is a method on the list itself, not a step in an
 /// iterator pipeline, so it is one here too.
 pub trait ListExt<T> {
+    /// The list the map builds: a list of the same kind (#490).
+    type Mapped<U>;
     /// Every element, transformed. Takes the list, because a mapped list
     /// replaces the one it was built from.
-    fn map<U>(self, f: impl FnMut(T) -> U) -> Vec<U>;
+    fn map<U>(self, f: impl FnMut(T) -> U) -> Self::Mapped<U>;
 }
 
 impl<T> ListExt<T> for Vec<T> {
+    type Mapped<U> = Vec<U>;
     fn map<U>(self, f: impl FnMut(T) -> U) -> Vec<U> {
+        self.into_iter().map(f).collect()
+    }
+}
+
+/// A block's list is mapped into another, outside every block (D9, #490).
+impl<T> ListExt<T> for crate::block::List<T> {
+    type Mapped<U> = crate::block::List<U>;
+    fn map<U>(self, f: impl FnMut(T) -> U) -> crate::block::List<U> {
         self.into_iter().map(f).collect()
     }
 }

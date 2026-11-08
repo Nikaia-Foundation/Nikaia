@@ -57,6 +57,22 @@ impl TextNeedle for String {
     }
 }
 
+/// A block's text is searched for as a `String` is (#490).
+impl TextNeedle for crate::block::Text {
+    #[inline]
+    fn first_in(&self, text: &str) -> Option<usize> {
+        self.as_str().first_in(text)
+    }
+    #[inline]
+    fn last_in(&self, text: &str) -> Option<usize> {
+        self.as_str().last_in(text)
+    }
+    #[inline]
+    fn replaced_in(&self, text: &str, to: &str, count: usize) -> String {
+        self.as_str().replaced_in(text, to, count)
+    }
+}
+
 impl TextNeedle for char {
     #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {

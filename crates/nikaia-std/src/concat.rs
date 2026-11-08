@@ -44,13 +44,17 @@
 /// `Out` is always `String`: a concatenation makes a new value, and there is no
 /// borrow to hand back.
 pub trait Plus<Rhs> {
-    fn plus(self, rhs: Rhs) -> String;
+    /// `String`, or a block's [`Text`](crate::block::Text) where a side is
+    /// one (#490).
+    type Out;
+    fn plus(self, rhs: Rhs) -> Self::Out;
 }
 
 /// The shape that already worked, and it keeps what it had: the left side's
 /// buffer is written into rather than replaced. This is what `String + &str`
 /// lowers to today and what the measurement above says costs nothing.
 impl Plus<&str> for String {
+    type Out = String;
     #[inline]
     fn plus(mut self, rhs: &str) -> String {
         self.push_str(rhs);
@@ -60,6 +64,7 @@ impl Plus<&str> for String {
 
 /// The same, with the right side owned and dropped after its bytes are taken.
 impl Plus<String> for String {
+    type Out = String;
     #[inline]
     fn plus(mut self, rhs: String) -> String {
         self.push_str(&rhs);
@@ -70,6 +75,7 @@ impl Plus<String> for String {
 /// Neither side owns anything, so something has to be allocated — once, at the
 /// size the result needs, rather than twice by growing.
 impl Plus<&str> for &str {
+    type Out = String;
     #[inline]
     fn plus(self, rhs: &str) -> String {
         let mut out = String::with_capacity(self.len() + rhs.len());
@@ -84,6 +90,7 @@ impl Plus<&str> for &str {
 /// allocating a second time, so this costs a copy where the obvious lowering
 /// would cost an allocation and a copy.
 impl Plus<String> for &str {
+    type Out = String;
     #[inline]
     fn plus(self, mut rhs: String) -> String {
         rhs.insert_str(0, self);
@@ -96,6 +103,7 @@ impl Plus<String> for &str {
 /// types, writes it as it is. Each shape reads it as the `&str` it holds, so
 /// the owned side keeps the buffer reuse above.
 impl Plus<&String> for String {
+    type Out = String;
     #[inline]
     fn plus(self, rhs: &String) -> String {
         self.plus(rhs.as_str())
@@ -104,6 +112,7 @@ impl Plus<&String> for String {
 
 /// The same, with the left side borrowed: one allocation, at the size needed.
 impl Plus<&String> for &str {
+    type Out = String;
     #[inline]
     fn plus(self, rhs: &String) -> String {
         self.plus(rhs.as_str())
@@ -112,6 +121,7 @@ impl Plus<&String> for &str {
 
 /// A lent `&String` on the left is borrowed text, as a `&str` is.
 impl Plus<&str> for &String {
+    type Out = String;
     #[inline]
     fn plus(self, rhs: &str) -> String {
         self.as_str().plus(rhs)
@@ -120,6 +130,7 @@ impl Plus<&str> for &String {
 
 /// The right side's buffer is reused, as for `&str + String`.
 impl Plus<String> for &String {
+    type Out = String;
     #[inline]
     fn plus(self, rhs: String) -> String {
         self.as_str().plus(rhs)
@@ -128,15 +139,70 @@ impl Plus<String> for &String {
 
 /// Both sides lent.
 impl Plus<&String> for &String {
+    type Out = String;
     #[inline]
     fn plus(self, rhs: &String) -> String {
         self.as_str().plus(rhs.as_str())
     }
 }
 
+/// **A side that is a block's text makes the sum one** (ADR-327 D4, #490):
+/// an owned left side keeps its buffer, as `String`'s does; otherwise one
+/// allocation at the size the sum needs, outside every block (D9).
+macro_rules! text_plus {
+    ($($left:ty, $right:ty;)+) => {$(
+        impl Plus<$right> for $left {
+            type Out = crate::block::Text;
+            #[inline]
+            fn plus(self, rhs: $right) -> crate::block::Text {
+                let (left, right): (&str, &str) = (&self, &rhs);
+                let mut out = crate::block::Text::with_capacity(left.len() + right.len());
+                out.push_str(left);
+                out.push_str(right);
+                out
+            }
+        }
+    )+};
+}
+
+text_plus! {
+    &str, crate::block::Text;
+    &str, &crate::block::Text;
+    &crate::block::Text, &str;
+    &crate::block::Text, crate::block::Text;
+    &crate::block::Text, &crate::block::Text;
+}
+
+impl Plus<&str> for crate::block::Text {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(mut self, rhs: &str) -> crate::block::Text {
+        self.push_str(rhs);
+        self
+    }
+}
+
+impl Plus<crate::block::Text> for crate::block::Text {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(mut self, rhs: crate::block::Text) -> crate::block::Text {
+        self.push_str(&rhs);
+        self
+    }
+}
+
+impl Plus<&crate::block::Text> for crate::block::Text {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(mut self, rhs: &crate::block::Text) -> crate::block::Text {
+        self.push_str(rhs);
+        self
+    }
+}
+
 /// The emitted spelling: `nikaia_std::concat::plus(a, b)`.
 #[inline]
-pub fn plus<L: Plus<R>, R>(left: L, right: R) -> String {
+pub fn plus<L: Plus<R>, R>(left: L, right: R) -> L::Out {
     left.plus(right)
 }
 

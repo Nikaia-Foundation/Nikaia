@@ -524,6 +524,14 @@ impl<T, const N: usize> From<[T; N]> for List<T> {
 }
 
 impl<T: Clone> List<T> {
+    /// `n` clones of `item`, outside every block (`vec![item; n]`).
+    #[inline]
+    pub fn from_elem(item: T, n: usize) -> List<T> {
+        let mut list = List::with_capacity(n);
+        list.resize(n, item);
+        list
+    }
+
     /// This list with clones of `run` after its elements.
     #[inline]
     fn with_clones_of(mut self, run: &[T]) -> List<T> {

@@ -36,3 +36,41 @@ pub use task_block::{
 /// ([`crate::map::HashMap`]), whose table is placed by its handle and grows
 /// in a block only through `try_reserve`.
 pub type Map<K, V, S> = crate::map::HashMap<K, V, S>;
+
+/// **The block types under the names a program's Rust writes** (#490,
+/// staged): `Vec` is [`List`], `String` is [`Text`], `vec![…]` builds a
+/// [`List`] and `format!(…)` a [`Text`], so a program lowers to the block
+/// types where its file imports these names (`lowers_to_block_types` in
+/// `tools/emit_needs.nika`, the one place that decides it).
+pub mod names {
+    pub use super::List as Vec;
+    pub use super::Text as String;
+    pub use crate::__nikaia_list as vec;
+    pub use crate::__nikaia_text as format;
+}
+
+/// `vec![…]` for a [`List`]: empty, `n` clones of one item, or the items
+/// listed, all outside every block (D9) until the emitter places sites.
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __nikaia_list {
+    () => {
+        $crate::block::List::new()
+    };
+    ($item:expr; $n:expr) => {
+        $crate::block::List::from_elem($item, $n)
+    };
+    ($($item:expr),+ $(,)?) => {
+        $crate::block::List::from([$($item),+])
+    };
+}
+
+/// `format!(…)` for a [`Text`], built with no `String` between ([`format`]),
+/// outside every block (D9) until the emitter places sites.
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __nikaia_text {
+    ($($part:tt)*) => {
+        $crate::block::format($crate::block::Place::Outside, ::std::format_args!($($part)*))
+    };
+}

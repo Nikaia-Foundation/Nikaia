@@ -151,8 +151,11 @@ impl EmitState {
             }
             out.push("            _ => {}\n        }\n    }\n}\n");
             if crashed { out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params)); }
-            out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n", decl, name, params));
-            out.push(&format!("impl{} nikaia_std::error::Full for {}{} {{\n    fn full(&self) -> String {{\n        match self {{\n", decl, name, params));
+            let block_types = lowers_to_block_types(self.is_std);
+            let into = if block_types { ".into()" } else { "" };
+            let full_text = if block_types { "std::string::String" } else { "String" };
+            out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string(){} }}\n}}\n", decl, name, params, into));
+            out.push(&format!("impl{} nikaia_std::error::Full for {}{} {{\n    fn full(&self) -> {} {{\n        match self {{\n", decl, name, params, full_text));
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let mut held: &'static str = "nikaia_std::error::Full::full(e)";

@@ -101,7 +101,10 @@ impl EmitState {
             out.push("use winnow_grammar::rt::Parallelism;\n");
             out.push("use winnow_grammar::ParseContext;\n");
         }
-        if !self.is_std { out.push("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n"); }
+        if !self.is_std {
+            out.push("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n");
+            out.push(&block_types_import(self.is_std));
+        }
         if self.fails { out.push("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n"); }
         out.push("\n");
     }

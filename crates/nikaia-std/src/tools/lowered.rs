@@ -2954,7 +2954,7 @@ pub mod emit_misc {
 }
 pub mod emit_needs {
     #[allow(unused_imports)]
-    pub use super::{EmitNeeds, emit_needs_abort_table};
+    pub use super::{lowers_to_block_types, block_types_import, EmitNeeds, emit_needs_abort_table};
 }
 pub mod emit_ops {
     #[allow(unused_imports)]
