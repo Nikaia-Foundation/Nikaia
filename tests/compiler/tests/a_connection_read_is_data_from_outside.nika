@@ -1,0 +1,12 @@
+// What `conn.read()` hands back comes from outside the program (#1446,
+// ADR-010 D2, ADR-365): `net::Connection::read` is an untrusted source, and
+// the checker's resolution of the method reaches the prover, so the claim
+// waits for a guard even though `net::connect` itself is not a source.
+use std::net
+
+fn main() throws {
+    let mut conn = net::connect("127.0.0.1:9")
+    let n = conn.read().len()
+    assert(n > 0)
+    println(n)
+}
