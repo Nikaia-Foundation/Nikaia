@@ -1,0 +1,725 @@
+// crates/nikaia-std/src/tools/project_features.nika
+//
+// **The features of a rust-library** (ADR-393 D2-D3, D6, #1393): the roots of
+// `[features]` resolved against the package's lowered items, what each root
+// reaches through calls, types, trait implementations and constants, the
+// `#[cfg]` each item gets in the lowered crate, and the `[features]` table,
+// the implications and the optional dependencies of its `Cargo.toml`. The
+// source holds no condition: everything here is derived from the lowered
+// Rust and the manifest's roots.
+
+use std::collections
+
+/// The lexer's state carried from one line of the lowered Rust to the next:
+/// the depth of `(`, `[` and `{`, the open block comments, and an open string
+/// (`hashes` is the `#` count of a raw string, `-1` for an ordinary one).
+struct FeatureLexer {
+    depth: i64,
+    comment: i64,
+    string: bool,
+    hashes: i64,
+}
+
+/// One line as the lexer saw it: the names outside strings and comments, in
+/// order, and the last character of code (`' '` where there is none).
+struct FeatureLine {
+    words: Vec[String],
+    last: scalar,
+}
+
+/// **An item of the lowered crate**, at depth 0: a function, a type, a trait,
+/// an `impl`, a constant, a `use`.
+struct FeatureItem {
+    /// The line its first attribute or its header is on: where its `#[cfg]` goes.
+    first: i64,
+    kind: String,
+    /// Empty for an `impl` and a `use`.
+    name: String,
+    public: bool,
+    /// The names its text holds.
+    words: Vec[String],
+    /// The names of an `impl`'s header (`impl Show for Node`).
+    header: Vec[String],
+    /// A trait's methods.
+    methods: Vec[String],
+    /// For an `impl`: the items of the crate its header names.
+    owners: Vec[i64],
+}
+
+/// **A feature resolved**: its roots as items, and the features its list
+/// names (an implication written by hand).
+struct FeatureRoots {
+    name: String,
+    roots: Vec[i64],
+    implied: Vec[String],
+}
+
+/// **What the features made of a lowered crate**: the Rust with its
+/// conditions, the `[features]` table, the dependencies that became optional,
+/// and for each item the feature it is in, for the report of `NK1345`.
+pub struct FeaturesMade {
+    pub rust: String,
+    /// `[features]` and its lines, for the generated `Cargo.toml`.
+    pub table: String,
+    /// The dependency keys written `optional = true`.
+    pub optional: Vec[String],
+    /// Each feature's name, in the manifest's order, `default` left out.
+    pub names: Vec[String],
+    /// `(item name, feature)` for each item that is in a feature only.
+    pub homes: Vec[(String, String)],
+}
+
+/// **A root or a feature list the build refuses** (`NK1344`, `NK1347`): the
+/// feature, the entry in its list (empty for the feature's name), and what
+/// is wrong.
+pub struct FeaturesRefusal {
+    pub code: String,
+    pub feature: String,
+    pub entry: String,
+    pub message: String,
+    pub help: String?,
+}
+
+impl Error for FeaturesRefusal {
+    fn message(ref self) -> String {
+        return self.message.clone()
+    }
+}
+
+/// Whether `c` is an ASCII letter or digit.
+fn features_plain(c: scalar) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
+/// **A feature name Cargo accepts**: a letter, digit or `_` first, then those
+/// and `-`, `+`, `.`.
+pub fn features_name_ok(name: ref String) -> bool {
+    let mut first = true
+    for c in name.chars() {
+        let plain = features_plain(c) || c == '_'
+        if first {
+            if !plain { return false }
+            first = false
+            continue
+        }
+        if !plain && c != '-' && c != '+' && c != '.' { return false }
+    }
+    return !first
+}
+
+/// **The feature lists checked against each other** (`NK1347`): each name
+/// one Cargo accepts, each value a list of texts, and each entry of `default`
+/// a declared feature. An entry of another feature without `::` that is not
+/// the package names a feature too, and must be declared.
+pub fn features_lists_checked(features: ref Vec[ManifestFeature], package: ref String) -> FeaturesRefusal? {
+    let mut declared: Vec[String] = []
+    for feature in features {
+        declared.push(feature.name.clone())
+    }
+    for feature in features {
+        if !features_name_ok(feature.name) {
+            return FeaturesRefusal { code: "NK1347", feature: feature.name.clone(), entry: "", message: f"`{feature.name}` is not a feature name Cargo accepts: a feature's name is letters, digits and `_`, then also `-`, `+` and `.`.", help: null }
+        }
+        if !feature.listed {
+            return FeaturesRefusal { code: "NK1347", feature: feature.name.clone(), entry: "", message: f"The feature `{feature.name}` is not a list: a feature lists its roots, and `default` lists features, each as a text in `[...]`.", help: null }
+        }
+        for entry in feature.entries {
+            let names_feature = feature.name == "default" || (!entry.contains("::") && entry != package)
+            if names_feature && !declared.contains(entry) {
+                let mut help: String? = null
+                let near = nearest_name(entry, declared)
+                if near != null {
+                    help = f"Did you mean `{near ?? ""}`?"
+                }
+                return FeaturesRefusal { code: "NK1347", feature: feature.name.clone(), entry: entry.clone(), message: f"`{feature.name}` names the feature `{entry}`, and `[features]` declares none of that name.", help: help }
+            }
+        }
+    }
+    return null
+}
+
+/// Whether `hashes` `#` follow position `at` (none for an ordinary string).
+fn features_hashes_follow(c: ref Vec[scalar], at: i64, hashes: i64) -> bool {
+    if hashes <= 0 { return true }
+    for k in 0..<hashes {
+        if at + k >= c.len() || c[at + k] != '#' { return false }
+    }
+    return true
+}
+
+/// **One line of the lowered Rust lexed**, its state carried on in `lexer`.
+fn features_scan_line(line: ref String, mut lexer: FeatureLexer) -> FeatureLine {
+    let c: Vec[scalar] = line.chars().collect()
+    let n = c.len()
+    let mut words: Vec[String] = []
+    let mut last = ' '
+    let mut at = 0
+    while at < n {
+        let ch = c[at]
+        if lexer.comment > 0 {
+            if ch == '*' && at + 1 < n && c[at + 1] == '/' {
+                lexer.comment -= 1
+                at += 2
+            } else if ch == '/' && at + 1 < n && c[at + 1] == '*' {
+                lexer.comment += 1
+                at += 2
+            } else {
+                at += 1
+            }
+            continue
+        }
+        if lexer.string {
+            if lexer.hashes < 0 && ch == '\\' {
+                at += 2
+                continue
+            }
+            if ch == '"' && features_hashes_follow(c, at + 1, lexer.hashes) {
+                lexer.string = false
+                at += 1
+                if lexer.hashes > 0 { at += lexer.hashes }
+                last = '"'
+                continue
+            }
+            at += 1
+            continue
+        }
+        if ch == '/' && at + 1 < n && c[at + 1] == '/' { break }
+        if ch == '/' && at + 1 < n && c[at + 1] == '*' {
+            lexer.comment = 1
+            at += 2
+            continue
+        }
+        if ch == '"' {
+            lexer.string = true
+            lexer.hashes = -1
+            at += 1
+            continue
+        }
+        if ch == '\'' {
+            // A character literal (`'x'`, `'\n'`); otherwise a lifetime.
+            if at + 1 < n && c[at + 1] == '\\' {
+                at += 2
+                while at < n && c[at] != '\'' { at += 1 }
+                at += 1
+                last = '\''
+                continue
+            }
+            if at + 2 < n && c[at + 2] == '\'' {
+                at += 3
+                last = '\''
+                continue
+            }
+            at += 1
+            continue
+        }
+        if ch.is_alphabetic() || ch == '_' {
+            let mut word = ""
+            while at < n && (c[at].is_alphanumeric() || c[at] == '_') {
+                word.push(c[at])
+                at += 1
+            }
+            // A raw or byte string: `r"…"`, `r#"…"#`, `b"…"`, `br"…"`.
+            if (word == "r" || word == "br") && at < n && (c[at] == '"' || c[at] == '#') {
+                let mut hashes = 0
+                while at < n && c[at] == '#' {
+                    hashes += 1
+                    at += 1
+                }
+                lexer.string = true
+                lexer.hashes = hashes
+                at += 1
+                continue
+            }
+            if word == "b" && at < n && (c[at] == '"' || c[at] == '\'') {
+                continue
+            }
+            last = c[at - 1]
+            words.push(word)
+            continue
+        }
+        if ch.is_ascii_digit() {
+            while at < n && (c[at].is_alphanumeric() || c[at] == '_' || c[at] == '.') { at += 1 }
+            last = '0'
+            continue
+        }
+        if ch == '(' || ch == '[' || ch == '{' {
+            lexer.depth += 1
+        } else if ch == ')' || ch == ']' || ch == '}' {
+            lexer.depth -= 1
+        }
+        if !ch.is_whitespace() { last = ch }
+        at += 1
+    }
+    return FeatureLine { words: words, last: last }
+}
+
+/// The words before a modifier-free kind: `pub`, `pub(crate)`, `unsafe`,
+/// `async`, `extern`, `default`, and `const` before `fn`.
+fn features_modifier(word: ref String, next: ref String) -> bool {
+    if word == "pub" || word == "crate" || word == "super" || word == "in" || word == "self" || word == "unsafe" || word == "async" || word == "extern" || word == "default" {
+        return true
+    }
+    return word == "const" && (next == "fn" || next == "unsafe" || next == "async" || next == "extern")
+}
+
+/// **The items of the lowered Rust**, at depth 0, each from its first
+/// attribute to the `}` or `;` that ends it.
+fn features_items(lines: ref Vec[String]) -> Vec[FeatureItem] {
+    let mut items: Vec[FeatureItem] = []
+    let mut lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 }
+    let mut pending = -1
+    let mut current = -1
+    let mut in_attribute = false
+    let mut words: Vec[String] = []
+    let mut header: Vec[String] = []
+    for i in 0..<lines.len() {
+        let open = lexer.depth != 0 || lexer.comment > 0 || lexer.string
+        let line = features_scan_line(lines[i], lexer)
+        if in_attribute {
+            if lexer.depth == 0 { in_attribute = false }
+            continue
+        }
+        if current < 0 {
+            if open { continue }
+            let trimmed = lines[i].trim()
+            if trimmed.len() == 0 || trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with("#!") {
+                continue
+            }
+            if trimmed.starts_with("#[") {
+                if pending < 0 { pending = i }
+                if lexer.depth > 0 { in_attribute = true }
+                continue
+            }
+            current = i
+            words = []
+            // An `impl`'s header: the names before its first `{`.
+            let mut head_lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 }
+            let head = lines[i].split("{").next() ?? ""
+            header = features_scan_line(head, head_lexer).words
+        }
+        // `beside:` of the place table names the packages it uses, not code.
+        if !lines[i].trim().starts_with("beside:") {
+            for word in line.words {
+                words.push(word.clone())
+            }
+        }
+        if lexer.depth == 0 && (line.last == '}' || line.last == ';') {
+            let first = if pending >= 0 { pending } else { current }
+            items.push(features_item(first, words, header))
+            current = -1
+            pending = -1
+        }
+    }
+    return items
+}
+
+/// One item from its words: its kind, its name, whether it is `pub`, and a
+/// trait's methods.
+fn features_item(first: i64, words: ref Vec[String], header: ref Vec[String]) -> FeatureItem {
+    let mut at = 0
+    while at < words.len() {
+        let next = if at + 1 < words.len() { words[at + 1].clone() } else { "" }
+        if !features_modifier(words[at], next) { break }
+        at += 1
+    }
+    let public = words.len() > 1 && words[0] == "pub" && words[1] != "crate" && words[1] != "super" && words[1] != "in"
+    let kind = if at < words.len() { words[at].clone() } else { "" }
+    let mut name: String = ""
+    if kind != "impl" && kind != "use" && at + 1 < words.len() {
+        name = words[at + 1].clone()
+    }
+    let mut methods: Vec[String] = []
+    if kind == "trait" {
+        for k in 0..<words.len() {
+            if words[k] == "fn" && k + 1 < words.len() {
+                methods.push(words[k + 1].clone())
+            }
+        }
+    }
+    let mut kept: Vec[String] = []
+    if kind == "impl" {
+        kept = header.clone()
+    }
+    return FeatureItem { first: first, kind: kind, name: name, public: public, words: words.clone(), header: kept, methods: methods, owners: [] }
+}
+
+/// **What `seeds` reach**: an item reaches each item its words name and each
+/// trait that declares a method of a name it holds. An `impl` comes along
+/// with an owner it names (`any`), or only once all its owners are in
+/// (`!any`, for the core).
+fn features_closure(items: ref Vec[FeatureItem], named: ref collections::BTreeMap[String, Vec[i64]], seeds: ref Vec[i64], any: bool) -> Vec[bool] {
+    let mut inside: Vec[bool] = []
+    for _ in 0..<items.len() { inside.push(false) }
+    let mut work: Vec[i64] = []
+    for seed in seeds {
+        if !inside[seed] {
+            inside[seed] = true
+            work.push(seed)
+        }
+    }
+    while true {
+        while work.len() > 0 {
+            let at = work.pop() ?? 0
+            for word in items[at].words {
+                let found = named.get(word) ?? continue
+                for target in found {
+                    if !inside[target] {
+                        inside[target] = true
+                        work.push(target)
+                    }
+                }
+            }
+        }
+        // The `impl`s whose owners are in.
+        for at in 0..<items.len() {
+            if inside[at] || items[at].kind != "impl" || items[at].owners.len() == 0 { continue }
+            let mut some = false
+            let mut all = true
+            for owner in items[at].owners {
+                if inside[owner] { some = true } else { all = false }
+            }
+            if (any && some) || (!any && all) {
+                inside[at] = true
+                work.push(at)
+            }
+        }
+        if work.len() == 0 { break }
+    }
+    return inside
+}
+
+/// `feature = "a"`, or `any(feature = "a", feature = "b")`.
+fn features_condition(names: ref Vec[String]) -> String {
+    if names.len() == 1 {
+        return f"feature = \"{names[0]}\""
+    }
+    let parts: Vec[String] = names.iter().map(fn(name) { f"feature = \"{name}\"" }).collect()
+    return f"any({parts.join(", ")})"
+}
+
+/// **A feature's roots resolved** (`NK1344`): the package stands for all its
+/// `pub` items; `<package>::<name>` for that `pub` item.
+fn features_roots(feature: ref ManifestFeature, package: ref String, items: ref Vec[FeatureItem], declared: ref Vec[String]) -> FeatureRoots throws {
+    let mut roots: Vec[i64] = []
+    let mut implied: Vec[String] = []
+    let mut offered: Vec[String] = [package.clone()]
+    for item in items {
+        if item.public && item.name.len() > 0 && !item.name.starts_with("__") {
+            offered.push(f"{package}::{item.name}")
+        }
+    }
+    for entry in feature.entries {
+        if declared.contains(entry) && !entry.contains("::") && entry != package {
+            implied.push(entry.clone())
+            continue
+        }
+        if entry == package {
+            for at in 0..<items.len() {
+                if items[at].public && items[at].name.len() > 0 && !items[at].name.starts_with("__") && items[at].kind != "use" {
+                    roots.push(at)
+                }
+            }
+            continue
+        }
+        let prefix = f"{package}::"
+        let mut found = -1
+        if entry.starts_with(prefix) {
+            let rest = entry.replace(prefix, "")
+            for at in 0..<items.len() {
+                if items[at].name == rest && items[at].kind != "use" {
+                    found = at
+                }
+            }
+        }
+        let mut help: String? = null
+        let near = nearest_name(entry, offered)
+        if near != null {
+            help = f"The closest `pub` path is `{near ?? ""}`."
+        }
+        if found < 0 {
+            throw FeaturesRefusal { code: "NK1344", feature: feature.name.clone(), entry: entry.clone(), message: f"The root `{entry}` of the feature `{feature.name}` names nothing: a root is the package `{package}`, standing for all its `pub` items, or one `pub` item written `{package}::<name>`.", help: help }
+        }
+        if !items[found].public {
+            throw FeaturesRefusal { code: "NK1344", feature: feature.name.clone(), entry: entry.clone(), message: f"The root `{entry}` of the feature `{feature.name}` is not `pub`: a Rust user can take only what the package offers.", help: f"Make `{items[found].name}` `pub`, or name a `pub` item that uses it." }
+        }
+        roots.push(found)
+    }
+    return FeatureRoots { name: feature.name.clone(), roots: roots, implied: implied }
+}
+
+/// The key of each line of `[dependencies]` in a generated manifest.
+fn features_dependency_keys(manifest: ref String) -> Vec[String] {
+    let mut keys: Vec[String] = []
+    let mut inside = false
+    for line in manifest.lines() {
+        if line.starts_with("[") {
+            inside = line.trim() == "[dependencies]"
+            continue
+        }
+        if !inside || !line.contains("=") || line.starts_with("#") { continue }
+        let key = line.split("=").next() ?? ""
+        let key = key.trim().replace("\"", "")
+        if key.len() > 0 && key != "nikaia-std" { keys.push(key) }
+    }
+    return keys
+}
+
+/// **The features applied to a lowered crate** (ADR-393 D2-D3): each item
+/// in a feature only gets `#[cfg]` written before its first line (no line is
+/// added: the place table counts them), each `impl` the condition of its
+/// owners, a dependency only feature items use is made optional, and the
+/// `[features]` table is written with `default`, the implications and the
+/// `dep:` entries.
+pub fn features_applied(rust: ref String, manifest: ref String, features: ref Vec[ManifestFeature], package: ref String) -> FeaturesMade throws {
+    let mut lines: Vec[String] = []
+    for line in rust.split("\n") {
+        lines.push(line.clone())
+    }
+    let mut items = features_items(lines)
+    let mut named: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    for at in 0..<items.len() {
+        if items[at].name.len() > 0 && items[at].kind != "use" {
+            named.entry(items[at].name.clone()).or_insert([]).push(at)
+        }
+        for method in items[at].methods {
+            named.entry(method.clone()).or_insert([]).push(at)
+        }
+    }
+    for at in 0..<items.len() {
+        if items[at].kind != "impl" { continue }
+        let mut owners: Vec[i64] = []
+        for word in items[at].header {
+            let found = named.get(word) ?? continue
+            for target in found {
+                if items[target].kind != "impl" && !owners.contains(target) { owners.push(target) }
+            }
+        }
+        items[at].owners = owners
+    }
+
+    let mut declared: Vec[String] = []
+    for feature in features { declared.push(feature.name.clone()) }
+    let mut resolved: Vec[FeatureRoots] = []
+    let mut default: Vec[String] = []
+    for feature in features {
+        if feature.name == "default" {
+            for entry in feature.entries {
+                default.push(entry.clone())
+            }
+            continue
+        }
+        resolved.push(features_roots(feature, package, items, declared))
+    }
+    // A feature named in another's list brings its roots along.
+    let mut reached: Vec[Vec[bool]] = []
+    for one in resolved {
+        let mut seeds = one.roots.clone()
+        for other in resolved {
+            if one.implied.contains(other.name) {
+                for root in other.roots { seeds.push(root) }
+            }
+        }
+        reached.push(features_closure(items, named, seeds, true))
+    }
+    let mut seeds: Vec[i64] = []
+    for at in 0..<items.len() {
+        if items[at].kind == "impl" && items[at].owners.len() > 0 { continue }
+        let mut claimed = false
+        for one in reached {
+            if one[at] { claimed = true }
+        }
+        if !claimed { seeds.push(at) }
+    }
+    let core = features_closure(items, named, seeds, false)
+
+    // The conditions, written before each item's first line.
+    let mut homes: Vec[(String, String)] = []
+    for at in 0..<items.len() {
+        if core[at] { continue }
+        let mut condition: String = ""
+        if items[at].kind == "impl" {
+            let mut parts: Vec[String] = []
+            for owner in items[at].owners {
+                if core[owner] { continue }
+                let mut names: Vec[String] = []
+                for k in 0..<resolved.len() {
+                    if reached[k][owner] { names.push(resolved[k].name.clone()) }
+                }
+                let part = features_condition(names)
+                if !parts.contains(part) { parts.push(part) }
+            }
+            if parts.len() == 0 { continue }
+            condition = if parts.len() == 1 { parts[0].clone() } else { f"all({parts.join(", ")})" }
+        } else {
+            let mut names: Vec[String] = []
+            for k in 0..<resolved.len() {
+                if reached[k][at] { names.push(resolved[k].name.clone()) }
+            }
+            if names.len() == 0 { continue }
+            condition = features_condition(names)
+            if items[at].name.len() > 0 { homes.push((items[at].name.clone(), names[0].clone())) }
+        }
+        let first = items[at].first
+        lines[first] = f"#[cfg({condition})] {lines[first]}"
+    }
+
+    // A dependency only feature items name is optional (D3).
+    let mut optional: Vec[String] = []
+    let mut uses: Vec[Vec[String]] = []
+    for _ in resolved { uses.push([]) }
+    for key in features_dependency_keys(manifest) {
+        let word = key.replace("-", "_")
+        let mut in_core = false
+        let mut users: Vec[i64] = []
+        for at in 0..<items.len() {
+            if !items[at].words.contains(word) { continue }
+            if core[at] {
+                in_core = true
+                continue
+            }
+            for k in 0..<resolved.len() {
+                if reached[k][at] && !users.contains(k) { users.push(k) }
+            }
+        }
+        if in_core || users.len() == 0 { continue }
+        optional.push(key.clone())
+        for k in users { uses[k].push(f"dep:{key}") }
+        let names: Vec[String] = users.iter().map(fn(k) { resolved[k].name.clone() }).collect()
+        let condition = features_condition(names)
+        for i in 0..<lines.len() {
+            if lines[i].trim().starts_with("beside:") {
+                lines[i] = lines[i].replace(f"&::{word}::__NIKAIA_PLACES", f"#[cfg({condition})] &::{word}::__NIKAIA_PLACES")
+            }
+        }
+    }
+
+    // The table: `default` as written, then each feature with the features
+    // it implies and the dependencies it brings.
+    let mut table = "[features]\n"
+    let quoted: Vec[String] = default.iter().map(fn(name) { f"\"{name}\"" }).collect()
+    if features.iter().any(fn(feature) { feature.name == "default" }) {
+        table = f"{table}default = [{quoted.join(", ")}]\n"
+    }
+    let mut edges: Vec[(i64, i64)] = []
+    for f in 0..<resolved.len() {
+        for g in 0..<resolved.len() {
+            if f == g || edges.contains((g, f)) { continue }
+            let mut implies = resolved[f].implied.contains(resolved[g].name)
+            if !implies && resolved[g].roots.len() > 0 {
+                implies = resolved[g].roots.iter().all(fn(root) { reached[f][root] })
+            }
+            if implies { edges.push((f, g)) }
+        }
+    }
+    let mut names: Vec[String] = []
+    for f in 0..<resolved.len() {
+        names.push(resolved[f].name.clone())
+        let mut entries: Vec[String] = []
+        for edge in edges {
+            if edge.0 == f { entries.push(f"\"{resolved[edge.1].name}\"") }
+        }
+        for dep in uses[f] { entries.push(f"\"{dep}\"") }
+        table = f"{table}{resolved[f].name} = [{entries.join(", ")}]\n"
+    }
+    return FeaturesMade { rust: lines.join("\n"), table: table, optional: optional, names: names, homes: homes }
+}
+
+/// **A generated manifest with the features in it**: each optional
+/// dependency written `optional = true`, and the table before `[workspace]`.
+pub fn features_manifest(manifest: ref String, made: ref FeaturesMade) -> String {
+    let mut out = ""
+    let mut inside = false
+    for line in manifest.lines() {
+        if line.starts_with("[") {
+            inside = line.trim() == "[dependencies]"
+            if line.trim() == "[workspace]" {
+                out = f"{out}{made.table}\n"
+            }
+            out = f"{out}{line}\n"
+            continue
+        }
+        let mut kept = line.clone()
+        if inside && line.contains("=") {
+            let key = line.split("=").next() ?? ""
+            let key = key.trim().replace("\"", "")
+            if made.optional.contains(key) {
+                let value = line.splitn(2, "=").nth(1) ?? ""
+                let value = value.trim()
+                if value.ends_with("}") {
+                    let body = value.trim_end_matches("}").trim_end()
+                    kept = f"{key} = {body}, optional = true }}"
+                } else {
+                    kept = f"{key} = {{ version = {value}, optional = true }}"
+                }
+            }
+        }
+        out = f"{out}{kept}\n"
+    }
+    return out
+}
+
+/// **The feature whose item rustc missed**: the first name in backticks of
+/// the first error, looked up among the items in a feature only; else
+/// `fallback`.
+pub fn features_blamed(said: ref String, made: ref FeaturesMade, fallback: ref String) -> String {
+    let line = features_first_error(said)
+    let mut at = 0
+    for piece in line.split("`") {
+        if at % 2 == 1 {
+            for home in made.homes {
+                if home.0 == piece || piece.ends_with(f"::{home.0}") { return home.1.clone() }
+            }
+        }
+        at += 1
+    }
+    return fallback.clone()
+}
+
+/// **The first error of Cargo's JSON messages**, its first line as rustc
+/// renders it.
+pub fn features_first_error(said: ref String) -> String {
+    for line in said.lines() {
+        if !line.contains("\"reason\":\"compiler-message\"") || !line.contains("\"level\":\"error\"") { continue }
+        let after = line.split("\"rendered\":\"").nth(1) ?? continue
+        let first = after.split("\\n").next() ?? ""
+        let said = first.replace("\\\"", "\"")
+        // `error[E0425]: …` and `error: …` say only what the code says.
+        let text = said.splitn(2, ": ").nth(1) ?? continue
+        return text.clone()
+    }
+    return "an error it did not render"
+}
+
+/// **Where an entry of `[features]` is in `nikaia.toml`**: the span of the
+/// text `entry` on the feature's line, or of the feature's name where `entry`
+/// is empty; the section's header where neither is found.
+pub fn features_span(toml: ref String, feature: ref String, entry: ref String) -> Span {
+    let mut offset = 0
+    let mut inside = false
+    let mut header = 0
+    for line in toml.split("\n") {
+        let trimmed = line.trim()
+        if trimmed.starts_with("[") {
+            inside = trimmed == "[features]"
+            if inside { header = offset }
+        } else if inside && feature.len() > 0 {
+            let key = trimmed.split("=").next() ?? ""
+            let key = key.trim().replace("\"", "")
+            if key == feature {
+                let indent = line.len() - line.trim_start().len()
+                if entry.len() > 0 {
+                    let quoted = f"\"{entry}\""
+                    let found = line.find(quoted)
+                    if found != null {
+                        let start = offset + (found ?? 0)
+                        return Span { start: start as u32, end: (start + quoted.len()) as u32 }
+                    }
+                }
+                let start = offset + indent
+                return Span { start: start as u32, end: (start + feature.len()) as u32 }
+            }
+        }
+        offset += line.len() + 1
+    }
+    return Span { start: header as u32, end: (header + 10) as u32 }
+}

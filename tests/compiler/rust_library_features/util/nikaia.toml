@@ -1,0 +1,4 @@
+# A dependency of `../demo` that only its feature `extra` uses.
+[package]
+name = "util"
+version = "0.1.0"

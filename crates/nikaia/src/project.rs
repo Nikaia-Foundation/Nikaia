@@ -3179,6 +3179,16 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         )
     }
 
+    fn features(&self) -> Vec<nikaia_std::tools::manifest::ManifestFeature> {
+        self.project.manifest.file().features.clone()
+    }
+
+    fn manifest_text(&self) -> (String, String) {
+        let path = self.project.root.join("nikaia.toml");
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        (path.display().to_string(), text)
+    }
+
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool {
         self.project
             .runs_without_cargo(&self.members.borrow(), link_flags)

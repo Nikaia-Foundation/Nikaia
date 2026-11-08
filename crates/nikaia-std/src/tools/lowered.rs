@@ -1829,6 +1829,14 @@ mod project_drive_lowered {
 #[allow(unused_imports)]
 pub use project_drive_lowered::*;
 
+mod project_features_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/project_features.rs");
+}
+#[allow(unused_imports)]
+pub use project_features_lowered::*;
+
 mod project_lower_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3102,7 +3110,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -3179,6 +3187,10 @@ pub mod project_check {
 pub mod project_drive {
     #[allow(unused_imports)]
     pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+}
+pub mod project_features {
+    #[allow(unused_imports)]
+    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_applied, features_manifest, features_blamed, features_first_error, features_span};
 }
 pub mod project_lower {
     #[allow(unused_imports)]
