@@ -68,6 +68,9 @@ exclude:
   - crates/
   - tests/
   - benches/
+  # a package's own tests: the yaml test suite holds files with front matter
+  # Jekyll cannot read, and none of them is a page
+  - packages/*/tests
   - scripts/
   # the TextMate grammar and the VS Code extension around it. Jekyll highlights
   # with Rouge, which does not read a TextMate grammar, so nothing here reaches

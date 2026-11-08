@@ -28,15 +28,15 @@ async {
     async fn { balance = balance + 50 }
     async fn { balance = balance - 30 }   // refused (NK2107): `balance` is bound outside the task
 }</code></pre></div>
-        <div class="home-code markdown-body"><pre><code>$ nikaia check main.nika
-error[NK2107]: You're changing `balance` in an `async` task, and `balance` is bound outside it.
-  --&gt; main.nika:4:5
-   |
- 4 |     async fn { balance = balance + 50 }
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-   = note: A task runs at the same time as everything after its start, so it would write `balance` while the rest of the program reads or writes it.
-   = help: Have the task produce a value, `let n = async count()`, and use it after, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre></div>
+<pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia check main.nika</b>
+<span class="d-error">error[NK2107]</span><b>: You're changing `balance` in an `async` task, and `balance` is bound outside it.</b>
+<span class="d-gutter">  --&gt;</span> main.nika:4:5
+<span class="d-gutter">   |</span>
+<span class="d-gutter"> 4 |</span>     async fn { balance = balance + 50 }
+<span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="d-gutter">   |</span>
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> A task runs at the same time as everything after its start, so it would write `balance` while the rest of the program reads or writes it.
+<span class="d-gutter">   =</span> <span class="d-help">help:</span> Have the task produce a value, `let n = async count()`, and use it after, or keep `balance` in a `SharedMut` and change it through `update`.</code></pre>
         <p>Two tasks that both write the same <code>SharedMut</code>, the same file or standard output are refused with <code>NK2104</code>, naming what they share.</p>
       </div>
     <div class="safe-reading">
