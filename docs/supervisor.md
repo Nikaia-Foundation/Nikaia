@@ -279,8 +279,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   `--max` reached, a push rejected after one rebase, a suite still red after two QA
   rounds.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
-  OWNER line; after the owner's answer, start `drive.nika` again. On `RESTART
-  drive: ...` (exit 3: the script changed) start it again at once. A failed
+  OWNER line; after the owner's answer, start `drive.nika` again. A `RESTART
+  drive: ...` line needs nothing: the driver runs the changed script again by
+  itself (exit 3 only where that new run could not be started: start it then). A failed
   run (`ESCALATE`, a file in DIR) is read like a failed builder.
 * **`OWNER` lines**: first the supervisor writes the decision paper (a
   `decision` issue: where it comes from, alternatives with doing nothing, for

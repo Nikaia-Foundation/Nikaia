@@ -49,6 +49,9 @@ pub struct Trivia {
     /// declaration, and which word followed it (`NK2115`, ADR-async-5 D5):
     /// the first one is refused.
     misplaced_async: Option<(usize, &'static str)>,
+    /// Where a `limit:` stood on a form that starts one task (`NK2112`,
+    /// ADR-async-5 D15): the first one is refused.
+    one_task_limit: Option<usize>,
 }
 
 impl Default for Trivia {
@@ -58,6 +61,7 @@ impl Default for Trivia {
             semi_end: 0,
             mut_name: None,
             misplaced_async: None,
+            one_task_limit: None,
         }
     }
 }
@@ -81,6 +85,11 @@ impl Trivia {
         if self.misplaced_async.is_none_or(|(first, _)| at < first) {
             self.misplaced_async = Some((at, word));
         }
+    }
+
+    /// A `limit:` stood at this byte on a form that starts one task.
+    fn a_one_task_limit(&mut self, at: usize) {
+        self.one_task_limit = Some(self.one_task_limit.map_or(at, |first| first.min(at)));
     }
 
     /// A `;` stood at this byte.
@@ -744,6 +753,12 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     if let Some((at, word)) = stream.state.user_state.misplaced_async {
         let finding =
             nikaia_std::tools::parse_findings::parse_findings_misplaced_async(at as i64, word);
+        return Err(refuse_parsing(finding, input));
+    }
+
+    // **`limit:` on a form that starts one task** (`NK2112`, ADR-async-5 D15).
+    if let Some(at) = stream.state.user_state.one_task_limit {
+        let finding = nikaia_std::tools::parse_findings::parse_findings_one_task_limit(at as i64);
         return Err(refuse_parsing(finding, input));
     }
 
@@ -3861,9 +3876,15 @@ grammar! {
           | KW_ASYNC "(" h:async_within_head? OPT_HANDLE t:async_within_tail? ")" body:trailing_lambda -> {
                 Expr::Spawn { body: Box::new(body), written_async: true, child: true, within: Box::new(h.or(t)), id: NodeId::parsed() }
             }
-          | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" peek("{") b:block not(KW_CATCH) -> {
-                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(Some(d)))
+          | KW_ASYNC "(" head:async_group_option tail:async_group_option_tail* ")" peek("{") b:block not(KW_CATCH) -> {
+                let mut options: [Option<Expr>; 3] = [None, None, None];
+                for (which, value) in std::iter::once(head).chain(tail) {
+                    options[which] = Some(value);
+                }
+                let [within, limit, admission] = options;
+                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(within), Box::new(limit), Box::new(admission))
             }
+          | KW_ASYNC "(" async_built_options l:async_one_task_limit -> { l }
           | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") not("{") e:unary_expr -> {
                 Expr::Async(Box::new(e), NodeId::parsed(), Box::new(Some(d)))
             }
@@ -3881,7 +3902,9 @@ grammar! {
                 "An `async` option is `handle`, `deferred`, `detached`, `limit:`, `within:` or \
                  `admission:`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | KW_ASYNC peek("{") b:block not(KW_CATCH) -> { Expr::AsyncGroup(b, NodeId::parsed(), Box::new(None)) }
+          | KW_ASYNC peek("{") b:block not(KW_CATCH) -> {
+                Expr::AsyncGroup(b, NodeId::parsed(), Box::new(None), Box::new(None), Box::new(None))
+            }
           | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr -> {
                 Expr::Async(Box::new(e), NodeId::parsed(), Box::new(None))
             }
@@ -3918,15 +3941,34 @@ grammar! {
         rule async_within_head -> Expr = OPT_WITHIN ":" d:expr "," -> { d }
         rule async_within_tail -> Expr = "," OPT_WITHIN ":" d:expr -> { d }
 
+        // **The options of `async { … }`** (ADR-async-5 D15, D16, D18), in any
+        // order: `within:` (0), `limit:` (1), `admission:` (2); a later one of
+        // the same name wins.
+        rule async_group_option -> (usize, Expr) =
+            OPT_WITHIN ":" d:expr -> { (0, d) }
+          | OPT_LIMIT ":" d:expr -> { (1, d) }
+          | OPT_ADMISSION ":" d:expr -> { (2, d) }
+        rule async_group_option_tail -> (usize, Expr) = "," o:async_group_option -> { o }
+
+        // **`limit:` on a form that starts one task** (`NK2112`, D15): read
+        // whole, the value form or a handle form, and refused once the parse
+        // is through, as `async_before_stmt` is.
+        rule async_one_task_limit -> Expr @=
+            OPT_LIMIT ":" expr async_group_option_tail* ")" not("{") e:async_one_task_body -> {
+                _state.user().a_one_task_limit(_span.start);
+                e
+            }
+        rule async_one_task_body -> Expr = l:trailing_lambda -> { l } | e:unary_expr -> { e }
+
         rule async_unbuilt_option -> Expr =
             peek(OPT_DEFERRED) fail(
                 "`async(deferred) fn { … }` isn't built yet (#986). Start the task where it \
                  should run, with `async(detached) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | peek(OPT_LIMIT) fail("`limit:` on `async` isn't built yet (#986).") -> {
-                Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
-            }
-          | peek(OPT_ADMISSION) fail("`admission:` on `async` isn't built yet (#986).") -> {
+          | peek(OPT_ADMISSION) fail(
+                "`admission:` on a form that starts one task isn't built yet (#986): \
+                 write it on `async { … }`."
+            ) -> {
                 Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
             }
 

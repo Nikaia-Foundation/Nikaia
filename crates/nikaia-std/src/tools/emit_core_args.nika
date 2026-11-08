@@ -962,6 +962,61 @@ fn emit_call_scope_channel(channel: ref String) -> String {
     return channel.clone()
 }
 
+/// **The gates asked where a task starts in a function that never pauses**
+/// (D15): no task of it runs on, so each runs to its end where it starts and
+/// the gates are only asked.
+fn emit_async_wait(gates: ref Vec[i64]) -> String {
+    if gates.len() == 0 {
+        return ""
+    }
+    let mut out: String = ""
+    for group in gates {
+        out = f"{out}{emit_async_group_name(group)}_gate.room(); "
+    }
+    return out
+}
+
+/// **What starts the waiting tasks of the gates around** (D37): the
+/// innermost gated group's `Waiting`, which asks the outer ones too; `""`
+/// where no gate is around.
+pub fn emit_async_line(gates: ref Vec[i64]) -> String {
+    if gates.len() == 0 {
+        return ""
+    }
+    return f"{emit_async_group_name(gates[gates.len() - 1])}_waiting"
+}
+
+/// **A pause of a gated group's main line** (D37): the group's running tasks
+/// are polled meanwhile, and those waiting for a place start as places free,
+/// as where it waits for one of them. Inside a task's body no gate is in the
+/// walk: the task's own groups have theirs.
+pub fn emit_async_pause(walk: ref EmitWalk) -> String {
+    let line = emit_async_line(walk.async_gates)
+    if line == "" {
+        return ".await"
+    }
+    return f".on_line(&{line}).await"
+}
+
+/// **A wait of the main line under a gate** (D37): the group's tasks run
+/// meanwhile, the waiting ones starting as places free.
+pub fn emit_async_during(line: ref String, wait: ref String) -> String {
+    if line == "" {
+        return f"{wait}.await"
+    }
+    return f"{line}.during({wait}).await"
+}
+
+/// The places a task holds from its start to its end, one per gate.
+fn emit_async_occupy(gates: ref Vec[i64]) -> String {
+    let mut out: String = ""
+    for group in gates {
+        let gate = emit_async_group_name(group)
+        out = f"{out}let {gate}_place = {gate}_gate.occupy(); "
+    }
+    return out
+}
+
 /// **The group of `async e` as a name** (ADR-async-5 D9): `__group_N` for an
 /// `async { }`'s node, `__group_nN` for a block's.
 fn emit_async_group_name(group: i64) -> String {
@@ -998,18 +1053,20 @@ fn emit_async_joined(handle: ref String, channel: ref String, fallback: bool) ->
 }
 
 /// **The join of a task that pauses** (D6, D20, #1226): it polls the rest of
-/// the task until it ends.
-fn emit_async_joined_paused(handle: ref String, channel: ref String, fallback: bool) -> String {
+/// the task until it ends; under a gate (`line`, D37) the group's other tasks
+/// run meanwhile, and one waiting for a place starts when it frees.
+fn emit_async_joined_paused(handle: ref String, channel: ref String, fallback: bool, line: ref String) -> String {
+    let joined = emit_async_during(line, f"{handle}.join()")
     if fallback {
-        return f"nikaia_std::task::fallen({handle}.join().await)"
+        return f"nikaia_std::task::fallen({joined})"
     }
     if channel == "nikaia_std::task::Crashed" {
-        return f"nikaia_std::task::unfailing({handle}.join().await)"
+        return f"nikaia_std::task::unfailing({joined})"
     }
     if emit_async_or_crash(channel) {
-        return f"nikaia_std::task::uncrashed({handle}.join().await)?"
+        return f"nikaia_std::task::uncrashed({joined})?"
     }
-    return f"{handle}.join().await?"
+    return f"{joined}?"
 }
 
 /// Whether a group's tasks fail in `task::OrCrash` (D35, #1355): the
@@ -1371,6 +1428,10 @@ impl EmitState {
             owner = ""
         }
         let inner = EmitScope::plain() with { origin: scope.origin.clone(), function: owner.clone(), channel: own.clone(), changed: scope.changed.clone(), tasks_channel: channel.clone(), tasks_function: owner.clone() }
+        // **The gates around it hold this task, not the ones its body
+        // starts** (D15): those are polled by the task, inside its future.
+        let gates = walk.async_gates.clone()
+        walk.async_gates = []
         let mut body = EmitOut::empty()
         let mut ran = false
         match task {
@@ -1390,6 +1451,7 @@ impl EmitState {
             self.emit_expr(world, walk, body, host, task, depth, failing, inner)
             walk.async_bound = ""
         }
+        walk.async_gates = gates.clone()
         // **A task bound by a deadline** (D16) is cancelled where it pauses
         // once the deadline has passed, and ends with `task::TimedOut`; one
         // that never pauses runs to its end before any wait could see it.
@@ -1426,37 +1488,115 @@ impl EmitState {
         // #1226): it starts here and runs to its first pause; its handle holds
         // the rest, polled where it is waited for. A statement's task runs to
         // its end here.
-        if body.buf.contains(".await") {
+        // **Under a gate, a bound task of a function that pauses may wait for
+        // a place** (D37), unstarted, while the main line goes on: it is
+        // started as a pausing one, whose rest a cell holds, whether its body
+        // pauses or not.
+        let line = emit_async_line(gates)
+        let gated = line != "" && walk.async_pausing
+        if body.buf.contains(".await") || gated {
+            // **A statement task under a gate queues as any task does**
+            // (D9, D37): its rest lives in a cell of its block, which waits
+            // for it at the block's end; its value is dropped, its failure
+            // reaches the group as an unread one.
+            if kind == "spawn" && gated {
+                let cell = f"__rest_{id}"
+                out.push(f"{{ let _ = {line}.keep({name}.start_kept_gated(&{cell}, &{line}, async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
+                walk.async_kept.push(cell)
+                return
+            }
             if kind == "spawn" {
                 out.push(f"{name}.spawn_paused_here(async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await")
                 return
             }
-            let mut held = f"{name}.start_paused(async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            // Under a gate it starts at once where a place is free and no
+            // task before it waits, and is queued otherwise (D37); it holds
+            // a place in each gate around it, those of the task whose body
+            // starts it included (D15, D38).
+            let mut start: String = "start_paused("
+            if line != "" {
+                start = f"start_paused_gated(&{line}, "
+            }
+            let mut held = f"{name}.{start}async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
             // **A handle named later keeps its rest in a cell of its block**
             // (Part I 8.2, #987): dropped live, the task is waited for at
             // the block's end instead of cancelled at its pause.
             if kind == "handle" && walk.async_keeps {
                 let cell = f"__rest_{id}"
-                held = f"{name}.start_kept(&{cell}, async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+                let mut kept = f"start_kept(&{cell}, "
+                if line != "" {
+                    kept = f"start_kept_gated(&{cell}, &{line}, "
+                }
+                held = f"{name}.{kept}async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
                 walk.async_kept.push(cell)
             }
+            // The gate keeps its rest, to poll it, or start it, where the
+            // main line waits. Its text still ends in `.await`, which tells
+            // the wait for it that it pauses.
+            if line != "" {
+                held = f"async {{ {line}.keep({held}) }}.await"
+            }
             if kind == "join" {
-                out.push(emit_async_joined_paused(held, channel, fallback))
+                out.push(emit_async_joined_paused(held, channel, fallback, line))
             } else {
                 out.push(held)
             }
             return
         }
+        // A task that never pauses runs to its end where it starts, holding
+        // its places until then.
+        let enter = f"{emit_async_wait(gates)}{emit_async_occupy(gates)}"
         if kind == "spawn" {
-            out.push(f"{name}.spawn_here(|| -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})")
+            let spawned = f"{name}.spawn_here(|| -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})"
+            if enter != "" {
+                out.push(f"{{ {enter}{spawned} }}")
+            } else {
+                out.push(spawned)
+            }
             return
         }
-        let started = f"{name}.start_here(|| -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
+        let mut started = f"{name}.start_here(|| -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
+        if enter != "" {
+            started = f"{{ {enter}{started} }}"
+        }
         if kind == "join" {
             out.push(emit_async_joined(started, channel, fallback))
         } else {
             out.push(started)
         }
+    }
+
+    /// **`limit: n` and `admission: s` of a group** (ADR-async-5 D15, D18,
+    /// #986), read where the group starts, before its function: `n` below
+    /// `1` panics there, naming the option; without `admission:` std's
+    /// strategy decides, also for a group that writes neither, where its
+    /// function pauses (D37). `""` for a group of a function that never
+    /// pauses and writes neither: each of its tasks runs to its end where it
+    /// starts, so none holds a place when the next starts, and every start is
+    /// admitted whatever the strategy says.
+    pub fn emit_async_gate_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, name: ref String, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+        let n = self.emit_async_option(world, walk, host, limit, depth, flow, scope)
+        let s = self.emit_async_option(world, walk, host, admission, depth, flow, scope)
+        if n == "" && s == "" && !walk.async_pausing {
+            return ""
+        }
+        let mut cap: String = "usize::MAX"
+        if n != "" {
+            cap = f"nikaia_std::task::limit({n})"
+        }
+        let mut strategy: String = "nikaia_std::task::Adaptive()"
+        if s != "" {
+            strategy = s
+        }
+        return f"let {name}_limit = {cap}; let {name}_admission = nikaia_std::task::admitted({strategy}); "
+    }
+
+    /// The text of an option's value; `""` for an option not written.
+    fn emit_async_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, option: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+        let value = option ?? return ""
+        let mut text = EmitOut::empty()
+        self.emit_expr(world, walk, text, host, value, depth, EmitFlow::plain().at(flow.statement), scope)
+        return text.buf
     }
 
     /// **`within: d` as the deadline it starts** (ADR-async-5 D16, #986):
@@ -1514,7 +1654,7 @@ impl EmitState {
     /// function, which ends after it and every task it started, and throws
     /// the first failure nobody read; a failure that leaves it carries the
     /// unread ones.
-    pub fn emit_async_group[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, id: i64, within: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    pub fn emit_async_group[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, id: i64, within: ref Expr?, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         if flow.handled_here {
             throw EmitRefused { message: "The compiler can't translate `async { … }` under a `catch` yet (#988).", at: emit_async_at(flow.statement) }
         }
@@ -1532,6 +1672,14 @@ impl EmitState {
             opened = f"let {name}_deadline = {deadline}; "
             walk.async_deadlines.push(id)
         }
+        // **Its gate** (D15, D18, #986): the options are read here, the gate
+        // itself is made inside the group's function, before the block, so
+        // the rests it keeps never outlive what they borrow.
+        let options = self.emit_async_gate_options(world, walk, host, name, limit, admission, depth, flow, scope)
+        if options != "" {
+            opened = f"{opened}{options}"
+            walk.async_gates.push(id)
+        }
         let mut body = EmitOut::empty()
         walk.async_groups.push(id)
         if channel == "nikaia_std::task::Crashed" && !plain {
@@ -1546,6 +1694,19 @@ impl EmitState {
         walk.async_groups.pop()
         if deadline != "" {
             walk.async_deadlines.pop()
+        }
+        if options != "" {
+            walk.async_gates.pop()
+            let text = body.buf.clone()
+            body = EmitOut::empty()
+            // A gated group inside another of the same function is under
+            // both gates (D15).
+            let mut waiting = f"nikaia_std::task::Waiting::new(&{name}_gate)"
+            let outer = emit_async_line(walk.async_gates)
+            if outer != "" {
+                waiting = f"nikaia_std::task::Waiting::nested(&{outer}, &{name}_gate)"
+            }
+            body.push(f"{{ let {name}_gate = nikaia_std::task::Gate::new({name}_limit, {name}_admission); let {name}_waiting = {waiting}; {text} }}")
         }
         if body.buf.contains("return ") || (body.buf.contains(".await") && !walk.async_pausing) {
             throw EmitRefused { message: "The compiler can't translate `async { … }` yet where it holds a `return` or a pause (#988).", at: emit_async_at(flow.statement) }
@@ -1651,6 +1812,9 @@ impl EmitState {
         let here = flow.at(span.start as i64)
         let mut first = true
         let mut joins: Vec[String] = []
+        // The joins inside another task (D8): that task's body polls the
+        // handle alone, since the gate's line is the main line's (D37).
+        let mut inside: Vec[String] = []
         let mut index: i64 = 0
         for each in tasks {
             let handle = f"__task_{each.1}"
@@ -1666,9 +1830,12 @@ impl EmitState {
             self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
             walk.async_fallback = false
             let mut joined = emit_async_joined(handle, channel, fallback)
+            let mut alone = joined.clone()
             if started.buf.ends_with(".await") {
-                joined = emit_async_joined_paused(handle, channel, fallback)
+                joined = emit_async_joined_paused(handle, channel, fallback, emit_async_line(walk.async_gates))
+                alone = emit_async_joined_paused(handle, channel, fallback, "")
             }
+            inside.push(alone)
             out.append(started)
             out.push(";")
             walk.async_joining.insert(each.1, joined.clone())
@@ -1681,7 +1848,7 @@ impl EmitState {
             // Named in another task alone (D8): that task waits for it.
             walk.async_joining = collections::BTreeMap()
             if named != "" {
-                walk.async_handles.insert(named, joins[0].clone())
+                walk.async_handles.insert(named, inside[0].clone())
             }
             return true
         }

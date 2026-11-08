@@ -1030,7 +1030,7 @@ fn grammar_types_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerCo
             grammar_types_walk_fields(fields, words, intern, walk)
         },
         Expr::Block(block, _) => grammar_types_walk_block(block, words, intern, walk),
-        Expr::AsyncGroup(block, _, _) => grammar_types_walk_block(block, words, intern, walk),
+        Expr::AsyncGroup(block, _, _, _, _) => grammar_types_walk_block(block, words, intern, walk),
         Expr::Unsafe(block, _) => grammar_types_walk_block(block, words, intern, walk),
         Expr::Overlap(block, _) => grammar_types_walk_block(block, words, intern, walk),
         Expr::Closure { body, .. } => grammar_types_walk_block(body, words, intern, walk),

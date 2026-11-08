@@ -166,6 +166,9 @@ pub struct CheckFlow {
     pub async_group_block: i64?,
     /// How many tasks the innermost `async { }` started so far (`NK2111`).
     pub async_started: i64,
+    /// The groups written `limit: 1` with the literal (ADR-async-5 D15): their
+    /// tasks run one at a time and are not checked against each other (D7).
+    pub async_one_at_a_time: collections::BTreeSet[i64],
     /// How many `async` forms stand around the expression in this function:
     /// a `return` inside one would leave it (`NK1132`, D10).
     pub async_depth: i64,
@@ -418,6 +421,7 @@ impl CheckFlow {
             async_group: null,
             async_group_block: null,
             async_started: 0,
+            async_one_at_a_time: collections::BTreeSet(),
             async_depth: 0,
             fallible_methods: collections::BTreeSet(),
             opaque_methods: collections::BTreeSet(),

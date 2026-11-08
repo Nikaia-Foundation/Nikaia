@@ -542,7 +542,7 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
             }
         },
         Expr::Block(block, _) => { derived_block(block, words, scan); },
-        Expr::AsyncGroup(block, _, _) => { derived_block(block, words, scan); },
+        Expr::AsyncGroup(block, _, _, _, _) => { derived_block(block, words, scan); },
         Expr::Unsafe(block, _) => { derived_block(block, words, scan); },
         Expr::Overlap(block, _) => { derived_block(block, words, scan); },
         Expr::Closure { body, .. } => { derived_block(body, words, scan); },

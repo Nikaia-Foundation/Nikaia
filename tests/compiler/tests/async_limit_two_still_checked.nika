@@ -1,0 +1,8 @@
+// `limit: 2` lets two tasks run at once, so two that print are still NK2104
+// (ADR-async-5 D15, D7, #986): only `limit: 1` as the literal exempts them.
+fn main() throws {
+	async(limit: 2) {
+		async fn { println("x") }
+		async fn { println("y") }
+	}
+}

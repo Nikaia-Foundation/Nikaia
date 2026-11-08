@@ -597,7 +597,10 @@ pub enum Expr {
     /// The third field is `d` of `async(within: d) { … }` (D16): its tasks
     /// still running when it runs out are cancelled and end with
     /// `task::TimedOut`.
-    AsyncGroup(Block, node_id::NodeId, Expr?),
+    /// The fourth is `n` of `limit: n` (D15): at most `n` of its tasks at
+    /// once, the others waiting unstarted in written order; the fifth `s` of
+    /// `admission: s` (D18), the strategy that decides when the next starts.
+    AsyncGroup(Block, node_id::NodeId, Expr?, Expr?, Expr?),
 
     // Part II, Kap 10.5: dsl sql db { ... }
     Dsl {
@@ -842,7 +845,7 @@ pub fn id_of(expr: ref Expr) -> u32 sync {
         Expr::Call { id, .. } => id.get(),
         Expr::Spawn { id, .. } => id.get(),
         Expr::Async(_, id, _) => id.get(),
-        Expr::AsyncGroup(_, id, _) => id.get(),
+        Expr::AsyncGroup(_, id, _, _, _) => id.get(),
         Expr::Dsl { id, .. } => id.get(),
         Expr::MethodCall { id, .. } => id.get(),
         Expr::Field { id, .. } => id.get(),

@@ -1,0 +1,48 @@
+// Tasks started inside a task's body are under the gate around it
+// (ADR-async-5 D15, D38, #986): under `limit: 2`, three parents each start
+// two children; a parent gives its place back while it waits for them and
+// takes one again before it goes on, so the group ends and never more than
+// two of its tasks run at once.
+use std::time
+
+fn enter(now: SharedMut[i64], most: SharedMut[i64]) {
+	now.update fn(mut v) { v += 1 }
+	let k = now.get()
+	most.update fn(mut v) { if k > v { v = k } }
+}
+
+fn leave(now: SharedMut[i64]) {
+	now.update fn(mut v) { v -= 1 }
+}
+
+fn child(n: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+	enter(now, most)
+	time::sleep(2.millis())
+	leave(now)
+	return n
+}
+
+fn parent(n: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 throws {
+	enter(now, most)
+	time::sleep(1.millis())
+	let a = async child(n * 10, now, most)
+	let b = async child(n * 10 + 1, now, most)
+	leave(now)
+	let both = a + b
+	enter(now, most)
+	time::sleep(1.millis())
+	leave(now)
+	return both
+}
+
+fn main() throws {
+	let now = SharedMut(0)
+	let most = SharedMut(0)
+	let total = async(limit: 2) {
+		let a = async parent(1, now, most)
+		let b = async parent(2, now, most)
+		let c = async parent(3, now, most)
+		a + b + c
+	}
+	println(f"total {total}, at most {most.get()} at once")
+}

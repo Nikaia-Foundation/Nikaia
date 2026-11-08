@@ -199,7 +199,7 @@ pub(crate) fn calls_in(expr: &Expr, span: &Span, words: &winnow_grammar::Interne
             for arg in args.iter() { calls_in(arg, span, words, bound, takers, found); }
         },
         Expr::Block(block, _) => { calls_in_block(block, span, words, bound, takers, found); },
-        Expr::AsyncGroup(block, _, _) => { calls_in_block(block, span, words, bound, takers, found); },
+        Expr::AsyncGroup(block, _, _, _, _) => { calls_in_block(block, span, words, bound, takers, found); },
         Expr::Overlap(block, _) => { calls_in_block(block, span, words, bound, takers, found); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -272,7 +272,7 @@ pub(crate) fn statements_in(expr: &Expr, words: &winnow_grammar::InternerContext
             for arg in args.iter() { statements_in(arg, words, out); }
         },
         Expr::Block(block, _) => { statements_in_block(block, words, out); },
-        Expr::AsyncGroup(block, _, _) => { statements_in_block(block, words, out); },
+        Expr::AsyncGroup(block, _, _, _, _) => { statements_in_block(block, words, out); },
         Expr::Overlap(block, _) => { statements_in_block(block, words, out); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);

@@ -370,7 +370,7 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
             thrown_by_a_deadline((within).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out);
             thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out);
         },
-        Expr::AsyncGroup(_, _, within) => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out); },
+        Expr::AsyncGroup(_, _, within, _, _) => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out); },
         Expr::Spawn { within, .. } => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out); },
@@ -432,7 +432,7 @@ pub(crate) fn maybe_thrown_in(expr: Option<&Expr>, names: &winnow_grammar::Inter
 pub(crate) fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, contribution_of: &dyn Fn(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
     match expr {
         Expr::Block(block, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
-        Expr::AsyncGroup(block, _, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
+        Expr::AsyncGroup(block, _, _, _, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
         Expr::Unsafe(block, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
         Expr::Overlap(block, _) => { thrown_in_block(block, names, &holes_of, &contribution_of, in_a_handler, out); },
         Expr::Closure { body, .. } => { thrown_in_block(body, names, &holes_of, &contribution_of, in_a_handler, out); },

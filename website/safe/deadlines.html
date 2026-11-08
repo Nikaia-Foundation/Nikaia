@@ -23,7 +23,7 @@ description: >-
           <dt>What Nikaia checks</dt>
           <dd>A task can be started with a deadline, <code>async(within: d)</code>, and a handle can be waited for with one, <code>join(within: d)</code>. When the time runs out, the task is cancelled at its next pause and ends with <code>task::TimedOut</code>. That is a failure like any other, so the compiler asks for it to be handled where the value is first needed, and a fallback written with <code>catch</code> stands in for it there. A handle that is still live where a <code>join(within:)</code> timed out is refused (<code>NK2109</code>), so a task is not left behind by accident.</dd>
           <dt>The limit</dt>
-          <dd>The deadline is a protection while the program runs. The compiler checks that a timeout is handled, not that the time chosen is right. A task is cancelled where it pauses; a long calculation that never pauses runs to its next pause first. A limit on how many tasks of one form run at once, <code>async(limit: n)</code>, is specified and not built yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">#986</a>).</dd>
+          <dd>The deadline is a protection while the program runs. The compiler checks that a timeout is handled, not that the time chosen is right. A task is cancelled where it pauses; a long calculation that never pauses runs to its next pause first. A limit on how many tasks of one group run at once is written <code>async(limit: n) { … }</code>, and the tasks over it wait, unstarted, until one ends.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>

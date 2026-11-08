@@ -829,7 +829,7 @@ fn derived_expr(
 			}
 		},
 		Expr::Block(block, _) => derived_block(block, words, scan),
-		Expr::AsyncGroup(block, _, _) => derived_block(block, words, scan),
+		Expr::AsyncGroup(block, _, _, _, _) => derived_block(block, words, scan),
 		Expr::Unsafe(block, _) => derived_block(block, words, scan),
 		Expr::Overlap(block, _) => derived_block(block, words, scan),
 		// A lambda's calls count as calls the walk never answers: the

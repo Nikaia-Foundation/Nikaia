@@ -190,7 +190,7 @@ pub fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
             out.push(block)
             return out
         },
-        Expr::AsyncGroup(block, _, _) => {
+        Expr::AsyncGroup(block, _, _, _, _) => {
             out.push(block)
             return out
         },

@@ -2871,7 +2871,10 @@ pub mod emit_contracts {
     #[allow(unused_imports)]
     pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state, EmitReachGraphs, emit_contracts_package_graphs};
 }
-pub mod emit_core_args {}
+pub mod emit_core_args {
+    #[allow(unused_imports)]
+    pub use super::{emit_async_line, emit_async_pause, emit_async_during};
+}
 pub mod emit_core_below {
     #[allow(unused_imports)]
     pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
@@ -3150,7 +3153,7 @@ pub mod parse_errors {
 }
 pub mod parse_findings {
     #[allow(unused_imports)]
-    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_refusal, parse_findings_types_refusal};
+    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_one_task_limit, parse_findings_refusal, parse_findings_types_refusal};
 }
 pub mod parse_notes {
     #[allow(unused_imports)]

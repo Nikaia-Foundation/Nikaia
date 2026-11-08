@@ -489,10 +489,12 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st)
             return Expr::Block(numbers_block(block, st), id2)
         },
-        Expr::AsyncGroup(block, id, within) => {
+        Expr::AsyncGroup(block, id, within, limit, admission) => {
             let id2 = numbers_id(id, st)
             let within2 = numbers_maybe_expr(within, st)
-            return Expr::AsyncGroup(numbers_block(block, st), id2, within2)
+            let limit2 = numbers_maybe_expr(limit, st)
+            let admission2 = numbers_maybe_expr(admission, st)
+            return Expr::AsyncGroup(numbers_block(block, st), id2, within2, limit2, admission2)
         },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st)

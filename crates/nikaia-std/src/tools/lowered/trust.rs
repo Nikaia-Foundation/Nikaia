@@ -546,7 +546,7 @@ pub(crate) fn map_named(receiver: &Expr, words: &winnow_grammar::InternerContext
 pub(crate) fn tm_walk_expr(expr: &Expr, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses, walk: &mut MapWalk) {
     match expr {
         Expr::Block(b, _) => { tm_walk_block(b, words, library, env, classes, walk); },
-        Expr::AsyncGroup(b, _, _) => { tm_walk_block(b, words, library, env, classes, walk); },
+        Expr::AsyncGroup(b, _, _, _, _) => { tm_walk_block(b, words, library, env, classes, walk); },
         Expr::Unsafe(b, _) => { tm_walk_block(b, words, library, env, classes, walk); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);

@@ -403,11 +403,13 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             return Expr::Block(numbers_block(block, st), id2);
         },
-        Expr::AsyncGroup(block, id, within) => {
-            let within = nikaia_std::boxed::open(within);
+        Expr::AsyncGroup(block, id, within, limit, admission) => {
+            let within = nikaia_std::boxed::open(within); let limit = nikaia_std::boxed::open(limit); let admission = nikaia_std::boxed::open(admission);
             let id2 = numbers_id(id, st);
             let within2 = numbers_maybe_expr(within, st);
-            return Expr::AsyncGroup(numbers_block(block, st), id2, Box::new(within2));
+            let limit2 = numbers_maybe_expr(limit, st);
+            let admission2 = numbers_maybe_expr(admission, st);
+            return Expr::AsyncGroup(numbers_block(block, st), id2, Box::new(within2), Box::new(limit2), Box::new(admission2));
         },
         Expr::Overlap(block, id) => {
             let id2 = numbers_id(id, st);

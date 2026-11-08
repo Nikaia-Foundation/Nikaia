@@ -1,0 +1,111 @@
+/// A list's values bounded by the length of another list the body never
+/// changes (ADR-306 D21, #1397): every write into `kept` is a position of
+/// `values`, proved where it is written, so each value read out of `kept`
+/// indexes `values` with no check - through a `for`, a `let` and a list
+/// copied from it, and when the other list is a parameter's field. Where
+/// the other list is popped, bound again, handed to a callee that may
+/// change it, or one write is not a position, the read stays checked.
+struct Table {
+    values: Vec[i64],
+}
+
+fn positive(values: ref Vec[i64]) -> i64 {
+    let mut kept: Vec[i64] = []
+    for at in 0..<values.len() {
+        if values[at] > 0 { kept.push(at) }
+    }
+    let mut count = 0
+    for at in kept {
+        if values[at] > 1 { count += 1 }
+    }
+    return count
+}
+
+fn first_over(table: ref Table, n: i64) -> i64 {
+    let mut kept: Vec[i64] = []
+    for at in 0..<table.values.len() {
+        if table.values[at] > n { kept.push(at) }
+    }
+    let mut k = 0
+    while k < kept.len() {
+        let at = kept[k]
+        if table.values[at] > n + 1 { return at }
+        k += 1
+    }
+    return -1
+}
+
+fn copied(values: ref Vec[i64]) -> i64 {
+    let mut kept: Vec[i64] = []
+    for at in 0..<values.len() {
+        kept.push(at)
+    }
+    let mut again: Vec[i64] = []
+    for at in kept {
+        again.push(at)
+    }
+    for at in again {
+        if values[at] > 2 { return at }
+    }
+    return -1
+}
+
+fn popped(mut values: Vec[i64]) -> i64 {
+    let mut kept: Vec[i64] = []
+    for at in 0..<values.len() {
+        kept.push(at)
+    }
+    values.pop()
+    for at in kept {
+        if values[at] > 0 { return at }
+    }
+    return -1
+}
+
+fn rebound(first: Vec[i64], second: Vec[i64]) -> i64 {
+    let mut values = first
+    let mut kept: Vec[i64] = []
+    for at in 0..<values.len() {
+        kept.push(at)
+    }
+    values = second
+    for at in kept {
+        if values[at] > 0 { return at }
+    }
+    return -1
+}
+
+fn shrink(mut values: Vec[i64]) {
+    values.clear()
+}
+
+fn handed(mut values: Vec[i64]) -> i64 {
+    let mut kept: Vec[i64] = []
+    for at in 0..<values.len() {
+        kept.push(at)
+    }
+    shrink(values)
+    for at in kept {
+        if values[at] > 0 { return at }
+    }
+    return -1
+}
+
+fn one_outside(values: ref Vec[i64]) -> i64 {
+    let mut kept: Vec[i64] = []
+    for at in 0..<values.len() {
+        kept.push(at)
+    }
+    kept.push(values.len())
+    for at in kept {
+        if values[at] > 0 { return at }
+    }
+    return -1
+}
+
+fn main() throws {
+    let values = [1, 0, 3]
+    println(f"{positive(values)} {first_over(Table { values: values.clone() }, 0)} {copied(values)}")
+    println(f"{popped([0, 5, 0])} {rebound([0, 2], [0, 1, 2])} {handed([])}")
+    println(f"{one_outside([0, 4])}")
+}
