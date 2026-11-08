@@ -8,27 +8,43 @@
 
 use std::collections
 
-/// **Which package lowers to the block types** (ADR-327 D4, #490; staged by
-/// the supervisor, 2026-11-08): a program whose file imports the block names
-/// writes `Vec`, `String` and `vec![…]` for `nikaia_std::block`'s `List`,
-/// `Text` and a `List` built in place; `std` and the tools package (the
-/// lowered compiler) still write Rust's own. **Temporary**: this setting is
-/// removed in #490 before step 5 starts, when the tools switch too, and it is
-/// the one place the question is answered. Until every program the tests
-/// hold compiles on the block types, `programs` is off; set it to `true` to
-/// try the switch. Not an environment variable: a program's lowering is
-/// cached by its source, and a switch from outside would be served stale.
-pub fn lowers_to_block_types(is_std: bool) -> bool {
-    let programs = false
-    return programs && !is_std
+/// **The switch to the block types** (#490): off until `std`'s runtime,
+/// the programs and the tools compile on them together; then this function
+/// goes, and `on_block_types` alone answers. Not an environment variable: a
+/// program's lowering is cached by its source, and a switch from outside
+/// would be served stale.
+pub fn block_types_switched() -> bool {
+    return false
 }
 
-/// The import that lowers a program to the block types, where the setting
-/// above says so; nothing otherwise. Explicit, not a glob: a glob's `vec`
-/// would be ambiguous with the standard library's macro.
-pub fn block_types_import(is_std: bool) -> String {
-    if lowers_to_block_types(is_std) {
-        return "#[allow(unused_imports)]\npub use nikaia_std::block::names::{String, Vec, format, vec};\n"
+impl EmitState {
+    /// **Whether this file lowers to the block types** (ADR-327 D4, #490):
+    /// `Vec`, `String`, `vec![…]` and `format!(…)` are `nikaia_std::block`'s
+    /// `List`, `Text` and the two built in place, for programs and the tools
+    /// alike. The one exception is the grammar: the grammar macro writes
+    /// `Vec` unqualified in what it expands and collects with winnow's own
+    /// `Vec`, so a file that declares a grammar stays on Rust's types, and so
+    /// does a program with one, whose files share one namespace. Toward the
+    /// rest such a file is a Rust boundary, and its values convert there
+    /// with `From` (the supervisor, 2026-11-08). In `std` and the tools each
+    /// file is a module of its own, so the question is the file's.
+    pub fn on_block_types(ref self) -> bool {
+        if !block_types_switched() {
+            return false
+        }
+        if self.is_std {
+            return self.grammars.is_empty()
+        }
+        return !self.package_grammar
+    }
+}
+
+/// The import that lowers a program to the block types where it does
+/// (`on_block_types`); nothing otherwise. Explicit, not a glob: a glob's
+/// `vec` would be ambiguous with the standard library's macro.
+pub fn block_types_import(on: bool) -> String {
+    if on {
+        return "#[allow(unused_imports)]\npub use nikaia_std::block::names::{CopyOwned, String, Vec, format, vec};\n"
     }
     return ""
 }
@@ -39,19 +55,27 @@ pub fn block_types_import(is_std: bool) -> String {
 /// `replace`, a joined list, a literal made owned), the same memory (ADR-327
 /// D8); nothing where the setting is off. `Text::from` of a `Text` is the
 /// value, so a sum that is already one passes.
-pub fn block_text_open(is_std: bool) -> String {
-    if lowers_to_block_types(is_std) {
+pub fn block_text_open(on: bool) -> String {
+    if on {
         return "nikaia_std::block::Text::from("
     }
     return ""
 }
 
 /// The other half of `block_text_open`.
-pub fn block_text_close(is_std: bool) -> String {
-    if lowers_to_block_types(is_std) {
+pub fn block_text_close(on: bool) -> String {
+    if on {
         return ")"
     }
     return ""
+}
+
+/// **The method a call resolves to is `std`'s on text or a list**, or
+/// unresolved: only such a call answers Rust's `String`; a `join` of the
+/// program's own type answers what it declares (#490).
+pub fn emit_callee_is_std_text(callee: ref String?) -> bool {
+    let key = callee ?? return true
+    return key.starts_with("str::") || key.starts_with("String::") || key.starts_with("Vec::")
 }
 
 /// **A method whose Rust answers a `String`**, which a program on the block
@@ -169,7 +193,7 @@ impl EmitNeeds {
         // the backend generates reaches these names through a glob of its
         // own, and a private import is not re-exported into one.
         out.push_str("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n")
-        out.push_str(block_types_import(false))
+        out.push_str(block_types_import(block_types_switched() && !self.uses_grammar))
         if self.fails {
             // Kap 7.1: `error.full()` is a method on whatever a `catch` bound,
             // so the trait has to be in scope even in a program that imports

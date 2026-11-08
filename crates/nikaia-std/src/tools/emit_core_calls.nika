@@ -973,15 +973,18 @@ impl EmitState {
         }
         // **Owned text is lent to a pattern** (D28, `owned_patterns`): `&` in
         // front of it, as for any `ref String` parameter. `replace`'s
-        // replacement is lent the same way (#877).
+        // replacement is lent the same way (#877). A block's text is lent as
+        // the `str` it holds, `&*`: Rust's `Pattern` is a trait no other
+        // crate may give a type (#490).
         let lent_pattern = args.len() == 1 || (name == "replace" && args.len() == 2)
         if receiver != null && lent_pattern && self.facts.owned_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
+            let lend = if self.on_block_types() { "&*" } else { "&" }
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
-            out.push(f".{name}(&")
+            out.push(f".{name}({lend}")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             if args.len() == 2 {
-                out.push(", &")
+                out.push(f", {lend}")
                 self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
             out.push(")")
@@ -1031,7 +1034,7 @@ impl EmitState {
             self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
             out.push(".extend(")
             self.emit_core_postfix_base(world, walk, out, host, args[0], depth, flow, scope)
-            out.push(f".iter().map(|item| {block_text_open(self.is_std)}item.to_string(){block_text_close(self.is_std)}))")
+            out.push(f".iter().map(|item| {block_text_open(self.on_block_types())}item.to_string(){block_text_close(self.on_block_types())}))")
             return
         }
         // **A copy of a tuple with view parts is owned** (ADR-293 D24,
@@ -1071,6 +1074,11 @@ impl EmitState {
             // or a `&[T]` is the reference, and a read-only `String` parameter
             // *is* a `&str` (ADR-282 D5).
             written = "to_owned"
+            // On the block types the copy is a block's list or text
+            // (`CopyOwned`, #490): `to_owned` answers Rust's `Vec`.
+            if self.on_block_types() {
+                written = "copy_owned"
+            }
             // **A copy of text is `to_string`**, as a reached one is: an element
             // lent out of a list of static text (ADR-282 D29) is `&&'static
             // str`, and `to_owned` of it is the view again.
@@ -1247,9 +1255,9 @@ impl EmitState {
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
         // **On the block types, Rust's `String` answer is made a block's
         // text** (#490): around the plain call, which is all these are.
-        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(written, args.len()) && lowers_to_block_types(self.is_std) && !self.method_pauses(on_node) && !self.method_can_fail(on_node)
+        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(written, args.len()) && emit_callee_is_std_text(self.facts.method_callees[on_node]) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node)
         if rust_text {
-            out.push(block_text_open(self.is_std))
+            out.push(block_text_open(self.on_block_types()))
         }
         if kind == 1 {
             out.push(f"nikaia_std::seq::{entry}(")
@@ -1357,7 +1365,7 @@ impl EmitState {
         }
         out.push(")")
         if rust_text {
-            out.push(block_text_close(self.is_std))
+            out.push(block_text_close(self.on_block_types()))
         }
         // **What hands back an element of a held list reads it through its
         // handle** (ADR-283 D17), as the brackets and a `for` do.

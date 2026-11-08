@@ -329,11 +329,11 @@ impl EmitState {
             return Ok(());
         }
         if self.facts.concatenations.contains(&site) {
-            out.push(&format!("{}nikaia_std::concat::plus(", block_text_open(self.is_std)));
+            out.push(&format!("{}nikaia_std::concat::plus(", block_text_open(self.on_block_types())));
             self.emit_core_concatenated(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
             self.emit_core_concatenated(world, walk, out, host, rhs, depth, wide, scope)?;
-            out.push(&format!("){}", block_text_close(self.is_std)));
+            out.push(&format!("){}", block_text_close(self.on_block_types())));
             return Ok(());
         }
         let side = emit_flow_null_side(lhs, rhs);
@@ -595,12 +595,12 @@ impl EmitState {
             return Ok(());
         }
         if !bare && emit_flow_a_lit_str(fallback) && emit_flow_an_iterator_answer(world, value) {
-            let (open, close) = (block_text_open(self.is_std), block_text_close(self.is_std));
+            let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()));
             out.push(&format!(".map(|__nikaia_found| {}__nikaia_found.to_string(){})", open, close));
         }
         let split = if bare { 0 } else { emit_flow_split_fallback(world, value, fallback) };
         if split == 2 {
-            let (open, close) = (block_text_open(self.is_std), block_text_close(self.is_std));
+            let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()));
             out.push(&format!(".map(|(__nikaia_head, __nikaia_tail)| ({}__nikaia_head.to_string(){}, {}__nikaia_tail.to_string(){}))", open, close, open, close));
         }
         out.push(", || ");

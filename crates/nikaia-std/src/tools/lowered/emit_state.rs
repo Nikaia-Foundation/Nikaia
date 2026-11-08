@@ -66,6 +66,7 @@ pub struct EmitState {
     pub kept_calls: collections::BTreeMap<(String, i64), EmitKeptCall>,
     pub uses_std: bool,
     pub is_std: bool,
+    pub package_grammar: bool,
     pub crate_root: String,
     pub offered_to_rust: bool,
     pub fails: bool,

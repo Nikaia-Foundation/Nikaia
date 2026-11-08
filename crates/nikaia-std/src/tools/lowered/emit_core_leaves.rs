@@ -270,7 +270,7 @@ impl EmitState {
                 }
                 if !emit_leaf_has_holes(parts) {
                     let text = format_of(parts).replace("{{", "{").replace("}}", "}");
-                    let (open, close) = (block_text_open(self.is_std), block_text_close(self.is_std));
+                    let (open, close) = (block_text_open(self.on_block_types()), block_text_close(self.on_block_types()));
                     out.push(&format!("{}\"{}\".to_string(){}", open, text, close));
                     return Ok(());
                 }

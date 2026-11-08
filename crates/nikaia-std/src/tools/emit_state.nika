@@ -152,6 +152,10 @@ pub struct EmitState {
     pub uses_std: bool,
     /// The file is `std` itself.
     pub is_std: bool,
+    /// **A file of the program declares a grammar** (#490): the program,
+    /// one namespace, stays on Rust's `Vec` and `String`; see
+    /// `on_block_types`.
+    pub package_grammar: bool,
     /// The path of the package's root a generated sum is written below:
     /// `crate`, or `crate::<native>` under a hand-written root (ADR-393 D7,
     /// #1447).

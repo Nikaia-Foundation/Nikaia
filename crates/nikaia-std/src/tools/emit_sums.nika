@@ -287,7 +287,7 @@ impl EmitState {
             // `error.message()` on an error, one of several (ADR-280 D30).
             // On the block types (#490) `String` is a block's text, and
             // `Full` is `std`'s, which answers Rust's own.
-            let block_types = lowers_to_block_types(self.is_std)
+            let block_types = self.on_block_types()
             let into = if block_types { ".into()" } else { "" }
             let full_text = if block_types { "std::string::String" } else { "String" }
             out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string(){into} }}\n}}\n")

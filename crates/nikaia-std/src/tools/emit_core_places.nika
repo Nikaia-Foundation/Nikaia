@@ -171,7 +171,7 @@ impl EmitState {
             out.push(" }")
             done = true
         } else if text_copy {
-            out.push(f"{block_text_open(self.is_std)}__nikaia_it.to_string(){block_text_close(self.is_std)}")
+            out.push(f"{block_text_open(self.on_block_types())}__nikaia_it.to_string(){block_text_close(self.on_block_types())}")
             done = true
         } else {
             done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)

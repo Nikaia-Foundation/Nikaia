@@ -43,10 +43,44 @@ pub type Map<K, V, S> = crate::map::HashMap<K, V, S>;
 /// types where its file imports these names (`lowers_to_block_types` in
 /// `tools/emit_needs.nika`, the one place that decides it).
 pub mod names {
+    pub use super::CopyOwned;
     pub use super::List as Vec;
     pub use super::Text as String;
     pub use crate::__nikaia_list as vec;
     pub use crate::__nikaia_text as format;
+}
+
+/// **A copy of a lent list or text that is a block's own** (#490): what
+/// `.clone()` of a `&[T]` or a `&str` is on the block types, where Rust's
+/// `to_owned` would answer a `Vec` or a `String`; of any other value, its
+/// clone, as `to_owned` is. Outside every block (D9)
+/// until the emitter places sites.
+pub trait CopyOwned {
+    /// The owned value: a [`List`] or a [`Text`].
+    type Owned;
+    /// The copy.
+    fn copy_owned(&self) -> Self::Owned;
+}
+
+impl<T: Clone> CopyOwned for T {
+    type Owned = T;
+    fn copy_owned(&self) -> T {
+        self.clone()
+    }
+}
+
+impl<T: Clone> CopyOwned for [T] {
+    type Owned = List<T>;
+    fn copy_owned(&self) -> List<T> {
+        List::from(self)
+    }
+}
+
+impl CopyOwned for str {
+    type Owned = Text;
+    fn copy_owned(&self) -> Text {
+        Text::from(self)
+    }
 }
 
 /// `vec![…]` for a [`List`]: empty, `n` clones of one item, or the items

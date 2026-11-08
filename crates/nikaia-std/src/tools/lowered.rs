@@ -2954,7 +2954,7 @@ pub mod emit_misc {
 }
 pub mod emit_needs {
     #[allow(unused_imports)]
-    pub use super::{lowers_to_block_types, block_types_import, block_text_open, block_text_close, answers_rust_text, EmitNeeds, emit_needs_abort_table};
+    pub use super::{block_types_switched, block_types_import, block_text_open, block_text_close, emit_callee_is_std_text, answers_rust_text, EmitNeeds, emit_needs_abort_table};
 }
 pub mod emit_ops {
     #[allow(unused_imports)]

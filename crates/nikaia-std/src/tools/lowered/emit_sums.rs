@@ -151,7 +151,7 @@ impl EmitState {
             }
             out.push("            _ => {}\n        }\n    }\n}\n");
             if crashed { out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params)); }
-            let block_types = lowers_to_block_types(self.is_std);
+            let block_types = self.on_block_types();
             let into = if block_types { ".into()" } else { "" };
             let full_text = if block_types { "std::string::String" } else { "String" };
             out.push(&format!("impl{} {}{} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string(){} }}\n}}\n", decl, name, params, into));

@@ -103,7 +103,7 @@ impl EmitState {
         }
         if !self.is_std {
             out.push("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n");
-            out.push(&block_types_import(self.is_std));
+            out.push(&block_types_import(self.on_block_types()));
         }
         if self.fails { out.push("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n"); }
         out.push("\n");
