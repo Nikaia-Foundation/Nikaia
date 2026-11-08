@@ -86,10 +86,6 @@ exclude:
   - _site/
   # patches and findings handed to dependencies, not written for readers here
   - docs/upstream/
-  # package test data: the yaml-test-suite's inputs begin with `---` and Jekyll
-  # reads them as front matter, which stops the build
-  - packages/json/tests/
-  - packages/yaml/tests/
   # the logo's source image: 2816x1536 and 5 MB, kept in the repository and
   # not published. `nikaia-logo.jpg` is what the README shows.
   - 1768075880760.jpg
