@@ -256,7 +256,12 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
         }
         return check_core_call_on(state, world, host, &answered, receiver, method, args, entry, span);
     }
-    if entry == "clone" && args.is_empty() && check_core_call_on_cloned_parameter(&state, world, on) { return on.clone(); }
+    if entry == "clone" && args.is_empty() && check_core_call_on_cloned_parameter(&state, world, on) {
+        return match on {
+            Ty::Named { name, args, .. } => Ty::Named { name: name.to_string(), args: args.to_owned(), view: false },
+            _ => on.clone(),
+        };
+    }
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
         let wants_order = entry == "compare";
         if check_core_call_on_comparable(&state, world, on, wants_order) {

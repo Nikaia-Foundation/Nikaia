@@ -445,7 +445,9 @@ impl EmitState {
         // the call (ADR-319 D2, #1195) is lent as made, `&PathBuf::from(..)`,
         // and made of a lent place, which the call only reads.
         let lent_path = self.facts.lent_args.contains(node) && emit_arg_made_a_path(self.facts.nullable_args, node)
-        let mut lend = self.facts.lent_args.contains(node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node))
+        // A literal at a type variable the callee lends takes the `&` the
+        // parameter does (ADR-views-3 D2, #1342), `&"b"`.
+        let mut lend = self.facts.lent_args.contains(node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node)) || self.facts.lent_literals.contains(node))
         if lent_path && !emit_arg_names_a_place(arg) {
             lend = false
         }

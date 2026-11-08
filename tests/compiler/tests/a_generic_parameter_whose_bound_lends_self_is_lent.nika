@@ -1,0 +1,42 @@
+// A plain parameter of a type variable is lent (ADR-views-3 D2, D7, #1342):
+// `twice` only calls a bound's method that takes plain `self`, so the
+// caller's `a` is usable after each call, handed on through `outer` too.
+// A text literal lent beside a returned literal or text view keeps working.
+
+trait Named {
+    fn name(self) -> i64
+}
+
+struct A {
+    n: i64,
+    s: String,
+}
+
+impl Named for A {
+    fn name(self) -> i64 {
+        return self.n
+    }
+}
+
+fn twice[C: Named](c: C) -> i64 {
+    return c.name() + c.name()
+}
+
+fn outer[C: Named](c: C) -> i64 {
+    return twice(c) + twice(c)
+}
+
+fn second[T](x: T, y: T) -> T {
+    return x
+}
+
+fn main() throws {
+    let a = A { n: 2, s: "x" }
+    println(twice(a))
+    println(twice(a))
+    println(outer(a))
+    println(a.s)
+    println(second("a", "b"))
+    let v = "v"
+    println(second(v, "w"))
+}

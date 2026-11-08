@@ -324,9 +324,13 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
         return check_core_call_on(state, world, host, answered, receiver, method, args, entry, span)
     }
     // **`[T: Clone]` gives `.clone()` on a `T`** (Part I 4.7, #1245): the
-    // language's trait, so no ledger describes it; the copy is a `T`.
+    // language's trait, so no ledger describes it; the copy is a `T`, of a
+    // lent `T` too (ADR-views-3 D2, #1342).
     if entry == "clone" && args.len() == 0 && check_core_call_on_cloned_parameter(state, world, on) {
-        return on.clone()
+        return match on {
+            Ty::Named { name, args, .. } => Ty::Named { name: name.clone(), args: args.clone(), view: false },
+            else => on.clone(),
+        }
     }
     if (entry == "compare" || entry == "eq") && args.len() == 1 {
         let wants_order = entry == "compare"

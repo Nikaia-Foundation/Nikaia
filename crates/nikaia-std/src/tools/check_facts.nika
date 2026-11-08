@@ -495,6 +495,10 @@ pub struct CheckFacts {
     pub array_literals: collections::BTreeSet[i64],
     pub byte_literals: collections::BTreeSet[i64],
     pub owned_texts: collections::BTreeSet[i64],
+    /// A text literal handed to a type variable the callee lends
+    /// (ADR-views-3 D2, #1342): the view it is, with the one `&` the
+    /// parameter takes, `&"b"`.
+    pub lent_literals: collections::BTreeSet[i64],
     /// A `catch` whose guarded value is a view of text and whose handler's is
     /// text of its own: the guarded value is made owned.
     pub owned_catches: collections::BTreeSet[i64],
@@ -764,6 +768,7 @@ impl CheckFacts {
             array_literals: collections::BTreeSet(),
             byte_literals: collections::BTreeSet(),
             owned_texts: collections::BTreeSet(),
+            lent_literals: collections::BTreeSet(),
             owned_catches: collections::BTreeSet(),
             nullable_catches: collections::BTreeSet(),
             dropped_catches: collections::BTreeSet(),

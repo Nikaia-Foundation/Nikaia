@@ -322,6 +322,7 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if kept && state.decided_by_this_argument(signature, wanted, at) {
             literal_wants = Ty::Named { name: "String", args: [], view: false }
         }
+        let a_lent_variable = lent && own && check_arguments_a_var(declared) && !declared.is_a_view()
         if given_here != null {
             let value = given_here ?? continue
             let array = state.array_literal(world, found_here, want, value, span)
@@ -348,6 +349,23 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // **`Bytes::find` takes a byte or a set of them** (ADR-375 D3): the
         // language below takes either for the one parameter.
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(found_here) {
+            continue
+        }
+        // **A type variable this program's function lends takes one `&`**
+        // (ADR-views-3 D2, #1342): `c: C` lowers `c: &C`, and a generic is not
+        // reached through the language below's deref coercion, so the
+        // argument has exactly one. None where it is a view of a value
+        // already (a lent `C` handed on, a `for` element); one otherwise, text
+        // views too, so `C` is the `&str` the caller holds; a text literal
+        // is the view it is beside them, `&"b"`.
+        if a_lent_variable && given_here != null {
+            let value = given_here ?? continue
+            if !found_here.is_a_view() || found_here == text_view {
+                state.facts.lent_args.insert(id_of(value) as i64)
+            }
+            if a_text_literal_expr(value) && !state.facts.owned_texts.contains(id_of(value) as i64) {
+                state.facts.lent_literals.insert(id_of(value) as i64)
+            }
             continue
         }
         // **A declared function that lends a parameter fits a function type

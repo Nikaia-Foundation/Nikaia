@@ -535,8 +535,12 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
         // **And a `T?` it only reads is the option of a view** (#1256): `ref
         // String?`, `ref T?`, as the lowering writes it.
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && arg.ty.code == null && !arg.mutable
+        // **And a type parameter it only reads is a view of one** (ADR-views-3
+        // D2, #1342): `c: C` lowers `c: &C`, so `c` handed on to another lent
+        // `C` is passed as it is, not behind a second `&`.
+        let type_parameter = arg.ty.generics.len() == 0 && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && arg.ty.code == null && !arg.mutable && state.type_parameters.contains_key(world.words.resolve(arg.ty.name))
         let mut ty = Ty::Unknown
-        if (plain_text || plain_option) && check_function_lends(world, key, at + offset) {
+        if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, at + offset) {
             let mut viewed = arg.ty.clone()
             viewed.is_view = true
             ty = check_walked_declared(state, world, viewed, arg.span)
