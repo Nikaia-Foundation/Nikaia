@@ -2045,7 +2045,14 @@ fn a_mixed_value_unwrapped_makes_its_position_mixed() {
 #[test]
 fn a_mixed_value_unwrapped_into_a_published_position_is_refused() {
     let source = include_str!("../../../../tests/accepted/696_mixed_read_into_positions.nika")
-        .replace("fn gather", "pub fn gather");
+        .replace("fn gather", "pub fn gather")
+        // A published position takes the text it is lent as a view: the
+        // parameters are written `ref`, as before the program was migrated.
+        .replace(
+            "(name: String) -> String?",
+            "(name: ref String) -> ref String?",
+        )
+        .replace("(n: String", "(n: ref String");
     let found = findings(&source);
     assert!(
         found

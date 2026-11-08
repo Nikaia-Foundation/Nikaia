@@ -397,10 +397,13 @@ impl EmitState {
                     let pname = emit_text(world, each.name);
                     let at = k + recv;
                     let changes = self.emit_fn_changes(&key, &pname);
-                    let lent_option = !changes && each.ty.is_nullable && !each.ty.is_view && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
+                    let lent_option = !changes && each.ty.is_nullable && (!each.ty.is_view || each.ty.either) && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(&key, at);
                     let mut ty = each.ty.clone();
-                    if lent_option { ty.is_view = true; }
+                    if lent_option {
+                        ty.is_view = true;
+                        ty.either = false;
+                    }
                     let lifted = is_source && shared && !source_nested;
                     let mut reference: &'static str = "";
                     if changes { if lifted { reference = "&'r mut "; } else if is_source && source_kept { reference = "&'k mut "; } else { reference = "&mut "; } } else if self.emit_fn_lends(world, &key, at) && !written_as_a_view { if !is_source && emit_store_source(&stores, &pname) { reference = "&'a "; } else if lifted { reference = "&'r "; } else if is_source && source_kept { reference = "&'k "; } else { reference = "&"; } }

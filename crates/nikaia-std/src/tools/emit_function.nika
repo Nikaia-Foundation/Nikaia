@@ -639,11 +639,15 @@ impl EmitState {
                     // **A `T?` the body only reads is the option of a view**
                     // (#1256): `Option<&T>`, `Option<&str>`, as `ref T?` is
                     // written, so a caller hands `Some("lit")` or `s.as_deref()`.
-                    let lent_option = !changes && each.ty.is_nullable && !each.ty.is_view && !each.ty.is_slice && each.ty.code == null && self.emit_fn_lends(world, key, at)
+                    let lent_option = !changes && each.ty.is_nullable && (!each.ty.is_view || each.ty.either) && !each.ty.is_slice && each.ty.code == null && self.emit_fn_lends(world, key, at)
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(key, at)
                     let mut ty = each.ty.clone()
                     if lent_option {
                         ty.is_view = true
+                        // **Text both kinds flow into is read as a view**
+                        // when the callee only reads it (#1256): the call
+                        // hands it unwrapped, `Some(view)`, not `EitherText`.
+                        ty.either = false
                     }
                     let lifted = is_source && shared && !source_nested
                     let mut reference: String = ""

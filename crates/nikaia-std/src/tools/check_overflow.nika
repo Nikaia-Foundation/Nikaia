@@ -245,6 +245,15 @@ fn check_overflow_block_leaves_none(state: ref CheckState, world: ref CheckWorld
     }
 }
 
+/// The type as it is written in a refusal: a lent `T?` is read as the `T?` it
+/// was written, not as the option of a view.
+fn check_overflow_wanted(want: ref Ty) -> String sync {
+    return match want {
+        Ty::Nullable(inner) => f"{unviewed_type(inner).text()}?",
+        else => want.text(),
+    }
+}
+
 pub fn check_wrap_undecided(found: ref Ty, want: ref Ty, literal: bool) -> bool sync {
     if literal || !found.is_unknown() {
         return false
@@ -306,7 +315,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
             if check_overflow_a_number_inside(want) {
                 return FactWrap::Constructor
             }
-            let wanted = want.text()
+            let wanted = check_overflow_wanted(want)
             state.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type this value is, so it can't put it into a `{wanted}`.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the type down where the value is made, such as `let x: T = …`."))
             return null
         }
@@ -327,7 +336,7 @@ pub fn check_widened_slot[H: CheckHost](mut state: CheckState, world: ref CheckW
             return FactWrap::Constructor
         }
         let shown = arith_shown(written_expression(world.words, given))
-        let wanted = want.text()
+        let wanted = check_overflow_wanted(want)
         state.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type `{shown}` is, so it can't put it into a `{wanted}`.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the type down where the value is made, such as `let x: T = …`."))
         return null
     }
