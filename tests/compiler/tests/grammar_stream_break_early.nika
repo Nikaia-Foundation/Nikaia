@@ -1,0 +1,40 @@
+// A `break` in a walk of an `@stream` entry ends the parse there
+// (ADR-grammar-2 D7, amended 2026-11-08, #1442): what follows the item it
+// stopped at is never read, so an error after it is no error. The same input
+// walked to the end fails, with the parse's own message.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+fn first_words(text: String) -> i64 throws {
+	let mut seen = 0
+	for it in Words::items(text) {
+		if it.word == "stop" {
+			break
+		}
+		println(it.word)
+		seen += 1
+	}
+	return seen
+}
+
+fn all_words(text: String) -> i64 throws {
+	let mut seen = 0
+	for _it in Words::items(text) {
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	let broken = "a;b;stop;this has no end"
+	println(f"read {first_words(broken)} before the stop")
+	let all = all_words(broken) catch { -1 }
+	println(f"walked to the end: {all}")
+}
