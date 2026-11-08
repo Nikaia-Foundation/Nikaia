@@ -2010,7 +2010,7 @@ pub(crate) fn prover_else_lengths_changed(changed: &mut collections::BTreeSet<St
 
 pub(crate) fn prover_loop_keeps(n: &str, changed: &collections::BTreeSet<String>, body: &Block, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
     let length = length_of(n);
-    scope.mutables.contains(&length) && !changed.contains(&length) && !rebinds(body, n, words)
+    scope.ints.contains(&length) && !changed.contains(&length) && !rebinds(body, n, words)
 }
 
 pub(crate) fn prover_relength(walk: &mut ProverWalk, n: &str, scope: &mut ProverScope) { if n.ends_with(".len()") && scope.mutables.contains(n) { scope.has_length(&mut walk.arena, &nikaia_std::index::or(n.strip_suffix(".len()"), || "").to_string(), None); } }

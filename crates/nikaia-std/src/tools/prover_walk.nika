@@ -2759,10 +2759,12 @@ fn prover_else_lengths_changed(mut changed: collections::BTreeSet[String], else_
 }
 
 /// **A followed list a loop changes only through an index** (#782) keeps
-/// its length: nothing binds it again, and nothing changes the length.
+/// its length: nothing binds it again, and nothing changes the length. So
+/// does a `mut` list parameter whose length is a name of the proof (#1375,
+/// #1385): the whole body keeps it, so the loop's element writes do too.
 fn prover_loop_keeps(n: ref String, changed: ref collections::BTreeSet[String], body: ref Block, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
     let length = length_of(n)
-    return scope.mutables.contains(length) && !changed.contains(length) && !rebinds(body, n, words)
+    return scope.ints.contains(length) && !changed.contains(length) && !rebinds(body, n, words)
 }
 
 /// **A followed list's length a loop forgets** (#782) is still a length:
