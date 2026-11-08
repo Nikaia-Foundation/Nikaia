@@ -545,6 +545,7 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
         }
         check_reflected_field_kept(state, world, arg.ty, arg.span, true)
         let id = state.a_new_binding()
+        state.declared_binding(id, arg.span, name)
         let mut local = CheckLocal::free(name, ty.erase(parameters), id)
         if !arg.mutable {
             local.without_mut = CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: "" }

@@ -959,6 +959,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Ty::Named { ref name, .. } => { if name == "TaskHandle" { state.flow.handle_lets.insert(span.start as i64); } },
         _ => { },
     }
+    state.declared_binding(id, span, &name);
     let mut local = CheckLocal::free(name, bound, id);
     if !mutable && element_read.is_some() && (state.does_not_copy(world, &local.ty) || viewed_past_a_jump) { local.view_of = nikaia_std::index::or(element_read.as_deref(), || "").to_string(); }
     local.constant = constant;
@@ -1523,6 +1524,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         if lent && !mut_view && !copied && !declared_copy && named { bound = view_of_type(&element); }
         let id = state.a_new_binding();
         if !lent && name != "_" && (state.flow.lent_walks.contains(&(id_of(iter) as i64)) || element.is_a_view()) && check_owned_text(&bound) { state.flow.lent_text_params.insert(id); }
+        state.declared_binding(id, span, &name);
         let mut local = CheckLocal::free(name, bound, id);
         local.written_mut = mutable;
         if mut_view { local.view_of = nikaia_std::index::or(dotted_path(world, iter), || "".into()); }

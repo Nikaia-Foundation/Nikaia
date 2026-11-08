@@ -264,6 +264,10 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
         state.flow.owned_call_bases.insert(id_of(base) as i64)
     }
     let field: String = f"{world.words.resolve(name)}"
+    match unviewed_type(on) {
+        Ty::Named { name: held, .. } => state.declared_use(expr, CheckDeclared::Field(held.clone(), field.clone())),
+        else => {},
+    }
     // **`x.name::member` asks a type** (ADR-330 D5): only a reflected
     // field's `.ty` is one.
     if field.contains("::") && !safe {
@@ -734,6 +738,9 @@ fn check_core_places_a_kept_fn(state: ref CheckState, name: ref String, given: r
 pub fn check_core_struct_literal[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, written: winnow_grammar::Symbol, fields: ref Vec[FieldInit], span: ref Span) -> Ty sync {
     // `unaliased`, the same as a type (ADR-286 D12).
     let name: String = world.here.unaliased(f"{world.words.resolve(written)}")
+    if !state.declared_a_variant(expr, name) {
+        state.declared_use(expr, CheckDeclared::Type(name.clone()))
+    }
     let declared: Vec[FieldContract]? = state.fields_of(world, name)
     // **A struct literal naming nothing this compiler declares** (`NK1135`),
     // unqualified only.

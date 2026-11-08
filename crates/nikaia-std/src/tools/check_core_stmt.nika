@@ -1323,6 +1323,7 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         },
         else => {},
     }
+    state.declared_binding(id, span, name)
     let mut local = CheckLocal::free(name, bound, id)
     // **A name bound to an element a list or a map keeps is a view of it**
     // (#1044, Part III `NK1131`): handed back whole, it is refused as a `for
@@ -2115,6 +2116,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
         if !lent && name != "_" && (state.flow.lent_walks.contains(id_of(iter) as i64) || element.is_a_view()) && check_owned_text(bound) {
             state.flow.lent_text_params.insert(id)
         }
+        state.declared_binding(id, span, name)
         let mut local = CheckLocal::free(name, bound, id)
         local.written_mut = mutable
         if mut_view {

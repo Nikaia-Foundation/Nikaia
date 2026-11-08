@@ -245,16 +245,30 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             check_core_expr_kept_copy(state, world, expr, read)
             read
         },
-        Expr::Path(segments, _) => check_reflect_path(state, world, expr, segments, span) ?? check_core_expr_path(state, world, segments, span),
+        Expr::Path(segments, _) => {
+            state.declared_path(world, expr, world.here.unaliased(check_core_call_joined(world, segments)))
+            check_reflect_path(state, world, expr, segments, span) ?? check_core_expr_path(state, world, segments, span)
+        },
         Expr::Block(block, _) => check_core_block(state, world, host, block),
         Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
         Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
         Expr::Select(arms, _) => check_core_flow_select(state, world, host, arms, span),
         Expr::If { cond, then_branch, else_branch, .. } => check_core_flow_if(state, world, host, expr, cond, then_branch, else_branch, span),
         Expr::Match { value, arms, .. } => check_reflect_match(state, world, host, expr, value, arms, span) ?? check_core_flow_match(state, world, host, expr, value, arms, span),
-        Expr::Call { func, args, config, .. } => check_core_call(state, world, host, func, args, config, span),
-        Expr::MethodCall { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, false, receiver, method, args, config, span),
-        Expr::SafeMethod { receiver, method, args, config, .. } => check_core_method(state, world, host, expr, true, receiver, method, args, config, span),
+        Expr::Call { func, args, config, .. } => {
+            state.declared_callee_at(world, expr, func)
+            check_core_call(state, world, host, func, args, config, span)
+        },
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let read = check_core_method(state, world, host, expr, false, receiver, method, args, config, span)
+            check_core_expr_declared_method(state, expr, receiver)
+            read
+        },
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            let read = check_core_method(state, world, host, expr, true, receiver, method, args, config, span)
+            check_core_expr_declared_method(state, expr, receiver)
+            read
+        },
         Expr::Field { base, name, .. } => {
             let read = check_core_field(state, world, host, expr, false, base, name, span)
             check_core_expr_kept_copy(state, world, expr, read)
@@ -479,6 +493,13 @@ fn check_core_expr_empty_list(state: ref CheckState, name: ref String) -> i64 sy
 }
 
 /// **A name read.**
+/// **What a method call names** (#1396): the method its receiver resolved it
+/// to, where the ledger describes one.
+fn check_core_expr_declared_method(mut state: CheckState, expr: ref Expr, receiver: ref Expr) sync {
+    let key: String = state.facts.method_callees[id_of(receiver) as i64]?.clone() ?? return
+    state.declared_use(expr, CheckDeclared::Function(key))
+}
+
 fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, symbol: winnow_grammar::Symbol, span: ref Span) -> Ty sync {
     let name = world.words.resolve(symbol).clone()
     // `NK2101`: where this name is read, for the question a `spawn` asks
@@ -493,6 +514,7 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
     let found: Ty? = state.lookup(name)
     if found != null {
         let ty: Ty = found ?? Ty::Unknown
+        state.declared_use(expr, CheckDeclared::Binding(state.binding_id(name) ?? -1))
         state.a_read(expr, name, span)
         // **A `let mut` view of a number is the `&mut` of it** (#976): every
         // mention reads through it.
@@ -540,6 +562,7 @@ fn check_core_expr_variable[H: CheckHost](mut state: CheckState, world: ref Chec
     // **A function or a type's constructor named as a value** (#502, #507).
     let as_value: Ty? = state.function_as_a_value(world, name)
     if as_value != null {
+        state.declared_path(world, expr, name)
         // **Its callers are no longer all in sight** (ADR-351 D4).
         let mut entry: CheckStoredCode = state.stored_code.remove(AS_VALUE) ?? CheckStoredCode::empty()
         entry.free.insert(name.clone())

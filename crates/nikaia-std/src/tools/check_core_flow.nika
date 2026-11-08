@@ -1375,6 +1375,9 @@ fn check_core_flow_arm[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         owned_text = check_core_flow_owned_texts(state, world, arm.pattern, typed, arm.body)
     }
     let frame = check_core_flow_frame(state, world, arm.pattern, id_of(arm.body) as i64, parts, lent_parts, owned_text)
+    for local in frame {
+        state.declared_binding(local.id, span, local.name)
+    }
     // **A `T?` bound out of a view is a reference to the option** (#898),
     // unless the arm copies it out.
     if typed.is_a_view() || through_the_reference {

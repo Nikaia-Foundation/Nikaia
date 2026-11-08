@@ -1,0 +1,109 @@
+// #1396: `textDocument/definition` answers where the name under the cursor is
+// declared, as the check resolved it: a local, a parameter, a function of the
+// same file, of another file of the package and of a package it `use`s, a
+// method, a field, the type of a struct literal and a variant. The editor's
+// unsaved text is what is asked about: on disk `main.nika` holds less. A
+// character above U+FFFF before a use on its line counts two UTF-16 units. A
+// place that names nothing, and a document that does not parse, answer
+// `null`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn framed(body: String) -> String {
+    return f"Content-Length: {body.len()}\r\n\r\n{body}"
+}
+
+fn quoted(text: String) -> String {
+    return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+}
+
+fn opened(uri: String, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"languageId\":\"nikaia\",\"version\":1,\"text\":\"{quoted(text)}\"}}}}}}")
+}
+
+fn changed(uri: String, version: i64, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"version\":{version}}},\"contentChanges\":[{{\"text\":\"{quoted(text)}\"}}]}}}}")
+}
+
+// The place of the `skip`th character of the first `needle` in `text`: its
+// line and its column in UTF-16 units, both from 0.
+fn place(text: String, needle: String, skip: i64) -> (i64, i64) {
+    let mut line = 0
+    for written in text.split("\n") {
+        let at = written.find(needle)
+        if at != null {
+            let mut units = 0
+            for c in written[0..<(at ?? 0)].chars() {
+                units += if (c as i64) < 65536 { 1 } else { 2 }
+            }
+            return (line, units + skip)
+        }
+        line += 1
+    }
+    return (-1, -1)
+}
+
+fn asked(id: i64, uri: String, at: (i64, i64)) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"textDocument/definition\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\"}},\"position\":{{\"line\":{at.0},\"character\":{at.1}}}}}}}")
+}
+
+// The answers, each frame as `Content-Length: ok` when the length is the
+// body's bytes: the length depends on the scratch path, which is cut from the
+// output. The published diagnostics are left out.
+fn masked(stdout: String, base: String) -> String {
+    let mut out = ""
+    for part in stdout.split("Content-Length: ") {
+        let pieces: Vec[String] = part.split("\r\n\r\n").map(fn(p) { p.to_string() }).collect()
+        if pieces.len() == 2 && !pieces[1].contains("publishDiagnostics") {
+            let length = if pieces[0] == f"{pieces[1].len()}" { "ok" } else { "wrong" }
+            out.push_str(f"Content-Length: {length}\\r\\n\n\\r\\n\n{pieces[1].replace(base, "<scratch>")}\n")
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::create_dir("gr/src", root; recursive: true)
+    fs::write("gr/nikaia.toml", root, "[package]\nname = \"gr\"\nversion = \"0.1.0\"\n")
+    fs::write("gr/src/lib.nika", root, "pub fn greet() -> String {\n    return \"hi\"\n}\n")
+    fs::create_dir("pk/src", root; recursive: true)
+    fs::write("pk/nikaia.toml", root, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n\n[dependencies]\ngr = { path = \"../gr\" }\n")
+    fs::write("pk/src/helper.nika", root, "fn helper(n: i64) -> i64 {\n    return n + 1\n}\n")
+    fs::write("pk/src/main.nika", root, "fn main() {}\n")
+    let text: String = "use gr\n\nstruct Point {\n    x: i64,\n    y: i64,\n}\n\nenum Shade {\n    Light,\n    Dark,\n}\n\nimpl Point {\n    fn sum(ref self) -> i64 {\n        return self.x + self.y\n    }\n}\n\nfn twice(n: i64) -> i64 {\n    return n * 2\n}\n\nfn main() throws {\n    // Grüße\n    let p = Point { x: 1, y: 2 }\n    let s = Shade::Dark\n    let pair = (\"é😀\", twice(p.sum()))\n    println(f\"{pair.1} {helper(p.x)} {gr::greet()}\")\n    match s {\n        Shade::Light => println(\"light\"),\n        else => println(\"dark\"),\n    }\n}\n"
+    let base = fs::canonical(".", root).display()
+    let uri = f"file://{base}/pk/src/main.nika"
+    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}")
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}"))
+    transcript.push_str(opened(uri, text))
+    // A local, a parameter.
+    transcript.push_str(asked(2, uri, place(text, "p.sum", 0)))
+    transcript.push_str(asked(3, uri, place(text, "n * 2", 0)))
+    // A function of this file, after `é😀`; of `helper.nika`; of `gr`.
+    transcript.push_str(asked(4, uri, place(text, "twice(p", 2)))
+    transcript.push_str(asked(5, uri, place(text, "helper(", 3)))
+    transcript.push_str(asked(6, uri, place(text, "greet()", 1)))
+    // A method, a field, a struct literal's type, a variant.
+    transcript.push_str(asked(7, uri, place(text, "sum()", 1)))
+    transcript.push_str(asked(8, uri, place(text, "x + self", 0)))
+    transcript.push_str(asked(9, uri, place(text, "= Point", 4)))
+    transcript.push_str(asked(10, uri, place(text, "::Dark", 3)))
+    // Space, which names nothing.
+    transcript.push_str(asked(11, uri, place(text, "let p", -2)))
+    // A document that does not parse.
+    transcript.push_str(changed(uri, 2, text.replace("fn twice(n: i64)", "fn twice(n: i64")))
+    transcript.push_str(asked(12, uri, place(text, "p.sum", 0)))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"shutdown\"}"))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    let out = process::run(toolchain(), ["lsp"]; stdin: process::Input::Text(transcript))
+    print(masked(out.stdout, base))
+    println(f"exit {out.code}")
+    print(out.stderr)
+}
