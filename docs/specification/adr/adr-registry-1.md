@@ -164,9 +164,14 @@ tests still run foreign code.
 
 ### D4 — A package is hashed as a canonical archive, and the archive is the byte stream the hash is taken over.
 
-The format is `nkpkg`, version 1. Paths are relative, sorted bytewise, UTF-8 in
-NFC. Every field — path, mode, content — is preceded by its length. The mode
-says only whether a file is executable. Symlinks, absolute paths, `..`, empty
+The format is `nkpkg`, version 1. Paths are relative, UTF-8 in NFC, and sorted
+strictly ascending by bytes, so no path appears twice. Two paths that differ
+only in case are refused, because a case-insensitive file system makes them
+one file. Every field — path, mode, content — is preceded by its length as an
+unsigned 64-bit big-endian number: a fixed width has one spelling per length.
+The archive begins with the number of its entries, in the same encoding, and
+ends after the last one; a byte after it is refused. The mode says only
+whether a file is executable. Symlinks, absolute paths, `..`, empty
 directories and anything outside the package are refused. The package is
 `nikaia.toml`, `src/`, `nikaia.contracts`, `nikaia.proofs`, the tests and the
 licence.
@@ -175,6 +180,14 @@ The hash is SHA-256 over the uncompressed archive, written with its algorithm
 and format: `sha256:nkpkg1:<hex>`. The length prefixes make it impossible for
 two different trees to give one byte stream; length extension does not apply,
 since no secret is hashed; the prefix lets the algorithm change later.
+
+The bytes that are hashed are the bytes that are unpacked. A client hashes
+what it fetched, compares, and unpacks exactly those bytes from memory with the
+one strict reader of the format; it never reads the file again, and no second,
+more lenient reader exists. The reader enforces limits on the total size, the
+size of one file, the number of files and the length of a path, and stops a
+`.zst` decompression as soon as one is passed. The hash is never shortened: the
+index, the lockfile and a mirror's file names carry all 64 hexadecimal digits.
 
 The Git commit is recorded as where to fetch from, not as what is checked:
 what is checked is the content hash, not Git's SHA-1.
@@ -374,7 +387,8 @@ Two major versions side by side are a case of this rule, not a separate one.
 * A transparency log or TUF metadata for the index itself; until then the
   client accepts only fast-forwards of the index.
 * How a private registry authenticates access.
-* Which compression a mirror may offer besides zstd.
+* Which compression a mirror may offer besides zstd, and the values of D4's
+  limits on archive size, file size, file count and path length.
 * Who keeps the registry: its maintainers, its reviewers, who decides a
   removal.
 * Whether the index later moves off GitHub, and where.
