@@ -56,6 +56,13 @@ pub(crate) fn emit_stmt_put_call(keep: &KeepAt, opaque: bool) -> String {
     format!("{}.{}(", emit_keep_expr(keep, false), method)
 }
 
+pub(crate) fn emit_stmt_a_kept_name(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, arg: &Expr) -> bool {
+    match arg {
+        Expr::Variable(name, _) => { let name = *name; walk.kept_names.contains(&emit_text(world, name)) },
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EmitStmtKept {
     pub(crate) put: Option<String>,
@@ -171,7 +178,7 @@ impl EmitState {
                         let st = out.mark();
                         out.push(&format!("{}vec![{}; {}];", nikaia_std::index::or(head, || ""), value.buf, count.buf));
                         out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
-                        out.push(&self.emit_stmt_late_puts(&walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64));
+                        out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64));
                         out.push("\n");
                         pos += 2;
                         continue;
@@ -188,7 +195,7 @@ impl EmitState {
             self.emit_stmt(world, walk, out, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, &here, flow, scope)?;
             out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
             if ending && here.is_value() { out.push(" };"); }
-            out.push(&self.emit_stmt_late_puts(&walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
+            out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
             out.push("\n");
             pos += 1;
         }
@@ -347,8 +354,8 @@ impl EmitState {
         if plan.element_keepers.contains(bound) { holding = Some(nikaia_std::index::or(plan.widths.get(bound), || 1)); }
         EmitStmtKept { put, packed, holding }
     }
-    pub(crate) fn emit_stmt_late_puts(&self, walk: &EmitWalk, function: &str, statement: i64) -> String {
-        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    pub(crate) fn emit_stmt_late_puts(&self, walk: &mut EmitWalk, function: &str, statement: i64) -> String {
+        let key = match self.keep_plan_key(&walk, function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let mut written = String::from("");
         for (at, late) in plan.late_puts.iter() {
@@ -357,6 +364,7 @@ impl EmitState {
             let keep = match plan.puts.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let put = emit_stmt_put_call(&keep, plan.opaque_puts.contains(&at));
             let local = self.emit_stmt_local(&late.name);
+            walk.kept_names.insert(late.name.to_string());
             let mut_word = if late.reassigned { "mut " } else { "" };
             written = format!("{} let {}{} = {}{});", written, mut_word, local, put, local);
         }
@@ -387,6 +395,10 @@ impl EmitState {
         let at = span.start as i64;
         let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(&node_key(value));
         let mut_word = if mutable && !unmuted { "mut " } else { "" };
+        for each in names.iter() {
+            let each = *each;
+            walk.kept_names.remove(&emit_text(world, each));
+        }
         if names.len() > 1 || !shape.is_empty() {
             let mut bound: Vec<String> = vec![];
             for each in names.iter() {
@@ -430,6 +442,7 @@ impl EmitState {
             return Ok(());
         }
         if kept.put.is_some() {
+            walk.kept_names.insert(bound.to_string());
             out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || "")));
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(");");

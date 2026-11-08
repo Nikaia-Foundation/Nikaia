@@ -513,7 +513,7 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
                 let mut path = work.path.to_owned();
                 path.push(grammar_types_called(words, called, &types));
                 work.queue.push(GrammarTypesWanted { call: GrammarTypesCall { owner, rule: name, types }, from: work.from, path });
-                copy.node = Pattern::Ref { name: intern(&copied), generics: vec![], args: parts };
+                copy.node = Pattern::Ref { name: intern(copied), generics: vec![], args: parts };
             } else { copy.node = Pattern::Ref { name, generics: types, args: parts }; }
         },
         _ => { },
