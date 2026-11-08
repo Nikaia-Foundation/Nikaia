@@ -1,0 +1,28 @@
+== lowered only
+MERGE SHA re-lowered crates/nikaia-std/src/tools/lowered/a.rs
+exit ok: true
+Merge branch 'develop' of ../origin into develop
+2
+no merge open
+ M notes.txt
+base
+theirs-side
+local
+== also a nika
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs src/a.nika, merge aborted
+exit ok: false
+ours
+1
+no merge open
+ M notes.txt
+ours
+local
+== lowering fails
+ESCALATE drive: push rejected, merge conflicted in crates/nikaia-std/src/tools/lowered/a.rs, re-lowering failed (lower-std), merge aborted
+exit ok: false
+ours
+1
+no merge open
+ M notes.txt
+ours
+local
