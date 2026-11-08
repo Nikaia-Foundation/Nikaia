@@ -1,2 +1,6 @@
 # Append-only tables two drivers write at once: keep both sides
 docs/tokenspeed.md merge=union
+# The vendored yaml-test-suite (#1382): bytes as published, never rewritten
+# (no line-end conversion) and no whitespace complaints; its trailing blanks
+# and tabs are what the cases test.
+packages/yaml/tests/suite/** -text -whitespace
