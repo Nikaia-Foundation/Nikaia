@@ -1,0 +1,20 @@
+// A `pub grammar` with an `@stream` entry: `counted` walks it inside the
+// crate (the core), and a Rust user reads it from a `std::io::Read` through
+// the feature `stream`.
+
+pub struct Item {
+	pub word: String,
+}
+
+pub grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+pub fn counted(text: String) -> i64 sync throws {
+	let mut n = 0
+	for _ in Words::items(text) {
+		n += 1
+	}
+	return n
+}

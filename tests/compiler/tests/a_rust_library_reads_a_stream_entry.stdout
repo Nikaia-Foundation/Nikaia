@@ -1,0 +1,23 @@
+with `stream = ["lines::Words::items"]`:
+  [features]
+  stream = []
+  trace = ["winnow-grammar/trace"]
+  #[cfg(feature = "stream")] #[allow(non_snake_case)]
+  #[cfg(feature = "stream")] pub use super::__nikaia_reader_Words__items as items_reader;
+  lines naming a reader: 2
+read a
+read b
+read c
+kept 1 before the stop
+p;q fails: unexpected end of input, expected `;` at line 1, column 4
+with `all = ["lines::Words"]`:
+  [features]
+  all = []
+  trace = ["winnow-grammar/trace"]
+  #[cfg(feature = "all")] #[allow(non_snake_case)]
+  #[cfg(feature = "all")] pub use super::__nikaia_reader_Words__items as items_reader;
+  lines naming a reader: 2
+without `[features]`:
+  [features]
+  trace = ["winnow-grammar/trace"]
+  lines naming a reader: 0

@@ -3205,7 +3205,7 @@ pub mod project_drive {
 }
 pub mod project_features {
     #[allow(unused_imports)]
-    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_chosen_checked, features_applied, features_kept, features_manifest, features_blamed, features_first_error, features_span};
+    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_chosen_checked, features_applied, features_kept, features_readers_dropped, features_manifest, features_blamed, features_first_error, features_span};
 }
 pub mod project_lower {
     #[allow(unused_imports)]
