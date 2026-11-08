@@ -14,10 +14,14 @@ Two workloads, each written twice, the same steps on both sides:
 | `brc_std`, `brc_fallible` | 1BRC's aggregation: a map from station to min/max/sum/count, then the sorted names written out. The map's table, the list of names and the output text are the collections; the map uses Nikaia's trusted hash on both sides |
 | `tasks_std`, `tasks_fallible` | `benches/taskblock`'s workload: many short tasks, each building a request and parsing it into owned parts, then writing a response (22 allocations and 7 reallocations a task) |
 
-The fallible side's allocator (`src/budget.rs`) counts every byte against a
-budget and refuses past it; growth goes through `try_reserve`, and a refusal
-ends the task. The budget is set so that nothing is refused: what is counted is
-the check and the collections, not a refusal.
+The fallible side is `nikaia-std`'s own (`nikaia_std::block`, #490 step 3,
+reached through `src/budget.rs`): every collection is placed in the running
+task's block, 16 pages of 4 KiB each counting what it holds (ADR-327 D12),
+growth goes through `try_reserve`, and a refusal ends the task. Each of
+`tasks_fallible`'s tasks has a block of its own, taken from the thread's
+spares and handed back at its end; `brc_fallible` is one long `main` that
+runs no task, so its handle places outside, with the global allocator, and
+what is counted there is the handle and the fallible collections.
 
 ```sh
 benches/fallible/fallible.sh                # 200 000 rows, 100 000 tasks
@@ -31,6 +35,24 @@ row or per task.
 
 ## The table
 
+On `nikaia_std::block` (0.0.1366, #490 step 3):
+
+| program | instructions | mispredicted |
+|---|---:|---:|
+| `brc_std` (per row) | 381.1 | 3.52 |
+| `brc_fallible` (per row) | 385.3 | 3.66 |
+| `tasks_std` (per task) | 17872.4 | 162.70 |
+| `tasks_fallible` (per task) | 11114.0 | 91.83 |
+
+- **A task on its block costs 37.8% fewer instructions** than on `malloc`,
+  with 44% fewer mispredicted branches: what `benches/taskblock` measured for
+  `pages` (-38.5%), now through `allocator-api2`'s collections and a handle.
+- **Outside a task the handle costs 1.1%** on 1BRC (4.2 instructions a row),
+  where step 1's budget count cost 0.2%.
+
+Step 1's allocator counted every byte against a budget and refused past it,
+with the system's memory (0.0.603):
+
 | program | instructions | mispredicted |
 |---|---:|---:|
 | `brc_std` (per row) | 393.8 | 3.51 |
@@ -38,21 +60,15 @@ row or per task.
 | `tasks_std` (per task) | 17872.4 | 181.12 |
 | `tasks_fallible` (per task) | 17882.3 | 193.21 |
 
-- **Instructions are the same within 0.2%** on both workloads.
-- **Mispredicted branches rise 5% (brc) and 7% (tasks)**: the budget check on
-  every allocation and the `try_reserve` before each growth.
-
 ## Reading it
 
 - **`allocator-api2`'s `extend_from_slice` copies one element at a time** on
   stable Rust (`extend(iter().cloned())`, no specialisation). Used as it is,
-  it doubled the tasks' count. `budget::extend` copies with one
-  `copy_nonoverlapping`, as `std`'s `Vec<u8>` does; a `std` built on the crate
-  would have to do the same.
+  it doubled the tasks' count. `nikaia_std::block::extend` copies with one
+  `copy_nonoverlapping`, as `std`'s `Vec<u8>` does.
 - **The fallible text is a `List<u8>`**, handed out as a `str` without checking
   its UTF-8 again, as `String` does: every byte in it came from a `str`.
   Checked, it cost about 230 instructions a task more.
-- **What is not measured here**: the collections behind a feature of
-  `nikaia-std` and a program the compiler emits against them (the emitter
-  writes `Vec` and `String` today), a refusal and the task it ends, and a
-  budget that is a block rather than a count (`benches/taskblock`).
+- **What is not measured here**: a program the compiler emits against these
+  collections (the emitter writes `Vec` and `String` until #490's type switch),
+  and a refusal and the task it ends.
