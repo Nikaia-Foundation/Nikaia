@@ -1,0 +1,8 @@
+# The package `a_package_built_as_a_rust_library_is_used_by_a_rust_crate`
+# builds as the Rust crate `nikaia_demo` (ADR-393 D1); `../user` uses it.
+[package]
+name = "demo"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
