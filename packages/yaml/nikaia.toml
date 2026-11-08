@@ -1,3 +1,13 @@
 [package]
 name = "yaml"
 version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[rust-library]
+root = "rust/lib.rs"
+
+[dependencies]
+serde = { type = "rust", version = "1" }
+indexmap = { type = "rust", version = "2" }
