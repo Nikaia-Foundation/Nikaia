@@ -514,6 +514,10 @@ pub struct CheckFacts {
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
     pub text_graphemes: collections::BTreeSet[i64],
+    /// `b[a..<c]` on a `Bytes`: a cut, a `&[u8]` into `b` below (ADR-320
+    /// D7): kept, it is copied into a `Bytes` of its own; read as a map's
+    /// key, it goes in as it is (#1345).
+    pub bytes_cuts: collections::BTreeSet[i64],
     /// `s.bytes`, or a name a `let` bound to it, where the program keeps it
     /// beyond the text: copied into a `Bytes` of its own (ADR-320 D11).
     pub kept_text_bytes: collections::BTreeSet[i64],
@@ -775,6 +779,7 @@ impl CheckFacts {
             text_bytes: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
+            bytes_cuts: collections::BTreeSet(),
             kept_text_bytes: collections::BTreeSet(),
             text_bytes_typed_lets: collections::BTreeSet(),
             byte_copies: collections::BTreeSet(),

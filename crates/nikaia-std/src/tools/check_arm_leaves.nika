@@ -588,7 +588,9 @@ impl CheckState {
     /// something that keeps it or handed back, the view
     /// becomes a `Bytes` of its own, and the text is not given up.
     pub fn a_text_bytes_kept(ref mut self, world: ref CheckWorld, value: ref Expr) -> bool sync {
-        if !self.a_text_bytes_view(world, value) {
+        // **A cut of a `Bytes` kept is copied** as well (ADR-320 D7, #1345):
+        // the checker's `Bytes` is a view into the cut one below.
+        if !self.a_text_bytes_view(world, value) && !self.facts.bytes_cuts.contains(node_key(value)) {
             return false
         }
         self.facts.kept_text_bytes.insert(node_key(value))
@@ -674,7 +676,8 @@ impl CheckState {
     }
 
     fn a_key_read_as_it_is(ref self, world: ref CheckWorld, found: ref Ty, index: ref Expr) -> bool sync {
-        if found.is_a_view() || self.a_lent_let(world, index) {
+        // A cut of a `Bytes` is a `&[u8]` below already (#1345).
+        if found.is_a_view() || self.a_lent_let(world, index) || self.facts.bytes_cuts.contains(node_key(index)) {
             return true
         }
         match index {

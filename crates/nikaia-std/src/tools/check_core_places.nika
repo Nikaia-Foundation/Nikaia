@@ -1222,6 +1222,8 @@ pub fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWor
             if written_range {
                 state.facts.list_indices.insert(id_of(base) as i64)
             }
+            // A view into `b` below (#1345).
+            state.facts.bytes_cuts.insert(id_of(expr) as i64)
             return check_core_places_named("Bytes")
         }
         return Ty::Unknown

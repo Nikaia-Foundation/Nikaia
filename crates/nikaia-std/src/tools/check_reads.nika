@@ -348,7 +348,8 @@ impl CheckState {
         // **A name that copied a value the ledger copies** out of a place
         // (`Symbol`) holds the value, not a view, below: it is lent with `&`.
         let copied = (self.a_lent_let(world, given) || self.a_lent_name(world, given)) && a_ledger_copies(unviewed_type(ty), [world.library])
-        if (ty.is_a_view() && !copied) || a_string {
+        // A cut of a `Bytes` is a `&[u8]` below already (#1345).
+        if (ty.is_a_view() && !copied) || a_string || self.facts.bytes_cuts.contains(id_of(given) as i64) {
             return
         }
         // **A name that is a view below whatever its type says** - a `let`

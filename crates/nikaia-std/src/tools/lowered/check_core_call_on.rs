@@ -1030,6 +1030,16 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
     state.a_lookup_key_lent(world, key, on, args, &found);
+    let an_entry = key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry";
+    let map_keys: Ty = nikaia_std::index::or(match bound.get("K") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown);
+    let mut slot: i64 = 0;
+    while ((slot) as usize) < args.len() && ((slot) as usize) < expected.len() {
+        if (*nikaia_std::index::get(&expected, (slot) as usize)).is_a_view() || an_entry && slot == 0 && map_keys.is_a_view() { state.facts.kept_text_bytes.remove(&node_key(nikaia_std::index::get(&args, (slot) as usize))); }
+        slot += 1;
+    }
     if (key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry") && args.len() == 1 && found.len() == 1 {
         let keys: Ty = nikaia_std::index::or(match bound.get("K") {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

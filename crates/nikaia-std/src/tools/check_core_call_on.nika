@@ -1345,6 +1345,19 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.option_values = []
     state.flow.option_literals = []
     state.a_lookup_key_lent(world, key, on, args, found)
+    // **Bytes handed to a slot the receiver says is a view stay a view**
+    // (#1345): `m.insert(b[0..<1], 1)` on a map keyed by `ref Bytes` copies
+    // nothing; the arguments were checked against the unbound signature.
+    // `entry`'s key is `?` in the ledger and the map's `K` (#676).
+    let an_entry = key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry"
+    let map_keys: Ty = bound.get("K")?.clone() ?? Ty::Unknown
+    let mut slot = 0
+    while slot < args.len() && slot < expected.len() {
+        if expected[slot].is_a_view() || (an_entry && slot == 0 && map_keys.is_a_view()) {
+            state.facts.kept_text_bytes.remove(node_key(args[slot]))
+        }
+        slot += 1
+    }
     // **`entry`'s key is the map's** (#676): a literal or a view of text, on a
     // map keyed by owned text, is built into text of its own, as `insert`'s is.
     if (key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry") && args.len() == 1 && found.len() == 1 {
