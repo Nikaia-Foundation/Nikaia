@@ -1,0 +1,23 @@
+migrated TMP/p.md
+TMP/p.md:5: `pick` hands back a view but says of no parameter whose data it points into: write one of `from a`, `from b`, `from a | b` after its result type, or drop `ref` to hand back text of its own (ADR-views-3 D14)
+TMP/p.md:16: `none` hands back a view but says of no parameter whose data it points into: or drop `ref` to hand back text of its own (ADR-views-3 D14)
+exit 1
+Intro
+
+```nika
+trait Pick {
+    fn pick(a: String, b: String) -> ref String
+}
+```
+
+```rust
+trait X { fn x(a: ref String, b: ref String) -> ref String }
+```
+
+```nikaia
+// second
+trait Q {
+    fn none() -> ref String
+    fn one(a: String) -> String from a
+}
+```
