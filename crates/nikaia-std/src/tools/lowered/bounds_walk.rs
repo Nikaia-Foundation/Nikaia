@@ -3495,6 +3495,9 @@ pub(crate) fn bounding_method(walk: &mut BoundsWalk, facts: &mut BoundsFacts, na
     if method == "push" && count == 1 || method == "insert" && count == 2 {
         let one = walk.arena.int(1);
         bounding_shift(walk, facts, &length, one);
+        let len = walk.arena.var(&length);
+        let fact = walk.arena.ge(len, one);
+        bounding_push(&walk, facts, fact);
         return;
     }
     if (method == "remove" || method == "swap_remove") && count == 1 {

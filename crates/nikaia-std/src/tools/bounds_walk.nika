@@ -6355,6 +6355,12 @@ fn bounding_method(
 	if (method == "push" && count == 1) || (method == "insert" && count == 2) {
 		let one = walk.arena.int(1)
 		bounding_shift(walk, facts, length, one)
+		// **A list just grown holds at least one element**: a fact of the
+		// length even where none was left, as at the head of a loop that
+		// grows it, so a value below it is seen to be (ADR-306 D21).
+		let len = walk.arena.var(length)
+		let fact = walk.arena.ge(len, one)
+		bounding_push(walk, facts, fact)
 		return
 	}
 	if (method == "remove" || method == "swap_remove") && count == 1 {
