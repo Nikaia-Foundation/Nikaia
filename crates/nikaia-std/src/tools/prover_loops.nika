@@ -495,6 +495,16 @@ pub fn loop_candidates(mut arena: TermArena, record: ref LoopRecord, proved: fn(
         }
         if one {
             steady.push((name.clone(), k))
+            continue
+        }
+        // A name that moves one way only, by steps that differ, stays on
+        // its side of its start (#1384).
+        let here = arena.var(name)
+        let before = arena.var(loop_before_name(name, start))
+        if deltas.iter().all(fn(d) { d >= 0 }) {
+            found.push((arena.ge(here, before), "closed forms"))
+        } else if deltas.iter().all(fn(d) { d <= 0 }) {
+            found.push((arena.le(here, before), "closed forms"))
         }
     }
     for (name, k) in steady {

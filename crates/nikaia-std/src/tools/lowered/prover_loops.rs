@@ -339,7 +339,13 @@ pub fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl
             let d = nikaia_std::num::value(d);
             if d != k { one = false; }
         }
-        if one { steady.push((name.to_string(), k)); }
+        if one {
+            steady.push((name.to_string(), k));
+            continue;
+        }
+        let here = arena.var(name);
+        let before = arena.var(&loop_before_name(name, start));
+        if deltas.iter().copied().all(|d| { d >= 0 }) { found.push((arena.ge(here, before), String::from("closed forms"))); } else if deltas.iter().copied().all(|d| { d <= 0 }) { found.push((arena.le(here, before), String::from("closed forms"))); }
     }
     for (name, k) in steady.iter() {
         let k = nikaia_std::num::value(k);
