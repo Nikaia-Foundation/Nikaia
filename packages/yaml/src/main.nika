@@ -2009,8 +2009,9 @@ fn marker(kind: EventKind, start: u32, end: u32, explicit: bool) -> Event sync {
 // A node's tag resolved to its full name by the directives `ds` of its
 // document (YAML 1.2.2 6.8.2, D7): a shorthand's handle replaced by the prefix
 // a `%TAG` directive gives it, else `!!` by `tag:yaml.org,2002:` and the
-// primary `!` kept; a verbatim `!<t>` is `t`, the non-specific `!` stays. A
-// named handle no directive declares is refused while parsing.
+// primary `!` kept, and the suffix's `%xx` decoded (`uri_decoded`); a
+// verbatim `!<t>` is `t`, the non-specific `!` stays. A named handle no
+// directive declares is refused while parsing.
 fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
 	let s = match t {
 		null => return null
@@ -2032,7 +2033,7 @@ fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
 		let name = rest.split('!').next() ?? ""
 		handle = f"!{name}!"
 	}
-	let suffix = s.strip_prefix(handle) ?? ""
+	let suffix = uri_decoded(s.strip_prefix(handle) ?? "")
 	for d in ds {
 		if d.name == "TAG" && d.handle == handle {
 			return f"{d.prefix}{suffix}"
@@ -2041,7 +2042,30 @@ fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
 	if handle == "!!" {
 		return f"tag:yaml.org,2002:{suffix}"
 	}
-	return s.clone()
+	return f"{handle}{suffix}"
+}
+
+// A tag shorthand's suffix with each `%xx` decoded to its byte (YAML 1.2.2
+// 6.9.1: `!e!tag%21` is `tag!` after the prefix); the grammar has checked
+// that two hexadecimal digits follow every `%` (`TagChar`). The decoded bytes
+// are taken as UTF-8, a run that is not as U+FFFD.
+fn uri_decoded(s: String) -> String sync {
+	if !s.contains('%') {
+		return s.clone()
+	}
+	let bs: Vec[u8] = s.bytes().collect()
+	let mut out: Vec[u8] = []
+	let mut i = 0
+	while i < bs.len() {
+		if bs[i] == 37 && i + 2 < bs.len() {
+			out.push((hex_value(bs[i + 1] as scalar) * 16 + hex_value(bs[i + 2] as scalar)) as u8)
+			i += 3
+		} else {
+			out.push(bs[i])
+			i += 1
+		}
+	}
+	return Bytes(out).text_lossy()
 }
 
 // A node's start event: its span, anchor and tag (resolved, by `resolved`).
