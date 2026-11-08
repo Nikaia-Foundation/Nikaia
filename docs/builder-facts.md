@@ -136,4 +136,8 @@ together with the specification section and an example test.
 * `commit.nika` refuses when another agent's file (even an unmerged `UU` one) is staged. `git commit -- PATH` commits only your path, and the report should say so under `Deviation:`. (qa-task)
 * the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
 * pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
+* A brief that needs a new NK code without naming a reserved one is blocked at once; search `docs/supervisor.md` and the brief for an NK block before planning. (issue-1318)
+* `scripts/probe.nika` snippets that print need `fn main() throws`, or every `print` is NK2605. (issue-1318)
+* "file NNN" in a `Found:` of the #1254 runs means `tests/accepted/NNN_*.nika` migrated by dropping `ref` from its parameters; reproduce on that file, not only on the reduced probe. (issue-1334)
+* Running two `nikaia test` processes on `tests/compiler` at the same time can make `migrate_views3_reads_package_tests_with_the_package` fail with "cannot read TMP/json/tests"; it also fails alone on develop, so it is not your change. (issue-1334)
 

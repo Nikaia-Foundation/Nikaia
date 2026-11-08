@@ -176,6 +176,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * `std` contracts write `fn(T)` for code whose result they leave open (`Seq::filter`), so a `Ty::Fn` with `result == null` means "hands back nothing" only for the program's own types. (issue-1321)
 * A lambda body is written in several places (`emit_core_flow` plain, failing and kept paths, and the pausing path in `emit_core_args`), and an emitter fix must cover each one. (issue-1321)
 * The emitter's `world.library` is std only; to know a dependency's errors, ask `name_of_error` (it checks `own_contracts.types`), not `error_kind`. (issue-539)
+* Whether an argument to an `EitherText` parameter is lent or moved is decided by the late-read walk in `text_tiers.nika` (`late_argument`, `late_args`), not by the emitter. (issue-1334)
 
 ### Grammar
 
