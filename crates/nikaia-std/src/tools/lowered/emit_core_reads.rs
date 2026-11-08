@@ -337,6 +337,27 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_index_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, deref: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let key = node_key(index);
+        let root = nikaia_std::index::or(emit_read_root(world, base), || "".into());
+        if root.is_empty() || walk.held.contains_key(&key) || self.slices(index) || self.map_key(index, false).is_some() || self.facts.kept_fn_reads.contains(&node_key(base)) || !self.emit_lends_mut(world, index, &root) {
+            self.emit_core_index_read_in(world, walk, out, host, base, index, deref, depth, flow, scope)?;
+            return Ok(());
+        }
+        if deref { out.push("*"); }
+        let name = format!("__nikaia_at_{}", walk.held.len() as i64);
+        out.push(&format!("{{ let {} = ", name));
+        self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
+        out.push("; ");
+        walk.held.insert(key, name);
+        self.emit_core_index_read_in(world, walk, out, host, base, index, false, depth, flow, scope)?;
+        walk.held.remove(&key);
+        out.push(" }");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_index_read_in<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, index: &Expr, deref: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let slicing = self.slices(index);
         let shares = deref && !slicing && self.facts.kept_fn_reads.contains(&node_key(base));
         if deref && !slicing && !shares { out.push("*"); }

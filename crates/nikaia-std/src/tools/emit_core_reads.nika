@@ -447,7 +447,35 @@ impl EmitState {
     /// **A read through the brackets** (ADR-293 D4): `*get(&base, at(i))`, or
     /// without the `*` where `deref` is off - which is how a read that is itself
     /// the base of a read is written (0.0.238).
+    ///
+    /// **A position that lends the indexed value is worked out first** (#1445).
+    /// `f.rank[f.find(c)]`, with `find` a `ref mut self` method, lowered to
+    /// `get(&f.rank, at(f.find(c)))`: the list borrowed while the argument
+    /// after it borrows `f` mutably, `rustc`'s E0502 about a file nobody
+    /// wrote. The position is bound inside a block first, `{ let
+    /// __nikaia_at_0 = f.find(c); get(&f.rank, at(__nikaia_at_0)) }`, which
+    /// changes nothing about what runs: the base is a place, read after.
     pub fn emit_core_index_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, deref: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let key = node_key(index)
+        let root = emit_read_root(world, base) ?? ""
+        if root.is_empty() || walk.held.contains_key(key) || self.slices(index) || self.map_key(index, false) != null || self.facts.kept_fn_reads.contains(node_key(base)) || !self.emit_lends_mut(world, index, root) {
+            self.emit_core_index_read_in(world, walk, out, host, base, index, deref, depth, flow, scope)
+            return
+        }
+        if deref {
+            out.push("*")
+        }
+        let name = f"__nikaia_at_{walk.held.len()}"
+        out.push(f"{{ let {name} = ")
+        self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+        out.push("; ")
+        walk.held.insert(key, name)
+        self.emit_core_index_read_in(world, walk, out, host, base, index, false, depth, flow, scope)
+        walk.held.remove(key)
+        out.push(" }")
+    }
+
+    fn emit_core_index_read_in[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, index: ref Expr, deref: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let slicing = self.slices(index)
         // **A function value read by index is a copy** (Part I, #1018): the
         // list keeps its `Kept`, and the read is a clone of that handle, so
