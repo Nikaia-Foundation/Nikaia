@@ -1611,7 +1611,7 @@ pub(crate) fn prover_std_held(helds: &[ClaimHeld]) -> ClaimHeld {
 pub(crate) fn prover_condition_term(arena: &mut TermArena, text: &str, names: &collections::BTreeSet<String>, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> i64 {
     let nodes = condition(text, names);
     if nodes.is_empty() { return -1; }
-    arena.adopt((nodes).as_ref())
+    arena.adopt(&nodes)
 }
 
 #[allow(clippy::too_many_arguments)]
