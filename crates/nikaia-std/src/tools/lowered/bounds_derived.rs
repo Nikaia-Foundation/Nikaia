@@ -7,6 +7,7 @@ pub struct DerivedClaim {
     pub strict: bool,
     pub right: String,
     pub length: bool,
+    pub each: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,22 +220,107 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: 
     let mut claims: Vec<DerivedClaim> = vec![];
     for p in ints.iter() {
         if !compared.contains(p) { continue; }
-        if !unsigned.contains(p) { claims.push(DerivedClaim { left: String::from(""), strict: false, right: p.to_string(), length: false }); }
+        if !unsigned.contains(p) { claims.push(DerivedClaim { left: String::from(""), strict: false, right: p.to_string(), length: false, each: false }); }
         for list in lists.iter() {
             if indexed.contains(list) {
-                claims.push(DerivedClaim { left: p.to_string(), strict: false, right: list.to_string(), length: true });
-                claims.push(DerivedClaim { left: p.to_string(), strict: true, right: list.to_string(), length: true });
+                claims.push(DerivedClaim { left: p.to_string(), strict: false, right: list.to_string(), length: true, each: false });
+                claims.push(DerivedClaim { left: p.to_string(), strict: true, right: list.to_string(), length: true, each: false });
             }
         }
         for q in ints.iter() {
             if q != p && compared.contains(q) {
-                claims.push(DerivedClaim { left: p.to_string(), strict: false, right: q.to_string(), length: false });
-                claims.push(DerivedClaim { left: p.to_string(), strict: true, right: q.to_string(), length: false });
+                claims.push(DerivedClaim { left: p.to_string(), strict: false, right: q.to_string(), length: false, each: false });
+                claims.push(DerivedClaim { left: p.to_string(), strict: true, right: q.to_string(), length: false, each: false });
             }
         }
     }
+    for claim in derived_element_claims(args, body, words) { claims.push(claim); }
     while (claims.len() as i64) > most_claims() { claims.pop(); }
     claims
+}
+
+pub(crate) fn derived_element_claims(args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext) -> Vec<DerivedClaim> {
+    let mut fixed: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut params: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for arg in args.iter() {
+        let name = words.resolve(arg.name).to_string();
+        params.insert(name.to_string());
+        if !arg.mutable { fixed.insert(name); }
+    }
+    let mut read: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut bound: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    derived_element_lets(body, words, &mut read, &mut bound);
+    for e in visited_in_block(body) {
+        match e {
+            Expr::If { then_branch, else_branch, .. } => {
+                derived_element_lets(then_branch, words, &mut read, &mut bound);
+                if else_branch.is_some() { derived_element_lets(match else_branch { Some(__nikaia_value) => __nikaia_value, None => continue }, words, &mut read, &mut bound); }
+            },
+            Expr::Block(inner, _) => { derived_element_lets(inner, words, &mut read, &mut bound); },
+            Expr::Unsafe(inner, _) => { derived_element_lets(inner, words, &mut read, &mut bound); },
+            _ => { },
+        }
+    }
+    let mut pairs: collections::BTreeSet<(String, String)> = collections::BTreeSet::new();
+    for e in visited_in_block(body) {
+        match e {
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                let m = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if !params.contains(&path_root(&m)) { continue; }
+                let s = match index {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        let text = words.resolve(name);
+                        if nikaia_std::index::or(*nikaia_std::index::get(&bound, text), || 0) != 1 { continue; }
+                        match *nikaia_std::index::get(&read, text) { Some(__nikaia_value) => __nikaia_value, None => continue }.to_string()
+                    },
+                    Expr::Index { base: inner, .. } => { let inner = nikaia_std::boxed::open(inner); match path_of(inner, words) { Some(__nikaia_value) => __nikaia_value, None => continue } },
+                    _ => continue,
+                };
+                let root = path_root(&s);
+                if s != m && fixed.contains(&root) && nikaia_std::index::or(*nikaia_std::index::get(&bound, &root), || 0) == 0 { pairs.insert((s, m)); }
+            },
+            _ => { },
+        }
+    }
+    let mut out: Vec<DerivedClaim> = vec![];
+    let mut floors: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (s, m) in pairs.iter() {
+        if !floors.contains(s) {
+            floors.insert(s.to_string());
+            out.push(DerivedClaim { left: String::from(""), strict: false, right: s.to_string(), length: false, each: true });
+        }
+        out.push(DerivedClaim { left: s.to_string(), strict: true, right: m.to_string(), length: true, each: true });
+    }
+    out
+}
+
+pub(crate) fn derived_element_lets(block: &Block, words: &winnow_grammar::InternerContext, read: &mut collections::BTreeMap<String, String>, bound: &mut collections::BTreeMap<String, i64>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, value, .. } => {
+                for symbol in names.iter() {
+                    let symbol = *symbol;
+                    let text = words.resolve(symbol).to_string();
+                    bound.insert(text.to_string(), nikaia_std::index::or(*nikaia_std::index::get(&bound, &text), || 0) + 1);
+                }
+                if names.len() == 1 {
+                    match value {
+                        Expr::Index { base, .. } => {
+                            let base = nikaia_std::boxed::open(base);
+                            let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            read.insert(words.resolve(*nikaia_std::index::get(&names, 0)).to_string(), list);
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            Stmt::For { body: inner, .. } => { derived_element_lets(inner, words, read, bound); },
+            Stmt::While { body: inner, .. } => { derived_element_lets(inner, words, read, bound); },
+            _ => { },
+        }
+    }
 }
 
 pub fn derived_order(around: &Around, starts: &[i64]) -> Vec<i64> {
@@ -286,9 +372,10 @@ pub fn derived_note(around: &mut Around, walked: &BoundsProven) {
 }
 
 pub fn derived_written(claim: &DerivedClaim) -> String {
-    let left = if claim.left == "" { String::from("0") } else { claim.left.to_string() };
+    let mut left = if claim.left == "" { String::from("0") } else { claim.left.to_string() };
+    if claim.each && claim.left != "" { left = format!("{}[..]", left); }
     let op = if claim.strict { "<" } else { "<=" };
-    let right = if claim.length { format!("{}.len()", claim.right) } else { claim.right.to_string() };
+    let right = if claim.length { format!("{}.len()", claim.right) } else if claim.each { format!("{}[..]", claim.right) } else { claim.right.to_string() };
     format!("{} {} {}", left, op, right)
 }
 

@@ -2009,14 +2009,19 @@ fn bounding_derived_call(
 	if args.len() == callee.params.len() {
 		for k in 0..<callee.claims.len() {
 			let claim = callee.claims[k].clone()
+			// What holds of every value of a list handed for a side over
+			// its values (ADR-306 D21).
+			let mut given: Vec[i64] = []
 			let left = bounding_derived_side(
 				walk,
 				callee.params,
 				claim.left,
 				false,
+				claim.each,
 				args,
 				on,
 				facts,
+				given,
 				context,
 				program,
 				words,
@@ -2027,9 +2032,11 @@ fn bounding_derived_call(
 				callee.params,
 				claim.right,
 				claim.length,
+				claim.each,
 				args,
 				on,
 				facts,
+				given,
 				context,
 				program,
 				words,
@@ -2038,8 +2045,18 @@ fn bounding_derived_call(
 			let goal = if claim.strict { walk.arena.lt(left, right) } else {
 				walk.arena.le(left, right)
 			}
-			if bounding_proves(walk, facts, goal, ask) {
-				proved.insert(k)
+			if given.is_empty() {
+				if bounding_proves(walk, facts, goal, ask) {
+					proved.insert(k)
+				}
+			} else {
+				let mut known = facts.clone()
+				for fact in given {
+					bounding_push(walk, known, fact)
+				}
+				if bounding_proves(walk, known, goal, ask) {
+					proved.insert(k)
+				}
 			}
 		}
 	}
@@ -2060,21 +2077,29 @@ fn bounding_derived_call(
 
 /// One side of a claim at a call: `0` for an empty `param`, the argument
 /// handed for it, or that argument's length where `length`; a field of
-/// `self` is the receiver's field, where the receiver is a path.
+/// `self` is the receiver's field, where the receiver is a path. Where
+/// `each` and not `length`, `param` is a list or a path of fields from one,
+/// and the side is every value the list handed holds: what the walk knows
+/// of those goes into `given`.
 fn bounding_derived_side(
 	mut walk: BoundsWalk,
 	params: ref Vec[String],
 	param: String,
 	length: bool,
+	each: bool,
 	args: ref Vec[Expr],
 	on: ref String?,
 	facts: ref BoundsFacts,
+	mut given: Vec[i64],
 	context: ref BoundsContext,
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 ) -> i64? {
 	if param == "" {
 		return walk.arena.int(0)
+	}
+	if each && !length {
+		return bounding_derived_each(walk, params, param, args, given, words)
 	}
 	let field = param.strip_prefix("self.")
 	if field != null {
@@ -2103,6 +2128,47 @@ fn bounding_derived_side(
 	return null
 }
 
+/// **Every value of the list a claim's side names, at a call** (ADR-306
+/// D21): the element of the path handed for it, `param`'s root replaced by
+/// the argument's path. Where the argument is a list whose every write the
+/// walk sees (D7), its bound on its values goes into `given`.
+fn bounding_derived_each(
+	mut walk: BoundsWalk,
+	params: ref Vec[String],
+	param: ref String,
+	args: ref Vec[Expr],
+	mut given: Vec[i64],
+	words: ref winnow_grammar::InternerContext,
+) -> i64? {
+	let root = path_root(param)
+	for k in 0..<params.len() {
+		if params[k] != root {
+			continue
+		}
+		let handed = path_of(args[k], words) ?? return null
+		if walk.pinned.contains(path_root(handed)) {
+			return null
+		}
+		let rest = param.strip_prefix(root) ?? ""
+		let path = f"{handed}{rest}"
+		let element = walk.arena.var(bounding_element_of(path))
+		if rest.is_empty() {
+			let key = elements_key(walk.shape, args[k], words) ?? return element
+			let bound = bounding_assumed(walk, key) ?? return element
+			if bound.lo != null {
+				let lo = walk.arena.int(bound.lo ?? 0)
+				given.push(walk.arena.ge(element, lo))
+			}
+			if bound.hi != null {
+				let hi = walk.arena.int(bound.hi ?? 0)
+				given.push(walk.arena.le(element, hi))
+			}
+		}
+		return element
+	}
+	return null
+}
+
 /// **The derived preconditions at a function's entry** (ADR-391 D1): the
 /// claims every call site proved, known as a written top `assert` is.
 fn bounding_derived_entry(
@@ -2116,8 +2182,15 @@ fn bounding_derived_entry(
 	}
 	let held = context.around.derived.entry[args[0].span.start as i64] ?? return
 	for claim in held {
-		let left = if claim.left == "" { walk.arena.int(0) } else { walk.arena.var(claim.left) }
-		let right = if claim.length { walk.arena.var(length_of(claim.right)) } else {
+		// A side over every value of a list is its element (ADR-306 D21).
+		let left = if claim.left == "" { walk.arena.int(0) } else if claim.each {
+			walk.arena.var(bounding_element_of(claim.left))
+		} else {
+			walk.arena.var(claim.left)
+		}
+		let right = if claim.length { walk.arena.var(length_of(claim.right)) } else if claim.each {
+			walk.arena.var(bounding_element_of(claim.right))
+		} else {
 			walk.arena.var(claim.right)
 		}
 		let fact = if claim.strict { walk.arena.lt(left, right) } else {
