@@ -1,0 +1,28 @@
+error[NK1300]: `assert(i < a.len())` is not proved: `a` is not a whole number the prover reads.
+  --> tests/mut_list_length_push_refused.nika:7:5
+   |
+ 7 |     assert(i < a.len())
+   |     ^^^^^^
+   |
+   = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+   = note: `nikaia check --asserts` lists every claim and why it is not proved.
+   = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+error[NK1300]: `assert(i < a.len())` is not proved: `a` is not a whole number the prover reads.
+   --> tests/mut_list_length_push_refused.nika:18:5
+    |
+ 18 |     assert(i < a.len())
+    |     ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+error[NK1300]: `assert(i < a.len())` is not proved: `a` is not a whole number the prover reads.
+   --> tests/mut_list_length_push_refused.nika:25:5
+    |
+ 25 |     assert(i < a.len())
+    |     ^^^^^^
+    |
+    = note: Not proved is not false: the compiler could not show the claim from what it knows where it stands, and it may well hold.
+    = note: `nikaia check --asserts` lists every claim and why it is not proved.
+    = help: Give the compiler what it needs to prove it, or build with `unproved-claims = "warn"` to have it checked when the program runs.
+3 type errors

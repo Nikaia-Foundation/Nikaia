@@ -21,9 +21,9 @@ description: >-
           <dt>An example</dt>
           <dd>A web service starts on one core. When the load grows, it should use all of them without a rewrite.</dd>
           <dt>What Nikaia checks</dt>
-          <dd>The choice is one line in <code>nikaia.toml</code>: <code>user-parallelism = "no"</code> (the default) or <code>"yes"</code>. At <code>no</code>, two pieces of your code are never running at the same moment. At <code>yes</code>, a multi-threaded runtime spreads the work over the cores, and thread safety is checked at compile time. A library built at <code>no</code> is still checked against the rules parallel code needs, so it also works when a program built at <code>yes</code> uses it.</dd>
+          <dd>The choice is one line in <code>nikaia.toml</code>, either <code>user-parallelism = "no"</code> (the default) or <code>"yes"</code>. At <code>no</code>, two pieces of your code are never running at the same moment. At <code>yes</code>, a multi-threaded runtime spreads the work over the cores, and thread safety is checked at compile time. A library built at <code>no</code> is still checked against the rules parallel code needs, so it also works when a program built at <code>yes</code> uses it.</dd>
           <dt>The limit</dt>
-          <dd>The setting allows parallelism; it does not set a thread count. How many threads serve <code>yes</code> is the runtime&rsquo;s choice, because it depends on the machine. At <code>no</code>, only your own code is limited to one thread: waiting for I/O happens on the runtime&rsquo;s own threads, and the standard library may still use every core.</dd>
+          <dd>The setting allows parallelism; it does not set a thread count. How many threads serve <code>yes</code> is the runtime&rsquo;s choice, because it depends on the machine. At <code>no</code>, only your own code is limited to one thread, since waiting for I/O happens on the runtime&rsquo;s own threads and the standard library may still use every core.</dd>
         </dl>
 
         <details class="limit-details home-code markdown-body" open>

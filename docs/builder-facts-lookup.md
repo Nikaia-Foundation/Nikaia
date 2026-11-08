@@ -163,6 +163,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * Setting `ty.is_view` on a `String` in an AST rewrite makes NK1261 warn about a `ref` the user never wrote, unless the position's key (`param K n` / `result K`) goes into `parsed.text_views`. (issue-1250)
 * A `String` param that a mixed result hands back through `let o = own(a) ?? return null` lowers as `EitherText` by value, which gives a rustc move error, not an NK refusal. (issue-1254-r1)
 * A `for` over a `Vec[String]` place lowers to `.iter()`, so its element is `&String` below; only numbers, `bool`, `char` and `&str` are copied out with `let x = *x`. (issue-1268)
+* A buffer `let` is put into the keep by `emit_stmt_kept` (`plan.puts`, `emit_stmt.nika`), decided in `buffers.nika` `decide`, and for non-text lists in `plan_of` via `untethered_returns`. (issue-1276)
+* A buffer changed after its `let` now carries `late_puts` and is put by a shadowing `let` after its last change; the reassignment puts (#293 reputs) before that point are dropped. (issue-1276)
 
 ### Grammar
 

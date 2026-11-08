@@ -225,7 +225,8 @@ fn a_trait_bound_error_from_cargo_is_placed_in_the_nika_file() {
     assert_eq!(placed.unit, 0);
 
     let rendered = diagnostics::render(&translated[0], "digits.nika", GOOD, "digits.rs");
-    assert!(rendered.starts_with("error: "), "{rendered}");
+    // A rustc refusal of a program the checker accepted is NK1343 (#1373).
+    assert!(rendered.starts_with("error[NK1343]: "), "{rendered}");
     assert!(rendered.contains("--> digits.nika:"), "{rendered}");
     assert!(
         !rendered.contains("digits.rs"),
@@ -373,7 +374,7 @@ fn a_translation_that_collapses_a_distinction_is_an_internal_error() {
         .expect("the map covers some of what was emitted");
     let end = offset + 4;
     let json = format!(
-        r#"{{"$message_type":"diagnostic","message":{},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
+        r#"{{"$message_type":"diagnostic","message":{},"code":{{"code":"E0308"}},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
         json_string("expected struct `Arc<Conn>`, found struct `Rc<Conn>`"),
     );
 
@@ -390,12 +391,13 @@ fn a_translation_that_collapses_a_distinction_is_an_internal_error() {
 
     let rendered = diagnostics::render(&translated[0], "p.nika", GOOD, "p.rs");
     assert!(
-        rendered.starts_with("internal error: This is a bug in Nikaia")
-            && rendered.contains("--> p.nika:"),
+        rendered.starts_with("error[NK1343]: Internal compiler error.")
+            && rendered.contains("--> p.nika:")
+            && rendered.contains("two different types for one of yours"),
         "{rendered}"
     );
     assert!(
-        rendered.contains("This is a bug in Nikaia, not in your program."),
+        rendered.contains("This is a bug in Nikaia, not in your program"),
         "the reader is told whose mistake it is: {rendered}"
     );
     assert!(
@@ -418,7 +420,7 @@ fn a_message_the_backend_wrote_that_way_is_not_an_internal_error() {
         .expect("the map covers some of what was emitted");
     let end = offset + 4;
     let json = format!(
-        r#"{{"$message_type":"diagnostic","message":{},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
+        r#"{{"$message_type":"diagnostic","message":{},"code":{{"code":"E0308"}},"level":"error","spans":[{{"file_name":"lowered.rs","byte_start":{offset},"byte_end":{end},"line_start":1,"column_start":1,"is_primary":true}}],"children":[]}}"#,
         json_string("expected struct `Conn`, found struct `Conn`"),
     );
 
@@ -429,8 +431,10 @@ fn a_message_the_backend_wrote_that_way_is_not_an_internal_error() {
     );
     let rendered = diagnostics::render(&translated[0], "p.nika", GOOD, "p.rs");
     assert!(
-        rendered.starts_with("error: ") && rendered.contains("--> p.nika:"),
-        "so it stays a message about the program: {rendered}"
+        rendered.starts_with("error[NK1343]: ")
+            && rendered.contains("--> p.nika:")
+            && !rendered.contains("two different types"),
+        "rustc's refusal as written (#1373), not a collapse: {rendered}"
     );
 }
 

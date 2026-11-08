@@ -1,0 +1,11 @@
+error[NK1134]: Nothing here can fail, so the `catch` has nothing to handle.
+  --> tests/task_that_cannot_panic_has_nothing_to_catch.nika:9:5
+   |
+ 9 |     let s = { a + b } catch { 0 }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Only a call to a function declared with `throws` can fail.
+   = note: None of the calls here is declared with `throws`.
+   = note: (A call the compiler knows nothing about would not be reported here.)
+   = help: Remove the `catch` and its handler.
+1 type error

@@ -47,6 +47,7 @@ pub fn infer(
     library: &Ledger,
     resolved: &BTreeMap<String, MethodCalls>,
     stored: &BTreeMap<String, crate::check::StoredCode>,
+    checked: &[crate::check::Checked],
 ) {
     let mut graph = ThrowsGraph {
         methods: resolved
@@ -93,13 +94,19 @@ pub fn infer(
             .or_default()
             .insert(format!("from({key})"));
     }
-    for parsed in units.iter().copied() {
+    for (at, parsed) in units.iter().copied().enumerate() {
         let own: &Ledger = ledger;
+        let facts = super::panics::task_facts(checked.get(at).map(|c| &c.facts));
         nika::unit_throws(
             &parsed.program,
             &parsed.interner,
             &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-            &|expr: &Expr| contribution(parsed, expr, own, library, &fatal),
+            &|expr: &Expr| match expr {
+                // **A task's crash, where the task can panic** (ADR-async-5
+                // D35): the walk is `tools/panics.nika`'s.
+                Expr::Async(task, _, _) => crashed(parsed, task, &facts, own, library),
+                _ => contribution(parsed, expr, own, library, &fatal),
+            },
             own,
             library,
             &mut graph,
@@ -120,6 +127,37 @@ pub fn infer(
         if let Some(contract) = ledger.functions.get_mut(&name) {
             contract.fails_with = nika::throws_published(&name, &errors);
         }
+    }
+}
+
+/// What `async e` contributes: `task::Crashed` where its task can panic,
+/// nothing where it cannot.
+fn crashed(
+    parsed: &Parsed,
+    task: &Expr,
+    facts: &nikaia_std::tools::panics::PanicFacts,
+    own: &Ledger,
+    library: &Ledger,
+) -> nikaia_std::tools::throws::Contribution {
+    let can = nikaia_std::tools::panics::panics_of_task(
+        task,
+        &parsed.program.items,
+        &parsed.interner,
+        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        facts,
+        own,
+        library,
+    );
+    nikaia_std::tools::throws::Contribution {
+        call: None,
+        given: Vec::new(),
+        errors: if can {
+            vec!["task::Crashed".to_string()]
+        } else {
+            Vec::new()
+        },
+        fatal: Vec::new(),
+        result: None,
     }
 }
 

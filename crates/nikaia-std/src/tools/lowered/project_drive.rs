@@ -46,7 +46,7 @@ pub trait ProjectDriveHost {
     fn cpu_rustflags(&self) -> Result<Option<String>, Box<dyn std::error::Error>>;
     fn make_cargo(&self, manifest: &std::path::Path, env: &[(String, String)], unset: &[String], shared: bool) -> Result<(), Box<dyn std::error::Error>>;
     fn is_library(&self) -> bool;
-    fn cargo_messages(&self, args: &[String]) -> Result<(i32, String), Box<dyn std::error::Error>>;
+    fn cargo_messages(&self, verb: &str, args: &[String]) -> Result<(i32, String), Box<dyn std::error::Error>>;
     fn settle(&self);
     fn report(&self, messages: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn package_name(&self) -> Option<String>;
@@ -166,12 +166,13 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     let library = host.is_library();
     if library && subcommand == "run" { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(String::from("This package is built as a library (`artifact = \"c-library\"`), and a library has nothing to run: `nikaia build` makes it, and a C program calls it.")), &"project_drive_drive_to")); }
     if library && header.is_none() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(cx_nothing_exported()), &"project_drive_drive_to")); }
-    if subcommand == "run" { build_args.push(String::from("--quiet")); }
-    let (built_code, messages) = host.cargo_messages(&build_args)?;
+    if subcommand == "run" || subcommand == "check" { build_args.push(String::from("--quiet")); }
+    let verb = if subcommand == "check" { "check" } else { "build" };
+    let (built_code, messages) = host.cargo_messages(verb, &build_args)?;
     let mut code = built_code;
     host.settle();
     host.report(&messages)?;
-    if code == 0 {
+    if code == 0 && subcommand != "check" {
         match header {
             None => { },
             Some(ref text) => { project_drive_c_library(host, text, (python).as_deref(), (node).as_deref(), &messages)?; },
@@ -371,8 +372,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple33887| {
-        let (a, b) = __nikaia_tuple33887;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple34236| {
+        let (a, b) = __nikaia_tuple34236;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

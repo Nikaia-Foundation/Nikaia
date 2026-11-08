@@ -6,11 +6,13 @@ use std::channel
 
 // Part II 12.5's own example, as a program that runs (§5 step 3).
 test "the pages own example runs" {
-    let (tx, rx) = channel::bounded(100)
+    let (tx, rx) = channel::bounded[String](100)
     spawn fn {
-        tx.send("Calculation complete")
+        let state = "complete"
+        tx.send(f"Calculation {state}")
     }
-    let msg = rx.recv() ?? "nobody sent anything"
+    let heard: String? = rx.recv()
+    let msg = heard ?? "nobody sent anything"
     assert(msg == "Calculation complete")
 }
 

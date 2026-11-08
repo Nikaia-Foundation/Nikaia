@@ -1,0 +1,15 @@
+// What is not known is not written (#1322, ADR-005 D7): a map whose key type
+// nothing pinned cannot tell whether text of its own looks a key up lent or
+// as a view.
+use std::collections
+
+fn id[T](x: T) -> T {
+	return x
+}
+
+fn main() throws {
+	let mut m = collections::HashMap()
+	m[id(3)] = "x"
+	let k: String = f"a{1}"
+	println(m[k] ?? "n")
+}

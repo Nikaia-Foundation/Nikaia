@@ -28,7 +28,7 @@ fn main() throws {
 	let nikaia = toolchain()
 	process::run("mkdir", ["-p", f"{tmp}/src"])
 	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"dumped\"\nversion = \"0.1.0\"\n")
-	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn step(n: i64) -> i64 sync {\n\tif n > 0 && n < 10 {\n\t\tassert(n + 1 > 1)\n\t}\n\treturn 0\n}\n\nfn main() {\n}\n")
+	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn step(n: i64) -> i64 sync {\n\tif n > 0 && n < 10 {\n\t\tassert(n + 1 > 1)\n\t}\n\treturn 0\n}\n\nfn main() throws {\n\tprintln(step(3))\n}\n")
 	let built = process::run(nikaia, ["build", "--no-cache"]; dir: tmp.clone(), env: [("NIKAIA_DUMP_QUERIES", f"{tmp}/dump")])
 	println(f"built: {built.stderr.contains("error") == false}")
 	// Each file in the order of its name, a SHA-256 key: whether it is one,

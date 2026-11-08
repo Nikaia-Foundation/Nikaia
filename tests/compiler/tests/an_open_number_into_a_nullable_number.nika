@@ -1,0 +1,28 @@
+// A number nothing typed takes the type its use asks for (Part I 2.4): into
+// an `i64?` it is that number, wrapped, at a `return`, the branches of a
+// tail, a struct field and an assignment (#1322).
+fn id[T](x: T) -> T {
+	return x
+}
+
+fn f() -> i64? {
+	return id(3)
+}
+
+fn g(a: bool) -> i64? {
+	if a { id(3) } else { id(4) }
+}
+
+struct R {
+	v: i64?,
+}
+
+fn main() throws {
+	println(f() ?? 0)
+	println(g(false) ?? 0)
+	let r = R { v: id(7) }
+	println(r.v ?? 0)
+	let mut q: i64? = null
+	q = id(8)
+	println(q ?? 0)
+}

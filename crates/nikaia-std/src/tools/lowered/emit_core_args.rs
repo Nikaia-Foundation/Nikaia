@@ -281,7 +281,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, || callee.to_string().into()), i);
-        let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node, arg);
+        let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node)?;
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
@@ -584,15 +584,21 @@ pub(crate) fn emit_async_at(statement: i64) -> Option<i64> {
     Some(statement)
 }
 
-pub(crate) fn emit_async_joined(handle: &str, channel: &str) -> String {
+pub(crate) fn emit_async_joined(handle: &str, channel: &str, fallback: bool) -> String {
+    if fallback { return format!("nikaia_std::task::fallen({}.join_now())", handle); }
     if channel == "nikaia_std::task::Crashed" { return format!("nikaia_std::task::unfailing({}.join_now())", handle); }
+    if emit_async_or_crash(channel) { return format!("nikaia_std::task::uncrashed({}.join_now())?", handle); }
     format!("{}.join_now()?", handle)
 }
 
-pub(crate) fn emit_async_joined_paused(handle: &str, channel: &str) -> String {
+pub(crate) fn emit_async_joined_paused(handle: &str, channel: &str, fallback: bool) -> String {
+    if fallback { return format!("nikaia_std::task::fallen({}.join().await)", handle); }
     if channel == "nikaia_std::task::Crashed" { return format!("nikaia_std::task::unfailing({}.join().await)", handle); }
+    if emit_async_or_crash(channel) { return format!("nikaia_std::task::uncrashed({}.join().await)?", handle); }
     format!("{}.join().await?", handle)
 }
+
+pub(crate) fn emit_async_or_crash(channel: &str) -> bool { channel.starts_with("nikaia_std::task::OrCrash<") }
 
 pub(crate) fn emit_call_not_computed_yet() -> &'static str { "a default not computed yet" }
 
@@ -723,7 +729,7 @@ impl EmitState {
         for passed in config.iter() {
             if emit_text(world, passed.name) == option.name {
                 if self.facts.lent_options.contains(&node_key(&passed.value)) { out.push("&"); }
-                let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value), &passed.value);
+                let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(&passed.value))?;
                 out.push(&before);
                 self.emit_expr(world, walk, out, host, &passed.value, depth, flow, scope)?;
                 out.push(&after);
@@ -770,7 +776,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub fn emit_async_tasks_channel(&self, channel: &str) -> String {
         if self.emit_channel_holds_a_crash(channel) { return channel.to_string(); }
-        String::from("nikaia_std::task::Crashed")
+        format!("nikaia_std::task::OrCrash<{}>", channel)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -793,10 +799,12 @@ impl EmitState {
     pub fn emit_async_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: &Expr, id: i64, kind: &str, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let group = self.emit_async_group_of(id);
         if !walk.async_groups.contains(&group) { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its group is a block inside the function (#988): put it in `async { … }` or in the function's own body."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
-        let channel = self.emit_async_tasks_channel(&emit_call_tasks_channel(&flow, scope));
+        let outer = emit_call_tasks_channel(&flow, scope);
+        let channel = self.emit_async_tasks_channel(&outer);
         if flow.handled_here { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` under a `catch` yet (#988)."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
+        let raised = emit_async_or_crash(&channel);
         let mut owner: String = String::from("");
-        if channel == scope.channel { owner = scope.function.to_string(); }
+        if channel == scope.channel || raised && outer == scope.channel { owner = scope.function.to_string(); }
         let failing = EmitFlow { in_lambda: !walk.async_pausing, can_throw: true, ..EmitFlow::plain().at(flow.statement) };
         let fallback = walk.async_fallback;
         walk.async_fallback = false;
@@ -813,6 +821,7 @@ impl EmitState {
         }
         let boxed: &'static str = "Box<dyn std::error::Error>";
         let mut own = channel.to_string();
+        if raised { own = outer.to_string(); }
         if fallback {
             own = boxed.to_string();
             owner = String::from("");
@@ -841,12 +850,17 @@ impl EmitState {
         if fallback {
             let text = body.buf.to_string();
             body = EmitOut::empty();
-            if bound { body.push(&format!("{}.bound((async || -> Result<_, {}> {{ Ok({}) }})()).await", deadline, boxed, text)); } else if walk.async_pausing { body.push(&format!("(async || -> Result<_, {}> {{ Ok({}) }})().await", boxed, text)); } else { body.push(&format!("(|| -> Result<_, {}> {{ Ok({}) }})()", boxed, text)); }
+            if bound { body.push(&format!("{}.bound(nikaia_std::task::fell_paused(async || -> Result<_, {}> {{ Ok({}) }})).await", deadline, boxed, text)); } else if walk.async_pausing { body.push(&format!("nikaia_std::task::fell_paused(async || -> Result<_, {}> {{ Ok({}) }}).await", boxed, text)); } else { body.push(&format!("nikaia_std::task::fell(|| -> Result<_, {}> {{ Ok({}) }})", boxed, text)); }
         }
         if bound && !fallback {
             let text = body.buf.to_string();
             body = EmitOut::empty();
             body.push(&format!("{}.bound(async {{ let __nikaia_value = {}; Ok::<_, {}>(__nikaia_value) }}).await?", deadline, text, own));
+        }
+        if raised && !fallback {
+            let text = body.buf.to_string();
+            body = EmitOut::empty();
+            if walk.async_pausing { body.push(&format!("(async || -> Result<_, {}> {{ Ok({}) }})().await.map_err(nikaia_std::task::OrCrash::Failed)?", outer, text)); } else { body.push(&format!("(|| -> Result<_, {}> {{ Ok({}) }})().map_err(nikaia_std::task::OrCrash::Failed)?", outer, text)); }
         }
         let name = emit_async_group_name(group);
         if body.buf.contains(".await") {
@@ -860,7 +874,7 @@ impl EmitState {
                 held = format!("{}.start_kept(&{}, async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, cell, channel, body.buf);
                 walk.async_kept.push(cell);
             }
-            if kind == "join" { out.push(&emit_async_joined_paused(&held, &channel)); } else { out.push(&held); }
+            if kind == "join" { out.push(&emit_async_joined_paused(&held, &channel, fallback)); } else { out.push(&held); }
             return Ok(());
         }
         if kind == "spawn" {
@@ -868,7 +882,7 @@ impl EmitState {
             return Ok(());
         }
         let started = format!("{}.start_here(|| -> Result<_, {}> {{ let __value = {}; Ok(__value) }})", name, channel, body.buf);
-        if kind == "join" { out.push(&emit_async_joined(&started, &channel)); } else { out.push(&started); }
+        if kind == "join" { out.push(&emit_async_joined(&started, &channel, fallback)); } else { out.push(&started); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -940,7 +954,7 @@ impl EmitState {
         if body.buf.contains("return ") || body.buf.contains(".await") && !walk.async_pausing { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async { … }` yet where it holds a `return` or a pause (#988)."), at: emit_async_at(flow.statement) }, &"emit_async_group")); }
         if walk.async_pausing {
             if plain {
-                out.push(&format!("{{ {}let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }})()).await? }}", opened, name, name, outer, body.buf));
+                out.push(&format!("{{ {}let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({}, (async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }})()).await? }}", opened, name, name, outer, body.buf));
                 return Ok(());
             }
             if channel == "nikaia_std::task::Crashed" {
@@ -951,7 +965,7 @@ impl EmitState {
             return Ok(());
         }
         if opened != "" { out.push(&format!("{{ {}", opened)); }
-        if plain { out.push(&format!("nikaia_std::task::group_plain(|{}| -> Result<_, {}> {{ let __value = {}; Ok(__value) }})?", name, outer, body.buf)); } else if channel == "nikaia_std::task::Crashed" { out.push(&format!("nikaia_std::task::group_plain(|{}| {})", name, body.buf)); } else { out.push(&format!("nikaia_std::task::group::<_, {}>(|{}| -> Result<_, {}> {{ let __value = {}; Ok(__value) }})?", channel, name, channel, body.buf)); }
+        if plain { out.push(&format!("nikaia_std::task::group_raised(|{}| -> Result<_, {}> {{ let __value = {}; Ok(__value) }})?", name, outer, body.buf)); } else if channel == "nikaia_std::task::Crashed" { out.push(&format!("nikaia_std::task::group_plain(|{}| {})", name, body.buf)); } else { out.push(&format!("nikaia_std::task::group::<_, {}>(|{}| -> Result<_, {}> {{ let __value = {}; Ok(__value) }})?", channel, name, channel, body.buf)); }
         if opened != "" { out.push(" }"); }
         Ok(())
     }
@@ -1028,8 +1042,8 @@ impl EmitState {
             index = index + 1;
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, &here, scope)?;
             walk.async_fallback = false;
-            let mut joined = emit_async_joined(&handle, &channel);
-            if started.buf.ends_with(".await") { joined = emit_async_joined_paused(&handle, &channel); }
+            let mut joined = emit_async_joined(&handle, &channel, fallback);
+            if started.buf.ends_with(".await") { joined = emit_async_joined_paused(&handle, &channel, fallback); }
             out.append(&started);
             out.push(";");
             walk.async_joining.insert(each.1, joined.to_string());

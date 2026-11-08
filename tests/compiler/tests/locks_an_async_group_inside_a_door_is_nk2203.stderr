@@ -1,7 +1,7 @@
 error[NK2203]: This `async` starts a task while you're holding a lock here.
-   --> tests/locks_an_async_group_inside_a_door_is_nk2203.nika:11:9
+   --> tests/locks_an_async_group_inside_a_door_is_nk2203.nika:12:9
     |
- 11 |         async {
+ 12 |         async {
     |         ^^^^^^^
     |
     = note: The block waits for its tasks before it lets the lock go, so a task that needs the held lock would wait for the block that is waiting for it.

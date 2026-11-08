@@ -1,0 +1,19 @@
+// A task whose only panic site is an index the prover drops cannot panic
+// (ADR-async-5 D35, #1355): `first` reads `xs[0]` behind `xs.len() > 0`, so
+// its ledger says `panics = false` and `both` needs no `throws`.
+
+fn first(xs: ref Vec[int]) -> int {
+    if xs.len() > 0 { return xs[0] }
+    return 0
+}
+
+fn both(xs: ref Vec[int]) -> int {
+    let a = async first(xs)
+    let b = async first(xs)
+    return a + b
+}
+
+fn main() throws {
+    let xs = [4, 5]
+    println(f"{both(xs)}")
+}

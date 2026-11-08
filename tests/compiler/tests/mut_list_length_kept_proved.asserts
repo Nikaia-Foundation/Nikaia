@@ -1,0 +1,10 @@
+asserts in tests/mut_list_length_kept_proved.nika: 7 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 7 (proved 0, preconditions proved at every call 7); derived from the callers 2
+  tests/mut_list_length_kept_proved.nika:7  assert(0 <= lo)  precondition of `get`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika:8  assert(lo <= hi)  precondition of `get`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika:9  assert(hi < a.len())  precondition of `get`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika:18  assert(0 <= i)  precondition of `swapped`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika:19  assert(i < a.len())  precondition of `swapped`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika:20  assert(0 <= j)  precondition of `swapped`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika:21  assert(j < a.len())  precondition of `swapped`: proved at every call the compiler sees; any other reaches the entry that checks it
+  tests/mut_list_length_kept_proved.nika  derived  get: 0 <= lo, lo <= a.len(), lo < a.len(), lo <= hi, lo < hi, 0 <= hi, hi <= a.len(), hi < a.len(), proved at the calls on lines 32
+  tests/mut_list_length_kept_proved.nika  derived  swapped: 0 <= i, i <= a.len(), i < a.len(), i <= j, i < j, 0 <= j, j <= a.len(), j < a.len(), proved at the calls on lines 34

@@ -840,6 +840,14 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     let nullable = check_core_ops_nullable(left)
     let inner = check_core_ops_inside(left)
     let place = check_core_ops_place(value)
+    // **A left side that holds a type nothing can tell is refused** (#1322,
+    // `NK1342`): the fallback would be converted into a type the language
+    // below has to guess. A number or a jump as the fallback leaves the type to
+    // what the left side holds, as `NK1245` does (C.4).
+    if nullable && inner.is_unknown() && !state.jumps(world, fallback) && !state.number_shaped(world, fallback) {
+        let shown = arith_shown(written_expression(world.words, value))
+        state.findings.push(check_refusal("NK1342", span, f"The compiler can't tell what type `{shown}` holds, so it can't tell what the fallback of this `??` becomes.", ["What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7)."], "Write the type down where the value is made, such as `let x: T? = …`."))
+    }
     // **A map read past a jump is a view of the map** (ADR-293 D28, #739).
     if from_a_map && nullable && moves(inner) && state.jumps(world, fallback) {
         state.facts.map_read_views.insert(id_of(expr) as i64)

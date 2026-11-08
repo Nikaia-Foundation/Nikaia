@@ -27,6 +27,10 @@ pub struct DiagnosticsRead {
     pub level: String,
     /// `message`, or empty where the line has none.
     pub message: String,
+    /// rustc's error code (`E0308`), or null where the message has none: a
+    /// procedural macro's own error, such as the parser backend's frame
+    /// check, carries none.
+    pub code: String?,
     /// The primary span's `line_start` in the emitted Rust.
     pub generated_line: i64?,
     /// What the backend wrote under the primary span's caret.
@@ -68,6 +72,7 @@ pub fn diagnostics_read_json(json: String) -> Vec[DiagnosticsRead] {
         read.push(DiagnosticsRead {
             level: cargo_json_text(cargo_json_member(value, "level")) ?? "",
             message: cargo_json_text(cargo_json_member(value, "message")) ?? "",
+            code: cargo_json_text(cargo_json_member(cargo_json_member(value, "code"), "code")),
             generated_line: cargo_json_number(cargo_json_member(primary, "line_start")),
             label: cargo_json_text(cargo_json_member(primary, "label")),
             byte_start: cargo_json_number(cargo_json_member(primary, "byte_start")),
@@ -120,6 +125,11 @@ pub struct DiagnosticsPlaced {
     /// D2): this compiler's defect, not a fact about the program.
     pub internal: String?,
     pub label: String?,
+    /// Whether the message is a statement about the program rather than this
+    /// compiler's defect: the parser backend's frame check, which ADR-296 D18
+    /// leaves to the backend and which speaks of the grammar in its own
+    /// words. Every other backend error is `NK1343` (Part III C.1).
+    pub about_the_program: bool,
 }
 
 /// The backend's messages about the program, in order. A level other than
@@ -151,7 +161,7 @@ pub fn diagnostics_placed(read: ref Vec[DiagnosticsRead], sources: ref Vec[ref S
             written => in_this_language(written),
         }
         let notes: Vec[String] = one.children.iter().filter(fn(c) { diagnostics_a_note(c) }).map(fn(c) { in_this_language(c.message ?? "") }).collect()
-        let mut placed = DiagnosticsPlaced { level: one.level.clone(), message: message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes: notes, internal: internal, label: label }
+        let mut placed = DiagnosticsPlaced { level: one.level.clone(), message: message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes: notes, internal: internal, label: label, about_the_program: false }
         if one.located && one.unit >= 0 && one.unit < starts.len() {
             let at = one.span.start as i64
             let line = diagnostics_line_of(starts[one.unit], at)
@@ -160,10 +170,27 @@ pub fn diagnostics_placed(read: ref Vec[DiagnosticsRead], sources: ref Vec[ref S
             placed.column = at - starts[one.unit][line] + 1
             placed.span = one.span.clone()
             placed.unit = one.unit
+            placed.about_the_program = one.code == null && diagnostics_in_a_grammar(starts[one.unit], sources[one.unit], at)
         }
         out.push(placed)
     }
     return out
+}
+
+/// **Whether byte `at` of `source` lies in a `grammar` declaration**, the
+/// part the parser backend's macro reads (ADR-296 D18): the last line before
+/// it that starts an item, at the margin, declares a grammar.
+fn diagnostics_in_a_grammar(starts: ref Vec[i64], source: String, at: i64) -> bool {
+    let lines: Vec[String] = source.split("\n").collect()
+    let mut line = diagnostics_line_of(starts, at)
+    while line >= 0 && line < lines.len() {
+        let first = lines[line].chars().next() ?? ' '
+        if first.is_alphabetic() {
+            return lines[line].starts_with("grammar ") || lines[line].starts_with("pub grammar ")
+        }
+        line -= 1
+    }
+    return false
 }
 
 /// Whether a child message is a note the reader gets: a `note` or a `help`,

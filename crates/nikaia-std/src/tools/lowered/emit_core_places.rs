@@ -57,13 +57,11 @@ impl EmitState {
         }
         format!("None::<{}>", plain_rust_spelling(&contract.ty))
     }
-    pub(crate) fn emit_place_around(&self, node: &Expr, field: &str, value: Option<&Expr>) -> (String, String) {
-        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
-        let present = match value { Some(__nikaia_value) => __nikaia_value, None => return emit_around_held(&held) };
-        let compound = matches!(present, Expr::Binary { .. } | Expr::Unary { .. } | Expr::Cast { .. } | Expr::Range { .. } | Expr::Coalesce { .. });
-        let conversion = matches!(held, FactWrap::Conversion);
-        if compound && conversion { return (String::from("("), String::from(").into()")); }
-        emit_around_held(&held)
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_place_around(&self, node: &Expr, field: &str) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
+        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return Ok((String::from(""), String::from(""))) };
+        Ok(emit_around_held(&held)?)
     }
     pub(crate) fn a_list_read(&self, node: &Expr) -> bool {
         match node {
@@ -147,7 +145,7 @@ impl EmitState {
                 if nullable { out.push(".as_deref()"); }
                 continue;
             }
-            let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(part), part);
+            let (before, after) = emit_leaf_wrapped(&self.facts.nullable_args, node_key(part))?;
             out.push(&before);
             self.emit_expr(world, walk, out, host, part, depth, flow, scope)?;
             out.push(&after);
@@ -425,7 +423,7 @@ impl EmitState {
             let plain = emit_text(world, field.name);
             out.push(&written);
             let wrapped = self.facts.nullable_fields.contains_key(&(node_key(node), plain.to_string()));
-            let (around_before, around_after) = self.emit_place_around(node, &plain, (field.value).as_ref());
+            let (around_before, around_after) = self.emit_place_around(node, &plain)?;
             let boxed = self.is_boxed_field(&owner, &plain);
             let mut before = around_before.to_string();
             let mut after = around_after.to_string();

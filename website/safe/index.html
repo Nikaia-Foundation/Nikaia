@@ -45,10 +45,10 @@ description: >-
         <a class="safe-more" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks left out where proved →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Decided, being built</span>
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3>A failure that ends only its task</h3>
-        <p>In the specification a panic in a task ends that task: its cleanups run, whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. A panic in <code>main</code> ends the program. With the new <code>async</code> tasks this is part of the build of <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/983">#983</a>.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326, D4 →</a>
+        <p>A panic in a task ends only that task. Whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. The compiler works out which functions can panic, so only a task that can panic is a failure, and the function that starts it says <code>throws</code>, catches the crash or gives the task a fallback, or it is refused. A task that cannot panic asks for nothing. A panic in <code>main</code> ends the program.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D35 →</a>
       </div>
     </div>
   </div>
@@ -62,7 +62,7 @@ description: >-
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
-<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows: it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
+<p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows, and it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
         <p>A claim about a value from outside, an <code>assert</code> or a function's precondition, is refused until a guard handles the bad case. After the guard the claim is proved. Words on the command line are checked against <code>main</code>'s preconditions before the body runs.</p>
@@ -112,7 +112,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
 <p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
 </details>
         <h3><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a></h3>
-        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses a task that changes a value bound outside it, and two tasks that write the same file, the same lock or standard output, naming what they share. The way out is in the message: a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
+        <p>Two tasks that change the same balance at once can overwrite each other's update. Nikaia looks at what each task touches and refuses a task that changes a value bound outside it, and two tasks that write the same file, the same lock or standard output, naming what they share. The message shows the way out, which is a value of its own for each task, a <code>SharedMut</code> changed through <code>update</code>, or the two changes in order.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">async {
     async fn { balance = balance + 50 }
     async fn { balance = balance - 30 }   // refused: `balance` is bound outside
@@ -128,12 +128,12 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
     <p class="home-eyebrow home-eyebrow-center">Layer 4</p>
     <h2 class="home-heading">Changes, by people and by models</h2>
     <p class="safe-lead home-intro">More and more changes are made by a model or an agent, often faster than a person can read them closely. Such a change can look right line by line and still break a rule that another part of the program relies on.</p>
-    <p class="safe-lead home-intro">In Nikaia those rules are part of the code: the <code>assert</code> that states what a function expects, the <code>throws</code> that says it can fail, the directory a path may not leave. The compiler checks every change against all of them on every build, whoever wrote it. A change that calls a function outside its precondition, lets an error through unhandled or starts two tasks that change the same value is refused, and the message says what to write instead, so an agent can fix the code and build again.</p>
+    <p class="safe-lead home-intro">In Nikaia those rules are part of the code, such as the <code>assert</code> that states what a function expects, the <code>throws</code> that says it can fail and the directory a path may not leave. The compiler checks every change against all of them on every build, whoever wrote it. A change that calls a function outside its precondition, lets an error through unhandled or starts two tasks that change the same value is refused, and the message says what to write instead, so an agent can fix the code and build again.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Shown on every build</span>
         <h3>What the compiler relied on</h3>
-        <p><code>nikaia build --asserts</code> lists every claim of the program and how it is held: proved, checked where the data arrives, or checked while the program runs. <code>--trust</code> lists every place where the program vouches for its input itself. A reviewer reads these beside the diff.</p>
+        <p><code>nikaia build --asserts</code> lists every claim of the program and whether it is proved, checked where the data arrives, or checked while the program runs. <code>--trust</code> lists every place where the program vouches for its input itself. A reviewer reads these beside the diff.</p>
 <div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
   …/src/main.nika:10  assert(n == 41)  proved</code></pre></div>
         <a class="safe-more" href="{{ "/guide/contracts.html" | relative_url }}">Contracts in the guide →</a>
@@ -141,7 +141,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-part">Where the check stops</span>
         <h3>The rules that are written</h3>
-        <p>The compiler checks the rules the code states. A change that rewrites a rule itself, removes an <code>assert</code> or writes <code>fs::Root::Anywhere</code>, is accepted: it shows in the diff and in the two reports, and that is where a person looks. A rule nobody has written is not checked.</p>
+        <p>The compiler checks the rules the code states. A change that rewrites a rule itself, removes an <code>assert</code> or writes <code>fs::Root::Anywhere</code>, is accepted. It shows in the diff and in the two reports, and that is where a person looks. A rule nobody has written is not checked.</p>
         <a class="safe-more" href="{{ "/manifesto.html#8-a-language-for-the-age-of-generated-code" | relative_url }}">The longer argument →</a>
       </div>
     </div>
@@ -178,7 +178,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <span class="safe-chip safe-chip-run">Specified, not built yet</span>
         <h3><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a></h3>
         <p>In the specification every task gets a memory budget of its own. A task that spends it ends with <code>task::OverBudget</code>, and the rest of the program runs on. It is a protection while the program runs, not a proof, and memory a Rust crate or a C library keeps for itself is in no budget.</p>
-        <p class="safe-note">Decided and specified, not built yet: today a task can still take memory from the whole program.</p>
+        <p class="safe-note">This is decided and specified, not built yet, so today a task can still take memory from the whole program.</p>
         <a class="safe-more" href="{{ "/safe/memory.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b">

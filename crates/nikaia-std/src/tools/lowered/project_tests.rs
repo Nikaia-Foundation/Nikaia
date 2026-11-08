@@ -264,7 +264,7 @@ pub fn project_tests_explain_bounds(outcome: &ProjectTestsOutcome) -> Result<(),
 
 pub fn is_refusal(text: &str) -> bool { (text.starts_with("error") || text.contains("\nerror")) && !does_not_compile(text) }
 
-pub fn does_not_compile(text: &str) -> bool { text.contains("could not compile") }
+pub fn does_not_compile(text: &str) -> bool { text.contains("could not compile") || text.contains("error[NK1343]") }
 
 pub fn named_by(output: &OutputTest) -> String {
     match output.stdout.is_some() {

@@ -342,6 +342,7 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     host.check_units(&ledger);
     host.infer_sync(ledger);
     ledger_expression_ensures(ledger, units, host);
+    host.infer_panics(ledger);
     host.infer_throws(ledger);
     host.infer_touch(ledger);
     ledger_result_sources(ledger, units.len() as i64, host);
@@ -357,7 +358,6 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     host.infer_maps(ledger);
     host.infer_locks(ledger);
     host.infer_tether(ledger);
-    host.infer_panics(ledger);
     ledger_result_sources(ledger, units.len() as i64, host);
     ledger_evaluate_defaults(ledger, units, &defaults, host);
     attribute_values(ledger, units, library, &|unit, ty, argument| { host.computed_literal(unit, "an attribute's argument", argument, ty) });
