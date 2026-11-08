@@ -286,7 +286,7 @@ impl EmitState {
                     if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) {
                         let loan = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view || self.emit_fn_lends(world, &key, at + recv);
                         let mut inside = false;
-                        for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) { inside = true; } }
+                        for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) || g.is_view && g.lasting { inside = true; } }
                         let owned = !loan && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty);
                         if receiver.is_some() || lowered_views > 1 || has_kept || owned || loan && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && (self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || inside) { source_at = Some(at); }
                     }

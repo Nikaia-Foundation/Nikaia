@@ -434,7 +434,9 @@ impl EmitState {
                         let loan = args[at].ty.is_view || self.emit_fn_lends(world, key, at + recv)
                         let mut inside = false
                         for g in args[at].ty.generics {
-                            if self.carries_a_view(world, g) {
+                            // Static text inside (`&[&'static str]`) is a
+                            // lifetime of its own too (#1343).
+                            if self.carries_a_view(world, g) || (g.is_view && g.lasting) {
                                 inside = true
                             }
                         }
