@@ -56,6 +56,10 @@ pub struct KeepsBody {
     /// the code lends** (ADR-views-3 D14): one written `ref`, or named by the
     /// type's `from`. An argument handed there is lent to the call, not kept.
     pub code_lends: collections::BTreeMap[String, Vec[bool]],
+    /// **The traits a parameter of a type variable is bound by**, `c: C` of
+    /// `[C: Count]`: a method call on it reaches the trait's method (#1254),
+    /// not every method of the same name.
+    pub bounds: collections::BTreeMap[String, Vec[String]],
 }
 
 // The walk's state: what it found, and the names a `let` bound to what may be
@@ -1018,6 +1022,15 @@ fn keeps_owner_of(receiver: ref Expr, method: ref String, interner: ref winnow_g
             let key = f"{declared}::{method}"
             if own.functions.contains_key(key) || library.functions.contains_key(key) {
                 return declared
+            }
+            // **A type variable's method is its bound's** (#1254): `c.count()`
+            // of `c: C` with `[C: Count]` is `Count::count`.
+            let bounds = context.bounds[interner.resolve(ident)] ?? return null
+            for bound in bounds {
+                let by_bound = f"{bound}::{method}"
+                if own.functions.contains_key(by_bound) || library.functions.contains_key(by_bound) {
+                    return bound.clone()
+                }
             }
             return null
         }
@@ -2168,7 +2181,7 @@ fn copied_keepers(keepers: ref Vec[KeepsKeeper]) -> Vec[KeepsKeeper] {
 /// nothing because it does nothing, and whose `impl`s answer for themselves.
 pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> KeepsFound? {
     match item {
-        Item::Fn { name, receiver, args, config, body, ret_type, .. } => {
+        Item::Fn { name, generics, receiver, args, config, body, ret_type, .. } => {
             let own = match name {
                 null => "new",
                 n => view.text(n),
@@ -2293,9 +2306,15 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // reaches `regex::Regex::find`, not `Seq::find`, which keeps its
             // receiver.
             let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
+            let mut bounds: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
             for a in args {
                 if !a.ty.is_slice {
                     types.insert(view.text(a.name), view.text(a.ty.name))
+                    for g in generics {
+                        if g.name == a.ty.name && g.bounds.len() > 0 {
+                            bounds.insert(view.text(a.name), g.bounds.iter().map(fn(b) { view.text(b) }).collect())
+                        }
+                    }
                 }
             }
             if is_method {
@@ -2331,7 +2350,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // **The walk** (`uses_in`): every statement's expressions
             // classified where they stand, then the blocks it holds, and **the
             // value a body ends in leaves the call**, as a `return` does.
-            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options }
+            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options, bounds: bounds }
             let uses = uses_in(body, view.words, holes_of, context, ledger, library)
             // **A receiver the author wrote `ref` is not kept** (issue #173),
             // **nor an argument written `mut`** (0.0.258): each is a reference
