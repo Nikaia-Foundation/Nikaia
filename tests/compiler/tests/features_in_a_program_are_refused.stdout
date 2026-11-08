@@ -1,0 +1,8 @@
+exit 1
+error[NK1346]: `[features]` is for a package built as a Rust library: a program has no user who chooses its parts.
+  --> TMP/nikaia.toml:7:1
+   |
+ 7 | [features]
+   | ^^^^^^^^^^
+   |
+   = help: Write `artifact = "rust-library"` under `[build]`, or remove `[features]`.

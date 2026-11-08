@@ -1,0 +1,11 @@
+# A Rust crate that takes `../demo` without its default features and with
+# `stream` (ADR-393 D2), by `tests/a_rust_library_offers_features_chosen_by_roots.nika`.
+[package]
+name = "user"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nikaia_demo = { path = "../demo/target/rust-library/nikaia_demo", default-features = false, features = ["stream"] }
+
+[workspace]

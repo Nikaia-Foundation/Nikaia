@@ -1,0 +1,15 @@
+exit 1
+error[NK1347]: `default` names the feature `tre`, and `[features]` declares none of that name.
+  --> TMP/nikaia.toml:9:12
+   |
+ 9 | default = ["tre"]
+   |            ^^^^^
+   |
+   = help: Did you mean `tree`?
+exit 1
+error[NK1347]: `tree view` is not a feature name Cargo accepts: a feature's name is letters, digits and `_`, then also `-`, `+` and `.`.
+  --> TMP/nikaia.toml:9:1
+   |
+ 9 | "tree view" = ["demo::make"]
+   | ^^^^^^^^^
+   |

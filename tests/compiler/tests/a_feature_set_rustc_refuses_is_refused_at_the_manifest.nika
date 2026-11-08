@@ -1,0 +1,29 @@
+// Each feature set of a rust-library must build (ADR-393 D6, #1393): when
+// rustc refuses one, the build stops with `NK1345` at `[features]` in
+// nikaia.toml, not with a refusal inside the made crate. Here warnings are
+// errors and a private function nobody calls is dead in the core.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// Builds a package with `[features]` `table`, and says how it ended.
+fn built(nikaia: String, build: String, table: String, source: String) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[build]\n{build}\n[features]\n{table}")
+    fs::write(f"{tmp}/src/{source}", fs::Root::Anywhere, "pub fn make(v: i64) -> i64 sync {\n    return helper(v)\n}\n\nfn helper(v: i64) -> i64 sync {\n    return v + 1\n}\n\nfn spare() -> i64 sync {\n    return 2\n}\n")
+    let out = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0"), ("RUSTFLAGS", "-D warnings")])
+    println(f"exit {out.code}")
+    println(out.stderr.trim().replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    built(nikaia, "artifact = \"rust-library\"\n", "tree = [\"demo::make\"]\n", "demo.nika")
+}

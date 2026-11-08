@@ -121,11 +121,38 @@ pub struct ManifestFile {
     pub dependencies: collections::BTreeMap<String, ManifestDependency>,
     pub codegen: collections::BTreeMap<String, collections::BTreeMap<String, String>>,
     pub libraries: collections::BTreeMap<String, String>,
+    pub features: Vec<ManifestFeature>,
     pub notes: Vec<String>,
     pub root: Option<fs::Path>,
 }
 
-pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), notes: vec![], root: None } }
+pub fn manifest_empty() -> ManifestFile { ManifestFile { build: collections::BTreeMap::new(), package: collections::BTreeMap::new(), name: None, version: String::from("0.0.0"), dependencies: collections::BTreeMap::new(), codegen: collections::BTreeMap::new(), libraries: collections::BTreeMap::new(), features: vec![], notes: vec![], root: None } }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestFeature {
+    pub name: String,
+    pub entries: Vec<String>,
+    pub listed: bool,
+}
+
+pub(crate) fn manifest_features(items: &[ManifestItem]) -> Vec<ManifestFeature> {
+    let mut out: Vec<ManifestFeature> = vec![];
+    for item in items.iter() {
+        if item.section != "features" || item.name.is_empty() || !item.key.is_empty() { continue; }
+        let text = item.text.trim();
+        let listed = text.starts_with('[') && text.ends_with(']') && !text.contains("\\");
+        let mut entries: Vec<String> = vec![];
+        if listed {
+            let mut at = 0;
+            for piece in text.split("\"") {
+                if at % 2 == 1 { entries.push(piece.to_string()); }
+                at += 1;
+            }
+        }
+        out.push(ManifestFeature { name: item.name.to_string(), entries, listed });
+    }
+    out
+}
 
 pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std::error::Thrown<Refused>> {
     let mut manifest = manifest_empty();
@@ -134,6 +161,7 @@ pub fn manifest_parse(items: &[ManifestItem]) -> Result<ManifestFile, nikaia_std
     manifest.version = nikaia_std::index::or(manifest_word_at(items, "package", "version", ""), || "0.0.0".into());
     manifest.dependencies = manifest_dependencies(items)?;
     manifest.libraries = manifest_libraries(items)?;
+    manifest.features = manifest_features(items);
     for value in items.iter() {
         if value.section != "build" || value.name.is_empty() || !value.key.is_empty() { continue; }
         if value.table {

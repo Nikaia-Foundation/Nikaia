@@ -1,0 +1,18 @@
+# The package of `tests/a_rust_library_offers_features_chosen_by_roots.nika`
+# (ADR-393 D2-D3): its features name roots, and the build derives the rest.
+[package]
+name = "demo"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[dependencies]
+util = { path = "../util" }
+
+[features]
+default = ["tree"]
+tree = ["demo::Node", "demo::make"]
+stream = ["demo::event"]
+show = ["demo::label", "demo::Show"]
+extra = ["demo::doubled"]

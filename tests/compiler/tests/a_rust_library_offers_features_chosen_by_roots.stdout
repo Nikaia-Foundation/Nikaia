@@ -1,0 +1,28 @@
+rust-library: TMP/demo/target/rust-library/nikaia_demo
+Cargo.toml:
+  [dependencies]
+  util = { package = "nikaia_util", path = "../nikaia_util", optional = true }
+  [features]
+  default = ["tree"]
+  extra = ["dep:util"]
+  show = ["tree"]
+  stream = []
+  tree = []
+src/lib.rs:
+  #[cfg(any(feature = "show", feature = "stream", feature = "tree"))] fn helper(v: i64) -> i64
+  #[cfg(any(feature = "show", feature = "tree"))] #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Node
+  #[cfg(any(feature = "show", feature = "tree"))] pub fn make(v: i64) -> Node
+  #[cfg(any(feature = "show", feature = "tree"))] pub trait Show
+  #[cfg(any(feature = "show", feature = "tree"))] impl Show for Node
+  #[cfg(feature = "show")] pub fn label(v: i64) -> String
+  #[cfg(feature = "stream")] #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Event
+  #[cfg(feature = "stream")] pub fn event(at: i64) -> Event
+  #[cfg(feature = "extra")] pub fn doubled(v: i64) -> i64
+  beside: &[#[cfg(feature = "extra")] &::util::__NIKAIA_PLACES, ],
+core_add: 5, event at 5
+with `whole = ["demo"]`:
+  [features]
+  tree = []
+  whole = ["tree", "dep:util"]
