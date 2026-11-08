@@ -1,0 +1,58 @@
+use std::fs
+
+// The pull-parser shape of #929, as written there: the text is read from a
+// file at run time, a zero-copy tree views it, and then it is given to a
+// struct whose `next_item` hands out views of it. The text moves to the keep
+// and the field views it (ADR-views-3 D8, D9; ADR-283 D25); before, rustc
+// refused it (`Cannot move out of text`, `Lifetime may not live long enough`).
+enum Value {
+	Str(String),
+	Seq(Vec[Value]),
+}
+
+struct Cursor {
+	input: String,
+	pos: i64,
+}
+
+fn next_item(mut c: Cursor) -> String? {
+	let rest = c.input.lines().skip(c.pos).collect()
+	if rest.len() == 0 {
+		return null
+	}
+	c.pos += 1
+	return rest[0].trim()
+}
+
+fn parse(input: String) -> Value {
+	let mut items: Vec[Value] = []
+	for l in input.lines() {
+		items.push(Value::Str(l.trim()))
+	}
+	return Value::Seq(items)
+}
+
+fn main() throws {
+	let root = fs::scratch()
+	fs::write("in.yaml", root, "a: 1\n  b: two\n")
+	let text = fs::read_to_string("in.yaml", root)
+	fs::remove("in.yaml", root)
+	let v = parse(text)
+	let mut c = Cursor { input: text, pos: 0 }
+	while true {
+		let s = next_item(c)
+		if s == null { break }
+		println(f"pull: {s}")
+	}
+	match v {
+		Value::Seq(items) => {
+			for it in items {
+				match it {
+					Value::Str(s) => println(s),
+					else => println("?"),
+				}
+			}
+		},
+		else => println("?"),
+	}
+}
