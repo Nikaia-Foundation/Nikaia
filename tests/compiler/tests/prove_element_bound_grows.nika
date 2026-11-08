@@ -1,0 +1,56 @@
+/// An end list that only grows stays an end (ADR-306 D21, #1414): every
+/// write into `kept` is below `values.len()` where it is written, and a
+/// `push` onto `values`, in the body or in a callee whose frame only adds,
+/// keeps it below. Where the end is popped, by the body or by a callee,
+/// the read stays checked.
+fn grown(mut values: Vec[i64]) -> i64 {
+	let mut kept: Vec[i64] = []
+	for at in 0..<values.len() {
+		kept.push(at)
+	}
+	values.push(4)
+	let mut sum = 0
+	for at in kept {
+		sum += values[at]
+	}
+	return sum
+}
+
+fn add(mut values: Vec[i64]) {
+	values.push(0)
+	values.insert(0, 1)
+}
+
+fn grown_by_a_call(mut values: Vec[i64]) -> i64 {
+	let mut kept: Vec[i64] = []
+	for at in 0..<values.len() {
+		kept.push(at)
+	}
+	add(values)
+	for at in kept {
+		if values[at] > 2 { return at }
+	}
+	return -1
+}
+
+fn take(mut values: Vec[i64]) {
+	values.push(0)
+	values.pop()
+	values.pop()
+}
+
+fn fallen_by_a_call(mut values: Vec[i64]) -> i64 {
+	let mut kept: Vec[i64] = []
+	for at in 0..<values.len() {
+		kept.push(at)
+	}
+	take(values)
+	for at in kept {
+		if values[at] > 2 { return at }
+	}
+	return -1
+}
+
+fn main() throws {
+	println(f"{grown([1, 2, 3])} {grown_by_a_call([0, 5, 0])} {fallen_by_a_call([1, 2, 3, 4])}")
+}
