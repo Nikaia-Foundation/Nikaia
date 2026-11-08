@@ -1,0 +1,5 @@
+[1,{"a":true}]
+exit 0
+lock: json = ["0.1.0"]
+mine [1, {"a": true}]
+exit 0

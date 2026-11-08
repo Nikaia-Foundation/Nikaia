@@ -93,6 +93,14 @@ impl Sysroot {
         &self.root
     }
 
+    /// The official packages the toolchain ships, one directory each under
+    /// its name ([ADR-338](../../docs/specification/adr/adr-338.md) D2, Part
+    /// III 17.3): `packages/` beside the sysroot, as in the repository.
+    pub fn packages_dir(&self) -> PathBuf {
+        let dir = self.root.join("..").join("packages");
+        dir.canonicalize().unwrap_or(dir)
+    }
+
     /// The `nikaia-std` a generated project depends on by path.
     pub fn std_dir(&self) -> PathBuf {
         sysroot_cache::sysroot_std_dir(&self.root)

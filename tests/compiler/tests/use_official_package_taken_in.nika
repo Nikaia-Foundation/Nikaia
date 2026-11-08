@@ -1,0 +1,38 @@
+// #539: a `use` of an official package that neither `[dependencies]` nor a
+// project directory names takes it in at the version `std` lists, offline,
+// and records it in `nikaia.lock` (ADR-338 D2, D3); a declared entry of the
+// same name wins over the list.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/app/src", f"{tmp}/own/src", f"{tmp}/mine/src"])
+    let program = "use json\n\nfn main() throws {\n    let v = json::parse(\"[1, {\\\"a\\\": true}]\")\n    println(json::to_string(v))\n}\n"
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, program)
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    print(out.stdout)
+    if out.code != 0 { print(out.stderr.replace(tmp, "TMP")) }
+    println(f"exit {out.code}")
+    let lock = process::run("cat", [f"{tmp}/app/nikaia.lock"]).stdout
+    for line in lock.lines() {
+        if line.contains("json") { println(f"lock: {line}") }
+    }
+    // A `[dependencies]` entry named `json` is the package that `use` takes.
+    fs::write(f"{tmp}/mine/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"json\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/mine/src/main.nika", fs::Root::Anywhere, "pub fn parse(text: String) -> String throws {\n    return f\"mine {text}\"\n}\n\npub fn to_string(text: String) -> String {\n    return text\n}\n")
+    fs::write(f"{tmp}/own/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"own\"\nversion = \"0.1.0\"\n\n[dependencies]\njson = { path = \"../mine\" }\n")
+    fs::write(f"{tmp}/own/src/main.nika", fs::Root::Anywhere, program)
+    let declared = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/own")
+    print(declared.stdout)
+    if declared.code != 0 { print(declared.stderr.replace(tmp, "TMP")) }
+    println(f"exit {declared.code}")
+    process::run("rm", ["-rf", tmp])
+}

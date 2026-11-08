@@ -410,6 +410,7 @@ fn manifest_view(manifest: &Manifest) -> ProjectMembersManifest {
             .collect(),
         foreign: manifest.foreign_crates().into_iter().collect(),
         has_build: manifest.has_build_section(),
+        uses_in: None,
     }
 }
 
@@ -435,6 +436,10 @@ impl ProjectMembersHost for Manifests {
                 None
             }
         }
+    }
+
+    fn shipped(&self) -> PathBuf {
+        Sysroot::resolve().packages_dir()
     }
 }
 
@@ -2153,6 +2158,22 @@ impl Project {
                     dependencies.insert(dependency.clone(), toml::Value::Table(table));
                 }
             }
+        }
+        // **An official package a `use` took in** (ADR-338 D3): resolved by
+        // the walk and named by no `[dependencies]` entry, so the same
+        // renaming form names it here.
+        for taken in &member.dependencies {
+            if member.manifest.dependencies().contains_key(&taken.name) {
+                continue;
+            }
+            let named = self.crate_named(&canonical(&taken.root))?;
+            let mut table = toml::value::Table::new();
+            table.insert("package".to_string(), toml::Value::String(named.clone()));
+            table.insert(
+                "path".to_string(),
+                toml::Value::String(format!("../{named}")),
+            );
+            dependencies.insert(taken.name.clone(), toml::Value::Table(table));
         }
 
         Ok(CargoProject {
