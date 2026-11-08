@@ -7,22 +7,22 @@ struct Item {
 
 grammar NoRepeat {
 	@stream entry rule items -> Item = item
-	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
 }
 
 grammar TwoRepeats {
 	@stream entry rule items -> Item = item* "|" item*
-	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
 }
 
 grammar WithAction {
 	@stream entry rule items -> Item = all:item* -> { Item { word: "" } }
-	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
 }
 
 grammar TwoAlternatives {
 	@stream entry rule items -> Item = item* | "-"
-	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
 }
 
 grammar OtherType {
@@ -32,7 +32,7 @@ grammar OtherType {
 
 grammar NoType {
 	@stream entry rule items = item*
-	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
 }
 
 fn main() {

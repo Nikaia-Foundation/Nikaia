@@ -9,12 +9,12 @@ struct Item {
 
 grammar Words {
 	@stream entry rule items -> Item = item*
-	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
 }
 
 grammar Listed {
 	@stream entry rule items -> Item = "[" => list(item, ",") "]"
-	rule item -> Item = w:until("," | "]") -> { Item { word: w.to_string() } }
+	rule item -> Item = w:until("," | "]") -> { Item { word: w.clone() } }
 }
 
 fn main() throws {

@@ -335,6 +335,10 @@ impl EmitState {
         for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", values.join(", ")) };
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.to_string() };
+        if rule.stream && rule.is_entry {
+            self.emit_stream_rule(world, walk, out, host, rule, &rule_name, &taken, &label)?;
+            return Ok(());
+        }
         out.push(&format!("        {}rule {}{}{}{} =\n", vis, rule_name, taken, ret, label));
         for i in 0..rule.alts.len() as i64 {
             let alt = nikaia_std::index::get(&rule.alts, (i) as usize);
@@ -377,6 +381,52 @@ impl EmitState {
             }
         }
         Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stream_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, rule_name: &str, taken: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let item = match &rule.ret_type {
+            Some(ty) => host.ty_named(walk, ty)?,
+            None => return Err(nikaia_std::error::raise(EmitRefused { message: String::from("A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")),
+        };
+        if rule.alts.len() != 1 || nikaia_std::index::get(&rule.alts, 0).action.is_some() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
+        let pattern = &nikaia_std::index::get(&rule.alts, 0).pattern;
+        let parts: Vec<Spanned<Pattern>> = match &pattern.node {
+            Pattern::Seq(seq) => seq.to_owned(),
+            _ => vec![pattern.clone()],
+        };
+        let mut folds = 0;
+        for part in parts.iter() { if stream_item(&part.node).is_some() { folds += 1; } }
+        if folds != 1 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate this `@stream` entry yet: its body holds one `item*`, a call of a rule repeated, and the engine reads only that form one item at a time (`list(item, sep)`, `item+` and counted repeats wait for a fold of their own in winnow-grammar)."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
+        out.push("        #[stream(each)]\n");
+        out.push(&format!("        pub rule {}{} -> usize{} =\n          ", rule_name, taken, label));
+        for i in 0..parts.len() as i64 {
+            if i > 0 { out.push(" "); }
+            match stream_item(&nikaia_std::index::get(&parts, (i) as usize).node) {
+                Some(ref inner) => {
+                    out.push("__wg_n:fold(");
+                    self.emit_pattern(world, walk, out, host, inner)?;
+                    out.push(&format!(", || 0usize, |n: usize, _item: {}| n + 1)", item));
+                },
+                None => { self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (i) as usize))?; },
+            }
+        }
+        out.push("\n            -> { __wg_n }\n");
+        Ok(())
+    }
+}
+
+pub(crate) fn stream_item(pattern: &Pattern) -> Option<Spanned<Pattern>> {
+    match pattern {
+        Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); match rep {
+            Repeat::Star => match &pat.node {
+                Pattern::Ref { .. } => Some(pat.clone()),
+                _ => None,
+            },
+            _ => None,
+        } },
+        _ => None,
     }
 }
 
