@@ -179,6 +179,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * The emitter's `world.library` is std only; to know a dependency's errors, ask `name_of_error` (it checks `own_contracts.types`), not `error_kind`. (issue-539)
 * Whether an argument to an `EitherText` parameter is lent or moved is decided by the late-read walk in `text_tiers.nika` (`late_argument`, `late_args`), not by the emitter. (issue-1334)
 * A list of string literals is tiered to `Vec<&'static str>`, so `ref $T` binds `T` to a view and a walk gives `&&str`; `AsRef::<str>::as_ref` treats `&str`, `&&str` and `&String` alike. (issue-1388)
+* Rust generics get no deref coercion, so an argument at a lent type-variable parameter gets exactly one `&` (`&&C` does not satisfy `C: Bound`). (issue-1342)
+* In the checker state a type parameter is `Ty::Named` (listed in `state.type_parameters`), not `Ty::Var`; `Ty::Var` appears only in contracts and signatures from `parameterise`. (issue-1342)
 
 ### Grammar
 
