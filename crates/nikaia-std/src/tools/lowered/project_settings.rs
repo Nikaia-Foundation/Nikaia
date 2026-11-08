@@ -77,8 +77,8 @@ pub(crate) fn project_settings_renamed(level: &str) -> &'static str {
 
 pub fn artifact(word: String) -> Result<String, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     Ok(match &*word {
-        "program" | "c-library" => word,
-        _ => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`artifact` is `program` or `c-library`, not `{}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body.", word)), &"artifact")),
+        "program" | "c-library" | "rust-library" => word,
+        _ => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`artifact` is `program`, `c-library` or `rust-library`, not `{}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body; `rust-library` writes the package as the Rust lib crate `nikaia_<name>`.", word)), &"artifact")),
     })
 }
 

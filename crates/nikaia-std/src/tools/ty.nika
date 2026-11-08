@@ -1981,13 +1981,38 @@ fn substituted(name: ref String, view: bool, bound: ref collections::BTreeMap[St
     let found = bound[name]?.clone() ?? Ty::Unknown
     if view {
         match found {
+            // **One text view** (ADR-184 D2, #1388): `ref $T` with `T` bound
+            // to `String` is the text view the two doors give, never a second
+            // spelling of it. A write through a `String` slot is told by the
+            // write (`views_text_slots`), not by the type.
             Ty::Named { name, args, .. } => {
-                return Ty::Named { name: name.clone(), args: args.clone(), view: true }
+                return viewed_name(name, args, false)
             }
             else => {}
         }
     }
     return found.clone()
+}
+
+/// Whether a signature's `ref $V`, bound to text, is what `ty` hands back,
+/// alone, as an option or as a sequence's item (#1388): substituted it is
+/// the one text view, but below it views a slot that holds text, a `String`
+/// or, unless `owned`, a view. A walk of either reads `&String` or `&&str`.
+pub fn views_text_slots(ty: ref Ty, bound: ref collections::BTreeMap[String, Ty], owned: bool) -> bool {
+    return match ty {
+        Ty::Var { name, view } => view && text_bound(name, bound, owned),
+        Ty::Nullable(inner) => views_text_slots(inner, bound, owned),
+        Ty::Seq { item, .. } => views_text_slots(item, bound, owned),
+        else => false,
+    }
+}
+
+fn text_bound(name: ref String, bound: ref collections::BTreeMap[String, Ty], owned: bool) -> bool {
+    let found = bound[name]?.clone() ?? Ty::Unknown
+    return match found {
+        Ty::Named { name: held, args, view } => args.len() == 0 && ((!view && (held == TEXT || held.ends_with("::String"))) || (!owned && view && held == TEXT_VIEW)),
+        else => false,
+    }
 }
 
 fn substituted_each(parts: ref Array[Ty], bound: ref collections::BTreeMap[String, Ty]) -> Vec[Ty] {

@@ -44,7 +44,12 @@ pub fn bounds_report_checked(program: &Program, words: &winnow_grammar::Interner
             Item::Impl { methods, .. } => {
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { args, body, .. } => { bounds_report_function(args, body, words, source, facts, holes_of, &mut walk); },
+                        Item::Fn { name, args, body, .. } => {
+                            let name = *name;
+                            walk.callers = callees.contains(words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
+                            bounds_report_function(args, body, words, source, facts, holes_of, &mut walk);
+                            walk.callers = false;
+                        },
                         _ => { },
                     }
                 }

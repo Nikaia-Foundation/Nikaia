@@ -130,4 +130,10 @@ together with the specification section and an example test.
 * A `Found:` filed from an earlier run: read that run's commit message (`git log --grep=#N`) first; it often holds the cause and a path already dropped. (issue-1327)
 * A `tests/compiler/tests/*.nika` program only runs under `nikaia test --project tests/compiler --filter NAME` (`nikaia run` refuses it as not the entry, and its `toolchain()` finds the compiler through its parent process). (issue-539)
 * `fs::read` returns `Bytes`, so a `catch { "" }` on it is NK1103; in a test program, read text with `process::run("cat", …).stdout`. (issue-539)
+* When `commit.nika` refuses another agent's staged file, commit only yours with `git commit --only -F MSG -- FILES`, which leaves their index entry as it was. (issue-1375)
+* A test whose assert is refused (NK1300) does not build, so it cannot sit beside a `.stdout`: put the refused case in its own test with a `.stderr`. (issue-1375)
+* When a mass migration such as `print-throws` rewrites test programs, the `accepted_sweep.rs` allow-list hashes change. The sweep's failure log pairs each new refused hash with the old "no longer checked" one, so replace the old hash with the new one. (qa-task)
+* `commit.nika` refuses when another agent's file (even an unmerged `UU` one) is staged. `git commit -- PATH` commits only your path, and the report should say so under `Deviation:`. (qa-task)
+* the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
+* pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
 

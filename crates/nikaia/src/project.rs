@@ -3191,6 +3191,15 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         )
     }
 
+    fn member_manifest(&self, at: i64, rust: &str) -> HostResult<String> {
+        let members = self.members.borrow();
+        self.held(
+            self.project
+                .cargo_member(&members[at as usize], rust, CrateKind::Lib)
+                .map(|member| member.render()),
+        )
+    }
+
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool {
         self.project
             .runs_without_cargo(&self.members.borrow(), link_flags)

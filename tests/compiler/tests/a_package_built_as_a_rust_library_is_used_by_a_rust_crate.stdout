@@ -1,0 +1,5 @@
+rust-library: TMP/demo/target/rust-library/nikaia_demo
+Cargo.toml: true
+src/lib.rs: true
+circle: area 12, centre (2, 2)
+square: area 16, centre (2, 2)

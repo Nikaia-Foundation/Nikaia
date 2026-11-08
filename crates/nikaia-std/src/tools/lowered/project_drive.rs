@@ -95,6 +95,7 @@ pub trait ProjectDriveHost {
     fn host_triple(&self) -> Option<String>;
     fn toolchain_can_build_for(&self, triple: &str) -> bool;
     fn write_workspace(&self, rust: &[String]) -> Result<fs::Path, Box<dyn std::error::Error>>;
+    fn member_manifest(&self, at: i64, rust: &str) -> Result<String, Box<dyn std::error::Error>>;
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool;
     fn compile_fast(&self, rust: &str) -> Result<Option<ProjectDriveFast>, Box<dyn std::error::Error>>;
     fn settings_env(&self) -> Vec<(String, String)>;
@@ -141,13 +142,18 @@ impl std::error::Error for ProjectDriveRefusal {}
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, no_cache: bool, locked: bool) -> Result<(i32, Option<fs::Path>), Box<dyn std::error::Error>> {
+    let rust_library = project_drive_artifact(host) == "rust-library";
+    if rust_library && subcommand == "run" { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(String::from("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")), &"project_drive_drive_to")); }
+    let crate_build = rust_library && subcommand == "build" && !host.tests_build();
     let entry = host.entry();
     let not_there = format!("{} is not there. A project's entry point is `src/main.nika`.", nikaia_std::fs::path::display(&(entry)));
-    let meta = match fs::metadata(&entry, &fs::Root::Anywhere) {
-        Ok(value) => value,
-        Err(_error) => { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(not_there), &"project_drive_drive_to")) },
-    };
-    if !meta.is_file() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(not_there), &"project_drive_drive_to")); }
+    if !crate_build {
+        let meta = match fs::metadata(&entry, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(not_there), &"project_drive_drive_to")) },
+        };
+        if !meta.is_file() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(not_there), &"project_drive_drive_to")); }
+    }
     host.explain_if_asked()?;
     let members = host.drive_members()?;
     let order = project_members_dependencies_first(&members);
@@ -181,6 +187,10 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
             };
         }
         { let __nikaia_stored = lowered.rust.to_string(); nikaia_std::index::set(&mut rust, nikaia_std::index::at(at), __nikaia_stored); }
+    }
+    if crate_build {
+        project_drive_rust_library(host, &members, &rust)?;
+        return Ok((0, None));
     }
     for (member, text) in members.iter().zip(rust.iter()) { host.write_if_changed(&project_drive_generated(host, &member.name), text)?; }
     let switches = host.switches_path();
@@ -418,6 +428,59 @@ pub(crate) fn project_drive_c_library<H: ProjectDriveHost>(host: &H, header: &st
     Ok(())
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn project_drive_artifact<H: ProjectDriveHost>(host: &H) -> String {
+    for (key, value) in host.settings_env() { if key == PROJECT_SETTINGS_ARTIFACT_VAR { return value; } }
+    String::from("program")
+}
+
+pub fn project_drive_rust_crate(name: &str) -> String { format!("nikaia_{}", name.replace('-', "_")) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members: &[ProjectMembersMember], rust: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let target = match nikaia_std::fs::path::parent(&(host.own_dir())) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(format!("{} has no directory", nikaia_std::fs::path::display(&(host.own_dir())))), &"project_drive_rust_library")) };
+    let made = nikaia_std::fs::path::join(&(target), std::path::Path::new(&("rust-library")));
+    for at in 0..members.len() as i64 {
+        let crate_name = project_drive_rust_crate(&nikaia_std::index::get(&members, nikaia_std::index::at(at)).name);
+        let manifest = host.member_manifest(at, nikaia_std::index::get(&rust, nikaia_std::index::at(at)))?;
+        let dir = nikaia_std::fs::path::join(&(made), std::path::Path::new(&(crate_name)));
+        project_drive_make_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src"))))?;
+        host.write_if_changed(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.toml"))), &project_drive_rust_manifest(&manifest, &crate_name, members))?;
+        host.write_if_changed(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src")))), std::path::Path::new(&("lib.rs"))), nikaia_std::index::get(&rust, nikaia_std::index::at(at)))?;
+    }
+    nikaia_std::io::println(format_args!("rust-library: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(made), std::path::Path::new(&(project_drive_rust_crate(&nikaia_std::index::get(&members, 0).name))))))))?;
+    Ok(())
+}
+
+pub fn project_drive_rust_manifest(generated: &str, crate_name: &str, members: &[ProjectMembersMember]) -> String {
+    let mut out = String::from("# Written by `nikaia build` (`artifact = \"rust-library\"`, ADR-393 D1) from\n# `nikaia.toml`. Do not edit: every build rewrites it.\n");
+    let mut section: String = String::from("");
+    for line in generated.lines() {
+        if line.starts_with('#') { continue; }
+        if line.starts_with('[') {
+            section = line.trim().to_string();
+            if section == "[[bin]]" || section == "[lib]" { out = format!("{}[lib]\nname = \"{}\"\npath = \"src/lib.rs\"\n", out, crate_name); } else { out = format!("{}{}\n", out, line); }
+            continue;
+        }
+        if (section == "[[bin]]" || section == "[lib]") && !line.trim().is_empty() { continue; }
+        if section == "[package]" && line.starts_with("name = ") {
+            out = format!("{}name = \"{}\"\n", out, crate_name);
+            continue;
+        }
+        let mut kept = line.to_string();
+        if section == "[dependencies]" {
+            for member in members.iter() {
+                let beside = project_drive_rust_crate(&member.name);
+                kept = kept.replace(&format!("package = \"{}\", path = \"../{}\"", member.name, member.name), &format!("package = \"{}\", path = \"../{}\"", beside, beside));
+            }
+        }
+        out = format!("{}{}\n", out, kept);
+    }
+    format!("{}\n[workspace]\n", out)
+}
+
 pub fn project_drive_backend_said(messages: &str) -> bool { messages.lines().any(|line| { line.contains("\"compiler-message\"") }) }
 
 pub trait ProjectDriveKeptHost {
@@ -511,8 +574,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple39226| {
-        let (a, b) = __nikaia_tuple39226;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple44055| {
+        let (a, b) = __nikaia_tuple44055;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

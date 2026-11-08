@@ -110,12 +110,12 @@ pub fn derived_of(
 			Item::Impl { methods, .. } => {
 				for method in methods {
 					match method.node {
-						Item::Fn { config, body, .. } => called.push(derived_body(
-							config,
-							body,
-							words,
-							everywhere,
-						)),
+						Item::Fn { name, config, body, .. } => {
+							called.push(derived_body(config, body, words, everywhere))
+							let named = name ?? continue
+							let text = words.resolve(named).clone()
+							defined.insert(text.clone(), (defined[text] ?? 0) + 1)
+						},
 						else => called.push(collections::BTreeSet()),
 					}
 				}
@@ -141,51 +141,77 @@ pub fn derived_of(
 	let mut position = 0
 	for item in program.items {
 		match item.node {
-			Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
-				let at = position
+			Item::Fn { .. } => {
+				derived_candidate(derived, item.node, position, false, defined, everywhere, words)
 				position += 1
-				let named = name ?? continue
-				let text = words.resolve(named).clone()
-				if is_public
-					|| is_extern
-					|| receiver != null
-					|| spread != null
-					|| !config.is_empty()
-					|| args.is_empty() {
-						continue
-					}
-				if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
-					continue
-				}
-				let sites = everywhere.calls[text] ?? continue
-				let claims = derived_claims(args, body, words)
-				if sites.is_empty() || claims.is_empty() {
-					continue
-				}
-				let mut params: Vec[String] = []
-				for arg in args {
-					params.push(words.resolve(arg.name).clone())
-				}
-				derived.functions.insert(
-					text.clone(),
-					DerivedFunction {
-						name: text.clone(),
-						key: args[0].span.start as i64,
-						position: at,
-						params: params,
-						claims: claims,
-						sites: sites.clone(),
-					},
-				)
 			},
-			Item::Impl { methods, .. } => {
-				position += methods.len()
+			Item::Impl { trait_name, methods, .. } => {
+				for method in methods {
+					// A trait's method is called wherever the trait is.
+					if trait_name == null {
+						derived_candidate(derived, method.node, position, true, defined, everywhere, words)
+					}
+					position += 1
+				}
 			},
 			else => {},
 		}
 	}
 	derived.order = derived_callers_first(derived, called)
 	return derived
+}
+
+/// **`item` as a candidate**, at `position` among the bodies: a private
+/// free function, or where `method` a private method on `self` of an
+/// inherent `impl`, defined once, named nowhere but as a callee, called, and
+/// with claims its body could use.
+fn derived_candidate(
+	mut derived: Derived,
+	item: ref Item,
+	position: i64,
+	method: bool,
+	defined: ref collections::BTreeMap[String, i64],
+	everywhere: ref DerivedScan,
+	words: ref winnow_grammar::InternerContext,
+) {
+	match item {
+		Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
+			let named = name ?? return
+			let text = words.resolve(named).clone()
+			if is_public
+				|| is_extern
+				|| (receiver != null) != method
+				|| spread != null
+				|| !config.is_empty()
+				|| args.is_empty() {
+					return
+				}
+			if (defined[text] ?? 0) != 1 || everywhere.values.contains(text) {
+				return
+			}
+			let sites = everywhere.calls[text] ?? return
+			let claims = derived_claims(args, body, method, words)
+			if sites.is_empty() || claims.is_empty() {
+				return
+			}
+			let mut params: Vec[String] = []
+			for arg in args {
+				params.push(words.resolve(arg.name).clone())
+			}
+			derived.functions.insert(
+				text.clone(),
+				DerivedFunction {
+					name: text.clone(),
+					key: args[0].span.start as i64,
+					position: position,
+					params: params,
+					claims: claims,
+					sites: sites.clone(),
+				},
+			)
+		},
+		else => {},
+	}
 }
 
 /// One body's calls, kept in `scan` with every other name it meets; the
@@ -274,10 +300,12 @@ fn derived_callers_first(
 /// **The claims a body could use**, from the shapes it is written in: each
 /// whole-number parameter compared or used as an index is `>= 0`, at most
 /// each list's length, below it where the list is indexed, and at most or
-/// below each other one compared.
+/// below each other one compared. Of a `method`, a list field of `self` the
+/// body indexes counts as a list.
 fn derived_claims(
 	args: ref Vec[FnArg],
 	body: ref Block,
+	method: bool,
 	words: ref winnow_grammar::InternerContext,
 ) -> Vec[DerivedClaim] {
 	let mut ints: Vec[String] = []
@@ -312,6 +340,15 @@ fn derived_claims(
 				match base {
 					Expr::Variable(name, _) => {
 						indexed.insert(words.resolve(name).clone())
+					},
+					// A method's list field, `self.arms[at]`, is bounded
+					// at a call by the receiver's (ADR-391 D1).
+					Expr::Field { .. } => {
+						let path = path_of(base, words) ?? ""
+						if method && path.starts_with("self.") && !lists.contains(path) {
+							indexed.insert(path.clone())
+							lists.push(path)
+						}
 					},
 					else => {},
 				}
@@ -564,6 +601,20 @@ fn derived_symbol(
 	scan.values.insert(words.resolve(named).clone())
 }
 
+/// A method call `call` of `method`, kept with the calls of that name.
+fn derived_method_site(
+	call: ref Expr,
+	method: winnow_grammar::Symbol,
+	at: i64,
+	words: ref winnow_grammar::InternerContext,
+	mut scan: DerivedScan,
+) {
+	let text = words.resolve(method).clone()
+	let mut sites = scan.calls[text]?.clone() ?? []
+	sites.push((node_key(call), at))
+	scan.calls.insert(text, sites)
+}
+
 /// Each call of a name in `expr`, with the byte its statement starts at, and
 /// every other name it mentions.
 fn derived_expr(
@@ -594,12 +645,16 @@ fn derived_expr(
 			derived_all(args, at, words, scan)
 			derived_settings(config, at, words, scan)
 		},
-		Expr::MethodCall { receiver, args, config, .. } => {
+		// A method's name is a call of every method so named: one of a
+		// type the scan cannot tell apart only adds a site to be proved.
+		Expr::MethodCall { receiver, method, args, config, .. } => {
+			derived_method_site(expr, method, at, words, scan)
 			derived_expr(receiver, at, words, scan)
 			derived_all(args, at, words, scan)
 			derived_settings(config, at, words, scan)
 		},
-		Expr::SafeMethod { receiver, args, config, .. } => {
+		Expr::SafeMethod { receiver, method, args, config, .. } => {
+			derived_method_site(expr, method, at, words, scan)
 			derived_expr(receiver, at, words, scan)
 			derived_all(args, at, words, scan)
 			derived_settings(config, at, words, scan)

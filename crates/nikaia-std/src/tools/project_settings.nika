@@ -45,8 +45,10 @@ pub struct ProjectWords {
     /// default, refuses the program (`NK1300`); `warn` builds it, each such
     /// claim a warning and a check where it is reached.
     pub unproved_claims: String,
-    /// **What is made** (ADR-284 D4): `"program"`, or `"c-library"`, which
-    /// exports every `pub extern fn` with a body and writes the header.
+    /// **What is made** (ADR-284 D4): `"program"`; `"c-library"`, which
+    /// exports every `pub extern fn` with a body and writes the header; or
+    /// `"rust-library"`, the package as the lib crate `nikaia_<name>`
+    /// (ADR-393 D1).
     pub artifact: String,
     /// The prefix of every exported symbol (ADR-284 D13): `symbol-prefix`, or
     /// the package's name with `-` written `_`.
@@ -144,11 +146,12 @@ fn project_settings_renamed(level: String) -> String {
     }
 }
 
-/// `[build] artifact` (ADR-284 D4): a program, or a library C calls.
+/// `[build] artifact` (ADR-284 D4): a program, a library C calls, or a lib
+/// crate Rust depends on (ADR-393 D1).
 pub fn artifact(word: String) -> String throws {
     return match word {
-        "program" | "c-library" => word,
-        else => throw ProjectSettingsRefusal::Refused(f"`artifact` is `program` or `c-library`, not `{word}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body."),
+        "program" | "c-library" | "rust-library" => word,
+        else => throw ProjectSettingsRefusal::Refused(f"`artifact` is `program`, `c-library` or `rust-library`, not `{word}`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body; `rust-library` writes the package as the Rust lib crate `nikaia_<name>`."),
     }
 }
 

@@ -69,15 +69,11 @@ pub fn bounds_report_checked(
 			Item::Impl { methods, .. } => {
 				for method in methods {
 					match method.node {
-						Item::Fn { args, body, .. } => bounds_report_function(
-							args,
-							body,
-							words,
-							source,
-							facts,
-							holes_of,
-							walk,
-						),
+						Item::Fn { name, args, body, .. } => {
+							walk.callers = callees.contains(words.resolve(name ?? continue))
+							bounds_report_function(args, body, words, source, facts, holes_of, walk)
+							walk.callers = false
+						},
 						else => {},
 					}
 				}

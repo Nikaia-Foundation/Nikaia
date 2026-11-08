@@ -140,7 +140,7 @@ pub fn project_check_gained(committed: &Ledger, inferred: &Ledger) -> collection
     let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (name, contract) in inferred.functions.iter() {
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let gained: Vec<String> = contract.fails_with.iter().filter(|&error| { !before.fails_with.contains(error) }).map(|x| { x.to_string() }).collect::<Vec<_>>();
+        let gained: Vec<String> = contract.fails_with.iter().filter(|&error| { !nikaia_std::list::contains(&before.fails_with, &error) }).map(|x| { x.to_string() }).collect::<Vec<_>>();
         if !gained.is_empty() { out.insert(name.to_string(), gained); }
     }
     out

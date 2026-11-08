@@ -1,0 +1,2 @@
+exit 1
+Error: `artifact` is `program`, `c-library` or `rust-library`, not `dylib`. `c-library` makes a shared and a static library of the package, and its header, from every `pub extern fn` with a body; `rust-library` writes the package as the Rust lib crate `nikaia_<name>`.
