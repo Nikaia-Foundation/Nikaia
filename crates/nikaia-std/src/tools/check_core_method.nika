@@ -530,6 +530,10 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.io_inside_a_door(world, on, f"`{written}`", span)
     // **`update`'s block is a write door's** (ADR-281 D12).
     let at_a_door = name == "update" && locked_content_of(on) != null
+    // **A value that copies is changed on a copy** (ADR-327 D11).
+    if at_a_door && a_copy_by_value(locked_content_of(on) ?? Ty::Unknown) {
+        state.facts.copied_doors.insert(id_of(receiver) as i64)
+    }
     if at_a_door && args.len() > 0 {
         match args[args.len() as i64 - 1] {
             Expr::Closure { params, body, .. } => {

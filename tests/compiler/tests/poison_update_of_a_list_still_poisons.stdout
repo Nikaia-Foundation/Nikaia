@@ -1,0 +1,4 @@
+the first task runs
+the update panicked: true
+the second task runs
+a second task finds it poisoned: true

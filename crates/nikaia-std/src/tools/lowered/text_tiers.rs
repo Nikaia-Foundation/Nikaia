@@ -4399,6 +4399,30 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_>, 
             walk_action((alt.action).as_ref(), ask, walk);
             close_tier_scope(walk);
         }
+        if rule.stream { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
+    }
+}
+
+pub(crate) fn own_stream_items(ret_type: Option<&Type>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
+    let item = ask.names.resolve(ty.name).to_string();
+    let mut owners: Vec<(TextOwner, Type)> = vec![];
+    let prefix = format!("{}::", item);
+    for (key, field) in walk.declared.fields.iter() { if key.0 == item { owners.push((TextOwner::Field(key.0.to_string(), key.1.to_string()), field.ty.clone())); } }
+    for (key, ty) in walk.declared.variant_fields.iter() { if key.0.starts_with(&prefix) { owners.push((TextOwner::Field(key.0.to_string(), key.1.to_string()), ty.clone())); } }
+    for (key, parts) in walk.declared.variants.iter() {
+        if key.starts_with(&prefix) {
+            let (of, variant) = variant_named(key);
+            let mut at = 0;
+            for part in parts.iter() {
+                owners.push((TextOwner::Variant(of.to_string(), variant.to_string(), at), part.clone()));
+                at += 1;
+            }
+        }
+    }
+    for (owner, part) in owners.iter() {
+        flow_type(owner, part, &mut vec![], &owned_kinds(), ask, walk);
+        unlinked_inside(owner, part, &mut vec![], ask, walk);
     }
 }
 

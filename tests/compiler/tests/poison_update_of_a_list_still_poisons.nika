@@ -1,0 +1,24 @@
+// An `update` of a list works in place (ADR-327 D11, #490): its block panics
+// after a `push`, so the list may be half-changed and is poisoned; a second
+// task's `get` panics.
+fn grow(list: SharedMut[Vec[i64]]) -> i64 {
+	list.update fn(mut v) {
+		v.push(4)
+		if v.len() > 3 { panic("after the push") }
+	}
+	return 1
+}
+
+fn read(list: SharedMut[Vec[i64]]) -> i64 {
+	return list.get().len()
+}
+
+fn main() throws {
+	let list: SharedMut[Vec[i64]] = SharedMut([1, 2, 3])
+	let a = async grow(list) catch { 0 }
+	println("the first task runs")
+	println(f"the update panicked: {a == 0}")
+	let b = async read(list) catch { -1 }
+	println("the second task runs")
+	println(f"a second task finds it poisoned: {b == -1}")
+}

@@ -191,6 +191,7 @@ impl Settings {
         build.skip_free_at_exit = skip_free_at_exit(&words.optimization);
         build.prove_through_loops = prove_through_loops(&words.optimization);
         build.called_from_c = words.artifact == "c-library";
+        build.offered_to_rust = words.artifact == "rust-library";
         Ok(Settings { build, words })
     }
 
@@ -318,9 +319,32 @@ impl Settings {
                 build.skip_free_at_exit,
                 build.prove_through_loops,
                 &cpu_key,
+                build.crate_root,
             ),
             "rust",
         )
+    }
+
+    /// **The same settings with the package's items below `crate_root`**
+    /// (`Build::crate_root`, ADR-393 D7, #1447). The path is kept once per
+    /// distinct text for the life of the process: `Build` is `Copy`, and a
+    /// build names one or two roots.
+    pub fn rooted_at(&self, crate_root: &str) -> Settings {
+        static ROOTS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+        let mut roots = ROOTS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let kept = match roots.iter().find(|root| **root == crate_root) {
+            Some(root) => *root,
+            None => {
+                let root: &'static str = Box::leak(crate_root.to_string().into_boxed_str());
+                roots.push(root);
+                root
+            }
+        };
+        let mut settings = self.clone();
+        settings.build.crate_root = kept;
+        settings
     }
 
     /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.
@@ -3111,10 +3135,20 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         &self,
         at: i64,
         no_cache: bool,
+        crate_root: &str,
     ) -> HostResult<project_drive::ProjectDriveLowered> {
         let project = self.project;
         let members = self.members.borrow();
         let member = &members[at as usize];
+        // **Below a hand-written root** (ADR-393 D7, #1447) the member's
+        // items are `crate::<native>`, and the lowering is asked for that.
+        let rooted;
+        let settings = if crate_root == project.settings.build.crate_root {
+            &project.settings
+        } else {
+            rooted = project.settings.rooted_at(crate_root);
+            &rooted
+        };
         let outer = WARNED.with(|warned| warned.replace(project.warned));
         let shown = match &project.written {
             Some(written) if canonical(&member.entry) == canonical(&project.entry()) => {
@@ -3125,7 +3159,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown));
         let lowered = lower_reading(
             &member.entry,
-            &project.settings,
+            settings,
             no_cache,
             &member.dependencies,
             self.allowlist,

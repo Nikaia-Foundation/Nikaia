@@ -93,7 +93,7 @@ pub fn cpu_config(words: &ProjectWords, target: &Target) -> Vec<String> {
     }
 }
 
-pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str) -> String {
+pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str, crate_root: &str) -> String {
     let tests = if words.tests { "/tests" } else { "" };
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
@@ -107,9 +107,10 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     };
     let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" };
     let through_loops = if through_loops_on { "/prove-through-loops:on" } else { "" };
-    let library = if words.artifact == "c-library" { format!("/c-library:{}", words.symbol_prefix) } else { String::from("") };
+    let library = if words.artifact == "c-library" { format!("/c-library:{}", words.symbol_prefix) } else if words.artifact == "rust-library" { String::from("/rust-library") } else { String::from("") };
     let cpu = if words.cpu.is_some() { format!("/cpu:{}", cpu_key) } else { String::from("") };
-    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, through_loops, library, cpu)
+    let root = if crate_root == "crate" { String::from("") } else { format!("/root:{}", crate_root) };
+    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, through_loops, library, cpu, root)
 }
 
 pub fn panic_strategy(target: &Target) -> String {

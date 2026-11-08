@@ -1,11 +1,11 @@
 //! Many short tasks on fallible collections: the same steps as
-//! `tasks_std.rs`, with every list and text taken from a budget that may
-//! refuse (ADR-327 D5).
+//! `tasks_std.rs`, with every list and text taken from the task's block,
+//! which may refuse (ADR-327 D5, D12).
 
 #[path = "../budget.rs"]
 mod budget;
 
-use budget::{extend, push, text, Budget, List, Text};
+use budget::{extend, push, text, List, Text, BUDGET};
 use std::fmt::Write;
 
 /// One request: a request line, headers, a body.
@@ -56,7 +56,7 @@ fn answer(text_in: &Text) -> Text {
     let mut parts = first.split(' ');
     let method = owned(parts.next().unwrap_or(""));
     let target = owned(parts.next().unwrap_or(""));
-    let mut headers: List<(Text, Text)> = List::new_in(Budget);
+    let mut headers: List<(Text, Text)> = List::new_in(BUDGET);
     for line in lines {
         if line.is_empty() {
             break;
@@ -69,7 +69,7 @@ fn answer(text_in: &Text) -> Text {
     }
     let target = as_str(&target);
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
-    let mut segments: List<Text> = List::new_in(Budget);
+    let mut segments: List<Text> = List::new_in(BUDGET);
     for segment in path.split('/').filter(|s| !s.is_empty()) {
         push(&mut segments, owned(segment));
     }
@@ -115,6 +115,10 @@ fn main() {
     let mut sum: u64 = 0;
     let mut bytes: u64 = 0;
     for n in 0..tasks {
+        // Each request is a task with a block of its own, in place while it
+        // runs and handed back whole at its end.
+        let block = budget::Block::default();
+        let _in = budget::enter(&block);
         let response = answer(&request(n));
         bytes += response.len() as u64;
         sum = response

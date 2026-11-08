@@ -66,7 +66,7 @@ impl EmitState {
     }
     pub fn sum_root(&self) -> String {
         if self.is_std { return String::from(""); }
-        String::from("crate::")
+        format!("{}::", self.crate_root)
     }
     pub fn sum_member_held(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, params: &str) -> String {
         let kind = self.name_of_error(world, member);
@@ -85,7 +85,7 @@ impl EmitState {
                 decl = format!("<{}>", sum_input_lifetime());
                 params = format!("<{}>", sum_input_lifetime());
             }
-            let shared = if self.is_std { "pub " } else { "" };
+            let shared = if self.is_std || self.offered_to_rust { "pub " } else { "" };
             out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[allow(non_camel_case_types)]\n{}enum {}{} {{\n", shared, name, decl));
             for member in members.iter() {
                 let variant = sum_variant(member);

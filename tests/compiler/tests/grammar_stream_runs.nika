@@ -1,0 +1,46 @@
+// An entry marked `@stream` hands its items over one at a time (ADR-grammar-2
+// D7, amended 2026-11-08, #1442): a `for` takes each item owned, so it
+// outlives the loop, a `break` stops the walk, and the call held in a name is
+// the same sequence, walked once. The repetition may sit between other
+// patterns.
+
+struct Item {
+	word: String,
+}
+
+struct Pair {
+	key: String,
+	value: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+grammar Pairs {
+	@stream entry rule pairs -> Pair = "{" pair* "}"
+	rule pair -> Pair = k:until("=") "=" v:until(";") ";" -> {
+		Pair { key: k.clone(), value: v.clone() }
+	}
+}
+
+fn main() throws {
+	let mut kept: Vec[Item] = []
+	for it in Words::items("a;b;stop;c;") {
+		if it.word == "stop" {
+			break
+		}
+		kept.push(it)
+	}
+	for k in kept {
+		println(k.word)
+	}
+	let all = Words::items("x;y;")
+	for it in all {
+		println(f"held {it.word}")
+	}
+	for p in Pairs::pairs("{one=1;two=2;}") {
+		println(f"{p.key} is {p.value}")
+	}
+}

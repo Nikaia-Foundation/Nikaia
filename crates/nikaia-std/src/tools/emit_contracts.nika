@@ -28,6 +28,11 @@ pub struct EmitContractsBuild {
     pub overflow_removed: bool,
     /// The package is trusted (ADR-010 D9).
     pub trusted: bool,
+    /// The path of the lowered package's root (`Build::crate_root`, #1447):
+    /// `crate`, or `crate::<native>` under a hand-written root (ADR-393 D7).
+    pub crate_root: String,
+    /// The package is offered to Rust (`Build::offered_to_rust`, ADR-393 D1).
+    pub offered_to_rust: bool,
 }
 
 /// The state, which checks a statement holds and which are proved, and what
@@ -165,6 +170,8 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         kept_calls: collections::BTreeMap(),
         uses_std: tables.uses_std,
         is_std: false,
+        crate_root: build.crate_root.clone(),
+        offered_to_rust: build.offered_to_rust,
         fails: tables.fails,
         trusted_input: build.trusted,
         unchecked_assumes: unchecked,

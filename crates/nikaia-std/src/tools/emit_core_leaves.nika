@@ -553,6 +553,29 @@ impl EmitState {
             }
             return
         }
+        // **A `@stream` entry hands its items over one at a time**
+        // (ADR-grammar-2 D7, amended 2026-11-08): the engine's reader runs on
+        // a thread of its own over a copy of the input and hands each item,
+        // owned, through a channel that holds none; a walk that stops drops
+        // the receiver, `each` answers `Break` and the parse ends there. A
+        // failure is the sequence's next element.
+        let streamed = match entered {
+            rule => rule.stream,
+            null => false,
+        }
+        if streamed {
+            let rule = entered ?? return
+            if rule.args.len() > 0 || rule.config.len() > 0 || table != null {
+                throw EmitRefused { message: f"The compiler can't translate a call of `@stream` entry `{rule_name}` that hands it values or a table yet.", at: flow.statement }
+            }
+            out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*")
+            self.emit_expr(world, walk, out, host, input, depth, flow, scope)
+            out.push(").to_vec(); let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+            out.push(f"let __wg_parsed = {lowered}::parse_{rule_name}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+            out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })")
+            out.push(f"{question}")
+            return
+        }
         // A sequential entry rule: the parser is driven over the whole input once.
         match table {
             null => {

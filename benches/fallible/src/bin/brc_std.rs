@@ -1,9 +1,9 @@
-//! 1BRC's aggregation on today's collections: `std`'s `HashMap` with the
-//! trusted hash, `Vec` and `String`, which abort where memory runs out.
+//! 1BRC's aggregation on today's collections: `nikaia-std`'s map with the
+//! trusted hash, as an emitted program has it, `Vec` and `String`, which abort
+//! where memory runs out.
 
-use std::collections::HashMap;
+use nikaia_std::hash::TrustedMap;
 use std::fmt::Write;
-use std::hash::BuildHasherDefault;
 
 struct Stats {
     min: i64,
@@ -33,8 +33,7 @@ fn tenths(field: &[u8]) -> i64 {
 fn main() {
     let path = std::env::args().nth(1).expect("the measurements file");
     let data = std::fs::read(path).expect("read the measurements");
-    let mut stations: HashMap<&[u8], Stats, BuildHasherDefault<nikaia_std::hash::FxHasher>> =
-        HashMap::default();
+    let mut stations: TrustedMap<&[u8], Stats> = TrustedMap::default();
     for line in data.split(|&b| b == b'\n') {
         let Some(at) = line.iter().position(|&b| b == b';') else {
             continue;

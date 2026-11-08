@@ -6055,6 +6055,44 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
             walk_action(alt.action, ask, walk)
             close_tier_scope(walk)
         }
+        if rule.stream {
+            own_stream_items(rule.ret_type, ask, walk)
+        }
+    }
+}
+
+/// **A stream entry's items are owned** (ADR-grammar-2 D7, amended
+/// 2026-11-08): an item outlives the step that read it, so the text its type
+/// holds is text of its own, never a view of the input.
+fn own_stream_items(ret_type: ref Type?, ask: ref TierAsk, mut walk: TierWalk) {
+    let ty = ret_type ?? return
+    let item = ask.names.resolve(ty.name).clone()
+    let mut owners: Vec[(TextOwner, Type)] = []
+    let prefix = f"{item}::"
+    for (key, field) in walk.declared.fields {
+        if key.0 == item {
+            owners.push((TextOwner::Field(key.0.clone(), key.1.clone()), field.ty.clone()))
+        }
+    }
+    // A named variant's field is a field of `E::V`.
+    for (key, ty) in walk.declared.variant_fields {
+        if key.0.starts_with(prefix) {
+            owners.push((TextOwner::Field(key.0.clone(), key.1.clone()), ty.clone()))
+        }
+    }
+    for (key, parts) in walk.declared.variants {
+        if key.starts_with(prefix) {
+            let (of, variant) = variant_named(key)
+            let mut at = 0
+            for part in parts {
+                owners.push((TextOwner::Variant(of.clone(), variant.clone(), at), part.clone()))
+                at += 1
+            }
+        }
+    }
+    for (owner, part) in owners {
+        flow_type(owner, part, [], owned_kinds(), ask, walk)
+        unlinked_inside(owner, part, [], ask, walk)
     }
 }
 

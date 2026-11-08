@@ -195,6 +195,12 @@ pub struct CheckFacts {
     pub simd_loads: collections::BTreeMap[i64, i64],
     pub copied_slots: collections::BTreeSet[i64],
     pub owned_copies: collections::BTreeSet[i64],
+    /// **A door over values that copy** (ADR-327 D11): an `update` by its
+    /// receiver's id, an `update_all` by its first lock's, where every value
+    /// is a number, a `bool` or a `char`. The emitter writes `update_copied` /
+    /// `update_all_copied`, whose block works on copies, so a panic in it
+    /// poisons nothing.
+    pub copied_doors: collections::BTreeSet[i64],
     /// The copies among them that copy text, by the receiver's id: reached
     /// through `?.`, the receiver is a reference to the text, which may itself
     /// be a view (ADR-282 D29), and only `to_string` copies both.
@@ -633,6 +639,7 @@ impl CheckFacts {
             negations: collections::BTreeMap(),
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),
+            copied_doors: collections::BTreeSet(),
             text_copies: collections::BTreeSet(),
             tuple_copies: collections::BTreeMap(),
             static_field_reads: collections::BTreeSet(),

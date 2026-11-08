@@ -9,12 +9,14 @@ pub struct EmitContractsProven {
     pub calls: collections::BTreeMap<i64, String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmitContractsBuild {
     pub leaves_values: bool,
     pub bounds_removed: bool,
     pub overflow_removed: bool,
     pub trusted: bool,
+    pub crate_root: String,
+    pub offered_to_rust: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,25 +64,25 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     let fold_callees = emit_holes_fold_callees(parsed, words, &tables.grammars);
     let keep_plans: collections::BTreeMap<String, BufferPlan> = nikaia_std::index::or(checked_plans, || host.buffer_plans(&own_contracts).into()).into_iter().map(|plan| { (plan.key.to_string(), plan) }).collect();
     let proven_indices: collections::BTreeSet<i64> = propagation.list_indices.iter().copied().filter(|&node| { build.bounds_removed && proven.indices.contains(&node) }).collect();
-    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8032| {
-        let (at, _) = __nikaia_tuple8032; let at = nikaia_std::num::value(at);
+    let proven_arithmetic: collections::BTreeMap<i64, String> = propagation.arithmetic.iter().chain(propagation.shifts.iter()).filter(|&__nikaia_tuple8325| {
+        let (at, _) = __nikaia_tuple8325; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.arithmetic.contains(&at)
-    }).map(|__nikaia_tuple8110| {
-        let (at, ty) = __nikaia_tuple8110; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8403| {
+        let (at, ty) = __nikaia_tuple8403; let at = nikaia_std::num::value(at);
         (at, ty.to_string())
     }).collect();
-    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8254| {
-        let (at, _) = __nikaia_tuple8254; let at = nikaia_std::num::value(at);
+    let proven_negations: collections::BTreeMap<i64, String> = propagation.negations.iter().filter(|&__nikaia_tuple8547| {
+        let (at, _) = __nikaia_tuple8547; let at = nikaia_std::num::value(at);
         build.overflow_removed && proven.negations.contains(&at)
-    }).map(|__nikaia_tuple8331| {
-        let (at, ty) = __nikaia_tuple8331; let at = nikaia_std::num::value(at);
+    }).map(|__nikaia_tuple8624| {
+        let (at, ty) = __nikaia_tuple8624; let at = nikaia_std::num::value(at);
         (at, ty.to_string())
     }).collect();
     let believed_arithmetic: collections::BTreeMap<i64, String> = if unchecked { propagation.arithmetic.to_owned() } else { collections::BTreeMap::new() };
-    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9084| {
-        let (name, _) = __nikaia_tuple9084;
+    let mut state = EmitState { described: described.clone(), view_slots: emit_tables_read_view_slots(&own_contracts).into_iter().filter(|__nikaia_tuple9377| {
+        let (name, _) = __nikaia_tuple9377;
         name.contains("::")
-    }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { words.resolve(*s).to_string() }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
+    }).chain(units.iter().flat_map(|unit| { emit_tables_view_slots(unit.words, unit.items, &package_wide) })).chain(emit_tables_read_view_slots(described).into_iter()).collect(), borrowing: emit_tables_borrowing_structs_beside(words, items, &package_wide).iter().map(|s| { words.resolve(*s).to_string() }).chain(package_wide.iter().cloned()).collect(), tethered: emit_tables_tethered(&own_contracts, beside), declared_errors: emit_tables_declared_errors(units), carries_input: host.carries_input(&own_contracts), fold_callees, by_name: tables.by_name, grammars: tables.grammars, methods: tables.methods, keep_plans, structs: tables.structs, structs_beside: emit_tables_structs_beside(beside), template_holes: collections::BTreeMap::new(), template_errors: collections::BTreeMap::new(), hole_wraps: host.hole_wraps(), kept_calls: collections::BTreeMap::new(), uses_std: tables.uses_std, is_std: false, crate_root: build.crate_root.to_string(), offered_to_rust: build.offered_to_rust, fails: tables.fails, trusted_input: build.trusted, unchecked_assumes: unchecked, believed_arithmetic, trusted_lets: plan.lets, escaped_lets: plan.escaped, fast_slots: plan.slots, seeded_calls: host.seeded_calls(), seeds: host.seeds(), proven_indices, proven_arithmetic, proven_negations, proven_calls: proven.calls, facts: propagation, cleaned_types: nikaia_std::index::or(match own_contracts.implementations.get("Cleanup") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeSet::new().into()), shared, built_at_build_time: emit_holes_built_at_build_time(parsed, words, items), pausing_reach: made_graphs.pausing_reach, code_cycle_graph: made_graphs.code_cycle_graph, own_methods: method_index(&own_contracts), library_methods: method_index(library), own_contracts, dsl_drivers: drivers(words, items).into_iter().collect(), foreign_params: foreign_params(words, items), opaque_handles: opaque_handles(words, items), foreign_results: foreign_results(words, items), entry: true, sums: collections::BTreeMap::new(), sums_written: collections::BTreeSet::new() };

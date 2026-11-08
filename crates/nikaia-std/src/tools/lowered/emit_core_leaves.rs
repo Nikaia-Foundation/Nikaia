@@ -394,6 +394,21 @@ impl EmitState {
             }
             return Ok(());
         }
+        let streamed = match entered {
+            Some(ref rule) => rule.stream,
+            None => false,
+        };
+        if streamed {
+            let rule = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            if !rule.args.is_empty() || !rule.config.is_empty() || table.is_some() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("The compiler can't translate a call of `@stream` entry `{}` that hands it values or a table yet.", rule_name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
+            out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*");
+            self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+            out.push(").to_vec(); let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", lowered, rule_name));
+            out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })");
+            out.push(&format!("{}", question));
+            return Ok(());
+        }
         match table {
             None => {
                 out.push(&format!("nikaia_std::grammar::parse{}(&*", over));

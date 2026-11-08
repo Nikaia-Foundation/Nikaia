@@ -1,0 +1,21 @@
+// An `update` of a number works on a copy (ADR-327 D11, #490): its block
+// panics on an overflow in one task, and a second task reads the old value
+// through `get` without a panic.
+fn add(kasse: SharedMut[i64]) -> i64 {
+	kasse.update fn(mut v) { v += i64::MAX }
+	return 1
+}
+
+fn read(kasse: SharedMut[i64]) -> i64 {
+	return kasse.get()
+}
+
+fn main() throws {
+	let kasse = SharedMut(5)
+	let a = async add(kasse) catch { 0 }
+	println("the first task runs")
+	println(f"the update panicked: {a == 0}")
+	let b = async read(kasse) catch { -1 }
+	println("the second task runs")
+	println(f"a second task reads: {b}")
+}

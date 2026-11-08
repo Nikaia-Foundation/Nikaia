@@ -1462,7 +1462,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if (text == "access_all" || text == "update_all") && !args.is_empty() {
-            out.push(&format!("nikaia_std::lock::{}(", text));
+            let copied = if text == "update_all" && self.facts.copied_doors.contains(&node_key(nikaia_std::index::get(&args, 0))) { "_copied" } else { "" };
+            out.push(&format!("nikaia_std::lock::{}{}(", text, copied));
             let last = args.len() as i64 - 1;
             let mut at: i64 = 0;
             for lock in args.iter() {

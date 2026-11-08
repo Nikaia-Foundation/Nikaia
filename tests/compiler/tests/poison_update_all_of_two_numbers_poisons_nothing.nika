@@ -1,0 +1,26 @@
+// An `update_all` over two numbers works on copies and puts both back
+// together (ADR-327 D11, #490): its block panics after changing the first,
+// and both old values are still readable.
+fn move(a: SharedMut[i64], b: SharedMut[i64]) -> i64 {
+	update_all(a, b) fn(mut x, mut y) {
+		x -= 10
+		if x < 100 { panic("after the first") }
+		y += 10
+	}
+	return 1
+}
+
+fn read(a: SharedMut[i64], b: SharedMut[i64]) -> i64 {
+	return a.get() * 1000 + b.get()
+}
+
+fn main() throws {
+	let a = SharedMut(105)
+	let b = SharedMut(7)
+	let t = async move(a, b) catch { 0 }
+	println("the first task runs")
+	println(f"the update_all panicked: {t == 0}")
+	let r = async read(a, b) catch { -1 }
+	println("the second task runs")
+	println(f"both old values: {r}")
+}
