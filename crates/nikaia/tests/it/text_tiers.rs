@@ -610,8 +610,8 @@ fn main() throws {
 /// **A view handed back out of a parameter that holds views**
 /// ([ADR-282](../../../docs/specification/adr/adr-282.md)): an element of a
 /// list of views, a view field of a struct - the result is the buffer's, not a
-/// borrow of the parameter - and a field both kinds flow into, which is handed
-/// over with its struct as a `String` field is.
+/// borrow of the parameter - and a field both kinds flow into, whose struct is
+/// lent as one with a `String` field is (#1341).
 const OUT_OF_A_PARAMETER: &str = r##"use std::fs
 
 struct Entry {
@@ -660,11 +660,11 @@ fn a_view_handed_back_out_of_a_parameter_that_holds_views_is_the_buffers() {
         "{rust}"
     );
     assert!(
-        rust.contains("fn place<'a>(s: &Seen<'a>) -> &'a str"),
+        rust.contains("fn place<'r>(s: &Seen<'r>) -> &'r str"),
         "{rust}"
     );
     assert!(
-        rust.contains("fn label<'r>(e: Entry<'r>) -> nikaia_std::either_text::EitherText<'r>"),
+        rust.contains("fn label<'r>(e: &'r Entry<'r>) -> nikaia_std::either_text::EitherText<'r>"),
         "{rust}"
     );
 }

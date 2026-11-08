@@ -1,0 +1,43 @@
+// #1341, ADR-views-3 D7, D8, D12: a field of a plain struct parameter that
+// one arm hands back, beside text of the body's own in another, lends the
+// parameter as `ref` would, so the caller uses it again (was NK2105, "passed
+// to `pick`, which keeps it"). A parameter also handed on whole stays as
+// written.
+
+struct Inner { name: String }
+
+struct H { name: String, inner: Inner }
+
+fn own(s: String) -> String { return s + "!" }
+
+fn pick(h: H, c: bool) -> String { if c { h.name } else { own(h.name) } }
+
+fn by_return(h: H, c: bool) -> String {
+    if c { return h.inner.name }
+    return f"{h.name}?"
+}
+
+fn by_match(h: H, c: i64) -> String? {
+    match c {
+        0 => h.name,
+        1 => null,
+        else => own(h.inner.name),
+    }
+}
+
+fn store(h: H, mut all: Vec[H], c: bool) -> String {
+    if c { return h.name }
+    all.push(h)
+    return "kept"
+}
+
+fn main() throws {
+    let h = H { name: "a", inner: Inner { name: f"i{1}" } }
+    println(pick(h, true))
+    println(pick(h, false))
+    println(f"{by_return(h, true)} {by_return(h, false)}")
+    println(f"{by_match(h, 0) ?? "-"} {by_match(h, 1) ?? "-"} {by_match(h, 2) ?? "-"}")
+    let mut all: Vec[H] = []
+    println(store(h, all, false))
+    println(all.len())
+}

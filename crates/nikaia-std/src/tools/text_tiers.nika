@@ -6088,12 +6088,20 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.in_hole = false
     walk.hole_text = -1
     open_tier_scope(walk)
+    // A plain struct parameter a field of which is handed back is read as
+    // `ref`, as the hand-back pass writes it (#1341, `hb_text_field_roots`).
+    let of_a_trait = walk.declared.fns[key]?.of_a_trait ?? false
+    let lent_fields: collections::BTreeSet[String] = if of_a_trait { collections::BTreeSet() } else { hb_text_field_roots(item, ask.names) }
     let mut at = 0
     for arg in args {
         let owner = TextOwner::Param(key.clone(), at)
         let kinds = kinds_of(owner, arg.ty, [], ask, walk)
         let of: String = ask.names.resolve(arg.ty.name).clone()
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: arg.ty.clone() }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
+        let mut ty = arg.ty.clone()
+        if lent_fields.contains(ask.names.resolve(arg.name)) {
+            ty.is_view = true
+        }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -7886,6 +7894,20 @@ fn hb_plain_text(t: ref Type, words: ref winnow_grammar::InternerContext) -> boo
 /// `free`: a function of the file, not a method; only such a one is entered
 /// in `views`, where a call names it.
 fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
+    let lent_fields = hb_text_field_roots(item, words)
+    if !lent_fields.is_empty() {
+        match item {
+            Item::Fn { args, .. } => {
+                for mut arg in args {
+                    if lent_fields.contains(words.resolve(arg.name)) {
+                        hb_set(arg.ty)
+                    }
+                }
+            },
+            else => {},
+        }
+        return
+    }
     match item {
         Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             if is_extern || !hb_result_may_be_a_view(ret_type, words, plain) {
@@ -7928,6 +7950,129 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
             hb_enter(name, sources, words, views, free)
         },
         else => {},
+    }
+}
+
+/// **A plain struct parameter whose text field a text result hands back is
+/// lent** (ADR-views-3 D7, D8, D12; #1341): `fn pick(h: H, c: bool) ->
+/// String { if c { h.name } else { own(h.name) } }`, or `-> String?`, reads
+/// `h` as `ref H`, as a plain `self` is read (`walk.lent_self`) and as a
+/// field of any other type is (`hb_roots`): the result is a view of `h`, or
+/// text of its own beside one (ADR-282 D14), and the caller uses `h` again.
+/// The text walk reads the parameter so (`walk_function`), and this pass
+/// writes it so (`hb_fn`). Each way out counts, and each arm of a tail `if`
+/// or `match` in one; only a chain of fields down to the parameter, neither
+/// `keep` nor `mut` nor `ref` already, named nowhere but in such reads
+/// (`hb_only_field_reads`). A whole parameter is not asked here: a `String`
+/// one is the walk's (`lendable_parameter`). A published function keeps its
+/// text of its own (ADR-282 D29), and a trait's method the trait's
+/// signature.
+fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    let (args, ret_type, body, is_extern, ret_from, is_public) = match item {
+        Item::Fn { args, ret_type, body, is_extern, ret_from, is_public, .. } => (args, ret_type, body, is_extern, ret_from, is_public),
+        else => return out,
+    }
+    let t = ret_type ?? return out
+    let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && t.code == null
+    if is_extern || is_public || ret_from.len() > 0 || !text {
+        return out
+    }
+    let none: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut handed: Vec[ref Expr] = []
+    for way in hb_ways_out(body) {
+        handed.extend(hb_text_arms(way))
+    }
+    // The field reads that only read: the ones handed back, and the ones
+    // handed to a free function, put in a hole or under an operator.
+    let mut reads: Vec[ref Expr] = handed.clone()
+    let visited = visited_in_block(body)
+    for expr in visited {
+        match expr {
+            Expr::Call { func, args: given, .. } => match func {
+                Expr::Variable(_, _) => reads.extend(given),
+                else => {},
+            },
+            Expr::Binary { lhs, rhs, .. } => {
+                reads.push(lhs)
+                reads.push(rhs)
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts {
+                    match part {
+                        FPart::Hole { expr: hole, .. } => reads.push(hole),
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    for value in handed {
+        let root = hb_field_chain_root(value, words) ?? continue
+        let lendable = args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null && hb_type_may_be_a_view(arg.ty, words, none) })
+        if lendable && !rebinds(body, root, words) && hb_only_field_reads(root, visited, reads, words) {
+            out.insert(root)
+        }
+    }
+    return out
+}
+
+/// **Every use of `root` is a field read among `reads`** (#1341): a
+/// parameter also named whole (`all.push(h)`), read in a lambda or handed
+/// to a method stays as written, since lending it would refuse that use.
+fn hb_only_field_reads(root: ref String, visited: ref Vec[ref Expr], reads: ref Vec[ref Expr], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut read: collections::BTreeSet[i64] = collections::BTreeSet()
+    for value in reads {
+        let name = hb_field_chain_root(value, words) ?? continue
+        if name == root {
+            read.insert(hb_chain_variable_id(value))
+        }
+    }
+    for expr in visited {
+        match expr {
+            Expr::Variable(name, _) => if words.resolve(name) == root && !read.contains(id_of(expr) as i64) {
+                return false
+            },
+            Expr::Closure { .. } => return false,
+            else => {},
+        }
+    }
+    return true
+}
+
+/// The id of the name a field read `x.a.b` starts at.
+fn hb_chain_variable_id(value: ref Expr) -> i64 {
+    return match value {
+        Expr::Field { base, .. } => hb_chain_variable_id(base),
+        else => id_of(value) as i64,
+    }
+}
+
+/// A value handed back, or each arm of a tail `if` or `match` it is, down
+/// to the values that are no such choice.
+fn hb_text_arms(value: ref Expr) -> Vec[ref Expr] {
+    let arms = tail_arms(value)
+    if arms.is_empty() {
+        return [value]
+    }
+    let mut out: Vec[ref Expr] = []
+    for arm in arms {
+        out.extend(hb_text_arms(arm))
+    }
+    return out
+}
+
+/// The name `x` of a field read `x.a` or `x.a.b`; null for anything else.
+fn hb_field_chain_root(value: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    let base = match value {
+        Expr::Field { base, .. } => base,
+        else => return null,
+    }
+    return match base {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        Expr::Field { .. } => hb_field_chain_root(base, words),
+        else => null,
     }
 }
 
