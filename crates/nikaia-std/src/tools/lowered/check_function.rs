@@ -431,6 +431,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         } else { ty = check_walked_declared(state, world, &arg.ty, &arg.span); }
         check_reflected_field_kept(state, world, &arg.ty, &arg.span, true);
         let id = state.a_new_binding();
+        state.declared_binding(id, &arg.span, &name);
         let mut local = CheckLocal::free(name, ty.erase(parameters), id);
         if !arg.mutable { local.without_mut = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: String::from("") }); }
         local.changing = arg.mutable;

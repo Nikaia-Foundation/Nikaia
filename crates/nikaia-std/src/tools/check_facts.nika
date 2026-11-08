@@ -545,6 +545,16 @@ pub struct CheckFacts {
     /// **The keep plans the check made against `std` alone** (#727): the
     /// emitter's own, where it reads this check's facts.
     pub keep_plans: Vec[BufferPlan]?,
+    /// **What each name a use names** (#1396), by the use's node: what
+    /// `nikaia lsp` answers "go to definition" from (`check_declared.nika`).
+    /// Nothing in a build reads it.
+    pub declared: collections::BTreeMap[i64, CheckDeclared],
+    /// **Where each local was bound** (#1396), by its binding's id
+    /// (`CheckLocal::id`): its `let`, `for`, `match` or parameter.
+    pub bound_at: collections::BTreeMap[i64, (Span, String)],
+    /// **Where a use stands whose node the grammar gave no span** (#1396):
+    /// a callee, from its call's start, as wide as the name written.
+    pub declared_at: collections::BTreeMap[i64, Span],
 }
 
 impl CheckFacts {
@@ -597,6 +607,9 @@ impl CheckFacts {
             shifts: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
             method_callees: collections::BTreeMap(),
+            declared: collections::BTreeMap(),
+            bound_at: collections::BTreeMap(),
+            declared_at: collections::BTreeMap(),
             simd_loads: collections::BTreeMap(),
             negations: collections::BTreeMap(),
             copied_slots: collections::BTreeSet(),

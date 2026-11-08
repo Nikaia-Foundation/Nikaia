@@ -118,6 +118,8 @@ fn no_nika_source_in_the_tree_was_left_on_the_old_meaning() {
                 // String literals are blanked first: a `".."` is no range.
                 let mut blanked = String::new();
                 let mut in_string = false;
+                // A `..` inside `[ ]` is a slice (`a[from..]`), not a range.
+                let mut depth = 0usize;
                 let mut chars = code.chars();
                 while let Some(c) = chars.next() {
                     if in_string {
@@ -128,7 +130,11 @@ fn no_nika_source_in_the_tree_was_left_on_the_old_meaning() {
                         }
                     } else if c == '"' {
                         in_string = true;
-                    } else {
+                    } else if c == '[' {
+                        depth += 1;
+                    } else if c == ']' {
+                        depth = depth.saturating_sub(1);
+                    } else if depth == 0 {
                         blanked.push(c);
                     }
                 }

@@ -1,0 +1,61 @@
+// #1383 (ADR-361 D10): an index after a loop that reads a name the loop
+// changes is asked through the loop, as an `assert` there is. `count2`'s
+// `a[i]` and `partition`'s `a[i]` after the loop are proved under
+// `prove-through-loops:on` by the bound of `i` by the loop's turns (D13),
+// with no assert after the loop; `last`'s `a[k - 1]` by the invariant the
+// prover finds for the `while` (`k < hi + 1`) and its way out. Without the
+// optimization they stay checked.
+fn count2(a: ref Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo <= hi)
+    assert(hi < a.len())
+    let mut i = lo
+    for j in lo..<hi {
+        if a[j] < 3 {
+            i = i + 1
+        }
+    }
+    return a[i]
+}
+
+fn partition(mut a: Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo <= hi)
+    assert(hi < a.len())
+    let pivot = a[hi]
+    let mut i = lo
+    for j in lo..<hi {
+        if a[j] < pivot {
+            let t = a[i]
+            a[i] = a[j]
+            a[j] = t
+            i = i + 1
+        }
+    }
+    let t = a[i]
+    a[i] = a[hi]
+    a[hi] = t
+    return i
+}
+
+fn last(a: ref Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo < hi)
+    assert(hi <= a.len())
+    let mut k = lo
+    while k < hi {
+        k = k + 1
+    }
+    return a[k - 1]
+}
+
+fn main() throws {
+    let v: Vec[i64] = [5, 3, 9, 1, 4]
+    println(f"{count2(v, 0, 4)}")
+    let mut w: Vec[i64] = [5, 3, 9, 1, 4]
+    println(f"{partition(w, 0, 4)}")
+    for x in w {
+        println(f"{x}")
+    }
+    println(f"{last(v, 1, 3)}")
+}

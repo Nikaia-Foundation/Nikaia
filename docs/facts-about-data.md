@@ -43,14 +43,14 @@ type's data is a different thing, but close to it. The ledger
 | 0 | the two defects above | small | yes, #797 |
 | 1 | a pure `bool` call is a **named property**: proved by name, carried to callers, in the ledger, checked once where not proved; removes only its own check | small: one name kind in `claim_term`, keyed like `xs.len()` | yes, ADR-381, #797 |
 | 2 | `std`: `Vec::is_sorted()`, `sort()` ensures it, `binary_search` | small; `binary_search` requiring sortedness refuses unproved callers | #798 Q2 |
-| 3 | an **element rule the prover reads**: `xs.all(\|x\| claim)` as bounded *for all*, instantiated at each read `xs[i]`; proved at each write (literal item, `push`, `xs[i] = v`) as ADR-306 D7 proves its interval | large (C of `formal-verification.md`): the logic's first quantifier, instantiation in certificates | #798 Q1 |
+| 3 | an element bound the prover **finds**, never written: ADR-306 D7 for fields (a found type invariant, ADR-369) and parameters (a found precondition), ends up to another list's length that never shrinks | medium: no quantifier in the language; one value instantiated per read | yes, ADR-306 D21 (owner, 2026-11-08: only found; the written `xs.all(\|x\| ...)` is not built) |
 | 4 | an order between elements (`sorted` as neighbours, then any `i < j`) | needs induction; Dafny-level | not now |
 
 Step 3 is what serves claim (b): the checker's and emitter's tables hold
 indexes into other tables, and every such read is checked today. How many of
-the 671 unproved indexes over `tools/*.nika` are of that kind is **not
-measured**; `scripts/proved.nika` (owed for #796) should count them by reason
-first, and that number decides whether step 3 pays.
+the 671 unproved indexes over `tools/*.nika` are of that kind was measured
+on 2026-11-08: 272 of 3,890 sites are "a value read out of a list", beside
+187 "the length of another list".
 
 ## How others do it (short)
 

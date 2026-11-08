@@ -339,10 +339,11 @@ pub mod tools {
     include!("tools/lowered.rs");
 
     /// The text tiers' conversions, which a lowered `String` local reassigned
-    /// from a view calls (`rest = rest.strip_prefix(..).into_either()`): a
+    /// from a view calls (`rest = rest.strip_prefix(..).into_either()`), and a
+    /// list of texts collected from views (`.either_items()`, #1396): a
     /// program gets them from its own prelude, a tool has none (#563).
     #[allow(unused_imports)]
-    use crate::either_text::{IntoEither, IntoEitherMaybe};
+    use crate::either_text::{EitherItems, EitherPairs, IntoEither, IntoEitherMaybe};
 
     /// `scalar`, which the lowered files write for one character (ADR-320).
     #[allow(unused_imports)]
