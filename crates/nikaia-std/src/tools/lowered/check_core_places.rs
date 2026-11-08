@@ -180,6 +180,10 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
     };
     if owned_result && check_core_places_a_call(base) { state.flow.owned_call_bases.insert(id_of(base) as i64); }
     let field: String = format!("{}", world.words.resolve(name));
+    match unviewed_type(&on) {
+        Ty::Named { name: ref held, .. } => { state.declared_use(expr, CheckDeclared::Field(held.to_string(), field.to_string())); },
+        _ => { },
+    }
     if field.contains("::") && !safe {
         let reflected = match on {
             Ty::Named { name: ref held, .. } => held == "meta::Field",
@@ -543,6 +547,7 @@ pub(crate) fn check_core_places_a_kept_fn(state: &CheckState, name: &str, given:
 // this was written - see `contracts::sync`.
 pub fn check_core_struct_literal<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, written: winnow_grammar::Symbol, fields: &[FieldInit], span: &Span) -> Ty {
     let name: String = world.here.unaliased(&format!("{}", world.words.resolve(written)));
+    if !state.declared_a_variant(expr, &name) { state.declared_use(expr, CheckDeclared::Type(name.to_string())); }
     let declared: Option<Vec<FieldContract>> = state.fields_of(world, &name);
     if declared.is_none() && !name.contains("::") && !state.declares_a_type(world, &name) { state.a_struct_nothing_declares(world, &name, span); }
     let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();

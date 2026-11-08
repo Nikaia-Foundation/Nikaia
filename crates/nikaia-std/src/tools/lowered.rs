@@ -477,6 +477,14 @@ mod check_crossings_lowered {
 #[allow(unused_imports)]
 pub use check_crossings_lowered::*;
 
+mod check_declared_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/check_declared.rs");
+}
+#[allow(unused_imports)]
+pub use check_declared_lowered::*;
+
 mod check_decls_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2568,6 +2576,10 @@ pub mod check_crossings {
     #[allow(unused_imports)]
     pub use super::{CheckCrossingsPath, check_crossings_a_bound_handle_is_taken, check_crossings_a_value_with_a_cleanup_made, check_crossings_a_value_with_a_cleanup_dying, check_crossings_a_value_with_a_cleanup_bound, check_crossings_a_type_that_does_not_compare, check_crossings_a_standard_bound_not_met, check_crossings_language_impls, check_crossings_a_task_of_a_scope, check_crossings_a_scope_that_pauses, check_crossings_a_lambda_that_pauses_at_an_entry, check_crossings_a_call_that_hands_its_number_back, check_crossings_arguments};
 }
+pub mod check_declared {
+    #[allow(unused_imports)]
+    pub use super::{CheckDeclared, declared_site};
+}
 pub mod check_decls {
     #[allow(unused_imports)]
     pub use super::{a_type_base, a_part_one_type};
@@ -3086,7 +3098,7 @@ pub mod logic_smtlib {
 }
 pub mod lsp {
     #[allow(unused_imports)]
-    pub use super::{LspHost, LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position, lsp_path_uri, lsp_diagnostic, lsp_range};
+    pub use super::{LspHost, LspRefusal, lsp_read_message, lsp_write_message, lsp_object, lsp_string, lsp_number, lsp_respond, lsp_refuse, lsp_capabilities, lsp_serve, lsp_uri_path, lsp_position, lsp_offset, lsp_path_uri, lsp_diagnostic, lsp_range};
 }
 pub mod manifest {
     #[allow(unused_imports)]

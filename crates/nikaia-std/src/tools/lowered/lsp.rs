@@ -63,6 +63,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_LspRefusal__io_IoError {
 
 pub trait LspHost {
     fn diagnose(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool) -> Vec<(String, Shown)>;
+    fn definition(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool, offset: i64) -> Option<(String, Span, String)>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,7 +125,7 @@ pub fn lsp_refuse(id: &json::Value, code: i64, message: &str) -> Result<(), nika
     Ok(())
 }
 
-pub fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1))]))]) }
+pub fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))]) }
 
 pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRefusal__io_IoError> {
     let mut shut_down = false;
@@ -180,7 +181,7 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
                 if method == "initialize" { lsp_respond(asked, lsp_capabilities())?; } else if method == "shutdown" {
                     shut_down = true;
                     lsp_respond(asked, json::Value::Null)?;
-                } else { lsp_refuse(asked, -32601, &format!("no method `{}`", method))?; }
+                } else if method == "textDocument/definition" { lsp_respond(asked, lsp_definition(host, (cargo_json_member(Some(&message), "params")).as_ref(), &open, &uris).await)?; } else { lsp_refuse(asked, -32601, &format!("no method `{}`", method))?; }
             },
         }
     }
@@ -236,6 +237,45 @@ pub fn lsp_position(source: &str, at: i64) -> (i64, i64) {
         } else { column += if code < 65536 { 1 } else { 2 }; }
     }
     (line, column)
+}
+
+pub(crate) async fn lsp_definition<H: LspHost>(host: &H, params: Option<&json::Value>, open: &collections::BTreeMap<String, String>, uris: &collections::BTreeMap<String, String>) -> json::Value {
+    let document = cargo_json_member(params, "textDocument");
+    let uri = match cargo_json_text((cargo_json_member((document).as_ref(), "uri")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
+    let position = cargo_json_member(params, "position");
+    let line = match cargo_json_number((cargo_json_member((position).as_ref(), "line")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
+    let character = match cargo_json_number((cargo_json_member((position).as_ref(), "character")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
+    let alone = !uri.starts_with("file://");
+    let path = if alone { uri.to_string() } else { match lsp_uri_path(&uri) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null } };
+    let offset = lsp_offset(&lsp_text_of(&path, open).await, line, character);
+    let (file, span, name) = match host.definition(&path, open, alone, offset) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
+    lsp_object(&vec![("uri", lsp_string(&lsp_uri_of(&file, uris))), ("range", lsp_range(&lsp_text_of(&file, open).await, &span, &name))])
+}
+
+pub(crate) async fn lsp_text_of(path: &str, open: &collections::BTreeMap<String, String>) -> String {
+    match open.get(path) {
+        None => match fs::read_to_string(std::path::Path::new(&(path)), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(_error) => { String::from("") },
+        },
+        Some(held) => held.to_string(),
+    }
+}
+
+pub fn lsp_offset(source: &str, line: i64, character: i64) -> i64 {
+    let mut at_line: i64 = 0;
+    let mut column: i64 = 0;
+    let mut byte: i64 = 0;
+    for c in source.chars() {
+        if at_line == line && (column >= character || c == '\n') { break; }
+        let code = c as i64;
+        byte += if code < 128 { 1 } else if code < 2048 { 2 } else if code < 65536 { 3 } else { 4 };
+        if c == '\n' {
+            at_line += 1;
+            column = 0;
+        } else if at_line == line { column += if code < 65536 { 1 } else { 2 }; }
+    }
+    byte
 }
 
 pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collections::BTreeMap<String, String>, uris: &collections::BTreeMap<String, String>, marked: &collections::BTreeMap<String, String>, alone: bool) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {

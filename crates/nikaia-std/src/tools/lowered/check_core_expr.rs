@@ -192,16 +192,33 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr_kept_copy(state, world, expr, &read);
             read
         },
-        Expr::Path(segments, _) => nikaia_std::index::or(check_reflect_path(state, world, expr, segments, span), || check_core_expr_path(state, world, segments, span).into()),
+        Expr::Path(segments, _) => {
+            state.declared_path(world, expr, &world.here.unaliased(&check_core_call_joined(world, segments)));
+            nikaia_std::index::or(check_reflect_path(state, world, expr, segments, span), || check_core_expr_path(state, world, segments, span).into())
+        },
         Expr::Block(block, _) => check_core_block(state, world, host, block),
         Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
         Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
         Expr::Select(arms, _) => check_core_flow_select(state, world, host, arms, span),
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); check_core_flow_if(state, world, host, expr, cond, then_branch, (else_branch).as_ref(), span) },
         Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); nikaia_std::index::or(check_reflect_match(state, world, host, expr, value, arms, span), || check_core_flow_match(state, world, host, expr, value, arms, span).into()) },
-        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); check_core_call(state, world, host, func, args, config, span) },
-        Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; check_core_method(state, world, host, expr, false, receiver, method, args, config, span) },
-        Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; check_core_method(state, world, host, expr, true, receiver, method, args, config, span) },
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            state.declared_callee_at(world, expr, func);
+            check_core_call(state, world, host, func, args, config, span)
+        },
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let read = check_core_method(state, world, host, expr, false, receiver, method, args, config, span);
+            check_core_expr_declared_method(state, expr, receiver);
+            read
+        },
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let read = check_core_method(state, world, host, expr, true, receiver, method, args, config, span);
+            check_core_expr_declared_method(state, expr, receiver);
+            read
+        },
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let read = check_core_field(state, world, host, expr, false, base, name, span);
@@ -402,6 +419,16 @@ pub(crate) fn check_core_expr_empty_list(state: &CheckState, name: &str) -> i64 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_expr_declared_method(state: &mut CheckState, expr: &Expr, receiver: &Expr) {
+    let key: String = match match *nikaia_std::index::get(&state.facts.method_callees, &(id_of(receiver) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.declared_use(expr, CheckDeclared::Function(key));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, symbol: winnow_grammar::Symbol, span: &Span) -> Ty {
     let name = world.words.resolve(symbol).to_string();
     state.read_at.push((name.to_string(), span.start as i64));
@@ -410,6 +437,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
     let found: Option<Ty> = state.lookup(&name);
     if found.is_some() {
         let ty: Ty = nikaia_std::index::or(found, || Ty::Unknown);
+        state.declared_use(expr, CheckDeclared::Binding(nikaia_std::index::or(state.binding_id(&name), || -1)));
         state.a_read(expr, &name, span);
         if state.a_mut_view_name(world, expr) && a_copy_by_value(&unviewed_type(&ty)) { state.facts.view_derefs.insert(node_key(expr)); }
         if state.facts.comptime_names.contains(&name) && state.frame_holding(&name) > 0 && state.binding(&name).and_then(|__nikaia_it| __nikaia_it.built).is_none() { state.facts.shadowing_reads.insert(node_key(expr)); }
@@ -434,6 +462,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
     }
     let as_value: Option<Ty> = state.function_as_a_value(world, &name);
     if as_value.is_some() {
+        state.declared_path(world, expr, &name);
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(AS_VALUE), || CheckStoredCode::empty());
         entry.free.insert(name.to_string());
         state.stored_code.insert(AS_VALUE.to_string(), entry);
