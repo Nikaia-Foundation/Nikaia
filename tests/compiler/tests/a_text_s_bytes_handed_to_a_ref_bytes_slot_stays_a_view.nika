@@ -1,0 +1,16 @@
+// #1345: `s.bytes` and a cut of it handed to a map or a list of `ref Bytes`
+// stay views of the text: nothing is copied into a `Bytes` of its own.
+use std::collections
+
+fn main() throws {
+    let s = f"a;b;a{""}"
+    let mut m: collections::HashMap[ref Bytes, i64] = collections::HashMap()
+    m.insert(s.bytes, 7)
+    m.insert(s.bytes[0..<1], 1)
+    m.entry(s.bytes[2..<3]).or_insert(3)
+    let mut v: Vec[ref Bytes] = []
+    v.push(s.bytes)
+    v.push(s.bytes[4..<5])
+    println(m.len() + v.len())
+    println(m[s.bytes[2..<3]] ?? 0)
+}

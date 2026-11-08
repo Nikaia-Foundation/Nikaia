@@ -276,8 +276,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   briefs (for `RED` the fix-forward, queued first) and starts it again. It
   prints one line per agent run and stops with one final line, exit 2, on an
   escalation: an `OWNER` line, `ESCALATE` of `agent.nika`, a stop line,
-  `--max` reached, a push rejected after one rebase, a suite still red after two QA
-  rounds.
+  `--max` reached, a push rejected whose merge of `origin/develop` conflicted
+  (a conflict only in the generated `lowered/*.rs` the driver resolves itself
+  by re-lowering, #1430), a suite still red after two QA rounds.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
   OWNER line; after the owner's answer, start `drive.nika` again. A `RESTART
   drive: ...` line needs nothing: the driver runs the changed script again by

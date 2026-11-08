@@ -2,11 +2,11 @@
 // parameter, with an argument made in the call.
 
 struct Summary {
-    label: ref String,
+    label: String,
     n: i64,
 }
 
-fn relabel(mut s: Summary, name: ref String) {
+fn relabel(mut s: Summary, name: String) {
     s.label = name
     s.n += 1
 }

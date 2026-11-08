@@ -48,6 +48,15 @@ fn line(text: String) throws {
 	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
 	println(parts.join(" | "))
 }
+// The refusal of `text`: where it stands and what was expected.
+fn refusal(text: String) throws {
+	let input = Bytes(text.bytes().collect())
+	yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	println("accepted")
+}
 // The events of `text`, one per line, after a header: tags resolved by the
 // directives of the node's document (ADR-yaml-1 D7).
 fn events(text: String) throws {
@@ -84,6 +93,9 @@ fn main() throws {
 	line("%TAG !e! tag:example.com,2000:app/\n---\n- !e!foo \"bar\"\n")
 	// a named handle no directive declares
 	line("--- !e!foo bar\n")
+	// once the tag's form has matched it is a tag: an undeclared handle is
+	// refused at the end of the tag with the guard's message (#1401)
+	refusal("k: !e!foo x\n")
 	// a directive holds for its document only, after `...` and after `---`
 	line("%TAG !e! tag:a:\n--- !e!x 1\n...\n--- !e!y 2\n")
 	line("%TAG !e! tag:a:\n--- !e!x 1\n...\n%TAG !e! tag:b:\n--- !e!y 2\n")

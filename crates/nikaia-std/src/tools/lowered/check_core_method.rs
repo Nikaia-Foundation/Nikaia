@@ -394,6 +394,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     }
     state.io_inside_a_door(world, &on, &format!("`{}`", written), span);
     let at_a_door = name == "update" && locked_content_of(&on).is_some();
+    if at_a_door && a_copy_by_value(&nikaia_std::index::or(locked_content_of(&on), || Ty::Unknown)) { state.facts.copied_doors.insert(id_of(receiver) as i64); }
     if at_a_door && !args.is_empty() {
         match nikaia_std::index::get(&args, nikaia_std::index::at(args.len() as i64 - 1)) {
             Expr::Closure { params, body, .. } => {

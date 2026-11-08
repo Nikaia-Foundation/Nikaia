@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1365 (Draft)
+**Version:** 0.0.1366 (Draft)
 **Date:** 2026-11-08
 
 ---
@@ -705,7 +705,12 @@ hands its items over one at a time instead of a list (D7); a generic `@frame`
 rule may be folded in parallel (10.7). The call is a sequence walked once:
 `for ev in Yaml::events(bytes)` takes each item as the parser produces it, and
 a `break` stops the parse. The items are owned and do not borrow from the
-input. A Rust user of a rust-library also gets `parse_<rule>_reader` over a
+input. The entry declares the item's type, and its body is one alternative
+without an action, as a `par_fold`'s is: exactly one element, through its
+sequences and groups, repeats a rule of that type (`item*`, `item+`,
+`list(item, ",")`), and the rest is matched and dropped
+(`@stream entry rule events -> Event = "---" event*`); any other body is
+`NK1349`. `@stream` on a rule that is not an entry is refused where it stands. A Rust user of a rust-library also gets `parse_<rule>_reader` over a
 `std::io::Read` where a feature reaches the entry (ADR-393 D4); a Nikaia entry
 takes `String` or `Bytes`.
 

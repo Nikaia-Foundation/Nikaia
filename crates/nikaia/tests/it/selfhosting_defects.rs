@@ -256,7 +256,7 @@ fn main() throws {
     );
     assert_eq!(said.trim(), "23");
     assert!(
-        rust.contains("size__User(User") && rust.contains("size__Point(Point"),
+        rust.contains("size__User(&User") && rust.contains("size__Point(&Point"),
         "{rust}"
     );
 }

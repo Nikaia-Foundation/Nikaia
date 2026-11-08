@@ -130,7 +130,11 @@
 // hand): the conflicted paths are noted, `git merge --abort` (HEAD and the
 // autostash restored), and `ESCALATE drive: push rejected, merge conflicted in
 // <paths>, merge aborted`; an abort that fails, or leaves a merge or an
-// unmerged path, escalates with `merge left open: ...`. Then it prints
+// unmerged path, escalates with `merge left open: ...`. A conflict only in the
+// generated `crates/nikaia-std/src/tools/lowered/*.rs` is resolved by
+// re-lowering instead (#1430, drive_merge_relower: their side, `lower-std` and
+// the build until the lowered files settle, `MERGE <sha8> re-lowered <paths>`),
+// then the short checks as for a clean merge. Then it prints
 // `PUSHED <sha8>` and drops the N tested lines from unpushed.txt (after a
 // merged push of HEAD it empties the file). Red: DIR/qa-input.txt gets the
 // suite's step lines, the whole suite.log (the failed jobs' log tails), `git log
@@ -370,8 +374,8 @@ fn drive_push(sha: String) -> String throws {
 		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
 		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
 		let base = process::run("git", ["merge-base", sha.clone(), "FETCH_HEAD"]).stdout.trim().clone()
-		let merged = process::run("git", ["merge", "-q", "--no-edit", "--autostash", "FETCH_HEAD"])
-		if !merged.ok { drive_merge_abort() }
+		let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
+		drive_merge_fetched(f"'{exe}' lower-std", "cargo build -q --profile fast -p nikaia")
 		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		let failed = drive_merge_check(base, merge.clone())
 		if failed != "" {
@@ -439,6 +443,123 @@ fn drive_suite_done() -> bool throws {
 	return fs::exists(f"{drive_lock_dir()}/exit-{sha}", fs::Root::Anywhere)
 }
 
+// Merges FETCH_HEAD into HEAD (`--autostash`: the other agents' unfinished
+// files are stashed around it). A conflict only in the generated lowered
+// files is resolved by drive_merge_relower with the commands LOWER and BUILD;
+// any other conflict, or a failed resolution, aborts and escalates.
+fn drive_merge_fetched(lower: String, build: String) throws {
+	let merged = process::run("git", ["merge", "-q", "--no-edit", "--autostash", "FETCH_HEAD"])
+	if merged.ok { return }
+	let unmerged = process::run(
+		"git",
+		["diff", "--name-only", "--diff-filter=U"],
+	).stdout.trim().split("\n").collect().join(" ")
+	if unmerged == "" { drive_merge_abort() }
+	for p in unmerged.split(" ") {
+		if !p.starts_with(drive_lowered_dir() + "/") { drive_merge_abort() }
+	}
+	drive_merge_relower(unmerged, lower, build)
+}
+
+fn drive_lowered_dir() -> String {
+	return "crates/nikaia-std/src/tools/lowered"
+}
+
+// The lowered files the lowering writes: the directory and its index.
+fn drive_lowered_paths() -> Vec[String] {
+	return [drive_lowered_dir(), drive_lowered_dir() + ".rs"]
+}
+
+// The paths under the lowered files that differ from the index or are new,
+// one per line (`git status --porcelain`, the path after the status).
+fn drive_lowered_status() -> String throws {
+	let mut args: Vec[String] = ["status", "--porcelain", "--untracked-files=all", "--"]
+	for p in drive_lowered_paths() { args.push(p) }
+	return process::run("git", args).stdout
+}
+
+// A fingerprint of the lowered files' contents, to see the lowering settle.
+fn drive_lowered_print() -> String throws {
+	let dirs = drive_lowered_paths().join(" ")
+	return process::run(
+		"sh",
+		["-c", f"find {dirs} -type f | sort | xargs sha256sum | sha256sum"],
+	).stdout.trim().clone()
+}
+
+// A merge that conflicted only in the generated lowered files (#1430): they
+// are output of `lower-std`, so the conflict has one mechanical resolution.
+// Takes their side of each conflicted file, runs LOWER (the driver's binary
+// from before the merge first: the side taken never has to pass rustc; when
+// it cannot lower the merged sources, BUILD and LOWER again), then BUILD and
+// LOWER until the lowered files stop changing (the old binary emits with the
+// old emitter, 2026-11-08: one round reverted unrelated files), adds the
+// changed lowered paths and nothing else, and commits the merge (the autostash
+// is applied after that commit). Prints `MERGE <sha8> re-lowered <paths>`. Any
+// failure aborts the merge and escalates (drive_merge_abort_paths): a partly
+// resolved merge is never left behind.
+fn drive_merge_relower(unmerged: String, lower: String, build: String) throws {
+	// Lowered files already untracked before the merge are not ours to add.
+	let mut before: Vec[String] = []
+	for line in drive_lowered_status().split("\n") {
+		if line.starts_with("?? ") { before.push(line.trim().clone()) }
+	}
+	let mut failed: String = ""
+	for p in unmerged.split(" ") {
+		if failed != "" { break }
+		let took = process::run("git", ["checkout", "--theirs", "--", p.clone()])
+		if !took.ok { failed = f"git checkout --theirs {p}" }
+	}
+	if failed == "" {
+		let first = process::run("sh", ["-c", f"{lower} 2>&1"])
+		if !first.ok {
+			let built = process::run("sh", ["-c", f"{build} 2>&1"])
+			if !built.ok { failed = "the build before lowering" } else {
+				let again = process::run("sh", ["-c", f"{lower} 2>&1"])
+				if !again.ok { failed = "lower-std" }
+			}
+		}
+	}
+	let mut rounds = 0
+	let mut settled = false
+	while failed == "" && !settled {
+		if rounds == 5 {
+			failed = "lower-std did not settle after 5 rounds"
+			break
+		}
+		rounds += 1
+		let built = process::run("sh", ["-c", f"{build} 2>&1"])
+		if !built.ok {
+			failed = "the build of the re-lowered files"
+			break
+		}
+		let old = drive_lowered_print()
+		let lowered = process::run("sh", ["-c", f"{lower} 2>&1"])
+		if !lowered.ok {
+			failed = "lower-std"
+			break
+		}
+		settled = drive_lowered_print() == old
+	}
+	// Every changed lowered path is staged, also on failure: `git merge
+	// --abort` then resets them with the merge.
+	let mut add: Vec[String] = ["add", "--"]
+	for line in drive_lowered_status().split("\n") {
+		let l = line.trim()
+		if l == "" || before.contains(l.clone()) { continue }
+		let words = l.split(" ").collect()
+		add.push(words[words.len() - 1].clone())
+	}
+	for p in unmerged.split(" ") { add.push(p.clone()) }
+	let added = process::run("git", add)
+	if failed == "" && !added.ok { failed = "git add of the lowered files" }
+	if failed != "" { drive_merge_abort_paths(unmerged, f"re-lowering failed ({failed})") }
+	let done = process::run("git", ["commit", "-q", "--no-edit"])
+	if !done.ok { drive_merge_abort_paths(unmerged, "the merge commit failed") }
+	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	println(f"MERGE {drive_short(merge)} re-lowered {unmerged}")
+}
+
 // A failed merge must not leave the shared checkout mid-merge: the conflicted
 // paths are noted, `git merge --abort` restores HEAD and applies the autostash
 // back, and the check that no merge is left open and no path is unmerged
@@ -449,6 +570,13 @@ fn drive_merge_abort() throws {
 		["diff", "--name-only", "--diff-filter=U"],
 	).stdout.trim().split("\n").collect().join(" ")
 	let paths = if unmerged == "" { "no unmerged path" } else { unmerged }
+	drive_merge_abort_paths(paths, "")
+}
+
+// drive_merge_abort for PATHS noted before; WHY, when not "", says what
+// failed after the conflict (a re-lowering, #1430).
+fn drive_merge_abort_paths(paths: String, why_failed: String) throws {
+	let failed = if why_failed == "" { "" } else { f", {why_failed}" }
 	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
 	let mut why: String = ""
 	let mut aborted = true
@@ -460,9 +588,9 @@ fn drive_merge_abort() throws {
 	let open = fs::exists(f"{git_dir}/MERGE_HEAD", fs::Root::Anywhere)
 	let left = process::run("git", ["diff", "--name-only", "--diff-filter=U"]).stdout.trim().clone()
 	if !aborted || open || left != "" {
-		drive_escalate(f"merge left open: push rejected, merge conflicted in {paths}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
+		drive_escalate(f"merge left open: push rejected, merge conflicted in {paths}{failed}, and git merge --abort did not finish ({why}); the shared checkout needs a hand now")
 	}
-	drive_escalate(f"push rejected, merge conflicted in {paths}, merge aborted")
+	drive_escalate(f"push rejected, merge conflicted in {paths}{failed}, merge aborted")
 }
 
 fn drive_short(sha: String) -> String throws {
@@ -2096,6 +2224,12 @@ fn main() throws {
 	}
 	if args.len() == 3 && args[1] == "--post-body" {
 		print(drive_post_body(drive_stem(args[2]), drive_read(args[2])))
+		return
+	}
+	// The merge of a rejected push, without its checks and push (#1430): run
+	// in a repository with FETCH_HEAD fetched, LOWER and BUILD the commands.
+	if args.len() == 4 && args[1] == "--merge-fetched" {
+		drive_merge_fetched(args[2], args[3])
 		return
 	}
 	if args.len() == 4 && args[1] == "--found" {

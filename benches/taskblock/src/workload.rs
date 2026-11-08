@@ -80,19 +80,32 @@ fn answer(text: &str) -> String {
     response
 }
 
-/// Run `tasks` tasks and print what they came to, the same bytes whatever
-/// the allocator.
+/// Run `tasks` requests and print what they came to, the same bytes whatever
+/// the allocator. Each request is a short task of its own, or, with `long`
+/// as the second argument, all of them are one long task (a connection loop,
+/// `main`) that frees each request's memory and allocates the next's.
 pub fn run(tasks: u64, around: &dyn Tasks) {
+    let long = std::env::args().nth(2).as_deref() == Some("long");
     let mut sum: u64 = 0;
     let mut bytes: u64 = 0;
-    for n in 0..tasks {
+    if long {
         around.begin();
+    }
+    for n in 0..tasks {
+        if !long {
+            around.begin();
+        }
         let response = answer(&request(n));
         bytes += response.len() as u64;
         sum = response
             .bytes()
             .fold(sum, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
         drop(response);
+        if !long {
+            around.end();
+        }
+    }
+    if long {
         around.end();
     }
     println!("{tasks} tasks, {bytes} bytes, checksum {sum:016x}");

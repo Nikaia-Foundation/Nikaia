@@ -290,6 +290,44 @@ impl EmitState {
                 }
             }
         }
+        let readers = emit_stream_readers(def, self.offered_to_rust)
+        for rule in readers {
+            self.emit_stream_reader(world, walk, out, host, name, rule)
+        }
+        // **The readers under the grammar's name**: the backend takes only a
+        // private `use` into a grammar, so a grammar with readers is written
+        // inside a module of its own (`emit_grammar_over`) and the module
+        // under its name takes in all of it and the readers, each `use` line
+        // one a feature's `#[cfg]` keeps or leaves out.
+        if readers.len() > 0 {
+            out.push(f"\n#[allow(non_snake_case)]\npub mod {name} {{\n    pub use super::{emit_stream_grammar_module(name)}::{name}::*;\n")
+            for rule in readers {
+                let rule_name = emit_text(world, rule.name)
+                out.push(f"    pub use super::{emit_stream_reader_name(name, rule_name)} as {rule_name}_reader;\n")
+            }
+            out.push("}\n")
+        }
+    }
+
+    /// **The Rust user's reader of a `@stream` entry** (ADR-grammar-2 D7 and
+    /// ADR-393 D4, both amended 2026-11-08): `G::<rule>_reader(r)` takes
+    /// `impl std::io::Read + Send + 'static` and hands back the items, owned,
+    /// as an iterator of `Result<Item, ParseError>`, the shape of the Nikaia
+    /// walk: the engine's `parse_<rule>_reader_each` on a thread of its own,
+    /// each item through a channel that holds none. The function is a
+    /// sibling of the grammar's module, which the backend writes and nothing
+    /// can be added to; the module under the grammar's name takes it in
+    /// (`emit_grammar`). The build of a feature that roots the entry
+    /// keeps it under that feature's `#[cfg]`, and every other build blanks
+    /// it (`features_applied`, `features_readers_dropped`).
+    fn emit_stream_reader[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
+        let rule_name = emit_text(world, rule.name)
+        let ty = rule.ret_type ?? return
+        let item = host.ty_named(walk, ty)
+        out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
     }
 
     /// **The options a `par_fold` entry names after its `;`** (ADR-372 D6),
@@ -319,7 +357,12 @@ impl EmitState {
     }
 
     fn emit_grammar_over[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, def: ref GrammarDef, name: ref String, bytes: bool) sync throws {
-        out.push("grammar! {\n")
+        // A grammar with readers is written in a module of its own (`emit_grammar`).
+        if !bytes && emit_stream_readers(def, self.offered_to_rust).len() > 0 {
+            out.push(f"#[doc(hidden)]\n#[allow(non_snake_case)]\nmod {emit_stream_grammar_module(name)} {{ use super::*; grammar! {{\n")
+        } else {
+            out.push("grammar! {\n")
+        }
         out.push(f"    grammar {name} {{\n")
         if bytes {
             out.push("        input bytes;\n")
@@ -460,7 +503,11 @@ impl EmitState {
             out.push("            -> { x }\n")
         }
         out.push("    }\n")
-        out.push("}\n")
+        if !bytes && emit_stream_readers(def, self.offered_to_rust).len() > 0 {
+            out.push("} }\n")
+        } else {
+            out.push("}\n")
+        }
         if lines {
             out.push(emit_same_line_function(name))
         }
@@ -499,6 +546,10 @@ impl EmitState {
         // A grammar's own `WS` under the recording one keeps its body and
         // takes `renamed` (`emit_grammar_body`).
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.clone() }
+        if rule.stream && rule.is_entry {
+            self.emit_stream_rule(world, walk, out, host, rule, rule_name, taken, label)
+            return
+        }
         out.push(f"        {vis}rule {rule_name}{taken}{ret}{label} =\n")
 
         for i in 0..<rule.alts.len() {
@@ -572,6 +623,93 @@ impl EmitState {
                 },
             }
         }
+    }
+
+    /// **A `@stream` entry is the engine's `#[stream(each)]`** (ADR-grammar-2
+    /// D7, amended 2026-11-08): its `item*` becomes a `fold` that counts, on
+    /// the path the reader hands each item over on, and the caller sees the
+    /// items through `each` (`nikaia_std::grammar::stream`).
+    fn emit_stream_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, rule_name: ref String, taken: ref String, label: ref String) sync throws {
+        let item = match rule.ret_type {
+            ty => host.ty_named(walk, ty),
+            null => throw EmitRefused { message: "A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`.", at: rule.span.start as i64 },
+        }
+        if rule.alts.len() != 1 || rule.alts[0].action != null {
+            throw EmitRefused { message: "The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns.", at: rule.span.start as i64 }
+        }
+        let pattern = rule.alts[0].pattern
+        let parts: Vec[Spanned[Pattern]] = match pattern.node {
+            Pattern::Seq(seq) => seq.clone(),
+            else => [pattern.clone()],
+        }
+        let mut folds = 0
+        for part in parts {
+            if stream_item(part.node) != null {
+                folds += 1
+            }
+        }
+        if folds != 1 {
+            throw EmitRefused { message: "The compiler can't translate this `@stream` entry yet: its body holds one `item*`, a call of a rule repeated, and the engine reads only that form one item at a time (`list(item, sep)`, `item+` and counted repeats wait for a fold of their own in winnow-grammar).", at: rule.span.start as i64 }
+        }
+        out.push("        #[stream(each)]\n")
+        out.push(f"        pub rule {rule_name}{taken} -> usize{label} =\n          ")
+        for i in 0..<parts.len() {
+            if i > 0 {
+                out.push(" ")
+            }
+            match stream_item(parts[i].node) {
+                inner => {
+                    out.push("__wg_n:fold(")
+                    self.emit_pattern(world, walk, out, host, inner)
+                    out.push(f", || 0usize, |n: usize, _item: {item}| n + 1)")
+                },
+                null => self.emit_pattern(world, walk, out, host, parts[i]),
+            }
+        }
+        out.push("\n            -> { __wg_n }\n")
+    }
+}
+
+/// **The `@stream` entries a Rust user reads with a reader** (ADR-grammar-2
+/// D7, amended 2026-11-08): those of a `pub grammar` in a package offered to
+/// Rust, which take no values; the walk refuses an entry that does
+/// (`emit_core_grammar_entry`).
+fn emit_stream_readers(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarRule] {
+    let mut found: Vec[GrammarRule] = []
+    if !offered_to_rust || !def.public {
+        return found
+    }
+    for rule in def.rules {
+        if rule.stream && rule.is_entry && rule.ret_type != null && rule.args.len() == 0 && rule.config.len() == 0 {
+            found.push(rule.clone())
+        }
+    }
+    return found
+}
+
+/// The function beside grammar `book` that reads its `@stream` entry `rule`
+/// from a `std::io::Read`; `features_reader_root` in `project_features.nika`
+/// reads the same prefix and the `__` between the two names.
+fn emit_stream_reader_name(book: ref String, rule: ref String) -> String {
+    return f"__nikaia_reader_{book}__{rule}"
+}
+
+/// The module a grammar `book` with readers is written in (`emit_grammar`).
+fn emit_stream_grammar_module(book: ref String) -> String {
+    return f"__nikaia_grammar_{book}"
+}
+
+/// The rule a `@stream` entry repeats: `item*`, the pattern under the `*`.
+fn stream_item(pattern: ref Pattern) -> Spanned[Pattern]? {
+    return match pattern {
+        Pattern::Repeat { pat, rep } => match rep {
+            Repeat::Star => match pat.node {
+                Pattern::Ref { .. } => pat.clone(),
+                else => null,
+            },
+            else => null,
+        },
+        else => null,
     }
 }
 

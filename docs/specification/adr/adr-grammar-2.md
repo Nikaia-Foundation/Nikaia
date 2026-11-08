@@ -198,6 +198,15 @@ rule values (ADR-grammar-1 D2). An entry takes `String` or `Bytes` (`NK1282`).
   takes `String` or `Bytes`; a reader type in `std` for Nikaia callers is a
   question of its own.
 
+*Amended November 8, 2026 (supervisor, on #1442 step 3):* the Rust user's
+reader is `G::<rule>_reader(r)`, an associated function of the grammar's type
+beside the forms over a whole input. It takes `impl std::io::Read + Send +
+'static` and returns an iterator of `Result<Item, ParseError>`, the shape of
+the Nikaia walk. The engine's own `parse_<rule>_reader`, which returns the
+fold's count, stays private to the grammar's module. An item is owned, so it
+is `'static`; an item type that is not `Send` is refused at the build of the
+feature (`NK1345`).
+
 ### D8 — Writing stays a function per type.
 
 `json::write[T]` walks the type with `match T::kind` and `T::fields`, builds

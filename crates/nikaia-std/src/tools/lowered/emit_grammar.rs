@@ -182,6 +182,28 @@ impl EmitState {
                 if spec.is_some() { self.emit_fold_options(world, walk, out, host, &name, &emit_text(world, rule.name), &match spec { Some(__nikaia_value) => __nikaia_value, None => panic("a par_fold") })?; }
             }
         }
+        let readers = emit_stream_readers(def, self.offered_to_rust);
+        for rule in readers.iter() { self.emit_stream_reader(world, walk, out, host, &name, rule)?; }
+        if !readers.is_empty() {
+            out.push(&format!("\n#[allow(non_snake_case)]\npub mod {} {{\n    pub use super::{}::{}::*;\n", name, emit_stream_grammar_module(&name), name));
+            for rule in readers.iter() {
+                let rule_name = emit_text(world, rule.name);
+                out.push(&format!("    pub use super::{} as {}_reader;\n", emit_stream_reader_name(&name, &rule_name), rule_name));
+            }
+            out.push("}\n");
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_stream_reader<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, rule: &GrammarRule) -> Result<(), Box<dyn std::error::Error>> {
+        let rule_name = emit_text(world, rule.name);
+        let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let item = host.ty_named(walk, ty)?;
+        out.push(&format!("\n#[allow(non_snake_case)]\npub fn {}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = Result<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_reader_name(name, &rule_name), item));
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", name, rule_name, item));
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n");
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -207,7 +229,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_grammar_over<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef, name: &str, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
-        out.push("grammar! {\n");
+        if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push(&format!("#[doc(hidden)]\n#[allow(non_snake_case)]\nmod {} {{ use super::*; grammar! {{\n", emit_stream_grammar_module(name))); } else { out.push("grammar! {\n"); }
         out.push(&format!("    grammar {} {{\n", name));
         if bytes { out.push("        input bytes;\n"); }
         walk.grammar_bytes = bytes;
@@ -307,7 +329,7 @@ impl EmitState {
             out.push("            -> { x }\n");
         }
         out.push("    }\n");
-        out.push("}\n");
+        if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push("} }\n"); } else { out.push("}\n"); }
         if lines { out.push(&emit_same_line_function(name)); }
         Ok(())
     }
@@ -335,6 +357,10 @@ impl EmitState {
         for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", values.join(", ")) };
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.to_string() };
+        if rule.stream && rule.is_entry {
+            self.emit_stream_rule(world, walk, out, host, rule, &rule_name, &taken, &label)?;
+            return Ok(());
+        }
         out.push(&format!("        {}rule {}{}{}{} =\n", vis, rule_name, taken, ret, label));
         for i in 0..rule.alts.len() as i64 {
             let alt = nikaia_std::index::get(&rule.alts, (i) as usize);
@@ -377,6 +403,63 @@ impl EmitState {
             }
         }
         Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stream_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, rule_name: &str, taken: &str, label: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let item = match &rule.ret_type {
+            Some(ty) => host.ty_named(walk, ty)?,
+            None => return Err(nikaia_std::error::raise(EmitRefused { message: String::from("A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")),
+        };
+        if rule.alts.len() != 1 || nikaia_std::index::get(&rule.alts, 0).action.is_some() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
+        let pattern = &nikaia_std::index::get(&rule.alts, 0).pattern;
+        let parts: Vec<Spanned<Pattern>> = match &pattern.node {
+            Pattern::Seq(seq) => seq.to_owned(),
+            _ => vec![pattern.clone()],
+        };
+        let mut folds = 0;
+        for part in parts.iter() { if stream_item(&part.node).is_some() { folds += 1; } }
+        if folds != 1 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate this `@stream` entry yet: its body holds one `item*`, a call of a rule repeated, and the engine reads only that form one item at a time (`list(item, sep)`, `item+` and counted repeats wait for a fold of their own in winnow-grammar)."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
+        out.push("        #[stream(each)]\n");
+        out.push(&format!("        pub rule {}{} -> usize{} =\n          ", rule_name, taken, label));
+        for i in 0..parts.len() as i64 {
+            if i > 0 { out.push(" "); }
+            match stream_item(&nikaia_std::index::get(&parts, (i) as usize).node) {
+                Some(ref inner) => {
+                    out.push("__wg_n:fold(");
+                    self.emit_pattern(world, walk, out, host, inner)?;
+                    out.push(&format!(", || 0usize, |n: usize, _item: {}| n + 1)", item));
+                },
+                None => { self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (i) as usize))?; },
+            }
+        }
+        out.push("\n            -> { __wg_n }\n");
+        Ok(())
+    }
+}
+
+pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
+    let mut found: Vec<GrammarRule> = vec![];
+    if !offered_to_rust || !def.public { return found; }
+    for rule in def.rules.iter() { if rule.stream && rule.is_entry && rule.ret_type.is_some() && rule.args.is_empty() && rule.config.is_empty() { found.push(rule.clone()); } }
+    found
+}
+
+pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format!("__nikaia_reader_{}__{}", book, rule) }
+
+pub(crate) fn emit_stream_grammar_module(book: &str) -> String { format!("__nikaia_grammar_{}", book) }
+
+pub(crate) fn stream_item(pattern: &Pattern) -> Option<Spanned<Pattern>> {
+    match pattern {
+        Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); match rep {
+            Repeat::Star => match &pat.node {
+                Pattern::Ref { .. } => Some(pat.clone()),
+                _ => None,
+            },
+            _ => None,
+        } },
+        _ => None,
     }
 }
 

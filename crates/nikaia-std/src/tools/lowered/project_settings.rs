@@ -93,7 +93,7 @@ pub fn cpu_config(words: &ProjectWords, target: &Target) -> Vec<String> {
     }
 }
 
-pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str) -> String {
+pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str, crate_root: &str) -> String {
     let tests = if words.tests { "/tests" } else { "" };
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
@@ -107,9 +107,10 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     };
     let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" };
     let through_loops = if through_loops_on { "/prove-through-loops:on" } else { "" };
-    let library = if words.artifact == "c-library" { format!("/c-library:{}", words.symbol_prefix) } else { String::from("") };
+    let library = if words.artifact == "c-library" { format!("/c-library:{}", words.symbol_prefix) } else if words.artifact == "rust-library" { String::from("/rust-library") } else { String::from("") };
     let cpu = if words.cpu.is_some() { format!("/cpu:{}", cpu_key) } else { String::from("") };
-    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, through_loops, library, cpu)
+    let root = if crate_root == "crate" { String::from("") } else { format!("/root:{}", crate_root) };
+    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, through_loops, library, cpu, root)
 }
 
 pub fn panic_strategy(target: &Target) -> String {
@@ -173,7 +174,7 @@ pub(crate) fn project_settings_checked(target: String, user_parallelism: String,
     Ok(ProjectWords { target, user_parallelism, reentrancy_check, optimization, refuted_claims, unproved_claims, artifact, symbol_prefix, tests, bind: None, bind_features: None, cpu })
 }
 
-pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<String>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, Box<dyn std::error::Error>> {
+pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, package: Option<&str>, target: Option<String>, user_parallelism: Option<String>, default_target: &str) -> Result<ProjectWords, Box<dyn std::error::Error>> {
     let target = nikaia_std::index::or(match target.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -187,7 +188,7 @@ pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, packag
     let refuted = manifest("refuted-claims", "error");
     let unproved = manifest("unproved-claims", "error");
     let made = manifest("artifact", "program");
-    let named = nikaia_std::index::or(package.as_deref(), || "program").replace('-', "_");
+    let named = nikaia_std::index::or(package, || "program").replace('-', "_");
     let symbol_prefix = manifest("symbol-prefix", &named);
     Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, false, None)?)
 }
@@ -341,9 +342,9 @@ pub fn project_settings_own_copy<H: ProjectSettingsHost>(root: &std::path::Path,
     Ok(own)
 }
 
-pub async fn project_settings_trace<H: ProjectSettingsHost>(trace_var: &str, crate_name: Option<String>, is_probe: bool, verdict: &str, host: &H) {
+pub async fn project_settings_trace<H: ProjectSettingsHost>(trace_var: &str, crate_name: Option<&str>, is_probe: bool, verdict: &str, host: &H) {
     let path = match host.env_var(trace_var) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let named = nikaia_std::index::or(crate_name, || "-".into());
+    let named = nikaia_std::index::or(crate_name, || "-");
     let said = match is_probe {
         true => nikaia_std::either_text::either(format!("{} (target-info probe)", verdict)),
         false => nikaia_std::either_text::either(verdict),

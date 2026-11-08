@@ -1,0 +1,46 @@
+// #1346, ADR-views-3 D2: a `String?` parameter read through `??` is lent, as
+// an option of any other type is: `let f = p ?? return ".."` only read, and
+// `t?.clone() ?? ".."` in a `match` arm, leave the caller's `p` usable, with
+// literal and built text alike. A `??` handed back still keeps (`give`).
+enum Cmd {
+    Op(String?),
+    Nop,
+}
+
+fn show(p: String?) -> String {
+    let f = p ?? return "none"
+    return f + "!"
+}
+
+fn size(p: String?) -> i64 {
+    let f = p ?? return 0
+    return f.len()
+}
+
+fn name(c: Cmd) -> String {
+    return match c {
+        Cmd::Op(t) => t?.clone() ?? "x",
+        Cmd::Nop => "n",
+    }
+}
+
+fn give(p: String?) -> String {
+    return p ?? "given"
+}
+
+fn main() throws {
+    let p: String? = "a"
+    println(show(p))
+    println(show(p))
+    let built: String? = "b".repeat(3)
+    println(show(built))
+    println(show(built))
+    println(size(built))
+    println(size(built))
+    println(show(null))
+    let c = Cmd::Op("o")
+    println(name(c))
+    println(name(c))
+    println(name(Cmd::Nop))
+    println(give(null))
+}

@@ -1,0 +1,41 @@
+// An element of a plain `Vec[String]` parameter handed back as the `String`
+// result lends the list (#1343, ADR-views-3 D8): the result is a view of it,
+// whole, beside text of its own, nested or through a struct field, and the
+// caller uses the list again. It used to lower as a move out of the borrow.
+struct Shelf { items: Vec[String] }
+fn own(s: String) -> String { s.clone() }
+fn first(v: Vec[String]) -> String { return v[0] }
+fn head(v: Vec[String]) -> String { return v[0] }
+fn second(v: Vec[String]) -> String { v[1] }
+fn first_or(v: Vec[String]) -> String? { return v[0] }
+fn either_arm(v: Vec[String], c: bool) -> String { if c { v[0] } else { own(v[1]) } }
+fn at(v: Vec[String], i: int) -> String { v[i] }
+fn shelved(s: Shelf) -> String { s.items[1] }
+fn nested(g: Vec[Vec[String]]) -> String { g[0][1] }
+fn counted(v: Vec[String]) -> String {
+    if v.len() > 0 {
+        return v[0]
+    }
+    return ""
+}
+fn main() throws {
+    let v = ["a", "b"]
+    println(first(v))
+    println(v.len())
+    let mut w: Vec[String] = []
+    w.push(f"c{1}")
+    w.push(f"d{2}")
+    println(head(w))
+    println(second(w))
+    println(first_or(w) ?? "-")
+    println(either_arm(w, true))
+    println(either_arm(w, false))
+    println(at(w, 1))
+    let s = Shelf { items: [f"e{3}", f"f{4}"] }
+    println(shelved(s))
+    let g = [w.clone()]
+    println(nested(g))
+    println(counted(w))
+    println(w.len())
+    println(s.items.len())
+}

@@ -1,7 +1,7 @@
 # What a memory block per task costs, against the global allocator
-# (ADR-327 D4-D8, #490 step 2).
+# (ADR-327 D4-D10, #490).
 #
-# No dependency: the three allocators are written here, so what is counted is
+# No dependency: the allocators are written here, so what is counted is
 # the strategy and not a crate's version of it.
 [package]
 name = "taskblock-bench"

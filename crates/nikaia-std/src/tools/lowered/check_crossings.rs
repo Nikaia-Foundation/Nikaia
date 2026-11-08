@@ -289,7 +289,7 @@ pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &C
 pub(crate) fn check_crossings_settle(state: &mut CheckState, fails: bool, pauses: bool) {
     let key: Option<String> = state.a_settle_in_this_function(fails, pauses);
     if key.is_none() { return; }
-    check_core_call_on_reached(state, std::convert::identity(key));
+    check_core_call_on_reached(state, Option::as_deref(&key));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

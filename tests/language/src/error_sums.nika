@@ -11,12 +11,12 @@ use std::fs
 use std::io
 
 enum ErrorSumsConfig {
-    Empty(ref String),
+    Empty(String),
     Unnamed
 }
 
 impl Error for ErrorSumsConfig {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             ErrorSumsConfig::Empty(p) => f"config at {p} is empty"
             ErrorSumsConfig::Unnamed => "config has no name"
@@ -25,9 +25,9 @@ impl Error for ErrorSumsConfig {
 }
 
 // The shape: an error of the program's own, and a file read, in one function.
-fn error_sums_load(path: ref String) -> String throws {
+fn error_sums_load(path: String) -> String throws {
     if path == "" { throw ErrorSumsConfig::Unnamed }
-    let text = fs::read_to_string(ref path, fs::Root::Anywhere)
+    let text = fs::read_to_string(path, fs::Root::Anywhere)
     if text == "" { throw ErrorSumsConfig::Empty(path) }
     return text
 }
@@ -64,7 +64,7 @@ test "the program's own member is matched and keeps its site" {
     assert(text == "unnamed")
 }
 
-fn error_sums_again(path: ref String) -> String throws {
+fn error_sums_again(path: String) -> String throws {
     return error_sums_load(path) catch {
         match error {
             ErrorSumsConfig::Empty(p) => f"defaulted for {p}"
@@ -110,7 +110,7 @@ test "an error of several answers its message without a match" {
     let empty = error_sums_load("") catch {
         match error {
             ErrorSumsConfig::Empty(p) => {
-                let at: ref String = p
+                let at: String = p
                 at.clone()
             }
             else => error.message()

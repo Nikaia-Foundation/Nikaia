@@ -98,6 +98,11 @@ struct Cancellable<F, T, Q: crate::cleanup::Queue> {
     /// while it is polled, so that what it parks and what it settles are its
     /// own, and handed to the runtime as orphans when it is over.
     queues: Q,
+    /// **The task's memory block**
+    /// ([ADR-327](../../../docs/specification/adr/adr-327.md) D5, D12): in
+    /// place while the body is polled or dropped, handed back whole with the
+    /// task.
+    block: crate::block::Block,
 }
 
 impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue + Unpin> std::future::Future
@@ -132,6 +137,7 @@ impl<F, T, Q: crate::cleanup::Queue> Drop for Cancellable<F, T, Q> {
     fn drop(&mut self) {
         if self.body.is_some() {
             self.queues.swap();
+            let _block = crate::block::enter(&self.block);
             self.body = None;
             self.queues.swap();
         }
@@ -142,6 +148,9 @@ impl<F, T, Q: crate::cleanup::Queue> Drop for Cancellable<F, T, Q> {
 impl<F: std::future::Future<Output = T>, T, Q: crate::cleanup::Queue> Cancellable<F, T, Q> {
     /// One poll of the body, with the task's own queues in place.
     fn step(&mut self, context: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+        // What the body allocates in its block, and what it drops, reach the
+        // task's own block, ended or not (ADR-327 D5).
+        let _block = crate::block::enter(&self.block);
         if self.asked.asked.load(std::sync::atomic::Ordering::Acquire) {
             // **The teardown is the drop**, and it happens here rather than in
             // `cancel` because this is the task's own thread and its pause
@@ -284,6 +293,7 @@ impl<T: 'static> TaskHandle<T> {
             slot: slot.clone(),
             asked: asked.clone(),
             queues: crate::cleanup::Queues::default(),
+            block: crate::block::Block::default(),
         });
         TaskHandle { slot, asked }
     }
@@ -363,6 +373,7 @@ impl<T: Send + 'static> TaskHandle<T> {
             slot: slot.clone(),
             asked: asked.clone(),
             queues: crate::cleanup::SendQueues::default(),
+            block: crate::block::Block::default(),
         });
         TaskHandle { slot, asked }
     }

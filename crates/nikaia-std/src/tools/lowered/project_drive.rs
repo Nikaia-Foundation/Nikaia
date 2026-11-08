@@ -85,7 +85,7 @@ pub trait ProjectDriveHost {
     fn entry(&self) -> fs::Path;
     fn explain_if_asked(&self) -> Result<(), Box<dyn std::error::Error>>;
     fn drive_members(&self) -> Result<Vec<ProjectMembersMember>, Box<dyn std::error::Error>>;
-    fn lower_member(&self, at: i64, no_cache: bool) -> Result<ProjectDriveLowered, Box<dyn std::error::Error>>;
+    fn lower_member(&self, at: i64, no_cache: bool, crate_root: &str) -> Result<ProjectDriveLowered, Box<dyn std::error::Error>>;
     fn check_libraries(&self, at: i64, own: &[fs::Path]) -> Result<Vec<String>, Box<dyn std::error::Error>>;
     fn write_ledgers(&self, at: i64, locked: bool) -> Result<(), Box<dyn std::error::Error>>;
     fn tests_build(&self) -> bool;
@@ -200,7 +200,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     for at in order.iter() {
         let at = nikaia_std::num::value(at);
         let member = (*nikaia_std::index::get(&members, nikaia_std::index::at(at))).clone();
-        let lowered = host.lower_member(at, no_cache)?;
+        let lowered = host.lower_member(at, no_cache, &project_drive_crate_root(host, crate_build && at == 0))?;
         let own: Vec<fs::Path> = lowered.sources.iter().filter(|&s| { nikaia_std::fs::path::starts_with(&(s), &member.root) && !members.iter().any(|other| { !nikaia_std::fs::path::same(&(other.root), &(member.root)) && nikaia_std::fs::path::starts_with(&(other.root), &member.root) && nikaia_std::fs::path::starts_with(&(s), &other.root) }) }).map(|s| { nikaia_std::fs::path::clone(&(s)) }).collect::<Vec<_>>();
         for flag in host.check_libraries(at, &own)? { if !nikaia_std::list::contains(&link_flags, &flag) { link_flags.push(flag.to_string()); } }
         if !(at == 0 && host.tests_build()) && member.fetched.is_none() { host.write_ledgers(at, locked)?; }
@@ -478,7 +478,7 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
     for at in 0..members.len() as i64 {
         let crate_name = project_drive_rust_crate(&nikaia_std::index::get(&members, nikaia_std::index::at(at)).name);
         let mut manifest = project_drive_rust_manifest(&host.member_manifest(at, nikaia_std::index::get(&rust, nikaia_std::index::at(at)))?, &crate_name, members);
-        let mut lowered = (*nikaia_std::index::get(&rust, nikaia_std::index::at(at))).to_string();
+        let mut lowered = features_readers_dropped(nikaia_std::index::get(&rust, nikaia_std::index::at(at)));
         if at == 0 && !features.is_empty() {
             let applied = match features_applied(nikaia_std::index::get(&rust, nikaia_std::index::at(at)), &manifest, &features, &nikaia_std::index::get(&members, 0).name) {
                 Ok(value) => value,
@@ -588,6 +588,14 @@ pub fn project_drive_splice_span(toml: &str, key: &str) -> Span {
         offset += line.len() as i64 + 1;
     }
     Span { start: u32::try_from(header).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(header + 14).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn project_drive_crate_root<H: ProjectDriveHost>(host: &H, spliced: bool) -> String {
+    if !spliced { return String::from("crate"); }
+    let table = match host.rust_library() { Some(__nikaia_value) => __nikaia_value, None => { return String::from("crate"); } };
+    format!("crate::{}", table.native)
 }
 
 pub async fn project_drive_spliced(root: &std::path::Path, file: &ManifestFile, src: &std::path::Path, lowered: &str) -> Result<(), nikaia_std::error::Thrown<ProjectDriveRefusal>> {
@@ -771,8 +779,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple55952| {
-        let (a, b) = __nikaia_tuple55952;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56714| {
+        let (a, b) = __nikaia_tuple56714;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

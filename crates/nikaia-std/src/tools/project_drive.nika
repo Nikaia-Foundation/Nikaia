@@ -47,9 +47,10 @@ pub trait ProjectDriveHost {
     /// Every package of this build, the entry first; the host keeps the
     /// members with their manifests.
     fn drive_members(ref self) -> Vec[ProjectMembersMember] sync throws
-    /// **Lowers member `at`**, the entry under the name it was given; the host
-    /// keeps its ledgers and proofs.
-    fn lower_member(ref self, at: i64, no_cache: bool) -> ProjectDriveLowered sync throws
+    /// **Lowers member `at`**, the entry under the name it was given, its
+    /// items below `crate_root` (`project_drive_crate_root`); the host keeps
+    /// its ledgers and proofs.
+    fn lower_member(ref self, at: i64, no_cache: bool, crate_root: ref String) -> ProjectDriveLowered sync throws
     /// **The libraries member `at` names in `own`, its own sources**, checked
     /// both ways (ADR-324 D2-D4): the linker flags `pkg-config` gives for
     /// them; a library named one way and not the other is thrown.
@@ -263,7 +264,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     let mut link_flags: Vec[String] = []
     for at in order {
         let member = members[at].clone()
-        let lowered = host.lower_member(at, no_cache)
+        let lowered = host.lower_member(at, no_cache, project_drive_crate_root(host, crate_build && at == 0))
         // **The libraries this package names, and how it finds them**
         // (ADR-324 D2-D4): both ways before anything is linked, and the
         // flags from `pkg-config` before `cargo` runs. Its own sources are
@@ -696,9 +697,10 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
     for at in 0..<members.len() {
         let crate_name = project_drive_rust_crate(members[at].name)
         let mut manifest = project_drive_rust_manifest(host.member_manifest(at, rust[at]), crate_name, members)
-        let mut lowered = rust[at].clone()
         // **The features** (ADR-393 D2-D3) are the package's own: the
-        // members it depends on are built whole.
+        // members it depends on are built whole, and without a feature that
+        // roots a grammar's `@stream` entry the crate holds no reader (D4).
+        let mut lowered = features_readers_dropped(rust[at])
         if at == 0 && features.len() > 0 {
             let applied = features_applied(rust[at], manifest, features, members[0].name) catch {
                 return project_drive_features_refused(host, error)
@@ -816,6 +818,18 @@ pub fn project_drive_splice_span(toml: ref String, key: ref String) -> Span {
         offset += line.len() + 1
     }
     return Span { start: header as u32, end: (header + 14) as u32 }
+}
+
+/// **The path of a member's root in its crate** (#1447): `crate::<native>`
+/// for the entry of a rust-library build whose `[rust-library] root` splices
+/// it under a hand-written root (ADR-393 D7, `project_drive_spliced`),
+/// `crate` for every other.
+fn project_drive_crate_root[H: ProjectDriveHost](host: ref H, spliced: bool) -> String sync {
+    if !spliced {
+        return "crate"
+    }
+    let table = host.rust_library() ?? { return "crate" }
+    return f"crate::{table.native}"
 }
 
 /// **The crate with a hand-written root** (ADR-393 D7), under the package

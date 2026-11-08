@@ -15,6 +15,7 @@ pub struct KeepsBody<'a, 'a1> {
     pub cloned_keeps: collections::BTreeSet<String>,
     pub options: collections::BTreeSet<String>,
     pub code_lends: collections::BTreeMap<String, Vec<bool>>,
+    pub bounds: collections::BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,9 +98,9 @@ pub(crate) fn keeps_statement_parts(stmt: &Stmt, interner: &winnow_grammar::Inte
         Stmt::While { cond, .. } => { keeps_expression(cond, interner, &holes_of, context, own, library, walk); },
         Stmt::Return(value) => {
             let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-            keeps_expression(returned, interner, &holes_of, context, own, library, walk);
+            if context.returns_a_view && a_read_option(returned, interner, context) { keeps_read_option(returned, interner, &holes_of, context, own, library, walk); } else { keeps_expression(returned, interner, &holes_of, context, own, library, walk); }
         },
-        Stmt::Expr(value) => { keeps_expression(value, interner, &holes_of, context, own, library, walk); },
+        Stmt::Expr(value) => { if context.returns_a_view && a_read_option(value, interner, context) { keeps_read_option(value, interner, &holes_of, context, own, library, walk); } else { keeps_expression(value, interner, &holes_of, context, own, library, walk); } },
         _ => { },
     }
     match stmt {
@@ -536,6 +537,7 @@ pub(crate) fn keep_option(setting: &ConfigArg, callee: Option<&str>, interner: &
 pub(crate) fn keep_method_options(config: &[ConfigArg], interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) { for setting in config.iter() { walk.uses.kept.extend(keeps_handed(&setting.value, interner, context, own, library, &walk)); } }
 
 pub(crate) fn keep_receiver(receiver: &Expr, method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
+    if keeps_code_field(receiver, method, interner, context).is_some() { return; }
     let mut names: Vec<String> = vec![];
     match receiver {
         Expr::Variable(ident, _) => {
@@ -587,6 +589,15 @@ pub(crate) fn takes_its_receiver(contract: &FnContract) -> bool {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str, interner: &winnow_grammar::InternerContext, holes_of: &impl Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
+    let code = keeps_code_field(receiver, method, interner, context);
+    if code.is_some() {
+        let params: Vec<Ty> = nikaia_std::index::or(code, || vec![].into());
+        for k in 0..args.len() as i64 {
+            if ((k) as usize) < params.len() && ((*nikaia_std::index::get(&params, (k) as usize)).is_a_view() || lent_mut(nikaia_std::index::get(&params, (k) as usize)).is_some()) { continue; }
+            for name in keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk) { walk.uses.kept.insert(name.to_string()); }
+        }
+        return;
+    }
     let owner = keeps_owner_of(receiver, method, interner, context, own, library);
     let ours = candidate_keys(own, context.own_methods, method, (owner).as_deref(), args.len() as i64);
     for k in 0..args.len() as i64 {
@@ -647,6 +658,11 @@ pub(crate) fn keeps_owner_of(receiver: &Expr, method: &str, interner: &winnow_gr
             let declared = keeps_ledger_owner(written);
             let key = format!("{}::{}", declared, method);
             if own.functions.contains_key(&key) || library.functions.contains_key(&key) { return Some(declared); }
+            let bounds = match *nikaia_std::index::get(&context.bounds, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            for bound in bounds.iter() {
+                let by_bound = format!("{}::{}", bound, method);
+                if own.functions.contains_key(&by_bound) || library.functions.contains_key(&by_bound) { return Some(bound.to_string()); }
+            }
             return None;
         },
         _ => return None,
@@ -907,6 +923,21 @@ pub(crate) fn not_self(name: String) -> Option<String> {
     Some(name)
 }
 
+pub(crate) fn keeps_code_field(receiver: &Expr, method: &str, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<Vec<Ty>> {
+    match receiver {
+        Expr::Variable(ident, _) => {
+            let ident = *ident;
+            let fields = match *nikaia_std::index::get(&context.fields, interner.resolve(ident)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let ty = match *nikaia_std::index::get(&fields, method) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return match ty {
+                Ty::Fn { params, .. } => Some(params.to_owned()),
+                _ => None,
+            };
+        },
+        _ => return None,
+    }
+}
+
 pub(crate) fn a_field_that_copies(parameter: &str, field: &str, context: &KeepsBody<'_, '_>) -> bool {
     let fields = match *nikaia_std::index::get(&context.fields, parameter) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let ty = match *nikaia_std::index::get(&fields, field) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -1098,11 +1129,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81723| {
-                            let (at, arg) = __nikaia_tuple81723; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple84628| {
+                            let (at, arg) = __nikaia_tuple84628; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple81899| {
-                            let (at, arg) = __nikaia_tuple81899;
+                        }).map(|__nikaia_tuple84804| {
+                            let (at, arg) = __nikaia_tuple84804;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1454,7 +1485,7 @@ pub(crate) fn copied_keepers(keepers: &[KeepsKeeper]) -> Vec<KeepsKeeper> {
 #[allow(clippy::too_many_arguments)]
 pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
     match item {
-        Item::Fn { name, receiver, args, config, body, ret_type, .. } => {
+        Item::Fn { name, generics, receiver, args, config, body, ret_type, .. } => {
             let name = *name;
             let own = match name {
                 None => String::from("new"),
@@ -1513,15 +1544,18 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 unresolved = calls.unresolved;
             }
             let mut types: collections::BTreeMap<String, String> = collections::BTreeMap::new();
-            for a in args.iter() { if !a.ty.is_slice { types.insert(view.text(a.name), view.text(a.ty.name)); } }
+            let mut bounds: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+            for a in args.iter() {
+                if !a.ty.is_slice {
+                    types.insert(view.text(a.name), view.text(a.ty.name));
+                    for g in generics.iter() { if g.name == a.ty.name && !g.bounds.is_empty() { bounds.insert(view.text(a.name), g.bounds.iter().map(|b| { view.text(*b) }).collect::<Vec<_>>()); } }
+                }
+            }
             if is_method { types.insert(String::from("self"), target_name.to_string()); }
             let mut cloned_keeps: collections::BTreeSet<String> = collections::BTreeSet::new();
             for a in args.iter() { if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.is_empty() && view.text(a.ty.name) == "Bytes" { cloned_keeps.insert(view.text(a.name)); } }
             let mut options: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for a in args.iter() {
-                let written = view.text(a.ty.name);
-                if a.ty.is_nullable && !a.ty.is_slice && (*a.ty.code).is_none() && written != "String" && written != "str" { options.insert(view.text(a.name)); }
-            }
+            for a in args.iter() { if a.ty.is_nullable && !a.ty.is_slice && (*a.ty.code).is_none() { options.insert(view.text(a.name)); } }
             let mut code_lends: collections::BTreeMap<String, Vec<bool>> = collections::BTreeMap::new();
             for a in args.iter() {
                 if (*a.ty.code).is_none() { continue; }
@@ -1529,7 +1563,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
                 for at in 0..a.ty.generics.len() as i64 { each.push(nikaia_std::index::get(&a.ty.generics, nikaia_std::index::at(at)).is_view || code_lends_at(view.words, &a.ty, at)); }
                 code_lends.insert(view.text(a.name), each);
             }
-            let context = KeepsBody { parameters: parameters.to_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options };
+            let context = KeepsBody { parameters: parameters.to_owned(), lent, fields, returns_a_view, hands_back_its_last: ret_type.is_some() && !returns_a_view, unresolved, types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps, code_lends, options, bounds };
             let uses = uses_in(body, view.words, holes_of, &context, ledger, library);
             let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
             for name in uses.kept.iter() { if !unkept.contains(name) { kept.insert(name.to_string()); } }

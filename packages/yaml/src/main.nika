@@ -304,7 +304,10 @@ grammar Yaml {
 	// `lim` holds the parse's limits (D8): the nesting depth is handed down the
 	// rules as the levels `left`, which each collection takes one of.
 	entry rule stream(lim: Limits) -> Vec[Document] =
-		Blanks DocEnd* docs:Docs(lim.depth)? eof -> { docs ?? [] }
+		Bom? Blanks DocEnd* docs:Docs(lim.depth)? eof -> { docs ?? [] }
+	// `c-byte-order-mark` (YAML 1.2.2 5.2): it may start the stream and each
+	// document's prefix; it is not content.
+	rule Bom = "\u{feff}" Blanks -> { }
 
 	// A bare document (no `---`) comes first or after `...` (`l-yaml-stream`).
 	// A `...` belongs to the document before it: each further document says
@@ -325,8 +328,8 @@ grammar Yaml {
 	// The rules below take the document's directives `ds`, where a tag's
 	// handle is looked up, and the nesting levels `left` still allowed.
 	rule NextDoc(left: i64) -> Next =
-		DocEnd+ v:AnyDoc(left) -> { Next { ended: true, doc: v } }
-		| v:Explicit([], left) -> {
+		DocEnd+ Bom? v:AnyDoc(left) -> { Next { ended: true, doc: v } }
+		| Bom? v:Explicit([], left) -> {
 			Next {
 				ended: false,
 				doc: Document { root: v, start: true, end: false, directives: [] },
@@ -388,8 +391,9 @@ grammar Yaml {
 			}
 		}
 
-	// `---` or `...` at the start of a line, where a document begins or ends.
-	rule Marker = ("---" | "...") (" " | "\t" | "\n" | eof) -> { }
+	// `---` or `...` at the start of a line, where a document begins or ends;
+	// a byte order mark may stand before it (5.2), and is no scalar's content.
+	rule Marker = "\u{feff}"? ("---" | "...") (" " | "\t" | "\n" | eof) -> { }
 
 	// Spaces and tabs inside a line.
 	rule Sp = (" " | "\t")* -> { }
@@ -638,7 +642,7 @@ grammar Yaml {
 	// characters a URI may hold (`ns-uri-char`, `ns-tag-char`); a named
 	// handle, by the document's `%TAG` directives (6.8.2.1).
 	rule Tag(ds: Vec[Dir]) -> String =
-		s:text(TagForm) if(declared(ds, s), "a tag handle a %TAG directive declares") -> { s }
+		s:text(TagForm) => if(declared(ds, s), "a tag handle a %TAG directive declares") -> { s }
 	rule TagForm =
 		"!<" UriChar+ ">" -> { }
 		| "!" WordChar* "!" TagChar+ -> { }
@@ -1068,10 +1072,27 @@ grammar Yaml {
 	// content lines as written, the empty lines behind them included; `text()`
 	// takes off the indentation, folds and chomps (no escapes, nothing to check
 	// twice). The header is checked here: a wrong indicator is a parse error.
-	// A core tag other than `!!str` does not fit one: its value is a copy, and
-	// an `Int` or a `Float` keeps a view.
+	// Any scalar style may carry any scalar tag (YAML 1.2.2 6.9.1): a core tag
+	// that fixes a kind reads the folded and chomped content as that kind, its
+	// shape checked here, as for the flow scalars; a collection tag fits none.
+	// Content that fits such a tag is one word, the written text trimmed: the
+	// value keeps that view, as `Value::Int` and `Value::Float` do.
 	rule BlockScalar(n: i64; k: TagKind = TagKind::Untagged) -> Node =
-		a:here st:BlockStyle if(block_fits(k), "a scalar its tag fits") h:Head e:here HeadEnd r:here s:text(i:BlockBody(n, h.indent)) -> {
+		a:here st:BlockStyle if(block_fits(k), "a scalar its tag fits") h:Head e:here HeadEnd r:here s:text(i:BlockBody(n, h.indent))
+		if(block_content_fits(k, s, i, h.chomp, st), "a scalar its tag fits") -> {
+			let v = match k {
+				TagKind::Null => Value::Null
+				TagKind::Bool => Value::Bool(is_true(s.trim()))
+				TagKind::Int => Value::Int(s.trim())
+				TagKind::Float => Value::Float(s.trim())
+				else => Value::Str(Scalar {
+					raw: s,
+					value: s,
+					style: st,
+					indent: i,
+					chomp: h.chomp,
+				})
+			}
 			Node {
 				start: a,
 				end: block_end(e, r, s),
@@ -1080,13 +1101,7 @@ grammar Yaml {
 				flow: false,
 				raw: s,
 				style: st,
-				value: Value::Str(Scalar {
-					raw: s,
-					value: s,
-					style: st,
-					indent: i,
-					chomp: h.chomp,
-				}),
+				value: v,
 			}
 		}
 	// What may follow a block scalar (`l-chomped-empty`): its lines of spaces
@@ -1308,15 +1323,41 @@ fn fits(k: TagKind, s: String) -> bool sync {
 	}
 }
 
+// Whether a block scalar may carry the tag: any but a collection's.
 fn block_fits(k: TagKind) -> bool sync {
 	return match k {
-		TagKind::Null => false
-		TagKind::Bool => false
-		TagKind::Int => false
-		TagKind::Float => false
 		TagKind::Seq => false
 		TagKind::Map => false
 		else => true
+	}
+}
+
+// Whether a block scalar's content fits its tag: a core tag that fixes a
+// kind wants the content, as `text()` gives it, to be the written text
+// trimmed and of the tag's shape (`|` keeps the line break after `7200`, so
+// that does not fit `!!int`); any other tag fits.
+fn block_content_fits(
+	k: TagKind,
+	raw: String,
+	indent: i64,
+	chomp: Chomp,
+	style: Style,
+) -> bool sync {
+	return match k {
+		TagKind::Null => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
+		TagKind::Bool => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
+		TagKind::Int => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
+		TagKind::Float => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
+		else => true
+	}
+}
+
+// A block scalar's content as `text()` gives it: unindented, folded for `>`,
+// chomped.
+fn block_text(raw: String, indent: i64, chomp: Chomp, style: Style) -> String sync {
+	return match style {
+		Style::Folded => block(raw, indent, chomp, true)
+		else => block(raw, indent, chomp, false)
 	}
 }
 

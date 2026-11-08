@@ -290,12 +290,7 @@ fn crate_sources(root: &Path, value: &toml::Value, crate_word: &str, key: &str) 
     // **Where the sources are, the refusals and the walk are Nikaia's**
     // (`tools/describe.nika`, #125); the `toml` value's `version` and `path`
     // are read here, and the crate's `Cargo.toml` by `Host::cargo_version`.
-    let text = |key: &str| {
-        value
-            .get(key)
-            .and_then(toml::Value::as_str)
-            .map(str::to_string)
-    };
+    let text = |key: &str| value.get(key).and_then(toml::Value::as_str);
     let found = block_on(describe::describe_crate_sources(
         root,
         text("version"),

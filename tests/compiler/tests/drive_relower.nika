@@ -1,0 +1,71 @@
+// scripts/drive.nika --merge-fetched LOWER BUILD (#1430): the merge of a
+// rejected push, in a temp repository with a bare remote. A conflict only in
+// the generated lowered files is resolved by re-lowering (here a stub that
+// writes them from the `.nika` source) and committed, the autostashed local
+// change back after it; a conflict also in a `.nika`, or a lowering that
+// fails, aborts and escalates with no merge left open.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// A repository `work` and a clone `other`, both from the bare `origin`; each
+// side changes the lowered file (and, with BOTH_NIKA, the source), `other`
+// pushes, `work` commits, keeps an uncommitted change and fetches.
+fn setup(tmp: String, name: String, both_nika: bool) -> String throws {
+    let base = f"{tmp}/{name}"
+    let low = "crates/nikaia-std/src/tools/lowered"
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    sh(tmp.clone(), f"mkdir -p {name}; cd {name}; git init -q --bare origin.git; git init -q -b develop work")
+    let work = f"{base}/work"
+    sh(work.clone(), f"{id}; mkdir -p {low} src; echo base > {low}/a.rs; echo index > {low}.rs; echo base > src/a.nika; echo notes > notes.txt; git add -A; git commit -q -m base; git remote add origin ../origin.git; git push -q origin develop")
+    sh(base.clone(), "git clone -q -b develop origin.git other")
+    let other = f"{base}/other"
+    let theirs = if both_nika { "echo theirs > src/a.nika; " } else { "echo theirs-side > src/b.nika; " }
+    sh(other.clone(), f"{id}; echo theirs > {low}/a.rs; {theirs}git add -A; git commit -q -m theirs; git push -q origin develop")
+    let ours = if both_nika { "echo ours > src/a.nika; " } else { "" }
+    sh(work.clone(), f"echo ours > {low}/a.rs; {ours}git add -A; git commit -q -m ours; echo local > notes.txt; git fetch -q origin develop")
+    return work
+}
+
+fn case(nikaia: String, repo: String, tmp: String, name: String, both_nika: bool, lower: String) throws {
+    let work = setup(tmp.clone(), name.replace(" ", "-"), both_nika)
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--merge-fetched", lower, "true"]; dir: work.clone())
+    let head = sh(work.clone(), "git rev-parse HEAD").bytes[0..<8].text().clone()
+    println(f"== {name}")
+    println(out.stdout.trim().replace(head, "SHA"))
+    println(f"exit ok: {out.ok}")
+    let state = sh(work.clone(), "git log --format=%s -1; git log --format=%p -1 | wc -w; test -f .git/MERGE_HEAD && echo merge open || echo no merge open; git status --porcelain --untracked-files=all; cat crates/nikaia-std/src/tools/lowered/a.rs; cat notes.txt")
+    println(state)
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    let low = "crates/nikaia-std/src/tools/lowered"
+    // The stub lowering: the lowered file from the sources, and a new file.
+    let lower = f"cat src/*.nika > {low}/a.rs; echo new > {low}/new.rs"
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "lowered only", false, lower.clone())
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "also a nika", true, lower.clone())
+    case(nikaia.clone(), repo.clone(), tmp.clone(), "lowering fails", false, f"echo new > {low}/new.rs; false")
+    process::run("rm", ["-rf", tmp])
+}

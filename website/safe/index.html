@@ -18,7 +18,7 @@ description: >-
     <h1 class="home-heading">Safe, secure, reliable</h1>
     <p class="safe-lead home-intro">Safety is more than one check. A program fails when something goes wrong while it runs and nothing handles it, when data from outside is not what it expected, when a part is used outside what it was made for, when a change quietly breaks a rule another part relies on, and when a service it waits for is slow or gone.</p>
     <p class="safe-lead home-intro">Nikaia looks at all five, at compile time wherever it can. For each one this page says what the compiler checks and where the check stops, and every topic has a page with the whole program and the message the compiler gives.</p>
-    <p class="safe-others">The five layers: <a href="#running">While the program runs</a><a href="#outside">Data from outside</a><a href="#logic">Parts that keep their promises</a><a href="#changes">Changes, by people and by models</a><a href="#load">Under load and failure</a></p>
+    <p class="safe-others">The five layers: <a href="#running">Errors that have to be handled</a><a href="#outside">Input checked where it arrives</a><a href="#logic">Contracts kept at every call</a><a href="#changes">Every change held to the rules</a><a href="#load">Steady under load and failure</a></p>
     <p class="safe-others">Also: <a href="{{ "/fast/" | relative_url }}">Very fast</a><a href="{{ "/easy/" | relative_url }}">Easy to understand</a><a href="{{ "/good/" | relative_url }}">Made for good</a></p>
   </div>
 </section>
@@ -26,7 +26,7 @@ description: >-
 <section class="home-section home-section-alt" id="running">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 1</p>
-    <h2 class="home-heading">While the program runs</h2>
+    <h2 class="home-heading">Errors that have to be handled</h2>
     <p class="safe-lead home-intro">A file is missing, an index is past the end of a list, a task fails. A program meets states nobody planned for, and what matters is that each is handled where it happens, and that one failing part does not take the rest of the program with it.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b" id="errors">
@@ -41,7 +41,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>An index past the end, a number that overflows</h3>
-        <p>An index outside a list or an integer that overflows stops the program and names the line, before anything reads or writes memory it does not own. Where the compiler has proved that such a check cannot fail, a build setting leaves it out of the machine code.</p>
+        <p>An index outside a list or an integer that overflows stops the program and names the line, before anything reads or writes memory it does not own. Where the compiler has proved that such a check cannot fail, a build setting leaves it out of the machine code. A division by a constant zero is refused when the program is built. Where the compiler can show that an index is past the end, a number overflows or a divisor is zero for a value the program reaches, the program is refused too; that is specified and not built yet.</p>
         <a class="safe-more" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks left out where proved →</a>
       </div>
       <div class="safe-tile safe-tile-b">
@@ -50,6 +50,18 @@ description: >-
         <p>A panic in a task ends only that task. Whoever waits for it receives <code>task::Crashed</code> as an error to handle, and the rest of the program goes on. The compiler works out which functions can panic, so only a task that can panic is a failure, and the function that starts it says <code>throws</code>, catches the crash or gives the task a fallback, or it is refused. A task that cannot panic asks for nothing. A panic in <code>main</code> ends the program.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D35 →</a>
       </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
+        <h3>Cleanup on every way out</h3>
+        <p>A file or a connection is cleaned up where the compiler sees its owner end, on a normal return, on an error and on a panic. When the program ends, the cleanups still due run within the <code>cleanup-deadline</code> the build sets, and one the deadline cuts off ends the program with exit status 70 and names the resource. <code>process::exit</code> runs the cleanups on its way out, and a plain <code>catch</code> does not take an error that is meant to end the program. A failed write to standard output is an <code>io::IoError</code> the program handles.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-297.html" | relative_url }}">ADR-297 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3>A missing value is a case to handle</h3>
+        <p>A value that may be absent has the type <code>T?</code>, and the program handles the absent case before it uses the value. A read from a map through brackets is a <code>T?</code> too, since the key may not be there. A conversion to a narrower number is written <code>as</code> only where the compiler shows the value fits; elsewhere the program writes <code>checked_</code> and handles the case where it does not, or <code>truncating_</code> and names the cut.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-278.html" | relative_url }}">ADR-278 →</a>
+      </div>
     </div>
   </div>
 </section>
@@ -57,11 +69,11 @@ description: >-
 <section class="home-section" id="outside">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 2</p>
-    <h2 class="home-heading">Data from outside</h2>
+    <h2 class="home-heading">Input checked where it arrives</h2>
     <p class="safe-lead home-intro">What a request carries, what another program prints or what a person types is not up to your program. Nikaia knows which values come from outside, and asks for them to be checked where they arrive, before the rest of the program relies on them.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
 <p><span class="why why-limit">Beyond what a compiler sees</span> What valid data is depends on your program. The guard says it; the compiler checks that there is one. Who wrote a file or what arrives on standard input is something only the program knows, and it says so with <code>trusted: true</code> where it reads them, and <code>--trust</code> lists each such place.</p>
 </details>
         <h3><a href="{{ "/safe/outside-data.html" | relative_url }}">A guard where the data arrives</a></h3>
@@ -84,6 +96,30 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
         <p>A map whose keys come from the network gets a hash with a random seed, so whoever sends the keys cannot pick ones that all land in the same place and slow the program down. A map filled from data the program trusts keeps a faster hash. <code>--trust</code> shows which map got which.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-316.html" | relative_url }}">ADR-316 →</a>
       </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Chosen by the compiler</span>
+        <h3>Parsers built from a grammar</h3>
+        <p>A format or a protocol is read by a parser the compiler builds from a grammar, and the parser of HTTP requests is one of them. Input that does not match is a parse error at its offset, for the program to handle. The <code>http</code> package's server caps a request's head at 16 KiB and its body at 1 MiB, limits how long it waits for the head, and answers 431, 413 or 408 past those limits.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-296.html" | relative_url }}">ADR-296 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Checked at the call</span>
+        <h3>Text from outside, matched and inserted</h3>
+        <p><code>std::regex</code> uses a dialect that matches in time linear in the input, so a hostile input cannot make a match run away. A template escapes every value it inserts, unless the value is marked raw. Bytes become text only through a check that they are valid UTF-8.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-017.html" | relative_url }}">ADR-017 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <h3>SQL checked against the schema</h3>
+        <p>In the specification a database statement is SQL that the driver's grammar checks against the schema while the program is built, and the rows it returns are matched to the program's struct by name. <code>std::db</code> is not built yet.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-299.html" | relative_url }}">ADR-299 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <h3>Encrypted connections</h3>
+        <p>The specification gives the HTTP server TLS through the Rust library <code>rustls</code>. It is not built yet, so today the server speaks plain HTTP.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-303.html" | relative_url }}">ADR-303, D2 →</a>
+      </div>
     </div>
   </div>
 </section>
@@ -91,7 +127,7 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
 <section class="home-section home-section-alt" id="logic">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 3</p>
-    <h2 class="home-heading">Parts that keep their promises</h2>
+    <h2 class="home-heading">Contracts kept at every call</h2>
     <p class="safe-lead home-intro">A function is written for certain inputs, and a value shared between tasks is meant to change in a certain way. Nikaia lets these rules be written in the code, and checks them when the program is built, so a state the program relies on is not broken unnoticed.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b" id="promises">
@@ -107,7 +143,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/broken-promises.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b" id="conflicts">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
 <p><span class="why why-limit">Beyond what a compiler sees</span> A file is told apart by a name written in the program; two tasks writing paths worked out while the program runs are not refused.</p>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Code in a Rust crate or a C library that starts threads of its own is outside what the compiler can look into. There it does not refuse, and you hand over a copy instead of shared data.</p>
 </details>
@@ -119,6 +155,18 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
 }</code></pre></div>
         <a class="safe-more" href="{{ "/safe/conflicting-actions.html" | relative_url }}">In depth →</a>
       </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3>A type keeps its rule</h3>
+        <p>An <code>assert</code> written inside a struct is the type's rule. It has to hold after every construction, at the end of every method that changes the value and after every write to a field from outside, proved where the compiler can and checked while the program runs where it cannot. A binding marked <code>immutable</code> is refused if anything reachable from its value can change, so every task that reads it sees the same value.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-369.html" | relative_url }}">ADR-369 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3>What crosses into C</h3>
+        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-302.html" | relative_url }}">ADR-302 →</a>
+      </div>
     </div>
   </div>
 </section>
@@ -126,7 +174,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
 <section class="home-section" id="changes">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 4</p>
-    <h2 class="home-heading">Changes, by people and by models</h2>
+    <h2 class="home-heading">Every change held to the rules</h2>
     <p class="safe-lead home-intro">More and more changes are made by a model or an agent, often faster than a person can read them closely. Such a change can look right line by line and still break a rule that another part of the program relies on.</p>
     <p class="safe-lead home-intro">In Nikaia those rules are part of the code, such as the <code>assert</code> that states what a function expects, the <code>throws</code> that says it can fail and the directory a path may not leave. The compiler checks every change against all of them on every build, whoever wrote it. A change that calls a function outside its precondition, lets an error through unhandled or starts two tasks that change the same value is refused, and the message says what to write instead, so an agent can fix the code and build again.</p>
     <div class="safe-tiles">
@@ -144,6 +192,18 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <p>The compiler checks the rules the code states. A change that rewrites a rule itself, removes an <code>assert</code> or writes <code>fs::Root::Anywhere</code>, is accepted. It shows in the diff and in the two reports, and that is where a person looks. A rule nobody has written is not checked.</p>
         <a class="safe-more" href="{{ "/manifesto.html#8-a-language-for-the-age-of-generated-code" | relative_url }}">The longer argument →</a>
       </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Shown on every build</span>
+        <h3>A contract change shows in the diff</h3>
+        <p>Every package commits its ledger, <code>nikaia.contracts</code>, which records for each function what it can fail with, whether it can pause or panic and what it touches. A change that alters any of this alters the ledger, so it shows in the diff, and <code>nikaia build --locked</code> fails in CI until the new ledger is committed. The proofs the build relied on are kept in <code>nikaia.proofs</code> beside it, and each is checked again when it is read.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-100.html" | relative_url }}">ADR-100 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3>What a dependency can do while you build</h3>
+        <p>A package has no build script, and a C library is linked by naming it. The tools below Nikaia read no configuration from the project, so a checked-out repository cannot plant any. Code that runs at build time reads only a file that the code, a committed list and the command all name, and it stops when it passes its budget of steps or memory.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-324.html" | relative_url }}">ADR-324 →</a>
+      </div>
     </div>
   </div>
 </section>
@@ -151,7 +211,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
 <section class="home-section home-section-alt" id="load">
   <div class="home-inner">
     <p class="home-eyebrow home-eyebrow-center">Layer 5</p>
-    <h2 class="home-heading">Under load and failure</h2>
+    <h2 class="home-heading">Steady under load and failure</h2>
     <p class="safe-lead home-intro">A service the program depends on gets slow, a connection stops answering, one task uses more than its share. The program should answer in time with what it has, and the trouble should stay with the part that has it.</p>
     <div class="safe-tiles">
       <div class="safe-tile safe-tile-b">
@@ -163,7 +223,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/deadlines.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b" id="stuck">
-        <details class="safe-why"><summary class="safe-chip safe-chip-part">Partly checked, why?</summary>
+        <details class="safe-why"><summary class="safe-chip safe-chip-part">Where the compiler's view ends</summary>
 <p><span class="why why-limit">Beyond what a compiler sees</span> Whether a program can get stuck cannot be decided for every program. Where the analysis cannot tell, it does not claim the problem is solved.</p>
 </details>
         <h3><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a></h3>
@@ -186,6 +246,24 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <h3>How many run at once</h3>
         <p><code>async(limit: n) { … }</code> lets at most <code>n</code> of its tasks run at once, and the others wait, unstarted, in the order they are written. <code>admission:</code> names the strategy that decides when the next one starts, and on a form that starts one task, when that task starts. A <code>limit:</code> on a form that starts one task is refused before the program runs. The same options work on <code>xs.par_iter()</code>, and <code>within: d</code> there makes the walk fail with <code>task::TimedOut</code> once <code>d</code> has run out. Serving many connections at once is not possible yet.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D15 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
+        <h3>State a crash left behind</h3>
+        <p>When a task panics while it is changing a shared value, the value is marked poisoned, and another task that opens it gets a panic of its own instead of a value changed halfway. A value made with <code>SharedMut::supervised</code> says how to build it, and is built again instead. An <code>update</code> of a number, or a door that only reads, works on a copy or changes nothing, so a panic there poisons nothing.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-327.html" | relative_url }}">ADR-327 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
+        <h3>Restarting what failed</h3>
+        <p><code>supervisor::run</code> starts a list of children and restarts one that crashes, by a strategy that restarts the child alone, all the children, or the child and those after it. One failing part is started again instead of taking the service down. A channel holds a fixed number of values, so a producer that runs ahead waits for the consumer instead of filling memory.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-328.html" | relative_url }}">ADR-328 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <h3>Clients that send slowly</h3>
+        <p>In the specification the HTTP server gives a request's head ten seconds to arrive, asks a body to keep a minimum rate, and keeps a quiet connection open for a set time between requests, answering 408 to a client that falls behind. Today the server counts reads while it waits for the head, not time, and closes each connection after one answer.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326, D6-D9 →</a>
       </div>
     </div>
   </div>

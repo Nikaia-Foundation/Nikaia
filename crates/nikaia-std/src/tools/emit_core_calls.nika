@@ -1265,6 +1265,11 @@ impl EmitState {
                 out.push(".map(|s| ::core::convert::AsRef::<str>::as_ref(s))")
             }
             out.push(f".{written}")
+            // **An `update` of a value that copies** (ADR-327 D11) works on a
+            // copy, so a panic in its block poisons nothing.
+            if name == "update" && self.facts.copied_doors.contains(on_node) {
+                out.push("_copied")
+            }
             // **A `close()` that does not pause** (#1317): the value's cleanup
             // says `sync`, and the runtime runs it without an `.await`.
             let closes = self.facts.method_callees[on_node]?.clone() ?? ""
@@ -1298,7 +1303,9 @@ impl EmitState {
         if kind == 0 {
             out.push("(")
         }
-        let takes = self.takes_a_handle(world, name)
+        // The handles of the method the receiver's type resolves to, not of a
+        // free function of the same name in another file (#1335).
+        let takes = self.takes_a_handle(world, self.facts.method_callees[on_node]?.clone() ?? name.clone())
         // **Views put into a keeper that drops entries are held** (ADR-283 D12),
         // each value with a handle on every buffer it points into - as many as the
         // keeper's widest value needs, so that every element is one type (D15).

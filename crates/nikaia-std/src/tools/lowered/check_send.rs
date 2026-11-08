@@ -34,7 +34,7 @@ impl CheckState {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < found.len() as i64 {
             let (what, path) = names_the_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), at);
-            self.a_value_crosses(world, callee, &what, path, nikaia_std::index::get(&found, nikaia_std::index::at(at)), span, why);
+            self.a_value_crosses(world, callee, &what, (path).as_deref(), nikaia_std::index::get(&found, nikaia_std::index::at(at)), span, why);
             at = at + 1;
         }
         let mut named: i64 = 0;
@@ -42,18 +42,18 @@ impl CheckState {
             let arg = nikaia_std::index::get(&config, nikaia_std::index::at(named));
             let label = format!("`{}`", world.words.resolve(arg.name));
             let path = dotted_path(world, &arg.value);
-            self.a_value_crosses(world, callee, &label, path, &nikaia_std::index::get(&passed, nikaia_std::index::at(named)).1, span, why);
+            self.a_value_crosses(world, callee, &label, (path).as_deref(), &nikaia_std::index::get(&passed, nikaia_std::index::at(named)).1, span, why);
             named = named + 1;
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, what: &str, path: Option<String>, ty: &Ty, span: &Span, why: &str) {
+    pub(crate) fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, what: &str, path: Option<&str>, ty: &Ty, span: &Span, why: &str) {
         let verdict = crossing(ty, &Walking { own: world.own, library: world.library, into: Going::Foreign });
         if verdict.refused_part().is_none() { return; }
         if a_lock_refusal(&verdict) {
-            self.reaches_a_lock(callee, what, (path).as_deref(), &verdict, span);
+            self.reaches_a_lock(callee, what, path, &verdict, span);
             return;
         }
         let notes: Vec<String> = vec![why.to_string(), nikaia_std::index::or(verdict.note(), || "".into()), same_at_both()];
@@ -63,7 +63,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn reaches_a_lock(&mut self, callee: &str, what: &str, path: Option<&str>, verdict: &Crossing, span: &Span) {
         let part = match verdict.refused_part() { Some(__nikaia_value) => __nikaia_value, None => return };
-        let reached = reached_path(path, verdict.refused_at());
+        let reached = reached_path(path, (verdict.refused_at()).as_deref());
         let mut note: String = format!("What you pass is a `{}`, and code that might keep a lock could deadlock.", part);
         let mut help: String = String::from("Open the lock here and pass the value inside it, so the called code gets an ordinary value and no lock.");
         if reached.is_some() {
@@ -76,7 +76,7 @@ impl CheckState {
     }
 }
 
-pub(crate) fn reached_path(path: Option<&str>, at: Option<String>) -> Option<String> {
+pub(crate) fn reached_path(path: Option<&str>, at: Option<&str>) -> Option<String> {
     let held = match path { Some(__nikaia_value) => __nikaia_value, None => return None };
     let field = match at { Some(__nikaia_value) => __nikaia_value, None => return Some(held.to_string()) };
     Some(format!("{}.{}", held, field))

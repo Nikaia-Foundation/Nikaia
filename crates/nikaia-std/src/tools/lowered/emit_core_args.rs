@@ -167,9 +167,10 @@ impl EmitState {
         if self.own_contracts.functions.contains_key(callee) { return keeps_its_bytes(match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i); }
         keeps_its_bytes(match world.library.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false }, i)
     }
-    pub(crate) fn emit_arg_opening(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> String {
-        if self.own_contracts.functions.contains_key(callee) {
-            let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    pub(crate) fn emit_arg_opening(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> String {
+        let key = nikaia_std::index::or(method_callee, || std::convert::AsRef::<str>::as_ref(callee));
+        if self.own_contracts.functions.contains_key(key) {
+            let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
             return emit_arg_opening_in(contract, i, world.library, &self.described);
         }
         let candidates = emit_candidates(&self.own_contracts, callee);
@@ -285,7 +286,7 @@ impl EmitState {
         let wants_a_size = is_count(callee, i) || self.takes_a_size(world, callee, i) || self.facts.count_args.contains(&node);
         let count = wants_a_size && !only_literals(arg);
         let lent_path = self.facts.lent_args.contains(&node) && emit_arg_made_a_path(&self.facts.nullable_args, node);
-        let mut lend = self.facts.lent_args.contains(&node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node));
+        let mut lend = self.facts.lent_args.contains(&node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node)) || self.facts.lent_literals.contains(&node));
         if lent_path && !emit_arg_names_a_place(arg) { lend = false; }
         let change = self.facts.mut_args.contains(&node);
         let duplicate = shares_a_handle || hands_on_kept;
@@ -298,8 +299,11 @@ impl EmitState {
                 pointer = emit_arg_pointer_code((self.pointer_for(world, callee, &ty)).as_ref());
             }
         }
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
-        let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, i) == "";
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, &nikaia_std::index::or(match method_callee {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            None => None,
+        }, || callee.to_string().into()), i) && !self.facts.mixed_choices.contains(&node_key(arg));
+        let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, method_callee, i) == "";
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
@@ -309,7 +313,7 @@ impl EmitState {
         let mut how: String = String::from("");
         let mut has_how = false;
         if lend {
-            how = self.emit_arg_opening(world, callee, i);
+            how = self.emit_arg_opening(world, callee, method_callee, i);
             has_how = how != "";
         }
         if has_how {
@@ -1244,6 +1248,7 @@ impl EmitState {
                 for arg in args.iter() {
                     if at > 0 { out.push(", "); }
                     at += 1;
+                    if self.facts.lent_args.contains(&node_key(arg)) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(&node_key(arg))) || self.facts.lent_literals.contains(&node_key(arg))) { out.push("&"); }
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
                 }
                 out.push(")");
@@ -1457,7 +1462,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if (text == "access_all" || text == "update_all") && !args.is_empty() {
-            out.push(&format!("nikaia_std::lock::{}(", text));
+            let copied = if text == "update_all" && self.facts.copied_doors.contains(&node_key(nikaia_std::index::get(&args, 0))) { "_copied" } else { "" };
+            out.push(&format!("nikaia_std::lock::{}{}(", text, copied));
             let last = args.len() as i64 - 1;
             let mut at: i64 = 0;
             for lock in args.iter() {

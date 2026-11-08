@@ -1,0 +1,25 @@
+// #539: an error a dependency declares (`lib::Fault`) crosses a caller's
+// `throws` by `?` as the unit's own does: the generated union holds it in its
+// envelope, as the dependency's functions fail with it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub struct Fault {\n    pub why: String,\n}\n\nimpl Error for Fault {\n    fn message(self) -> String {\n        return self.why\n    }\n}\n\npub fn half(n: i64) -> i64 throws {\n    if n % 2 != 0 { throw Fault { why: f\"{n} is odd\" } }\n    return n / 2\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\n\nfn quarter(n: i64) -> i64 throws {\n    return lib::half(lib::half(n))\n}\n\nfn main() throws {\n    println(quarter(8))\n    let odd = quarter(6) catch {\n        println(f\"caught: {error.why}\")\n        return\n    }\n    println(odd)\n}\n")
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    println(out.stdout)
+    if out.code != 0 { print(out.stderr.replace(tmp, "TMP")) }
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

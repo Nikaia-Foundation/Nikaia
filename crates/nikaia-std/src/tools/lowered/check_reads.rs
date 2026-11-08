@@ -228,7 +228,7 @@ impl CheckState {
             return;
         }
         let copied = (self.a_lent_let(world, &given) || self.a_lent_name(world, &given)) && a_ledger_copies(&unviewed_type(&ty), &vec![world.library]);
-        if ty.is_a_view() && !copied || a_string { return; }
+        if ty.is_a_view() && !copied || a_string || self.facts.bytes_cuts.contains(&(id_of(&given) as i64)) { return; }
         if moves(&ty) && !copied && (self.a_lent_name(world, &given) || self.a_lent_let(world, &given)) { return; }
         let mut a_number = matches!(given, Expr::LitInt { .. } | Expr::LitFloat(_, _));
         match given {

@@ -9,10 +9,11 @@ error 4:1
 error 3:1
 !e!foo str(bar)
 [!e!foo str(bar)]
-error 1:12
-error 4:10
+error 1:11
+error 1:10: expected a tag handle a %TAG directive declares; found unexpected token ` `
+error 4:9
 !e!x int(1) | !e!y int(2)
-error 3:10
+error 3:9
 error 2:1
 str(a %YAML 1.2) | str(b)
 # %TAG !e! tag:example.com,2000:\n%TAG !! tag:example.com,2000:app/\n---\n- !e!foo "bar"\n- !!str x\n- !local y\n- !<tag:v> z\n- ! w\n

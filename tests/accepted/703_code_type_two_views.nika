@@ -1,5 +1,5 @@
 // A function type handing back a view of one of two views (#703).
-fn pick(f: fn(ref String, ref String) -> ref String sync, a: String, b: String) -> i64 {
+fn pick(f: fn(a: String, b: String) -> String from a | b sync, a: String, b: String) -> i64 {
     return f(a, b).len()
 }
 

@@ -16,3 +16,24 @@ pub fn area(side: i64) -> i64 sync {
 pub fn cube(side: i64) -> i64 sync {
     return side * side * side
 }
+
+/// An odd number has no whole half.
+pub enum Odd { Odd }
+impl Error for Odd { fn message(ref self) -> String { return "odd" } }
+
+/// A negative number is not halved.
+pub enum Negative { Negative }
+impl Error for Negative { fn message(ref self) -> String { return "negative" } }
+
+/// The half of an even number.
+pub fn half(x: i64) -> i64 sync throws {
+    if x % 2 != 0 { throw Odd::Odd }
+    return x / 2
+}
+
+/// The half of an even number that is not negative: two errors, so a
+/// generated sum, below `native` (#1447).
+pub fn checked_half(x: i64) -> i64 sync throws {
+    if x < 0 { throw Negative::Negative }
+    return half(x)
+}

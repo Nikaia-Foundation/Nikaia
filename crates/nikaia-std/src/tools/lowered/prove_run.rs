@@ -139,13 +139,13 @@ pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeS
     for c in from.iter() {
         let nodes = condition(c, names);
         if nodes.is_empty() { return false; }
-        facts.push(arena.adopt((nodes).as_ref()));
+        facts.push(arena.adopt(&nodes));
     }
     let mut goals: Vec<i64> = vec![];
     for c in to.iter() {
         let nodes = condition(c, names);
         if nodes.is_empty() { return false; }
-        goals.push(arena.adopt((nodes).as_ref()));
+        goals.push(arena.adopt(&nodes));
     }
     let goal = arena.and(goals);
     matches!(ask(&arena, &facts, goal), SolverAnswer::Proved)

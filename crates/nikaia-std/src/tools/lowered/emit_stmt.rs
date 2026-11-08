@@ -789,10 +789,12 @@ impl EmitState {
                 return Ok(());
             }
         }
+        let fallible = self.facts.fallible_loops.contains(&at);
         let mut each: Vec<String> = vec![];
         for one in bindings.iter() {
             let one = *one;
-            each.push(self.emit_stmt_local(&emit_text(world, one)));
+            let local = self.emit_stmt_local(&emit_text(world, one));
+            if fallible && local == "_" { each.push(format!("__nikaia_step_{}", each.len() as i64)); } else { each.push(local); }
         }
         let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(&node_key(iter));
         let mut written: Vec<String> = vec![];

@@ -1,5 +1,5 @@
 exit 1
-error[NK1344]: The root `demo::mak` of the feature `tree` names nothing: a root is the package `demo`, standing for all its `pub` items, or one `pub` item written `demo::<name>`.
+error[NK1344]: The root `demo::mak` of the feature `tree` names nothing: a root is the package `demo`, standing for all its `pub` items, or one `pub` item written `demo::<name>`, or the `@stream` entry of a `pub grammar` written `demo::<Grammar>::<rule>`.
   --> TMP/nikaia.toml:9:9
    |
  9 | tree = ["demo::mak"]

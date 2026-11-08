@@ -1,0 +1,6 @@
+the first task runs
+the update_all panicked: true
+the second task runs
+the number is poisoned: true
+the third task runs
+the list is poisoned: true

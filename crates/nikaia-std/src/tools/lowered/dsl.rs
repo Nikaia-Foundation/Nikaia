@@ -306,16 +306,16 @@ pub(crate) fn a_call(expr: &Expr, span: &Span, words: &winnow_grammar::InternerC
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let subject = nikaia_std::index::or_maybe(bound_subject(receiver, words, bound), || bound_argument(args, words, bound));
-            a_parameter_call(words.resolve(method), &option_names(config, words), subject, span, bound, takers, found);
+            a_parameter_call(words.resolve(method), &option_names(config, words), (subject).as_deref(), span, bound, takers, found);
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let subject = nikaia_std::index::or_maybe(bound_subject(receiver, words, bound), || bound_argument(args, words, bound));
-            a_parameter_call(words.resolve(method), &option_names(config, words), subject, span, bound, takers, found);
+            a_parameter_call(words.resolve(method), &option_names(config, words), (subject).as_deref(), span, bound, takers, found);
         },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            a_parameter_call(&callee_name(func, words), &option_names(config, words), bound_argument(args, words, bound), span, bound, takers, found);
+            a_parameter_call(&callee_name(func, words), &option_names(config, words), (bound_argument(args, words, bound)).as_deref(), span, bound, takers, found);
         },
         _ => { },
     }
@@ -343,10 +343,10 @@ pub(crate) fn bound_argument(args: &[Expr], words: &winnow_grammar::InternerCont
     None
 }
 
-pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<String>, span: &Span, bound: &collections::BTreeMap<String, Vec<String>>, takers: &[String], found: &mut Vec<Finding>) {
+pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<&str>, span: &Span, bound: &collections::BTreeMap<String, Vec<String>>, takers: &[String], found: &mut Vec<Finding>) {
     if passed.is_empty() { return; }
     let name = match subject { Some(__nikaia_value) => __nikaia_value, None => return };
-    let declared = match *nikaia_std::index::get(&bound, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let declared = match *nikaia_std::index::get(&bound, name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if callee.is_empty() || !nikaia_std::list::contains(&takers, &callee) {
         let shown: String = if callee.is_empty() { String::from("this call") } else { callee.to_string() };
         let first: String = if !passed.is_empty() { (*nikaia_std::index::get(&passed, 0)).to_string() } else { String::from("") };

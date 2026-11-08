@@ -635,6 +635,10 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
     if params.len() > 0 && params.len() != count {
         check_core_args_no_door(state, writing, "The block takes one value per lock, in the order the locks are written.", span)
     }
+    // **Both values copy: the block works on copies** (ADR-327 D11).
+    if writing && count == 2 && a_copy_by_value(held[0]) && a_copy_by_value(held[1]) {
+        state.facts.copied_doors.insert(id_of(args[0]) as i64)
+    }
     // D6 is D1 widened, so the same two questions are asked of this block.
     if writing {
         state.an_update_block_returns_nothing(body, span)
@@ -969,7 +973,11 @@ pub fn check_core_a_called_field[H: CheckHost](mut state: CheckState, world: ref
         Ty::Fn { params, result, is_sync, can_throw } => {
             let pauses: bool = !is_sync
             let fails: bool = can_throw
-            check_core_arguments_to_code(state, world, host, args, params, span)
+            // **What it takes as a view or `mut` is lent to it** (ADR-views-3
+            // D2, D14), as through a function value called by name: an owned
+            // `String` field handed to `fn(String)` went below by value.
+            let found = check_core_arguments_to_code(state, world, host, args, unlent_each(params), span)
+            check_core_call_lent(state, world, args, params, found, world.words.resolve(method), span)
             state.kept_arguments_are_its_own(world, args, params)
             // **A call through a function field reaches what was stored
             // there** (ADR-230 D1, D2).

@@ -1,0 +1,74 @@
+// A Rust user reads a grammar's `@stream` entry from a `std::io::Read`
+// (ADR-grammar-2 D7 and ADR-393 D4, amended 2026-11-08, #1442): the package
+// `rust_library_stream/lines` names the entry `lines::Words::items` as the
+// root of its feature `stream`, which gates `Words::items_reader` alone; the
+// in-crate walk of `counted` is core. The crate `user` reads items from a
+// `Cursor`, stops early, and gets the parse error last. Then the grammar as a
+// root takes all its entries, and without `[features]` the crate holds no
+// reader.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn shown(made: String) throws {
+    let manifest = fs::read_to_string(f"{made}/Cargo.toml", fs::Root::Anywhere)
+    let mut inside = false
+    for line in manifest.lines() {
+        if line.starts_with("[") { inside = line == "[features]" }
+        if inside && line.len() > 0 { println(f"  {line}") }
+    }
+    let lib = fs::read_to_string(f"{made}/src/lib.rs", fs::Root::Anywhere)
+    let mut readers = 0
+    for line in lib.lines() {
+        let text = line.trim()
+        if text.starts_with("#[cfg(") { println(f"  {text.split(" {").next() ?? ""}") }
+        if text.contains("__nikaia_reader_") { readers += 1 }
+    }
+    println(f"  lines naming a reader: {readers}")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let from = f"{repo}/tests/compiler/rust_library_stream"
+    process::run("cp", ["-r", f"{from}/lines", f"{from}/user", tmp.clone()])
+    process::run("rm", ["-rf", f"{tmp}/lines/target"])
+    let mut env: Vec[(String, String)] = []
+    env.push(("CARGO_TARGET_DIR", f"{repo}/target/nikaia-project-tests/rust-library-user"))
+    env.push(("CARGO_NET_OFFLINE", "true"))
+    let made = f"{tmp}/lines/target/rust-library/nikaia_lines"
+    let toml = fs::read_to_string(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere)
+    let whole = (toml.split("[features]").next() ?? "").clone()
+    for features in ["stream = [\"lines::Words::items\"]\n", "all = [\"lines::Words\"]\n", ""] {
+        if features.len() > 0 {
+            fs::write(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere, f"{whole}[features]\n{features}")
+            println(f"with `{features.trim()}`:")
+        } else {
+            fs::write(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere, whole.clone())
+            println("without `[features]`:")
+        }
+        let built = process::run(nikaia, ["build"]; dir: f"{tmp}/lines", env: env.clone())
+        if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
+        shown(made.clone())
+        if features.starts_with("stream") {
+            let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: env.clone())
+            println(ran.stdout.trim())
+            if ran.code != 0 { println(ran.stderr.trim().replace(tmp, "TMP")) }
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

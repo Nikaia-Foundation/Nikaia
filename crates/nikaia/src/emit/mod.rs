@@ -107,6 +107,16 @@ pub struct Build {
     /// gives it - the atomic floor at a public signature or field, the plain
     /// one only where nothing crosses (#113).
     pub called_from_c: bool,
+    /// **The path of the lowered package's root** (#1447): `crate` for a
+    /// crate whose root it is, `crate::<native>` where `[rust-library] root`
+    /// splices it under a hand-written root (ADR-393 D7). A generated error
+    /// sum is written below it.
+    pub crate_root: &'static str,
+    /// **A package offered to Rust** (`artifact = "rust-library"`,
+    /// [ADR-393](../../docs/specification/adr/adr-393.md) D1): a Rust crate
+    /// calls its `pub` functions, so the error sums they fail with are `pub`
+    /// too (#1447).
+    pub offered_to_rust: bool,
 }
 
 impl Default for Build {
@@ -122,6 +132,8 @@ impl Default for Build {
             counts_steps: false,
             leaves_values: false,
             called_from_c: false,
+            crate_root: "crate",
+            offered_to_rust: false,
         }
     }
 }
@@ -144,6 +156,8 @@ impl Build {
             counts_steps: false,
             leaves_values: false,
             called_from_c: false,
+            crate_root: "crate",
+            offered_to_rust: false,
         })
     }
 
@@ -690,6 +704,8 @@ impl<'p> Emitter<'p> {
                 bounds_removed: build.bounds == crate::bounds::BoundsChecks::Removed,
                 overflow_removed: build.overflow == crate::bounds::OverflowChecks::Removed,
                 trusted: provenance == crate::contracts::Provenance::Trusted,
+                crate_root: build.crate_root.to_string(),
+                offered_to_rust: build.offered_to_rust,
             },
             graphs,
         );

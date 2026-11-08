@@ -1,0 +1,14 @@
+# The ported cases of serde_yaml 0.9's `tests/test_de.rs` that use only
+# `from_str` and `Value`, run against the yaml package built as a Rust
+# library (#1439). `tests/facade.nika` builds the package and runs this.
+[package]
+name = "facade"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+nikaia_yaml = { path = "../../target/rust-library/nikaia_yaml" }
+serde = { version = "1", features = ["derive"] }
+
+[workspace]

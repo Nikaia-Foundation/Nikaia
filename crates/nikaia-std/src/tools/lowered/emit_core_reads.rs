@@ -320,6 +320,8 @@ impl EmitState {
         for arg in args.iter() {
             if n > 0 { out.push(", "); }
             n += 1;
+            let change = self.facts.mut_args.contains(&node_key(arg));
+            if change && self.facts.reborrowed_args.contains(&node_key(arg)) { out.push("&mut *"); } else if change { out.push("&mut "); } else if self.facts.lent_args.contains(&node_key(arg)) && !self.facts.views_handed_on.contains(&node_key(arg)) { out.push("&"); }
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
         }
         out.push(")");

@@ -639,7 +639,7 @@ pub(crate) const MODULES_SRC: &str = "src";
 
 pub(crate) const MODULES_ENTRY: &str = "main.nika";
 
-pub fn modules_qualify(package: Option<String>, name: &str) -> String {
+pub fn modules_qualify(package: Option<&str>, name: &str) -> String {
     let package = match package { Some(__nikaia_value) => __nikaia_value, None => return name.to_string() };
     format!("{}::{}", package, name)
 }
