@@ -157,8 +157,10 @@
 // `nikaia run` compiles this script once, so a commit to it does nothing until a
 // restart: at the top of each round of a real run the driver reads
 // scripts/drive.nika again, and if it changed since the start it prints the one
-// final line `RESTART drive: scripts/drive.nika changed` and exits 3 (the main
-// session starts it again at once). `--changed OLDFILE` prints that line or
+// line `RESTART drive: scripts/drive.nika changed`, releases the suite lock and
+// runs itself again with the same arguments, its output going where this run's
+// goes, and ends with that run's exit code (drive_restart); exit 3 is left only
+// where the new run cannot be started. `--changed OLDFILE` prints that line or
 // `same` (for tests).
 // The scripts are run as programs: a script cannot `use` another.
 
@@ -187,6 +189,25 @@ fn drive_escalate(why: String) throws {
 	drive_unlock()
 	println(f"ESCALATE drive: {why}")
 	process::exit(2)
+}
+
+// After a change to scripts/drive.nika: compiles and runs the new script with
+// the same arguments, its output inherited, and ends with its exit code. The lock is released first,
+// or the new run would wait on this one. Exit 3 where it cannot be started.
+fn drive_restart(exe: String) throws {
+	println("RESTART drive: scripts/drive.nika changed")
+	drive_unlock()
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut again: Vec[String] = ["run", "scripts/drive.nika", "--"]
+	let mut i = 1
+	while i < args.len() {
+		again.push(args[i].clone())
+		i += 1
+	}
+	let ran = process::run(exe, again; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)
+	if ran.code < 0 { process::exit(3) }
+	process::exit(ran.code)
 }
 
 // The suite lock of this checkout (drive_suite).
@@ -1903,8 +1924,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe, dir)
-			println("RESTART drive: scripts/drive.nika changed")
-			process::exit(3)
+			drive_restart(exe.clone())
 		}
 		let block = drive_focus_block(file)
 		let count = drive_focus_count(file)
@@ -2168,8 +2188,7 @@ fn main() throws {
 	while runs <= max {
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe.clone(), dir)
-			println("RESTART drive: scripts/drive.nika changed")
-			process::exit(3)
+			drive_restart(exe.clone())
 		}
 		// The lane's ready issues are queued here too, the area being DIR's
 		// last name (docs/briefs/yaml: yaml), as in --focus.
