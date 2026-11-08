@@ -2459,7 +2459,7 @@ pub mod cexport_mirror {
 }
 pub mod cexport_model {
     #[allow(unused_imports)]
-    pub use super::{CxRefused, CxByValue, CxIn, CxLent, CxOut, cx_out_index, CxRecord, CxAlternative, CxPart, cx_element, CxPlain, CxHold, CxVariantOf, CxEntry, CxHandled, CxShown, CxRaising, CxCode, cx_escaped, cx_not_yet, cx_nothing_exported, cx_by_value, cx_records, cx_record_of, cx_records_in_order, cx_plain_enums, cx_choice, cx_handle_of, cx_taken, cx_handed, cx_parameter_names, cx_handled_structs, cx_result_of, CxResult, cx_entries_in, cx_variant_codes, cx_std_codes, cx_errno};
+    pub use super::{CxRefused, CxByValue, CxIn, CxLent, CxOut, cx_out_index, CxRecord, CxAlternative, CxPart, cx_element, CxPlain, CxHold, CxVariantOf, CxEntry, CxHandled, CxShown, CxRaising, CxCode, cx_escaped, cx_not_yet, cx_nothing_exported, cx_by_value, cx_records, cx_record_of, cx_records_in_order, cx_plain_enums, cx_choice, cx_handle_of, cx_taken, cx_handed, cx_parameter_names, cx_handled_structs, cx_result_of, CxResult, cx_entries_in, cx_entries_bound, cx_variant_codes, cx_std_codes, cx_errno};
 }
 pub mod cexport_node {
     #[allow(unused_imports)]
@@ -3190,7 +3190,7 @@ pub mod project_drive {
 }
 pub mod project_features {
     #[allow(unused_imports)]
-    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_applied, features_manifest, features_blamed, features_first_error, features_span};
+    pub use super::{FeaturesMade, FeaturesRefusal, features_name_ok, features_lists_checked, features_chosen_checked, features_applied, features_kept, features_manifest, features_blamed, features_first_error, features_span};
 }
 pub mod project_lower {
     #[allow(unused_imports)]

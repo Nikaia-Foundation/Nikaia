@@ -138,6 +138,27 @@ pub fn features_lists_checked(features: ref Vec[ManifestFeature], package: ref S
     return null
 }
 
+/// **`--features` of `nikaia bind` checked** (`NK1347`, ADR-393 D5): each
+/// name a feature `[features]` declares, `default` too where it is declared.
+pub fn features_chosen_checked(features: ref Vec[ManifestFeature], chosen: ref Vec[String]) -> FeaturesRefusal? {
+    let mut declared: Vec[String] = []
+    for feature in features {
+        declared.push(feature.name.clone())
+    }
+    for name in chosen {
+        if declared.contains(name) { continue }
+        let mut help: String? = null
+        if declared.len() == 0 {
+            help = "This package declares no `[features]`: leave out `--features` to bind all of it."
+        } else {
+            let near = nearest_name(name, declared)
+            help = if near != null { f"Did you mean `{near ?? ""}`?" } else { f"The features are {declared.join(", ")}." }
+        }
+        return FeaturesRefusal { code: "NK1347", feature: "", entry: "", message: f"`--features` names the feature `{name}`, and `[features]` declares none of that name.", help: help }
+    }
+    return null
+}
+
 /// Whether `hashes` `#` follow position `at` (none for an ordinary string).
 fn features_hashes_follow(c: ref Vec[scalar], at: i64, hashes: i64) -> bool {
     if hashes <= 0 { return true }
@@ -464,6 +485,18 @@ fn features_dependency_keys(manifest: ref String) -> Vec[String] {
     return keys
 }
 
+/// **What the roots of `[features]` reach in a lowered crate**: its lines and
+/// items, each feature's roots, the items each feature reaches (with the
+/// roots of the features it names), the core, and the list of `default`.
+struct FeaturesReach {
+    lines: Vec[String],
+    items: Vec[FeatureItem],
+    resolved: Vec[FeatureRoots],
+    reached: Vec[Vec[bool]],
+    core: Vec[bool],
+    default: Vec[String],
+}
+
 /// **The features applied to a lowered crate** (ADR-393 D2-D3): each item
 /// in a feature only gets `#[cfg]` written before its first line (no line is
 /// added: the place table counts them), each `impl` the condition of its
@@ -471,66 +504,13 @@ fn features_dependency_keys(manifest: ref String) -> Vec[String] {
 /// `[features]` table is written with `default`, the implications and the
 /// `dep:` entries.
 pub fn features_applied(rust: ref String, manifest: ref String, features: ref Vec[ManifestFeature], package: ref String) -> FeaturesMade throws {
-    let mut lines: Vec[String] = []
-    for line in rust.split("\n") {
-        lines.push(line.clone())
-    }
-    let mut items = features_items(lines)
-    let mut named: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
-    for at in 0..<items.len() {
-        if items[at].name.len() > 0 && items[at].kind != "use" {
-            named.entry(items[at].name.clone()).or_insert([]).push(at)
-        }
-        for method in items[at].methods {
-            named.entry(method.clone()).or_insert([]).push(at)
-        }
-    }
-    for at in 0..<items.len() {
-        if items[at].kind != "impl" { continue }
-        let mut owners: Vec[i64] = []
-        for word in items[at].header {
-            let found = named.get(word) ?? continue
-            for target in found {
-                if items[target].kind != "impl" && !owners.contains(target) { owners.push(target) }
-            }
-        }
-        items[at].owners = owners
-    }
-
-    let mut declared: Vec[String] = []
-    for feature in features { declared.push(feature.name.clone()) }
-    let mut resolved: Vec[FeatureRoots] = []
-    let mut default: Vec[String] = []
-    for feature in features {
-        if feature.name == "default" {
-            for entry in feature.entries {
-                default.push(entry.clone())
-            }
-            continue
-        }
-        resolved.push(features_roots(feature, package, items, declared))
-    }
-    // A feature named in another's list brings its roots along.
-    let mut reached: Vec[Vec[bool]] = []
-    for one in resolved {
-        let mut seeds = one.roots.clone()
-        for other in resolved {
-            if one.implied.contains(other.name) {
-                for root in other.roots { seeds.push(root) }
-            }
-        }
-        reached.push(features_closure(items, named, seeds, true))
-    }
-    let mut seeds: Vec[i64] = []
-    for at in 0..<items.len() {
-        if items[at].kind == "impl" && items[at].owners.len() > 0 { continue }
-        let mut claimed = false
-        for one in reached {
-            if one[at] { claimed = true }
-        }
-        if !claimed { seeds.push(at) }
-    }
-    let core = features_closure(items, named, seeds, false)
+    let reach = features_reach(rust, features, package)
+    let mut lines = reach.lines.clone()
+    let items = reach.items.clone()
+    let resolved = reach.resolved.clone()
+    let reached = reach.reached.clone()
+    let core = reach.core.clone()
+    let default = reach.default.clone()
 
     // The conditions, written before each item's first line.
     let mut homes: Vec[(String, String)] = []
@@ -624,6 +604,106 @@ pub fn features_applied(rust: ref String, manifest: ref String, features: ref Ve
     return FeaturesMade { rust: lines.join("\n"), table: table, optional: optional, names: names, homes: homes }
 }
 
+/// **The items a binding carries** (ADR-393 D5): the names of the items of
+/// the lowered crate `rust` in the core or reached by a feature of `chosen`
+/// (`default`'s list where `chosen` is null). An `impl` has no name: it comes
+/// with the type it is of.
+pub fn features_kept(rust: ref String, features: ref Vec[ManifestFeature], package: ref String, chosen: ref Vec[String]?) -> Vec[String] throws {
+    let reach = features_reach(rust, features, package)
+    let mut wanted: Vec[String] = []
+    let named = match chosen {
+        null => reach.default.clone(),
+        list => list.clone(),
+    }
+    for name in named {
+        // `default` named in the list stands for the features it lists.
+        if name == "default" {
+            for listed in reach.default { wanted.push(listed.clone()) }
+        } else {
+            wanted.push(name.clone())
+        }
+    }
+    let mut kept: Vec[String] = []
+    for at in 0..<reach.items.len() {
+        let item = reach.items[at]
+        if item.name.len() == 0 || item.kind == "use" || kept.contains(item.name) { continue }
+        let mut inside = reach.core[at]
+        for k in 0..<reach.resolved.len() {
+            if reach.reached[k][at] && wanted.contains(reach.resolved[k].name) { inside = true }
+        }
+        if inside { kept.push(item.name.clone()) }
+    }
+    return kept
+}
+
+/// **What the roots reach**, the part of the derivation `features_applied`
+/// and `features_kept` share (ADR-393 D2): the items of the lowered crate,
+/// each feature's roots resolved (`NK1344`), the closure of each, and the core,
+/// the closure of every item no feature reaches.
+fn features_reach(rust: ref String, features: ref Vec[ManifestFeature], package: ref String) -> FeaturesReach throws {
+    let mut lines: Vec[String] = []
+    for line in rust.split("\n") {
+        lines.push(line.clone())
+    }
+    let mut items = features_items(lines)
+    let mut named: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+    for at in 0..<items.len() {
+        if items[at].name.len() > 0 && items[at].kind != "use" {
+            named.entry(items[at].name.clone()).or_insert([]).push(at)
+        }
+        for method in items[at].methods {
+            named.entry(method.clone()).or_insert([]).push(at)
+        }
+    }
+    for at in 0..<items.len() {
+        if items[at].kind != "impl" { continue }
+        let mut owners: Vec[i64] = []
+        for word in items[at].header {
+            let found = named.get(word) ?? continue
+            for target in found {
+                if items[target].kind != "impl" && !owners.contains(target) { owners.push(target) }
+            }
+        }
+        items[at].owners = owners
+    }
+
+    let mut declared: Vec[String] = []
+    for feature in features { declared.push(feature.name.clone()) }
+    let mut resolved: Vec[FeatureRoots] = []
+    let mut default: Vec[String] = []
+    for feature in features {
+        if feature.name == "default" {
+            for entry in feature.entries {
+                default.push(entry.clone())
+            }
+            continue
+        }
+        resolved.push(features_roots(feature, package, items, declared))
+    }
+    // A feature named in another's list brings its roots along.
+    let mut reached: Vec[Vec[bool]] = []
+    for one in resolved {
+        let mut seeds = one.roots.clone()
+        for other in resolved {
+            if one.implied.contains(other.name) {
+                for root in other.roots { seeds.push(root) }
+            }
+        }
+        reached.push(features_closure(items, named, seeds, true))
+    }
+    let mut seeds: Vec[i64] = []
+    for at in 0..<items.len() {
+        if items[at].kind == "impl" && items[at].owners.len() > 0 { continue }
+        let mut claimed = false
+        for one in reached {
+            if one[at] { claimed = true }
+        }
+        if !claimed { seeds.push(at) }
+    }
+    let core = features_closure(items, named, seeds, false)
+    return FeaturesReach { lines: lines, items: items, resolved: resolved, reached: reached, core: core, default: default }
+}
+
 /// **A generated manifest with the features in it**: each optional
 /// dependency written `optional = true`, and the table before `[workspace]`.
 pub fn features_manifest(manifest: ref String, made: ref FeaturesMade) -> String {
@@ -692,16 +772,20 @@ pub fn features_first_error(said: ref String) -> String {
 
 /// **Where an entry of `[features]` is in `nikaia.toml`**: the span of the
 /// text `entry` on the feature's line, or of the feature's name where `entry`
-/// is empty; the section's header where neither is found.
+/// is empty; the section's header where neither is found, and `[build]`'s
+/// where there is no `[features]` (`--features` on a program).
 pub fn features_span(toml: ref String, feature: ref String, entry: ref String) -> Span {
     let mut offset = 0
     let mut inside = false
-    let mut header = 0
+    let mut header = -1
+    let mut build = 0
+    let mut width = 10
     for line in toml.split("\n") {
         let trimmed = line.trim()
         if trimmed.starts_with("[") {
             inside = trimmed == "[features]"
             if inside { header = offset }
+            if trimmed == "[build]" { build = offset }
         } else if inside && feature.len() > 0 {
             let key = trimmed.split("=").next() ?? ""
             let key = key.trim().replace("\"", "")
@@ -721,5 +805,9 @@ pub fn features_span(toml: ref String, feature: ref String, entry: ref String) -
         }
         offset += line.len() + 1
     }
-    return Span { start: header as u32, end: (header + 10) as u32 }
+    if header < 0 {
+        header = build
+        width = 7
+    }
+    return Span { start: header as u32, end: (header + width) as u32 }
 }

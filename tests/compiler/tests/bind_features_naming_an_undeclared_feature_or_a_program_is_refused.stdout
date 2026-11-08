@@ -1,0 +1,24 @@
+exit 1
+error[NK1347]: `--features` names the feature `shape`, and `[features]` declares none of that name.
+  --> TMP/nikaia.toml:8:1
+   |
+ 8 | [features]
+   | ^^^^^^^^^^
+   |
+   = help: Did you mean `shapes`?
+exit 1
+error[NK1347]: `--features` names the feature `shapes`, and `[features]` declares none of that name.
+  --> TMP/nikaia.toml:5:1
+   |
+ 5 | [build]
+   | ^^^^^^^
+   |
+   = help: This package declares no `[features]`: leave out `--features` to bind all of it.
+exit 1
+error[NK1346]: `--features` chooses the parts of a library a binding carries, and a program has no user who chooses its parts.
+  --> TMP/nikaia.toml:5:1
+   |
+ 5 | [build]
+   | ^^^^^^^
+   |
+   = help: Write `artifact = "c-library"` under `[build]` to bind the package, or leave out `--features`.
