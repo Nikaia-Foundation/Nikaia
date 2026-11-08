@@ -654,7 +654,22 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.receiver_from_text = state.made_from_text(world, receiver)
     state.flow.walk_open = null
     state.flow.walk_lent = false
+    state.flow.text_slot = false
+    state.flow.text_walk = false
     let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
+    // **A view of a `String` slot is told by where it comes from** (#1388):
+    // its type is the one text view (ADR-184 D2).
+    if state.flow.text_slot {
+        state.flow.text_slot_views.insert(id_of(expr) as i64)
+    }
+    if state.flow.text_walk {
+        state.flow.text_walks.insert(id_of(expr) as i64)
+    }
+    state.flow.text_slot = false
+    state.flow.text_walk = false
+    if name == "collect" && args.len() == 0 && check_core_method_text_views(value) && state.check_core_method_from_text_slots(receiver) {
+        state.facts.text_slot_collects.insert(id_of(receiver) as i64)
+    }
     // **What a sequence's `sum` hands back is named** (#1007): the
     // language below infers no type for it where nothing annotates it.
     let summed = check_core_method_summed(name, on, value)
@@ -1209,6 +1224,11 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         return check_core_method_called(state, world, host, expr, on, receiver, method, given, "join(within)", span)
     }
+    // **A method on a view of a `String` slot is `String`'s** (#1388): the
+    // view is the one text view, but `u.push_str(x)` writes through it.
+    if state.check_core_method_on_a_text_slot(world, receiver, on) {
+        return check_core_method_called(state, world, host, expr, Ty::Named { name: TEXT.clone(), args: [], view: true }, receiver, method, args, name, span)
+    }
     return check_core_method_called(state, world, host, expr, on, receiver, method, args, name, span)
 }
 
@@ -1259,5 +1279,40 @@ fn check_core_method_a_tuple(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Tuple(_) => true,
         else => false,
+    }
+}
+
+/// Whether a collected value holds text views (#1388).
+fn check_core_method_text_views(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { args, .. } => args.len() == 1 && match args[0] {
+            Ty::Named { name, args: none, view } => view && none.len() == 0 && name == TEXT_VIEW,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+impl CheckState {
+    /// Whether a receiver typed as the text view is a view of a `String`
+    /// slot (#1388): a `let mut` bound to one, or the call that reads it.
+    fn check_core_method_on_a_text_slot(ref self, world: ref CheckWorld, receiver: ref Expr, on: ref Ty) -> bool sync {
+        let text_view = match on {
+            Ty::Named { name, args, view } => view && args.len() == 0 && name == TEXT_VIEW,
+            else => false,
+        }
+        return text_view && (self.a_text_slot_name(world, receiver) || self.flow.text_slot_views.contains(id_of(receiver) as i64))
+    }
+
+    /// Whether a chain of method calls starts at, or passes, a view of a
+    /// `String` slot (#1388): `ws.iter().filter(...)`.
+    fn check_core_method_from_text_slots(ref self, receiver: ref Expr) -> bool sync {
+        if self.flow.text_walks.contains(id_of(receiver) as i64) {
+            return true
+        }
+        return match receiver {
+            Expr::MethodCall { receiver: inner, .. } => self.check_core_method_from_text_slots(inner),
+            else => false,
+        }
     }
 }

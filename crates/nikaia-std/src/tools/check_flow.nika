@@ -237,6 +237,22 @@ pub struct CheckFlow {
     /// (ADR-282 D14, #1310): typed as the view they may be, they hold
     /// `EitherText`, which a read-only `String` parameter is lent (`&x`).
     pub either_bindings: collections::BTreeSet[i64],
+    /// Whether the last `std` method call handed back a view of a `String`
+    /// slot (`ref $V` bound to owned text, #1388), read by the call's caller.
+    pub text_slot: bool,
+    /// Whether it handed back a view of a slot that holds text, owned or a
+    /// view (#1388): a walk of it reads `&String` or `&&str`.
+    pub text_walk: bool,
+    /// **The method calls that hand back a view of a `String` slot**, by
+    /// their id (#1388): typed as the one text view (ADR-184 D2), below they
+    /// are `&String`, or `&mut String` where a `let mut` writes through them.
+    pub text_slot_views: collections::BTreeSet[i64],
+    /// The method calls that hand back views of slots that hold text, owned
+    /// or views, by their id (#1388).
+    pub text_walks: collections::BTreeSet[i64],
+    /// The bindings a `let mut` made a view of a `String` slot, by their id
+    /// (#1388): what is assigned through them is owned text.
+    pub text_slot_bindings: collections::BTreeSet[i64],
     /// The ledger key the last method call resolved to (ADR-293 D24).
     pub last_resolved: String?,
     /// The name of the receiver of the method call being walked, where it is a
@@ -426,6 +442,11 @@ impl CheckFlow {
             std_entry_views: collections::BTreeSet(),
             mut_view_bindings: collections::BTreeSet(),
             either_bindings: collections::BTreeSet(),
+            text_slot: false,
+            text_walk: false,
+            text_walks: collections::BTreeSet(),
+            text_slot_views: collections::BTreeSet(),
+            text_slot_bindings: collections::BTreeSet(),
             last_resolved: null,
             receiver_name: null,
             receiver_from_text: false,

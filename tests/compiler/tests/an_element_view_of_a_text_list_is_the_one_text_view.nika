@@ -1,0 +1,39 @@
+use std::collections
+
+// A view read through `ref $T` with `T = String` (`.iter()`, a map's
+// `iter()`) is the one text view (ADR-184 D2, #1388): a `let` that declares
+// `ref String`, or a list of them, takes it, where it was NK1103 "is `ref
+// String`, but the `let` declares `ref String`".
+fn names() -> Vec[String] {
+    let mut out: Vec[String] = []
+    for i in 0..<3 {
+        out.push(f"n{i}")
+    }
+    return out
+}
+
+fn longest(xs: ref Vec[ref String]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        if x.len() > n {
+            n = x.len()
+        }
+    }
+    return n
+}
+
+fn main() throws {
+    let ws = names()
+    for w in ws.iter() {
+        let t: ref String = w
+        println(t)
+    }
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert(f"k{1}", 1)
+    for (k, v) in m.iter() {
+        let key: ref String = k
+        println(f"{key} {v}")
+    }
+    let f: Vec[ref String] = ws.iter().filter(fn(w) { w.len() > 1 && w != "n1" }).collect()
+    println(f"{f.len()} {longest(f)}")
+}

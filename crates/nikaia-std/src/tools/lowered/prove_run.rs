@@ -131,7 +131,7 @@ pub fn prove_model(held: &TermArena, facts: &[i64], goal: i64, asked: ProofsAske
 }
 
 pub fn prove_implies(from: &[String], to: &[String], names: &collections::BTreeSet<String>, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> bool {
-    if to.iter().all(|c| { from.contains(c) }) { return true; }
+    if to.iter().all(|c| { nikaia_std::list::contains(&from, &c) }) { return true; }
     let mut arena = TermArena::empty();
     let mut facts: Vec<i64> = vec![];
     for c in from.iter() {

@@ -188,7 +188,7 @@ pub(crate) fn rules_outside(changed: &BoundsChanged, types: &collections::BTreeM
                 }, || false) { dropped.insert(format!("{}.{}", of, field)); }
                 continue;
             }
-            for (owner, fields) in lists.iter() { if fields.contains(field) { dropped.insert(format!("{}.{}", owner, field)); } }
+            for (owner, fields) in lists.iter() { if nikaia_std::list::contains(&fields, &field) { dropped.insert(format!("{}.{}", owner, field)); } }
         }
     }
 }

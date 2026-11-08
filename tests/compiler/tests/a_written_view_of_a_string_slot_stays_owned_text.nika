@@ -1,0 +1,19 @@
+use std::collections
+
+// A `let mut` of a view of a `String` slot writes owned text through it
+// (#1388): the view is typed as the one text view (ADR-184 D2), and the
+// write, not the type, says that the slot is `&mut String` below.
+fn main() throws {
+    let mut s: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut t = s.entry("a").or_insert("p")
+    t = "new"
+    t += "!"
+    let mut u = s.entry("b").or_insert_with(fn() { "x" })
+    u.push_str("y")
+    s.entry("c").or_insert("c").push_str("z")
+    let mut v = s.get("b") ?? return
+    v += "w"
+    for (k, x) in s.iter() {
+        println(f"{k}={x}")
+    }
+}
