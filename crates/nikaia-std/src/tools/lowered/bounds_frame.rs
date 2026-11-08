@@ -104,6 +104,7 @@ pub(crate) fn frame_of_body(receiver: Option<&Receiver>, args: &[FnArg], body: &
     frame_aliases_block(body, &roots, &mut aliases, words);
     for path in changed.values.iter() { frame_put(&mut out, path, 0, &roots, &aliases); }
     for path in changed.lengths.iter() { frame_put(&mut out, path, 1, &roots, &aliases); }
+    for path in changed.falls.iter() { frame_put(&mut out, path, 3, &roots, &aliases); }
     for path in changed.parts.iter() { frame_put(&mut out, path, 2, &roots, &aliases); }
     for place in changed.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();
@@ -132,7 +133,7 @@ pub(crate) fn frame_put(out: &mut BoundsChanged, path: &str, kind: i64, roots: &
         }
     }
     let mapped = frame_rooted(&at, roots);
-    if whole || kind == 0 || frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else if kind == 1 { out.lengths.insert(mapped); } else { out.parts.insert(mapped); }
+    if whole || kind == 0 || frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else if kind == 1 { out.lengths.insert(mapped); } else if kind == 3 { out.falls.insert(mapped); } else { out.parts.insert(mapped); }
 }
 
 pub(crate) fn frame_rooted(path: &str, roots: &collections::BTreeMap<String, String>) -> String {
@@ -242,9 +243,11 @@ pub fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Op
         out.values.insert(on.to_string());
         out.jumps.insert(on.to_string());
         out.drops.insert(on.to_string());
+        out.falls.insert(on.to_string());
         out.lengths.insert(on);
     }
     for path in frame.lengths.iter() { out.lengths.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+    for path in frame.falls.iter() { out.falls.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
     for path in frame.parts.iter() { out.parts.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
     for place in frame.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();

@@ -60,6 +60,7 @@ pub struct BoundsChanged {
     pub parts: collections::BTreeSet<String>,
     pub jumps: collections::BTreeSet<String>,
     pub drops: collections::BTreeSet<String>,
+    pub falls: collections::BTreeSet<String>,
     pub elements: collections::BTreeSet<String>,
 }
 
@@ -121,7 +122,7 @@ pub(crate) fn call_depth() -> i64 { 4 }
 
 pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new() } }
 
-pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
+pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), falls: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
 
 pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProven {
     let mut walk = bounding_new(args, body, nonnegative, context, program, words);
@@ -424,9 +425,9 @@ pub(crate) fn bounding_end_write(walk: &mut BoundsWalk, key: &str, value: &Expr,
 pub(crate) fn bounding_end_list(walk: &BoundsWalk, list: &str, key: &str) -> bool {
     let root = path_root(list);
     if root == key_root(key) || !walk.end_roots.contains(&root) || walk.pinned.contains(&root) { return false; }
-    if walk.steady.lengths.contains(list) { return false; }
+    if walk.steady.falls.contains(list) { return false; }
     for name in walk.steady.values.iter() { if list == name || list.starts_with(&format!("{}.", name)) { return false; } }
-    for name in walk.steady.parts.iter() { if list == name || list.starts_with(&format!("{}.", name)) { return false; } }
+    for name in walk.steady.parts.iter() { if list.starts_with(&format!("{}.", name)) { return false; } }
     true
 }
 
@@ -2995,8 +2996,11 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
             filled = lists;
         }
     }
-    let mut outer = BoundsChanged { values: changed.values.to_owned(), lengths: changed.lengths.to_owned(), parts: changed.parts.to_owned(), jumps: changed.jumps.to_owned(), drops: changed.drops.to_owned(), elements: changed.elements.to_owned() };
-    for list in filled.iter() { outer.lengths.remove(list); }
+    let mut outer = BoundsChanged { values: changed.values.to_owned(), lengths: changed.lengths.to_owned(), parts: changed.parts.to_owned(), jumps: changed.jumps.to_owned(), drops: changed.drops.to_owned(), falls: changed.falls.to_owned(), elements: changed.elements.to_owned() };
+    for list in filled.iter() {
+        outer.lengths.remove(list);
+        outer.falls.remove(list);
+    }
     let mut past: Vec<i64> = vec![];
     if walk.through_loops && all_turns.is_some() && !breaks(body, words) { past = bounding_turn_bounds(walk, facts, &steps, nikaia_std::index::or(all_turns, || 0)); }
     bounding_loop_change(walk, facts, &outer, cands);
@@ -3526,6 +3530,7 @@ pub(crate) fn bounding_extend(changed: &mut BoundsChanged, other: &BoundsChanged
     changed.parts.extend(other.parts.iter().cloned());
     changed.jumps.extend(other.jumps.iter().cloned());
     changed.drops.extend(other.drops.iter().cloned());
+    changed.falls.extend(other.falls.iter().cloned());
     changed.elements.extend(other.elements.iter().cloned());
 }
 
@@ -3556,6 +3561,7 @@ pub(crate) fn changed_in_block(block: &Block, context: &BoundsContext, words: &w
                     if !bounding_steps_up(&name, (op).as_ref(), value, words) { out.jumps.insert(name.to_string()); }
                     if !bounding_steps_down(&name, (op).as_ref(), value, words) { out.drops.insert(name.to_string()); }
                     out.lengths.insert(name.to_string());
+                    out.falls.insert(name.to_string());
                     out.values.insert(name);
                 }
                 bounding_element_changed(target, words, out);
@@ -3712,6 +3718,7 @@ pub(crate) fn changed_by(expr: &Expr, context: &BoundsContext, words: &winnow_gr
                 let handed = match path_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), words) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if hands_on((callee).as_ref(), at) && !context.simd_loads.contains_key(&node_key(func)) {
                     out.lengths.insert(handed.to_string());
+                    out.falls.insert(handed.to_string());
                     out.jumps.insert(handed.to_string());
                     out.drops.insert(handed.to_string());
                     out.values.insert(handed);
@@ -3732,7 +3739,10 @@ pub(crate) fn changed_by_method(call: &Expr, receiver: &Expr, method: &str, args
     let receiver_path = path_of(receiver, words);
     if receiver_path.is_some() {
         let name = nikaia_std::index::or(receiver_path, || "".into());
-        if !keeps_length(method) { out.lengths.insert(name.to_string()); }
+        if !keeps_length(method) {
+            out.lengths.insert(name.to_string());
+            if !only_adds(method) { out.falls.insert(name.to_string()); }
+        }
         if context.around.changing_receivers.contains(method) || !keeps_length(method) { out.parts.insert(name); }
     }
     if context.around.changing_methods.contains(method) {
@@ -3742,6 +3752,7 @@ pub(crate) fn changed_by_method(call: &Expr, receiver: &Expr, method: &str, args
             out.values.insert(text.to_string());
             out.jumps.insert(text.to_string());
             out.drops.insert(text.to_string());
+            out.falls.insert(text.to_string());
             out.lengths.insert(text);
         }
     }

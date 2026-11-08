@@ -195,6 +195,15 @@ pub fn writes_a_value(method: ref String, args: i64) -> i64? {
 	}
 }
 
+/// Methods that change a list's length only by adding to it (#1414): its
+/// length after is at least what it was.
+pub fn only_adds(method: ref String) -> bool {
+	return match method {
+		"push" => true, "push_str" => true, "insert" => true, "extend" => true,
+		else => false,
+	}
+}
+
 /// Methods that change a list without putting anything new in it.
 pub fn only_removes(method: ref String) -> bool {
 	return match method {

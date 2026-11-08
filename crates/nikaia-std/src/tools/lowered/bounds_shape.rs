@@ -109,6 +109,8 @@ pub fn writes_a_value(method: &str, args: i64) -> Option<i64> {
     }
 }
 
+pub fn only_adds(method: &str) -> bool { matches!(method, "push" | "push_str" | "insert" | "extend") }
+
 pub fn only_removes(method: &str) -> bool { matches!(method, "pop" | "remove" | "swap_remove" | "clear" | "truncate" | "retain" | "dedup") }
 
 pub fn key_root(key: &str) -> String {

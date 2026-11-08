@@ -244,6 +244,9 @@ fn frame_of_body(
 	for path in changed.lengths {
 		frame_put(out, path, 1, roots, aliases)
 	}
+	for path in changed.falls {
+		frame_put(out, path, 3, roots, aliases)
+	}
 	for path in changed.parts {
 		frame_put(out, path, 2, roots, aliases)
 	}
@@ -270,9 +273,9 @@ fn frame_of_body(
 }
 
 /// A path the body changes, as `kind` says (0 its value, 1 its length, 2
-/// the parts of it), put into the frame from its root; through an alias,
-/// the part the alias is bound to, written whole; a path from a local of
-/// the body's own, nowhere.
+/// the parts of it, 3 its length otherwise than by adding, #1414), put into
+/// the frame from its root; through an alias, the part the alias is bound
+/// to, written whole; a path from a local of the body's own, nowhere.
 fn frame_put(
 	mut out: BoundsChanged,
 	path: ref String,
@@ -301,6 +304,8 @@ fn frame_put(
 		out.values.insert(frame_cut(mapped))
 	} else if kind == 1 {
 		out.lengths.insert(mapped)
+	} else if kind == 3 {
+		out.falls.insert(mapped)
 	} else {
 		out.parts.insert(mapped)
 	}
@@ -487,10 +492,14 @@ pub fn frame_at_call(
 		out.values.insert(on.clone())
 		out.jumps.insert(on.clone())
 		out.drops.insert(on.clone())
+		out.falls.insert(on.clone())
 		out.lengths.insert(on)
 	}
 	for path in frame.lengths {
 		out.lengths.insert(frame_onto(path, receiver, handed) ?? continue)
+	}
+	for path in frame.falls {
+		out.falls.insert(frame_onto(path, receiver, handed) ?? continue)
 	}
 	for path in frame.parts {
 		out.parts.insert(frame_onto(path, receiver, handed) ?? continue)
