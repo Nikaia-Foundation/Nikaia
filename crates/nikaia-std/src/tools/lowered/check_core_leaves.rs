@@ -189,7 +189,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
         },
         _ => { return; },
     }
-    if root == "self" || !state.lent_here(&root) { return; }
+    if root == "self" || !(state.lent_here(&root) || handed_back && state.a_mut_parameter(world, &root)) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
     match ty {
