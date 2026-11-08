@@ -615,7 +615,7 @@ fn check_function_handed_back[H: CheckHost](mut state: CheckState, world: ref Ch
                     },
                     else => {},
                 }
-                tail_lent = state.hands_back_a_view_of_the_subject(world, value) || (state.flow.expected_either && plain && state.a_place_of_a_lent_parameter(world, value))
+                tail_lent = state.hands_back_a_view_of_the_subject(world, value) || (state.flow.expected_either && plain && state.a_place_of_a_lent_parameter(world, value)) || state.a_made_element_lent(world, value, want)
                 if !tail_lent {
                     check_core_a_field_of_a_borrowed_subject(state, world, host, value, at, "handed back")
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, at)

@@ -561,6 +561,14 @@ struct TierLocal {
     /// Bound by a `let` to a cut of text, `s.split_once("=") ?? return`
     /// (#1344): its parts are views of what the cut views.
     cut: bool,
+    /// Bound by a `let` without a type to an element of a list the body
+    /// made, read whole (`let e = xs[0]`, #1368): the list it is a view of,
+    /// handed back as the element is (`made_element`).
+    element_of: String?,
+    /// Bound by a `let` without a type to a list literal of text of its own
+    /// (`let xs = [a + "!"]`, #1368): a list the body made, as one declared
+    /// `Vec[String]` is (`made_list_local`).
+    text_items: bool,
 }
 
 /// What one walk found, every position by its word.
@@ -812,7 +820,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -2569,6 +2577,10 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                         // is a view beside the others (#738).
                         if back {
                             tail = handed_kinds(last, tail, ask, walk)
+                        } else if same_kinds(tail, owned_kinds()) && result_plain_text(ask, walk) && made_element(last, ask, walk) {
+                            // An element of a list the body made, as the
+                            // function's own last value (#1368).
+                            tail = view_kinds()
                         }
                     },
                     else => {}
@@ -2767,7 +2779,12 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask) }
+        let text_items = !written && declared == null && own_text_items(value, bound)
+        let mut element_of: String? = null
+        if !written {
+            element_of = made_element_read(value, ask, walk)
+        }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -2877,6 +2894,8 @@ fn tier_assign(target: ref Expr, value: ref Expr, compound: bool, ask: ref TierA
                 else => return,
             }
             let mut local = tier_local(name, walk) ?? return
+            // Assigned again: no longer the element it was bound to (#1368).
+            local.element_of = null
             if local.declared == null {
                 local.kinds = kinds_joined(local.kinds, kinds)
                 // Below, the name is of the type of the position it was read
@@ -3369,6 +3388,9 @@ fn lent_field(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
 /// of a lent struct. With `made`, also out of a list the body made
 /// (`made_list_local`), for an element handed back in a field (#1275).
 fn lent_element(base: ref Expr, made: bool, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    if made && untyped_text_list(base, ask, walk) {
+        return true
+    }
     let list = list_place(base, ask, walk) ?? return false
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) {
         return false
@@ -3423,11 +3445,104 @@ fn list_place(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring
 /// caller's keep (`untethered_returns` in `buffers.nika`), as text does.
 fn made_list_local(name: ref String, walk: ref TierWalk) -> bool {
     let local = tier_local(name, walk) ?? return false
+    if local.made && local.text_items && local.declared == null {
+        return true
+    }
     let declared = local.declared ?? return false
     return match declared.owner {
         TextOwner::Let(_) => local.made && !declared.ty.is_view && !declared.ty.is_nullable,
         else => false,
     }
+}
+
+/// **A list literal of text of its own bound without a type** (#1368): the
+/// list the body made, its type read off its items (`text_items`), for which
+/// `made_list_local` reads the declared one. The element is text, as the
+/// place it is handed back into is (`made_element`'s callers ask).
+fn untyped_text_list(base: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    return match base {
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return false
+            local.made && local.text_items && local.declared == null
+        },
+        else => false,
+    }
+}
+
+/// Items that are all text of its own: owned, no view (`[a + "!", "b"]` is
+/// built into `String`s whole), as written (`own_text_items_written`).
+fn own_text_items(value: ref Expr, kinds: ref Kinds) -> bool {
+    return own_text_items_written(value) && kinds.owned && !kinds.view && !kinds.either && !kinds.lasting
+}
+
+/// **A list literal whose items are text made there**, each a `+`, an
+/// `f"…"` or a literal, one at least no literal (#1368): read off the
+/// syntax alone, so `untethered_let` in `buffers.nika` puts the same lists
+/// into the caller's keep that this pass makes an element of a view of.
+pub fn own_text_items_written(value: ref Expr) -> bool {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        else => return false,
+    }
+    let mut made = false
+    for item in items {
+        match item {
+            Expr::Binary { op, .. } => {
+                match op {
+                    BinaryOp::Add => {},
+                    else => return false,
+                }
+                made = true
+            },
+            Expr::LitInterpolated { .. } => {
+                made = true
+            },
+            Expr::LitStr { .. } => {},
+            else => return false,
+        }
+    }
+    return made
+}
+
+/// **An element of a list the body made, read whole** (#1368, ADR-283 D23):
+/// `xs[0]`, or a name a `let` bound to one (`element_of`).
+fn made_element(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    return match value {
+        Expr::Index { base, index, .. } => !a_range(index) && lent_element(base, true, ask, walk),
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return false
+            local.element_of != null
+        },
+        else => false,
+    }
+}
+
+/// The list of a list the body made whose element `value` reads whole
+/// (`let e = xs[0]`), for `element_of`; a `ref` parameter's is not one: a
+/// view of it handed back as text of its own is refused (ADR-282 D8).
+fn made_element_read(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String? {
+    return match value {
+        Expr::Index { base, index, .. } => match base {
+            Expr::Variable(name, _) => {
+                let named = ask.names.resolve(name).clone()
+                if a_range(index) || !(made_list_local(named, walk) || untyped_text_list(base, ask, walk)) || !lent_element(base, true, ask, walk) {
+                    return null
+                }
+                named
+            },
+            else => null,
+        },
+        else => null,
+    }
+}
+
+/// The function the walk is in hands back plain text: `String`, not a view
+/// already, not `String?`, not a trait's method.
+fn result_plain_text(ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    let key = walk.result?.clone() ?? return false
+    let function = walk.declared.fns[key]?.clone() ?? return false
+    let result = function.result ?? return false
+    return plain_string(ask.names, result) && !result.is_nullable && !result.is_view && !function.of_a_trait
 }
 
 /// A name bound to a list parameter declared `ref`.
@@ -3444,6 +3559,12 @@ fn lent_list_parameter(name: ref String, walk: ref TierWalk) -> bool {
 /// borrowed parameter is a view of it, whatever its position holds.
 fn handed_kinds(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
     if same_kinds(kinds, owned_kinds()) && lent_field(value, ask, walk) {
+        return view_kinds()
+    }
+    // **An element of a list the body made, handed back as the result** is
+    // a view of the list, which moves into the caller's keep (#1368,
+    // ADR-283 D23): `return xs[0]`, a last value, or a name bound to it.
+    if same_kinds(kinds, owned_kinds()) && result_plain_text(ask, walk) && made_element(value, ask, walk) {
         return view_kinds()
     }
     return kinds.clone()
@@ -5195,15 +5316,14 @@ fn tier_struct_field(owner: ref String, field: ref FieldInit, back: bool, ask: r
     // back, is a view of the list (#1275, ADR-282 D13, ADR-283 D23): of a
     // `ref` parameter's list, or of a list the body made, which moves into
     // the caller's keep (`untethered_returns` in `buffers.nika`).
-    if back && plain_string(ask.names, found.ty) && !found.ty.is_nullable && same_kinds(kinds, owned_kinds()) && field.value != null {
-        let value = field.value ?? return
-        match value {
-            Expr::Index { base, .. } => {
-                if lent_element(base, true, ask, walk) {
-                    kinds = view_kinds()
-                }
-            }
-            else => {}
+    // So is a name a `let` bound to such an element (#1368).
+    if back && plain_string(ask.names, found.ty) && !found.ty.is_nullable && same_kinds(kinds, owned_kinds()) {
+        let made = match field.value {
+            null => made_element(shorthand, ask, walk),
+            value => made_element(value, ask, walk),
+        }
+        if made {
+            kinds = view_kinds()
         }
     }
     flow_value(going_into(into, found.ty, [], false), field.value, kinds, ask, walk)
@@ -6269,7 +6389,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         if lent_fields.contains(ask.names.resolve(arg.name)) {
             ty.is_view = true
         }
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -6282,7 +6402,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1

@@ -190,6 +190,8 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let name = *name;
             let read = check_core_expr_variable(state, world, host, expr, name, span);
             check_core_expr_kept_copy(state, world, expr, &read);
+            let bound = state.binding(&world.words.resolve(name).to_string());
+            if bound.is_some() && state.flow.made_elements.contains(&match bound { Some(__nikaia_value) => __nikaia_value, None => return read }.id) { state.flow.made_element_reads.insert(node_key(expr)); }
             read
         },
         Expr::Path(segments, _) => {
@@ -348,6 +350,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let read = check_core_index(state, world, host, expr, base, index, span);
+            if state.an_element_of_a_made_list(world, expr) { state.flow.made_element_reads.insert(node_key(expr)); }
             match read {
                 Ty::Fn { .. } => { state.facts.kept_fn_reads.insert(id_of(base) as i64); },
                 _ => { },

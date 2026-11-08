@@ -1346,6 +1346,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if !mutable && element_read != null && (state.does_not_copy(world, local.ty) || viewed_past_a_jump) {
         local.view_of = (element_read ?? "").clone()
     }
+    if !mutable && ty == null && names.len() == 1 && shape.len() == 0 && state.an_element_of_a_made_list(world, value) {
+        state.flow.made_elements.insert(local.id)
+    }
     local.constant = constant
     local.lent = read_through_a_jump
     local.empty_list = pending

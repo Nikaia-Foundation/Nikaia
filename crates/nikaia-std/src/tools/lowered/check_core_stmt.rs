@@ -975,6 +975,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.declared_binding(id, span, &name);
     let mut local = CheckLocal::free(name, bound, id);
     if !mutable && element_read.is_some() && (state.does_not_copy(world, &local.ty) || viewed_past_a_jump) { local.view_of = nikaia_std::index::or(element_read.as_deref(), || "").to_string(); }
+    if !mutable && ty.is_none() && names.len() == 1 && shape.is_empty() && state.an_element_of_a_made_list(world, value) { state.flow.made_elements.insert(local.id); }
     local.constant = constant;
     local.lent = read_through_a_jump;
     local.empty_list = pending;

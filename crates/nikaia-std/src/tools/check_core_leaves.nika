@@ -737,6 +737,12 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     if value != null {
         let given = value ?? return
         found = check_core_expr(state, world, host, given, span)
+        // **An element of a list this body made is lent** into a result the
+        // text pass made a view (#1368): its read is known once checked.
+        if !lending && state.a_made_element_lent(world, given, state.expected?.clone() ?? Ty::Unknown) {
+            lending = true
+            state.facts.lent_returns.insert(span.start as i64)
+        }
     }
     state.flow.lambda_expected = null
     // **A lambda's `return` is the lambda's** (#758): recorded, and checked

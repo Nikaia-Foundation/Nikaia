@@ -260,7 +260,9 @@ impl CheckState {
             let ty = self.arm_type_of(leaf) ?? Ty::Unknown
             // **A name `Some(a)` bound over a lent place** is a view of it,
             // lent where it stands (#808).
-            if (ty == text && self.a_place_of_a_lent_parameter(world, leaf)) || world.here.viewed_arms.contains(node_key(check_peeled(leaf))) {
+            // So is an element of a list this body made, in a view (#1368).
+            let made = view && ty == text && self.flow.made_element_reads.contains(node_key(check_peeled(leaf)))
+            if (ty == text && self.a_place_of_a_lent_parameter(world, leaf)) || world.here.viewed_arms.contains(node_key(check_peeled(leaf))) || made {
                 lent.push(node_key(leaf))
             } else if arm_leaves_a_text_literal(leaf) {
                 // **A literal is a view of static text** (ADR-282 D13, #740).
