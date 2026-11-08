@@ -32,6 +32,9 @@ it, like the checks in `docs/supervisor.md`.
   the command, the **expected** output and the **actual** output (the error
   with its code and message, or the `rustc` error on the emitted Rust). It was
   run on the binary of the day the issue was written; the issue says so.
+  A proof that differs between two runs (`check` and `lower-std`, one file
+  and a package) is reduced to a probe of at most two files, and says whether
+  the function is called from more than one file (ADR-391 D1) (#1465).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
