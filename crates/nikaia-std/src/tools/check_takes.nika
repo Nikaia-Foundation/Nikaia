@@ -563,6 +563,88 @@ impl CheckState {
         self.parts_out.push(CheckPartOut { subject: root.clone(), part: path.clone(), binding: local.id, handed: handed, view: view, frame: frame, ends: -1, from: -1, choices: [] })
     }
 
+    /// **A name of owned text beside a `+`** (ADR-081, #1324): `+` says
+    /// nothing about which side is owned, so the name is read, never taken.
+    /// Its buffer goes into the answer only where nothing reads it again: not
+    /// in a loop or a lambda around its binding that does not give it a new
+    /// value, nor elsewhere in its statement or after it; decided at the end
+    /// of the body (`concatenated_names_read_again`).
+    pub fn a_concatenated_name(ref mut self, world: ref CheckWorld, side: ref Expr, ty: ref Ty, span: ref Span) sync {
+        let name = match side {
+            Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
+            else => return,
+        }
+        if ty.is_a_view() || !is_text_type(ty) {
+            return
+        }
+        let node = node_key(side)
+        let bound = self.frame_of(name)
+        if bound < 0 {
+            self.facts.lent_concatenated.insert(node)
+            return
+        }
+        let mut at = self.repeats.len()
+        while at > 0 {
+            at = at - 1
+            if self.repeats[at].frame <= bound {
+                break
+            }
+            if !self.repeats[at].revives(name) {
+                self.facts.lent_concatenated.insert(node)
+                return
+            }
+        }
+        let found = self.flow.read_index.get((node, span.start as i64))
+        if found == null {
+            self.facts.lent_concatenated.insert(node)
+            return
+        }
+        let read = self.reads_on_paths[found ?? 0].clone()
+        let taken = self.taken(read.path.clone(), ty.clone(), read.seq, "", span)
+        self.flow.pending_concatenations.push(CheckPendingConcat { node: node, taken: taken })
+    }
+
+    /// **Each name beside a `+` that is read again is lent** (#1324): read
+    /// elsewhere in its statement, as `a + pick(a)` reads it, or after it.
+    pub fn concatenated_names_read_again(ref mut self) sync {
+        let pending = self.flow.pending_concatenations.clone()
+        self.flow.pending_concatenations = []
+        for one in pending {
+            if self.read_beside(one.taken) || self.first_read_after(one.taken) != null {
+                self.facts.lent_concatenated.insert(one.node)
+            }
+        }
+    }
+
+    /// The `seq` of the read an assignment at `taken`'s statement makes of the
+    /// place it writes, the first read of it there; `-1` where none writes it.
+    fn assigned_read(ref self, taken: ref CheckTaken) -> i64 sync {
+        let mut first: i64 = -1
+        for written in self.written_at {
+            if written.1 == taken.from && a_path_overlaps(written.0, taken.path) {
+                for read in self.reads_on_paths {
+                    if read.binding == taken.binding && read.at == taken.from && read.path == written.0 && (first < 0 || read.seq < first) {
+                        first = read.seq
+                    }
+                }
+            }
+        }
+        return first
+    }
+
+    /// Whether another read of what `taken` reads stands in its statement.
+    /// The target of an assignment there is not one: `a = a + "x"` reads `a`
+    /// as the place it writes first, and writes it after the `+`.
+    fn read_beside(ref self, taken: ref CheckTaken) -> bool sync {
+        let target = self.assigned_read(taken)
+        for read in self.reads_on_paths {
+            if read.binding == taken.binding && read.seq != taken.seq && read.seq != target && a_path_overlaps(read.path, taken.path) && read.at >= taken.from && read.at < taken.at {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Every taking whose name is read again: `NK2105`, said once per site.
     pub fn data_handed_over_is_used_again(ref mut self) sync {
         let mut said: collections::BTreeSet[i64] = collections::BTreeSet()

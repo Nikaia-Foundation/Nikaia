@@ -2661,7 +2661,7 @@ pub mod check_members {}
 pub mod check_name_in_text {}
 pub mod check_names {
     #[allow(unused_imports)]
-    pub use super::{integer_named, is_a_literal};
+    pub use super::{an_integer_limit, integer_named, is_a_literal};
 }
 pub mod check_narrow {
     #[allow(unused_imports)]
@@ -2744,7 +2744,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, a_path_overlaps, a_path_revives, choices_apart, CheckRepeats, CheckHeldTaking, a_body_never_ends, a_jump_leaves, CheckSeverity, CheckLabel, CheckFinding, check_refusal, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -2849,7 +2849,7 @@ pub mod dump {
 }
 pub mod emit_below {
     #[allow(unused_imports)]
-    pub use super::{emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
+    pub use super::{integer_limit_below, emit_is_a_shape_bound, emit_bounded, emit_uses_driver};
 }
 pub mod emit_build {
     #[allow(unused_imports)]
@@ -3178,7 +3178,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_lower {
     #[allow(unused_imports)]
@@ -3391,7 +3391,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_plain_enums};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_type_may_be_a_view, hb_plain_enums};
 }
 pub mod threads {
     #[allow(unused_imports)]

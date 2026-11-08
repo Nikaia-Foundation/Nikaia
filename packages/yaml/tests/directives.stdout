@@ -40,3 +40,13 @@ str(a %YAML 1.2) | str(b)
 -SEQ
 -DOC
 -STR
+# %TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 a\n- !!x%2Fy b\n- !l%C3%A9 c\n
++STR
++DOC ---
++SEQ
+=VAL <tag:example.com,2000:app/tag!> :a
+=VAL <tag:yaml.org,2002:x/y> :b
+=VAL <!lé> :c
+-SEQ
+-DOC
+-STR

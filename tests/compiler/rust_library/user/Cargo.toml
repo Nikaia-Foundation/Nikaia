@@ -1,0 +1,11 @@
+# A Rust crate over the Nikaia package `../demo`, built as a rust-library
+# (ADR-393 D1) by `tests/a_package_built_as_a_rust_library_is_used_by_a_rust_crate.nika`.
+[package]
+name = "user"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nikaia_demo = { path = "../demo/target/rust-library/nikaia_demo" }
+
+[workspace]

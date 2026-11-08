@@ -1,0 +1,39 @@
+// A package with `artifact = "rust-library"` (ADR-393 D1, #1392): `nikaia
+// build` writes it as the Rust lib crate `nikaia_demo`, and the Rust crate
+// `rust_library/user` depends on that by path, calls its functions and
+// matches its enum. Both are copied to a scratch directory and built there;
+// cargo's target directory is kept in the tests' cache.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("cp", ["-r", f"{repo}/tests/compiler/rust_library/demo", f"{repo}/tests/compiler/rust_library/user", tmp.clone()])
+    let built = process::run(nikaia, ["build"]; dir: f"{tmp}/demo")
+    println(built.stdout.trim().replace(tmp, "TMP"))
+    for file in ["Cargo.toml", "src/lib.rs"] {
+        let there = fs::exists(f"{tmp}/demo/target/rust-library/nikaia_demo/{file}", fs::Root::Anywhere)
+        println(f"{file}: {there}")
+    }
+    let cache = f"{repo}/target/nikaia-project-tests/rust-library-user"
+    let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: [("CARGO_TARGET_DIR", cache), ("CARGO_NET_OFFLINE", "true")])
+    println(ran.stdout.trim())
+    if ran.code != 0 { println(ran.stderr.trim()) }
+    process::run("rm", ["-rf", tmp])
+}

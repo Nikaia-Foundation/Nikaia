@@ -514,7 +514,10 @@ pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_
             let element = check_core_expr_shape_element(&state, &ty, &member);
             if element != "" { return Ty::Named { name: String::from("Vec"), args: vec![check_core_expr_named(&element)], view: false }; }
         }
-        if (member == "MIN" || member == "MAX") && integer_named(&check_core_expr_named(&ty)).is_some() { return check_core_expr_named(&ty); }
+        if an_integer_limit(&ty, &member) {
+            if ty == "int" { return check_core_expr_named("i64"); }
+            return check_core_expr_named(&ty);
+        }
         state.a_member_this_type_does_not_have(world, &ty, &member, span);
         return Ty::Unknown;
     }

@@ -368,6 +368,59 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_concatenated_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty, span: &Span) {
+        let name = match side {
+            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            _ => return,
+        };
+        if ty.is_a_view() || !is_text_type(ty) { return; }
+        let node = node_key(side);
+        let bound = self.frame_of(&name);
+        if bound < 0 {
+            self.facts.lent_concatenated.insert(node);
+            return;
+        }
+        let mut at = self.repeats.len() as i64;
+        while at > 0 {
+            at = at - 1;
+            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame <= bound { break; }
+            if !(*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).revives(&name) {
+                self.facts.lent_concatenated.insert(node);
+                return;
+            }
+        }
+        let found = self.flow.read_index.get(&(node, span.start as i64));
+        if found.is_none() {
+            self.facts.lent_concatenated.insert(node);
+            return;
+        }
+        let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(nikaia_std::index::or(found, || 0)))).clone();
+        let taken = self.taken(read.path.to_string(), ty.clone(), read.seq, "", span);
+        self.flow.pending_concatenations.push(CheckPendingConcat { node, taken });
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn concatenated_names_read_again(&mut self) {
+        let pending = self.flow.pending_concatenations.to_owned();
+        self.flow.pending_concatenations = vec![];
+        for one in pending.iter() { if self.read_beside(&one.taken) || self.first_read_after(&one.taken).is_some() { self.facts.lent_concatenated.insert(one.node); } }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn assigned_read(&self, taken: &CheckTaken) -> i64 {
+        let mut first: i64 = -1;
+        for written in self.written_at.iter() { if written.1 == taken.from && a_path_overlaps(&written.0, &taken.path) { for read in self.reads_on_paths.iter() { if read.binding == taken.binding && read.at == taken.from && read.path == written.0 && (first < 0 || read.seq < first) { first = read.seq; } } } }
+        first
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn read_beside(&self, taken: &CheckTaken) -> bool {
+        let target = self.assigned_read(taken);
+        for read in self.reads_on_paths.iter() { if read.binding == taken.binding && read.seq != taken.seq && read.seq != target && a_path_overlaps(&read.path, &taken.path) && read.at >= taken.from && read.at < taken.at { return true; } }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn data_handed_over_is_used_again(&mut self) {
         let mut said: collections::BTreeSet<i64> = collections::BTreeSet::new();
         let mut found: Vec<CheckFinding> = vec![];

@@ -98,4 +98,7 @@ fn main() throws {
 	// document has none, so `!!` is `tag:yaml.org,2002:` and `!` stays local
 	events("%TAG !e! tag:example.com,2000:\n%TAG !! tag:example.com,2000:app/\n---\n- !e!foo \"bar\"\n- !!str x\n- !local y\n- !<tag:v> z\n- ! w\n")
 	events("%TAG ! tag:example.com,2000:local/\n--- !local [!!str x]\n--- !local [!!str x]\n")
+	// a shorthand's suffix has each `%xx` decoded (6.9.1, suite 6CK3), with
+	// a named, the secondary and the primary handle; UTF-8 in two escapes
+	events("%TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 a\n- !!x%2Fy b\n- !l%C3%A9 c\n")
 }

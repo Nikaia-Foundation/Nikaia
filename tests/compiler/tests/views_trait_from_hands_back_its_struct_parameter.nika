@@ -1,0 +1,49 @@
+// A trait method whose result says `from` and hands back the parameter it
+// names lends that parameter whatever its type (ADR-views-3 D2, D8, #1327):
+// a struct, or an element of a list, is lowered as the view it is in the
+// trait and in the impl alike, so the caller still has its value after the
+// call, through the impl and through a bound.
+struct W {
+    n: i64,
+    s: String,
+}
+
+trait Pick {
+    fn pick(a: W) -> W from a
+    fn first(xs: Vec[W]) -> W from xs
+    fn other(self, a: W) -> W from a
+}
+
+struct P {
+    k: i64,
+}
+
+impl Pick for P {
+    fn pick(a: W) -> W from a {
+        return a
+    }
+
+    fn first(xs: Vec[W]) -> W from xs {
+        return xs[0]
+    }
+
+    fn other(self, a: W) -> W from a {
+        return a
+    }
+}
+
+fn through[T: Pick](t: T, w: W) -> i64 {
+    return t.other(w).n + w.n
+}
+
+fn main() throws {
+    let w = W { n: 3, s: "x" }
+    println(P::pick(w).n)
+    println(w.s)
+    let xs = [W { n: 4, s: "y" }, W { n: 5, s: "z" }]
+    println(P::first(xs).s)
+    println(xs.len())
+    let p = P { k: 1 }
+    println(p.other(w).s)
+    println(through(p, w))
+}

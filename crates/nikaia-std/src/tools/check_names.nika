@@ -162,6 +162,15 @@ impl CheckState {
     }
 }
 
+/// **Whether `ty::member` is an integer type's limit** (Part I 2.2, #1294,
+/// #1325): `MIN` or `MAX` under `int` or one of the five fixed widths.
+pub fn an_integer_limit(ty: ref String, member: ref String) -> bool sync {
+    if member != "MIN" && member != "MAX" {
+        return false
+    }
+    return ty == "int" || integer_named(Ty::Named { name: ty.clone(), args: [], view: false }) != null
+}
+
 /// The name of an integer type, held and not viewed: the five of Part I 2.2.
 pub fn integer_named(ty: ref Ty) -> String? sync {
     return match ty {

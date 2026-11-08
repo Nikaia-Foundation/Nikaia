@@ -242,7 +242,7 @@ impl EmitState {
                         None => world.library.types.contains_key(&named),
                         _ => true,
                     };
-                    out.push(&if whole { String::from("_") } else { named.to_string() });
+                    out.push(&if whole { String::from("_") } else { integer_limit_below(&named) });
                 }
             },
             MatchPattern::Tuple { path, parts } => {

@@ -1,0 +1,37 @@
+// A name of owned text beside `+` is read, not taken: its buffer goes into
+// the answer only where nothing reads it again (ADR-081, #1324).
+
+fn pick(d: String) -> String {
+    d
+}
+
+fn made() -> String {
+    let mut s: String = ""
+    s.push_str("d")
+    s
+}
+
+fn main() throws {
+    let a: String = "d"
+    println(a + pick(a))
+    let b: String = made()
+    println(b + pick(b))
+    println(pick(b) + b)
+    println(b + b)
+    let c = b + "x"
+    println(b)
+    println(c)
+    for _ in 0..<2 {
+        println(b + "y")
+    }
+    let f: fn() -> String = fn() { b + "z" }
+    println(f())
+    println(f())
+    let mut g: String = made()
+    g = g + "1"
+    g = g + pick(g)
+    for _ in 0..<2 {
+        g = g + "2"
+    }
+    println(g)
+}

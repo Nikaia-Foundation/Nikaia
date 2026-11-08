@@ -1,0 +1,29 @@
+// What `../user`, a Rust crate, calls: a function, a struct and an enum.
+
+/// A point on the plane.
+pub struct Point {
+    pub x: i64,
+    pub y: i64,
+}
+
+/// A shape, by its one measure.
+pub enum Shape {
+    Circle(i64),
+    Square(i64),
+}
+
+/// The shape's area, with pi taken as 3.
+pub fn area(shape: Shape) -> i64 sync {
+    return match shape {
+        Shape::Circle(r) => 3 * r * r,
+        Shape::Square(a) => a * a,
+    }
+}
+
+/// Where the shape is drawn.
+pub fn centre(shape: Shape) -> Point sync {
+    return match shape {
+        Shape::Circle(r) => Point { x: r, y: r },
+        Shape::Square(a) => Point { x: a / 2, y: a / 2 },
+    }
+}

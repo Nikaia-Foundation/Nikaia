@@ -167,6 +167,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A `for` over a `Vec[String]` place lowers to `.iter()`, so its element is `&String` below; only numbers, `bool`, `char` and `&str` are copied out with `let x = *x`. (issue-1268)
 * A buffer `let` is put into the keep by `emit_stmt_kept` (`plan.puts`, `emit_stmt.nika`), decided in `buffers.nika` `decide`, and for non-text lists in `plan_of` via `untethered_returns`. (issue-1276)
 * A buffer changed after its `let` now carries `late_puts` and is put by a shadowing `let` after its last change; the reassignment puts (#293 reputs) before that point are dropped. (issue-1276)
+* `std` contracts write `fn(T)` for code whose result they leave open (`Seq::filter`), so a `Ty::Fn` with `result == null` means "hands back nothing" only for the program's own types. (issue-1321)
+* A lambda body is written in several places (`emit_core_flow` plain, failing and kept paths, and the pausing path in `emit_core_args`), and an emitter fix must cover each one. (issue-1321)
 
 ### Grammar
 
@@ -281,6 +283,7 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * A `match`'s catch-all arm is `else => ...`; `_ =>` is refused. (issue-1352)
 * A text position taken from `match s.find(..) { at => .. }` loses its origin (NK1214); write `let at = s.find(..) ?? return null` in a helper. (issue-1339)
 * `i64` has no `checked_div_euclid`/`checked_rem_euclid`; guard `MIN / -1` and use `div_euclid`/`rem_euclid`. (issue-1339)
+* A trailing `;` does not drop a value and `let _ = x` is NK1144, so a value can't be discarded explicitly; a body's last value is dropped only where the function type hands back nothing. (issue-1321)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`

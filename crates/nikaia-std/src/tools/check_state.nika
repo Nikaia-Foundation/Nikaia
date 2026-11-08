@@ -278,6 +278,15 @@ pub struct CheckPendingCoalesce {
     pub opened: String,
 }
 
+/// **A name of owned text beside a `+`** (ADR-081, #1324): its buffer is
+/// written into where nothing reads it again, else it is lent.
+pub struct CheckPendingConcat {
+    /// The side, by its id: what the emitter looks it up by.
+    pub node: i64,
+    /// The read, as a taking, for `first_read_after`.
+    pub taken: CheckTaken,
+}
+
 /// Whether reading `read` touches what taking `taken` took: the same path, a
 /// part of it (`p.name` after `p`), or the whole it was part of (`p` after
 /// `p.name`).

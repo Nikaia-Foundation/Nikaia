@@ -99,8 +99,10 @@ fn emit_item_trait_method(world: ref EmitWorld, trait_name: ref String, wanted: 
 
 /// A trait method's parameter or result that `from` names, as the view it is
 /// lowered as (ADR-views-3 D2, D14): text written plain is lent, as `ref` text
-/// is; a type already a view stays one. Null for anything else, which keeps
-/// its ordinary lowering.
+/// is; a type already a view stays one. **A `from` result is a view of any
+/// type** (D8, #1327): what a free function's `from` makes a view
+/// (`hb_type_may_be_a_view`, `text_tiers.nika`) is lent here too, as the
+/// impl's is. Null for anything else, which keeps its ordinary lowering.
 fn emit_item_lent_view(world: ref EmitWorld, ty: ref Type) -> Type? {
     if ty.code != null || ty.is_slice {
         return null
@@ -108,7 +110,8 @@ fn emit_item_lent_view(world: ref EmitWorld, ty: ref Type) -> Type? {
     if ty.is_view {
         return ty.clone()
     }
-    if emit_text(world, ty.name) != "String" || !ty.generics.is_empty() || ty.is_nullable || ty.is_mut {
+    let text = emit_text(world, ty.name) == "String" && ty.generics.is_empty() && !ty.is_nullable && !ty.is_mut
+    if !text && !hb_type_may_be_a_view(ty, world.words, hb_plain_enums(world.items, world.words)) {
         return null
     }
     let mut viewed = ty.clone()
@@ -602,7 +605,7 @@ impl EmitState {
             // **`mut` lowers to `&mut T` here as it does in the impl** (ADR-094 D3).
             let mut reference = if arg.mutable && !foreign { "&mut " } else { "" }
             let mut written: String = ""
-            let lent_source = if !arg.mutable && from_names.contains(emit_text(world, arg.name)) { emit_item_lent_view(world, arg.ty) } else { null }
+            let lent_source = if !arg.mutable && !arg.keep && from_names.contains(emit_text(world, arg.name)) { emit_item_lent_view(world, arg.ty) } else { null }
             if lent_source != null {
                 let source = lent_source ?? arg.ty.clone()
                 written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, source, EmitLifetimes::Shared))

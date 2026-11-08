@@ -383,6 +383,10 @@ pub struct CheckFacts {
     pub pausing_methods: collections::BTreeSet[i64],
     pub nullable_sites: collections::BTreeMap[i64, FactWrap],
     pub concatenations: collections::BTreeSet[i64],
+    /// **A name of owned text beside a `+` that is read again** (ADR-081,
+    /// #1324), by the side: lent as a view of text, where its buffer would
+    /// be given to the answer otherwise.
+    pub lent_concatenated: collections::BTreeSet[i64],
     /// `text += x` on a text place (#760): the right side goes as a `str`.
     pub appended_texts: collections::BTreeSet[i64],
     pub path_comparisons: collections::BTreeSet[i64],
@@ -691,6 +695,7 @@ impl CheckFacts {
             pausing_methods: collections::BTreeSet(),
             nullable_sites: collections::BTreeMap(),
             concatenations: collections::BTreeSet(),
+            lent_concatenated: collections::BTreeSet(),
             appended_texts: collections::BTreeSet(),
             path_comparisons: collections::BTreeSet(),
             mixed_comparisons: collections::BTreeMap(),
