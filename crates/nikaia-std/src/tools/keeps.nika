@@ -48,9 +48,9 @@ pub struct KeepsBody {
     /// D4): the clone is a count on the caller's owner, so the parameter takes
     /// the `Bytes` with its owner rather than a run of bytes to copy.
     pub cloned_keeps: collections::BTreeSet[String],
-    /// **The parameters written `T?` of a type other than text** (ADR-views-3
-    /// D2, #1254): `p ?? e` over one whose result is only read keeps nothing
-    /// of `p`.
+    /// **The parameters written `T?`**, text among them (ADR-views-3 D2,
+    /// #1254, #1346): `p ?? e` over one whose result is only read keeps
+    /// nothing of `p`.
     pub options: collections::BTreeSet[String],
     /// **The parameters of function type, by which of their own parameters
     /// the code lends** (ADR-views-3 D14): one written `ref`, or named by the
@@ -138,8 +138,7 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                     alias(interner.resolve(bound).clone(), reached, walk.aliases)
                 }
             }
-            // **`let x = p ?? e` over an option of a type other than text
-            // binds a view of `p`** (ADR-views-3 D2, #1254): `p` is lent, and
+            // **`let x = p ?? e` over an option binds a view of `p`** (ADR-views-3 D2, #1254): `p` is lent, and
             // kept only where `x` leaves - returned, handed on, matched apart
             // and handed on, taken by a method, or bound `mut`.
             if !mutable && !owned_declared {
@@ -1297,8 +1296,8 @@ fn parameter_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext
     }
 }
 
-// **`p ?? e` over an option of a type other than text** (ADR-views-3 D2,
-// #1254): the parameter `p`, or `null`.
+// **`p ?? e` over an option parameter** (ADR-views-3 D2, #1254, #1346): the
+// parameter `p`, or `null`.
 fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
     return match expr {
         Expr::Coalesce { value, .. } => {
@@ -2309,11 +2308,11 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     cloned_keeps.insert(view.text(a.name))
                 }
             }
-            // **The options of a type other than text** (ADR-views-3 D2, #1254).
+            // **The options** (ADR-views-3 D2, #1254), text among them (#1346):
+            // `let f = p ?? return ".."` over a `p: String?` reads `p`.
             let mut options: collections::BTreeSet[String] = collections::BTreeSet()
             for a in args {
-                let written = view.text(a.ty.name)
-                if a.ty.is_nullable && !a.ty.is_slice && a.ty.code == null && written != "String" && written != "str" {
+                if a.ty.is_nullable && !a.ty.is_slice && a.ty.code == null {
                     options.insert(view.text(a.name))
                 }
             }

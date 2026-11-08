@@ -258,7 +258,7 @@ pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerCon
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 let owner = names.resolve(target.name).to_string();
-                for method in methods.iter() { declare_function(&method.node, Some(owner.to_string()), names, &mut declared, trait_name.is_some()); }
+                for method in methods.iter() { declare_function(&method.node, Some(&owner.to_string()), names, &mut declared, trait_name.is_some()); }
             },
             Item::Grammar(def) => { declare_rules(def, names, &mut declared); },
             Item::Comptime { name, ty, .. } => {
@@ -288,14 +288,14 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     }
 }
 
-pub(crate) fn declare_function(item: &Item, target: Option<String>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
+pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
     let (name, receiver, args, ret_type, is_public) = match item {
         Item::Fn { name, receiver, args, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, ret_type, is_public) },
         _ => return,
     };
     let changes_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
     let own = own_name((name).as_ref(), names);
-    let key = tier_key((target).as_deref(), &own);
+    let key = tier_key(target, &own);
     if target.is_some() { declared.methods.entry(own.to_string()).or_insert(vec![]).push(key.to_string()); }
     let mut params: Vec<Type> = vec![];
     let mut changes: Vec<bool> = vec![];
@@ -4192,7 +4192,7 @@ pub(crate) fn walk_unit(program: &Program, item_at: i64, method_at: i64, ask: &T
         Item::Fn { .. } => { walk_function(&item.node, None, ask, walk); },
         Item::Impl { target, methods, .. } => {
             let owner = ask.names.resolve(target.name).to_string();
-            walk_function(&nikaia_std::index::get(&methods, nikaia_std::index::at(method_at)).node, Some(owner), ask, walk);
+            walk_function(&nikaia_std::index::get(&methods, nikaia_std::index::at(method_at)).node, Some(&owner), ask, walk);
         },
         Item::Grammar(def) => { walk_grammar(def, ask, walk); },
         Item::Test { body, .. } => { walk_body(body, ask, walk); },
@@ -4497,12 +4497,12 @@ pub(crate) fn grammar_reference_kinds(gname: &str, rules: &collections::BTreeSet
     no_kinds()
 }
 
-pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let (name, receiver, args, config, body) = match item {
         Item::Fn { name, receiver, args, config, body, .. } => { let name = *name; (name, receiver, args, config, body) },
         _ => return,
     };
-    let key = tier_key((target).as_deref(), &own_name((name).as_ref(), ask.names));
+    let key = tier_key(target, &own_name((name).as_ref(), ask.names));
     walk.function = own_name((name).as_ref(), ask.names);
     walk.locals = collections::BTreeMap::new();
     walk.ties = collections::BTreeMap::new();
@@ -4514,7 +4514,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
     let of_a_trait = nikaia_std::index::or((*nikaia_std::index::get(&walk.declared.fns, &key)).as_ref().map(|__nikaia_it| __nikaia_it.of_a_trait), || false);
     let held = walk_lists_of_views(&key, args.len() as i64, walk);
     let free: Option<String> = if target.is_none() { Some(key.to_string()) } else { None };
-    let lent_fields: collections::BTreeSet<String> = if of_a_trait { collections::BTreeSet::new() } else { hb_text_field_roots(item, ask.names, &walk.declared.private_structs, free, &held) };
+    let lent_fields: collections::BTreeSet<String> = if of_a_trait { collections::BTreeSet::new() } else { hb_text_field_roots(item, ask.names, &walk.declared.private_structs, (free).as_deref(), &held) };
     let mut at = 0;
     for arg in args.iter() {
         let owner = TextOwner::Param(key.to_string(), at);
@@ -4530,8 +4530,8 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
     walk.lent_self = false;
     if receiver.is_some() && target.is_some() {
         walk.lent_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
-        let local = TierLocal { kinds: owned_kinds(), of: match target.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        let local = TierLocal { kinds: owned_kinds(), of: match target {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
         }, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false };
         bind_tier_local(String::from("self"), local, walk);
@@ -5916,7 +5916,7 @@ pub(crate) fn hb_plain_text(t: &Type, words: &winnow_grammar::InternerContext) -
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, private: &collections::BTreeSet<String>, held: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
-    let lent_fields = hb_text_field_roots(&item, words, private, if free { hb_fn_name(&item, words) } else { None }, held);
+    let lent_fields = hb_text_field_roots(&item, words, private, (if free { hb_fn_name(&item, words) } else { None }).as_deref(), held);
     if !lent_fields.is_empty() {
         match item {
             Item::Fn { args, .. } => { for arg in args.iter_mut() { if lent_fields.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } } },
@@ -5949,7 +5949,7 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
     }
 }
 
-pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerContext, private: &collections::BTreeSet<String>, key: Option<String>, held: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerContext, private: &collections::BTreeSet<String>, key: Option<&str>, held: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     let (args, ret_type, body, is_extern, ret_from, is_public) = match item {
         Item::Fn { args, ret_type, body, is_extern, ret_from, is_public, .. } => { let is_extern = *is_extern; let is_public = *is_public; (args, ret_type, body, is_extern, ret_from, is_public) },
@@ -5996,7 +5996,7 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
     }
     let nothing: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let free = key.is_some();
-    let function = nikaia_std::index::or(key, || "".into());
+    let function = nikaia_std::index::or(key, || "");
     for value in handed.iter() {
         let value = *value;
         let root = match hb_field_chain_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue };

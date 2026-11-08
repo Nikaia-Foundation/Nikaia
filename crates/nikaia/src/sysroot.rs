@@ -1313,7 +1313,7 @@ impl LoweredBefore {
     /// The key for lowering `files` as `what` (`sysroot_lowered_key`).
     fn key(&self, what: &str, files: &[PathBuf]) -> Option<String> {
         block_on(sysroot_cache::sysroot_lowered_key(
-            self.compiler.clone(),
+            self.compiler.as_deref(),
             what,
             files,
             &Host,
@@ -1333,7 +1333,7 @@ impl LoweredBefore {
         block_on(sysroot_cache::sysroot_lowered_put(
             &self.root,
             self.compiler.is_some(),
-            key.map(str::to_string),
+            key,
             rust,
             &Host,
         ))

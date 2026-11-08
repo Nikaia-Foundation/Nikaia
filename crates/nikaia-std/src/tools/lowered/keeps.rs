@@ -1098,11 +1098,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81723| {
-                            let (at, arg) = __nikaia_tuple81723; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81671| {
+                            let (at, arg) = __nikaia_tuple81671; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple81899| {
-                            let (at, arg) = __nikaia_tuple81899;
+                        }).map(|__nikaia_tuple81847| {
+                            let (at, arg) = __nikaia_tuple81847;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
@@ -1518,10 +1518,7 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Item, tar
             let mut cloned_keeps: collections::BTreeSet<String> = collections::BTreeSet::new();
             for a in args.iter() { if a.ty.is_view && !a.ty.is_nullable && !a.ty.is_slice && a.ty.generics.is_empty() && view.text(a.ty.name) == "Bytes" { cloned_keeps.insert(view.text(a.name)); } }
             let mut options: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for a in args.iter() {
-                let written = view.text(a.ty.name);
-                if a.ty.is_nullable && !a.ty.is_slice && (*a.ty.code).is_none() && written != "String" && written != "str" { options.insert(view.text(a.name)); }
-            }
+            for a in args.iter() { if a.ty.is_nullable && !a.ty.is_slice && (*a.ty.code).is_none() { options.insert(view.text(a.name)); } }
             let mut code_lends: collections::BTreeMap<String, Vec<bool>> = collections::BTreeMap::new();
             for a in args.iter() {
                 if (*a.ty.code).is_none() { continue; }

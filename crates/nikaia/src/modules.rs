@@ -65,7 +65,7 @@ impl Unit {
     /// package, and plain `serve` inside the program's own.
     pub fn qualify(&self, name: &str) -> String {
         // In Nikaia (`tools/modules.nika`, M3a).
-        collecting::modules_qualify(self.package.clone(), name)
+        collecting::modules_qualify(self.package.as_deref(), name)
     }
 }
 

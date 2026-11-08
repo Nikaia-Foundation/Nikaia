@@ -29,9 +29,9 @@ pub(crate) fn check_core_call_on_view(ty: &Ty) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_call_on_reached(state: &mut CheckState, key: Option<String>) {
+pub fn check_core_call_on_reached(state: &mut CheckState, key: Option<&str>) {
     let have = key.is_some();
-    let written: String = nikaia_std::index::or(key.as_deref(), || "").to_string();
+    let written: String = nikaia_std::index::or(key, || "").to_string();
     if !have && state.flow.guarded.is_some() {
         let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -268,7 +268,7 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
             let given = check_core_expr(state, world, host, nikaia_std::index::get(&args, 0), span);
             let code = check_core_call_on_view(on) + check_core_call_on_view(&given) * 2;
             state.facts.standard_compares.insert(id_of(receiver) as i64, code);
-            if wants_order { check_core_call_on_reached(state, Some(String::from("Ord::compare"))); } else { check_core_call_on_reached(state, Some(String::from("Eq::eq"))); }
+            if wants_order { check_core_call_on_reached(state, Some("Ord::compare")); } else { check_core_call_on_reached(state, Some("Eq::eq")); }
             check_core_call_on_quiet(state, receiver);
             if wants_order { return check_core_call_on_named("Ordering"); }
             return check_core_call_on_named("bool");
@@ -826,8 +826,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     }
     if known_text {
         state.facts.path_methods.insert(node, true);
-        check_core_call_on_reached(state, Some(String::from("fs::Path::text_of")));
-    } else { check_core_call_on_reached(state, Some(key.to_string())); }
+        check_core_call_on_reached(state, Some("fs::Path::text_of"));
+    } else { check_core_call_on_reached(state, Some(&key.to_string())); }
     state.flow.last_resolved = Some(key.to_string());
     if contract.mutates {
         state.facts.mut_receivers.insert(node);

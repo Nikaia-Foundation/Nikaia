@@ -168,7 +168,7 @@ impl Settings {
         Settings::of(
             project_settings::project_settings_resolve(
                 &|key, default| manifest.setting(key, None, default).to_string(),
-                manifest.package_name().map(str::to_string),
+                manifest.package_name(),
                 target.map(str::to_string),
                 user_parallelism.map(str::to_string),
                 crate::emit::default_target().name(),
@@ -3568,7 +3568,7 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
         let invocation = self.invocation.borrow();
         block_on(project_settings::project_settings_trace(
             TRACE_VAR,
-            invocation.crate_name.clone(),
+            invocation.crate_name.as_deref(),
             invocation.is_a_probe(),
             verdict,
             &SettingsHost,
