@@ -8143,13 +8143,21 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
     }
     let t = ret_type ?? return out
     let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && t.code == null
-    if is_extern || is_public || ret_from.len() > 0 || !text {
+    if is_extern || !text {
         return out
     }
     let none: collections::BTreeSet[String] = collections::BTreeSet()
     let mut handed: Vec[ref Expr] = []
     for way in hb_ways_out(body) {
         handed.extend(hb_text_arms(way))
+    }
+    // **A published function hands back a view only where every way out is
+    // one** (ADR-views-3 D2, D7; ADR-282 D22, #1254): `pub fn first(v:
+    // Vec[String]) -> String { return v[0] }` lends `v` and hands back the
+    // element, as `pub fn same(s: String) -> String { return s }` does; beside
+    // text of its own it keeps its text, one kind at the published position.
+    if is_public && !handed.iter().all(fn(value) { hb_field_chain_root(value, words) != null }) {
+        return out
     }
     // The field reads that only read: the ones handed back, and the ones
     // handed to a free function, put in a hole or under an operator.
@@ -8193,6 +8201,11 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
     let function = key ?? ""
     for value in handed {
         let root = hb_field_chain_root(value, words) ?? continue
+        // **A result written `from` views only what it names** (ADR-views-3
+        // D8): a field or element read of another parameter is not lent here.
+        if ret_from.len() > 0 && !ret_from.iter().any(fn(named) { words.resolve(named) == root }) {
+            continue
+        }
         let element = hb_an_element_read(value)
         let mut list = false
         if element && free {

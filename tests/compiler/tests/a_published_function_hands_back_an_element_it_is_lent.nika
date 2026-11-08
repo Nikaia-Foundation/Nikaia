@@ -1,0 +1,18 @@
+// **A published function hands back a view of what it is lent** where every
+// way out is one (ADR-views-3 D2, D7; ADR-282 D22, #1254): the element read
+// of a lent list moved out of a borrow, and `rustc` refused it. A result
+// written `from` lends what it names the same way.
+pub fn first(v: Vec[String]) -> String {
+    return v[0]
+}
+
+fn second(v: Vec[String], n: i64) -> String from v {
+    return v[n]
+}
+
+fn main() throws {
+    let v = [f"a{1}", f"b{2}"]
+    println(first(v))
+    println(second(v, 1))
+    println(first(v))
+}

@@ -5981,10 +5981,11 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
     };
     let t = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return out };
     let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && (*t.code).is_none();
-    if is_extern || is_public || !ret_from.is_empty() || !text { return out; }
+    if is_extern || !text { return out; }
     let none: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut handed: Vec<&Expr> = vec![];
     for way in hb_ways_out(body) { handed.extend(hb_text_arms(way)); }
+    if is_public && !handed.iter().all(|value| { hb_field_chain_root(value, words).is_some() }) { return out; }
     let mut reads: Vec<&Expr> = handed.to_owned();
     let mut measured: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let visited = visited_in_block(body);
@@ -6024,6 +6025,7 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
     for value in handed.iter() {
         let value = *value;
         let root = match hb_field_chain_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !ret_from.is_empty() && !ret_from.iter().any(|named| { words.resolve(*named) == root }) { continue; }
         let element = hb_an_element_read(value);
         let mut list = false;
         if element && free {
