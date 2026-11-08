@@ -76,7 +76,7 @@ impl CheckState {
             _ => { },
         }
         let node = id_of(value) as i64;
-        if !self.flow.map_read_sites.contains(&node) { return; }
+        if !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) { return; }
         let inner = match want {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return,
@@ -101,7 +101,7 @@ impl CheckState {
     pub fn a_map_read_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, body: &Block) {
         for value in block_tail(body) {
             let node = id_of(value) as i64;
-            if !self.flow.map_read_sites.contains(&node) { return; }
+            if !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) { return; }
             let read = match found {
                 Ty::Nullable(read) => { let read = nikaia_std::boxed::open(read); read.clone() },
                 _ => return,
@@ -117,7 +117,7 @@ impl CheckState {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
                 let node = id_of(read) as i64;
-                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(&node) || into.is_a_view() || into.is_unknown() { return; }
+                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) || into.is_a_view() || into.is_unknown() { return; }
                 if self.copied(world, into) || !self.takes_away(world, into) {
                     let added = self.facts.copied_reads.insert(node);
                     return;

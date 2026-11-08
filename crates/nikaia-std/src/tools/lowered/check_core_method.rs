@@ -529,7 +529,16 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         match value {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                if a_copy_by_value(inner) || check_core_method_views_of_text(&on) { let added = state.facts.copied_walks.insert(id_of(expr) as i64); } else if check_core_method_a_tuple(inner) { let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64); }
+                if a_copy_by_value(inner) || state.a_word_by_its_kind(world, inner) || check_core_method_views_of_text(&on) { let added = state.facts.copied_walks.insert(id_of(expr) as i64); } else if check_core_method_a_tuple(inner) { let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64); }
+            },
+            _ => { },
+        }
+    }
+    if key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" {
+        match value {
+            Ty::Nullable(ref inner) => {
+                let inner = nikaia_std::boxed::open(inner);
+                if !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) { let added = state.facts.copied_walks.insert(id_of(expr) as i64); }
             },
             _ => { },
         }

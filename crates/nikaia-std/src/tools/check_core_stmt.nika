@@ -1241,7 +1241,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **And typed as one**: a `V?` read out of a map is an option of a view.
-    if of_a_map {
+    // **Unless a word by its kind is copied out of it** (ADR-279 D8, #1460):
+    // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
+    let word_copied = match bound {
+        Ty::Nullable(inner) => !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
+        else => false,
+    }
+    if of_a_map && !word_copied {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
