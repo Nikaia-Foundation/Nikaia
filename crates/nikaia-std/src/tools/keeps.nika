@@ -48,14 +48,18 @@ pub struct KeepsBody {
     /// D4): the clone is a count on the caller's owner, so the parameter takes
     /// the `Bytes` with its owner rather than a run of bytes to copy.
     pub cloned_keeps: collections::BTreeSet[String],
-    /// **The parameters written `T?` of a type other than text** (ADR-views-3
-    /// D2, #1254): `p ?? e` over one whose result is only read keeps nothing
-    /// of `p`.
+    /// **The parameters written `T?`**, text among them (ADR-views-3 D2,
+    /// #1254, #1346): `p ?? e` over one whose result is only read keeps
+    /// nothing of `p`.
     pub options: collections::BTreeSet[String],
     /// **The parameters of function type, by which of their own parameters
     /// the code lends** (ADR-views-3 D14): one written `ref`, or named by the
     /// type's `from`. An argument handed there is lent to the call, not kept.
     pub code_lends: collections::BTreeMap[String, Vec[bool]],
+    /// **The traits a parameter of a type variable is bound by**, `c: C` of
+    /// `[C: Count]`: a method call on it reaches the trait's method (#1254),
+    /// not every method of the same name.
+    pub bounds: collections::BTreeMap[String, Vec[String]],
 }
 
 // The walk's state: what it found, and the names a `let` bound to what may be
@@ -138,8 +142,7 @@ fn keeps_statement(stmt: ref Stmt, interner: ref winnow_grammar::InternerContext
                     alias(interner.resolve(bound).clone(), reached, walk.aliases)
                 }
             }
-            // **`let x = p ?? e` over an option of a type other than text
-            // binds a view of `p`** (ADR-views-3 D2, #1254): `p` is lent, and
+            // **`let x = p ?? e` over an option binds a view of `p`** (ADR-views-3 D2, #1254): `p` is lent, and
             // kept only where `x` leaves - returned, handed on, matched apart
             // and handed on, taken by a method, or bound `mut`.
             if !mutable && !owned_declared {
@@ -182,11 +185,24 @@ fn keeps_statement_parts(stmt: ref Stmt, interner: ref winnow_grammar::InternerC
         }
         Stmt::For { iter, .. } => keeps_expression(iter, interner, holes_of, context, own, library, walk),
         Stmt::While { cond, .. } => keeps_expression(cond, interner, holes_of, context, own, library, walk),
+        // **`return p ?? e` of a view result hands back a view of `p`**
+        // (ADR-views-3 D2, D7, #1254): the option is read, not moved, as in
+        // a `let` of one.
         Stmt::Return(value) => {
             let returned = value ?? return
-            keeps_expression(returned, interner, holes_of, context, own, library, walk)
+            if context.returns_a_view && a_read_option(returned, interner, context) {
+                keeps_read_option(returned, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(returned, interner, holes_of, context, own, library, walk)
+            }
         }
-        Stmt::Expr(value) => keeps_expression(value, interner, holes_of, context, own, library, walk),
+        Stmt::Expr(value) => {
+            if context.returns_a_view && a_read_option(value, interner, context) {
+                keeps_read_option(value, interner, holes_of, context, own, library, walk)
+            } else {
+                keeps_expression(value, interner, holes_of, context, own, library, walk)
+            }
+        }
         else => {}
     }
     match stmt {
@@ -856,6 +872,12 @@ fn keep_method_options(config: ref Vec[ConfigArg], interner: ref winnow_grammar:
 // asked the same, for the parameters it points into: a method that takes it
 // whole may hand it on.
 fn keep_receiver(receiver: ref Expr, method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    // **A call through a field that holds code reads the field** (#1254):
+    // `p.parse("12")` of `p: Parser` with `parse: fn(String) -> i64` keeps
+    // nothing of `p`; the bare name matched `std`'s `parse`.
+    if keeps_code_field(receiver, method, interner, context) != null {
+        return
+    }
     let mut names: Vec[String] = []
     match receiver {
         Expr::Variable(ident, _) => {
@@ -944,6 +966,22 @@ fn takes_its_receiver(contract: ref FnContract) -> bool {
 // A library's candidates answer from their ledger, and no candidate at all
 // keeps (D2).
 fn keep_method_arguments(receiver: ref Expr, args: ref Vec[Expr], method: ref String, interner: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
+    // **What a field's code takes as a view or `mut` is lent to it**
+    // (ADR-views-3 D2, D14), as the call lowers it; what it takes whole it
+    // keeps.
+    let code = keeps_code_field(receiver, method, interner, context)
+    if code != null {
+        let params: Vec[Ty] = code ?? []
+        for k in 0..<args.len() {
+            if k < params.len() && (params[k].is_a_view() || lent_mut(params[k]) != null) {
+                continue
+            }
+            for name in keeps_handed(args[k], interner, context, own, library, walk) {
+                walk.uses.kept.insert(name.clone())
+            }
+        }
+        return
+    }
     let owner = keeps_owner_of(receiver, method, interner, context, own, library)
     let ours = candidate_keys(own, context.own_methods, method, owner, args.len())
     for k in 0..<args.len() {
@@ -1019,6 +1057,15 @@ fn keeps_owner_of(receiver: ref Expr, method: ref String, interner: ref winnow_g
             let key = f"{declared}::{method}"
             if own.functions.contains_key(key) || library.functions.contains_key(key) {
                 return declared
+            }
+            // **A type variable's method is its bound's** (#1254): `c.count()`
+            // of `c: C` with `[C: Count]` is `Count::count`.
+            let bounds = context.bounds[interner.resolve(ident)] ?? return null
+            for bound in bounds {
+                let by_bound = f"{bound}::{method}"
+                if own.functions.contains_key(by_bound) || library.functions.contains_key(by_bound) {
+                    return bound.clone()
+                }
             }
             return null
         }
@@ -1297,8 +1344,8 @@ fn parameter_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext
     }
 }
 
-// **`p ?? e` over an option of a type other than text** (ADR-views-3 D2,
-// #1254): the parameter `p`, or `null`.
+// **`p ?? e` over an option parameter** (ADR-views-3 D2, #1254, #1346): the
+// parameter `p`, or `null`.
 fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
     return match expr {
         Expr::Coalesce { value, .. } => {
@@ -1375,6 +1422,22 @@ fn not_self(name: String) -> String? {
         return null
     }
     return name
+}
+
+// The parameters of the code a parameter's field holds, where `receiver.method`
+// is a call of that field and not a method.
+fn keeps_code_field(receiver: ref Expr, method: ref String, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> Vec[Ty]? {
+    match receiver {
+        Expr::Variable(ident, _) => {
+            let fields = context.fields[interner.resolve(ident)] ?? return null
+            let ty = fields[method] ?? return null
+            return match ty {
+                Ty::Fn { params, .. } => params.clone(),
+                else => null,
+            }
+        }
+        else => return null,
+    }
 }
 
 fn a_field_that_copies(parameter: ref String, field: ref String, context: ref KeepsBody) -> bool {
@@ -2169,7 +2232,7 @@ fn copied_keepers(keepers: ref Vec[KeepsKeeper]) -> Vec[KeepsKeeper] {
 /// nothing because it does nothing, and whose `impl`s answer for themselves.
 pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> KeepsFound? {
     match item {
-        Item::Fn { name, receiver, args, config, body, ret_type, .. } => {
+        Item::Fn { name, generics, receiver, args, config, body, ret_type, .. } => {
             let own = match name {
                 null => "new",
                 n => view.text(n),
@@ -2294,9 +2357,15 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // reaches `regex::Regex::find`, not `Seq::find`, which keeps its
             // receiver.
             let mut types: collections::BTreeMap[String, String] = collections::BTreeMap()
+            let mut bounds: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
             for a in args {
                 if !a.ty.is_slice {
                     types.insert(view.text(a.name), view.text(a.ty.name))
+                    for g in generics {
+                        if g.name == a.ty.name && g.bounds.len() > 0 {
+                            bounds.insert(view.text(a.name), g.bounds.iter().map(fn(b) { view.text(b) }).collect())
+                        }
+                    }
                 }
             }
             if is_method {
@@ -2309,11 +2378,11 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                     cloned_keeps.insert(view.text(a.name))
                 }
             }
-            // **The options of a type other than text** (ADR-views-3 D2, #1254).
+            // **The options** (ADR-views-3 D2, #1254), text among them (#1346):
+            // `let f = p ?? return ".."` over a `p: String?` reads `p`.
             let mut options: collections::BTreeSet[String] = collections::BTreeSet()
             for a in args {
-                let written = view.text(a.ty.name)
-                if a.ty.is_nullable && !a.ty.is_slice && a.ty.code == null && written != "String" && written != "str" {
+                if a.ty.is_nullable && !a.ty.is_slice && a.ty.code == null {
                     options.insert(view.text(a.name))
                 }
             }
@@ -2332,7 +2401,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             // **The walk** (`uses_in`): every statement's expressions
             // classified where they stand, then the blocks it holds, and **the
             // value a body ends in leaves the call**, as a `return` does.
-            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options }
+            let context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options, bounds: bounds }
             let uses = uses_in(body, view.words, holes_of, context, ledger, library)
             // **A receiver the author wrote `ref` is not kept** (issue #173),
             // **nor an argument written `mut`** (0.0.258): each is a reference

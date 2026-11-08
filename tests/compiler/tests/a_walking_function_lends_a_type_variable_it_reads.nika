@@ -1,0 +1,20 @@
+// A function that walks `T::fields` is copied for each type, and a copy that
+// only reads its `T` lends it (ADR-views-3 D2, #1342): the caller's argument
+// takes the `&` there as in a plain generic call.
+
+struct Point {
+	x: f64,
+}
+
+fn show[T: Struct](_value: T) throws {
+	for field in T::fields {
+		println(field.name)
+	}
+}
+
+fn main() throws {
+	let p = Point { x: 0.0 }
+	show(p)
+	show(Point { x: 1.0 })
+	println(p.x)
+}

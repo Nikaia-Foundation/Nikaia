@@ -1,0 +1,17 @@
+// **What a function field takes as a view is lent to it** (ADR-views-3 D2,
+// D14, #1254): an owned `String` field or local handed to `fn(String)` went
+// below by value, and `rustc` refused the call.
+struct Ask {
+    name: String,
+    size_of: fn(String) -> i64 sync,
+}
+
+fn sum(ask: Ask) -> i64 {
+    let local: String = f"{ask.name}!"
+    return ask.size_of(ask.name) + ask.size_of(local)
+}
+
+fn main() throws {
+    let ask = Ask { name: "abc", size_of: fn(s) { s.len() } }
+    println(f"{sum(ask)}")
+}

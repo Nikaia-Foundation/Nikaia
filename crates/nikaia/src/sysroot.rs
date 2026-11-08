@@ -93,6 +93,14 @@ impl Sysroot {
         &self.root
     }
 
+    /// The official packages the toolchain ships, one directory each under
+    /// its name ([ADR-338](../../docs/specification/adr/adr-338.md) D2, Part
+    /// III 17.3): `packages/` beside the sysroot, as in the repository.
+    pub fn packages_dir(&self) -> PathBuf {
+        let dir = self.root.join("..").join("packages");
+        dir.canonicalize().unwrap_or(dir)
+    }
+
     /// The `nikaia-std` a generated project depends on by path.
     pub fn std_dir(&self) -> PathBuf {
         sysroot_cache::sysroot_std_dir(&self.root)
@@ -1305,7 +1313,7 @@ impl LoweredBefore {
     /// The key for lowering `files` as `what` (`sysroot_lowered_key`).
     fn key(&self, what: &str, files: &[PathBuf]) -> Option<String> {
         block_on(sysroot_cache::sysroot_lowered_key(
-            self.compiler.clone(),
+            self.compiler.as_deref(),
             what,
             files,
             &Host,
@@ -1325,7 +1333,7 @@ impl LoweredBefore {
         block_on(sysroot_cache::sysroot_lowered_put(
             &self.root,
             self.compiler.is_some(),
-            key.map(str::to_string),
+            key,
             rust,
             &Host,
         ))

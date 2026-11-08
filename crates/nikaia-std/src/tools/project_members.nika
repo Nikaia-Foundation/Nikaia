@@ -34,6 +34,10 @@ pub struct ProjectMembersManifest {
     pub foreign: Vec[String],
     /// Whether it has a `[build]` or a `[build.<target>]` section.
     pub has_build: bool,
+    /// The directory whose `.nika` files' `use` lines take in an official
+    /// package ([ADR-338](../../../docs/specification/adr/adr-338.md) D3);
+    /// null for the package's `src/`.
+    pub uses_in: fs::Path?,
 }
 
 /// What the walk asks of the compiler.
@@ -41,6 +45,66 @@ pub trait ProjectMembersHost {
     /// The manifest at `path`; null where it cannot be read or is refused,
     /// and the host keeps why, in its own words.
     fn manifest_at(ref self, path: ref fs::Path) -> ProjectMembersManifest? sync
+    /// The directory the toolchain ships its official packages in, one
+    /// directory each under its name
+    /// ([ADR-338](../../../docs/specification/adr/adr-338.md) D2).
+    fn shipped(ref self) -> fs::Path sync
+}
+
+/// **The official packages, and the version of each this toolchain ships**
+/// ([ADR-338](../../../docs/specification/adr/adr-338.md) D3, Part III 17.3):
+/// the one place that says which names are official. A `use` of one that
+/// nothing else names takes it in (`project_members_taken_in`); a name joins
+/// the list when its package is under `packages/` with this version.
+pub fn project_members_official() -> Vec[(String, String)] {
+    return [("json", "0.1.0")]
+}
+
+/// **The official packages `manifest`'s package takes in by its first `use`**
+/// ([ADR-338](../../../docs/specification/adr/adr-338.md) D3): each listed
+/// name a `.nika` file of its sources writes after `use`, where neither
+/// `[dependencies]`, a Rust crate it declares nor a directory of the project
+/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D37) names it, at
+/// the directory the toolchain ships it in. A name that is neither declared
+/// nor listed is left to the `use` line's refusal (`NK1341`).
+fn project_members_taken_in[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, host: ref H) -> Vec[(String, fs::Path)] {
+    let src = root.join("src")
+    let used = project_members_used(manifest.uses_in ?? src)
+    let mut out: Vec[(String, fs::Path)] = []
+    for (name, _) in project_members_official().iter() {
+        if !used.contains(name) || manifest.keys.contains(name) || manifest.foreign.contains(name) || project_members_holds_sources(src.join(name)) {
+            continue
+        }
+        out.push((name.clone(), host.shipped().join(name)))
+    }
+    return out
+}
+
+/// The package each `use` line of the `.nika` files in `dir` names: the first
+/// word after `use` on a line that starts with it, which is where a `use` is
+/// written (at the top of a file, Part III 13.2).
+fn project_members_used(dir: ref fs::Path) -> collections::BTreeSet[String] {
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return out }
+    for name in names.iter() {
+        if (name.extension()?.text_of() ?? "") != "nika" {
+            continue
+        }
+        let text = fs::read_to_string(dir.join(name), fs::Root::Anywhere) catch { continue }
+        for line in text.lines() {
+            let rest = line.strip_prefix("use ") ?? continue
+            let word: String = rest.trim_start().chars().take_while(fn(c) { c.is_alphanumeric() || c == '_' }).collect()
+            out.insert(word)
+        }
+    }
+    return out
+}
+
+/// Whether `dir` holds `.nika` files: a directory of the project that is a
+/// package of its own (ADR-286 D37).
+fn project_members_holds_sources(dir: ref fs::Path) -> bool {
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return false }
+    return names.iter().any(fn(name) { (name.extension()?.text_of() ?? "") == "nika" })
 }
 
 /// Why the walk stops.
@@ -130,7 +194,7 @@ pub fn project_members_packages_of[H: ProjectMembersHost](manifest: ref ProjectM
 /// build, so a package Cargo fetched is read where it landed.
 fn project_members_packages_in[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, announce: bool, fetched: ref collections::BTreeMap[String, fs::Path], host: ref H) -> Vec[ProjectMembersDependency] throws {
     let mut out: Vec[ProjectMembersDependency] = []
-    let located = project_members_located(manifest, root, fetched)
+    let located = project_members_located(manifest, root, fetched, host)
     let mut seen: collections::HashMap[fs::Path, String] = collections::HashMap()
 
     // **What this build calls each package**, before any of them is read, so
@@ -171,6 +235,8 @@ fn project_members_packages_in[H: ProjectMembersHost](manifest: ref ProjectMembe
         // A Rust crate among them under the name a call writes it by.
         let mut reachable: collections::BTreeSet[String] = dependency.keys.iter().map(fn(x) { x.clone() }).collect()
         reachable.extend(dependency.foreign.clone())
+        // And the official packages it takes in by a `use` (ADR-338 D3).
+        reachable.extend(project_members_taken_in(dependency, root, host).iter().map(fn(pair) { pair.0.clone() }))
         out.push(ProjectMembersDependency { name: name.clone(), renames: project_members_renames_in(dependency, root, here, fetched, host), root: root, reachable: reachable })
     }
     return out
@@ -199,7 +265,7 @@ fn project_members_packages_in[H: ProjectMembersHost](manifest: ref ProjectMembe
 /// program's ledger to be renamed.
 fn project_members_renames_in[H: ProjectMembersHost](dependency: ref ProjectMembersManifest, dependency_root: ref fs::Path, here: ref collections::HashMap[fs::Path, String], fetched: ref collections::BTreeMap[String, fs::Path], host: ref H) -> collections::BTreeMap[String, String] throws {
     let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
-    for (key, path) in project_members_located(dependency, dependency_root, fetched).iter() {
+    for (key, path) in project_members_located(dependency, dependency_root, fetched, host).iter() {
         let at = project_members_canonical(dependency_root.join(path))
         let canonical: String = match here.get(at) {
             ours => ours.clone(),
@@ -357,8 +423,9 @@ pub fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> S
 /// path as written, and each package by version at the directory Cargo put
 /// the crate `nikaia_<key>` in, refused where that crate is not a Nikaia
 /// package ([ADR-286](../../docs/specification/adr/adr-286.md) D25, D26).
-fn project_members_located(manifest: ref ProjectMembersManifest, root: ref fs::Path, fetched: ref collections::BTreeMap[String, fs::Path]) -> Vec[(String, fs::Path)] throws {
+fn project_members_located[H: ProjectMembersHost](manifest: ref ProjectMembersManifest, root: ref fs::Path, fetched: ref collections::BTreeMap[String, fs::Path], host: ref H) -> Vec[(String, fs::Path)] throws {
     let mut out: Vec[(String, fs::Path)] = manifest.paths.clone()
+    out.extend(project_members_taken_in(manifest, root, host))
     for (key, entry) in manifest.versions.iter() {
         let named = f"nikaia_{key}"
         let at = fetched.get(named) ?? throw ProjectMembersRefusal::Refused(f"`{key}` is a Nikaia package by version, and Cargo found no crate `{named}` for it in {root.display()}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `{named}` there.")

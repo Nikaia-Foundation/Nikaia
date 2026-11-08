@@ -3,16 +3,16 @@
 // D13): nothing is copied.
 use std::collections
 struct Box { name: String }
-fn ns(name: ref String) -> ref String? {
+fn ns(name: String) -> String? {
     if name == "self" { return null }
     return name
 }
-fn part(n: ref String, c: bool) -> String? {
+fn part(n: String, c: bool) -> String? {
     if c { return ns(n) }
     if n == "" { return null }
     return f"{n}!"
 }
-fn gather(n: ref String) -> Vec[String] {
+fn gather(n: String) -> Vec[String] {
     let mut out: Vec[String] = []
     let a = part(n, true) ?? return out
     out.push(a)
@@ -20,7 +20,7 @@ fn gather(n: ref String) -> Vec[String] {
     out.push(b)
     return out
 }
-fn boxed(n: ref String) -> Box? {
+fn boxed(n: String) -> Box? {
     let a = part(n, true) ?? return null
     return Box { name: a }
 }

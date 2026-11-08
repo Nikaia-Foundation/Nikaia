@@ -4,7 +4,7 @@ use std::collections
 
 fn main() throws {
     let s = f"a;b;a{""}"
-    let mut m: collections::HashMap[ref Bytes, i64] = collections::HashMap()
+    let mut m: collections::HashMap[Bytes, i64] = collections::HashMap()
     let b = s.bytes
     m.entry(b[0..<1]).and_modify(fn(v) { v += 1 }).or_insert(1)
     m.entry(b[4..<5]).and_modify(fn(v) { v += 1 }).or_insert(1)

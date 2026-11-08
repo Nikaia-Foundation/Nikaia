@@ -1,0 +1,13 @@
+/// A free function named like a method `named_like_a_method_beside_caller.nika`
+/// declares, whose first parameter is an option of a view: it must not change
+/// how that method's calls are lowered (#1335).
+pub struct NamedLikeHolder { pub n: i64 }
+
+pub fn named_like_frame_of(holder: ref NamedLikeHolder?, extra: i64) -> i64 {
+	return (holder?.n ?? 0) + extra
+}
+
+pub fn named_like_frame_of_held(n: i64) -> i64 {
+	let held = NamedLikeHolder { n: n }
+	return named_like_frame_of(held, 2) + named_like_frame_of(null, 1)
+}

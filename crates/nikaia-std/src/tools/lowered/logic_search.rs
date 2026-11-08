@@ -135,7 +135,7 @@ pub fn lg_check(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudget) 
     let indexed = match read { Some(__nikaia_value) => __nikaia_value, None => return LgAnswer::Unknown { why: LgUnknown::NoContradiction } };
     let mut state = LgBranch { held_atoms: vec![], held_why: vec![], open_ors: vec![], open_why: vec![] };
     let none: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    state.absorb((indexed.top).as_ref(), &none);
+    state.absorb(&indexed.top, &none);
     let mut work = LgWork { n: 0 };
     let found = lg_search(&indexed, &state, budget, &mut work);
     match found {
@@ -236,7 +236,7 @@ pub fn lg_verify(arena: &TermArena, facts: &[i64], goal: i64, certificate: &LgCe
     if read.is_none() { return Some(LgRejected::NotReadable); }
     let indexed = match read { Some(__nikaia_value) => __nikaia_value, None => return Some(LgRejected::NotReadable) };
     let mut branch = LgChecking { held: collections::BTreeSet::new(), open: collections::BTreeSet::new() };
-    branch.absorb((indexed.top).as_ref());
+    branch.absorb(&indexed.top);
     let mut verdict = LgVerdict { rejected: None, case: 0 };
     lg_follow(&indexed, &branch, certificate, &mut verdict);
     match verdict.rejected.as_ref() {
@@ -269,7 +269,7 @@ pub(crate) fn lg_follow(indexed: &LgIndexed, branch: &LgChecking, certificate: &
             while at < alternatives.len() as i64 {
                 let mut next = LgChecking { held: branch.held.to_owned(), open: branch.open.to_owned() };
                 next.open.remove(&which);
-                next.absorb((*nikaia_std::index::get(&alternatives, nikaia_std::index::at(at))).as_ref());
+                next.absorb(nikaia_std::index::get(&alternatives, nikaia_std::index::at(at)));
                 lg_follow(indexed, &next, nikaia_std::index::get(&cases, nikaia_std::index::at(at)), verdict);
                 if verdict.rejected.is_some() { return; }
                 at += 1;

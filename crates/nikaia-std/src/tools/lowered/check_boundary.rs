@@ -281,7 +281,7 @@ pub(crate) fn written_from_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ke
                     match &method.node {
                         Item::Fn { name, ret_from, .. } => {
                             let name = *name;
-                            if written_from_names(world, name, Some(owner.to_string()), key) { return ret_from.iter().map(|source| { world.words.resolve(*source).to_string() }).collect::<Vec<_>>(); }
+                            if written_from_names(world, name, Some(&owner.to_string()), key) { return ret_from.iter().map(|source| { world.words.resolve(*source).to_string() }).collect::<Vec<_>>(); }
                         },
                         _ => { },
                     }
@@ -295,7 +295,7 @@ pub(crate) fn written_from_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ke
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn written_from_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, owner: Option<String>, key: &str) -> bool {
+pub(crate) fn written_from_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, owner: Option<&str>, key: &str) -> bool {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     let own = world.words.resolve(symbol).to_string();
     let held = match owner { Some(__nikaia_value) => __nikaia_value, None => return own == key };

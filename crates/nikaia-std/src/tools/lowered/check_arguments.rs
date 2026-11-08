@@ -222,6 +222,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let mut literal_wants = want.clone();
         if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
+        let a_lent_variable = lent && own && check_arguments_a_var(&declared) && !declared.is_a_view();
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             let array = state.array_literal(world, &found_here, &want, value, span);
@@ -230,6 +231,12 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(world, &want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         }
         if key == "Bytes::find" && at == 0 && check_arguments_a_byte_set(&found_here) { continue; }
+        if a_lent_variable && given_here.is_some() {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !found_here.is_a_view() || found_here == text_view { state.facts.lent_args.insert(id_of(value) as i64); }
+            if a_text_literal_expr(value) && !state.facts.owned_texts.contains(&(id_of(value) as i64)) { state.facts.lent_literals.insert(id_of(value) as i64); }
+            continue;
+        }
         if state.lends_where_a_function_type_reads(world, given_here, &found_here, &want) {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             if lent { state.facts.lent_args.insert(id_of(value) as i64); }

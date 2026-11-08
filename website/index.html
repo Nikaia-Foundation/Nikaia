@@ -50,7 +50,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3><a href="{{ "/safe/#running" | relative_url }}">Errors that have to be handled</a></h3>
-        <p>A call that can fail is handled or passed on, or the program is not built. What a function can fail with is worked out from its body, so its signature says <code>throws</code> and not a list of every error. A task that can panic ends alone, and whoever waits for it handles the crash.</p>
+        <p>A call that can fail is handled or passed on, or the program is not built. What a function can fail with is worked out from its body, so its signature says <code>throws</code> and not a list of every error. A task that can panic ends alone, and whoever waits for it handles the crash. A division by a constant zero is refused, and so, once it is built, is an index past the end, an overflow or a division by zero that the compiler can show happens.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">fn load() -&gt; String {
     return fs::read_to_string("config.txt", fs::Root::Anywhere)
 }</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This function can fail, because `fs::read_to_string` can fail.</b></code></pre></div>
@@ -80,7 +80,7 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked on every build</span>
         <h3><a href="{{ "/safe/#changes" | relative_url }}">Every change held to the rules</a></h3>
-        <p>Every change is checked against the rules the code states, whoever wrote it. A change that breaks one is refused, with what to write instead. A change to a rule itself shows in the diff and in the reports.</p>
+        <p>Every change is checked against the rules the code states, whoever wrote it. A change that breaks one is refused, with what to write instead. A change to a rule itself shows in the diff and in the reports. A package runs no script while it is built, and code that runs at build time reads only the files it is allowed to and stops at its budget of steps and memory.</p>
 <div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-gutter">$</span> <b>nikaia build --asserts</b>
   …/src/main.nika:10  assert(n == 41)  proved</code></pre></div>
         <a class="safe-more" href="{{ "/safe/#changes" | relative_url }}">Read more →</a>

@@ -274,10 +274,13 @@ impl EmitState {
 
     /// The opening a lent view gets inside the option a nullable parameter is:
     /// the declaration's own where this unit has the callee, else the one every
-    /// method of that name agrees on (#462). Empty where there is none.
-    fn emit_arg_opening(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> String {
-        if self.own_contracts.functions.contains_key(callee) {
-            let contract = self.own_contracts.functions.get(callee) ?? return ""
+    /// method of that name agrees on (#462). Empty where there is none. **A
+    /// method call is the method its receiver's type resolves to** (#1335): a
+    /// free function of the same name in another file is not it.
+    fn emit_arg_opening(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, i: i64) -> String {
+        let key = method_callee ?? callee
+        if self.own_contracts.functions.contains_key(key) {
+            let contract = self.own_contracts.functions.get(key) ?? return ""
             return emit_arg_opening_in(contract, i, world.library, self.described)
         }
         let candidates = emit_candidates(self.own_contracts, callee)
@@ -442,7 +445,9 @@ impl EmitState {
         // the call (ADR-319 D2, #1195) is lent as made, `&PathBuf::from(..)`,
         // and made of a lent place, which the call only reads.
         let lent_path = self.facts.lent_args.contains(node) && emit_arg_made_a_path(self.facts.nullable_args, node)
-        let mut lend = self.facts.lent_args.contains(node) && !(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node))
+        // A literal at a type variable the callee lends takes the `&` the
+        // parameter does (ADR-views-3 D2, #1342), `&"b"`.
+        let mut lend = self.facts.lent_args.contains(node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node)) || self.facts.lent_literals.contains(node))
         if lent_path && !emit_arg_names_a_place(arg) {
             lend = false
         }
@@ -462,12 +467,12 @@ impl EmitState {
         }
         // **Into a parameter both kinds of text flow into, each argument goes as
         // it is** (ADR-282 D2): a view borrowed, text of its own moved in.
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, i) && !self.facts.mixed_choices.contains(node_key(arg))
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, method_callee?.clone() ?? callee.clone(), i) && !self.facts.mixed_choices.contains(node_key(arg))
         // **A plain value lent to a `T?` the callee reads as `&Option<T>`**
         // (#1080) is lent in an option made for the call: `&Some(name.clone())`,
         // a place copied in, a value made there moved in. A named function
         // kept there (#1117) is a closure made there, not a place.
-        let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, i) == ""
+        let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, method_callee, i) == ""
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(node_key(arg))
         if lent_option || lent_path {
             out.push("&")
@@ -487,7 +492,7 @@ impl EmitState {
         let mut how: String = ""
         let mut has_how = false
         if lend {
-            how = self.emit_arg_opening(world, callee, i)
+            how = self.emit_arg_opening(world, callee, method_callee, i)
             has_how = how != ""
         }
         // **A map's read is that option already**: `index::get` answers an
@@ -1991,6 +1996,11 @@ impl EmitState {
                         out.push(", ")
                     }
                     at += 1
+                    // A type variable the copy's function lends is `&T` there
+                    // (ADR-views-3 D2, #1342): the argument takes the `&`.
+                    if self.facts.lent_args.contains(node_key(arg)) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node_key(arg))) || self.facts.lent_literals.contains(node_key(arg))) {
+                        out.push("&")
+                    }
                     self.emit_expr(world, walk, out, host, arg, depth, flow, scope)
                 }
                 out.push(")")

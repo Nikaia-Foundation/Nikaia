@@ -144,10 +144,13 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
     parsed.refused_moves = decided.refused_moves.clone();
     // A parameter handed back is a view of it, of any type (ADR-views-3 D12, #1239).
     // Its text views in an impl of a trait were written `String` (#1250).
+    // A list whose elements the walk found views is not lent for its element
+    // (#1343): the element handed back is a view of the buffers.
     let handed = nikaia_std::tools::text_tiers::tier_hand_back(
         &mut parsed.program,
         &parsed.interner,
         &beside.fills,
+        &decided.tiers,
     );
     if decided.tiers.is_empty() && decided.lets.is_empty() && decided.adopted.is_empty() {
         parsed.text_views = handed;

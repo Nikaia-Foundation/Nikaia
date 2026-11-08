@@ -1,0 +1,38 @@
+// A piece of a lent text pushed into a field of `self` or into a `mut`
+// parameter is a view stored in the caller's place (ADR-283 D27, #1344): the
+// method takes the text at the impl's lifetime, the function at its own, and
+// the part of a cut (`parts.0`) views what the cut views.
+
+struct L {
+	items: Vec[String],
+}
+
+impl L {
+	fn add(ref mut self, s: String) {
+		for p in s.split(",") {
+			self.items.push(p)
+		}
+	}
+
+	fn give(ref mut self, mut o: L, s: String) {
+		let parts = s.split_once("=") ?? return
+		o.items.push(parts.1)
+	}
+}
+
+fn put(mut v: Vec[String], s: String) {
+	let parts = s.split_once("=") ?? return
+	v.push(parts.0)
+}
+
+fn main() throws {
+	let mut l = L { items: [] }
+	l.add("a,b")
+	let mut v: Vec[String] = []
+	put(v, "k=x")
+	println(f"{l.items.len()} {v.len()}")
+	let mut m = L { items: [] }
+	m.give(l, "k=y")
+	let all = l.items.join(" ")
+	println(f"{all}")
+}

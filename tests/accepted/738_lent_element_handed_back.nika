@@ -3,17 +3,17 @@
 // its own, as a field read through a borrowed parameter is.
 struct Shelf { items: Vec[String] }
 fn own(s: String) -> String { s.clone() }
-fn first(v: ref Vec[String]) -> String { return v[0] }
-fn first_or(v: ref Vec[String]) -> String? { return v[0] }
-fn first_tail(v: ref Vec[String]) -> String { v[0] }
-fn first_tail_or(v: ref Vec[String]) -> String? { v[0] }
-fn shelved(s: ref Shelf) -> String { s.items[1] }
-fn either_arm(v: ref Vec[String], c: bool) -> String { if c { v[0] } else { own(v[1]) } }
-fn either_return(v: ref Vec[String], c: bool) -> String? { if c { return v[0] }
+fn first(v: Vec[String]) -> String { return v[0] }
+fn first_or(v: Vec[String]) -> String? { return v[0] }
+fn first_tail(v: Vec[String]) -> String { v[0] }
+fn first_tail_or(v: Vec[String]) -> String? { v[0] }
+fn shelved(s: Shelf) -> String { s.items[1] }
+fn either_arm(v: Vec[String], c: bool) -> String { if c { v[0] } else { own(v[1]) } }
+fn either_return(v: Vec[String], c: bool) -> String? { if c { return v[0] }
 	return own(v[1]) }
-fn either_tail(v: ref Vec[String], c: bool) -> String? { if c { return own(v[0]) }
+fn either_tail(v: Vec[String], c: bool) -> String? { if c { return own(v[0]) }
 	v[1] }
-pub fn published(v: ref Vec[String]) -> String { return v[0] }
+pub fn published(v: Vec[String]) -> String { return v[0] }
 fn main() throws {
 	let v = [f"a{1}", f"b{2}"]
 	let s = Shelf { items: [f"c{3}", f"d{4}"] }

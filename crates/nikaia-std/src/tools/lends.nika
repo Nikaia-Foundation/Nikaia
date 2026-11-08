@@ -71,7 +71,14 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
             // (`keeps_by_value`). An impl keeps what its trait method keeps
             // (D17), so every entry of a trait agrees.
             let own_lends = own && (a_function_value(ty) || !contract.by_value.contains(name))
-            return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && moves(ty) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
+            // **A plain parameter of a type variable is lent too** (ADR-views-3
+            // D2, #1342): `fn twice[C: Named](c: C)` only reads `c`, so the
+            // caller's value is usable after the call. `moves` answers no for
+            // a type variable, which a library's entry still means (its Rust
+            // takes the `T` whole); this program's own declaration is written
+            // `c: &C` by the emitter, so here it is lent unless kept.
+            let a_lent_variable = own && !contract.by_value.contains(name) && a_plain_variable(ty)
+            return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && (moves(ty) || a_lent_variable) && !a_ledger_copies(ty, copying) && !contract.keeps.contains(name)
         }
         position += 1
     }
@@ -82,6 +89,15 @@ fn lends_with(contract: ref FnContract, at: i64, copying: ref Vec[ref Ledger], o
 fn a_run_parameter(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, view } => !view && base_name(name) == ARRAY && args.len() == 1,
+        else => false,
+    }
+}
+
+/// Whether a parameter's type is a type variable written plain, `C` and not
+/// `ref C`.
+fn a_plain_variable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Var { view, .. } => !view,
         else => false,
     }
 }

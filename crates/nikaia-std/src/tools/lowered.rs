@@ -2550,7 +2550,7 @@ pub mod check_core_args {
 }
 pub mod check_core_call {
     #[allow(unused_imports)]
-    pub use super::{check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
+    pub use super::{check_core_call_lent, check_core_free_call, signature_type_variables, check_core_call, check_core_tuple};
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
@@ -3213,7 +3213,7 @@ pub mod project_lower {
 }
 pub mod project_members {
     #[allow(unused_imports)]
-    pub use super::{ProjectMembersManifest, ProjectMembersHost, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_fetched_variable, project_members_fetched_text, project_members_fetched_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
+    pub use super::{ProjectMembersManifest, ProjectMembersHost, project_members_official, ProjectMembersRefusal, ProjectMembersDependency, project_members_packages_of, ProjectMembersMember, project_members_dependencies_first, project_members_members_of, project_members_fetched_variable, project_members_fetched_text, project_members_fetched_of, project_members_canonical, ProjectMembersForeignHost, ProjectMembersForeign, project_members_no_foreign, project_members_foreign_of, project_members_proofs_digest, project_members_unnamed, project_members_project_unnamed};
 }
 pub mod project_settings {
     #[allow(unused_imports)]

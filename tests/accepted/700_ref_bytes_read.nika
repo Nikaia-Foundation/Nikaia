@@ -1,7 +1,7 @@
 // #700 d01: a `ref Bytes` is a run of bytes (ADR-373 D4): a text's
 // `s.bytes`, a name bound to it and a `Bytes` all reach it, read or handed back.
 
-fn count(b: ref Bytes) -> i64 {
+fn count(b: Bytes) -> i64 {
     let mut n = 0
     for x in b {
         if x == 59 {
@@ -11,14 +11,14 @@ fn count(b: ref Bytes) -> i64 {
     return n
 }
 
-fn head(b: ref Bytes) -> String {
+fn head(b: Bytes) -> String {
     let t = b[0..<2].text() catch {
         return "?"
     }
     return t.clone()
 }
 
-fn first(b: ref Bytes) -> ref Bytes {
+fn first(b: Bytes) -> Bytes {
     return b[0..<1]
 }
 

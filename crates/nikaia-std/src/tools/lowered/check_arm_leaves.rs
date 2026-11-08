@@ -391,7 +391,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_text_bytes_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
-        if !self.a_text_bytes_view(world, value) { return false; }
+        if !self.a_text_bytes_view(world, value) && !self.facts.bytes_cuts.contains(&node_key(value)) { return false; }
         self.facts.kept_text_bytes.insert(node_key(value));
         true
     }
@@ -446,7 +446,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_key_read_as_it_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, index: &Expr) -> bool {
-        if found.is_a_view() || self.a_lent_let(world, index) { return true; }
+        if found.is_a_view() || self.a_lent_let(world, index) || self.facts.bytes_cuts.contains(&node_key(index)) { return true; }
         match index {
             Expr::LitStr { .. } => { return true; },
             Expr::Variable(name, _) => {

@@ -8,7 +8,7 @@ struct BorrowedSubjectCountRow {
 }
 
 impl BorrowedSubjectCountRow {
-    fn m(ref self) -> i64 {
+    fn m(self) -> i64 {
         return self.count
     }
 }
@@ -28,7 +28,7 @@ struct BorrowedSubjectCloneRow {
 }
 
 impl BorrowedSubjectCloneRow {
-    fn m(ref self) -> String {
+    fn m(self) -> String {
         return self.name.clone()
     }
 }
@@ -63,15 +63,15 @@ struct BorrowedSubjectReadRow {
 }
 
 impl BorrowedSubjectReadRow {
-    fn shout(ref self) -> String {
+    fn shout(self) -> String {
         return self.name.to_uppercase()
     }
 
-    fn size(ref self) -> i64 {
+    fn size(self) -> i64 {
         return self.name.len()
     }
 
-    fn label(ref self) -> String {
+    fn label(self) -> String {
         return f"{self.name}: {self.count}"
     }
 }
@@ -91,11 +91,11 @@ struct BorrowedSubjectViewRow {
 }
 
 impl BorrowedSubjectViewRow {
-    fn name(ref self) -> ref String {
+    fn name(self) -> String {
         return self.name
     }
 
-    fn tags(ref self) -> ref Vec[i64] {
+    fn tags(self) -> Vec[i64] {
         return self.tags
     }
 }
@@ -117,11 +117,11 @@ struct BorrowedSubjectTailRow {
 }
 
 impl BorrowedSubjectTailRow {
-    fn name(ref self) -> ref String {
+    fn name(self) -> String {
         return self.name
     }
 
-    fn tags(ref self) -> ref Vec[i64] {
+    fn tags(self) -> Vec[i64] {
         self.tags
     }
 }
@@ -162,7 +162,7 @@ struct BorrowedSubjectNamed {
     name: String,
 }
 
-fn borrowed_subject_of(row: ref BorrowedSubjectNamed) -> ref String {
+fn borrowed_subject_of(row: BorrowedSubjectNamed) -> String {
     return row.name
 }
 

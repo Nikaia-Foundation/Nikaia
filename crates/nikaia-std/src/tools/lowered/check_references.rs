@@ -199,6 +199,7 @@ impl CheckState {
         let lends = if own { lends_in_own(contract, position, &vec![world.library]) } else { lends_in(contract, position, &vec![world.library]) };
         if !lends { return false; }
         let given_expr = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if found.is_unknown() && check_reference_an_option(want) { return false; }
         match given_expr {
             Expr::Closure { .. } => { if !world.own.functions.contains_key(written) && !world.own.functions.contains_key(&format!("{}::new", written)) && world.library.functions.contains_key(written) { return false; } },
             _ => { },
@@ -402,4 +403,6 @@ pub(crate) fn check_references_is_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_
         _ => false,
     }
 }
+
+pub(crate) fn check_reference_an_option(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 

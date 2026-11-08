@@ -865,7 +865,10 @@ impl EmitState {
             if summed != "" { out.push(&format!("::<{}>", summed)); }
         }
         if kind == 0 { out.push("("); }
-        let takes = self.takes_a_handle(world, &name);
+        let takes = self.takes_a_handle(world, &nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || name.to_string().into()));
         self.emit_call_hold(world, walk, host, receiver, scope, &flow);
         walk.method_callee = match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1101,8 +1104,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple81434| {
-        let (i, word) = __nikaia_tuple81434;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple81635| {
+        let (i, word) = __nikaia_tuple81635;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

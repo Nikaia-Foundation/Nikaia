@@ -276,6 +276,12 @@ impl CheckState {
             return false
         }
         let given_expr = given ?? return false
+        // **A value of no known type is not lent into a `T?`** (#1322,
+        // `NK1342`): how it goes in is not decided by its type, so the wrap
+        // below asks, as it does for a position the callee keeps.
+        if found.is_unknown() && check_reference_an_option(want) {
+            return false
+        }
         // **A lambda written in place for a `std` entry is handed over, not
         // lent**: the entry's counterpart takes an `impl FnOnce` by value.
         match given_expr {
@@ -598,6 +604,14 @@ impl CheckState {
 fn check_references_is_self(world: ref CheckWorld, expr: ref Expr) -> bool sync {
     return match expr {
         Expr::Variable(symbol, _) => world.words.resolve(symbol) == "self",
+        else => false,
+    }
+}
+
+/// Whether a type is a `T?`.
+fn check_reference_an_option(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
         else => false,
     }
 }
