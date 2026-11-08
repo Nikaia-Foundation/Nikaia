@@ -143,4 +143,8 @@ together with the specification section and an example test.
 * Running two `nikaia test` processes on `tests/compiler` at the same time can make `migrate_views3_reads_package_tests_with_the_package` fail with "cannot read TMP/json/tests"; it also fails alone on develop, so it is not your change. (issue-1334)
 * A checker change that makes a tools file fail to check must be lowered with the old binary first (`$OLD lower-std`), or the change never reaches `lowered/`. (issue-1388)
 * Run the issue's probe on develop first: a probe made only of Copy fields can pass there and hide the defect. (issue-1342)
+* The first `lower-std` with the old binary resets lowered files a broken build left behind; after a failed build, restart the cycle from the old binary, not the new one. (issue-1344)
+* The checker types `b[a..<c]` on a `Bytes` as an owned `Bytes` (ADR-320 D7), but the emitter writes a `&[u8]`; the fact `bytes_cuts` marks such a cut. (issue-1345)
+* `check_crossings_arguments` gets the unbound contract, so `want` there is the type variable `K`; the substituted types are `expected`/`bound` in `check_core_call_on`, and `entry`'s key is `?` (use `bound["K"]`). (issue-1345)
+* `nikaia check` accepts `HashMap[String, i64]`'s `insert(5, 7)` (std method arguments are not checked against bound types), so a probe that passes `check` can still fail in rustc; always `run` it. (issue-1345)
 

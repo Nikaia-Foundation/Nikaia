@@ -181,6 +181,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A list of string literals is tiered to `Vec<&'static str>`, so `ref $T` binds `T` to a view and a walk gives `&&str`; `AsRef::<str>::as_ref` treats `&str`, `&&str` and `&String` alike. (issue-1388)
 * Rust generics get no deref coercion, so an argument at a lent type-variable parameter gets exactly one `&` (`&&C` does not satisfy `C: Bound`). (issue-1342)
 * In the checker state a type parameter is `Ty::Named` (listed in `state.type_parameters`), not `Ty::Var`; `Ty::Var` appears only in contracts and signatures from `parameterise`. (issue-1342)
+* Under `impl<'a>` (`EmitLifetimes::Inner`), `EmitLifetimes::Named` means the impl's `'a`, so a store into self ties the source to it without declaring a new lifetime. (issue-1344)
 
 ### Grammar
 
