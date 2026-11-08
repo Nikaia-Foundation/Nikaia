@@ -16,7 +16,7 @@ fn main() throws {
     let source = "use std::collections\n\nfn located(keys: ref Vec[String], m: ref collections::BTreeMap[String, String]) -> Vec[String] {\n    let mut out: Vec[String] = []\n    for key in keys {\n        let named = f\"n_{key}\"\n        let at = m.get(named) ?? return []\n        out.push(at.clone())\n    }\n    return out\n}\n\nfn main() throws {\n    let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()\n    m.insert(\"n_a\", \"A\")\n    m.insert(\"n_b\", \"B\")\n    println(located([\"a\", \"b\"], m).join(\",\"))\n}\n"
     fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
     let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
-    println(lowered.stdout.trim())
+    if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
     let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
     println(f"a keep in the frame: {rust.contains("__keep_frame")}")
     for line in rust.lines() {

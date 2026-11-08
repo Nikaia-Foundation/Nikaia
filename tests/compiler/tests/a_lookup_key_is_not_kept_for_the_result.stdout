@@ -1,4 +1,3 @@
-Lowered p.nika to p.rs (target: x86_64-linux)
 a keep in the frame: false
 let named = format!("n_{}", key);
 A,B
