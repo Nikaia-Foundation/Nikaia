@@ -1238,9 +1238,59 @@ pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
         origins_of(receiver, ask, &holes_of, &unaliased, walk);
         return out;
     }
-    add_all(&lent_origins(receiver, ask, &holes_of, &unaliased, walk), &mut out);
-    for arg in args.iter() { add_all(&lent_origins(arg, ask, &holes_of, &unaliased, walk), &mut out); }
+    let named = method_sources(ask, &method);
+    let of_receiver = lent_origins(receiver, ask, &holes_of, &unaliased, walk);
+    if named.is_none() || nikaia_std::index::or(match named.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.contains(&-1)),
+        None => None,
+    }, || true) { add_all(&of_receiver, &mut out); }
+    let mut position: i64 = 0;
+    for arg in args.iter() {
+        let of = lent_origins(arg, ask, &holes_of, &unaliased, walk);
+        if named.is_none() || nikaia_std::index::or(match named.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.contains(&position)),
+            None => None,
+        }, || true) { add_all(&of, &mut out); }
+        position += 1;
+    }
     out
+}
+
+pub(crate) fn method_sources(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, method: &str) -> Option<collections::BTreeSet<i64>> {
+    let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let mut any = false;
+    for key in method_keys(ask.own_methods, method) {
+        let contract = match *nikaia_std::index::get(&ask.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        any = true;
+        if !sources_of_a_method(contract, &mut out) { return None; }
+    }
+    for key in method_keys(ask.library_methods, method) {
+        let contract = match *nikaia_std::index::get(&ask.library.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        any = true;
+        if !sources_of_a_method(contract, &mut out) { return None; }
+    }
+    if !any { return None; }
+    Some(out)
+}
+
+pub(crate) fn sources_of_a_method(contract: &FnContract, into: &mut collections::BTreeSet<i64>) -> bool {
+    if contract.borrows.is_empty() { return false; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
+    for b in contract.borrows.iter() {
+        let mut found = false;
+        let mut at: i64 = 0;
+        for (name, _) in signature.params.iter() {
+            let dotted = format!("{}.", name);
+            if b == name || b.starts_with(&dotted) {
+                into.insert(at - 1);
+                found = true;
+            }
+            at += 1;
+        }
+        if !found { return false; }
+    }
+    true
 }
 
 pub(crate) fn owned_by_every_method(ledger: &Ledger, methods: &MethodIndex, method: &str) -> bool {

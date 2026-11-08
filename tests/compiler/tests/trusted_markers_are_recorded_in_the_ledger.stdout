@@ -1,0 +1,14 @@
+-- two markers, lowered
+    fs::read_to_string is trusted: `trusted: true` at p.nika:5
+    process::Child::wait is trusted: `trusted: true` at p.nika:10
+    process::Child::wait is untrusted
+    process::spawn is untrusted
+-- the ledger
+[fn."config"]
+trusted = ["fs::read_to_string at p.nika:5"]
+[fn."main"]
+trusted = ["process::Child::wait at p.nika:10"]
+-- an unmarked method read
+error[NK1202]: `n > 0` is a claim about data from outside the program.
+-- a marked method read, a claim as any other
+error[NK1300]: `assert(n > 0)` is not proved: nothing before it shows it.

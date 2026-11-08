@@ -1,0 +1,51 @@
+// A rust-library package with `[rust-library] root = "rust/lib.rs"` (ADR-393
+// D7, #1438): `nikaia build` copies `rust/` into the crate's `src/`, writes
+// the lowered package as `src/native/mod.rs` and makes `rust/lib.rs` the
+// crate root with `pub mod native;` below it. Every feature alone builds with
+// the hand-written root (D6), and the Rust crate `rust_library_splice/user`
+// calls its re-exports, its own function and `nikaia_demo::native`.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let from = f"{repo}/tests/compiler/rust_library_splice"
+    process::run("cp", ["-r", f"{from}/demo", f"{from}/user", tmp.clone()])
+    let cache = f"{repo}/target/nikaia-project-tests/rust-library-splice"
+    let mut env: Vec[(String, String)] = []
+    env.push(("CARGO_TARGET_DIR", cache.clone()))
+    env.push(("CARGO_NET_OFFLINE", "true"))
+    let built = process::run(nikaia, ["build"]; dir: f"{tmp}/demo", env: env.clone())
+    println(built.stdout.trim().replace(tmp, "TMP"))
+    if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
+    let made = f"{tmp}/demo/target/rust-library/nikaia_demo"
+    let listed = process::run("sh", ["-c", "find src -type f | sort"]; dir: made)
+    println(listed.stdout.trim())
+    let lib = fs::read_to_string(f"{made}/src/lib.rs", fs::Root::Anywhere)
+    let lines: Vec[String] = lib.lines().collect()
+    println(f"src/lib.rs ends: {lines[lines.len() - 1]}")
+    let native = fs::read_to_string(f"{made}/src/native/mod.rs", fs::Root::Anywhere)
+    for line in native.lines() {
+        if line.starts_with("#[cfg(") { println(f"src/native/mod.rs: {line.split(" {").next() ?? ""}") }
+    }
+    let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: env.clone())
+    println(ran.stdout.trim())
+    if ran.code != 0 { println(ran.stderr.trim()) }
+    process::run("rm", ["-rf", tmp])
+}

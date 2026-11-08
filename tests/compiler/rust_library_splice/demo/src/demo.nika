@@ -1,0 +1,18 @@
+// What the hand-written root re-exports, and what `../user` reaches under
+// `native`.
+
+/// A point on the plane.
+pub struct Point {
+    pub x: i64,
+    pub y: i64,
+}
+
+/// The area of a square.
+pub fn area(side: i64) -> i64 sync {
+    return side * side
+}
+
+/// The volume of a cube: the root of the feature `cube`.
+pub fn cube(side: i64) -> i64 sync {
+    return side * side * side
+}

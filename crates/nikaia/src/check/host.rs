@@ -429,8 +429,12 @@ impl CheckWalkedPasses for Host<'_> {
 
     fn proved(&self, facts: &CheckFacts) -> CheckWalkedProved {
         let keys: BTreeSet<(i64, i64)> = facts.claims.keys().cloned().collect();
-        let comptimes =
-            crate::prove::comptimes_of(self.parsed, &facts.comptime_values, &facts.whole_lets);
+        let comptimes = crate::prove::comptimes_of(
+            self.parsed,
+            &facts.comptime_values,
+            &facts.whole_lets,
+            &facts.method_callees,
+        );
         let runner = |call: &Expr, callee: &str, args: &[i64]| {
             self.run_for_a_claim(call, callee, args, &comptimes.by_name)
         };

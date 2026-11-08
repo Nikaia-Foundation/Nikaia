@@ -40,6 +40,7 @@ signature = "(dna: String, k: i64) -> collections::HashMap[ref(dna) String, Tall
 throws = ["io::IoError"]
 locks = true
 panics = true
+trusted = ["io::read_to_string at main.nika:155"]
 signature = "()"
 
 [fn."report_fragment"]

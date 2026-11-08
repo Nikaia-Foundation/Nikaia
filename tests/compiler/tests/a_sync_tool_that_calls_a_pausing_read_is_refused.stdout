@@ -1,0 +1,6 @@
+-- a program
+error[NK2202]: `size` is `sync`, but it calls `fs::read_to_string`, which can pause.
+error[NK2202]: `count` is `sync`, but it calls `fs::walk`, which can pause.
+-- a tools file
+error[NK2202]: `size` is `sync`, but it calls `fs::read_to_string`, which can pause.
+error[NK2202]: `count` is `sync`, but it calls `fs::walk`, which can pause.

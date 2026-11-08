@@ -1,0 +1,9 @@
+error[NK1109]: `process::Child::wait` has no option called `bogus`.
+  --> tests/a_std_method_option_is_checked.nika:8:5
+   |
+ 8 |     let out = child.wait(bogus: 3)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Its options are `trusted`.
+   = help: Use one of the options it has.
+1 type error

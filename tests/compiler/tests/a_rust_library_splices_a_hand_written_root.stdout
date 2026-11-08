@@ -1,0 +1,7 @@
+rust-library: TMP/demo/target/rust-library/nikaia_demo
+src/lib.rs
+src/native/mod.rs
+src/words.rs
+src/lib.rs ends: pub mod native;
+src/native/mod.rs: #[cfg(feature = "cube")] pub fn cube(side: i64) -> i64
+area 9, cube 8, a square of area 16, point (1, 2)

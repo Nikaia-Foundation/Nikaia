@@ -199,6 +199,48 @@ fn join(
             &computed
         }
     };
+    // **A method call that wrote `trusted: true`** (ADR-365 D2), and one
+    // that did not, by the key the checker resolved its receiver to: the
+    // walk is Nikaia (`tools/trust.nika`).
+    for (file, unit) in package.iter().zip(checked) {
+        let own_file = only.is_none_or(|only| std::ptr::eq(*file, only));
+        let calls = nikaia_std::tools::trust::source_calls(
+            &file.program,
+            &file.interner,
+            library,
+            &unit.facts.method_callees,
+            &|expr: &crate::ast::Expr| crate::emit::literal_expressions(file, expr),
+        );
+        for call in calls.iter().filter(|call| call.method) {
+            let Some((key, contract)) = library.lookup(&call.source) else {
+                continue;
+            };
+            let Some(provenance) = contract.provenance else {
+                continue;
+            };
+            let (provenance, marked) = if call.marked {
+                let at = Span {
+                    start: call.at as u32,
+                    end: call.at as u32,
+                };
+                (Provenance::Trusted, Some(own_file.then_some(at)))
+            } else {
+                (provenance, None)
+            };
+            let same = |r: &Reason| {
+                r.source == key
+                    && r.provenance == provenance
+                    && r.marked.is_some() == marked.is_some()
+            };
+            if !reasons.iter().any(same) {
+                reasons.push(Reason {
+                    source: key,
+                    provenance,
+                    marked,
+                });
+            }
+        }
+    }
     let mut unresolved = false;
     for calls in checked.iter().flat_map(|c| c.methods.values()) {
         unresolved |= calls.unresolved;

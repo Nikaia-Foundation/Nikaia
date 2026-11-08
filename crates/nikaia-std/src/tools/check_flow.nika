@@ -124,6 +124,11 @@ pub struct CheckFlow {
     pub option_values: Vec[i64],
     /// Which of them is a text literal, in the same order.
     pub option_literals: Vec[bool],
+    /// **The options a method call names after its `;`** (#1446), by its
+    /// receiver's node, until the call resolves: each one's name, type,
+    /// address and whether it is a text literal. A witness (`within:`,
+    /// `after:`), `on_timeout:` and a DSL driver's options are not among them.
+    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool)]],
     /// The concrete type's name and the field the current unrolling stands at
     /// (ADR-304 D7); `null` in the generic body.
     pub unrolling: CheckUnrolling?,
@@ -404,6 +409,7 @@ impl CheckFlow {
             computes: computes,
             option_values: Vec(),
             option_literals: Vec(),
+            method_passed: collections::BTreeMap(),
             unrolling: null,
             harvesting: harvesting,
             inside_a_comptime: false,

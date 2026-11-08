@@ -370,6 +370,25 @@ fn package_ledger_checked(
     // from - and recorded for every package, so that the ledger a dependency's
     // own build writes says what it was derived from.
     own.sources = sources;
+    // **Each `trusted: true` with its place** (ADR-365 D2, Part III 13.5
+    // `trusted`), here for the same reason: the place is a file and a line.
+    // The walk and the key are Nikaia (`tools/trust.nika`).
+    let empty = crate::check::CheckFacts::empty();
+    for (at, unit) in units.iter().enumerate() {
+        let facts = checked.get(at).map_or(&empty, |c| &c.facts);
+        let calls = nikaia_std::tools::trust::source_calls(
+            &unit.parsed.program,
+            &unit.parsed.interner,
+            library,
+            &facts.method_callees,
+            &|expr: &crate::ast::Expr| crate::emit::literal_expressions(&unit.parsed, expr),
+        );
+        let file = unit.path.file_name().map_or_else(
+            || unit.path.display().to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        nikaia_std::tools::trust::mark_trusted(&mut own, &calls, &file, &unit.source);
+    }
     (own, Some(checked), noted)
 }
 

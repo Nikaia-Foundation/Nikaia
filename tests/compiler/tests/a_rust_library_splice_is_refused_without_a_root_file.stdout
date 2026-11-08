@@ -1,0 +1,24 @@
+not_a_library: exit 1
+error[NK1348]: `[rust-library]` splices hand-written Rust into the crate a rust-library build writes, and this package is not built as one.
+  --> TMP/not_a_library/nikaia.toml:9:1
+   |
+ 9 | [rust-library]
+   | ^^^^^^^^^^^^^^
+   |
+   = help: Write `artifact = "rust-library"` under `[build]`, or remove `[rust-library]`.
+no_root: exit 1
+error[NK1348]: `[rust-library]` needs `root`, the hand-written Rust file that becomes the crate root.
+  --> TMP/no_root/nikaia.toml:9:1
+   |
+ 9 | [rust-library]
+   | ^^^^^^^^^^^^^^
+   |
+   = help: Write `root = "rust/lib.rs"` under `[rust-library]`, naming a file of the package.
+missing_root: exit 1
+error[NK1348]: `[rust-library] root` names `rust/lib.rs`, which is not a file of the package.
+   --> TMP/missing_root/nikaia.toml:10:1
+    |
+ 10 | root = "rust/lib.rs"
+    | ^^^^
+    |
+    = help: Name the hand-written Rust file that becomes the crate root, relative to `nikaia.toml`.

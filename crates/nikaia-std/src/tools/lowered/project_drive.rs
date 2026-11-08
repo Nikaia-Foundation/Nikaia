@@ -93,6 +93,7 @@ pub trait ProjectDriveHost {
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn gen_dir(&self) -> fs::Path;
     fn write_publishable(&self) -> Result<(), Box<dyn std::error::Error>>;
+    fn write_spliced(&self, src: &std::path::Path, lowered: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn switches_path(&self) -> fs::Path;
     fn own_dir(&self) -> fs::Path;
     fn choices(&self) -> (String, String);
@@ -104,6 +105,7 @@ pub trait ProjectDriveHost {
     fn write_workspace(&self, rust: &[String]) -> Result<fs::Path, Box<dyn std::error::Error>>;
     fn member_manifest(&self, at: i64, rust: &str) -> Result<String, Box<dyn std::error::Error>>;
     fn features(&self) -> Vec<ManifestFeature>;
+    fn rust_library(&self) -> Option<ManifestRustLibrary>;
     fn manifest_text(&self) -> (String, String);
     fn runs_without_cargo(&self, link_flags: &[String]) -> bool;
     fn compile_fast(&self, rust: &str) -> Result<Option<ProjectDriveFast>, Box<dyn std::error::Error>>;
@@ -172,6 +174,10 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         }
         let checked = features_lists_checked(&features, &nikaia_std::index::or(host.package_name(), || "".into()));
         if checked.is_some() { return Ok((project_drive_features_refused(host, &match checked { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(String::from("no refusal")), &"project_drive_drive_to")) }), None)); }
+    }
+    if !host.tests_build() && (subcommand == "build" || subcommand == "run") {
+        let splice_refused = project_drive_splice_checked(host, rust_library);
+        if splice_refused != 0 { return Ok((splice_refused, None)); }
     }
     let entry = host.entry();
     let not_there = format!("{} is not there. A project's entry point is `src/main.nika`.", nikaia_std::fs::path::display(&(entry)));
@@ -488,7 +494,11 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
         let dir = nikaia_std::fs::path::join(&(made), std::path::Path::new(&(crate_name)));
         project_drive_make_dir(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src"))))?;
         host.write_if_changed(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("Cargo.toml"))), &manifest)?;
-        host.write_if_changed(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src")))), std::path::Path::new(&("lib.rs"))), &lowered)?;
+        if at > 0 || host.rust_library().is_none() {
+            host.write_if_changed(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src")))), std::path::Path::new(&("lib.rs"))), &lowered)?;
+            continue;
+        }
+        host.write_spliced(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("src"))), &lowered)?;
     }
     let crate_dir = nikaia_std::fs::path::join(&(made), std::path::Path::new(&(project_drive_rust_crate(&nikaia_std::index::get(&members, 0).name))));
     let applied = match checked { Some(__nikaia_value) => __nikaia_value, None => {
@@ -519,6 +529,113 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
     }
     nikaia_std::io::println(format_args!("rust-library: {}", nikaia_std::fs::path::display(&(crate_dir))))?;
     Ok(0)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn project_drive_splice_checked<H: ProjectDriveHost>(host: &H, rust_library: bool) -> i32 {
+    let table = match host.rust_library() { Some(__nikaia_value) => __nikaia_value, None => { return 0; } };
+    let (path, toml) = host.manifest_text();
+    let mut message: String = String::from("");
+    let mut help: String = String::from("");
+    let mut key: String = String::from("");
+    if !rust_library {
+        message = String::from("`[rust-library]` splices hand-written Rust into the crate a rust-library build writes, and this package is not built as one.");
+        help = String::from("Write `artifact = \"rust-library\"` under `[build]`, or remove `[rust-library]`.");
+    } else {
+        let written = nikaia_std::index::or(table.root, || "".into());
+        let manifest: fs::Path = std::path::PathBuf::from(path.to_string());
+        let package = match nikaia_std::fs::path::parent(&(manifest)) { Some(__nikaia_value) => __nikaia_value, None => { return 0; } };
+        let meta = match fs::metadata(&nikaia_std::fs::path::join(&(package), std::path::Path::new(&(written))), &fs::Root::Anywhere) {
+            Ok(value) => Some(value),
+            Err(_error) => { None },
+        };
+        if written.is_empty() {
+            message = String::from("`[rust-library]` needs `root`, the hand-written Rust file that becomes the crate root.");
+            help = String::from("Write `root = \"rust/lib.rs\"` under `[rust-library]`, naming a file of the package.");
+        } else if !nikaia_std::index::or(match meta.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.is_file()),
+            None => None,
+        }, || false) {
+            message = format!("`[rust-library] root` names `{}`, which is not a file of the package.", written);
+            help = String::from("Name the hand-written Rust file that becomes the crate root, relative to `nikaia.toml`.");
+            key = String::from("root");
+        }
+    }
+    if message.is_empty() { return 0; }
+    let span = project_drive_splice_span(&toml, &key);
+    let shown = Shown { warning: false, code: String::from("NK1348"), message, notes: vec![], help: Some(help), span, labels: vec![] };
+    host.eprint(&rendered(&shown, &path, &toml));
+    1
+}
+
+pub fn project_drive_splice_span(toml: &str, key: &str) -> Span {
+    let mut offset: i64 = 0;
+    let mut inside = false;
+    let mut header: i64 = 0;
+    for line in toml.split("\n") {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            inside = trimmed == "[rust-library]";
+            if inside { header = offset; }
+        } else if inside && !key.is_empty() {
+            let name = nikaia_std::index::or(trimmed.split('=').next(), || "");
+            if name.trim() == key {
+                let start = offset + line.len() as i64 - line.trim_start().len() as i64;
+                return Span { start: u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(start + key.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+            }
+        }
+        offset += line.len() as i64 + 1;
+    }
+    Span { start: u32::try_from(header).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(header + 14).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }
+}
+
+pub async fn project_drive_spliced(root: &std::path::Path, file: &ManifestFile, src: &std::path::Path, lowered: &str) -> Result<(), nikaia_std::error::Thrown<ProjectDriveRefusal>> {
+    let table = match file.rust_library.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(String::from("the manifest has no `[rust-library]`")), &"project_drive_spliced")) };
+    let hand_path = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(nikaia_std::index::or(table.root.as_deref(), || ""))));
+    let from = nikaia_std::index::or(nikaia_std::fs::path::parent(&(hand_path)), || nikaia_std::fs::path::clone(&(root)).into());
+    let files = match fs::walk(&from, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("reading {}: {}", nikaia_std::fs::path::display(&(from)), error)), &"project_drive_spliced")) },
+    };
+    for name in files.iter() {
+        let to = nikaia_std::fs::path::join(&(src), name);
+        let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(from), name), &fs::Root::Anywhere).await {
+            Ok(value) => value,
+            Err(error) => {
+                project_drive_make_dir(&nikaia_std::index::or(nikaia_std::fs::path::parent(&(to)), || nikaia_std::fs::path::clone(&(src)).into()))?;
+                match fs::copy(&nikaia_std::fs::path::join(&(from), name), &to, &fs::Root::Anywhere) {
+                    Ok(_) => {},
+                    Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("copying {}: {}", nikaia_std::fs::path::display(&(nikaia_std::fs::path::join(&(from), name))), error)), &"project_drive_spliced")); },
+                };
+                continue;
+            },
+        };
+        project_drive_written(&to, &text).await?;
+    }
+    let hand = match fs::read_to_string(&hand_path, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("reading {}: {}", nikaia_std::fs::path::display(&(hand_path)), error)), &"project_drive_spliced")) },
+    };
+    project_drive_written(&nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(src), std::path::Path::new(&(table.native)))), std::path::Path::new(&("mod.rs"))), lowered).await?;
+    let parted = if hand.is_empty() || hand.ends_with("\n") { "" } else { "\n" };
+    project_drive_written(&nikaia_std::fs::path::join(&(src), std::path::Path::new(&("lib.rs"))), &format!("{}{}\npub mod {};\n", hand, parted, table.native)).await?;
+    Ok(())
+}
+
+pub(crate) async fn project_drive_written(path: &std::path::Path, text: &str) -> Result<(), nikaia_std::error::Thrown<ProjectDriveRefusal>> {
+    project_drive_make_dir(&match nikaia_std::fs::path::parent(&(path)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("{} has no directory", nikaia_std::fs::path::display(&(path)))), &"project_drive_written")) })?;
+    let was = match fs::read_to_string(path, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { String::from("\u{0}") },
+    };
+    if was != text {
+        match fs::write(path, &fs::Root::Anywhere, text, false, true).await {
+            Ok(_) => {},
+            Err(error) => { return Err(nikaia_std::error::throwing(ProjectDriveRefusal::Failed(format!("writing {}: {}", nikaia_std::fs::path::display(&(path)), error)), &"project_drive_written")); },
+        };
+    }
+    Ok(())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -654,8 +771,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple49841| {
-        let (a, b) = __nikaia_tuple49841;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple55952| {
+        let (a, b) = __nikaia_tuple55952;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

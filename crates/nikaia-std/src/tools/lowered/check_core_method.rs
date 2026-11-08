@@ -680,7 +680,7 @@ pub fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorl
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
     let found = check_core_method_deadline(&state, world, receiver, config, walked);
-    check_core_method_option_names(state, world, receiver, &name, config, span);
+    state.flow.method_passed.remove(&(id_of(receiver) as i64));
     if !code_keys.is_empty() {
         let last = args.len() as i64 - 1;
         check_core_places_stored_keys(state, world, host, Some(nikaia_std::index::get(&args, nikaia_std::index::at(last))), &code_keys);
@@ -702,25 +702,6 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
     match found {
         Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: Box::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } } },
         _ => found,
-    }
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_option_names(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, name: &str, config: &[ConfigArg], span: &Span) {
-    if config.is_empty() || state.dsl_drivers.contains(name) { return; }
-    let node = id_of(receiver) as i64;
-    let recorded = match state.facts.method_options.get(&(node, name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let mut names: Vec<String> = vec![];
-    for (option, _) in recorded.iter() { names.push(option.to_string()); }
-    let key = match state.facts.method_callees.get(&node) { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
-    let witness = check_core_method_witness(world, name, config);
-    let on_timeout = check_core_method_on_timeout(world, name, config, witness);
-    let mut at: i64 = 0;
-    while at < config.len() as i64 {
-        let written = world.words.resolve(nikaia_std::index::get(&config, (at) as usize).name).to_string();
-        if at != witness && at != on_timeout && !nikaia_std::list::contains(&names, &written) { state.no_such_option_among(&key, &written, &names, span); }
-        at += 1;
     }
 }
 
@@ -766,11 +747,17 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     }
     let witness = check_core_method_witness(world, &name, config);
     let on_timeout = check_core_method_on_timeout(world, &name, config, witness);
+    let driver = state.dsl_drivers.contains(&name);
+    let mut passed: Vec<(String, Ty, i64, bool)> = vec![];
     let mut at: i64 = 0;
     while at < config.len() as i64 {
-        if at != witness && at != on_timeout { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(at)).value, span); }
+        if at != witness && at != on_timeout {
+            let ty = check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(at)).value, span);
+            if !driver { passed.push((world.words.resolve(nikaia_std::index::get(&config, nikaia_std::index::at(at)).name).to_string(), ty, id_of(&nikaia_std::index::get(&config, nikaia_std::index::at(at)).value) as i64, a_text_literal_expr(&nikaia_std::index::get(&config, nikaia_std::index::at(at)).value))); }
+        }
         at += 1;
     }
+    if !passed.is_empty() { state.flow.method_passed.insert(id_of(receiver) as i64, passed); }
     let entered: Option<String> = state.grammar_entry(world, receiver, method);
     if entered.is_some() {
         let entry: String = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };

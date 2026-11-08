@@ -235,6 +235,11 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         let provenance = contract.provenance?.clone() ?? return out
         out.push_str(f"provenance = \"{provenance.as_str()}\"\n")
     }
+    // **Each `trusted: true` with its place** (ADR-365 D2, ADR-010 D3): a
+    // diff of the ledger shows a new marker as a review item.
+    if contract.trusted.len() > 0 {
+        out.push_str(f"trusted = [{quoted_all(contract.trusted)}]\n")
+    }
     if contract.views.len() > 0 {
         let mut views: Vec[String] = []
         for held in contract.views {

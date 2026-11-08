@@ -80,8 +80,23 @@ impl CheckState {
             return
         }
         let mut options: Vec[(String, String)] = []
-        for option in signature.config {
+        for option in lowered_options(contract) {
+            // **`trusted:` at a source is said to the compiler** (ADR-365
+            // D2), as `options_of` drops it at a call by name: the method
+            // below reads the same bytes either way.
+            if contract.provenance != null && option.name == "trusted" {
+                continue
+            }
+            // **Text for an owned `String`** is built (#1446), as a
+            // function's default is (#498): the literal below is a `&str`.
+            if option.default.starts_with("\"") && a_plain_string(option.ty) {
+                options.push((option.name.clone(), f"String::from({option.default})"))
+                continue
+            }
             options.push((option.name.clone(), option.default.clone()))
+        }
+        if options.len() == 0 {
+            return
         }
         let key = (on, world.words.resolve(method).clone())
         self.facts.method_options.insert(key, options)

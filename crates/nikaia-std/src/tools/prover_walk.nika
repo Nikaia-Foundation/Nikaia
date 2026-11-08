@@ -403,7 +403,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
             match target {
                 Expr::Variable(name, _) => {
                     let n = words.resolve(name).clone()
-                    let tainted = from_outside(value, scope.tainted, words, library, holes_of) || (op != null && scope.tainted.contains(n))
+                    let tainted = from_outside(value, scope.tainted, words, library, walk.state.method_callees, holes_of) || (op != null && scope.tainted.contains(n))
                     if !prover_assigned(walk, n, op, value, span, scope, words) {
                         scope.rebind(walk.arena, n)
                         if op == null && !tainted {
@@ -594,7 +594,7 @@ fn prover_field_list(value: ref Expr?, field_name: ref String, words: ref winnow
 /// A `let`: what its value makes known of the names it binds.
 fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], mutable: bool, ty: ref Type?, value: ref Expr, span: Span, mut scope: ProverScope, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, value, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    let tainted = from_outside(value, scope.tainted, words, library, holes_of)
+    let tainted = from_outside(value, scope.tainted, words, library, walk.state.method_callees, holes_of)
     // **The calls with known arguments the value reads** (ADR-359 D11), kept
     // with the name it binds, so a claim over it can have them run.
     let mut known_calls: collections::BTreeSet[String] = collections::BTreeSet()
@@ -1075,7 +1075,7 @@ fn prover_all_plain(exprs: ref Vec[Expr]) -> bool {
 /// through its invariant; over anything else what it changes is unknown.
 fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], iter: ref Expr, body: ref Block, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync) {
     prover_expr(walk, iter, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
-    let tainted = from_outside(iter, scope.tainted, words, library, holes_of)
+    let tainted = from_outside(iter, scope.tainted, words, library, walk.state.method_callees, holes_of)
     // What a turn changes is unknown at its head and past the loop.
     let mut changed = assigned_in(body, words)
     prover_lengths_changed(changed, body, scope, walk.state.readers, words)

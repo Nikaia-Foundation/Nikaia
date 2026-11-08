@@ -1,0 +1,10 @@
+// An option at a call of a `std` method is checked against its entry, as at
+// a function (#1446, Part I 5.1): `process::Child::wait` has only
+// `trusted:`, so `bogus:` is `NK1109`.
+use std::process
+
+fn main() throws {
+    let mut child = process::spawn("true", [])
+    let out = child.wait(bogus: 3)
+    println(out.stdout)
+}

@@ -1,0 +1,10 @@
+# `[rust-library]` in a package built as a C library: NK1348 (ADR-393 D7).
+[package]
+name = "not_a_library"
+version = "0.1.0"
+
+[build]
+artifact = "c-library"
+
+[rust-library]
+root = "rust/lib.rs"
