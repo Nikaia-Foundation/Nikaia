@@ -5,3 +5,6 @@ src/words.rs
 src/lib.rs ends: pub mod native;
 src/native/mod.rs: #[cfg(feature = "cube")] pub fn cube(side: i64) -> i64
 area 9, cube 8, a square of area 16, point (1, 2)
+half of 8: 4
+half of 7: odd
+half of -2: negative

@@ -172,7 +172,7 @@ pub fn cpu_config(words: ref ProjectWords, target: Target) -> Vec[String] {
 /// The cache's view of this build (ADR-021 D5): the key of
 /// `Settings::choices`, whose backend is `"rust"`. `cpu_key` is
 /// `Settings::cpu_key`'s answer, read only where a level is named.
-pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String) -> String {
+pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String, crate_root: ref String) -> String {
     let tests = if words.tests { "/tests" } else { "" }
     // A build that lets a refuted claim through must not hand its
     // lowering to one that refuses it.
@@ -185,11 +185,15 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     let through_loops = if through_loops_on { "/prove-through-loops:on" } else { "" }
     // A library's lowering carries its entry points' wrappers,
     // named by the prefix.
-    let library = if words.artifact == "c-library" { f"/c-library:{words.symbol_prefix}" } else { "" }
+    // A rust-library's error sums are `pub` (ADR-393 D1, #1447).
+    let library = if words.artifact == "c-library" { f"/c-library:{words.symbol_prefix}" } else if words.artifact == "rust-library" { "/rust-library" } else { "" }
     // A `comptime` that reads `target::has` answers for the level
     // (ADR-371 D6), so the lowering is kept per level.
     let cpu = if words.cpu != null { f"/cpu:{cpu_key}" } else { "" }
-    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{through_loops}{library}{cpu}"
+    // The package's items under a hand-written root are written below
+    // another path (ADR-393 D7, #1447).
+    let root = if crate_root == "crate" { "" } else { f"/root:{crate_root}" }
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{through_loops}{library}{cpu}{root}"
 }
 
 /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.

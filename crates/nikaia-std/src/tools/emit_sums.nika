@@ -124,15 +124,17 @@ impl EmitState {
         return out
     }
 
-    /// The path to a generated sum from inside a function: from the crate root
-    /// in a program, whose modules import nothing of it; bare in a file of
-    /// `std` or the tools package, whose modules import the package root, where
-    /// the sum's own file puts it (`emit_sums_written`, #1360).
+    /// The path to a generated sum from inside a function: from the package's
+    /// root in a program, whose modules import nothing of it (`crate`, or
+    /// `crate::<native>` under a hand-written root, ADR-393 D7, #1447); bare
+    /// in a file of `std` or the tools package, whose modules import the
+    /// package root, where the sum's own file puts it (`emit_sums_written`,
+    /// #1360).
     pub fn sum_root(ref self) -> String {
         if self.is_std {
             return ""
         }
-        return "crate::"
+        return f"{self.crate_root}::"
     }
 
     /// The type a member of a sum is held as, with the lifetime parameters of
@@ -176,7 +178,9 @@ impl EmitState {
             }
             // **`pub` in a file of `std` or the tools package**: its functions
             // are called from the Rust around it, which matches on the sum.
-            let shared = if self.is_std { "pub " } else { "" }
+            // So are a rust-library's, from the Rust crate that depends on it
+            // (ADR-393 D1, #1447).
+            let shared = if self.is_std || self.offered_to_rust { "pub " } else { "" }
             out.push(f"// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[allow(non_camel_case_types)]\n{shared}enum {name}{decl} {{\n")
             for member in members {
                 let variant = sum_variant(member)
