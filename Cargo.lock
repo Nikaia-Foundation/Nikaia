@@ -520,6 +520,7 @@ dependencies = [
  "regex-automata",
  "rustc-hash",
  "shared-bytes",
+ "task-block",
  "tether",
  "text-key",
  "unicode-normalization",
@@ -830,6 +831,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "task-block"
+version = "0.1.0"
+dependencies = [
+ "allocator-api2",
 ]
 
 [[package]]

@@ -1,11 +1,12 @@
 //! 1BRC's aggregation on fallible collections: the same steps as
-//! `brc_std.rs`, with every table, list and text taken from a budget that may
-//! refuse (ADR-327 D5).
+//! `brc_std.rs`, with every table, list and text placed in the task's block
+//! (ADR-327 D5, D12); one long `main` runs no task, so the handle places them
+//! outside, and what is counted is the handle and the fallible collections.
 
 #[path = "../budget.rs"]
 mod budget;
 
-use budget::{Budget, List, Map};
+use budget::{List, Map, BUDGET};
 use std::fmt::Write;
 
 struct Stats {
@@ -36,15 +37,12 @@ fn tenths(field: &[u8]) -> i64 {
 fn main() {
     let path = std::env::args().nth(1).expect("the measurements file");
     let data = std::fs::read(path).expect("read the measurements");
-    let mut stations: Map<&[u8], Stats> = Map::with_hasher_in(Default::default(), Budget);
+    let mut stations: Map<&[u8], Stats> = Map::with_hasher_in(Default::default(), BUDGET);
     for line in data.split(|&b| b == b'\n') {
         let Some(at) = line.iter().position(|&b| b == b';') else {
             continue;
         };
         let t = tenths(&line[at + 1..]);
-        if stations.len() == stations.capacity() && stations.try_reserve(1).is_err() {
-            budget::spent()
-        }
         let stats = stations.entry(&line[..at]).or_insert(Stats {
             min: t,
             max: t,
@@ -56,7 +54,7 @@ fn main() {
         stats.sum += t;
         stats.count += 1;
     }
-    let mut names: List<&[u8]> = List::new_in(Budget);
+    let mut names: List<&[u8]> = List::new_in(BUDGET);
     for name in stations.keys() {
         budget::push(&mut names, *name);
     }
