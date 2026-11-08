@@ -88,6 +88,144 @@ pub fn says_trusted(names: ref winnow_grammar::InternerContext, config: ref Vec[
     return false
 }
 
+/// **One call of a source** (ADR-365 D2): the function it stands in and
+/// the source, both as the ledger keys them, whether it is a method, and
+/// whether it wrote `trusted: true`. `at` is the first byte of the
+/// statement it stands in, the place `--trust` names too.
+pub struct SourceCall {
+    pub function: String,
+    pub source: String,
+    pub method: bool,
+    pub marked: bool,
+    pub at: i64,
+}
+
+/// **Every call of a source in a file** (ADR-365 D2, ADR-010 D3), in each
+/// function and method body, its lambdas and its tasks included. A call by
+/// name is a source where `library` says so; a method call where the
+/// checker resolved it (`callees`, by the receiver's node) to an entry with
+/// a provenance.
+pub fn source_calls(program: ref Program, names: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[SourceCall] {
+    let mut out: Vec[SourceCall] = []
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, body, .. } => {
+                let key = key_of_function(name, "", names)
+                sc_block(key, body, names, library, callees, holes_of, out)
+            }
+            Item::Impl { target, methods, .. } => {
+                let owner = names.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => {
+                            let key = key_of_function(name, owner, names)
+                            sc_block(key, body, names, library, callees, holes_of, out)
+                        }
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+fn sc_block(function: ref String, block: ref Block, names: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync, mut out: Vec[SourceCall]) {
+    for stmt in block.stmts {
+        let at = stmt.span.start as i64
+        for expr in check_visit_stmt(stmt.node) {
+            sc_expr(function, expr, at, names, library, callees, holes_of, out)
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            sc_block(function, inner, names, library, callees, holes_of, out)
+        }
+    }
+}
+
+fn sc_expr(function: ref String, expr: ref Expr, at: i64, names: ref winnow_grammar::InternerContext, library: ref Ledger, callees: ref collections::BTreeMap[i64, String], holes_of: fn(ref Expr) -> Vec[Expr] sync, mut out: Vec[SourceCall]) {
+    match expr {
+        Expr::Call { func, config, .. } => {
+            let name = match func {
+                Expr::Variable(one, _) => names.resolve(one).clone(),
+                Expr::Path(segments, _) => written_path(names, segments),
+                else => "",
+            }
+            if a_source(library, name) {
+                out.push(sc_call(function, name, false, config, at, names))
+            }
+        }
+        Expr::MethodCall { receiver, config, .. } => {
+            let key: String = callees.get(id_of(receiver) as i64)?.clone() ?? ""
+            if a_source(library, key) {
+                out.push(sc_call(function, key, true, config, at, names))
+            }
+        }
+        // **A task's body is the function's text** (ADR-010 D3): a marker
+        // there is written in it as anywhere else.
+        Expr::Spawn { body, .. } => {
+            for inner in check_visit_expr_blocks(body) {
+                sc_block(function, inner, names, library, callees, holes_of, out)
+            }
+        }
+        else => {}
+    }
+    if check_visit_has_holes(expr) {
+        for hole in holes_of(expr) {
+            for inner in check_visit_preorder(hole) {
+                sc_expr(function, inner, at, names, library, callees, holes_of, out)
+            }
+        }
+    }
+}
+
+fn sc_call(function: ref String, source: ref String, method: bool, config: ref Vec[ConfigArg], at: i64, names: ref winnow_grammar::InternerContext) -> SourceCall {
+    return SourceCall { function: function.clone(), source: source.clone(), method: method, marked: says_trusted(names, config), at: at }
+}
+
+/// **The `trusted` key of each function this file holds** (Part III 13.5,
+/// ADR-365 D2): every marked call, `SOURCE at FILE:LINE`, sorted by place.
+/// `file` is the file as the ledger's `[sources]` names it. A function the
+/// ledger has no entry for gets none.
+pub fn mark_trusted(mut ledger: Ledger, calls: ref Vec[SourceCall], file: ref String, text: ref String) {
+    let mut marks: Vec[(String, i64, String)] = []
+    for call in calls {
+        if call.marked && ledger.functions.contains_key(call.function) {
+            let line = line_of_byte(text, call.at)
+            marks.push((call.function.clone(), call.at, f"{call.source} at {file}:{line}"))
+        }
+    }
+    marks.sort()
+    for (function, _, mark) in marks {
+        let mut entry = ledger.functions.get(function)?.clone() ?? continue
+        entry.trusted.push(mark.clone())
+        ledger.functions.insert(function.clone(), entry)
+    }
+}
+
+/// Whether `library` describes `name` as a source: an entry with a
+/// provenance (ADR-010 D2).
+fn a_source(library: ref Ledger, name: ref String) -> bool {
+    let contract = library.functions[name] ?? return false
+    return contract.provenance != null
+}
+
+/// The 1-based line the byte `at` of `text` stands on.
+fn line_of_byte(text: ref String, at: i64) -> i64 {
+    let mut line = 1
+    let mut i = 0
+    for b in text.bytes() {
+        if i >= at {
+            break
+        }
+        if b == 10 {
+            line += 1
+        }
+        i += 1
+    }
+    return line
+}
+
 /// A call that wrote a root the review wants to see, where it stands.
 pub struct Place {
     pub line: i64,
@@ -922,9 +1060,13 @@ fn tm_deps_of(value: ref Expr, words: ref winnow_grammar::InternerContext, libra
         Expr::Index { base, index, .. } => tm_join(tm_deps_of(base, words, library, env, walk), tm_deps_of(index, words, library, env, walk)),
         Expr::Coalesce { value, fallback, .. } => tm_join(tm_deps_of(value, words, library, env, walk), tm_deps_of(fallback, words, library, env, walk)),
         Expr::Call { func, args, config, .. } => tm_call_deps(func, args, config, words, library, env, walk),
-        Expr::MethodCall { receiver, method, args, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
             let name = words.resolve(method)
-            if env.sources.contains(name) || env.own.contains(name) {
+            // **A source method marked `trusted: true`** (ADR-365 D2): the
+            // operator chose what it hands back, as at a call by name.
+            if env.sources.contains(name) && !env.own.contains(name) && says_trusted(words, config) {
+                tm_nothing()
+            } else if env.sources.contains(name) || env.own.contains(name) {
                 tm_never()
             } else {
                 tm_join(tm_deps_of(receiver, words, library, env, walk), tm_all_deps(args, words, library, env, walk))

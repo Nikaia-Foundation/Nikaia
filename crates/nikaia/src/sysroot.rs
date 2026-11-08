@@ -306,8 +306,14 @@ pub fn lower_std_module(path: &Path) -> Result<String> {
         .iter()
         .filter(|finding| matches!(finding.severity, crate::check::Severity::Error))
         .collect();
-    if !refusals.is_empty() {
-        anyhow::bail!("{}", every_refusal(path, &source, &refusals));
+    let pauses = crate::contracts::sync::check(&parsed, &own, &library);
+    if !refusals.is_empty() || !pauses.is_empty() {
+        let mut said = String::new();
+        if !refusals.is_empty() {
+            said.push_str(&every_refusal(path, &source, &refusals));
+        }
+        said.push_str(&sync_refusals(path, &source, &pauses));
+        anyhow::bail!("{said}");
     }
     let lowered =
         crate::emit::emit_std_against(&parsed, &beside, &own, &crate::contracts::Ledger::blank())
@@ -337,6 +343,20 @@ fn every_refusal(path: &Path, source: &str, refusals: &[&crate::check::Finding])
         refusals,
         &Render,
     )
+}
+
+/// **Every broken `sync` promise of a file** (`NK2202`, #1387), as
+/// `nikaia check` says them, in file order; empty where there is none.
+fn sync_refusals(
+    path: &Path,
+    source: &str,
+    pauses: &[crate::contracts::sync::Violation],
+) -> String {
+    let shown = path.display().to_string();
+    pauses
+        .iter()
+        .map(|pause| crate::diagnostics::render_sync_violation(pause, &shown, source))
+        .collect()
 }
 
 /// **The toolchain's Nikaia, lowered as the one package it is** (ADR-294).
@@ -617,7 +637,8 @@ pub fn bounds_tools(
         let refused = checked
             .findings
             .iter()
-            .any(|finding| matches!(finding.severity, crate::check::Severity::Error));
+            .any(|finding| matches!(finding.severity, crate::check::Severity::Error))
+            || !crate::contracts::sync::check(&parsed[at], &own, &library).is_empty();
         if refused {
             return format!("refused: {path}\n");
         }
@@ -812,12 +833,18 @@ fn lower_package(
             .iter()
             .filter(|finding| matches!(finding.severity, crate::check::Severity::Error))
             .collect();
-        if !refusals.is_empty() {
+        // **A `sync` promise is checked here too** (#1387): the type check
+        // does not say `NK2202`, and without it a `sync` function calling
+        // `fs::read_to_string` lowered to an `.await` rustc refused.
+        let pauses = crate::contracts::sync::check(unit, &own, &library);
+        if !refusals.is_empty() || !pauses.is_empty() {
             let source = std::fs::read_to_string(path).unwrap_or_default();
-            let refused = Err(anyhow::anyhow!(
-                "{}",
-                every_refusal(path, &source, &refusals)
-            ));
+            let mut said = String::new();
+            if !refusals.is_empty() {
+                said.push_str(&every_refusal(path, &source, &refusals));
+            }
+            said.push_str(&sync_refusals(path, &source, &pauses));
+            let refused = Err(anyhow::anyhow!("{said}"));
             return (refused, started.elapsed(), std::time::Duration::ZERO);
         }
         let checking = started.elapsed();

@@ -441,6 +441,10 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         entry.touches_known = true
     } else if key == "provenance" {
         entry.provenance = provenance_of(unquoted(value, n), n)
+    } else if key == "trusted" {
+        // **Each `trusted: true` the body wrote, with its place** (ADR-365
+        // D2): a review item, read back as written.
+        entry.trusted = entries(value, n)
     } else if key == "views" {
         let mut views: Vec[Held] = []
         for held in entries(value, n) {

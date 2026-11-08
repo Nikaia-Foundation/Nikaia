@@ -49,7 +49,11 @@ impl CheckState {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         if signature.config.is_empty() { return; }
         let mut options: Vec<(String, String)> = vec![];
-        for option in signature.config.iter() { options.push((option.name.to_string(), option.default.to_string())); }
+        for option in signature.config.iter() {
+            if contract.provenance.is_some() && option.name == "trusted" { continue; }
+            options.push((option.name.to_string(), option.default.to_string()));
+        }
+        if options.is_empty() { return; }
         let key = (on, world.words.resolve(method).to_string());
         self.facts.method_options.insert(key, options);
     }

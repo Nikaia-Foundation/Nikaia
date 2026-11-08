@@ -1,0 +1,9 @@
+bounds in tests/prove_own_length_union_find.nika: 8 indexes, 6 proved; 0 operations, 0 proved
+    16  self.parent[at]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    17  self.parent[at]   proved
+    18  self.parent[at]   proved
+    18  self.parent[up]   proved
+    19  self.parent[at]   proved
+    28  self.parent[one]  proved
+    29  self.rank[other]  proved
+    49  f.rank[root]      checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

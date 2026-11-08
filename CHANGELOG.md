@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1364] — 2026-11-08
+
+**Builders' fixes: a lookup's key is not kept, lower-std runs the sync check, trusted: true is recorded with its place (#1390, #1387, #1357)**
+- std lookups (`get`, `first`, `last`) say their result is from `self`; the buffer pass reads the entry's sources, so a lookup key is no longer kept for the result (#1390).
+- `lower-std` runs the `sync` check over the tools, runtime and std files, so a `sync` tool that calls a pausing read is refused, not lowered to an `.await` rustc rejects (#1387).
+- Every `trusted: true` is recorded in its function's ledger entry as `trusted = ["SOURCE at FILE:LINE"]`; the method sources `process::Child::wait` and `net::Connection::read` take the marker, and `--trust`, the map hasher and the prover honour it there (#1357, Part III 13.5).
+
 ## [0.0.1363] — 2026-11-08
 
 **admission: on every form that starts one task (ADR-async-5 D15, D18, D37; #986 item 11)**

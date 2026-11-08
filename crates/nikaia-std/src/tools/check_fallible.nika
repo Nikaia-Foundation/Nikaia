@@ -81,7 +81,16 @@ impl CheckState {
         }
         let mut options: Vec[(String, String)] = []
         for option in signature.config {
+            // **`trusted:` at a source is said to the compiler** (ADR-365
+            // D2), as `options_of` drops it at a call by name: the method
+            // below reads the same bytes either way.
+            if contract.provenance != null && option.name == "trusted" {
+                continue
+            }
             options.push((option.name.clone(), option.default.clone()))
+        }
+        if options.len() == 0 {
+            return
         }
         let key = (on, world.words.resolve(method).clone())
         self.facts.method_options.insert(key, options)

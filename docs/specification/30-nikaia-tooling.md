@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1363 (Draft)
+**Version:** 0.0.1364 (Draft)
 **Date:** 2026-11-08
 
 ---
@@ -341,6 +341,7 @@ error[NK2401]: a change in `longest` broke its caller `report`
 | `pieces` | fn | a grammar entry whose body is a `par_fold`: a caller in another package drives it in pieces (Part II 10.7) |
 | `threads` | fn | a described foreign call **may start threads of its own** (`true`), **may not** (`false`), or nobody said (absent); `NK2502` fires on the claim, never on its absence ([ADR-290](adr/adr-290.md) D6) |
 | `provenance` | fn | the function is a **source**: its result is bytes that entered the program from outside, and this names who chose them ([ADR-010](adr/adr-010.md) D2). Absent means *not a source*, which is what almost every function is |
+| `trusted` | fn | every call in its body that writes `trusted: true` at a source (17.1, [ADR-365](adr/adr-365.md) D2), each as the source and its place, `trusted = ["fs::read_to_string at main.nika:7"]`, the file named as `[sources]` names it, sorted by place. The marker makes the bytes the operator's, so a diff of the ledger shows each new one as a review item, as `--trust` names it ([ADR-010](adr/adr-010.md) D3). **Absent means it writes none** |
 | `trait."…"` | table | a trait, with its methods as ordinary `fn` entries (signature, `sync`, `throws`) and no `fields`; a bound and an `impl … for` must name one. The table carries the name and nothing else. The methods are the `fn` entries beside it, under `Handler::handle`, the key shape `NK1130` compares against. |
 | `impl."A for T"` | table | an `impl`, in the ledger of the package that wrote it. Whether `T` implements `A` is the union over every ledger a program reads plus its own; no ledger claims completeness. A consumer reads it under both spellings, the package's and the qualified one. An extra spelling can only make the check fail **open** (C.4); it never removes `NK1164`. |
 | `crosses` | type | a value of this type **may cross a thread** (`true`), **may not** (`false`, which the crossing refusals `NK25xx` fire on), or nothing was recorded (absent). Written by `nikaia describe` from a foreign type's fields — `false` for an `Rc` or a raw pointer, `true` where every field is plainly sendable, nothing where it cannot tell — or by hand, and never inferred. It answers only for a type whose parts this compiler cannot walk; a Nikaia `struct` records its `fields` and the check walks those. Absence means *nobody said*, which is not permission: the compiler does not put such a value on a thread of its own choosing |
