@@ -69,6 +69,9 @@ pub struct BoundsContext {
 	pub whole_fields: collections::BTreeSet[i64],
 	/// The `for` heads that bind one whole number, by the node walked.
 	pub whole_loops: collections::BTreeSet[i64],
+	/// The `for` heads that bind several names, by the node walked, with
+	/// the positions of those bound to a whole number.
+	pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
 	/// **The length an `Array[T, N]`'s type says**, by the node of the
 	/// array read or counted: `len()` is `N` (#711).
 	pub array_lengths: collections::BTreeMap[i64, i64],
@@ -5374,6 +5377,16 @@ fn bounding_for(
 	// which every test in the body is a fact (ADR-306 D7, #781).
 	if bindings.len() == 1 && !counted && context.whole_loops.contains(node_key(iter)) {
 		inner.ints.insert(words.resolve(bindings[0]).clone())
+	}
+	// `for (at, unit) in rows`: each name bound to a whole number is one
+	// too, of which every test in the body is a fact.
+	let parts = context.whole_parts.get(node_key(iter))
+	if bindings.len() > 1 && parts != null {
+		for (at, binding) in bindings.iter().enumerate() {
+			if parts?.contains(at as i64) ?? false {
+				inner.ints.insert(words.resolve(binding).clone())
+			}
+		}
 	}
 	// `for x in xs`, where what `xs` holds is bounded (ADR-306 D7).
 	if bindings.len() == 1 && !counted {

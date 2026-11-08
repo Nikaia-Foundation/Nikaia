@@ -171,6 +171,10 @@ pub struct CheckFacts {
     /// **The `for` heads that bind one whole number**, by the node of what
     /// they walk (ADR-306 D7): the bounds walk reads the binding as a number.
     pub whole_loops: collections::BTreeSet[i64],
+    /// **The `for` heads that bind several names**, by the node of what they
+    /// walk, with the positions of the names bound to a whole number
+    /// (ADR-306 D7): `for (at, unit) in rows` reads each as a number.
+    pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
     /// **Each `let` of one name without a written type whose value is a whole
     /// number**, by the statement's start, with the type (#1358): the prover
     /// reads the name as a whole number, as it reads `let n: i64`.
@@ -615,6 +619,7 @@ impl CheckFacts {
             sized_lengths: collections::BTreeSet(),
             whole_fields: collections::BTreeSet(),
             whole_loops: collections::BTreeSet(),
+            whole_parts: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),
             array_lengths: collections::BTreeMap(),
             char_codes: collections::BTreeSet(),

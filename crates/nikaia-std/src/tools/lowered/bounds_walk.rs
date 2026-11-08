@@ -22,6 +22,7 @@ pub struct BoundsContext {
     pub around: Around,
     pub whole_fields: collections::BTreeSet<i64>,
     pub whole_loops: collections::BTreeSet<i64>,
+    pub whole_parts: collections::BTreeMap<i64, collections::BTreeSet<i64>>,
     pub array_lengths: collections::BTreeMap<i64, i64>,
     pub through_loops: bool,
     pub decided: collections::BTreeMap<String, bool>,
@@ -3003,6 +3004,15 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         }
     }
     if bindings.len() == 1 && !counted && context.whole_loops.contains(&node_key(iter)) { inner.ints.insert(words.resolve(*nikaia_std::index::get(&bindings, 0)).to_string()); }
+    let parts = context.whole_parts.get(&node_key(iter));
+    if bindings.len() > 1 && parts.is_some() {
+        for (at, binding) in bindings.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            if nikaia_std::index::or(match parts {
+                Some(__nikaia_it) => Some(__nikaia_it.contains(&(at as i64))),
+                None => None,
+            }, || false) { inner.ints.insert(words.resolve(*binding).to_string()); }
+        }
+    }
     if bindings.len() == 1 && !counted {
         let key = elements_key(&walk.shape, iter, words);
         if key.is_some() {

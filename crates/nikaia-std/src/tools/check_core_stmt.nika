@@ -2017,6 +2017,24 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
             else => {}
         }
     }
+    // **And each name of several a `for` binds to a whole number**: a
+    // tuple's part, an `enumerate()`'s position.
+    if bindings.len() > 1 && elements.len() == bindings.len() {
+        let mut parts: collections::BTreeSet[i64] = collections::BTreeSet()
+        for (at, element) in elements.iter().enumerate() {
+            match element {
+                Ty::Named { name, args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        parts.insert(at as i64)
+                    }
+                },
+                else => {}
+            }
+        }
+        if !parts.is_empty() {
+            state.facts.whole_parts.insert(id_of(iter) as i64, parts)
+        }
+    }
     // **An element of a list of code is given what the list was** (ADR-351
     // D1, D4).
     if bindings.len() == 1 && state.current != null && check_core_stmt_holds_code(over) {

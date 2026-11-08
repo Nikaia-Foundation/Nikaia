@@ -154,6 +154,7 @@ fn frame_context(
 		around: around,
 		whole_fields: collections::BTreeSet(),
 		whole_loops: collections::BTreeSet(),
+		whole_parts: collections::BTreeMap(),
 		array_lengths: collections::BTreeMap(),
 		through_loops: false,
 		decided: collections::BTreeMap(),
