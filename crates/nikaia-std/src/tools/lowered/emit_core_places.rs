@@ -103,7 +103,7 @@ impl EmitState {
             out.push(" }");
             done = true;
         } else if text_copy {
-            out.push("__nikaia_it.to_string()");
+            out.push(&format!("{}__nikaia_it.to_string(){}", block_text_open(self.is_std), block_text_close(self.is_std)));
             done = true;
         } else { done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)?; }
         if !done { self.emit_core_method_call(world, walk, out, host, None, node_key(receiver), method, args, config, depth + 1, flow, scope)?; }

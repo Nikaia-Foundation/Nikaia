@@ -330,6 +330,14 @@ impl PartialEq<EitherText<'_>> for String {
 
 /// Text of its own from either: an owned answer moves, a view is copied
 /// (`text = either_fn()` into a `String` variable, #911).
+/// Text of both kinds made a block's text (#490): owned text moved in, a
+/// view copied, as into a `String`.
+impl From<EitherText<'_>> for crate::block::Text {
+    fn from(text: EitherText<'_>) -> crate::block::Text {
+        crate::block::Text::from(String::from(text))
+    }
+}
+
 impl From<EitherText<'_>> for String {
     fn from(text: EitherText<'_>) -> String {
         text.0.into_owned()

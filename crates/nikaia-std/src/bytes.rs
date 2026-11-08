@@ -356,8 +356,10 @@ impl AsRef<[u8]> for Bytes {
 /// the program does; it is the `From` below, which copies nothing.
 #[allow(non_snake_case)]
 #[inline]
-pub fn Bytes(bytes: Vec<u8>) -> Bytes {
-    Bytes::from(bytes)
+pub fn Bytes(bytes: impl Into<Vec<u8>>) -> Bytes {
+    // A `Vec` as it is, or a block's list of bytes by its `From`, the same
+    // memory where it is outside (ADR-327 D8, #490).
+    Bytes::from(bytes.into())
 }
 
 /// **`Bytes(v)`: the vector is handed over and nothing is copied**

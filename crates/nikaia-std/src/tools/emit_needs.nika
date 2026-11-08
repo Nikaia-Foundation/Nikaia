@@ -7,7 +7,6 @@
 // (`emit/mod.rs`) re-exports `EmitNeeds` as `emit::Needs`.
 
 use std::collections
-use std::env
 
 /// **Which package lowers to the block types** (ADR-327 D4, #490; staged by
 /// the supervisor, 2026-11-08): a program whose file imports the block names
@@ -16,10 +15,12 @@ use std::env
 /// lowered compiler) still write Rust's own. **Temporary**: this setting is
 /// removed in #490 before step 5 starts, when the tools switch too, and it is
 /// the one place the question is answered. Until every program the tests
-/// hold compiles on the block types it is off, and `NIKAIA_BLOCK_TYPES=1`
-/// turns it on for a program's lowering, to try the switch.
+/// hold compiles on the block types, `programs` is off; set it to `true` to
+/// try the switch. Not an environment variable: a program's lowering is
+/// cached by its source, and a switch from outside would be served stale.
 pub fn lowers_to_block_types(is_std: bool) -> bool {
-    return !is_std && (env::var("NIKAIA_BLOCK_TYPES") ?? "") == "1"
+    let programs = false
+    return programs && !is_std
 }
 
 /// The import that lowers a program to the block types, where the setting
@@ -30,6 +31,40 @@ pub fn block_types_import(is_std: bool) -> String {
         return "#[allow(unused_imports)]\npub use nikaia_std::block::names::{String, Vec, format, vec};\n"
     }
     return ""
+}
+
+/// **Rust's `String`, made a block's text** where a program lowers to the
+/// block types: `nikaia_std::block::Text::from(…)` around a value the
+/// language below builds as a `String` (`to_string`, `to_uppercase`,
+/// `replace`, a joined list, a literal made owned), the same memory (ADR-327
+/// D8); nothing where the setting is off. `Text::from` of a `Text` is the
+/// value, so a sum that is already one passes.
+pub fn block_text_open(is_std: bool) -> String {
+    if lowers_to_block_types(is_std) {
+        return "nikaia_std::block::Text::from("
+    }
+    return ""
+}
+
+/// The other half of `block_text_open`.
+pub fn block_text_close(is_std: bool) -> String {
+    if lowers_to_block_types(is_std) {
+        return ")"
+    }
+    return ""
+}
+
+/// **A method whose Rust answers a `String`**, which a program on the block
+/// types makes a block's text around the call: each of these, on text, is
+/// text of its own in Nikaia (`join` with its separator, on a list of text).
+pub fn answers_rust_text(written: ref String, args: i64) -> bool {
+    if args == 0 {
+        return written == "to_string" || written == "to_uppercase" || written == "to_lowercase"
+    }
+    if args == 1 {
+        return written == "repeat" || written == "join"
+    }
+    return (written == "replace" && args == 2) || (written == "replacen" && args == 3)
 }
 
 /// What a program's preamble has to say, over all of its files.

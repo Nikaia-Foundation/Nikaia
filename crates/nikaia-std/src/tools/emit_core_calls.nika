@@ -1031,7 +1031,7 @@ impl EmitState {
             self.emit_core_postfix_base(world, walk, out, host, target, depth, flow, scope)
             out.push(".extend(")
             self.emit_core_postfix_base(world, walk, out, host, args[0], depth, flow, scope)
-            out.push(".iter().map(|item| item.to_string()))")
+            out.push(f".iter().map(|item| {block_text_open(self.is_std)}item.to_string(){block_text_close(self.is_std)}))")
             return
         }
         // **A copy of a tuple with view parts is owned** (ADR-293 D24,
@@ -1245,6 +1245,12 @@ impl EmitState {
             out.push("nikaia_std::par::ended(")
         }
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
+        // **On the block types, Rust's `String` answer is made a block's
+        // text** (#490): around the plain call, which is all these are.
+        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(written, args.len()) && lowers_to_block_types(self.is_std) && !self.method_pauses(on_node) && !self.method_can_fail(on_node)
+        if rust_text {
+            out.push(block_text_open(self.is_std))
+        }
         if kind == 1 {
             out.push(f"nikaia_std::seq::{entry}(")
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
@@ -1350,6 +1356,9 @@ impl EmitState {
             self.emit_core_method_options(world, walk, out, host, method, on_node, args.len(), config, depth, flow, scope)
         }
         out.push(")")
+        if rust_text {
+            out.push(block_text_close(self.is_std))
+        }
         // **What hands back an element of a held list reads it through its
         // handle** (ADR-283 D17), as the brackets and a `for` do.
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver != null {
