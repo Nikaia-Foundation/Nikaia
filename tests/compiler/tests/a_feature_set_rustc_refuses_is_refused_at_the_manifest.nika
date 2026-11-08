@@ -17,7 +17,7 @@ fn built(nikaia: String, build: String, table: String, source: String) throws {
     process::run("mkdir", ["-p", f"{tmp}/src"])
     fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[build]\n{build}\n[features]\n{table}")
     fs::write(f"{tmp}/src/{source}", fs::Root::Anywhere, "pub fn make(v: i64) -> i64 sync {\n    return helper(v)\n}\n\nfn helper(v: i64) -> i64 sync {\n    return v + 1\n}\n\nfn spare() -> i64 sync {\n    return 2\n}\n")
-    let out = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0"), ("RUSTFLAGS", "-D warnings")])
+    let out = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0"), ("RUSTFLAGS", "-D warnings"), ("CARGO_TERM_COLOR", "never")])
     println(f"exit {out.code}")
     println(out.stderr.trim().replace(tmp, "TMP"))
     process::run("rm", ["-rf", tmp])
