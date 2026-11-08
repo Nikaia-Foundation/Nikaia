@@ -558,6 +558,9 @@ struct TierLocal {
     /// The struct each element of the list literal it is bound to is, where
     /// the `let` names no type (#1210): its elements' fields are known places.
     items_of: String?,
+    /// Bound by a `let` to a cut of text, `s.split_once("=") ?? return`
+    /// (#1344): its parts are views of what the cut views.
+    cut: bool,
 }
 
 /// What one walk found, every position by its word.
@@ -809,7 +812,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -2764,7 +2767,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask) }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -5104,16 +5107,46 @@ fn items_kinds(items: ref Vec[Expr], ask: ref TierAsk, mut walk: TierWalk) -> Ki
 }
 
 fn field_kinds(expr: ref Expr, base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
-    tier_expr(base, ask, walk)
+    let whole = tier_expr(base, ask, walk)
     let place = place_of(expr, ask, walk)
     if place == null {
         // **A tuple's part is what its position holds** (#929), where the
         // tuple comes from a declared one.
-        let part = tuple_part_going(expr, ask, walk) ?? return owned_kinds()
+        let part = tuple_part_going(expr, ask, walk) ?? return cut_part_kinds(expr, whole, ask, walk)
         return kinds_of(part.owner, part.ty, part.path.clone(), ask, walk)
     }
     let found = place ?? return owned_kinds()
     return kinds_of_declared(found, ask, walk)
+}
+
+/// **A part of a cut is what the cut is** (#1344): `s.split_once("=").0`, or
+/// `parts.0` of a local bound to one, views what the whole views, as a part
+/// bound by `let (a, b) = ...` does (`bind_tuple_parts`). A whole of mixed
+/// kinds keeps its parts owned.
+fn cut_part_kinds(expr: ref Expr, whole: ref Kinds, ask: ref TierAsk, walk: ref TierWalk) -> Kinds {
+    let (base, name) = match expr {
+        Expr::Field { base, name, .. } => (base, name),
+        else => return owned_kinds(),
+    }
+    let cut = match base {
+        Expr::Variable(local, _) => tier_local(ask.names.resolve(local), walk)?.cut ?? false,
+        else => a_cut(base, ask),
+    }
+    if !cut || tier_part_index(ask.names.resolve(name)) < 0 || whole.either || (whole.owned && (whole.view || whole.still)) {
+        return owned_kinds()
+    }
+    return whole.clone()
+}
+
+/// Whether a value is a cut of text in two (`cuts_in_two`), also before a `?`
+/// or a `??` that jumps.
+fn a_cut(value: ref Expr, ask: ref TierAsk) -> bool {
+    return match value {
+        Expr::MethodCall { method, .. } => cuts_in_two(ask.names.resolve(method)),
+        Expr::Coalesce { value: first, fallback, .. } => tier_a_jump(fallback) && a_cut(first, ask),
+        Expr::Try(inner, _) => a_cut(inner, ask),
+        else => false,
+    }
 }
 
 /// A field of a struct literal: what goes into it is a flow the emitter wraps
@@ -6196,7 +6229,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         if lent_fields.contains(ask.names.resolve(arg.name)) {
             ty.is_view = true
         }
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -6209,7 +6242,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1

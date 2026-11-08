@@ -396,6 +396,34 @@ impl EmitState {
                             null => {},
                         }
                     }
+                } else if emit_is_inner(lifetimes) && receiver != null {
+                    // **A view kept in the subject** (#1344): `self:s` takes
+                    // the source to the impl's lifetime, the one the subject's
+                    // view fields are written with; so does `o:s` for a place
+                    // whose type is written with that lifetime.
+                    for entry in self.emit_fn_stores(key) {
+                        match entry.split_once(":") {
+                            pair => {
+                                let stored = pair.0.clone()
+                                let source = pair.1.clone()
+                                if !carries_input.contains(source) {
+                                    if stored == "self" {
+                                        stores.push(EmitPair { first: stored.clone(), second: source.clone() })
+                                    }
+                                    for each in args {
+                                        if emit_text(world, each.name) == stored {
+                                            let spelled = self.emit_fn_ty(world, walk, host, each.ty, EmitLifetimes::Named, key, stored)
+                                            if spelled.contains("'a") {
+                                                stores.push(EmitPair { first: stored.clone(), second: source.clone() })
+                                            }
+                                            break
+                                        }
+                                    }
+                                }
+                            },
+                            null => {},
+                        }
+                    }
                 }
 
                 // **A result points into one parameter, and the signature says

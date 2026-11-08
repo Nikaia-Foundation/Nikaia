@@ -2760,7 +2760,16 @@ fn rsrc_method(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref coll
     let root = rsrc_root_local(asked, here, flow, receiver)
     let ty = rsrc_type(unit, asked, here, flow, receiver) ?? rsrc_local_type(asked, flow, receiver)
     if stored.len() > 0 && flow.places.len() > 0 && rsrc_changes_described(asked, ty, name) {
-        rsrc_store(asked, receiver, stored, flow)
+        // **Only what the method keeps is stored** (#1344): `v.push(b)` keeps
+        // `b`, `seen.remove(name)` only looks `name` up (the `keeps` column).
+        let mut kept = rsrc_none()
+        let params = rsrc_described_params(asked, ty, name)
+        for i in 1..<positional.len() {
+            if i >= params.len() || params[i].1 {
+                rsrc_join(kept, positional[i])
+            }
+        }
+        rsrc_store(asked, receiver, kept, flow)
     }
     if stored.len() > 0 && root != null {
         let mut changes = true
@@ -2832,6 +2841,31 @@ fn rsrc_changes_described(asked: ref Asked, ty: ref Type?, name: ref String) -> 
     let described = asked.own.functions[f"{subject}::{name}"]?.clone() ?? asked.library.functions[f"{subject}::{name}"]?.clone()
     let contract = described ?? return false
     return contract.mutates
+}
+
+// A described method's parameters, the receiver first, each with whether the
+// method keeps it in its receiver: a library method's `keeps` column, an own
+// method's `self:x` in the `stores` of the round before (the rounds of
+// `write_result_sources` reach the fixpoint). Empty where nobody describes it.
+fn rsrc_described_params(asked: ref Asked, ty: ref Type?, name: ref String) -> Vec[(String, bool)] {
+    let mut out: Vec[(String, bool)] = []
+    let kind = ty ?? return out
+    let subject = asked.names.resolve(kind.name)
+    let own = asked.own.functions[f"{subject}::{name}"]?.clone()
+    if own != null {
+        let contract = own ?? return out
+        let signature = contract.signature ?? return out
+        for (param, _) in signature.params {
+            out.push((param.clone(), contract.stores.contains(f"self:{param}")))
+        }
+        return out
+    }
+    let contract = asked.library.functions[f"{subject}::{name}"]?.clone() ?? return out
+    let signature = contract.signature ?? return out
+    for (param, _) in signature.params {
+        out.push((param.clone(), contract.keeps.contains(param)))
+    }
+    return out
 }
 
 fn rsrc_call(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
@@ -3564,6 +3598,14 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
             let mut position = 0
             if receiver != null {
                 position = 1
+                // **A changed subject is a place too** (#1344): a piece of a
+                // lent text pushed into `self.items` outlives the call as
+                // one pushed into a `mut` parameter does (ADR-283 D27).
+                let taken = receiver ?? return
+                let ty = subject ?? return
+                if taken.is_mut && !taken.is_keep && rsrc_type_holds_view(asked, ty) {
+                    places.insert("self")
+                }
             }
             for arg in args {
                 let named = asked.names.resolve(arg.name).clone()

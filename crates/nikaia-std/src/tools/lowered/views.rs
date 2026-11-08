@@ -1972,7 +1972,12 @@ pub(crate) fn rsrc_method(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, k
     for i in 1..positional.len() as i64 { rsrc_join(&mut stored, nikaia_std::index::get(&positional, (i) as usize)); }
     let root = rsrc_root_local(asked, here, &flow, receiver);
     let ty = nikaia_std::index::or_maybe(rsrc_type(unit, asked, here, &flow, receiver), || rsrc_local_type(asked, &flow, receiver));
-    if !stored.is_empty() && !flow.places.is_empty() && rsrc_changes_described(asked, (ty).as_ref(), name) { rsrc_store(asked, receiver, &stored, flow); }
+    if !stored.is_empty() && !flow.places.is_empty() && rsrc_changes_described(asked, (ty).as_ref(), name) {
+        let mut kept = rsrc_none();
+        let params = rsrc_described_params(asked, (ty).as_ref(), name);
+        for i in 1..positional.len() as i64 { if ((i) as usize) >= params.len() || nikaia_std::index::get(&params, (i) as usize).1 { rsrc_join(&mut kept, nikaia_std::index::get(&positional, (i) as usize)); } }
+        rsrc_store(asked, receiver, &kept, flow);
+    }
     if !stored.is_empty() && root.is_some() {
         let mut changes = true;
         if ty.is_some() {
@@ -2045,6 +2050,29 @@ pub(crate) fn rsrc_changes_described(asked: &Asked<'_, '_, '_>, ty: Option<&Type
     });
     let contract = match described { Some(__nikaia_value) => __nikaia_value, None => return false };
     contract.mutates
+}
+
+pub(crate) fn rsrc_described_params(asked: &Asked<'_, '_, '_>, ty: Option<&Type>, name: &str) -> Vec<(String, bool)> {
+    let mut out: Vec<(String, bool)> = vec![];
+    let kind = match ty { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let subject = asked.names.resolve(kind.name);
+    let own = match *nikaia_std::index::get(&asked.own.functions, &(format!("{}::{}", subject, name))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    if own.is_some() {
+        let contract = match own { Some(__nikaia_value) => __nikaia_value, None => return out };
+        let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return out };
+        for (param, _) in signature.params.iter() { out.push((param.to_string(), contract.stores.contains(&format!("self:{}", param)))); }
+        return out;
+    }
+    let contract = match match *nikaia_std::index::get(&asked.library.functions, &(format!("{}::{}", subject, name))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let signature = match contract.signature { Some(__nikaia_value) => __nikaia_value, None => return out };
+    for (param, _) in signature.params.iter() { out.push((param.to_string(), nikaia_std::list::contains(&contract.keeps, &param))); }
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2604,7 +2632,12 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             let mut places = rsrc_none();
             let mut sources: Vec<String> = vec![];
             let mut position: i64 = 0;
-            if receiver.is_some() { position = 1; }
+            if receiver.is_some() {
+                position = 1;
+                let taken = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
+                let ty = match subject { Some(__nikaia_value) => __nikaia_value, None => return };
+                if taken.is_mut && !taken.is_keep && rsrc_type_holds_view(asked, ty) { places.insert(String::from("self")); }
+            }
             for arg in args.iter() {
                 let named = asked.names.resolve(arg.name).to_string();
                 if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(named.to_string()); } else if !arg.mutable && (*arg.ty.code).is_none() && (rsrc_plain_text(asked, &arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(named.to_string()); }

@@ -262,6 +262,26 @@ impl EmitState {
                             None => { },
                         }
                     }
+                } else if emit_is_inner(&lifetimes) && receiver.is_some() {
+                    for entry in self.emit_fn_stores(&key) {
+                        match entry.split_once(":") {
+                            Some(pair) => {
+                                let stored = pair.0.to_string();
+                                let source = pair.1.to_string();
+                                if !carries_input.contains(&source) {
+                                    if stored == "self" { stores.push(EmitPair { first: stored.to_string(), second: source.to_string() }); }
+                                    for each in args.iter() {
+                                        if emit_text(world, each.name) == stored {
+                                            let spelled = self.emit_fn_ty(world, walk, host, &each.ty, &EmitLifetimes::Named, &key, &stored);
+                                            if spelled.contains("'a") { stores.push(EmitPair { first: stored.to_string(), second: source.to_string() }); }
+                                            break;
+                                        }
+                                    }
+                                }
+                            },
+                            None => { },
+                        }
+                    }
                 }
                 let mut result_is_a_view = false;
                 match ret_type {
