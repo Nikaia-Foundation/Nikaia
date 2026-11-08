@@ -120,7 +120,8 @@ impl EmitState {
             return
         }
         // **A name an enclosing arm lent** (#1355) is a reference already.
-        if kind == 0 || (kind == 2 && self.emit_match_lent_subject(world, index) == "*") {
+        // And a name put into a keep (#99).
+        if kind == 0 || (kind == 2 && (self.emit_match_lent_subject(world, index) == "*" || emit_stmt_a_kept_name(world, walk, index))) {
             self.emit_expr(world, walk, out, host, index, depth, flow, scope)
             return
         }

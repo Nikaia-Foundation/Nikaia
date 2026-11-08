@@ -326,8 +326,14 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
         };
         for entry in entries.flatten() {
             let path = entry.path();
+            // **A project's `target/` is build output, not a program**: since
+            // #99 a build writes the crate `cargo publish` takes, with a copy
+            // of the sources, into `target/nikaia/publish/` - read, each
+            // example's calls counted twice (22 for 14).
             if path.is_dir() {
-                pending.push(path);
+                if entry.file_name() != "target" {
+                    pending.push(path);
+                }
                 continue;
             }
             if path.extension().is_none_or(|e| e != "nika") {

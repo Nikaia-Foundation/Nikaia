@@ -1,0 +1,27 @@
+// #1385 (ADR-269 D9, D17): a loop that writes a `mut` list parameter's
+// elements keeps the list's length, so the loop no longer binds the list
+// again and loses `a.len()`: `part`'s postcondition `i <= hi`, proved
+// through the loop, holds at the call, and `p <= 4` in `main` is proved.
+fn part(mut a: Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo <= hi)
+    assert(hi < a.len())
+    let mut i = lo
+    for j in lo..<hi {
+        assert(lo <= i)
+        assert(i <= j)
+        if a[j] < 3 {
+            a[i] = 0
+            i = i + 1
+        }
+    }
+    assert(lo <= i)
+    assert(i <= hi)
+    return i
+}
+fn main() throws {
+    let mut v: Vec[i64] = [5, 3, 9, 1, 4]
+    let p = part(v, 0, 4)
+    assert(p <= 4)
+    println(f"{p}")
+}

@@ -1,0 +1,29 @@
+// A name bound to a `match` of text of its own and a view (a sliced
+// `.to_string()`, ADR-282 D8) holds `EitherText` (ADR-282 D14); handed to a
+// `String` parameter the callee only reads, it is lent (#1310).
+
+fn width(s: String) -> i64 {
+	return s.len()
+}
+
+fn head(engine: String) -> i64 {
+	let at = engine.find(":")
+	let base = match at {
+		null => engine.clone(),
+		else => engine[0..<(at ?? 0)].to_string(),
+	}
+	return width(base)
+}
+
+fn chosen(engine: String) -> i64 {
+	let at = engine.find(":")
+	let base = if at == null { engine.clone() } else { engine[0..<(at ?? 0)].to_string() }
+	return width(base) + width(base)
+}
+
+fn main() throws {
+	println(head("new:a=1"))
+	println(head("new"))
+	println(chosen("new:a=1"))
+	println(chosen("ab"))
+}

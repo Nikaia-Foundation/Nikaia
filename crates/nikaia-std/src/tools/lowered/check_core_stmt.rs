@@ -979,6 +979,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if declared_option && names.len() == 1 && shape.is_empty() { state.flow.declared_options.insert(local.id); }
     state.bind_local(local);
     if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
+    if state.facts.mixed_choices.contains(&node_key(value)) || state.facts.mixed_leaves.contains_key(&node_key(check_peeled(value))) { state.flow.either_bindings.insert(id); }
     check_core_stmt_unit()
 }
 

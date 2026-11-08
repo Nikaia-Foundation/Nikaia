@@ -1,0 +1,23 @@
+// An element `Vec[String].iter()` gives is a view of text (ADR-184 D2,
+// #1316): a keeper that needs text of its own refuses it, and
+// `.to_string()` on it is text as it is (ADR-282 D8), so each of these
+// is refused with the `.clone()` way out, not lowered to a rustc error.
+use std::collections
+
+fn words() -> Vec[String] {
+    return [f"x{1}", f"y{2}"]
+}
+
+fn main() throws {
+    let ws = words()
+    let mut b: Vec[String] = []
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut counts: collections::HashMap[String, i64] = collections::HashMap()
+    for w in ws.iter() {
+        b.push(w.to_string())
+        b.insert(0, w)
+        seen.insert(w.to_string())
+        counts.insert(w.to_string(), 1)
+    }
+    println(f"{b.len()} {seen.len()} {counts.len()}")
+}

@@ -3342,6 +3342,17 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
         for each in way.reach {
             if each.starts_with("!") {
                 let owned = each.strip_prefix("!") ?? ""
+                // **In an `impl` of a trait whose result writes `from`** the
+                // contract is the trait's (D14, #1280): a parameter it does
+                // not name is not lent, and the way out is the trait's `from`.
+                if trait_name != null && !trait_from.is_empty() {
+                    let written = trait_from.join(" | ")
+                    let message = f"{of} implements a trait method that hands back views of `{written}` only, but this hands back a view of `{owned}`, which it takes by value."
+                    let note = f"The trait's result says `from {written}`, so `{owned}` is not lent: it is moved into {of} and ends with it, and a view of it can't outlive the call (ADR-views-3 D14)."
+                    let help = f"Hand back a view of what the trait names, or write `from {written} | {owned}` on the trait's result."
+                    out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, [note], help))
+                    return
+                }
                 let message = f"{of} hands back a view of `{owned}`, which it takes by value, so the data is gone when the call returns."
                 let note = f"`{owned}` is moved into {of} and ends with it; a view of it can't outlive the call."
                 let help: String = "Take it as `ref`, so the view is of the caller's data, or hand back a copy: declare `-> String` and write `.clone()`."

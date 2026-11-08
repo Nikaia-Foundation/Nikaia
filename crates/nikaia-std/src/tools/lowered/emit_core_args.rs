@@ -337,7 +337,7 @@ impl EmitState {
                 if lend && keep != "" {
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
-                } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) {
+                } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) && !emit_stmt_a_kept_name(world, &walk, arg) {
                     out.push("&");
                     lent_whole = emit_arg_binds_looser_than_a_borrow(arg) || self.emits_as_cast(world, arg);
                 }

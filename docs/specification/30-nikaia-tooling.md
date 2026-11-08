@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1358 (Draft)
+**Version:** 0.0.1359 (Draft)
 **Date:** 2026-11-08
 
 ---
@@ -145,8 +145,12 @@ http = { path = "../http" }
 # crate `nikaia_http_server`, and the generated `Cargo.toml` writes the rename,
 # so the prefix never reaches a `.nika` file. `"1.2"` is Cargo's semver; a
 # `git` table with a `tag` is the same arm without an index. The key is an
-# identifier, because it is the `use` name. *Decided, not built yet:* a bare
-# version is refused.
+# identifier, because it is the `use` name. Cargo fetches the crate, and the
+# compiler reads its `nikaia.toml`, `src/*.nika` and `nikaia.contracts` where
+# it landed; a crate under the prefix without them is refused by name. Its own
+# packages by version come in the same resolution. `nikaia build` writes the
+# package's own crate to `target/nikaia/publish/`, and `cargo publish
+# --manifest-path target/nikaia/publish/Cargo.toml` publishes it.
 http_server = "1.2"
 # A native Rust crate. The entry reaches Cargo with only `type` removed and a
 # relative `path` made absolute, and Cargo resolves, fetches and links it.

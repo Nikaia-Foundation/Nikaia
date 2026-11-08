@@ -522,7 +522,7 @@ impl CheckState {
             let mut first_scalar: Option<Span> = None;
             for (read, at) in open.reads.iter() {
                 let read = nikaia_std::num::value(read);let at = *at;
-                if open.bytes.contains(&read) { if first_byte.is_none() || nikaia_std::index::or(first_byte.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0) > at.start { first_byte = Some(at.clone()); } } else if first_scalar.is_none() || nikaia_std::index::or(first_scalar.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0) > at.start { first_scalar = Some(at.clone()); }
+                if open.bytes.contains(&read) { if first_byte.is_none() || nikaia_std::index::or(first_byte.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0u32) > at.start { first_byte = Some(at.clone()); } } else if first_scalar.is_none() || nikaia_std::index::or(first_scalar.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0u32) > at.start { first_scalar = Some(at.clone()); }
             }
             if first_byte.is_some() && first_scalar.is_some() {
                 let byte_at = nikaia_std::index::or(first_byte, || open.at.clone().into());

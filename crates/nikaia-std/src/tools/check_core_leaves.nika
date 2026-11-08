@@ -601,7 +601,53 @@ pub fn check_core_lambda_leave(mut state: CheckState, outer: ref Ty?, tail: ref 
     if ends_in_a_return && first != null {
         result = first ?? Ty::Unknown
     }
-    return result
+    return check_core_lambda_some_at_plain_ends(state, returns, ends_in_a_return, tail, body, result)
+}
+
+/// **A lambda that hands back `null` somewhere hands back `T?` at each end**
+/// (Part I 2.3, ADR-293 D3), as a named function declared `-> T?` does: a
+/// plain last value or `return v` beside a `return null` is `Some`, so
+/// `filter_map(fn(x) { let v = x ?? return null; f"{v}!" })` comes to
+/// `String?`, not a bare `String`.
+fn check_core_lambda_some_at_plain_ends(mut state: CheckState, returns: ref Vec[CheckLambdaReturn], ends_in_a_return: bool, tail: ref Ty, body: ref Block, result: Ty) -> Ty sync {
+    let mut nullable = false
+    let mut plain: Ty? = null
+    let tail_plain = !ends_in_a_return && !a_body_never_ends(body) && check_core_lambda_plain(tail)
+    if tail_plain {
+        plain = tail.clone()
+    } else if !ends_in_a_return && check_function_is_nullable(tail) {
+        nullable = true
+    }
+    for one in returns {
+        if check_function_is_nullable(one.ty) {
+            nullable = true
+        } else if plain == null && one.value.len() == 1 && check_core_lambda_plain(one.ty) {
+            plain = one.ty.clone()
+        }
+    }
+    let held: Ty = plain ?? return result
+    if !nullable {
+        return result
+    }
+    if tail_plain {
+        for value in block_tail(body) {
+            state.some_at_the_tails(value)
+        }
+    }
+    for one in returns {
+        if !check_function_is_nullable(one.ty) && check_core_lambda_plain(one.ty) {
+            for value in one.value {
+                state.some_at_the_tails(value)
+            }
+        }
+    }
+    return Ty::Nullable(held)
+}
+
+/// A value an end hands back that `Some` can hold: known, and neither a unit
+/// nor nullable already.
+fn check_core_lambda_plain(ty: ref Ty) -> bool {
+    return wholly_known(ty) && !check_core_lambda_a_unit(ty) && !check_function_is_nullable(ty)
 }
 
 /// Whether two results of one lambda are of one type: an unknown, a unit, a

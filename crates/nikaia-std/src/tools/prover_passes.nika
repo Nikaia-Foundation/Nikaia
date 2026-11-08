@@ -26,8 +26,9 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     // the last one's until nothing changes. A call inside a cycle is never
     // carried back, so every chain of carrying is at most as long as the
     // functions are many.
-    walk.state.readers = prover_readers(program, words)
-    walk.state.value_readers = prover_value_readers(walk.state.readers, own, library)
+    let readers = prover_readers(program, words)
+    walk.state.value_readers = prover_value_readers(readers, own, library)
+    walk.state.readers = prover_length_keepers(program, readers, words)
     let bound = program.items.len() + 2
     let mut preconditions: collections::BTreeMap[String, Precondition] = collections::BTreeMap()
     for _ in 0..<bound {

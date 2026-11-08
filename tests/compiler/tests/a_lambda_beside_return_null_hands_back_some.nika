@@ -1,0 +1,35 @@
+// A lambda that hands back `null` somewhere hands back `T?` at each end: a
+// plain last value or `return v` beside a `return null` is `Some` (#99).
+fn texts(xs: ref Vec[String?]) -> Vec[String] {
+    let lines: Vec[String] = xs.iter().filter_map(fn(x) {
+        let v = x ?? return null
+        f"{v}!"
+    }).collect()
+    return lines
+}
+
+fn returned(xs: ref Vec[String?]) -> Vec[String] {
+    return xs.iter().filter_map(fn(x) {
+        if x == null {
+            return null
+        }
+        return f"{x ?? ""}?"
+    }).collect()
+}
+
+fn maybe(xs: ref Vec[i64]) -> Vec[i64?] {
+    return xs.iter().map(fn(x) {
+        if x < 0 {
+            return null
+        }
+        x * 2
+    }).collect()
+}
+
+fn main() throws {
+    println(texts(["x", null, "y"]).join(","))
+    println(returned([null, "z"]).join(","))
+    for m in maybe([1, -1, 3]) {
+        println(m ?? 0)
+    }
+}

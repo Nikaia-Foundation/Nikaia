@@ -2759,10 +2759,12 @@ fn prover_else_lengths_changed(mut changed: collections::BTreeSet[String], else_
 }
 
 /// **A followed list a loop changes only through an index** (#782) keeps
-/// its length: nothing binds it again, and nothing changes the length.
+/// its length: nothing binds it again, and nothing changes the length. So
+/// does a `mut` list parameter whose length is a name of the proof (#1375,
+/// #1385): the whole body keeps it, so the loop's element writes do too.
 fn prover_loop_keeps(n: ref String, changed: ref collections::BTreeSet[String], body: ref Block, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> bool {
     let length = length_of(n)
-    return scope.mutables.contains(length) && !changed.contains(length) && !rebinds(body, n, words)
+    return scope.ints.contains(length) && !changed.contains(length) && !rebinds(body, n, words)
 }
 
 /// **A followed list's length a loop forgets** (#782) is still a length:
@@ -3110,6 +3112,65 @@ fn prover_reads_only(contract: ref FnContract) -> bool sync {
         null => false,
         sig => !sig.takes_a_receiver() && sig.mutable.is_empty(),
     }
+}
+
+/// **The free functions a list handed to keeps its length** (#782, #1385):
+/// the readers, and each free function whose `mut` parameters are all lists
+/// (or text) its body neither binds again nor grows or shrinks, handing them
+/// only to such functions. Derived as the other callee facts are (ADR-269
+/// D17): every candidate is assumed to keep them, and one whose body does
+/// not under that assumption is struck, until none falls, so a recursive
+/// call keeps them where the rest of the body does.
+fn prover_length_keepers(program: ref Program, readers: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+    let mut keepers = readers.clone()
+    let mut candidates: Vec[String] = []
+    for item in program.items {
+        match item.node {
+            Item::Fn { name, receiver, args, .. } => {
+                if receiver == null && name != null {
+                    let mut lists = true
+                    for arg in args {
+                        if arg.mutable && !has_a_length(words.resolve(arg.ty.name)) {
+                            lists = false
+                        }
+                    }
+                    let n = words.resolve(name ?? continue).clone()
+                    if lists && !readers.contains(n) {
+                        keepers.insert(n.clone())
+                        candidates.push(n)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    let mut falling = true
+    while falling {
+        falling = false
+        for item in program.items {
+            match item.node {
+                Item::Fn { name, receiver, args, body, .. } => {
+                    if receiver != null || name == null {
+                        continue
+                    }
+                    let n = words.resolve(name ?? continue).clone()
+                    if !candidates.contains(n) || !keepers.contains(n) {
+                        continue
+                    }
+                    for arg in args {
+                        let arg_name = words.resolve(arg.name).clone()
+                        if arg.mutable && (changes_length_in(body, arg_name, keepers, words) || rebinds(body, arg_name, words)) {
+                            keepers.remove(n)
+                            falling = true
+                            break
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return keepers
 }
 
 fn prover_readers(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {

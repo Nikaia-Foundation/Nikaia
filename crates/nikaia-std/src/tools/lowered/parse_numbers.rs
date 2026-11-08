@@ -227,12 +227,12 @@ pub fn number_at(text: &str, signed: bool) -> Number {
                     fits = false;
                     break;
                 }
-                let sum = nikaia_std::index::or(times_radix, || 0).checked_add(d);
+                let sum = nikaia_std::index::or(times_radix, || 0u64).checked_add(d);
                 if sum.is_none() {
                     fits = false;
                     break;
                 }
-                n = nikaia_std::index::or(sum, || 0);
+                n = nikaia_std::index::or(sum, || 0u64);
             }
             if fits && signed && n > 9223372036854775808u64 { fits = false; }
             if fits { magnitude = n; } else { wrong = too_big(); }
