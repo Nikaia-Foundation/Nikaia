@@ -219,19 +219,20 @@ pub async fn project_members_members_of<H: ProjectMembersHost>(entry_manifest: &
 pub fn project_members_fetched_variable() -> String { String::from("NIKAIA_FETCHED") }
 
 pub fn project_members_fetched_text(members: &[ProjectMembersMember]) -> String {
-    let mut lines: Vec<String> = vec![];
-    for m in members.iter() {
-        let named = match m.fetched.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        lines.push(format!("{}={}", named, nikaia_std::fs::path::display(&(m.root))));
-    }
+    let lines: Vec<String> = members.iter().filter_map(|m| {
+        let named = match m.fetched.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(format!("{}={}", named, nikaia_std::fs::path::display(&(m.root))))
+    }).collect::<Vec<_>>();
     lines.join("\n")
 }
 
 pub(crate) fn project_members_located(manifest: &ProjectMembersManifest, root: &std::path::Path, fetched: &collections::BTreeMap<String, fs::Path>) -> Result<Vec<(String, fs::Path)>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
+    let __keep_frame = nikaia_std::tether::Keep::new();
     let mut out: Vec<(String, fs::Path)> = manifest.paths.to_owned();
     for (key, entry) in manifest.versions.iter() {
-        let at = match fetched.get(&format!("nikaia_{}", key)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}` is a Nikaia package by version, and Cargo found no crate `nikaia_{}` for it in {}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `nikaia_{}` there.", key, key, nikaia_std::fs::path::display(&(root)), key)), &"project_members_located")) };
-        project_members_a_nikaia_package(&key, &format!("nikaia_{}", key), &at)?;
+        let named = __keep_frame.put(format!("nikaia_{}", key));
+        let at = match fetched.get(named) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}` is a Nikaia package by version, and Cargo found no crate `{}` for it in {}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `{}` there.", key, named, nikaia_std::fs::path::display(&(root)), named)), &"project_members_located")) };
+        project_members_a_nikaia_package(&key, named, &at)?;
         out.push((key.to_string(), nikaia_std::fs::path::clone(&(at))));
     }
     out.sort();

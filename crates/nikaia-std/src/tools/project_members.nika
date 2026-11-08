@@ -346,11 +346,10 @@ pub fn project_members_fetched_variable() -> String {
 
 /// `members`' packages by version, as `project_members_fetched_variable()` carries them.
 pub fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> String {
-    let mut lines: Vec[String] = []
-    for m in members.iter() {
-        let named = m.fetched ?? continue
-        lines.push(f"{named}={m.root.display()}")
-    }
+    let lines: Vec[String] = members.iter().filter_map(fn(m) {
+        let named = m.fetched ?? return null
+        f"{named}={m.root.display()}"
+    }).collect()
     return lines.join("\n")
 }
 
@@ -361,8 +360,9 @@ pub fn project_members_fetched_text(members: ref Vec[ProjectMembersMember]) -> S
 fn project_members_located(manifest: ref ProjectMembersManifest, root: ref fs::Path, fetched: ref collections::BTreeMap[String, fs::Path]) -> Vec[(String, fs::Path)] throws {
     let mut out: Vec[(String, fs::Path)] = manifest.paths.clone()
     for (key, entry) in manifest.versions.iter() {
-        let at = fetched.get(f"nikaia_{key}") ?? throw ProjectMembersRefusal::Refused(f"`{key}` is a Nikaia package by version, and Cargo found no crate `nikaia_{key}` for it in {root.display()}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `nikaia_{key}` there.")
-        project_members_a_nikaia_package(key, f"nikaia_{key}", at)
+        let named = f"nikaia_{key}"
+        let at = fetched.get(named) ?? throw ProjectMembersRefusal::Refused(f"`{key}` is a Nikaia package by version, and Cargo found no crate `{named}` for it in {root.display()}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `{named}` there.")
+        project_members_a_nikaia_package(key, named, at)
         out.push((key.clone(), at.clone()))
     }
     out.sort()
