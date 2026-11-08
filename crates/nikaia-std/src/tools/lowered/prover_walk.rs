@@ -1383,7 +1383,7 @@ pub(crate) fn prover_calls_in(walk: &mut ProverWalk, expr: &Expr, span: Span, sc
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); prover_calls_in(walk, inner, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); prover_calls_in(walk, expr, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); prover_calls_in(walk, base, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition); },

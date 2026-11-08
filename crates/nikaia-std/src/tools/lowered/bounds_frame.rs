@@ -509,7 +509,7 @@ pub(crate) fn fields_expr(expr: &Expr, words: &winnow_grammar::InternerContext, 
             fields_expr(body, words, scan);
             scan.walked = was;
         },
-        Expr::Async(inner, _, _) => {
+        Expr::Async(inner, _, _, _) => {
             let inner = nikaia_std::boxed::open(inner);
             let was = scan.walked;
             scan.walked = false;

@@ -93,7 +93,7 @@ pub fn visited_in_expr(expr: &Expr) -> Vec<&Expr> {
             out.extend(visited_in_expr(rhs));
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(visited_in_expr(inner)); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(visited_in_expr(inner)); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(visited_in_expr(inner)); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); out.extend(visited_in_expr(inner)); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); out.extend(visited_in_maybe((value).as_ref())); },
         Expr::Index { base, index, .. } => {

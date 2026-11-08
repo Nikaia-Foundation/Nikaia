@@ -441,11 +441,11 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st);
             return Expr::Call { func: Box::new(func2), args: args2, config: config2, id: id2 };
         },
-        Expr::Spawn { body, written_async, child, within, id } => {
-            let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within);
+        Expr::Spawn { body, written_async, child, within, admission, id } => {
+            let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
             let id2 = numbers_id(id, st);
             let within2 = numbers_maybe_expr(within, st);
-            return Expr::Spawn { body: Box::new(numbers_expr(body, st)), written_async, child, within: Box::new(within2), id: id2 };
+            return Expr::Spawn { body: Box::new(numbers_expr(body, st)), written_async, child, within: Box::new(within2), admission: Box::new(numbers_maybe_expr(admission, st)), id: id2 };
         },
         Expr::Dsl { target, package, context, content, id } => { return Expr::Dsl { target, package, context, content, id: numbers_id(id, st) }; },
         Expr::Path(segments, id) => { return Expr::Path(segments, numbers_id(id, st)); },
@@ -507,11 +507,12 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let id2 = numbers_id(id, st);
             return Expr::Try(Box::new(numbers_expr(inner, st)), id2);
         },
-        Expr::Async(inner, id, within) => {
-            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
+        Expr::Async(inner, id, within, admission) => {
+            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
             let id2 = numbers_id(id, st);
             let within2 = numbers_maybe_expr(within, st);
-            return Expr::Async(Box::new(numbers_expr(inner, st)), id2, Box::new(within2));
+            let admission2 = numbers_maybe_expr(admission, st);
+            return Expr::Async(Box::new(numbers_expr(inner, st)), id2, Box::new(within2), Box::new(admission2));
         },
         Expr::Throw(inner, id) => {
             let inner = nikaia_std::boxed::open(inner);

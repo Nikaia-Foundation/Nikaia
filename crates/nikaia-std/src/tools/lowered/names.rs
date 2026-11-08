@@ -37,7 +37,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); names_in(expr, words, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); names_in(inner, words, out); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); names_in(inner, words, out); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); names_in(inner, words, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); names_in(expr, words, out); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);

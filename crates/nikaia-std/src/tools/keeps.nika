@@ -498,7 +498,7 @@ fn keeps_expression(expr: ref Expr, interner: ref winnow_grammar::InternerContex
         }
         Expr::Unary { expr, .. } => keeps_expression(expr, interner, holes_of, context, own, library, walk),
         Expr::Try(inner, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
-        Expr::Async(inner, _, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
+        Expr::Async(inner, _, _, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
         Expr::Throw(inner, _) => keeps_expression(inner, interner, holes_of, context, own, library, walk),
         Expr::Cast { expr, .. } => keeps_expression(expr, interner, holes_of, context, own, library, walk),
         Expr::Field { base, .. } => {
@@ -697,7 +697,7 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
             }
         },
         Expr::Try(value, _) => keep_named(value, interner, context, own, library, walk),
-        Expr::Async(value, _, _) => keep_named(value, interner, context, own, library, walk),
+        Expr::Async(value, _, _, _) => keep_named(value, interner, context, own, library, walk),
         // **`p with { .. }` builds a value out of the whole of `p`** (Part I
         // 4.1): `..p` moves it below, so `p` stays a value
         // (`defects_found_running::a_with_over_a_by_value_parameter_runs`). A field the literal names is a part like any other.

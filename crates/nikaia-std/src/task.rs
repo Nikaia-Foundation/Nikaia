@@ -31,8 +31,8 @@ mod gate;
 mod group;
 
 pub use gate::{
-    Adaptive, Admission, Decision, Gate, Line, Load, OnLine, Placed, Pollable, Waiting, admitted,
-    limit,
+    Adaptive, Admission, Decision, Gate, Line, Load, OnLine, Placed, Pollable, Waiting,
+    admission_first, admitted, admitted_sent, asked, limit,
 };
 pub use group::{ChildHandle, Deferred, Ended, Polled, Receiver, Rest};
 use group::{Group, ended, ran};
@@ -1558,6 +1558,52 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         F: std::future::Future<Output = Result<T, E>> + 'b,
     {
         let queued = line.queues();
+        let gates = line.gates();
+        let body = move || gate::placed(gates, body());
+        if queued {
+            return ChildHandle::kept_queued(self, rest, body);
+        }
+        ChildHandle::kept(self, rest, body).await
+    }
+
+    /// **`async(admission: s) e` whose task pauses, under the gates of
+    /// `line`** (ADR-async-5 D15, D18, D37): as [`Scope::start_paused_gated`],
+    /// and the task's own strategy `admission` admits it too; until it does,
+    /// the task waits unstarted and the main line goes on, and `line` asks
+    /// it again where the main line next pauses or waits.
+    pub async fn start_paused_admitted<'g, T: 'g, F>(
+        &'g self,
+        line: &Waiting<'_>,
+        admission: Box<dyn Admission>,
+        body: impl FnOnce() -> F + 'g,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'g,
+        F: std::future::Future<Output = Result<T, E>> + 'g,
+    {
+        let queued = line.queues_admitted(admission);
+        let gates = line.gates();
+        let body = move || gate::placed(gates, body());
+        if queued {
+            return ChildHandle::held_queued(self, body);
+        }
+        ChildHandle::held(self, body).await
+    }
+
+    /// [`Scope::start_kept_gated`] with a strategy of its own, as
+    /// [`Scope::start_paused_admitted`].
+    pub async fn start_kept_admitted<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        line: &Waiting<'_>,
+        admission: Box<dyn Admission>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let queued = line.queues_admitted(admission);
         let gates = line.gates();
         let body = move || gate::placed(gates, body());
         if queued {

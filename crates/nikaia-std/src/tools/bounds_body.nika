@@ -499,7 +499,7 @@ fn tally_expr(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
         },
         Expr::Unary { expr, .. } => tally_expr(expr, ask, deferred, words, tally),
         Expr::Try(inner, _) => tally_expr(inner, ask, deferred, words, tally),
-        Expr::Async(inner, _, _) => tally_expr(inner, ask, deferred, words, tally),
+        Expr::Async(inner, _, _, _) => tally_expr(inner, ask, deferred, words, tally),
         Expr::Throw(inner, _) => tally_expr(inner, ask, deferred, words, tally),
         Expr::Cast { expr, .. } => tally_expr(expr, ask, deferred, words, tally),
         Expr::TryCatch { expr, handler, .. } => {

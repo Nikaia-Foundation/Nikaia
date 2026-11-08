@@ -219,7 +219,7 @@ fn expression_paths(expr: ref Expr, span: ref Span, names: ref winnow_grammar::I
         }
         Expr::Unary { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
         Expr::Try(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
-        Expr::Async(inner, _, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
+        Expr::Async(inner, _, _, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
         Expr::Throw(inner, _) => expression_paths(inner, span, names, unaliased, holes_of, root_at, found),
         Expr::Cast { expr, .. } => expression_paths(expr, span, names, unaliased, holes_of, root_at, found),
         Expr::Field { base, .. } => expression_paths(base, span, names, unaliased, holes_of, root_at, found),
@@ -367,7 +367,7 @@ fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext,
         }
         Expr::Unary { expr, .. } => expression_blocks(expr, names, unaliased, holes_of, root_at, found),
         Expr::Try(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
-        Expr::Async(inner, _, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
+        Expr::Async(inner, _, _, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
         Expr::Throw(inner, _) => expression_blocks(inner, names, unaliased, holes_of, root_at, found),
         Expr::Cast { expr, .. } => expression_blocks(expr, names, unaliased, holes_of, root_at, found),
         Expr::Field { base, .. } => expression_blocks(base, names, unaliased, holes_of, root_at, found),

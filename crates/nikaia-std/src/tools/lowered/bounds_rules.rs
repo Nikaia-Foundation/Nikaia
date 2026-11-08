@@ -411,7 +411,7 @@ pub(crate) fn rules_built(expr: &Expr, owner: &str, lists: &collections::BTreeMa
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rules_built(base, owner, lists, defaults, built, dropped, words); },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::TryCatch { expr: inner, handler, .. } => {

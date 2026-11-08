@@ -724,7 +724,7 @@ fn look_expr(
 		},
 		Expr::Unary { expr, .. } => look_expr(expr, look, deferred, around, words, seen),
 		Expr::Try(inner, _) => look_expr(inner, look, deferred, around, words, seen),
-		Expr::Async(inner, _, _) => look_expr(inner, look, deferred, around, words, seen),
+		Expr::Async(inner, _, _, _) => look_expr(inner, look, deferred, around, words, seen),
 		Expr::Throw(inner, _) => look_expr(inner, look, deferred, around, words, seen),
 		Expr::Cast { expr, .. } => look_expr(expr, look, deferred, around, words, seen),
 		Expr::TryCatch { expr, handler, .. } => {

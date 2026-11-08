@@ -92,6 +92,45 @@ pub fn admitted(strategy: impl Admission + 'static) -> Box<dyn Admission> {
     Box::new(strategy)
 }
 
+/// **`admission: s` on a form that starts one task whose task never
+/// pauses** (D15, D18): the strategy is asked where the task starts, and the
+/// task runs there to its end whatever it says, as every task that never
+/// pauses does (D20 at `user_parallelism = no`): none of its form runs then.
+pub fn asked(mut strategy: Box<dyn Admission>) {
+    strategy.decide(load_of(0, 1));
+}
+
+/// **`admission: s` on `async(detached) fn { … }`** (D15, D18), which may
+/// run on another thread.
+pub fn admitted_sent(strategy: impl Admission + Send + 'static) -> Box<dyn Admission + Send> {
+    Box::new(strategy)
+}
+
+/// **A detached task waits, unstarted, until its strategy admits it** (D15,
+/// D18, D37): awaited first in its body, the strategy asked on each beat of
+/// the runtime until it lets the task start.
+pub async fn admission_first(mut strategy: Box<dyn Admission + Send>) {
+    std::future::poll_fn(|cx| {
+        if strategy.decide(load_of(0, 1)).start > 0 {
+            return std::task::Poll::Ready(());
+        }
+        cx.waker().wake_by_ref();
+        std::task::Poll::Pending
+    })
+    .await
+}
+
+/// The load a strategy is shown: `running` and `waiting` tasks of its form,
+/// and the descriptors.
+fn load_of(running: i64, waiting: i64) -> Load {
+    Load {
+        running,
+        waiting,
+        descriptors_in_use: descriptors_in_use(),
+        descriptors_allowed: descriptors_allowed(),
+    }
+}
+
 /// **The rest of a task, as a gate polls it**: `true` where it ended.
 pub trait Pollable {
     fn poll_here(&self, cx: &mut std::task::Context<'_>) -> bool;
@@ -369,8 +408,22 @@ pub struct Waiting<'x> {
     outer: Option<&'x (dyn Line + 'x)>,
     /// The task whose body this group is in, if it holds places (D38).
     parent: Option<Rc<Frame>>,
-    members: RefCell<Vec<Weak<dyn Pollable + 'x>>>,
+    members: RefCell<Vec<Member<'x>>>,
+    /// **The strategy of the task started last** (`admission:` on a form
+    /// that starts one task, D15, D18), where it did not admit it yet: the
+    /// task's [`Waiting::keep`] takes it.
+    admitting: RefCell<Option<Box<dyn Admission>>>,
 }
+
+/// **A task of the group**: the cell of its rest, and the strategy of its
+/// own `admission:` that has not admitted it yet, if any (D15, D18).
+struct Member<'x> {
+    cell: Weak<dyn Pollable + 'x>,
+    admission: Rc<RefCell<Option<Box<dyn Admission>>>>,
+}
+
+/// The strategy of one task, as the gate asks it.
+type Own = Rc<RefCell<Option<Box<dyn Admission>>>>;
 
 impl<'x> Waiting<'x> {
     /// The tasks of the group whose gate is `gate`, under the gates of the
@@ -386,6 +439,7 @@ impl<'x> Waiting<'x> {
             outer: None,
             parent,
             members: RefCell::new(Vec::new()),
+            admitting: RefCell::new(None),
         }
     }
 
@@ -399,6 +453,7 @@ impl<'x> Waiting<'x> {
             outer: Some(outer),
             parent: outer.parent.clone(),
             members: RefCell::new(Vec::new()),
+            admitting: RefCell::new(None),
         }
     }
 
@@ -416,9 +471,57 @@ impl<'x> Waiting<'x> {
         self.members
             .borrow()
             .iter()
-            .filter_map(Weak::upgrade)
+            .filter_map(|member| member.cell.upgrade())
             .filter(|member| member.queued())
             .count() as i64
+    }
+
+    fn running_members(&self) -> i64 {
+        self.members
+            .borrow()
+            .iter()
+            .filter_map(|member| member.cell.upgrade())
+            .filter(|member| member.running())
+            .count() as i64
+    }
+
+    /// **Whether the next task, with a strategy of its own, waits for a
+    /// place** (`admission:` on a form that starts one task, D15, D18, D37):
+    /// as [`Waiting::queues`], and its own strategy is asked first; one that
+    /// does not admit it yet is kept for the task's [`Waiting::keep`], and
+    /// asked again where the main line next pauses or waits.
+    pub fn queues_admitted(&self, mut admission: Box<dyn Admission>) -> bool {
+        let waiting = self.queued_members();
+        if waiting > 0
+            || admission
+                .decide(load_of(self.running_members(), waiting + 1))
+                .start
+                <= 0
+        {
+            *self.admitting.borrow_mut() = Some(admission);
+            return true;
+        }
+        !self.room(waiting + 1)
+    }
+
+    /// Whether the task's own strategy admits it, `waiting` wanting to start;
+    /// `forced` where the main line waits and none of the group runs, so it
+    /// starts whatever the strategy says, as a group's task does (D15).
+    fn own_admits(&self, own: &Own, waiting: i64, forced: bool) -> bool {
+        let mut own = own.borrow_mut();
+        let Some(strategy) = own.as_mut() else {
+            return true;
+        };
+        if forced
+            || strategy
+                .decide(load_of(self.running_members(), waiting))
+                .start
+                > 0
+        {
+            *own = None;
+            return true;
+        }
+        false
     }
 
     /// **Whether the next task waits for a place** (D37): one before it waits
@@ -440,7 +543,7 @@ impl<'x> Waiting<'x> {
         std::future::poll_fn(|cx| {
             // Its tasks run on while it waits to take its places again: one
             // of them may hold the place it waits for.
-            self.pump(cx);
+            self.pump_waiting(cx, true);
             if ended.is_none() {
                 match wait.as_mut().poll(cx) {
                     std::task::Poll::Ready(value) => ended = Some(value),
@@ -450,7 +553,7 @@ impl<'x> Waiting<'x> {
                             return std::task::Poll::Pending;
                         };
                         parent.give_back();
-                        self.pump(cx);
+                        self.pump_waiting(cx, true);
                         match wait.as_mut().poll(cx) {
                             std::task::Poll::Ready(value) => ended = Some(value),
                             std::task::Poll::Pending => return std::task::Poll::Pending,
@@ -493,13 +596,23 @@ impl<'x> Waiting<'x> {
         handle: super::ChildHandle<'h, T, E>,
     ) -> super::ChildHandle<'h, T, E> {
         let cell: Weak<dyn Pollable + 'x> = handle.pollable();
-        self.members.borrow_mut().push(cell);
+        let admission = Rc::new(RefCell::new(self.admitting.borrow_mut().take()));
+        self.members.borrow_mut().push(Member { cell, admission });
         handle
     }
 }
 
 impl Line for Waiting<'_> {
     fn pump(&self, cx: &mut std::task::Context<'_>) {
+        self.pump_waiting(cx, false);
+    }
+}
+
+impl Waiting<'_> {
+    /// [`Line::pump`]; `waits` where the main line waits here (a `join`,
+    /// the end of a block), so a task whose own strategy has not admitted
+    /// it starts where none of the group runs (D15, D37).
+    fn pump_waiting(&self, cx: &mut std::task::Context<'_>, waits: bool) {
         if let Some(outer) = self.outer {
             outer.pump(cx);
         }
@@ -508,20 +621,30 @@ impl Line for Waiting<'_> {
                 .members
                 .borrow()
                 .iter()
-                .filter_map(Weak::upgrade)
+                .filter_map(|member| {
+                    member
+                        .cell
+                        .upgrade()
+                        .map(|cell| (cell, member.admission.clone()))
+                })
                 .collect();
-            let mut waiting = members.iter().filter(|member| member.queued()).count() as i64;
+            let mut waiting = members.iter().filter(|(member, _)| member.queued()).count() as i64;
+            let forced = waits && !members.iter().any(|(member, _)| member.running());
             let mut progressed = false;
             let mut blocked = false;
-            for member in &members {
+            for (member, own) in &members {
                 if member.queued() {
                     // First in first out: none starts before one written
-                    // earlier that still waits.
-                    if blocked || !self.room(waiting) {
-                        if !blocked {
-                            for gate in &self.gates {
-                                gate.want(cx);
-                            }
+                    // earlier that still waits. One its own strategy does
+                    // not admit yet is asked again where the main line
+                    // next pauses or waits.
+                    if blocked || !self.own_admits(own, waiting, forced) {
+                        blocked = true;
+                        continue;
+                    }
+                    if !self.room(waiting) {
+                        for gate in &self.gates {
+                            gate.want(cx);
                         }
                         blocked = true;
                         continue;
@@ -536,7 +659,7 @@ impl Line for Waiting<'_> {
             drop(members);
             self.members
                 .borrow_mut()
-                .retain(|member| member.strong_count() > 0);
+                .retain(|member| member.cell.strong_count() > 0);
             if !progressed {
                 return;
             }

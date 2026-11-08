@@ -864,7 +864,7 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 			fields_expr(body, words, scan)
 			scan.walked = was
 		},
-		Expr::Async(inner, _, _) => {
+		Expr::Async(inner, _, _, _) => {
 			let was = scan.walked
 			scan.walked = false
 			fields_expr(inner, words, scan)

@@ -365,7 +365,7 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out); },
-        Expr::Async(inner, _, within) => {
+        Expr::Async(inner, _, within, _) => {
             let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
             if !caught { out.direct.extend(contribution_of(expr).errors.iter().cloned()); }
             thrown_by_a_deadline((within).as_ref(), names, &holes_of, &contribution_of, in_a_handler, caught, out);
