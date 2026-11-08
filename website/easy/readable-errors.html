@@ -21,7 +21,7 @@ description: >-
           <dt>An example</dt>
           <dd>You change a value that you declared without <code>mut</code>.</dd>
           <dt>What Nikaia checks</dt>
-          <dd>The compiler points at every place the explanation needs: <code>^</code> under the line with the mistake, <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</dd>
+          <dd>The compiler points at every place the explanation needs, with <code>^</code> under the line with the mistake and <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</dd>
           <dt>The limit</dt>
           <dd>When no line of yours explains an error, the message says so. Where a check passes a problem on to the Rust compiler underneath, the error it raises is reported against your <code>.nika</code> line.</dd>
         </dl>

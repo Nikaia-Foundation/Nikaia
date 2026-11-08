@@ -1,0 +1,19 @@
+// A task's fallback takes its crash (ADR-async-5 D22, D35, #1355): the
+// crash is read where it arrives, so `total` needs no `throws`, and the
+// group does not raise it again at its end. The task after the crash is not
+// cancelled by it (D36) and ends with its own value.
+
+fn boom(n: int) -> int {
+    if n > 0 { panic("boom") }
+    return 1
+}
+
+fn total() -> int {
+    let a = async boom(1) catch { 7 }
+    let b = async boom(0) catch { 8 }
+    return a + b
+}
+
+fn main() throws {
+    println(f"total: {total()}")
+}

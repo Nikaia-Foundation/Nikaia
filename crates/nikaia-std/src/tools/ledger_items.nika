@@ -549,6 +549,10 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
     // which it is only given for.
     ledger_expression_ensures(ledger, units, host)
+    // **Whether each function can panic** (ADR-async-5 D35): after the
+    // `ensures` the bounds walk it asks reads, and before `throws`, which
+    // holds `task::Crashed` only where a task can panic.
+    host.infer_panics(ledger)
     // Kap 7.1: `throws` in the source says *that* it fails; this says with
     // what (ADR-023 D1). After `sync`, because both read bodies and only
     // this one needs nothing from the other, and both read the same method
@@ -586,9 +590,6 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     host.infer_locks(ledger)
     // **Last of the columns, and it reads none of the above** (ADR-283 D5).
     host.infer_tether(ledger)
-    // **Whether each function can panic** (ADR-async-5 D35): after the
-    // others, since the bounds walk it asks reads what callees ensure.
-    host.infer_panics(ledger)
     // **What a result points into, written** (ADR-283 D25, #580), again, so
     // a callee of another unit is read as written once its unit has been.
     ledger_result_sources(ledger, units.len(), host)

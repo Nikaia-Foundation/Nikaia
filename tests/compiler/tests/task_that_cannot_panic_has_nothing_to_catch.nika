@@ -1,0 +1,15 @@
+// A `catch` that could only take the crash of a task that cannot panic has
+// nothing to handle (ADR-async-5 D35, #1355): `NK1134`.
+
+fn one() -> int { return 1 }
+
+fn two() -> int {
+    let a = async one()
+    let b = async one()
+    let s = { a + b } catch { 0 }
+    return s
+}
+
+fn main() throws {
+    println(f"{two()}")
+}

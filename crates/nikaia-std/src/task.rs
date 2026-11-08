@@ -1584,8 +1584,12 @@ impl<E: From<Crashed>> Receiver<E> for Scope<'_, '_, E> {
         self.seen.borrow_mut().start()
     }
 
-    fn crashed(&self, at: usize, crash: Crashed) {
-        self.seen.borrow_mut().crash(at, crash);
+    fn crashed(&self, _at: usize) {
+        self.seen.borrow_mut().crashed = true;
+    }
+
+    fn unread_crash(&self, at: usize, crash: Crashed) {
+        self.seen.borrow_mut().failed.push((at, E::from(crash)));
     }
 
     fn unread(&self, at: usize, error: E) {
@@ -1664,6 +1668,113 @@ pub fn group_plain<'env, T>(
     body: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env, Crashed>) -> T,
 ) -> T {
     unfailing(scope(body))
+}
+
+/// **The channel of a group's tasks where the function's own cannot carry a
+/// crash** (ADR-async-5 D35, #1355): the function throws no `task::Crashed`
+/// because none of its tasks can panic, or each one that can reads its crash
+/// in a fallback. A task's own failure travels as `Failed`; a crash, which
+/// the compiler showed cannot happen there, is raised again where it would
+/// leave ([`OrCrash::failed`]).
+pub enum OrCrash<E> {
+    /// The task's own failure, in the function's channel.
+    Failed(E),
+    /// A crash nothing reads.
+    Crashed(Crashed),
+}
+
+impl<E> From<Crashed> for OrCrash<E> {
+    fn from(crash: Crashed) -> Self {
+        OrCrash::Crashed(crash)
+    }
+}
+
+impl<E: crate::error::Joined> crate::error::Joined for OrCrash<E> {
+    fn joined_by(&mut self, later: OrCrash<E>) {
+        match (&mut *self, later) {
+            (OrCrash::Failed(first), OrCrash::Failed(later)) => first.joined_by(later),
+            (OrCrash::Crashed(_), _) => {}
+            (_, crash) => *self = crash,
+        }
+    }
+}
+
+impl<E> OrCrash<E> {
+    /// The failure in the function's channel, or the crash raised again.
+    pub fn failed(self) -> E {
+        match self {
+            OrCrash::Failed(error) => error,
+            OrCrash::Crashed(crash) => panic!("{crash}"),
+        }
+    }
+}
+
+/// A fallback takes both: the task's own failure and its crash.
+impl<E: Into<Box<dyn std::error::Error>>> From<OrCrash<E>> for Box<dyn std::error::Error> {
+    fn from(error: OrCrash<E>) -> Box<dyn std::error::Error> {
+        match error {
+            OrCrash::Failed(error) => error.into(),
+            OrCrash::Crashed(crash) => Box::new(crash),
+        }
+    }
+}
+
+/// **A join in a group of [`OrCrash`]**: the task's value, or its failure in
+/// the function's channel.
+pub fn uncrashed<T, E>(joined: Result<T, OrCrash<E>>) -> Result<T, E> {
+    joined.map_err(OrCrash::failed)
+}
+
+/// **[`group`] where the function's channel cannot carry a crash** (D35):
+/// `body` fails in it, its tasks in [`OrCrash`]; the group's value, or its
+/// first failure with the unread ones joined.
+pub fn group_raised<'env, T, E: crate::error::Joined>(
+    body: impl for<'scope> FnOnce(&'scope Scope<'scope, 'env, OrCrash<E>>) -> Result<T, E>,
+) -> Result<T, E> {
+    uncrashed(group(|scope| body(scope).map_err(OrCrash::Failed)))
+}
+
+/// [`group_raised`] where the group's function pauses.
+pub async fn group_paused_raised<T, E: crate::error::Joined>(
+    scope: &Scope<'_, '_, OrCrash<E>>,
+    body: impl std::future::Future<Output = Result<T, E>>,
+) -> Result<T, E> {
+    uncrashed(group_paused(scope, async { body.await.map_err(OrCrash::Failed) }).await)
+}
+
+/// **The body of a task with a fallback** (ADR-async-5 D36, #1355): a panic
+/// in it is the task's failure, handed to its fallback, not a crash of the
+/// group, so it cancels no sibling and is not thrown where the group ends.
+pub fn fell<T>(
+    body: impl FnOnce() -> Result<T, Box<dyn std::error::Error>>,
+) -> Result<T, Box<dyn std::error::Error>> {
+    let mut ended = None;
+    match caught(|| ended = Some(body())) {
+        Err(crash) => Err(Box::new(crash)),
+        Ok(()) => ended.expect("a body that did not panic ended"),
+    }
+}
+
+/// [`fell`] for a body that pauses.
+pub async fn fell_paused<T, F>(body: impl FnOnce() -> F) -> Result<T, Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
+{
+    match caught_paused(body).await {
+        Err(crash) => Err(Box::new(crash)),
+        Ok(ended) => ended,
+    }
+}
+
+/// **The end of a task with a fallback** (ADR-async-5 D22, D35): its own
+/// failure and its crash alike, each for the fallback to take.
+pub fn fallen<T, E: Into<Box<dyn std::error::Error>>>(
+    joined: Result<Result<T, Box<dyn std::error::Error>>, E>,
+) -> Result<T, Box<dyn std::error::Error>> {
+    match joined {
+        Ok(ended) => ended,
+        Err(crash) => Err(crash.into()),
+    }
 }
 
 /// A task's end where only a crash can fail it: its value, or the crash
@@ -1861,8 +1972,12 @@ impl<E: From<Crashed>> Receiver<E> for PausedScope<'_, E> {
         locked(&self.seen).start()
     }
 
-    fn crashed(&self, at: usize, crash: Crashed) {
-        locked(&self.seen).crash(at, crash);
+    fn crashed(&self, _at: usize) {
+        locked(&self.seen).crashed = true;
+    }
+
+    fn unread_crash(&self, at: usize, crash: Crashed) {
+        locked(&self.seen).failed.push((at, E::from(crash)));
     }
 
     fn unread(&self, at: usize, error: E) {

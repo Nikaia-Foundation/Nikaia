@@ -736,3 +736,14 @@ is `NK1134`, and its group keeps no failure slot (D28). A program
 is not made to handle a failure that cannot happen, and one that can happen is
 handled; the rule is the same as for every other failure. `task::OverBudget`
 stays as D19 says.
+
+### D36 - A crash its fallback took cancels nothing (supervisor, 2026-11-08, by D22 and D35; #1355).
+
+D21 says a task that panics cancels its siblings, and D22 says a fallback
+written at the form stands in for the task's failure, a crash included. Where
+both meet, D22 decides: a crash taken by the task's own fallback (D22, step
+2) is handled where it happens, so the group goes on as if the task had ended
+with the fallback's value, and no sibling is cancelled. Only a crash that no
+fallback takes cancels the tasks after it and is thrown where the group ends.
+Otherwise a task that cannot panic, of which D35 asks nothing, could still
+fail through a crash that was already handled.

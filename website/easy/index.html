@@ -27,7 +27,7 @@ description: >-
       <h2>Waiting does not split your code in two</h2>
       <p>A function that waits does not have to be marked as one, and so it does not mark its callers either. Code does not split into a waiting half and a non-waiting half, and no library needs two versions of the same function, one for each. The program waits where it needs the value.</p>
       <p>A call that reads a file or waits for the network is written like any other call. Its function pauses there until the result is ready, and the program goes on with other work in the meantime. The compiler finds where a function pauses, so a function that starts to wait leaves its callers as they are. A function marked <code>sync</code> does not pause; the compiler holds it to that, and it may call only other <code>sync</code> functions.</p>
-      <p>To run things beside each other, a program puts <code>async</code> before an expression: it starts at once, and the program waits for the value where it is first needed. A task&rsquo;s error is thrown at that point, and an <code>async { … }</code> group ends only when every task in it has ended. Tasks whose calls pause, handles, detached tasks and deadlines are built; <code>async(deferred)</code>, the options <code>limit:</code> and <code>admission:</code>, and a panic that ends only its task are still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>).</p>
+      <p>To run things beside each other, a program puts <code>async</code> before an expression. It starts at once, and the program waits for the value where it is first needed. A task&rsquo;s error is thrown at that point, and an <code>async { … }</code> group ends only when every task in it has ended. Tasks whose calls pause, handles, detached tasks and deadlines are built; <code>async(deferred)</code>, the options <code>limit:</code> and <code>admission:</code>, and a panic that ends only its task are still being built (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/988">#988</a>).</p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-nika">let a = async count_words(first)    // starts at once
@@ -45,7 +45,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
       <span class="safe-chip safe-chip-build">Suggests the fix</span>
       <h2>Readable errors</h2>
       <p><strong>A compiler message that talks about lifetimes and borrowing sends you away from your own code.</strong></p>
-      <p>The compiler points at every place the explanation needs: <code>^</code> under the line with the mistake, <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</p>
+      <p>The compiler points at every place the explanation needs, with <code>^</code> under the line with the mistake and <code>-</code> under the line that explains it. Then it says what to write instead. Errors point at your <code>.nika</code> line and do not talk about lifetimes or borrowing.</p>
       <p>When no line of yours explains an error, the message says so. Where a check passes a problem on to the Rust compiler underneath, the error it raises is reported against your <code>.nika</code> line.</p>
     </div>
     <div class="home-code-side">
@@ -62,7 +62,7 @@ println(f"{a + b} words")           // waits for both</code></pre></div>
       <span class="safe-chip safe-chip-build">Built-in parser generator</span>
       <h2>Parsers from a grammar you write</h2>
       <p><strong>Reading a log, a protocol or a small language usually means a parsing library, or a parser written by hand.</strong></p>
-      <p>You describe the format as a <code>grammar</code>, and the compiler builds the parser. Precedence and recursion are rules: the order of the rules is the order of binding. The whole calculator is about 100 lines.</p>
+      <p>You describe the format as a <code>grammar</code>, and the compiler builds the parser. Precedence and recursion are rules, and the order of the rules is the order of binding. The whole calculator is about 100 lines.</p>
       <p>A grammar is a large topic, and this page shows only the idea. The full rules are in Part II, chapter 10.</p>
     </div>
     <div class="home-code-side">

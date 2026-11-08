@@ -1157,16 +1157,20 @@ impl EmitState {
                             }
                             let name = emit_async_group_name(group)
                             // **A channel that cannot carry a crash** (ADR-328
-                            // D8, #1360): every task reads its own, so the
-                            // group is the plain one, and the function's
-                            // failures leave through its value.
+                            // D8, #1360, ADR-async-5 D35): no task can panic,
+                            // or each reads its own crash, so the tasks fail
+                            // in `task::OrCrash` of it and the function's
+                            // failures leave through the group's value.
                             let grouped = throws_ && self.emit_async_tasks_channel(channel) == channel
+                            let raised = throws_ && !grouped
                             if pausing != "" {
                                 // **A function that pauses** (D20, #1226): its
                                 // body is a future over the group, polled
                                 // where the function is awaited.
                                 if grouped {
                                     out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {channel}>({name}, (async ||{ret} ")
+                                } else if raised {
+                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({name}, (async ||{ret} ")
                                 } else {
                                     out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, (async ||{ret} ")
                                 }
@@ -1175,6 +1179,8 @@ impl EmitState {
                             } else {
                                 if grouped {
                                     out.push(f"{{ nikaia_std::task::group::<_, {channel}>(|{name}|{ret} ")
+                                } else if raised {
+                                    out.push(f"{{ nikaia_std::task::group_raised(|{name}|{ret} ")
                                 } else {
                                     out.push(f"{{ nikaia_std::task::group_plain(|{name}|{ret} ")
                                 }

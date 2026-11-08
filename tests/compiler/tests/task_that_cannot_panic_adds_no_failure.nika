@@ -1,0 +1,14 @@
+// A task with no panic site adds nothing (ADR-async-5 D35, #1355): `two`
+// starts two without `throws` and no handler is asked of it.
+
+fn one() -> int { return 1 }
+
+fn two() -> int {
+    let a = async one()
+    let b = async one()
+    return a + b
+}
+
+fn main() throws {
+    println(f"{two()}")
+}

@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1358] — 2026-11-08
+
+**A panic in a task ends only that task: task::Crashed where the task can panic, and a fallback takes it (ADR-async-5 D35, D36, #1355)**
+- A task that can panic adds `task::Crashed` to the starting function's throw set; unhandled it is NK2605 at the `async` form. A task that cannot panic asks for nothing (D35).
+- A crash reaches the caller as `task::Crashed` instead of ending the program; `async boom() catch { 7 }` gives 7 and the program goes on.
+- ADR-async-5 D36: a crash the task's own fallback takes is handled there and cancels no sibling; only a crash no fallback takes cancels the tasks after it and is thrown at the group's end.
+
 ## [0.0.1357] — 2026-11-07
 
 **Writing output can fail: println, print, eprintln and eprint throw io::IoError and never panic (ADR-392, #1360)**

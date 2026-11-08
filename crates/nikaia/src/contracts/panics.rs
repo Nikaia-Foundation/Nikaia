@@ -19,6 +19,23 @@ use crate::parser::Parsed;
 use nikaia_std::tools::panics::{self as nika, PanicFacts, PanicsGraph};
 use nikaia_std::tools::throws::MethodsCalled;
 
+/// **What a task's walk is handed** (D35): the unit's checks, each a site,
+/// nothing proved; the checker asks the same (`check_core_async_crash`).
+pub fn task_facts(facts: Option<&crate::check::CheckFacts>) -> PanicFacts {
+    let empty = crate::check::CheckFacts::empty();
+    let facts = facts.unwrap_or(&empty);
+    PanicFacts {
+        checked: true,
+        arithmetic: facts.arithmetic.clone(),
+        negations: facts.negations.clone(),
+        shifts: facts.shifts.clone(),
+        map_keys: facts.map_keys.keys().map(|(key, _)| *key).collect(),
+        proven_indices: BTreeSet::new(),
+        proven_arithmetic: BTreeSet::new(),
+        proven_negations: BTreeSet::new(),
+    }
+}
+
 /// Give every function of this package its `panics`.
 pub fn infer(
     ledger: &mut Ledger,

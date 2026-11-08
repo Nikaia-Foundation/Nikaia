@@ -23,7 +23,7 @@ description: >-
           <dt>What Nikaia checks</dt>
           <dd>Every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</dd>
           <dt>The limit</dt>
-          <dd>The per-task budget is not built yet. Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof: Nikaia will not show at build time that a task stays within its budget, it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</dd>
+          <dd>The per-task budget is not built yet. Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof. Nikaia will not show at build time that a task stays within its budget, but it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</dd>
         </dl>
 
 

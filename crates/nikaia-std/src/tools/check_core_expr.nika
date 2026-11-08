@@ -10,6 +10,8 @@
 // a value's cleanup is `check_crossings_a_value_with_a_cleanup_made`.
 // One function per arm, so a deep expression's frames stay small.
 
+use std::collections
+
 /// The escapes a literal may write (`build_time::ESCAPES`).
 comptime CHECK_CORE_EXPR_ESCAPES: ref String = "\\n \\r \\t \\0 \\\\ \\' \\\" \\xNN \\u{…}"
 
@@ -317,6 +319,7 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
             state.flow.async_depth -= 1
             state.flow.loops = loops
             state.flow.barrier = barrier
+            check_core_async_crash(state, world, host, inner, span)
             // **A task changes no name bound outside it** (D7, #1229): it
             // runs beside everything after its start, whatever else does.
             let mut at = changed_from
@@ -771,15 +774,39 @@ fn check_core_async_within[H: CheckHost](mut state: CheckState, world: ref Check
         found = Ty::Named { name: "i64", args: [], view: false }
     }
     state.expect_type(world, found, want, span, "argument", fn(found_text, wanted_text) { f"This deadline is `{found_text}`, but `within:` takes a `{wanted_text}`." })
-    check_core_async_deadline_fails(state, span)
+    let function = state.current?.clone() ?? ""
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).", f"Add `throws` to `{function}`, or write a fallback: `async(within: d) … catch {{ … }}`.")
 }
 
-/// **A deadline can run out** (ADR-async-5 D16, D22): the form fails with
-/// `task::TimedOut`, as a written call that can fail does (`NK2605`), so a
-/// `catch` around it or its fallback has it to handle, and a function that
-/// handles it nowhere says `throws`.
-fn check_core_async_deadline_fails(mut state: CheckState, span: ref Span) sync {
-    let fails: Vec[String] = ["task::TimedOut"]
+/// **A task that can panic fails with `task::Crashed`** (ADR-async-5 D35,
+/// #1355): where its value is waited for, as a written call that can fail
+/// does (`NK2605`). One that cannot adds nothing, so a `catch` that could
+/// only take its crash has nothing to handle (`NK1134`). Its own sites
+/// count with every check left in; its callees answer what the ledger says.
+fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: ref Expr, span: ref Span) {
+    let facts = PanicFacts {
+        checked: true,
+        arithmetic: state.facts.arithmetic.clone(),
+        negations: state.facts.negations.clone(),
+        shifts: state.facts.shifts.clone(),
+        map_keys: state.facts.map_keys.keys().map(fn(key) { key.0 }).collect(),
+        proven_indices: collections::BTreeSet(),
+        proven_arithmetic: collections::BTreeSet(),
+        proven_negations: collections::BTreeSet(),
+    }
+    if !panics_of_task(task, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library) {
+        return
+    }
+    let function = state.current?.clone() ?? ""
+    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
+}
+
+/// **A deadline can run out, a task can crash** (ADR-async-5 D16, D22,
+/// D35): the form fails with `error`, as a written call that can fail does
+/// (`NK2605`), so a `catch` around it or its fallback has it to handle, and a
+/// function that handles it nowhere says `throws`.
+fn check_core_async_fails(mut state: CheckState, span: ref Span, error: ref String, message: ref String, note: ref String, help: ref String) sync {
+    let fails: Vec[String] = [error.clone()]
     if state.flow.guarded != null {
         let held: CheckGuarded? = state.flow.guarded?.clone()
         let mut guarded = held ?? CheckGuarded::nothing()
@@ -802,6 +829,8 @@ fn check_core_async_deadline_fails(mut state: CheckState, span: ref Span) sync {
     if state.flow.throwing || state.flow.caught || state.inside_an_action != null {
         return
     }
-    let function = state.current?.clone() ?? return
-    state.findings.push(check_refusal("NK2605", span, "This function can fail, because the deadline of `within:` can run out.", ["When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16)."], f"Add `throws` to `{function}`, or write a fallback: `async(within: d) … catch {{ … }}`."))
+    if state.current == null {
+        return
+    }
+    state.findings.push(check_refusal("NK2605", span, message.clone(), [note.clone()], help.clone()))
 }
