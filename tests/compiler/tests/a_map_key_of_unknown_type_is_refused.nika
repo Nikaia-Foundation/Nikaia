@@ -7,7 +7,7 @@ fn id[T](x: T) -> T {
 	return x
 }
 
-fn main() {
+fn main() throws {
 	let mut m = collections::HashMap()
 	m[id(3)] = "x"
 	let k: String = f"a{1}"

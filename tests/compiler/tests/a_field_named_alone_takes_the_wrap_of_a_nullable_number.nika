@@ -13,7 +13,7 @@ fn hold(a: ref P, b: ref Q) -> i64 {
 	return (a.x ?? 0) + b.x
 }
 
-fn main() {
+fn main() throws {
 	let x = 1
 	let r = hold(P { x }, Q { x })
 	println(f"{r}")

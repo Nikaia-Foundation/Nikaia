@@ -17,7 +17,7 @@ struct R {
 	v: i64?,
 }
 
-fn main() {
+fn main() throws {
 	println(f() ?? 0)
 	println(g(false) ?? 0)
 	let r = R { v: id(7) }
