@@ -921,6 +921,7 @@ pub fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         }
         if b == "Bytes" && args.is_empty() {
             if written_range { state.facts.list_indices.insert(id_of(base) as i64); }
+            state.facts.bytes_cuts.insert(id_of(expr) as i64);
             return check_core_places_named("Bytes");
         }
         return Ty::Unknown;

@@ -1,0 +1,33 @@
+// A Rust user's reader of a `@stream` entry parses on a thread of its own and
+// sends each item over (ADR-grammar-2 D7, amended 2026-11-08, #1468): an item
+// type that is not `Send` is `NK1345` on the root of the feature that reaches
+// the entry, before rustc runs. A `SharedMut` at one thread is a count around
+// a cell; first the entry holds it in a field, then through a type of its own
+// with the grammar as the root.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+/// Builds a rust-library whose feature `stream` has `root`, the item holding
+/// `field`, and says how it ended.
+fn built(nikaia: String, root: String, field: String, made: String) throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n\n[features]\nstream = [\"{root}\"]\n")
+    fs::write(f"{tmp}/src/demo.nika", fs::Root::Anywhere, f"pub struct Inner {{\n\tpub text: SharedMut[String],\n}}\n\npub struct Item {{\n\tpub word: {field},\n}}\n\npub grammar G {{\n\t@stream entry rule doc -> Item = item*\n\trule item -> Item = w:until(\";\") \";\" -> {{ Item {{ word: {made} }} }}\n}}\n")
+    let out = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0"), ("CARGO_TERM_COLOR", "never")])
+    println(f"exit {out.code}")
+    println(out.stderr.trim().replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    built(nikaia, "demo::G::doc", "SharedMut[String]", "SharedMut(w.clone())")
+    built(nikaia, "demo::G", "Inner", "Inner { text: SharedMut(w.clone()) }")
+}

@@ -182,6 +182,28 @@ impl EmitState {
                 if spec.is_some() { self.emit_fold_options(world, walk, out, host, &name, &emit_text(world, rule.name), &match spec { Some(__nikaia_value) => __nikaia_value, None => panic("a par_fold") })?; }
             }
         }
+        let readers = emit_stream_readers(def, self.offered_to_rust);
+        for rule in readers.iter() { self.emit_stream_reader(world, walk, out, host, &name, rule)?; }
+        if !readers.is_empty() {
+            out.push(&format!("\n#[allow(non_snake_case)]\npub mod {} {{\n    pub use super::{}::{}::*;\n", name, emit_stream_grammar_module(&name), name));
+            for rule in readers.iter() {
+                let rule_name = emit_text(world, rule.name);
+                out.push(&format!("    pub use super::{} as {}_reader;\n", emit_stream_reader_name(&name, &rule_name), rule_name));
+            }
+            out.push("}\n");
+        }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_stream_reader<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, rule: &GrammarRule) -> Result<(), Box<dyn std::error::Error>> {
+        let rule_name = emit_text(world, rule.name);
+        let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let item = host.ty_named(walk, ty)?;
+        out.push(&format!("\n#[allow(non_snake_case)]\npub fn {}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = Result<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_reader_name(name, &rule_name), item));
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", name, rule_name, item));
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n");
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -207,7 +229,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_grammar_over<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef, name: &str, bytes: bool) -> Result<(), Box<dyn std::error::Error>> {
-        out.push("grammar! {\n");
+        if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push(&format!("#[doc(hidden)]\n#[allow(non_snake_case)]\nmod {} {{ use super::*; grammar! {{\n", emit_stream_grammar_module(name))); } else { out.push("grammar! {\n"); }
         out.push(&format!("    grammar {} {{\n", name));
         if bytes { out.push("        input bytes;\n"); }
         walk.grammar_bytes = bytes;
@@ -307,7 +329,7 @@ impl EmitState {
             out.push("            -> { x }\n");
         }
         out.push("    }\n");
-        out.push("}\n");
+        if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push("} }\n"); } else { out.push("}\n"); }
         if lines { out.push(&emit_same_line_function(name)); }
         Ok(())
     }
@@ -416,6 +438,17 @@ impl EmitState {
         Ok(())
     }
 }
+
+pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
+    let mut found: Vec<GrammarRule> = vec![];
+    if !offered_to_rust || !def.public { return found; }
+    for rule in def.rules.iter() { if rule.stream && rule.is_entry && rule.ret_type.is_some() && rule.args.is_empty() && rule.config.is_empty() { found.push(rule.clone()); } }
+    found
+}
+
+pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format!("__nikaia_reader_{}__{}", book, rule) }
+
+pub(crate) fn emit_stream_grammar_module(book: &str) -> String { format!("__nikaia_grammar_{}", book) }
 
 pub(crate) fn stream_item(pattern: &Pattern) -> Option<Spanned<Pattern>> {
     match pattern {

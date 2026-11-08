@@ -17,7 +17,7 @@ test "a run parameter lowers to a closure argument" {
 // nothing, `name.contains` on its result resolved to no method, which is read
 // as one that may pause, and `has` came out `async` with nothing in it that
 // pauses.
-fn function_types_has(f: fn(ref String) -> String sync, s: ref String) -> bool {
+fn function_types_has(f: fn(String) -> String sync, s: String) -> bool {
     let name = f(s)
     return name.contains("::")
 }
@@ -30,7 +30,7 @@ test "a run parameters result is its declared type" {
 // **And what it takes as a view is lent to it** (#125): an owned `name`
 // handed to a `fn(ref String)` gains the `&` a declared function's argument
 // would, where it went below by value and `rustc` refused it.
-fn function_types_ask(f: fn(ref String) -> i64 sync) -> i64 {
+fn function_types_ask(f: fn(String) -> i64 sync) -> i64 {
     let name: String = "abc"
     return f(name)
 }
@@ -60,7 +60,7 @@ test "a run parameter that pauses compiles and runs" {
 // the failure was.
 enum FunctionTypesE { Bad }
 
-impl Error for FunctionTypesE { fn message(ref self) -> String { return "bad" } }
+impl Error for FunctionTypesE { fn message(self) -> String { return "bad" } }
 
 fn function_types_risky(x: i64) -> i64 throws {
     if x > 1 { throw FunctionTypesE::Bad }
@@ -118,11 +118,11 @@ test "a mut parameter handed to another mut parameter gains no second reference"
 // long as that view, so a call with a local's text was a borrow `rustc`
 // refused (found moving `text_tiers` into Nikaia, #125).
 struct FunctionTypesAsk {
-    name: ref String,
-    size_of: fn(ref String) -> i64 sync,
+    name: String,
+    size_of: fn(String) -> i64 sync,
 }
 
-fn function_types_sum(ask: ref FunctionTypesAsk, words: ref Vec[String]) -> i64 {
+fn function_types_sum(ask: FunctionTypesAsk, words: Vec[String]) -> i64 {
     let mut total = ask.size_of(ask.name)
     for word in words {
         let local: String = f"{word}!"
@@ -133,7 +133,7 @@ fn function_types_sum(ask: ref FunctionTypesAsk, words: ref Vec[String]) -> i64 
 
 test "a kept function takes a borrow of any length" {
     let name: String = "abc"
-    let ask = FunctionTypesAsk { name: ref name, size_of: fn(s) { s.len() } }
+    let ask = FunctionTypesAsk { name: name, size_of: fn(s) { s.len() } }
     let words: Vec[String] = ["x", "yy"]
     let total = function_types_sum(ask, words)
     assert(total == 8)

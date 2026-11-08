@@ -1,0 +1,35 @@
+use compiler_tests
+
+// #1335: a free function and a method of the same name, in two files of the
+// package (`src/named_like_a_method_beside.nika` and
+// `src/named_like_a_method_beside_caller.nika`) and in this one: the method's
+// call lends its argument as the method's parameter wants, not as the free
+// function's first parameter (an option of a view) would.
+struct Holder { n: i64 }
+
+fn frame_of(holder: ref Holder?, extra: i64) -> i64 {
+	return (holder?.n ?? 0) + extra
+}
+
+struct Item { name: String }
+
+struct State { count: i64 }
+
+impl State {
+	fn frame_of(ref self, item: ref Item) -> i64 {
+		return self.count + item.name.len()
+	}
+
+	fn twice(ref self, name: String) -> i64 {
+		let item = Item { name: name }
+		return self.frame_of(item) + self.frame_of(item)
+	}
+}
+
+fn main() throws {
+	let beside = compiler_tests::NamedLikeState { count: 1 }
+	println(f"{beside.named_like_twice("abc")} {compiler_tests::named_like_frame_of_held(4)}")
+	let here = State { count: 10 }
+	let h = Holder { n: 5 }
+	println(f"{here.twice("ab")} {frame_of(h, 1)} {frame_of(null, 1)}")
+}

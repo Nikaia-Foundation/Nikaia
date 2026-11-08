@@ -1,0 +1,27 @@
+rust-library: TMP/yaml/target/rust-library/nikaia_yaml
+ok test_borrowed
+ok test_alias
+ok test_option
+ok test_option_alias
+ok test_enum_alias
+ok test_enum_representations
+ok test_number_as_string
+ok test_empty_string
+ok test_i128_big
+ok test_u128_big
+ok test_number_alias_as_string
+ok test_de_mapping
+FAILED test_byte_order_mark: called `Result::unwrap()` on an `Err` value: Error("invalid type: string \"\\u{feff}- 0\", expected a sequence", line: 1, column: 1)
+ok test_bomb
+ok test_numbers
+ok test_nan
+ok test_ignore_tag
+ok test_no_required_fields
+ok test_empty_scalar
+FAILED test_python_safe_dump: called `Result::unwrap()` on an `Err` value: Error("expected one of: `plain_first(x)`, a scalar its tag fits; found unexpected token `-`", line: 1, column: 15)
+ok test_tag_resolution
+ok test_parse_number
+ok test_one_document
+  b: invalid type: string "x", expected u8 at line 2 column 4
+  unexpected end of input, expected one of: `m > n`, `plain_char(x, flow, after_space)` at line 2 column 1 (2:1)
+ok test_location

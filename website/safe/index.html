@@ -41,7 +41,7 @@ description: >-
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>An index past the end, a number that overflows</h3>
-        <p>An index outside a list or an integer that overflows stops the program and names the line, before anything reads or writes memory it does not own. Where the compiler has proved that such a check cannot fail, a build setting leaves it out of the machine code.</p>
+        <p>An index outside a list or an integer that overflows stops the program and names the line, before anything reads or writes memory it does not own. Where the compiler has proved that such a check cannot fail, a build setting leaves it out of the machine code. A division by a constant zero is refused when the program is built. Where the compiler can show that an index is past the end, a number overflows or a divisor is zero for a value the program reaches, the program is refused too; that is specified and not built yet.</p>
         <a class="safe-more" href="{{ "/fast/proved-checks-dropped.html" | relative_url }}">Checks left out where proved →</a>
       </div>
       <div class="safe-tile safe-tile-b">

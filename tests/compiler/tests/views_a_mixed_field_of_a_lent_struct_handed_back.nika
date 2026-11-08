@@ -1,0 +1,13 @@
+// A field both kinds flow into, handed back out of a lent struct, borrows
+// the struct: `fn label<'r>(e: &'r Entry<'r>)` (#1341).
+struct Entry { key: String }
+struct Seen { at: String }
+fn label(e: ref Entry) -> String { return e.key }
+fn place(s: ref Seen) -> String { return s.at }
+fn main() throws {
+    let text = f"  hello\nworld"
+    let a = Entry { key: text.trim() }
+    let b = Entry { key: f"own" }
+    let s = Seen { at: text.lines().next() ?? "" }
+    println(f"{label(b)} {place(s)} {label(a).len()}")
+}

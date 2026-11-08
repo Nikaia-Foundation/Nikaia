@@ -19,7 +19,7 @@ fn reader_shapes_found(n: i64) -> ReaderShapesStep? {
     return null
 }
 
-fn reader_shapes_applied(step: ref ReaderShapesStep?, x: i64) -> i64 {
+fn reader_shapes_applied(step: ReaderShapesStep?, x: i64) -> i64 {
     let s = step ?? return 0
     return s.apply(x)
 }
@@ -80,7 +80,7 @@ enum ReaderShapesLine {
     Skip,
 }
 
-fn reader_shapes_shout(text: ref String) -> String {
+fn reader_shapes_shout(text: String) -> String {
     return text.to_uppercase()
 }
 
@@ -108,12 +108,12 @@ struct ReaderShapesRow {
 }
 
 impl ReaderShapesRow {
-    fn doubled(ref self) -> i64 {
+    fn doubled(self) -> i64 {
         return self.value * 2
     }
 }
 
-fn reader_shapes_first(rows: ref Array[ReaderShapesRow]) -> i64 {
+fn reader_shapes_first(rows: Array[ReaderShapesRow]) -> i64 {
     return rows[0].doubled() + rows[1..<2][0].doubled()
 }
 

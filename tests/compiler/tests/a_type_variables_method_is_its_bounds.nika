@@ -1,0 +1,30 @@
+// **A method call on a parameter of a type variable reaches its bound's
+// method** (#1254): `c.count()` of `c: C` with `[C: Count]` is
+// `Count::count`, which lends `c`; the bare name also matched `std`'s
+// `count`, which takes its receiver, so `counted` kept `c`.
+trait Count {
+    fn count(self) -> i64
+}
+
+struct Fixed {
+    text: String,
+}
+
+impl Count for Fixed {
+    fn count(self) -> i64 {
+        return self.text.len()
+    }
+}
+
+fn counted[C: Count](c: C) -> i64 {
+    return c.count()
+}
+
+fn stored(keep s: String) -> Vec[String] {
+    return [s]
+}
+
+fn main() throws {
+    let f = Fixed { text: "fixed" }
+    println(f"{counted(f)} {counted(f)} {stored(f.text).len()}")
+}

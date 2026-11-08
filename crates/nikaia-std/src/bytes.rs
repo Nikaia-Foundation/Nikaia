@@ -350,6 +350,14 @@ impl AsRef<[u8]> for Bytes {
     }
 }
 
+/// **A map keyed by `Bytes` is looked up with a cut** (#1345): equal, ordered
+/// and hashed by content, a `Bytes` borrows as the `[u8]` it holds.
+impl std::borrow::Borrow<[u8]> for Bytes {
+    fn borrow(&self) -> &[u8] {
+        self.buffer.as_slice()
+    }
+}
+
 /// **`Bytes(v)`** (ADR-373 D2): the call a program writes, the type's name
 /// with a `Vec[u8]` it hands over. A function in the value namespace beside
 /// the struct in the type namespace, so the generated Rust writes the call as

@@ -206,11 +206,11 @@ pub struct DescribeSources {
     pub files: collections::BTreeMap<String, String>,
 }
 
-pub async fn describe_crate_sources<H: DescribeHost>(root: &std::path::Path, version: Option<String>, declared: Option<String>, crate_word: &str, key: &str, host: &H) -> Result<DescribeSources, nikaia_std::error::Thrown<Refused>> {
+pub async fn describe_crate_sources<H: DescribeHost>(root: &std::path::Path, version: Option<&str>, declared: Option<&str>, crate_word: &str, key: &str, host: &H) -> Result<DescribeSources, nikaia_std::error::Thrown<Refused>> {
     let path = match declared { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is a dependency by version, and `nikaia describe` can only read crates given by `path`. Use a `path` dependency, or write `contracts/{}.contracts` by hand.", key, crate_word)), &"describe_crate_sources")) };
     let crate_root = describe_without_dots(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(path))));
     if !describe_is_dir(&crate_root) { return Err(nikaia_std::error::throwing(Refused::Because(format!("The sources of `{}` aren't at {}. (A `path` in `nikaia.toml` is relative to `nikaia.toml`.)", key, nikaia_std::fs::path::display(&(crate_root)))), &"describe_crate_sources")); }
-    let mut known = nikaia_std::index::or(version.as_deref(), || "?").to_string();
+    let mut known = nikaia_std::index::or(version, || "?").to_string();
     if known == "?" { known = nikaia_std::index::or(host.cargo_version(&crate_root), || "?".into()).to_string(); }
     let src = nikaia_std::fs::path::join(&(crate_root), std::path::Path::new(&("src")));
     let mut files: collections::BTreeMap<String, String> = collections::BTreeMap::new();

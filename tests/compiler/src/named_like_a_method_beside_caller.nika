@@ -1,0 +1,16 @@
+/// A method named like a free function `named_like_a_method_beside.nika`
+/// declares: its argument is lent as its own parameter wants it (#1335).
+pub struct NamedLikeItem { pub name: String }
+
+pub struct NamedLikeState { pub count: i64 }
+
+impl NamedLikeState {
+	pub fn named_like_frame_of(ref self, item: ref NamedLikeItem) -> i64 {
+		return self.count + item.name.len()
+	}
+
+	pub fn named_like_twice(ref self, name: String) -> i64 {
+		let item = NamedLikeItem { name: name }
+		return self.named_like_frame_of(item) + self.named_like_frame_of(item)
+	}
+}

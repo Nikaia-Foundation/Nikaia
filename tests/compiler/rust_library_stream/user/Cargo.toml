@@ -1,0 +1,11 @@
+# A Rust crate that takes `../lines` with its feature `stream` (ADR-393 D4),
+# by `tests/a_rust_library_reads_a_stream_entry.nika`.
+[package]
+name = "user"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nikaia_lines = { path = "../lines/target/rust-library/nikaia_lines", features = ["stream"] }
+
+[workspace]

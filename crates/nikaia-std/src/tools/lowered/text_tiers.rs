@@ -217,16 +217,18 @@ pub(crate) struct TextDeclared {
     pub(crate) methods: collections::BTreeMap<String, Vec<String>>,
     pub(crate) rules: collections::BTreeSet<String>,
     pub(crate) comptime_texts: collections::BTreeSet<String>,
+    pub(crate) private_structs: collections::BTreeSet<String>,
 }
 
 pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerContext) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new(), comptime_texts: collections::BTreeSet::new() };
+    let mut declared = TextDeclared { fields: collections::BTreeMap::new(), variants: collections::BTreeMap::new(), variant_fields: collections::BTreeMap::new(), public_enums: collections::BTreeSet::new(), fns: collections::BTreeMap::new(), types: collections::BTreeSet::new(), methods: collections::BTreeMap::new(), rules: collections::BTreeSet::new(), comptime_texts: collections::BTreeSet::new(), private_structs: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, fields, is_public, .. } => {
                 let is_public = *is_public; let name = *name;
                 let owner = names.resolve(name).to_string();
                 declared.types.insert(owner.to_string());
+                if !is_public { declared.private_structs.insert(owner.to_string()); }
                 for field in fields.iter() {
                     let key = (owner.to_string(), names.resolve(field.name).to_string());
                     declared.fields.insert(key, FieldDecl { ty: field.ty.clone(), published: is_public && field.is_public });
@@ -256,7 +258,7 @@ pub(crate) fn declared_of(program: &Program, names: &winnow_grammar::InternerCon
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 let owner = names.resolve(target.name).to_string();
-                for method in methods.iter() { declare_function(&method.node, Some(owner.to_string()), names, &mut declared, trait_name.is_some()); }
+                for method in methods.iter() { declare_function(&method.node, Some(&owner.to_string()), names, &mut declared, trait_name.is_some()); }
             },
             Item::Grammar(def) => { declare_rules(def, names, &mut declared); },
             Item::Comptime { name, ty, .. } => {
@@ -286,14 +288,14 @@ pub(crate) fn declare_rules(def: &GrammarDef, names: &winnow_grammar::InternerCo
     }
 }
 
-pub(crate) fn declare_function(item: &Item, target: Option<String>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
+pub(crate) fn declare_function(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, declared: &mut TextDeclared, of_a_trait: bool) {
     let (name, receiver, args, ret_type, is_public) = match item {
         Item::Fn { name, receiver, args, ret_type, is_public, .. } => { let is_public = *is_public; let name = *name; (name, receiver, args, ret_type, is_public) },
         _ => return,
     };
     let changes_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
     let own = own_name((name).as_ref(), names);
-    let key = tier_key((target).as_deref(), &own);
+    let key = tier_key(target, &own);
     if target.is_some() { declared.methods.entry(own.to_string()).or_insert(vec![]).push(key.to_string()); }
     let mut params: Vec<Type> = vec![];
     let mut changes: Vec<bool> = vec![];
@@ -367,6 +369,7 @@ pub(crate) struct TierLocal {
     pub(crate) made: bool,
     pub(crate) unkept: bool,
     pub(crate) items_of: Option<String>,
+    pub(crate) cut: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -504,7 +507,7 @@ pub(crate) fn tier_arm_read(node: i64, walk: &mut TierWalk) -> bool {
     walk.param_arms.contains(&node)
 }
 
-pub(crate) fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None } }
+pub(crate) fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false } }
 
 pub(crate) fn tier_at(word: &str, walk: &mut TierWalk) -> Tier {
     if !walk.reads.tiers.contains(word) { walk.reads.tiers.insert(word.to_string()); }
@@ -1934,7 +1937,7 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
         }
     }
     if names.len() == 1 {
-        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of };
+        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of, cut: a_cut(value, ask) };
         bind_tier_local(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), local, walk);
         return;
     }
@@ -2124,7 +2127,7 @@ pub(crate) fn lendable_sides(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wa
         Expr::Throw(_, _) => { return true; },
         _ => { },
     }
-    if a_null(value) { return true; }
+    if a_null(value) || a_literal_text(value) { return true; }
     let through = lent_through_code(value, ask, &walk);
     if through.is_some() {
         let argument = match through { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -2392,14 +2395,44 @@ pub(crate) fn lent_field(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: 
 }
 
 pub(crate) fn lent_element(base: &Expr, made: bool, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
-    let list = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let list = match list_place(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) { return false; }
     let element = nikaia_std::index::get(&list.ty.generics, 0);
     if !plain_string(ask.names, &element) || element.is_nullable { return false; }
     match base {
         Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) || made && made_list_local(ask.names.resolve(name), &walk) },
         Expr::Field { base: inner, .. } => { let inner = nikaia_std::boxed::open(inner); !list.ty.is_view && lent_root(inner, ask, walk) },
+        Expr::Index { base: inner, .. } => { let inner = nikaia_std::boxed::open(inner); !list.ty.is_view && lent_outer_list(inner, ask, walk) },
         _ => false,
+    }
+}
+
+pub(crate) fn lent_outer_list(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    match base {
+        Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) },
+        Expr::Field { base: inner, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            let place = match place_of(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            !place.ty.is_view && !place.ty.is_nullable && lent_root(inner, ask, walk)
+        },
+        Expr::Index { base: inner, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            let place = match list_place(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            !place.ty.is_view && !place.ty.is_nullable && lent_outer_list(inner, ask, walk)
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn list_place(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<Declaring> {
+    match base {
+        Expr::Index { base: inner, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            let outer = match list_place(inner, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if outer.ty.is_nullable || outer.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(outer.ty.name)) { return None; }
+            Some(Declaring { owner: outer.owner.clone(), ty: (*nikaia_std::index::get(&outer.ty.generics, 0)).clone() })
+        },
+        _ => place_of(base, ask, walk),
     }
 }
 
@@ -2769,10 +2802,11 @@ pub(crate) struct TierLate {
     pub(crate) text_fields: collections::BTreeSet<String>,
     pub(crate) held: collections::BTreeMap<String, Vec<(i64, (String, String))>>,
     pub(crate) held_moves: collections::BTreeSet<i64>,
+    pub(crate) temporaries: collections::BTreeSet<String>,
 }
 
 pub(crate) fn late_arms(program: &Program, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new() };
+    let mut late = TierLate { bound: collections::BTreeMap::new(), frames: vec![], serial: 0, loops: 0, leaving: 0, leaves: vec![], pending: vec![], found: collections::BTreeSet::new(), args: collections::BTreeSet::new(), params: collections::BTreeSet::new(), params_from: 0, params_upto: 0, branch_args: vec![], branches: 0, viewing: collections::BTreeSet::new(), viewing_methods: collections::BTreeSet::new(), variants: collections::BTreeSet::new(), views: collections::BTreeMap::new(), viewers: collections::BTreeMap::new(), moved: collections::BTreeMap::new(), changing_methods: collections::BTreeSet::new(), text_fields: collections::BTreeSet::new(), held: collections::BTreeMap::new(), held_moves: collections::BTreeSet::new(), temporaries: collections::BTreeSet::new() };
     for (key, function) in declared.fns.iter() {
         let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if late_holds_text(result, declared, ask, 0) { late.viewing.insert(key.to_string()); }
@@ -2831,6 +2865,7 @@ pub(crate) fn late_body(body: &Block, names: &[String], ask: &TierAsk<'_, '_, '_
     late.views = collections::BTreeMap::new();
     late.viewers = collections::BTreeMap::new();
     late.held = collections::BTreeMap::new();
+    late.temporaries = collections::BTreeSet::new();
     late_open(late);
     late.params_from = late.serial;
     for name in names.iter() { late_bind(name.to_string(), late); }
@@ -2919,7 +2954,9 @@ pub(crate) fn late_block(block: &Block, leaf: bool, ask: &TierAsk<'_, '_, '_, '_
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
         at += 1;
+        let outer = late.temporaries.to_owned();
         late_stmt(&stmt.node, leaf && ((at) as usize) == block.stmts.len(), ask, late);
+        late.temporaries = outer;
     }
     late_close(late);
 }
@@ -3030,14 +3067,19 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             let held = late_choice_opened(leaf, late);
             let outer = late_branches_opened(late);
             let mut gathered: Vec<TierLateArm> = vec![];
+            let before = late.temporaries.to_owned();
+            let mut made = before.to_owned();
             for arm in arms.iter() {
+                late.temporaries = before.to_owned();
                 late_open(late);
                 late_pattern(&arm.pattern, ask, late);
                 if arm.guard.is_some() { late_maybe(Option::as_ref(&arm.guard), ask, late); }
                 late_expr(&arm.body, true, ask, late);
                 late_close(late);
                 late_branch_ended(&mut gathered, late);
+                made.extend(late.temporaries.iter().cloned());
             }
+            late.temporaries = made;
             late_branches_closed(outer, &gathered, late);
             late_choice_closed(leaf, held, late);
         },
@@ -3058,6 +3100,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             late_expr(func, false, ask, late);
             late_all(args, ask, late);
             for arg in args.iter() { late_argument(arg, ask, late); }
+            late_temporary(expr, ask, late);
             let callee = nikaia_std::index::or(tier_callee(func, ask), || "".into());
             if late.variants.contains(&callee) {
                 let (of, variant) = variant_named(&callee);
@@ -3072,6 +3115,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             let receiver = nikaia_std::boxed::open(receiver);
             late_expr(receiver, false, ask, late);
             late_all(args, ask, late);
+            late_temporary(expr, ask, late);
         },
         Expr::SafeMethod { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -3179,12 +3223,14 @@ pub(crate) fn late_argument(arg: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late:
     let serial = late_serial(&word, &late);
     if serial < 0 { return; }
     let loops = late_loops(&word, &late);
-    if late.loops > loops {
+    if late.loops > loops || late.temporaries.contains(&format!("{} {}", word, serial)) {
         late.args.insert(node_key(arg));
         return;
     }
     late_defer(TierLateArm { at: node_key(arg), name: word.to_string(), serial, loops, argument: true }, late);
 }
+
+pub(crate) fn late_temporary(call: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) { for key in late_sources(call, ask, &late) { late.temporaries.insert(key); } }
 
 pub(crate) fn late_holds_text(ty: &Type, declared: &TextDeclared, ask: &TierAsk<'_, '_, '_, '_, '_>, depth: i64) -> bool {
     if depth > 4 { return false; }
@@ -3668,14 +3714,36 @@ pub(crate) fn items_kinds(items: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, wal
 }
 
 pub(crate) fn field_kinds(expr: &Expr, base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
-    tier_expr(base, ask, walk);
+    let whole = tier_expr(base, ask, walk);
     let place = place_of(expr, ask, walk);
     if place.is_none() {
-        let part = match tuple_part_going(expr, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
+        let part = match tuple_part_going(expr, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return cut_part_kinds(expr, &whole, ask, &walk) };
         return kinds_of(&part.owner, &part.ty, &mut part.path.to_owned(), ask, walk);
     }
     let found = match place { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     kinds_of_declared(&found, ask, walk)
+}
+
+pub(crate) fn cut_part_kinds(expr: &Expr, whole: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &TierWalk) -> Kinds {
+    let (base, name) = match expr {
+        Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; (base, name) },
+        _ => return owned_kinds(),
+    };
+    let cut = match base {
+        Expr::Variable(local, _) => { let local = *local; nikaia_std::index::or(tier_local(ask.names.resolve(local), walk).as_ref().map(|__nikaia_it| __nikaia_it.cut), || false) },
+        _ => a_cut(base, ask),
+    };
+    if !cut || tier_part_index(ask.names.resolve(name)) < 0 || whole.either || whole.owned && (whole.view || whole.still) { return owned_kinds(); }
+    whole.clone()
+}
+
+pub(crate) fn a_cut(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>) -> bool {
+    match value {
+        Expr::MethodCall { method, .. } => { let method = *method; cuts_in_two(ask.names.resolve(method)) },
+        Expr::Coalesce { value: first, fallback, .. } => { let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback); tier_a_jump(fallback) && a_cut(first, ask) },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); a_cut(inner, ask) },
+        _ => false,
+    }
 }
 
 pub(crate) fn tier_struct_field(owner: &str, field: &FieldInit, back: bool, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -4124,7 +4192,7 @@ pub(crate) fn walk_unit(program: &Program, item_at: i64, method_at: i64, ask: &T
         Item::Fn { .. } => { walk_function(&item.node, None, ask, walk); },
         Item::Impl { target, methods, .. } => {
             let owner = ask.names.resolve(target.name).to_string();
-            walk_function(&nikaia_std::index::get(&methods, nikaia_std::index::at(method_at)).node, Some(owner), ask, walk);
+            walk_function(&nikaia_std::index::get(&methods, nikaia_std::index::at(method_at)).node, Some(&owner), ask, walk);
         },
         Item::Grammar(def) => { walk_grammar(def, ask, walk); },
         Item::Test { body, .. } => { walk_body(body, ask, walk); },
@@ -4453,12 +4521,12 @@ pub(crate) fn grammar_reference_kinds(gname: &str, rules: &collections::BTreeSet
     no_kinds()
 }
 
-pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let (name, receiver, args, config, body) = match item {
         Item::Fn { name, receiver, args, config, body, .. } => { let name = *name; (name, receiver, args, config, body) },
         _ => return,
     };
-    let key = tier_key((target).as_deref(), &own_name((name).as_ref(), ask.names));
+    let key = tier_key(target, &own_name((name).as_ref(), ask.names));
     walk.function = own_name((name).as_ref(), ask.names);
     walk.locals = collections::BTreeMap::new();
     walk.ties = collections::BTreeMap::new();
@@ -4467,12 +4535,18 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
     walk.in_hole = false;
     walk.hole_text = -1;
     open_tier_scope(walk);
+    let of_a_trait = nikaia_std::index::or((*nikaia_std::index::get(&walk.declared.fns, &key)).as_ref().map(|__nikaia_it| __nikaia_it.of_a_trait), || false);
+    let held = walk_lists_of_views(&key, args.len() as i64, walk);
+    let free: Option<String> = if target.is_none() { Some(key.to_string()) } else { None };
+    let lent_fields: collections::BTreeSet<String> = if of_a_trait { collections::BTreeSet::new() } else { hb_text_field_roots(item, ask.names, &walk.declared.private_structs, (free).as_deref(), &held) };
     let mut at = 0;
     for arg in args.iter() {
         let owner = TextOwner::Param(key.to_string(), at);
         let kinds = kinds_of(&owner, &arg.ty, &mut vec![], ask, walk);
         let of: String = ask.names.resolve(arg.ty.name).to_string();
-        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty: arg.ty.clone() }), from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None };
+        let mut ty = arg.ty.clone();
+        if lent_fields.contains(ask.names.resolve(arg.name)) { ty.is_view = true; }
+        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty }), from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false };
         bind_tier_local(ask.names.resolve(arg.name).to_string(), local, walk);
         at += 1;
     }
@@ -4480,10 +4554,10 @@ pub(crate) fn walk_function(item: &Item, target: Option<String>, ask: &TierAsk<'
     walk.lent_self = false;
     if receiver.is_some() && target.is_some() {
         walk.lent_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
-        let local = TierLocal { kinds: owned_kinds(), of: match target.as_ref() {
-            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        let local = TierLocal { kinds: owned_kinds(), of: match target {
+            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
             None => None,
-        }, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None };
+        }, literal: -1, declared: None, from: None, empty: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false };
         bind_tier_local(String::from("self"), local, walk);
     }
     walk.handed_back = -1;
@@ -5485,14 +5559,16 @@ pub(crate) fn tw_said(tiers: &collections::BTreeMap<(i64, String, String, i64, V
     out
 }
 
-pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext, package: &SliceFills) -> collections::BTreeSet<String> {
+pub fn tier_hand_back(program: &mut Program, words: &winnow_grammar::InternerContext, package: &SliceFills, decided: &[(TextPosition, Tier)]) -> collections::BTreeSet<String> {
+    let held = hb_lists_of_views(decided);
     let plain = hb_plain_enums(&program.items, words);
     let opted = keep_marks_opted_in_items(&program.items);
+    let private = hb_private_structs(&program.items, words);
     let mut views: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
     let mut made: collections::BTreeSet<String> = collections::BTreeSet::new();
     loop {
         let before = views.len() as i64;
-        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, opted, &mut views, &mut made); }
+        for item in program.items.iter_mut() { hb_item(&mut (*item).node, words, &plain, &private, &held, opted, &mut views, &mut made); }
         if (views.len() as i64) == before { break; }
     }
     sf_slice_fields(program, words, package);
@@ -5816,12 +5892,13 @@ pub(crate) fn sv_through_an_index(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, made: &mut collections::BTreeSet<String>) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn hb_item(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, private: &collections::BTreeSet<String>, held: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, made: &mut collections::BTreeSet<String>) {
     match item {
-        Item::Fn { .. } => { hb_fn(item, words, plain, opted, views, true); },
+        Item::Fn { .. } => { hb_fn(item, words, plain, private, held, opted, views, true); },
         Item::Impl { trait_name, target, methods } => {
             let trait_name = *trait_name;
-            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, opted, views, false); } } else {
+            if trait_name.is_none() { for method in methods.iter_mut() { hb_fn(&mut (*method).node, words, plain, private, held, opted, views, false); } } else {
                 let owner = words.resolve(target.name).to_string();
                 for method in methods.iter_mut() { hb_trait_from(&mut (*method).node, words, plain, &owner, made); }
             }
@@ -5861,7 +5938,16 @@ pub(crate) fn hb_trait_from(item: &mut Item, words: &winnow_grammar::InternerCon
 
 pub(crate) fn hb_plain_text(t: &Type, words: &winnow_grammar::InternerContext) -> bool { words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_nullable && !t.is_mut && !t.is_slice && (*t.code).is_none() }
 
-pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, plain: &collections::BTreeSet<String>, private: &collections::BTreeSet<String>, held: &collections::BTreeSet<String>, opted: bool, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
+    let lent_fields = hb_text_field_roots(&item, words, private, (if free { hb_fn_name(&item, words) } else { None }).as_deref(), held);
+    if !lent_fields.is_empty() {
+        match item {
+            Item::Fn { args, .. } => { for arg in args.iter_mut() { if lent_fields.contains(words.resolve((*arg).name)) { hb_set(&mut (*arg).ty); } } },
+            _ => { },
+        }
+        return;
+    }
     match item {
         Item::Fn { name, receiver, args, ret_type, body, is_extern, ret_from, .. } => {
             let is_extern = *is_extern; let name = *name;
@@ -5885,6 +5971,177 @@ pub(crate) fn hb_fn(item: &mut Item, words: &winnow_grammar::InternerContext, pl
         },
         _ => { },
     }
+}
+
+pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerContext, private: &collections::BTreeSet<String>, key: Option<&str>, held: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let (args, ret_type, body, is_extern, ret_from, is_public) = match item {
+        Item::Fn { args, ret_type, body, is_extern, ret_from, is_public, .. } => { let is_extern = *is_extern; let is_public = *is_public; (args, ret_type, body, is_extern, ret_from, is_public) },
+        _ => return out,
+    };
+    let t = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && (*t.code).is_none();
+    if is_extern || !text { return out; }
+    let none: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut handed: Vec<&Expr> = vec![];
+    for way in hb_ways_out(body) { handed.extend(hb_text_arms(way)); }
+    if is_public && !handed.iter().all(|value| { hb_field_chain_root(value, words).is_some() }) { return out; }
+    let mut reads: Vec<&Expr> = handed.to_owned();
+    let mut measured: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let visited = visited_in_block(body);
+    for expr in visited.iter() {
+        let expr = *expr;
+        match expr {
+            Expr::Call { func, args: given, .. } => { let func = nikaia_std::boxed::open(func); match func {
+                Expr::Variable(_, _) => { reads.extend(given); },
+                _ => { },
+            }; },
+            Expr::Binary { lhs, rhs, .. } => {
+                let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+                reads.push(lhs);
+                reads.push(rhs);
+            },
+            Expr::LitInterpolated { parts, .. } => {
+                for part in parts.iter() {
+                    match part {
+                        FPart::Hole { expr: hole, .. } => { reads.push(hole); },
+                        _ => { },
+                    }
+                }
+            },
+            Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match receiver {
+                Expr::Variable(_, _) => {
+                    let word = words.resolve(method);
+                    if word == "len" || word == "is_empty" || word == "contains" { measured.insert(id_of(receiver) as i64); }
+                },
+                _ => { },
+            }; },
+            _ => { },
+        }
+    }
+    let nothing: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let free = key.is_some();
+    let function = nikaia_std::index::or(key, || "");
+    for value in handed.iter() {
+        let value = *value;
+        let root = match hb_field_chain_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !ret_from.is_empty() && !ret_from.iter().any(|named| { words.resolve(*named) == root }) { continue; }
+        let element = hb_an_element_read(value);
+        let mut list = false;
+        if element && free {
+            let mut at = 0;
+            for arg in args.iter() {
+                if words.resolve(arg.name) == root && hb_a_list_type(&arg.ty, words) && !held.contains(&position_word(&TextOwner::Param(function.to_string(), at), &vec![])) { list = true; }
+                at += 1;
+            }
+        }
+        let lendable = args.iter().any(|arg| { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && (*arg.ty.code).is_none() && (private.contains(words.resolve(arg.ty.name)) || list) && hb_type_may_be_a_view(&arg.ty, words, &none) });
+        let only_read = if list { hb_only_field_reads(&root, &visited, &reads, &measured, words) } else { hb_only_field_reads(&root, &visited, &reads, &nothing, words) };
+        if lendable && !rebinds(body, &root, words) && only_read { out.insert(root); }
+    }
+    out
+}
+
+pub(crate) fn hb_only_field_reads(root: &str, visited: &[&Expr], reads: &[&Expr], also: &collections::BTreeSet<i64>, words: &winnow_grammar::InternerContext) -> bool {
+    let mut read: collections::BTreeSet<i64> = also.to_owned();
+    for value in reads.iter() {
+        let value = *value;
+        let name = match hb_field_chain_root(value, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if name == root { read.insert(hb_chain_variable_id(value)); }
+    }
+    for expr in visited.iter() {
+        let expr = *expr;
+        match expr {
+            Expr::Variable(name, _) => { let name = *name; if words.resolve(name) == root && !read.contains(&(id_of(expr) as i64)) { return false; }; },
+            Expr::Closure { .. } => { return false; },
+            _ => { },
+        }
+    }
+    true
+}
+
+pub(crate) fn hb_chain_variable_id(value: &Expr) -> i64 {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); hb_chain_variable_id(base) },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); hb_chain_variable_id(base) },
+        _ => id_of(value) as i64,
+    }
+}
+
+pub(crate) fn hb_text_arms(value: &Expr) -> Vec<&Expr> {
+    let arms = tail_arms(value);
+    if arms.is_empty() { return vec![value]; }
+    let mut out: Vec<&Expr> = vec![];
+    for arm in arms.iter() {
+        let arm = *arm;
+        out.extend(hb_text_arms(arm));
+    }
+    out
+}
+
+pub(crate) fn hb_field_chain_root(value: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    let base = match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+        _ => return None,
+    };
+    match base {
+        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Field { .. } => hb_field_chain_root(base, words),
+        Expr::Index { .. } => hb_field_chain_root(base, words),
+        _ => None,
+    }
+}
+
+pub(crate) fn hb_an_element_read(value: &Expr) -> bool {
+    match value {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+            Expr::Variable(..) => true,
+            Expr::Index { .. } => hb_an_element_read(base),
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+pub(crate) fn hb_a_list_type(t: &Type, words: &winnow_grammar::InternerContext) -> bool {
+    let name = words.resolve(t.name);
+    (name == "Vec" || name == "Array") && t.generics.len() == 1
+}
+
+pub(crate) fn hb_fn_name(item: &Item, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match item {
+        Item::Fn { name, .. } => { let name = *name; match name {
+            Some(each) => Some(words.resolve(each).to_string()),
+            None => None,
+        } },
+        _ => None,
+    }
+}
+
+pub(crate) fn hb_lists_of_views(decided: &[(TextPosition, Tier)]) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (position, tier) in decided.iter() {
+        let tier = *tier;
+        let viewed = matches!(tier, Tier::View | Tier::Mixed);
+        match &position.owner {
+            TextOwner::Param(_, _) => { if viewed && !position.path.is_empty() { out.insert(position_word(&position.owner, &vec![])); } },
+            _ => { },
+        }
+    }
+    out
+}
+
+pub(crate) fn walk_lists_of_views(key: &str, count: i64, walk: &mut TierWalk) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for at in 0..count {
+        let owner = TextOwner::Param(key.to_string(), at);
+        for path in [vec![0], vec![0, 0]] {
+            let viewed = matches!(tier_at(&position_word(&owner, &path), walk), Tier::View | Tier::Mixed);
+            if viewed { out.insert(position_word(&owner, &vec![])); }
+        }
+    }
+    out
 }
 
 pub(crate) fn hb_enter(name: Option<&winnow_grammar::Symbol>, sources: Vec<i64>, words: &winnow_grammar::InternerContext, views: &mut collections::BTreeMap<String, Vec<i64>>, free: bool) {
@@ -6046,6 +6303,20 @@ pub(crate) fn hb_returns_of(block: &Block) -> Vec<&Expr> {
 pub(crate) fn hb_returns_of_maybe(block: Option<&Block>) -> Vec<&Expr> { hb_returns_of(match block { Some(__nikaia_value) => __nikaia_value, None => return vec![] }) }
 
 pub(crate) fn hb_maybe(expr: Option<&Expr>) -> Vec<&Expr> { vec![match expr { Some(__nikaia_value) => __nikaia_value, None => return vec![] }] }
+
+pub(crate) fn hb_private_structs(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in items.iter() {
+        match &item.node {
+            Item::Struct { name, is_public, .. } => {
+                let is_public = *is_public; let name = *name;
+                if !is_public { out.insert(words.resolve(name).to_string()); }
+            },
+            _ => { },
+        }
+    }
+    out
+}
 
 pub fn hb_plain_enums(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut plain: collections::BTreeSet<String> = collections::BTreeSet::new();

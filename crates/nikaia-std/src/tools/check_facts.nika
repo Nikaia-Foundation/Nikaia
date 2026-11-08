@@ -501,6 +501,10 @@ pub struct CheckFacts {
     pub array_literals: collections::BTreeSet[i64],
     pub byte_literals: collections::BTreeSet[i64],
     pub owned_texts: collections::BTreeSet[i64],
+    /// A text literal handed to a type variable the callee lends
+    /// (ADR-views-3 D2, #1342): the view it is, with the one `&` the
+    /// parameter takes, `&"b"`.
+    pub lent_literals: collections::BTreeSet[i64],
     /// A `catch` whose guarded value is a view of text and whose handler's is
     /// text of its own: the guarded value is made owned.
     pub owned_catches: collections::BTreeSet[i64],
@@ -516,6 +520,10 @@ pub struct CheckFacts {
     pub text_scalars: collections::BTreeSet[i64],
     /// `s.graphemes` on text: its graphemes by UAX #29, walked (ADR-320 D9).
     pub text_graphemes: collections::BTreeSet[i64],
+    /// `b[a..<c]` on a `Bytes`: a cut, a `&[u8]` into `b` below (ADR-320
+    /// D7): kept, it is copied into a `Bytes` of its own; read as a map's
+    /// key, it goes in as it is (#1345).
+    pub bytes_cuts: collections::BTreeSet[i64],
     /// `s.bytes`, or a name a `let` bound to it, where the program keeps it
     /// beyond the text: copied into a `Bytes` of its own (ADR-320 D11).
     pub kept_text_bytes: collections::BTreeSet[i64],
@@ -771,12 +779,14 @@ impl CheckFacts {
             array_literals: collections::BTreeSet(),
             byte_literals: collections::BTreeSet(),
             owned_texts: collections::BTreeSet(),
+            lent_literals: collections::BTreeSet(),
             owned_catches: collections::BTreeSet(),
             nullable_catches: collections::BTreeSet(),
             dropped_catches: collections::BTreeSet(),
             text_bytes: collections::BTreeSet(),
             text_scalars: collections::BTreeSet(),
             text_graphemes: collections::BTreeSet(),
+            bytes_cuts: collections::BTreeSet(),
             kept_text_bytes: collections::BTreeSet(),
             text_bytes_typed_lets: collections::BTreeSet(),
             byte_copies: collections::BTreeSet(),

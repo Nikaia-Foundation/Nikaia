@@ -391,8 +391,12 @@ fn the_column_renders_and_parses_back() {
 /// answer.text` did not.
 #[test]
 fn a_field_that_moves_keeps_the_parameter_it_came_out_of() {
-    let source = "struct Answer { text: String }\n\
-                  fn say(answer: Answer) -> String { return answer.text }";
+    // A field handed back as the one way out is a view of a lent struct
+    // (#1239, #1341); beside another way out it moves, and keeps the struct.
+    let source = "struct Answer { words: Vec[String] }\n\
+                  fn say(answer: Answer, none: bool) -> Vec[String] {\n\
+                  if none { return [] }\n\
+                  return answer.words }";
     assert_eq!(keeps(source, "say"), ["answer"]);
 }
 

@@ -697,9 +697,10 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
     for at in 0..<members.len() {
         let crate_name = project_drive_rust_crate(members[at].name)
         let mut manifest = project_drive_rust_manifest(host.member_manifest(at, rust[at]), crate_name, members)
-        let mut lowered = rust[at].clone()
         // **The features** (ADR-393 D2-D3) are the package's own: the
-        // members it depends on are built whole.
+        // members it depends on are built whole, and without a feature that
+        // roots a grammar's `@stream` entry the crate holds no reader (D4).
+        let mut lowered = features_readers_dropped(rust[at])
         if at == 0 && features.len() > 0 {
             let applied = features_applied(rust[at], manifest, features, members[0].name) catch {
                 return project_drive_features_refused(host, error)

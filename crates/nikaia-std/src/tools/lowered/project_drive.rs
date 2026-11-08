@@ -478,7 +478,7 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
     for at in 0..members.len() as i64 {
         let crate_name = project_drive_rust_crate(&nikaia_std::index::get(&members, nikaia_std::index::at(at)).name);
         let mut manifest = project_drive_rust_manifest(&host.member_manifest(at, nikaia_std::index::get(&rust, nikaia_std::index::at(at)))?, &crate_name, members);
-        let mut lowered = (*nikaia_std::index::get(&rust, nikaia_std::index::at(at))).to_string();
+        let mut lowered = features_readers_dropped(nikaia_std::index::get(&rust, nikaia_std::index::at(at)));
         if at == 0 && !features.is_empty() {
             let applied = match features_applied(nikaia_std::index::get(&rust, nikaia_std::index::at(at)), &manifest, &features, &nikaia_std::index::get(&members, 0).name) {
                 Ok(value) => value,
@@ -779,8 +779,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56592| {
-        let (a, b) = __nikaia_tuple56592;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56714| {
+        let (a, b) = __nikaia_tuple56714;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

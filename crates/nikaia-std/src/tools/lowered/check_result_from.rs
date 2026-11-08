@@ -10,7 +10,7 @@ pub fn result_from_check(view: &ParsedView<'_, '_, '_, '_, '_, '_>, inferred: &[
             Item::Fn { .. } => { result_from_of_body(view, item, None, &reached, &mut out); },
             Item::Impl { target, methods, .. } => {
                 let owner = view.text(target.name);
-                for method in methods.iter() { result_from_of_body(view, method, Some(owner.to_string()), &reached, &mut out); }
+                for method in methods.iter() { result_from_of_body(view, method, Some(&owner.to_string()), &reached, &mut out); }
             },
             Item::Trait { methods, .. } => { for method in methods.iter() { result_from_of_signature(view, method, &mut out); } },
             Item::Extern { declarations, .. } => { for declared in declarations.iter() { result_from_of_signature(view, declared, &mut out); } },
@@ -27,7 +27,7 @@ pub fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[
             Item::Fn { .. } => { result_from_written_of(names, &item.node, None, &mut written); },
             Item::Impl { target, methods, .. } => {
                 let owner = names.resolve(target.name).to_string();
-                for method in methods.iter() { result_from_written_of(names, &method.node, Some(owner.to_string()), &mut written); }
+                for method in methods.iter() { result_from_written_of(names, &method.node, Some(&owner.to_string()), &mut written); }
             },
             _ => { },
         }
@@ -41,13 +41,13 @@ pub fn result_from_as_written(names: &winnow_grammar::InternerContext, items: &[
     for (key, named) in written.iter() { sources.push(ResultSource { key: key.to_string(), borrows: named.to_owned(), returns: String::from("") }); }
 }
 
-pub(crate) fn result_from_written_of(names: &winnow_grammar::InternerContext, item: &Item, owner: Option<String>, written: &mut collections::BTreeMap<String, Vec<String>>) {
+pub(crate) fn result_from_written_of(names: &winnow_grammar::InternerContext, item: &Item, owner: Option<&str>, written: &mut collections::BTreeMap<String, Vec<String>>) {
     match item {
         Item::Fn { name, ret_from, .. } => {
             let name = *name;
             if ret_from.is_empty() { return; }
             let function = function_name(names, name);
-            let key = rsrc_key((owner).as_deref(), &function);
+            let key = rsrc_key(owner, &function);
             written.insert(key, ret_from.iter().map(|source| { names.resolve(*source).to_string() }).collect::<Vec<_>>());
         },
         _ => { },
@@ -112,13 +112,13 @@ pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, s
     None
 }
 
-pub(crate) fn result_from_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, owner: Option<String>, reached: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<CheckFinding>) {
+pub(crate) fn result_from_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item: &Spanned<Item>, owner: Option<&str>, reached: &collections::BTreeMap<String, Vec<String>>, out: &mut Vec<CheckFinding>) {
     match &item.node {
         Item::Fn { name, receiver, args, ret_from, .. } => {
             let name = *name;
             if ret_from.is_empty() { return; }
             let function = function_name(view.words, name);
-            let key = rsrc_key((owner).as_deref(), &function);
+            let key = rsrc_key(owner, &function);
             let parameters = result_from_parameters(view, (receiver).as_ref(), args);
             if result_from_names(view, &key, &item.span, ret_from, &parameters, out) { return; }
             let named: Vec<String> = ret_from.iter().map(|source| { view.text(*source) }).collect::<Vec<_>>();

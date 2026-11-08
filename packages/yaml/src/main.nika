@@ -638,7 +638,7 @@ grammar Yaml {
 	// characters a URI may hold (`ns-uri-char`, `ns-tag-char`); a named
 	// handle, by the document's `%TAG` directives (6.8.2.1).
 	rule Tag(ds: Vec[Dir]) -> String =
-		s:text(TagForm) if(declared(ds, s), "a tag handle a %TAG directive declares") -> { s }
+		s:text(TagForm) => if(declared(ds, s), "a tag handle a %TAG directive declares") -> { s }
 	rule TagForm =
 		"!<" UriChar+ ">" -> { }
 		| "!" WordChar* "!" TagChar+ -> { }

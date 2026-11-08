@@ -6,7 +6,7 @@ enum ListPatternsOp { Plus, Times }
 
 enum ListPatternsHeld { Three(i64, i64, String) }
 
-fn list_patterns_shape(xs: ref Vec[i64]) -> String {
+fn list_patterns_shape(xs: Vec[i64]) -> String {
     return match xs {
         [] => "empty",
         [x] => f"one {x}",
@@ -16,14 +16,14 @@ fn list_patterns_shape(xs: ref Vec[i64]) -> String {
     }
 }
 
-fn list_patterns_sum(xs: ref Array[i64]) -> i64 {
+fn list_patterns_sum(xs: Array[i64]) -> i64 {
     return match xs {
         [h, ..rest] => h + list_patterns_sum(rest),
         else => 0,
     }
 }
 
-fn list_patterns_ops(xs: ref Vec[ListPatternsOp]) -> i64 {
+fn list_patterns_ops(xs: Vec[ListPatternsOp]) -> i64 {
     return match xs {
         [ListPatternsOp::Times, ListPatternsOp::Plus] => 1,
         [ListPatternsOp::Plus, ..] => 2,
@@ -31,7 +31,7 @@ fn list_patterns_ops(xs: ref Vec[ListPatternsOp]) -> i64 {
     }
 }
 
-fn list_patterns_firsts(xs: Vec[String]) -> Vec[String] {
+fn list_patterns_firsts(keep xs: Vec[String]) -> Vec[String] {
     let mut out: Vec[String] = []
     match xs {
         [first, ..] => out.push(first),
@@ -40,7 +40,7 @@ fn list_patterns_firsts(xs: Vec[String]) -> Vec[String] {
     return out
 }
 
-fn list_patterns_big(xs: ref Vec[i64]) -> i64 {
+fn list_patterns_big(xs: Vec[i64]) -> i64 {
     return match xs {
         [a, ..] if a > 3 => 1,
         [a, b] if a == b => 2,

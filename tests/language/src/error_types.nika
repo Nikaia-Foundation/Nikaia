@@ -8,12 +8,12 @@ use std::io
 
 // Part I 7.1's error type, with both variant shapes it writes.
 enum ErrorTypesConfigError {
-    NotFound(ref String),
-    BadSyntax { line: i64, expected: ref String },
+    NotFound(String),
+    BadSyntax { line: i64, expected: String },
 }
 
 impl Error for ErrorTypesConfigError {
-    fn message(ref self) -> String {
+    fn message(self) -> String {
         match self {
             ErrorTypesConfigError::NotFound(p) => f"no config at {p}"
             ErrorTypesConfigError::BadSyntax { line, expected } => f"line {line}: expected {expected}"
@@ -29,7 +29,7 @@ fn error_types_load() -> i64 throws {
 // is what lets it have one: `Box<dyn Error>` is `'static`, so
 // `ConfigError::NotFound(path)` - Part I 7.1's own line - used to be *borrowed
 // data escapes outside of function* (`E0521`) about a generated file.
-fn error_types_load_at(path: ref String) -> i64 throws {
+fn error_types_load_at(path: String) -> i64 throws {
     throw ErrorTypesConfigError::NotFound(path)
 }
 
@@ -124,8 +124,8 @@ test "a failure propagates through a typed channel" {
 
 // The whole of it, as a program that runs: a failure from `std` crosses a
 // function boundary and the handler takes it apart by variant.
-fn error_types_read(path: ref String) -> String throws {
-    return fs::read_to_string(ref path, fs::Root::Anywhere)
+fn error_types_read(path: String) -> String throws {
+    return fs::read_to_string(path, fs::Root::Anywhere)
 }
 
 test "a failure from std is matched by variant" {

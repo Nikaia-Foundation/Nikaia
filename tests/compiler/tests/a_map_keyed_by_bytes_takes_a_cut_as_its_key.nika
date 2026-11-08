@@ -1,0 +1,22 @@
+// #1345: a cut of a `Bytes` is a key of a map keyed by `Bytes`: read, it is
+// looked up as it is; written or inserted, the map keeps a copy of it.
+use std::collections
+
+fn made() -> Bytes {
+    return f"ab{""}".bytes
+}
+
+fn main() throws {
+    let s = f"ab{""}"
+    let b = s.bytes
+    let mut m: collections::HashMap[Bytes, i64] = collections::HashMap()
+    m[b[0..<1]] = 1
+    println(m.get(b[0..<1]) ?? 0)
+    let o = made()
+    m.insert(o[1..<2], 2)
+    println(m[o[1..<2]] ?? 0)
+    println(m.contains_key(b[0..<2]))
+    let mut kept: Vec[Bytes] = []
+    kept.push(o[0..<1])
+    println(kept.len())
+}

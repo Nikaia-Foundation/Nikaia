@@ -262,6 +262,26 @@ impl EmitState {
                             None => { },
                         }
                     }
+                } else if emit_is_inner(&lifetimes) && receiver.is_some() {
+                    for entry in self.emit_fn_stores(&key) {
+                        match entry.split_once(":") {
+                            Some(pair) => {
+                                let stored = pair.0.to_string();
+                                let source = pair.1.to_string();
+                                if !carries_input.contains(&source) {
+                                    if stored == "self" { stores.push(EmitPair { first: stored.to_string(), second: source.to_string() }); }
+                                    for each in args.iter() {
+                                        if emit_text(world, each.name) == stored {
+                                            let spelled = self.emit_fn_ty(world, walk, host, &each.ty, &EmitLifetimes::Named, &key, &stored);
+                                            if spelled.contains("'a") { stores.push(EmitPair { first: stored.to_string(), second: source.to_string() }); }
+                                            break;
+                                        }
+                                    }
+                                }
+                            },
+                            None => { },
+                        }
+                    }
                 }
                 let mut result_is_a_view = false;
                 match ret_type {
@@ -286,7 +306,7 @@ impl EmitState {
                     if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) {
                         let loan = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view || self.emit_fn_lends(world, &key, at + recv);
                         let mut inside = false;
-                        for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) { inside = true; } }
+                        for g in nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.iter() { if self.carries_a_view(world, g) || g.is_view && g.lasting { inside = true; } }
                         let owned = !loan && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty);
                         if receiver.is_some() || lowered_views > 1 || has_kept || owned || loan && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && (self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || inside) { source_at = Some(at); }
                     }
@@ -317,7 +337,7 @@ impl EmitState {
                     let at = nikaia_std::index::or(source_at, || 0);
                     if self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty() {
                         match ret_type {
-                            Some(each) => { source_nested = each.name != nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name || !emit_holds_a_ref_of_a_type(world, each); },
+                            Some(each) => { source_nested = !each.either && (each.name != nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name || !emit_holds_a_ref_of_a_type(world, each)); },
                             None => { },
                         }
                     }
@@ -377,10 +397,13 @@ impl EmitState {
                     let pname = emit_text(world, each.name);
                     let at = k + recv;
                     let changes = self.emit_fn_changes(&key, &pname);
-                    let lent_option = !changes && each.ty.is_nullable && !each.ty.is_view && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
+                    let lent_option = !changes && each.ty.is_nullable && (!each.ty.is_view || each.ty.either) && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(&key, at);
                     let mut ty = each.ty.clone();
-                    if lent_option { ty.is_view = true; }
+                    if lent_option {
+                        ty.is_view = true;
+                        ty.either = false;
+                    }
                     let lifted = is_source && shared && !source_nested;
                     let mut reference: &'static str = "";
                     if changes { if lifted { reference = "&'r mut "; } else if is_source && source_kept { reference = "&'k mut "; } else { reference = "&mut "; } } else if self.emit_fn_lends(world, &key, at) && !written_as_a_view { if !is_source && emit_store_source(&stores, &pname) { reference = "&'a "; } else if lifted { reference = "&'r "; } else if is_source && source_kept { reference = "&'k "; } else { reference = "&"; } }

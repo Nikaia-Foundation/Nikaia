@@ -36,7 +36,7 @@ test "a kept function that may pause is awaited" {
 // stored in a field, then called from there.
 struct KeptFunctionsRouter { handler: fn(i64) -> i64 sync }
 
-fn kept_functions_route(handler: fn(i64) -> i64 sync) -> KeptFunctionsRouter {
+fn kept_functions_route(keep handler: fn(i64) -> i64 sync) -> KeptFunctionsRouter {
     return KeptFunctionsRouter { handler: handler }
 }
 
@@ -70,9 +70,9 @@ test "a kept value is handed to a run parameter" {
 // A field whose function may fail fails the function that calls it. (The
 // lambda names its result: one written as a bare expression is lowered as
 // `Ok({ … })`, which `rustc` warns about.)
-struct KeptFunctionsParser { parse: fn(ref String) -> i64 sync throws }
+struct KeptFunctionsParser { parse: fn(String) -> i64 sync throws }
 
-fn kept_functions_run(p: ref KeptFunctionsParser) -> i64 throws {
+fn kept_functions_run(p: KeptFunctionsParser) -> i64 throws {
     return p.parse("12") + 1
 }
 
@@ -86,7 +86,7 @@ test "a kept function that may fail is propagated" {
 }
 
 // A kept function handed to a task travels with it, at both settings.
-fn kept_functions_holds(f: fn() -> String) -> String throws {
+fn kept_functions_holds(keep f: fn() -> String) -> String throws {
     let t = spawn fn { f() }
     return t.join()
 }

@@ -2,7 +2,8 @@
 // `error[NK1343]: internal compiler error` at the `.nika` line, for `nikaia
 // run` and `nikaia check --rustc` alike, and `nikaia test` counts it as a
 // failure that `--bless` never blesses. The program below is refused by rustc
-// today (a `fn` field called with an owned `String`); when that defect is
+// today (`insert(5, 7)` on a `HashMap[String, i64]`: std method arguments are
+// not checked against bound types); when that defect is
 // fixed, put another one here.
 use std::fs
 use std::process
@@ -26,7 +27,7 @@ fn shown(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
 fn main() throws {
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let nikaia = toolchain()
-    let refused = "struct H {\n    f: fn(String) -> i64,\n}\n\nfn size(s: String) -> i64 { s.len() }\n\nfn main() throws {\n    let h = H { f: size }\n    let mut g = String()\n    g.push_str(\"abc\")\n    println(h.f(g))\n}\n"
+    let refused = "use std::collections\n\nfn main() throws {\n    let mut m: collections::HashMap[String, i64] = collections::HashMap()\n    m.insert(5, 7)\n    println(m.len())\n}\n"
     process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
     fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n")
     fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")

@@ -245,12 +245,12 @@ pub fn sysroot_unpack(packed: &str) -> Option<Vec<(String, String)>> {
     Some(files)
 }
 
-pub async fn sysroot_lowered_key<H: SysrootHost>(compiler: Option<String>, what: &str, files: &[fs::Path], host: &H) -> Option<String> {
+pub async fn sysroot_lowered_key<H: SysrootHost>(compiler: Option<&str>, what: &str, files: &[fs::Path], host: &H) -> Option<String> {
     let __keep_frame = nikaia_std::tether::Keep::new();
     let given = match compiler { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut read: Vec<u8> = vec![];
     sysroot_ended(&mut read, "nikaia-lower-std-v1");
-    sysroot_ended(&mut read, &given);
+    sysroot_ended(&mut read, given);
     sysroot_ended(&mut read, what);
     for file in files.iter() {
         let source = __keep_frame.put(match fs::read(file, &fs::Root::Anywhere).await {
@@ -276,7 +276,7 @@ pub async fn sysroot_lowered_get<H: SysrootHost>(root: &std::path::Path, cached:
     Some(rust)
 }
 
-pub async fn sysroot_lowered_put<H: SysrootHost>(root: &std::path::Path, cached: bool, key: Option<String>, rust: &str, host: &H) {
+pub async fn sysroot_lowered_put<H: SysrootHost>(root: &std::path::Path, cached: bool, key: Option<&str>, rust: &str, host: &H) {
     let at = match key { Some(__nikaia_value) => __nikaia_value, None => return };
     if !cached { return; }
     let entry = nikaia_std::fs::path::join(&(root), std::path::Path::new(&(at)));

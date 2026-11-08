@@ -396,6 +396,34 @@ impl EmitState {
                             null => {},
                         }
                     }
+                } else if emit_is_inner(lifetimes) && receiver != null {
+                    // **A view kept in the subject** (#1344): `self:s` takes
+                    // the source to the impl's lifetime, the one the subject's
+                    // view fields are written with; so does `o:s` for a place
+                    // whose type is written with that lifetime.
+                    for entry in self.emit_fn_stores(key) {
+                        match entry.split_once(":") {
+                            pair => {
+                                let stored = pair.0.clone()
+                                let source = pair.1.clone()
+                                if !carries_input.contains(source) {
+                                    if stored == "self" {
+                                        stores.push(EmitPair { first: stored.clone(), second: source.clone() })
+                                    }
+                                    for each in args {
+                                        if emit_text(world, each.name) == stored {
+                                            let spelled = self.emit_fn_ty(world, walk, host, each.ty, EmitLifetimes::Named, key, stored)
+                                            if spelled.contains("'a") {
+                                                stores.push(EmitPair { first: stored.clone(), second: source.clone() })
+                                            }
+                                            break
+                                        }
+                                    }
+                                }
+                            },
+                            null => {},
+                        }
+                    }
                 }
 
                 // **A result points into one parameter, and the signature says
@@ -434,7 +462,9 @@ impl EmitState {
                         let loan = args[at].ty.is_view || self.emit_fn_lends(world, key, at + recv)
                         let mut inside = false
                         for g in args[at].ty.generics {
-                            if self.carries_a_view(world, g) {
+                            // Static text inside (`&[&'static str]`) is a
+                            // lifetime of its own too (#1343).
+                            if self.carries_a_view(world, g) || (g.is_view && g.lasting) {
                                 inside = true
                             }
                         }
@@ -512,7 +542,10 @@ impl EmitState {
                     if self.carries_a_view(world, args[at].ty) && self.borrows(world, args[at].ty.name) && args[at].ty.generics.is_empty() {
                         match ret_type {
                             each => {
-                                source_nested = each.name != args[at].ty.name || !emit_holds_a_ref_of_a_type(world, each)
+                                // A result both kinds flow into may hand back
+                                // the parameter's own text, so it is a borrow
+                                // of the parameter (#1341).
+                                source_nested = !each.either && (each.name != args[at].ty.name || !emit_holds_a_ref_of_a_type(world, each))
                             },
                             null => {},
                         }
@@ -606,11 +639,15 @@ impl EmitState {
                     // **A `T?` the body only reads is the option of a view**
                     // (#1256): `Option<&T>`, `Option<&str>`, as `ref T?` is
                     // written, so a caller hands `Some("lit")` or `s.as_deref()`.
-                    let lent_option = !changes && each.ty.is_nullable && !each.ty.is_view && !each.ty.is_slice && each.ty.code == null && self.emit_fn_lends(world, key, at)
+                    let lent_option = !changes && each.ty.is_nullable && (!each.ty.is_view || each.ty.either) && !each.ty.is_slice && each.ty.code == null && self.emit_fn_lends(world, key, at)
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(key, at)
                     let mut ty = each.ty.clone()
                     if lent_option {
                         ty.is_view = true
+                        // **Text both kinds flow into is read as a view**
+                        // when the callee only reads it (#1256): the call
+                        // hands it unwrapped, `Some(view)`, not `EitherText`.
+                        ty.either = false
                     }
                     let lifted = is_source && shared && !source_nested
                     let mut reference: String = ""
