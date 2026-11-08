@@ -1,0 +1,10 @@
+# `[rust-library] root` naming no file of the package: NK1348 (ADR-393 D7).
+[package]
+name = "missing_root"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[rust-library]
+root = "rust/lib.rs"

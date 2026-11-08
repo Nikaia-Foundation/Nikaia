@@ -185,8 +185,8 @@ fn choices(words: ref Array[String]) -> String {
 
 /// One value of `nikaia.toml`, in the plain words the `toml` reader gives it
 /// (MF). The adapter walks the document once, in the file's key order, and
-/// hands over the five sections this module reads (`package`, `dependencies`,
-/// `library`, `build`, `features`), their entries, and each key of an entry that is a
+/// hands over the six sections this module reads (`package`, `dependencies`,
+/// `library`, `build`, `features`, `rust-library`), their entries, and each key of an entry that is a
 /// table. Nothing deeper: no reader looks further in.
 pub struct ManifestItem {
     /// The top-level table it is in.
@@ -255,6 +255,10 @@ pub struct ManifestFile {
     pub libraries: collections::BTreeMap[String, String],
     /// `[features]` (ADR-393 D2): read only for a rust-library build.
     pub features: Vec[ManifestFeature],
+    /// `[rust-library]` (ADR-393 D7), where the manifest has the table: the
+    /// hand-written crate root spliced in, and the module the lowered items
+    /// move to.
+    pub rust_library: ManifestRustLibrary?,
     /// What this manifest carries that the compiler no longer reads, and where
     /// it went. Printed once per build rather than returned as an error:
     /// failing a manifest somebody already wrote to the specification would
@@ -267,7 +271,7 @@ pub struct ManifestFile {
 
 /// The manifest of no project: every section empty.
 pub fn manifest_empty() -> ManifestFile {
-    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], notes: [], root: null }
+    return ManifestFile { build: collections::BTreeMap(), package: collections::BTreeMap(), name: null, version: "0.0.0", dependencies: collections::BTreeMap(), codegen: collections::BTreeMap(), libraries: collections::BTreeMap(), features: [], rust_library: null, notes: [], root: null }
 }
 
 /// **One entry of `[features]`** (ADR-393 D2, Part III 13.3): a feature and
@@ -280,6 +284,30 @@ pub struct ManifestFeature {
     pub entries: Vec[String],
     /// Whether the value was a list of texts: anything else is `NK1347`.
     pub listed: bool,
+}
+
+/// **`[rust-library]`** (ADR-393 D7, Part III 13): a hand-written Rust file
+/// that becomes the crate root, and the module the lowered `pub` items go to.
+/// Whether `root` names a file, and whether the artifact is a rust-library,
+/// is `NK1348`, decided where the crate is written (`tools/project_drive.nika`).
+pub struct ManifestRustLibrary {
+    /// `root`, relative to the package's directory; null where the table
+    /// does not say one.
+    pub root: String?,
+    /// `native`, `"native"` where the table does not say one.
+    pub native: String,
+}
+
+/// `[rust-library]` as written, or null where the manifest has no such table.
+fn manifest_rust_library(items: ref Vec[ManifestItem]) -> ManifestRustLibrary? {
+    for item in items {
+        if item.section == "rust-library" && item.name.len() == 0 {
+            let root = manifest_word_at(items, "rust-library", "root", "")
+            let native = manifest_word_at(items, "rust-library", "native", "") ?? "native"
+            return ManifestRustLibrary { root: root, native: native }
+        }
+    }
+    return null
 }
 
 /// `[features]`, in the file's order. A list's texts are read off the text
@@ -309,7 +337,7 @@ fn manifest_features(items: ref Vec[ManifestItem]) -> Vec[ManifestFeature] {
 }
 
 /// `[package]`, `[dependencies]`, `[build]`, the `[build.<target>]`
-/// codegen tables and `[features]`.
+/// codegen tables, `[features]` and `[rust-library]`.
 pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     let mut manifest = manifest_empty()
     for item in items {
@@ -322,6 +350,7 @@ pub fn manifest_parse(items: ref Vec[ManifestItem]) -> ManifestFile throws {
     manifest.dependencies = manifest_dependencies(items)
     manifest.libraries = manifest_libraries(items)
     manifest.features = manifest_features(items)
+    manifest.rust_library = manifest_rust_library(items)
 
     for value in items {
         if value.section != "build" || value.name.len() == 0 || value.key.len() > 0 {
