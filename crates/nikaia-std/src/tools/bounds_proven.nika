@@ -1,0 +1,245 @@
+// crates/nikaia-std/src/tools/bounds_proven.nika
+//
+// **Which index checks a proof shows are not needed** (ADR-306), moved from
+// the compiler's `bounds::proven` (ADR-294, #125, #1431).
+//
+// An index into a list stops the program where it is outside (Part III A.2).
+// `--optimization=remove-bounds-checks:on` drops that check where it is
+// **proved** that the position is inside, every time the index is reached -
+// never on a guess (D2). Two walks find what is proved:
+//
+// * **`basic`** (D3, `tools/bounds_basic.nika`) reads one shape and asks no
+//   solver: `xs[k]` where `k` is the binding of an enclosing
+//   `for k in lo..<xs.len()`.
+// * **`aggressive`** (D4, `tools/bounds_walk.nika`) walks each body forward,
+//   keeping the linear facts that hold at each point, and asks the solver
+//   whether `0 <= i < xs.len()` follows.
+//
+// What either finds is a set of index nodes, by the node of the indexed
+// expression, which the emitter reads where it writes an index of a list.
+// The same walk answers whether a `+`, `-` or `*` stays inside its type (D6).
+//
+// What only the compiler can do comes in as code: `read` reads a ledger's
+// condition back over names, `ask` asks the solver (`ask_in` within a named
+// function, for `nikaia.proofs`), `record` keeps the invariants a walk used
+// (ADR-361 D4, D10), `counted` hands each body's counters that are never
+// negative to the emitter, and `folded` proves a fold's counters (ADR-367
+// D3).
+
+use std::collections
+
+/// **What the walks proved** over one file: index nodes, arithmetic
+/// operators (by the byte their operator starts at), the values asked
+/// `nonnegative` proved `>= 0` (ADR-285 D32), the negations that stay inside
+/// their type (ADR-314 D5), the method calls whose callee's precondition holds
+/// (ADR-269 D20) with the callee's ledger key, and the derived preconditions
+/// for `--bounds` (ADR-391 D4).
+pub struct BoundsAllProven {
+	pub indices: collections::BTreeSet[i64],
+	pub arithmetic: collections::BTreeSet[i64],
+	pub nonnegative: collections::BTreeSet[i64],
+	pub negations: collections::BTreeSet[i64],
+	pub calls: collections::BTreeMap[i64, String],
+	pub derived: Vec[String],
+}
+
+/// **Every index and every operation the walks prove**, whatever a build
+/// does with them (ADR-306 D14). `facts` are the checker's: what may be read
+/// and proved. `ledgers` answer what a callee ensures (ADR-314 D3);
+/// `nonnegative` are the signed values asked `>= 0` (ADR-285 D32); `beside`
+/// are the package's other files (ADR-391 D1).
+pub fn bounds_proven(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	beside: ref Vec[ref Program],
+	beside_words: ref Vec[ref winnow_grammar::InternerContext],
+	facts: ref CheckFacts,
+	ledgers: ref Vec[ref Ledger],
+	nonnegative: ref collections::BTreeSet[i64],
+	through_loops: bool,
+	read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[SolverTerm] sync,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+	ask_in: fn(ref String, i64, ref TermArena, ref Vec[i64], i64) -> bool sync,
+	record: fn(ref collections::BTreeMap[i64, String]) sync,
+	counted: fn(ref Block, ref Vec[winnow_grammar::Symbol]) sync,
+	folded: fn() -> collections::BTreeSet[i64] sync,
+) -> BoundsAllProven {
+	let mut out = BoundsAllProven {
+		indices: collections::BTreeSet(),
+		arithmetic: collections::BTreeSet(),
+		nonnegative: collections::BTreeSet(),
+		negations: collections::BTreeSet(),
+		calls: collections::BTreeMap(),
+		derived: [],
+	}
+	// What each call may change, each function's frame among it (ADR-306
+	// D17, ADR-391 D2): `tools/bounds_frame.nika`.
+	let around = bounds_around(program, beside, beside_words, ledgers, facts.std_receivers, facts.simd_loads, words)
+	let mut context = BoundsContext {
+		lengths: facts.std_lengths.clone(),
+		sized: facts.sized_lengths.clone(),
+		char_codes: facts.char_codes.clone(),
+		ensured: bm_ensured(ledgers, read),
+		required: bm_required(ledgers, read),
+		each: bm_each(ledgers, read),
+		std_receivers: facts.std_receivers.clone(),
+		simd_loads: facts.simd_loads.clone(),
+		shifts: facts.shifts.clone(),
+		arithmetic: facts.arithmetic.clone(),
+		nonnegative: nonnegative.clone(),
+		given: collections::BTreeMap(),
+		negations: facts.negations.clone(),
+		classes: collections::BTreeMap(),
+		text_lengths: collections::BTreeMap(),
+		text_classes: collections::BTreeMap(),
+		around: around,
+		whole_fields: facts.whole_fields.clone(),
+		array_lengths: facts.array_lengths.clone(),
+		through_loops: through_loops,
+		decided: bp_decided(program, words, facts.comptime_values),
+	}
+	// **The list fields' bounds, found program-wide** (ADR-306 D21):
+	// `tools/bounds_walk.nika`.
+	bounds_fields(context, program, words, ask)
+	let mut bodies: Vec[ref Spanned[Item]] = []
+	for item in program.items {
+		match item.node {
+			Item::Fn { .. } => bodies.push(item),
+			Item::Impl { methods, .. } => {
+				for method in methods {
+					bodies.push(method)
+				}
+			},
+			else => {},
+		}
+	}
+	// Callers before callees (ADR-391 D1): `tools/bounds_derived.nika`.
+	let mut starts: Vec[i64] = []
+	for body in bodies {
+		starts.push(body.span.start as i64)
+	}
+	let order = derived_order(context.around, starts)
+	for k in order {
+		let item = bodies[k]
+		match item.node {
+			Item::Fn { name, args, body, .. } => {
+				for at in basic_indices(body, words) {
+					out.indices.insert(at)
+				}
+				// **The aggressive walk**, with the solver asked about the
+				// arena it grows, within the function it walks.
+				let function = bp_name(name, words)
+				let at = item.span.start as i64
+				let counters = nonnegative_locals(body)
+				counted(body, counters)
+				let walked = bounds_aggressive(args, body, bp_names(counters, words), context, program, words, fn(arena, known, goal) { ask_in(function, at, arena, known, goal) })
+				// **The invariants that carried a check through a loop** go
+				// into `nikaia.proofs` (ADR-361 D4, D10).
+				record(walked.loops)
+				derived_note(context.around, walked)
+				bp_add(out, walked)
+			},
+			else => {},
+		}
+	}
+	out.derived = derived_rows(context.around)
+	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
+	// from what each binding matched.
+	let none: Vec[FnArg] = []
+	for item in program.items {
+		match item.node {
+			Item::Grammar(def) => {
+				let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
+				for rule in def.rules {
+					rules.insert(words.resolve(rule.name).clone())
+				}
+				for rule in def.rules {
+					let function = words.resolve(rule.name).clone()
+					let at = rule.span.start as i64
+					for alt in rule.alts {
+						let action = alt.action ?? continue
+						let mut found = bm_empty()
+						bm_matched(words, rules, alt.pattern.node, found)
+						let mut inner = context.clone()
+						inner.given = found.given
+						inner.classes = found.classes
+						inner.text_lengths = found.text_lengths
+						inner.text_classes = found.text_classes
+						let walked = bounds_aggressive(none, action, bp_names(nonnegative_locals(action), words), inner, program, words, fn(arena, known, goal) { ask_in(function, at, arena, known, goal) })
+						record(walked.loops)
+						bp_add(out, walked)
+					}
+				}
+			},
+			else => {},
+		}
+	}
+	// **A fold's counters, proved from the input's length** (ADR-367 D3).
+	for at in folded() {
+		out.arithmetic.insert(at)
+	}
+	return out
+}
+
+/// What one walk proved, added to `out`.
+fn bp_add(mut out: BoundsAllProven, walked: ref BoundsProven) {
+	for at in walked.indices {
+		out.indices.insert(at)
+	}
+	for at in walked.arithmetic {
+		out.arithmetic.insert(at)
+	}
+	for at in walked.nonnegative {
+		out.nonnegative.insert(at)
+	}
+	for at in walked.negations {
+		out.negations.insert(at)
+	}
+	for (at, key) in walked.calls {
+		out.calls.insert(at, key.clone())
+	}
+}
+
+/// A function's name, empty for the anonymous constructor (Kap 4.2).
+fn bp_name(name: winnow_grammar::Symbol?, words: ref winnow_grammar::InternerContext) -> String {
+	let symbol = name ?? return ""
+	return words.resolve(symbol).clone()
+}
+
+/// The names of `symbols`, as the walk reads them.
+fn bp_names(symbols: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> collections::BTreeSet[String] {
+	let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+	for symbol in symbols {
+		out.insert(words.resolve(symbol).clone())
+	}
+	return out
+}
+
+/// **The module's `comptime`s of type `bool`**, by name, with what the build
+/// computed for each (`values`, the checker's `comptime_values`): an `if` on
+/// one is decided.
+fn bp_decided(
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	values: ref collections::BTreeMap[i64, (String, String)],
+) -> collections::BTreeMap[String, bool] {
+	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Comptime { name, .. } => {
+				let value = values.get(item.span.start as i64) ?? continue
+				if value.0 != "bool" {
+					continue
+				}
+				let written = value.1.trim()
+				if written == "true" {
+					out.insert(words.resolve(name).clone(), true)
+				} else if written == "false" {
+					out.insert(words.resolve(name).clone(), false)
+				}
+			},
+			else => {},
+		}
+	}
+	return out
+}
