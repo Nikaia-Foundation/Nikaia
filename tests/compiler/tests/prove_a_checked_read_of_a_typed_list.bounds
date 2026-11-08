@@ -1,0 +1,9 @@
+bounds in tests/prove_a_checked_read_of_a_typed_list.nika: 4 indexes, 2 proved; 4 operations, 0 proved
+     9  k * 2                  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    16  xs[at]                 checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    17  first + xs[at]         checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    17  xs[at]                 proved
+    23  xs[at]                 checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    25  sum += first - xs[at]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    25  first - xs[at]         checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    25  xs[at]                 proved

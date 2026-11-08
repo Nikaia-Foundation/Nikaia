@@ -729,6 +729,7 @@ pub(crate) fn rules_element_write(walk: &mut BoundsWalk, facts: &BoundsFacts, ta
 pub(crate) fn rules_read_inside(walk: &mut BoundsWalk, base: &Expr, index: &Expr, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) {
     let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut known = walk.shape.roots.contains(&list) || walk.lists.contains(&list);
+    if context.list_indices.contains(&node_key(base)) && !walk.shape.twice.contains(&path_root(&list)) { known = true; }
     match base {
         Expr::Field { name, .. } => {
             let name = *name;

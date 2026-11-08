@@ -97,6 +97,7 @@ pub fn bounds_proven(
 		array_lengths: facts.array_lengths.clone(),
 		through_loops: through_loops,
 		decided: bp_decided(program, words, facts.comptime_values),
+		list_indices: facts.list_indices.clone(),
 	}
 	// **The list fields' bounds, found program-wide** (ADR-306 D21):
 	// `tools/bounds_walk.nika`.
