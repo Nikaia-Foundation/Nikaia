@@ -1,5 +1,5 @@
 bounds in tests/prove_element_bound_popped.nika: 2 indexes, 1 proved; 1 operations, 1 proved
      9  atoms[k]      proved
-    10  values[atom]  checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    10  values[atom]  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
     13  k += 1        proved
   derived  eval: 0 <= atoms[..], atoms[..] < values.len(), proved at the calls on lines 21

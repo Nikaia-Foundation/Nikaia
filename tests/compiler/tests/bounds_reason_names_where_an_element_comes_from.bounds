@@ -1,0 +1,9 @@
+bounds in tests/bounds_reason_names_where_an_element_comes_from.nika: 7 indexes, 0 proved; 1 operations, 0 proved
+     8  values[k]         checked: a value read out of a list, of which the walk knows no fact (#797, #798): a map's value (ADR-306 D24)
+    20  sum += values[k]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    20  values[k]         checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a call's result (ADR-306 D24)
+    26  ks[0]             checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    27  values[k]         checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    31  ks[0][0]          checked: a list of lists, whose inner lengths the walk does not know (#385)
+    31  ks[0]             checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    32  values[k]         checked: a value read out of a list, of which the walk knows no fact (#797, #798): another read
