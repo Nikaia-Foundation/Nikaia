@@ -1,0 +1,10 @@
+// `@stream` stands on an entry only (ADR-grammar-2 D7, #1440): its items go to
+// the program's `for`, and only an entry is called by the program.
+
+grammar Words {
+	@stream rule items -> String = item*
+	rule item -> String = w:until(";") ";" -> { w.to_string() }
+}
+
+fn main() {
+}

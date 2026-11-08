@@ -24,6 +24,7 @@ pub struct BoundsContext {
     pub array_lengths: collections::BTreeMap<i64, i64>,
     pub through_loops: bool,
     pub decided: collections::BTreeMap<String, bool>,
+    pub list_indices: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

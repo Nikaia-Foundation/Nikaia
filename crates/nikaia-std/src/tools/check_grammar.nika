@@ -72,6 +72,98 @@ fn an_offered_number_name(name: ref String) -> bool sync {
     return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64"
 }
 
+/// **An `@stream` entry repeats one item on a fixed path** (ADR-grammar-2
+/// D7, `NK1349`): one alternative, no action, and through its sequences and
+/// groups exactly one element that repeats a rule of the grammar whose type is
+/// the entry's (`item*`, `item+`, a counted repeat, `list(item, sep)`). What
+/// stands around it is matched and dropped, so nothing is built from the
+/// items and each can be handed over as it is parsed.
+pub fn grammar_stream_refused(world: ref CheckWorld, rule: ref GrammarRule, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> CheckFinding? {
+    let entry = world.words.resolve(rule.name).clone()
+    let wanted: Ty = results[entry]?.clone() ?? Ty::Unknown
+    if wanted.is_unknown() {
+        return grammar_stream_refusal(entry, rule.span, "it names no item type", f"Write the type of one item after the arrow: `@stream entry rule {entry} -> Item = item*`.")
+    }
+    if rule.alts.len() != 1 {
+        return grammar_stream_refusal(entry, rule.span, f"it has {rule.alts.len()} alternatives", "Put the choice into the item's rule, and leave the entry one repetition: `item*`.")
+    }
+    if rule.alts[0].action != null {
+        return grammar_stream_refusal(entry, rule.span, "it has an action", "Leave the action out: each item goes to the caller as it is parsed, so there is no list for an action to read.")
+    }
+    let found = grammar_stream_paths(world, rule.alts[0].pattern.node, wanted, results, rules)
+    if found == 1 {
+        return null
+    }
+    let item = wanted.text()
+    if found == 0 {
+        return grammar_stream_refusal(entry, rule.span, f"no element of it repeats a rule of type `{item}`", f"Repeat the rule of one item: `item*`, `item+` or `list(item, \",\")`, where `item` is a rule `-> {item}`.")
+    }
+    return grammar_stream_refusal(entry, rule.span, f"{found} of its elements repeat a rule of type `{item}`", "Stream one repetition, and fold the others into the item's rule.")
+}
+
+fn grammar_stream_refusal(entry: ref String, span: ref Span, why: String, help: String) -> CheckFinding sync {
+    let notes: Vec[String] = ["A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it."]
+    return check_refusal("NK1349", span, f"`{entry}` is `@stream`, so its body has to repeat one item on a fixed path, but {why}.", notes, help)
+}
+
+/// How many elements on the body's one path repeat an item of type `wanted`:
+/// a sequence and a group hand on what they hold, a choice or anything else
+/// counts none.
+fn grammar_stream_paths(world: ref CheckWorld, pattern: ref Pattern, wanted: ref Ty, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> i64 sync {
+    match pattern {
+        Pattern::Group(inner) => return grammar_stream_paths(world, inner.node, wanted, results, rules),
+        Pattern::Seq(parts) => {
+            let mut count = 0
+            for part in parts {
+                count += grammar_stream_paths(world, part.node, wanted, results, rules)
+            }
+            return count
+        },
+        Pattern::Repeat { pat, rep } => {
+            if rep != Repeat::Optional && grammar_stream_item(world, pat.node, wanted, results, rules) {
+                return 1
+            }
+            return 0
+        },
+        Pattern::Counted { pat, .. } => {
+            if grammar_stream_item(world, pat.node, wanted, results, rules) {
+                return 1
+            }
+            return 0
+        },
+        Pattern::Ref { name, generics, args } => {
+            let called = world.words.resolve(name).clone()
+            if called == "list" && !rules.contains(called) && generics.len() == 0 && args.len() == 2 && grammar_stream_item(world, args[0].node, wanted, results, rules) {
+                return 1
+            }
+            return 0
+        },
+        else => return 0,
+    }
+}
+
+/// A call of a rule of the grammar whose declared type is the item's.
+fn grammar_stream_item(world: ref CheckWorld, pattern: ref Pattern, wanted: ref Ty, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> bool sync {
+    let mut called: String = ""
+    match pattern {
+        Pattern::Group(inner) => return grammar_stream_item(world, inner.node, wanted, results, rules),
+        Pattern::Ref { name, generics, .. } => {
+            if generics.len() == 0 {
+                called = world.words.resolve(name).clone()
+            }
+        },
+        Pattern::Call { name, .. } => {
+            called = world.words.resolve(name).clone()
+        },
+        else => {},
+    }
+    if called == "" || !rules.contains(called) {
+        return false
+    }
+    let declared: Ty = results[called]?.clone() ?? return false
+    return declared.text() == wanted.text()
+}
+
 impl CheckState {
     /// **The type a pattern's result has** in a rule's action.
     pub fn pattern_type(ref self, world: ref CheckWorld, pattern: ref Pattern, rules: ref collections::BTreeSet[String]) -> Ty sync {

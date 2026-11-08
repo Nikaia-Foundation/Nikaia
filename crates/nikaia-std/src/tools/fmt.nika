@@ -662,12 +662,19 @@ impl FmtPrinter {
             }
             return 0
         }
+        // A line of a grammar's body that starts a rule starts one, even after
+        // `item*`, which is the whole body of an `@stream` entry
+        // (ADR-grammar-2 D7) and only looks like an operator left hanging.
+        let starts_rule = fmt_starts_rule(first.text)
+        if self.in_grammar() && starts_rule {
+            return inner
+        }
         if self.hanging {
             return inner + 1
         }
         // A line of a grammar's body that starts no rule continues the one
         // before it, one level deeper.
-        if self.in_grammar() && !fmt_starts_rule(first.text) {
+        if self.in_grammar() {
             return inner + 1
         }
         let after_item = self.tail == "," || self.tail == "" || self.tail == ";" || self.tail_kind == FmtKind::Open

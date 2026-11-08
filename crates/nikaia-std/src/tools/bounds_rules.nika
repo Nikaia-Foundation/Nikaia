@@ -1012,10 +1012,14 @@ fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref
 /// position lies outside, so past it `0 <= i < len` holds, as what an
 /// `assert` claims does (ADR-269 D4). Only a list known to be one - a rule
 /// speaks of it, the body built it, its type says so, or it is a list field
-/// the walks see (D21) - for a map's key may lie past its length.
+/// the walks see (D21), or the checker typed it a std list (#1431) - for a
+/// map's key may lie past its length.
 fn rules_read_inside(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, mut facts: BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) {
     let list = path_of(base, words) ?? return
     let mut known = walk.shape.roots.contains(list) || walk.lists.contains(list)
+    if context.list_indices.contains(node_key(base)) && !walk.shape.twice.contains(path_root(list)) {
+        known = true
+    }
     match base {
         Expr::Field { name, .. } => {
             if walk.shape.fields.contains(f".{words.resolve(name)}") {

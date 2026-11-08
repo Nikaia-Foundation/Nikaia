@@ -1377,6 +1377,10 @@ pub struct GrammarRule {
     /// `entry rule file`: the program may call it, `Measurements::file(data)`
     /// (ADR-296 D25). Every other rule is the grammar's own.
     pub is_entry: bool,
+    /// `@stream entry rule events -> Event = event*`: the entry hands its
+    /// items over one at a time, a sequence walked once
+    /// ([ADR-grammar-2](../../../docs/specification/adr/adr-grammar-2.md) D7).
+    pub stream: bool,
     /// Part II, 10.7: the rule is a resynchronization unit.
     pub frame: FrameAttr?,
     pub ret_type: Type?,

@@ -415,7 +415,7 @@ impl CheckWalkedPasses for Host<'_> {
         crate::bounds::proven(
             self.parsed,
             self.beside,
-            &crate::bounds::Sites::of(facts),
+            facts,
             &[self.own, self.library],
             nodes,
             // What the checker accepts does not depend on an optimization

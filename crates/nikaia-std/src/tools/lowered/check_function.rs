@@ -231,6 +231,12 @@ pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.rule_results = results;
     for rule in gram.rules.iter() { for alt in rule.alts.iter() { state.a_name_the_page_does_not_have(world, &alt.pattern); } }
     for rule in gram.rules.iter() {
+        if rule.stream {
+            match grammar_stream_refused(world, rule, &state.rule_results, &rules) {
+                Some(refused) => { state.findings.push(refused); },
+                None => { },
+            }
+        }
         let mut expected: Option<Ty> = None;
         let written: Option<Type> = match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

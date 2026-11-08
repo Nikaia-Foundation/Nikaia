@@ -2034,13 +2034,14 @@ grammar! {
             // program may enter it is what `entry` says, and offering a
             // grammar to other packages is `pub grammar`'s, for all its
             // entries at once.
-            frame_attr? KW_PUB KW_RULE
+            stream_attr? frame_attr? KW_PUB KW_RULE
             fail("A rule isn't `pub` on its own. Write `entry rule` for a rule the \
                   program calls; a grammar's entries are offered to other packages \
                   together, by `pub grammar`.") -> {
                 GrammarRule {
                     name: _state.intern(""),
                     is_entry: false,
+                    stream: false,
                     frame: None,
                     ret_type: None,
                     label: None,
@@ -2049,6 +2050,53 @@ grammar! {
                     args: Vec::new(),
                     config: Vec::new(),
                     generics: Vec::new(),
+                }
+            }
+          // **Only an entry streams** (ADR-grammar-2 D7): the items are
+          // handed to the caller, and only an entry has one.
+          | stream_attr frame_attr? KW_RULE
+            fail("Only an entry can be `@stream`: its items are handed to the \
+                  program's `for`, and only an entry is called by the program. \
+                  Write `@stream entry rule`.") -> {
+                GrammarRule {
+                    name: _state.intern(""),
+                    is_entry: false,
+                    stream: false,
+                    frame: None,
+                    ret_type: None,
+                    label: None,
+                    alts: Vec::new(),
+                    span: Span::from(_span),
+                    args: Vec::new(),
+                    config: Vec::new(),
+                    generics: Vec::new(),
+                }
+            }
+          | stream_attr
+            frame:frame_attr?
+            kw_entry
+            KW_RULE
+            name:NAME
+            generics:generic_list?
+            values:fn_params?
+            ret:return_type_arrow?
+            label:rule_label?
+            "="
+            alts:g_stream_alts
+            -> {
+                let values = values.unwrap_or_else(FnParams::none);
+                GrammarRule {
+                    name,
+                    is_entry: true,
+                    stream: true,
+                    frame,
+                    ret_type: ret,
+                    label,
+                    alts,
+                    span: Span::from(_span),
+                    args: values.args,
+                    config: values.config,
+                    generics: generics.unwrap_or_default(),
                 }
             }
           | frame:frame_attr?
@@ -2068,6 +2116,7 @@ grammar! {
                 GrammarRule {
                     name,
                     is_entry: entry.is_some(),
+                    stream: false,
                     frame,
                     ret_type: ret,
                     label,
@@ -2086,6 +2135,53 @@ grammar! {
         // the lowering is name for name (ADR-296 D17) and a second spelling for
         // the same thing would be one more thing to know.
         rule rule_label -> String = "#" text:STRING -> { text }
+
+        // **`@stream`** (ADR-grammar-2 D7): the entry hands its items over one
+        // at a time. Its body is the repetition alone, as a `par_fold` is
+        // the whole of its rule: no list is built for an action to read.
+        rule stream_attr -> () = "@stream" -> { () }
+
+        // **An `@stream` entry's body may end without an action**: its
+        // elements stop where the next rule begins. An action written there
+        // is parsed, and refused by the checker with `NK1349`.
+        rule g_stream_alts -> Vec<GrammarAlt> =
+            head:g_stream_alt tail:g_stream_alt_tail* -> {
+                let mut alts = vec![head];
+                alts.extend(tail);
+                alts
+            }
+
+        rule g_stream_alt_tail -> GrammarAlt = "|" a:g_stream_alt -> { a }
+
+        rule g_stream_alt -> GrammarAlt =
+            pattern:g_stream_seq action:g_stream_action? -> {
+                GrammarAlt { pattern, action }
+            }
+
+        rule g_stream_action -> Block = "->" b:block -> { b }
+
+        rule g_stream_seq -> Spanned<Pattern> @=
+            head:g_stream_elem tail:g_stream_elem* -> {
+                if tail.is_empty() {
+                    head
+                } else {
+                    let mut parts = vec![head];
+                    parts.extend(tail);
+                    Spanned::new(Pattern::Seq(parts), Span::from(_span))
+                }
+            }
+
+        rule g_stream_elem -> Spanned<Pattern> = not(g_rule_starts) e:g_elem -> { e }
+
+        // Each arm hands back a `0` nothing reads: an alternation without
+        // actions generates a unit per arm, which `clippy::unused_unit`
+        // refuses (see `RESERVED`).
+        rule g_rule_starts -> u8 =
+            KW_RULE -> { 0 }
+          | KW_ENTRY -> { 0 }
+          | KW_PUB -> { 0 }
+          | "@frame" -> { 0 }
+          | "@stream" -> { 0 }
 
         // ADR-296 D9: the attribute is keyed. `@frame`, `@frame(boundary: "\n")`,
         // `@frame(boundary: "\n", unchecked)`; the positional form is withdrawn,

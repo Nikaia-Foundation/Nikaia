@@ -28,13 +28,14 @@
 //! what each write puts in, proved where it is written (D2); `x % n` (D3); and
 //! the length a loop that pushes once per turn leaves (D4).
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+//! The walks and what they read are Nikaia (`tools/bounds_proven.nika`,
+//! #1431); here is only the call, with what only the compiler can do handed
+//! in as code: the solver, the book of `nikaia.proofs`, the emitter's
+//! counters and the fold's proof.
 
-use crate::ast::{Item, Spanned};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
 use crate::parser::Parsed;
-use nikaia_std::tools::bounds_basic as nika;
-use nikaia_std::tools::bounds_derived as derived;
-use nikaia_std::tools::bounds_walk::{self as walk, BoundsContext, Ensured};
 
 /// What happens to an index or overflow check the walk proved (ADR-306
 /// D14): `tools/emit_build.nika`. The default of both is `Kept`.
@@ -54,10 +55,10 @@ pub struct Proven {
     /// (ADR-314 D5), by node.
     pub negations: HashSet<i64>,
     /// **Each walked body's counters that are never negative**
-    /// (`emit::nonnegative_names`), by the body's address in the `Parsed`
+    /// (`tools/emit_locals.nika`), by the body's address in the `Parsed`
     /// both walks borrow: the emitter reads them back rather than walking the
     /// body a second time.
-    pub nonnegative_locals: std::collections::HashMap<usize, HashSet<winnow_grammar::Symbol>>,
+    pub nonnegative_locals: HashMap<usize, HashSet<winnow_grammar::Symbol>>,
     /// **The method calls whose callee's precondition holds where they
     /// stand** ([ADR-269](../../docs/specification/adr/adr-269.md) D20, #776),
     /// by the receiver's node, with the callee's ledger key.
@@ -66,307 +67,54 @@ pub struct Proven {
     pub derived: Vec<String>,
 }
 
-/// **What each callee the ledgers describe ensures**
-/// ([ADR-314](../../docs/specification/adr/adr-314.md) D3), read back over its
-/// parameters and `result`, by the name a call writes. The first ledger that
-/// has an entry answers; a condition that does not read back is left out,
-/// which only ever proves less.
-fn ensured(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
-    nikaia_std::tools::bounds_matched::bm_ensured(ledgers, &|text, names| {
-        crate::prove::condition_nodes(text, names)
-    })
-}
-
-/// **What each callee the ledgers describe requires** (ADR-269 D5, #776),
-/// read back over its parameters, by the ledger's key: an entry whose every
-/// condition reads back, or none.
-fn required(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
-    nikaia_std::tools::bounds_matched::bm_required(ledgers, &|text, names| {
-        crate::prove::condition_nodes(text, names)
-    })
-}
-
-/// **What each sequence the ledgers describe holds of each element**
-/// ([ADR-375](../../docs/specification/adr/adr-375.md) D5), by the ledger's
-/// key: `Bytes::find_all`'s positions lie at or after `from` and inside the
-/// bytes.
-fn each(ledgers: &[&crate::contracts::Ledger]) -> BTreeMap<String, Ensured> {
-    nikaia_std::tools::bounds_matched::bm_each(ledgers, &|text, names| {
-        crate::prove::condition_nodes(text, names)
-    })
-}
-
-/// **Every index and every operation the walk proves**, whatever a build does
-/// with them (ADR-306 D14): the shape D3 reads without a solver and every
-/// linear fact D4 decides with one. What is written without its check is the
-/// emitter's choice, by `remove-bounds-checks` and `remove-overflow-checks`.
-///
-/// **What the checker found that a proof may read or prove**, by node or by
-/// the byte an operator starts at.
-pub struct Sites<'a> {
-    /// The receivers of the `x.len()` calls that count a `std` list, text or
-    /// map ([`crate::check::CheckFacts::std_lengths`]): only those are numbers
-    /// of a proof, because a `len()` a program writes for its own type may
-    /// say anything.
-    pub lengths: &'a BTreeSet<i64>,
-    /// Of `lengths`, those below 2^60 ([`crate::check::CheckFacts::sized_lengths`]).
-    pub sized: &'a BTreeSet<i64>,
-    /// [`crate::check::CheckFacts::char_codes`] (ADR-314 D2).
-    pub char_codes: &'a BTreeSet<i64>,
-    /// Every `+`, `-` and `*` whose two sides are one whole-number type, with
-    /// that type ([`crate::check::CheckFacts::arithmetic`]): only those may be
-    /// proved.
-    pub arithmetic: &'a BTreeMap<i64, String>,
-    /// [`crate::check::CheckFacts::negations`] (ADR-314 D5).
-    pub negations: &'a BTreeMap<i64, String>,
-    /// [`crate::check::CheckFacts::whole_fields`] (ADR-306 D17).
-    pub whole_fields: &'a BTreeSet<i64>,
-    /// [`crate::check::CheckFacts::array_lengths`] (#711).
-    pub array_lengths: &'a BTreeMap<i64, i64>,
-    /// [`crate::check::CheckFacts::shifts`] (ADR-306 D18).
-    pub shifts: &'a BTreeMap<i64, String>,
-    /// [`crate::check::CheckFacts::std_receivers`] (ADR-314 D3, ADR-375 D5).
-    pub std_receivers: &'a BTreeMap<i64, String>,
-    /// [`crate::check::CheckFacts::simd_loads`] (ADR-377 D3).
-    pub simd_loads: &'a BTreeMap<i64, i64>,
-    /// [`crate::check::CheckFacts::comptime_values`]: a module's `comptime`
-    /// of type `bool` decides an `if` on it.
-    pub comptime_values: &'a BTreeMap<i64, (String, String)>,
-}
-
-impl<'a> Sites<'a> {
-    /// The checker's tables, as [`proven`] reads them.
-    pub fn of(facts: &'a crate::check::CheckFacts) -> Sites<'a> {
-        Sites {
-            lengths: &facts.std_lengths,
-            sized: &facts.sized_lengths,
-            char_codes: &facts.char_codes,
-            arithmetic: &facts.arithmetic,
-            negations: &facts.negations,
-            whole_fields: &facts.whole_fields,
-            array_lengths: &facts.array_lengths,
-            shifts: &facts.shifts,
-            std_receivers: &facts.std_receivers,
-            simd_loads: &facts.simd_loads,
-            comptime_values: &facts.comptime_values,
-        }
-    }
-}
-
-/// **The module's `comptime`s of type `bool`**, by name, with what the build
-/// computed for each.
-fn decided(parsed: &Parsed, values: &BTreeMap<i64, (String, String)>) -> BTreeMap<String, bool> {
-    let mut out = BTreeMap::new();
-    for item in &parsed.program.items {
-        let Item::Comptime { name, .. } = &item.node else {
-            continue;
-        };
-        let Some((below, written)) = values.get(&(item.span.start as i64)) else {
-            continue;
-        };
-        let value = match (below.as_str(), written.trim()) {
-            ("bool", "true") => true,
-            ("bool", "false") => false,
-            _ => continue,
-        };
-        out.insert(parsed.text(*name).to_string(), value);
-    }
-    out
-}
-
-/// `sites` are what may be read and proved; `ledgers` answer what a callee
-/// ensures (ADR-314 D3); `nonnegative` are the signed values asked `>= 0`
-/// (ADR-285 D32); `beside` are the package's other files (ADR-391 D1).
+/// **Every index and every operation the walks prove**
+/// (`tools/bounds_proven.nika`): `facts` are the checker's, what may be read
+/// and proved; `ledgers` answer what a callee ensures (ADR-314 D3);
+/// `nonnegative` are the signed values asked `>= 0` (ADR-285 D32); `beside`
+/// are the package's other files (ADR-391 D1).
 pub fn proven(
     parsed: &Parsed,
     beside: &[&Parsed],
-    sites: &Sites<'_>,
+    facts: &crate::check::CheckFacts,
     ledgers: &[&crate::contracts::Ledger],
     nonnegative: &BTreeSet<i64>,
     through_loops: bool,
 ) -> Proven {
-    let Sites {
-        lengths,
-        sized,
-        char_codes,
-        arithmetic,
-        negations,
-        whole_fields,
-        array_lengths,
-        shifts,
-        std_receivers,
-        simd_loads,
-        comptime_values,
-    } = *sites;
-    let mut out = Proven::default();
-    // What each call may change, each function's frame among it (ADR-306
-    // D17, ADR-391 D2): `tools/bounds_frame.nika`.
-    let around = nikaia_std::tools::bounds_frame::bounds_around(
+    let counters = std::cell::RefCell::new(HashMap::new());
+    let all = nikaia_std::tools::bounds_proven::bounds_proven(
         &parsed.program,
+        &parsed.interner,
         &beside.iter().map(|p| &p.program).collect::<Vec<_>>(),
         &beside.iter().map(|p| &p.interner).collect::<Vec<_>>(),
+        facts,
         ledgers,
-        std_receivers,
-        simd_loads,
-        &parsed.interner,
-    );
-    let mut context = BoundsContext {
-        lengths: lengths.iter().copied().collect(),
-        sized: sized.iter().copied().collect(),
-        char_codes: char_codes.iter().copied().collect(),
-        ensured: ensured(ledgers),
-        required: required(ledgers),
-        each: each(ledgers),
-        std_receivers: std_receivers.clone(),
-        simd_loads: simd_loads.clone(),
-        shifts: shifts.clone(),
-        arithmetic: arithmetic
-            .iter()
-            .map(|(at, ty)| ((*at), ty.clone()))
-            .collect(),
-        nonnegative: nonnegative.iter().copied().collect(),
-        given: BTreeMap::new(),
-        negations: negations
-            .iter()
-            .map(|(at, ty)| ((*at), ty.clone()))
-            .collect(),
-        classes: BTreeMap::new(),
-        text_lengths: BTreeMap::new(),
-        text_classes: BTreeMap::new(),
-        around,
-        whole_fields: whole_fields.iter().copied().collect(),
-        array_lengths: array_lengths.iter().map(|(k, v)| (*k, *v)).collect(),
+        nonnegative,
         through_loops,
-        decided: decided(parsed, comptime_values),
-    };
-    // **The list fields' bounds, found program-wide** (ADR-306 D21):
-    // `tools/bounds_walk.nika`.
-    walk::bounds_fields(
-        &mut context,
-        &parsed.program,
-        &parsed.interner,
-        &|arena, facts, goal| {
-            crate::proofs::ask(arena, facts, goal) == crate::proofs::Asked::Proved
+        &|text, names| crate::prove::condition_nodes(text, names),
+        &|arena, known, goal| {
+            crate::proofs::ask(arena, known, goal) == crate::proofs::Asked::Proved
         },
+        &|function, at, arena, known, goal| {
+            crate::proofs::in_function(function, at as usize, || {
+                crate::proofs::ask(arena, known, goal) == crate::proofs::Asked::Proved
+            })
+        },
+        &|used| crate::proofs::record_bound_invariants(used),
+        &|body, symbols| {
+            counters.borrow_mut().insert(
+                std::ptr::from_ref(body) as usize,
+                symbols.iter().copied().collect(),
+            );
+        },
+        &|| crate::fold_bound::proven_counters(parsed, &facts.arithmetic),
     );
-    let mut bodies: Vec<&Spanned<Item>> = Vec::new();
-    for item in &parsed.program.items {
-        match &item.node {
-            Item::Fn { .. } => bodies.push(item),
-            Item::Impl { methods, .. } => bodies.extend(methods.iter()),
-            _ => {}
-        }
+    Proven {
+        indices: all.indices.into_iter().collect(),
+        arithmetic: all.arithmetic.into_iter().collect(),
+        nonnegative: all.nonnegative.into_iter().collect(),
+        negations: all.negations.into_iter().collect(),
+        nonnegative_locals: counters.into_inner(),
+        calls: all.calls,
+        derived: all.derived,
     }
-    // Callers before callees (ADR-391 D1): `tools/bounds_derived.nika`.
-    let starts: Vec<i64> = bodies.iter().map(|b| b.span.start as i64).collect();
-    let order = derived::derived_order(&context.around, &starts);
-    for item in order.iter().map(|k| bodies[*k as usize]) {
-        let Item::Fn {
-            name, args, body, ..
-        } = &item.node
-        else {
-            continue;
-        };
-        out.indices
-            .extend(nika::basic_indices(body, &parsed.interner));
-        // **The aggressive walk** (`tools/bounds_walk.nika`), with the
-        // solver asked about the arena it grows.
-        let function = name.map(|n| parsed.text(n).to_string()).unwrap_or_default();
-        let counters = crate::emit::nonnegative_names(body);
-        let names = counters
-            .iter()
-            .map(|s| parsed.text(*s).to_string())
-            .collect();
-        out.nonnegative_locals
-            .insert(std::ptr::from_ref(body) as usize, counters);
-        let walked = crate::proofs::in_function(&function, item.span.start as usize, || {
-            walk::bounds_aggressive(
-                args,
-                body,
-                names,
-                &context,
-                &parsed.program,
-                &parsed.interner,
-                &|arena, facts, goal| {
-                    crate::proofs::ask(arena, facts, goal) == crate::proofs::Asked::Proved
-                },
-            )
-        });
-        // **The invariants that carried a check through a loop** go into
-        // `nikaia.proofs` (ADR-361 D4, D10).
-        crate::proofs::record_bound_invariants(&walked.loops);
-        derived::derived_note(&mut context.around, &walked);
-        out.indices.extend(walked.indices);
-        out.arithmetic.extend(walked.arithmetic);
-        out.nonnegative.extend(walked.nonnegative);
-        out.negations.extend(walked.negations);
-        out.calls.extend(walked.calls);
-    }
-    out.derived = derived::derived_rows(&context.around);
-    // **A grammar's actions, walked like a function's body**
-    // ([ADR-314](../../docs/specification/adr/adr-314.md) D1), from what each
-    // binding matched.
-    for item in &parsed.program.items {
-        let Item::Grammar(grammar) = &item.node else {
-            continue;
-        };
-        let rules: BTreeSet<String> = grammar
-            .rules
-            .iter()
-            .map(|r| parsed.text(r.name).to_string())
-            .collect();
-        for rule in &grammar.rules {
-            for alt in &rule.alts {
-                let Some(action) = &alt.action else {
-                    continue;
-                };
-                let mut found = nikaia_std::tools::bounds_matched::bm_empty();
-                nikaia_std::tools::bounds_matched::bm_matched(
-                    &parsed.interner,
-                    &rules,
-                    &alt.pattern.node,
-                    &mut found,
-                );
-                let context = BoundsContext {
-                    given: found.given,
-                    classes: found.classes,
-                    text_lengths: found.text_lengths,
-                    text_classes: found.text_classes,
-                    ..context.clone()
-                };
-                let walked = crate::proofs::in_function(
-                    parsed.text(rule.name),
-                    rule.span.start as usize,
-                    || {
-                        walk::bounds_aggressive(
-                            &Vec::new(),
-                            action,
-                            crate::emit::nonnegative_names(action)
-                                .into_iter()
-                                .map(|s| parsed.text(s).to_string())
-                                .collect(),
-                            &context,
-                            &parsed.program,
-                            &parsed.interner,
-                            &|arena, facts, goal| {
-                                crate::proofs::ask(arena, facts, goal)
-                                    == crate::proofs::Asked::Proved
-                            },
-                        )
-                    },
-                );
-                crate::proofs::record_bound_invariants(&walked.loops);
-                out.indices.extend(walked.indices);
-                out.arithmetic.extend(walked.arithmetic);
-                out.nonnegative.extend(walked.nonnegative);
-                out.negations.extend(walked.negations);
-                out.calls.extend(walked.calls);
-            }
-        }
-    }
-    // **A fold's counters, proved from the input's length**
-    // ([ADR-367](../../docs/specification/adr/adr-367.md) D3).
-    out.arithmetic
-        .extend(crate::fold_bound::proven_counters(parsed, arithmetic));
-    out
 }

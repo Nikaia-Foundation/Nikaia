@@ -76,6 +76,10 @@ pub struct BoundsContext {
 	/// **A `comptime` of the module of type `bool`, by name, with what the
 	/// build computed for it**: an `if` on it takes one arm only.
 	pub decided: collections::BTreeMap[String, bool],
+	/// **The indexed bases the checker typed as a std list** (ADR-306 D23,
+	/// #1431), by node: a read of one stops the program outside, so past it
+	/// the position is inside, whatever bound the base.
+	pub list_indices: collections::BTreeSet[i64],
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
