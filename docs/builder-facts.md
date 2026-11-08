@@ -121,4 +121,8 @@ together with the specification section and an example test.
 * A `let` of a choice mixing owned text and a view is typed `ref String` by the checker but emitted as `EitherText`; a missing `&` at a call is a `lent_args` question in `check_arguments.nika`, not an emitter one. (issue-1310)
 * In cargo test output, grep `test result:` with the colon; `^test result` also matches `it` tests named `result_source::…`. (issue-1310)
 * `.to_string()` of a text slice is a view in the checker as well (NK1105 when assigned to a `String` local), not only in the emitter. (issue-1310)
+* ADRs are in `docs/specification/adr/` (for example `adr-views-3.md`); there is no `docs/adr/`. (issue-1280)
+* The checker has two text-view forms, `Named{"str", view:true}` and `Named{"String", view:true}` (the latter from `ref $T` with T=String, e.g. `.iter()` and `or_insert`), and both print as `ref String`. (issue-1316)
+* Do not merge the two text-view forms in `ty.nika` `substituted`: the `String`-slot form means `&String`/`&mut String` to the emitter, and writes through `or_insert` break; normalise in the one check that needs it. (issue-1316)
+* An NK1103 that says "is `ref String`, but the `let` declares `ref String`" is the two view forms meeting, not a tier question. (issue-1316)
 
