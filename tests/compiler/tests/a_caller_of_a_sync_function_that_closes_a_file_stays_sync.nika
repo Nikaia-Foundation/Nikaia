@@ -7,8 +7,8 @@ use std::fs
 // body, took the file's `close` for a pause, and refused `walk` (NK2202).
 fn written(root: ref fs::Root, name: String, text: String) sync {
 	let mut file = fs::open(name, root; write: true, create: true, truncate: true) catch { return }
-	file.write(text) catch { println("write failed") }
-	file.close() catch { println("close failed") }
+	file.write(text) catch { }
+	file.close() catch { return }
 }
 
 fn asks(root: ref fs::Root, n: i64) -> i64 {
