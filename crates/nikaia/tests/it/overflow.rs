@@ -191,6 +191,7 @@ fn find_manifest(under: &Path) -> Option<std::path::PathBuf> {
             if path.is_dir() {
                 stack.push((depth + 1, path));
             } else if path.file_name().is_some_and(|n| n == "Cargo.toml")
+                && std::fs::read_to_string(&path).is_ok_and(|t| t.contains("[profile"))
                 && best.as_ref().is_none_or(|(at, _)| depth < *at)
             {
                 best = Some((depth, path));
