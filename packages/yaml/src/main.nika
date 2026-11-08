@@ -407,15 +407,15 @@ grammar Yaml {
 	// indentation (`seq-spaces(n, block-out)`).
 	// `k` is the tag a property line above gave it.
 	rule Block(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
-		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; k: k) -> { v }
+		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
 		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
 
 	// A node whose first character is at column `m`, under a parent at `n`;
 	// it ends after its last line's break and the blank lines behind it.
-	rule Content(ds: Vec[Dir], left: i64, m: i64, n: i64; k: TagKind = TagKind::Untagged) -> Node =
+	rule Content(ds: Vec[Dir], left: i64, m: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
 		v:Seq(ds, left, m) -> { v }
 		| v:Map(ds, left, m) -> { v }
-		| v:Propped(ds, left, n) -> { v }
+		| v:Propped(ds, left, n; c: c, k: k) -> { v }
 		| v:BlockScalar(n; k: k) Blanks -> { v }
 		| v:Inline(ds, left, n; k: k) Eol Blanks -> { v }
 
@@ -535,6 +535,9 @@ grammar Yaml {
 			}
 		}
 		| v:KeyNode(ds, left, TagKind::Untagged) -> { v }
+		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") peek(Sp ":" Gap) -> {
+			empty_of(tag_kind(ds, p.tag), p)
+		}
 	rule KeyNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
 		v:FlowSeq(ds, left) -> { v }
 		| v:FlowMap(ds, left) -> { v }
@@ -547,9 +550,13 @@ grammar Yaml {
 	// content on the same line, a block scalar, a node on the lines below (a
 	// block collection, as a rule), or none, an empty node. A core tag that
 	// fixes a kind is checked here, against a collection, and where a scalar
-	// is read, against its text; an alias takes no properties.
-	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn) -> Node =
-		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: tag_kind(ds, p.tag)) Blanks -> {
+	// is read, against its text; an alias takes no properties. Properties on
+	// a line of their own may be split over two lines, the tag on one and
+	// the anchor on the other (`c-ns-properties` with `s-separate-lines`):
+	// the node below then holds the other one, and the two join. `k` is the
+	// tag a property line above gave it.
+	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: kind_with(ds, p.tag, k)) Blanks -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -561,7 +568,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") Eol Blanks -> {
+		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") Eol Blanks -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -573,46 +580,20 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
 			Node {
 				start: p.start,
 				end: v.end,
-				anchor: p.anchor,
-				tag: p.tag,
+				anchor: p.anchor ?? v.anchor,
+				tag: p.tag ?? v.tag,
 				flow: v.flow,
 				raw: v.raw,
 				style: v.style,
 				value: v.value,
 			}
 		}
-		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) Eol Blanks -> {
-			let v = match tag_kind(ds, p.tag) {
-				TagKind::Str => Value::Str(Scalar {
-					raw: e,
-					value: e,
-					style: Style::Plain,
-					indent: 0,
-					chomp: Chomp::Clip,
-				})
-				TagKind::NonSpecific => Value::Str(Scalar {
-					raw: e,
-					value: e,
-					style: Style::Plain,
-					indent: 0,
-					chomp: Chomp::Clip,
-				})
-				else => Value::Null
-			}
-			Node {
-				start: p.start,
-				end: p.end,
-				anchor: p.anchor,
-				tag: p.tag,
-				flow: false,
-				raw: "",
-				style: Style::Plain,
-				value: v,
-			}
+		| p:Props(ds) if(empty_fits(kind_with(ds, p.tag, k)), "a node its tag fits") Eol Blanks -> {
+			empty_of(kind_with(ds, p.tag, k), p)
 		}
 	rule Nothing = "" -> { }
 
@@ -1305,6 +1286,47 @@ fn empty_fits(k: TagKind) -> bool sync {
 		TagKind::Seq => false
 		TagKind::Map => false
 		else => true
+	}
+}
+
+// The kind a node's own tag `t` says, or, with none, the kind `k` a property
+// line above gave it.
+fn kind_with(ds: ref Vec[Dir], t: String?, k: TagKind) -> TagKind sync {
+	return match t {
+		null => k
+		x => tag_kind(ds, t)
+	}
+}
+
+// An empty node with properties `p` and kind `k`: null, or with `!!str` or
+// `!` the empty string.
+fn empty_of(k: TagKind, p: Props) -> Node sync {
+	let v = match k {
+		TagKind::Str => Value::Str(Scalar {
+			raw: "",
+			value: "",
+			style: Style::Plain,
+			indent: 0,
+			chomp: Chomp::Clip,
+		})
+		TagKind::NonSpecific => Value::Str(Scalar {
+			raw: "",
+			value: "",
+			style: Style::Plain,
+			indent: 0,
+			chomp: Chomp::Clip,
+		})
+		else => Value::Null
+	}
+	return Node {
+		start: p.start,
+		end: p.end,
+		anchor: p.anchor,
+		tag: p.tag,
+		flow: false,
+		raw: "",
+		style: Style::Plain,
+		value: v,
 	}
 }
 
