@@ -203,8 +203,8 @@ fn a_backend_error_is_still_said_in_nikaias_words() {
     assert!(!ran.status.success(), "{}", said(&ran));
     let complaint = said(&ran);
     assert!(
-        complaint.contains("Unused variable") && !complaint.contains("error[NK"),
-        "the backend refused it, not the checker: {complaint}"
+        complaint.contains("unused variable") && complaint.contains("error[NK1343]"),
+        "the backend refused it, said as NK1343 (an internal compiler error): {complaint}"
     );
     assert!(
         complaint.contains("src/main.nika:3:"),
