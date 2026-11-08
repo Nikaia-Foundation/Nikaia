@@ -246,7 +246,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
-* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist; `touch` them first. (issue-1397)
+* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist (a refused program gets a `.stderr` instead); `touch` them first. (issue-1397)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
 * **`f.rank[f.find(c)]` (a `ref mut` method call in an index of the same value) passes the checker and fails rustc (E0502)**: a defect, #1445; until it lands, a test probe binds the call to a `let`, and no code under `tools/` relies on the form. (issue-1414)
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
@@ -279,6 +279,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * the old binary lowers `for x in xs.f[a..]` wrong (NK1343, `expected Symbol, found &Symbol`); after the checker fix in fb2698e9, the first build of a tool that uses it needs the index-skip form, then a switch back. (issue-1383)
 
 ### Syntax gaps of tools/*.nika
+
+* `grammar` is a reserved word: a binding named `grammar` in `tools/*.nika` is refused by `lower-std`. (issue-1431)
 
 Classes (CLAUDE.md, *A missing form stops the work*): **[design]** holds,
 build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect

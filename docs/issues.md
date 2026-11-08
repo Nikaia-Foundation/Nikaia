@@ -50,6 +50,8 @@ it, like the checks in `docs/supervisor.md`.
   estimate not measured says so. A *Done when* figure names the reason it
   counts (the walk's report line), and each item says which reason it moves;
   an item that moves none of the counted reasons does not promise the figure.
+  A count taken from a builder's `Found:` is a hypothesis: the issue measures
+  it, or makes the count its step 1 and stops when it is short (#1431).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/` (or the package's tests), and the rows it must show.
