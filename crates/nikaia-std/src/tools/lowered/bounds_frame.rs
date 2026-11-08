@@ -6,7 +6,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
 pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
-    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], derived: no_derived() };
+    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, .. } => {
@@ -47,6 +47,9 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
     let rules = rules_candidates(program, &context, words);
     context.around.rules = rules;
     context.around.derived = derived_of(program, beside, beside_words, words);
+    let seen = fields_seen(program, beside, beside_words, words);
+    context.around.fields = seen.keys;
+    context.around.field_writers = seen.writers;
     context.around
 }
 
@@ -276,4 +279,283 @@ pub(crate) fn frame_list(entry: &str) -> String {
 pub fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.iter().any(|e| { frame_from(e, root) }) || frame.lengths.iter().any(|e| { frame_from(e, root) }) || frame.parts.iter().any(|e| { frame_from(e, root) }) || frame.elements.iter().any(|e| { frame_from(e, root) }) }
 
 pub(crate) fn frame_from(entry: &str, root: &str) -> bool { path_root(&frame_list(entry)) == root }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldsSeen {
+    pub keys: collections::BTreeSet<String>,
+    pub writers: collections::BTreeSet<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FieldsScan {
+    pub(crate) live: collections::BTreeMap<String, bool>,
+    pub(crate) walked: bool,
+    pub(crate) wrote: bool,
+}
+
+pub fn fields_seen(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], words: &winnow_grammar::InternerContext) -> FieldsSeen {
+    let mut scan = FieldsScan { live: collections::BTreeMap::new(), walked: false, wrote: false };
+    fields_declared(program, words, true, &mut scan);
+    for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) { fields_declared(other, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), false, &mut scan); }
+    let mut writers: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    for item in program.items.iter() { fields_item(item, words, &mut scan, &mut writers); }
+    for (k, other) in beside.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        let mut ignored: collections::BTreeSet<i64> = collections::BTreeSet::new();
+        for item in other.items.iter() { fields_item(item, *nikaia_std::index::get(&beside_words, nikaia_std::index::at(k)), &mut scan, &mut ignored); }
+    }
+    let mut keys: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (name, live) in scan.live.iter() {
+        let live = nikaia_std::num::value(live);
+        if live { keys.insert(format!(".{}", name)); }
+    }
+    FieldsSeen { keys, writers }
+}
+
+pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::InternerContext, here: bool, scan: &mut FieldsScan) {
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Struct { generics, fields, is_extern, .. } => {
+                let is_extern = *is_extern;
+                for field in fields.iter() {
+                    let name = words.resolve(field.name).to_string();
+                    let ty = &field.ty;
+                    let mut fits = here && generics.is_empty() && !is_extern && !field.is_public && field.default.is_none() && field.attributes.is_empty();
+                    let list = words.resolve(ty.name);
+                    fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1;
+                    if fits {
+                        let inner = nikaia_std::index::get(&ty.generics, 0);
+                        fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name));
+                    }
+                    let was = nikaia_std::index::or(scan.live.get(&name), || true);
+                    scan.live.insert(name, was && fits);
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan, writers: &mut collections::BTreeSet<i64>) {
+    match &item.node {
+        Item::Fn { config, body, .. } => {
+            scan.walked = false;
+            for param in config.iter() { fields_expr(&param.default, words, scan); }
+            scan.walked = true;
+            scan.wrote = false;
+            fields_block(body, words, scan);
+            if scan.wrote { writers.insert(i64::from(item.span.start)); }
+            scan.walked = false;
+        },
+        Item::Impl { methods, .. } => { for method in methods.iter() { fields_item(method, words, scan, writers); } },
+        Item::Struct { rules, .. } => { for rule in rules.iter() { fields_expr(&rule.node, words, scan); } },
+        Item::Test { body, .. } => { fields_block(body, words, scan); },
+        Item::Bench { body, .. } => { fields_block(body, words, scan); },
+        Item::Comptime { value, .. } => { fields_expr(value, words, scan); },
+        Item::Grammar(def) => {
+            for rule in def.rules.iter() {
+                for param in rule.config.iter() { fields_expr(&param.default, words, scan); }
+                for alt in rule.alts.iter() {
+                    let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    fields_block(action, words, scan);
+                }
+            }
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn fields_write(name: &str, scan: &mut FieldsScan) {
+    if !nikaia_std::index::or(scan.live.get(name), || false) { return; }
+    if scan.walked { scan.wrote = true; } else { scan.live.insert(name.to_string(), false); }
+}
+
+pub(crate) fn fields_lose(name: &str, scan: &mut FieldsScan) { if nikaia_std::index::or(scan.live.get(name), || false) { scan.live.insert(name.to_string(), false); } }
+
+pub(crate) fn fields_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) { for stmt in block.stmts.iter() { fields_stmt(&stmt.node, words, scan); } }
+
+pub(crate) fn fields_stmt(stmt: &Stmt, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) {
+    match stmt {
+        Stmt::Let { value, .. } => { fields_expr(value, words, scan); },
+        Stmt::Comptime { value, .. } => { fields_expr(value, words, scan); },
+        Stmt::Assign { target, op, value } => {
+            fields_expr(value, words, scan);
+            match target {
+                Expr::Field { base, name, .. } => {
+                    let base = nikaia_std::boxed::open(base); let name = *name;
+                    let text = words.resolve(name);
+                    if op.is_none() { fields_write(text, scan); } else { fields_lose(text, scan); }
+                    fields_expr(base, words, scan);
+                },
+                Expr::Index { base: list, index, .. } => {
+                    let list = nikaia_std::boxed::open(list); let index = nikaia_std::boxed::open(index);
+                    match list {
+                        Expr::Field { base: owner, name, .. } => {
+                            let owner = nikaia_std::boxed::open(owner); let name = *name;
+                            let text = words.resolve(name);
+                            if op.is_none() { fields_write(text, scan); } else { fields_lose(text, scan); }
+                            fields_expr(owner, words, scan);
+                        },
+                        _ => { fields_expr(list, words, scan); },
+                    }
+                    fields_expr(index, words, scan);
+                },
+                _ => { fields_expr(target, words, scan); },
+            }
+        },
+        Stmt::For { iter, body, .. } => {
+            match iter {
+                Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); fields_expr(base, words, scan); },
+                _ => { fields_expr(iter, words, scan); },
+            }
+            fields_block(body, words, scan);
+        },
+        Stmt::While { cond, body } => {
+            fields_expr(cond, words, scan);
+            fields_block(body, words, scan);
+        },
+        Stmt::Return(value) => { fields_maybe((value).as_ref(), words, scan); },
+        Stmt::Expr(inner) => { fields_expr(inner, words, scan); },
+        _ => { },
+    }
+}
+
+pub(crate) fn fields_maybe(expr: Option<&Expr>, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) { fields_expr(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, words, scan); }
+
+pub(crate) fn fields_all(all: &[Expr], words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) { for each in all.iter() { fields_expr(each, words, scan); } }
+
+pub(crate) fn fields_unwalked(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) {
+    let was = scan.walked;
+    scan.walked = false;
+    fields_block(block, words, scan);
+    scan.walked = was;
+}
+
+pub(crate) fn fields_inits(fields: &[FieldInit], words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) {
+    for field in fields.iter() {
+        fields_write(words.resolve(field.name), scan);
+        fields_maybe((field.value).as_ref(), words, scan);
+    }
+}
+
+pub(crate) fn fields_expr(expr: &Expr, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) {
+    match expr {
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            fields_lose(words.resolve(name), scan);
+            fields_expr(base, words, scan);
+        },
+        Expr::SafeField { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            fields_lose(words.resolve(name), scan);
+            fields_expr(base, words, scan);
+        },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            match base {
+                Expr::Field { base: owner, .. } => { let owner = nikaia_std::boxed::open(owner); fields_expr(owner, words, scan); },
+                _ => { fields_expr(base, words, scan); },
+            }
+            fields_expr(index, words, scan);
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let called = words.resolve(method);
+            match receiver {
+                Expr::Field { base: owner, name, .. } => {
+                    let owner = nikaia_std::boxed::open(owner); let name = *name;
+                    let text = words.resolve(name);
+                    if writes_a_value(called, args.len() as i64).is_some() { fields_write(text, scan); } else if !keeps_length(called) && !only_removes(called) { fields_lose(text, scan); }
+                    fields_expr(owner, words, scan);
+                },
+                _ => { fields_expr(receiver, words, scan); },
+            }
+            fields_all(args, words, scan);
+        },
+        Expr::SafeMethod { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            fields_expr(receiver, words, scan);
+            fields_all(args, words, scan);
+        },
+        Expr::StructLit { fields, .. } => { fields_inits(fields, words, scan); },
+        Expr::With { base, fields, .. } => {
+            let base = nikaia_std::boxed::open(base);
+            fields_expr(base, words, scan);
+            fields_inits(fields, words, scan);
+        },
+        Expr::Block(block, _) => { fields_block(block, words, scan); },
+        Expr::Unsafe(block, _) => { fields_block(block, words, scan); },
+        Expr::Overlap(block, _) => { fields_block(block, words, scan); },
+        Expr::AsyncGroup(block, _, _) => { fields_unwalked(block, words, scan); },
+        Expr::Closure { body, .. } => { fields_unwalked(body, words, scan); },
+        Expr::Spawn { body, .. } => {
+            let body = nikaia_std::boxed::open(body);
+            let was = scan.walked;
+            scan.walked = false;
+            fields_expr(body, words, scan);
+            scan.walked = was;
+        },
+        Expr::Async(inner, _, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let was = scan.walked;
+            scan.walked = false;
+            fields_expr(inner, words, scan);
+            scan.walked = was;
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            fields_expr(cond, words, scan);
+            fields_block(then_branch, words, scan);
+            if else_branch.is_some() { fields_block(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, words, scan); }
+        },
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            fields_expr(func, words, scan);
+            fields_all(args, words, scan);
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            fields_expr(value, words, scan);
+            for arm in arms.iter() {
+                fields_maybe((arm.guard).as_ref(), words, scan);
+                fields_expr(&arm.body, words, scan);
+            }
+        },
+        Expr::Tuple(parts, _) => { fields_all(parts, words, scan); },
+        Expr::ListLit { items, .. } => { fields_all(items, words, scan); },
+        Expr::ListRepeat { value, count, .. } => {
+            let value = nikaia_std::boxed::open(value); let count = nikaia_std::boxed::open(count);
+            fields_expr(value, words, scan);
+            fields_expr(count, words, scan);
+        },
+        Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); fields_expr(inner, words, scan); },
+        Expr::Binary { lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            fields_expr(lhs, words, scan);
+            fields_expr(rhs, words, scan);
+        },
+        Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); fields_expr(inner, words, scan); },
+        Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); fields_expr(inner, words, scan); },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); fields_maybe((value).as_ref(), words, scan); },
+        Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); fields_expr(inner, words, scan); },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            fields_expr(value, words, scan);
+            fields_expr(fallback, words, scan);
+        },
+        Expr::TryCatch { expr: inner, handler, .. } => {
+            let inner = nikaia_std::boxed::open(inner);
+            fields_expr(inner, words, scan);
+            fields_block(handler, words, scan);
+        },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr: hole, .. } => { fields_expr(hole, words, scan); },
+                    _ => { },
+                }
+            }
+        },
+        _ => { },
+    }
+}
 

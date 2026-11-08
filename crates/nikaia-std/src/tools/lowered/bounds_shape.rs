@@ -9,6 +9,7 @@ pub struct BodyShape {
     pub aliases: collections::BTreeMap<String, String>,
     pub bound: collections::BTreeSet<String>,
     pub twice: collections::BTreeSet<String>,
+    pub fields: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,6 +20,9 @@ pub struct Around {
     pub frames: collections::BTreeMap<String, BoundsChanged>,
     pub rules: Vec<BoundsRule>,
     pub derived: Derived,
+    pub fields: collections::BTreeSet<String>,
+    pub field_writers: collections::BTreeSet<i64>,
+    pub field_bounds: collections::BTreeMap<String, Range>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +41,7 @@ pub(crate) struct ShapeSeen {
 }
 
 pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<String>, around: &Around, words: &winnow_grammar::InternerContext) -> BodyShape {
-    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new() }, lost: collections::BTreeSet::new() };
+    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.to_owned() }, lost: collections::BTreeSet::new() };
     for arg in args.iter() { bind_name(words.resolve(arg.name), &mut seen); }
     look_block(body, &Look::Bound, false, around, words, &mut seen);
     for (name, times) in seen.bound.iter() {
@@ -80,11 +84,20 @@ pub fn elements_key(shape: &BodyShape, expr: &Expr, words: &winnow_grammar::Inte
             let key = match elements_key(shape, base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(format!("{}[]", key))
         },
+        Expr::Field { name, .. } => {
+            let name = *name;
+            let key = format!(".{}", words.resolve(name));
+            if shape.fields.contains(&key) { return Some(key); }
+            return None;
+        },
         _ => None,
     }
 }
 
-pub fn tracks(shape: &BodyShape, key: &str) -> bool { shape.roots.contains(&key_root(key)) }
+pub fn tracks(shape: &BodyShape, key: &str) -> bool {
+    let root = key_root(key);
+    shape.roots.contains(&root) || shape.fields.contains(&root)
+}
 
 pub fn writes_a_value(method: &str, args: i64) -> Option<i64> {
     match method {

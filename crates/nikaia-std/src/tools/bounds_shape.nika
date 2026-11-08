@@ -35,6 +35,9 @@ pub struct BodyShape {
 	pub bound: collections::BTreeSet[String],
 	/// Of `bound`, the names bound more than once.
 	pub twice: collections::BTreeSet[String],
+	/// **The list fields whose every write the walks see** (ADR-306 D21):
+	/// `.name`, the key of its values whichever value holds it.
+	pub fields: collections::BTreeSet[String],
 }
 
 /// **What the program around a body says about a call**: each free
@@ -58,6 +61,12 @@ pub struct Around {
 	/// what the walks so far proved at their calls (ADR-391 D1,
 	/// `bounds_derived.nika`).
 	pub derived: Derived,
+	/// The list fields whose every write the walks see (ADR-306 D21,
+	/// `fields_seen`), the bodies that write one, and the bounds found of
+	/// their values, program-wide (`bounds_fields`).
+	pub fields: collections::BTreeSet[String],
+	pub field_writers: collections::BTreeSet[i64],
+	pub field_bounds: collections::BTreeMap[String, Range],
 }
 
 enum Look {
@@ -95,6 +104,7 @@ pub fn shape_of(
 			aliases: collections::BTreeMap(),
 			bound: collections::BTreeSet(),
 			twice: collections::BTreeSet(),
+			fields: around.fields.clone(),
 		},
 		lost: collections::BTreeSet(),
 	}
@@ -157,13 +167,21 @@ pub fn elements_key(
 			let key = elements_key(shape, base, words) ?? return null
 			f"{key}[]"
 		},
+		Expr::Field { name, .. } => {
+			let key = f".{words.resolve(name)}"
+			if shape.fields.contains(key) {
+				return key
+			}
+			return null
+		},
 		else => null,
 	}
 }
 
 /// Whether the walk sees every write of the list `key` is about.
 pub fn tracks(shape: ref BodyShape, key: ref String) -> bool {
-	return shape.roots.contains(key_root(key))
+	let root = key_root(key)
+	return shape.roots.contains(root) || shape.fields.contains(root)
 }
 
 /// **Methods that put one value into a list**, and which argument it is.

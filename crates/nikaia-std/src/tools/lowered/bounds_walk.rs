@@ -43,6 +43,8 @@ pub struct BoundsProven {
     pub calls: collections::BTreeMap<i64, String>,
     pub loops: collections::BTreeMap<i64, String>,
     pub derived: collections::BTreeMap<i64, collections::BTreeSet<i64>>,
+    pub fields: collections::BTreeMap<String, Range>,
+    pub fields_lost: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,7 +115,7 @@ pub(crate) fn most_facts() -> i64 { 48 }
 
 pub(crate) fn call_depth() -> i64 { 4 }
 
-pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new() } }
+pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new() } }
 
 pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
 
@@ -126,6 +128,10 @@ pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections:
         for _round in 0..2 {
             bounding_pass(&mut walk, args, body, context, program, words, ask);
             walk.assumed = bounding_found(&walk);
+            for (key, bound) in context.around.field_bounds.iter() {
+                let bound = *bound;
+                walk.assumed.insert(key.to_string(), bound.clone());
+            }
         }
         walk.collecting = false;
         for _round in 0..4 {
@@ -136,6 +142,10 @@ pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections:
             let mut kept: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
             for (key, bound) in walk.assumed.iter() {
                 let bound = *bound;
+                if key.starts_with('.') {
+                    kept.insert(key.to_string(), bound.clone());
+                    continue;
+                }
                 let seen = match found.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if bound.holds(seen) { kept.insert(key.to_string(), bound.clone()); }
             }
@@ -147,11 +157,70 @@ pub fn bounds_aggressive(args: &[FnArg], body: &Block, nonnegative: collections:
         }
     }
     if !settled {
-        if !walk.shape.roots.is_empty() { walk.assumed = collections::BTreeMap::new(); }
+        if !walk.shape.roots.is_empty() { walk.assumed = context.around.field_bounds.to_owned(); }
         walk.proven = no_proofs();
         bounding_pass(&mut walk, args, body, context, program, words, ask);
     }
+    for (key, bound) in walk.written.iter() {
+        let bound = *bound;
+        if key.starts_with('.') && bound.is_bounded() { walk.proven.fields.insert(key.to_string(), bound.clone()); }
+    }
+    for key in walk.poisoned.iter() { if key.starts_with('.') { walk.proven.fields_lost.insert(key_root(key)); } }
     walk.proven
+}
+
+pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    context.around.field_bounds = collections::BTreeMap::new();
+    if context.around.fields.is_empty() { return; }
+    let writers = context.around.field_writers.to_owned();
+    let mut bodies: Vec<&Spanned<Item>> = vec![];
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Fn { .. } => { if writers.contains(&(item.span.start as i64)) { bodies.push(item); } },
+            Item::Impl { methods, .. } => { for method in methods.iter() { if writers.contains(&(method.span.start as i64)) { bodies.push(method); } } },
+            _ => { },
+        }
+    }
+    for _round in 0..2 { context.around.field_bounds = fields_round(&context, &bodies, program, words, ask); }
+    for _round in 0..4 {
+        let found = fields_round(&context, &bodies, program, words, ask);
+        let before = context.around.field_bounds.len() as i64;
+        let mut kept: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
+        for (key, bound) in context.around.field_bounds.iter() {
+            let bound = *bound;
+            let seen = match found.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if bound.holds(seen) { kept.insert(key.to_string(), bound.clone()); }
+        }
+        context.around.field_bounds = kept;
+        if (context.around.field_bounds.len() as i64) == before { return; }
+    }
+    context.around.field_bounds = collections::BTreeMap::new();
+}
+
+pub(crate) fn fields_round(context: &BoundsContext, bodies: &[&Spanned<Item>], program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
+    let mut written: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
+    let mut lost: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for item in bodies.iter() {
+        let item = *item;
+        match &item.node {
+            Item::Fn { args, body, .. } => {
+                let proven = bounds_aggressive(args, body, collections::BTreeSet::new(), context, program, words, ask);
+                for (key, bound) in proven.fields.iter() {
+                    let bound = *bound;
+                    let was = written.get(key);
+                    if was.is_some() { written.insert(key.to_string(), nikaia_std::index::or(was, || Range::open()).join(&bound.clone())); } else { written.insert(key.to_string(), bound.clone()); }
+                }
+                lost.extend(proven.fields_lost.iter().cloned());
+            },
+            _ => { },
+        }
+    }
+    let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
+    for (key, bound) in written.iter() {
+        let bound = *bound;
+        if !lost.contains(key) { out.insert(key.to_string(), bound.clone()); }
+    }
+    out
 }
 
 pub(crate) fn bounding_new(args: &[FnArg], body: &Block, nonnegative: collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> BoundsWalk {
@@ -172,7 +241,7 @@ pub(crate) fn bounding_new(args: &[FnArg], body: &Block, nonnegative: collection
             _ => { },
         }
     }
-    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: collections::BTreeMap::new(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new() };
+    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new() };
     for arg in args.iter() {
         let name = words.resolve(arg.name).to_string();
         let ty = words.resolve(arg.ty.name).to_string();
@@ -215,7 +284,7 @@ pub(crate) fn bounding_found(walk: &BoundsWalk) -> collections::BTreeMap<String,
     let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
     for (key, bound) in walk.written.iter() {
         let bound = *bound;
-        if bound.is_bounded() && !bounding_poisoned(walk, key) { out.insert(key.to_string(), bound.clone()); }
+        if bound.is_bounded() && !bounding_poisoned(walk, key) && !key.starts_with('.') { out.insert(key.to_string(), bound.clone()); }
     }
     out
 }
@@ -261,6 +330,52 @@ pub(crate) fn bounding_write(walk: &mut BoundsWalk, key: &str, value: &Expr, fac
         let bound = bounding_assumed(&walk, nikaia_std::index::or(elements.as_deref(), || ""));
         if bound.is_some() { bounding_join(walk, &inner, nikaia_std::index::or(bound, || Range::open())); } else { walk.poisoned.insert(inner); }
         return;
+    }
+    walk.poisoned.insert(key.to_string());
+}
+
+pub(crate) fn bounding_field_inits(walk: &mut BoundsWalk, fields: &[FieldInit], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    for field in fields.iter() {
+        let name = words.resolve(field.name);
+        let key = format!(".{}", name);
+        if !walk.shape.fields.contains(&key) { continue; }
+        if field.value.is_some() {
+            bounding_field_list(walk, &key, match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, facts, context, program, words, ask);
+            continue;
+        }
+        let mut elements: Option<String> = None;
+        if walk.shape.roots.contains(name) { elements = Some(name.to_string()); } else {
+            elements = match walk.shape.aliases.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+        }
+        let bound = bounding_assumed(&walk, nikaia_std::index::or(elements.as_deref(), || ""));
+        if elements.is_some() && bound.is_some() { bounding_join(walk, &key, nikaia_std::index::or(bound, || Range::open())); } else { walk.poisoned.insert(key); }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bounding_field_list(walk: &mut BoundsWalk, key: &str, value: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    match value {
+        Expr::ListLit { items, .. } => {
+            for item in items.iter() { bounding_write(walk, key, item, facts, context, program, words, ask); }
+            return;
+        },
+        Expr::ListRepeat { value: item, .. } => {
+            let item = nikaia_std::boxed::open(item);
+            bounding_write(walk, key, item, facts, context, program, words, ask);
+            return;
+        },
+        _ => { },
+    }
+    let elements = elements_key(&walk.shape, value, words);
+    if elements.is_some() {
+        let bound = bounding_assumed(&walk, nikaia_std::index::or(elements.as_deref(), || ""));
+        if bound.is_some() {
+            bounding_join(walk, key, nikaia_std::index::or(bound, || Range::open()));
+            return;
+        }
     }
     walk.poisoned.insert(key.to_string());
 }
@@ -1201,9 +1316,15 @@ pub(crate) fn bounding_derived_each(walk: &mut BoundsWalk, params: &[String], pa
         let rest = nikaia_std::index::or(param.strip_prefix(&root), || "");
         let path = format!("{}{}", handed, rest);
         let element = walk.arena.var(&bounding_element_of(&path));
-        if rest.is_empty() {
-            let key = match elements_key(&walk.shape, nikaia_std::index::get(&args, (k) as usize), words) { Some(__nikaia_value) => __nikaia_value, None => return Some(element) };
-            let bound = match bounding_assumed(&walk, &key) { Some(__nikaia_value) => __nikaia_value, None => return Some(element) };
+        let mut key = elements_key(&walk.shape, nikaia_std::index::get(&args, (k) as usize), words);
+        if !rest.is_empty() {
+            key = None;
+            let parts: Vec<&str> = rest.split('.').collect::<Vec<_>>();
+            let field = format!(".{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1)));
+            if walk.shape.fields.contains(&field) { key = Some(field); }
+        }
+        if key.is_some() {
+            let bound = match bounding_assumed(&walk, nikaia_std::index::or(key.as_deref(), || "")) { Some(__nikaia_value) => __nikaia_value, None => return Some(element) };
             if bound.lo.is_some() {
                 let lo = walk.arena.int(nikaia_std::index::or(bound.lo, || 0));
                 given.push(walk.arena.ge(element, lo));
@@ -1637,6 +1758,11 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
             bounding_compound(walk, (op).as_ref(), target, value, at, &facts, context, program, words, &ask);
             if op.is_none() {
                 match target {
+                    Expr::Field { name, .. } => {
+                        let name = *name;
+                        let key = format!(".{}", words.resolve(name));
+                        if walk.shape.fields.contains(&key) { bounding_field_list(walk, &key, value, &facts, context, program, words, &ask); }
+                    },
                     Expr::Index { base, .. } => {
                         let base = nikaia_std::boxed::open(base);
                         let key = elements_key(&walk.shape, base, words);
@@ -3211,11 +3337,15 @@ pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut 
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); bounding_expr(walk, base, facts, context, program, words, &ask); },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); bounding_expr(walk, base, facts, context, program, words, &ask); },
-        Expr::StructLit { fields, .. } => { for field in fields.iter() { bounding_maybe_expr(walk, (field.value).as_ref(), facts, context, program, words, &ask); } },
+        Expr::StructLit { fields, .. } => {
+            for field in fields.iter() { bounding_maybe_expr(walk, (field.value).as_ref(), facts, context, program, words, &ask); }
+            bounding_field_inits(walk, fields, &facts, context, program, words, &ask);
+        },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             bounding_expr(walk, base, facts, context, program, words, &ask);
             for field in fields.iter() { bounding_maybe_expr(walk, (field.value).as_ref(), facts, context, program, words, &ask); }
+            bounding_field_inits(walk, fields, &facts, context, program, words, &ask);
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); bounding_expr(walk, expr, facts, context, program, words, &ask); },
         Expr::Try(inner, _) => {

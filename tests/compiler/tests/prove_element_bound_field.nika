@@ -1,0 +1,24 @@
+// ADR-306 D21 (#1397): a private list field written only by literals the
+// walks see has its values bounded program-wide, and a caller proves
+// `eval`'s derived precondition from that bound.
+struct Clause {
+	atoms: Vec[i64],
+}
+
+fn eval(clause: ref Clause, values: ref Vec[bool]) -> bool {
+	let mut k = 0
+	while k < clause.atoms.len() {
+		let atom = clause.atoms[k]
+		if values[atom] {
+			return true
+		}
+		k += 1
+	}
+	return false
+}
+
+fn main() throws {
+	let clause = Clause { atoms: [0, 2, 1] }
+	let values = [false, false, true]
+	println(f"{eval(clause, values)}")
+}
