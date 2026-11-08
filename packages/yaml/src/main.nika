@@ -1787,6 +1787,147 @@ fn key_of(n: ref Node) -> String? sync {
 	}
 }
 
+// The tree from `load` with every `<<` merge key applied (D6, as serde_yaml
+// 0.9's `apply_merge` and the YAML 1.1 merge key), in every mapping at every
+// depth. A mapping's entry whose key is the plain scalar `<<` is taken out;
+// its value, a mapping or a sequence of mappings, each merged first, gives
+// its entries after the mapping's own, in order, each only when its key
+// (`key_of`) is not there yet: the mapping's own keys win, then the first
+// merged mapping over a later one. Any other value of `<<` is an `Error` at
+// its position; a quoted `"<<"` is an ordinary key.
+pub fn merge(node: Node, input: ref Bytes) -> Node sync throws {
+	let value = match node.value {
+		Value::Seq(items) => {
+			let mut out: Vec[Node] = []
+			for x in items.drain() {
+				out.push(merge(x, input))
+			}
+			Value::Seq(out)
+		}
+		Value::Map(entries) => Value::Map(merged_entries(entries, input))
+		else => node.value
+	}
+	return Node {
+		start: node.start,
+		end: node.end,
+		anchor: node.anchor,
+		tag: node.tag,
+		flow: node.flow,
+		raw: node.raw,
+		style: node.style,
+		value: value,
+	}
+}
+
+// A mapping's entries merged: its own first, then those of its `<<` value's
+// mappings whose keys it does not hold yet.
+fn merged_entries(entries: Vec[Entry], input: ref Bytes) -> Vec[Entry] sync throws {
+	let mut out: Vec[Entry] = []
+	let mut sources: Vec[Node] = []
+	for e in entries.drain() {
+		if is_merge_key(e.key) {
+			sources.push(e.value)
+		} else {
+			out.push(Entry { key: merge(e.key, input), value: merge(e.value, input) })
+		}
+	}
+	if sources.is_empty() {
+		return out
+	}
+	let mut seen: collections::HashSet[String] = collections::HashSet()
+	for e in out {
+		let k = key_of(e.key)
+		if k != null {
+			seen.insert(k ?? "")
+		}
+	}
+	for s in sources.drain() {
+		for m in merge_sources(s, input).drain() {
+			for e in merged_map(m, input).drain() {
+				let k = key_of(e.key)
+				if k == null {
+					out.push(e)
+				} else {
+					let s = k ?? ""
+					if !seen.contains(s) {
+						seen.insert(s)
+						out.push(e)
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// True for a key written as the plain scalar `<<`.
+fn is_merge_key(k: ref Node) -> bool sync {
+	return match k.value {
+		Value::Str(s) => s.raw == "<<" && match s.style {
+			Style::Plain => true
+			else => false
+		}
+		else => false
+	}
+}
+
+// The mappings a `<<` value names: itself, or the items of its sequence;
+// anything else an error at its position.
+fn merge_sources(v: Node, input: ref Bytes) -> Vec[Node] sync throws {
+	return match v.value {
+		Value::Map(_) => [v]
+		Value::Seq(items) => {
+			let mut out: Vec[Node] = []
+			for x in items.drain() {
+				if !is_a_map(x) {
+					throw load_error(
+						input,
+						x.start,
+						f"expected a mapping to merge in the list, found {kind_of(x)}",
+					)
+				}
+				out.push(x)
+			}
+			out
+		}
+		else => throw load_error(
+			input,
+			v.start,
+			f"expected a mapping or a list of mappings to merge, found {kind_of(v)}",
+		)
+	}
+}
+
+// A mapping to merge in, its own `<<` applied first, as its entries.
+fn merged_map(m: Node, input: ref Bytes) -> Vec[Entry] sync throws {
+	let merged = merge(m, input)
+	return match merged.value {
+		Value::Map(entries) => entries
+		else => []
+	}
+}
+
+fn is_a_map(n: ref Node) -> bool sync {
+	return match n.value {
+		Value::Map(_) => true
+		else => false
+	}
+}
+
+// What a node is, for an error.
+fn kind_of(n: ref Node) -> String sync {
+	return match n.value {
+		Value::Null => "null"
+		Value::Bool(_) => "a boolean"
+		Value::Int(_) => "an integer"
+		Value::Float(_) => "a float"
+		Value::Str(_) => "a string"
+		Value::Seq(_) => "a list"
+		Value::Map(_) => "a mapping"
+		Value::Alias(a) => f"the unresolved alias *{a}"
+	}
+}
+
 // A scalar's value: for a double-quoted one what the grammar decoded (D11);
 // line folding (YAML 1.2.2 6.5) and `''` of a plain or a single-quoted one,
 // a copy of its own computed on request.

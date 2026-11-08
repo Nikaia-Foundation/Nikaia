@@ -1,0 +1,71 @@
+// `merge` (ADR-yaml-1 D6): the `<<` merge key applied on request, over a tree
+// from `load`. A mapping's own keys win, then the first merged mapping over a
+// later one; merged mappings are merged first; a quoted `"<<"` is an ordinary
+// key; any other value of `<<` is an error with its position.
+use yaml
+
+fn props(n: ref yaml::Node) -> String {
+	let a = match n.anchor {
+		null => ""
+		x => f"&{x} "
+	}
+	return a
+}
+
+fn show(n: ref yaml::Node) -> String {
+	let p = props(n)
+	return match n.value {
+		yaml::Value::Null => f"{p}null"
+		yaml::Value::Bool(b) => f"{p}{b}"
+		yaml::Value::Int(t) => f"{p}{t}"
+		yaml::Value::Float(t) => f"{p}{t}"
+		yaml::Value::Str(s) => f"{p}{yaml::text(s)}"
+		yaml::Value::Alias(a) => f"{p}*{a}"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"{p}[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}={show(e.value)}"
+			}).collect()
+			f"{p}{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+// Each document loaded and merged; a root mapping printed as one `key=value`
+// line per entry, anything else as one line.
+fn merged(title: String, text: String) throws {
+	println(f"-- {title}")
+	let input = Bytes(text.bytes().collect())
+	let mut docs = yaml::load(input) catch {
+		println(f"load error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	for d in docs.drain() {
+		let m = yaml::merge(d, input) catch {
+			println(f"error {error.line}:{error.column}: {error.message}")
+			return
+		}
+		match m.value {
+			yaml::Value::Map(entries) => {
+				for e in entries {
+					println(f"{show(e.key)}={show(e.value)}")
+				}
+			}
+			else => println(show(m))
+		}
+	}
+}
+
+fn main() throws {
+	merged("own key overrides base", "base: &base\n  a: 1\n  b: 2\nx:\n  <<: *base\n  b: 3\n  c: 4\n")
+	merged("first merged mapping wins", "a: &a {k: 1, p: 2}\nb: &b {k: 9, q: 3}\nm:\n  <<: [*a, *b]\n")
+	merged("nested merge", "base: &b {x: 1}\nmid: &m {<<: *b, y: 2}\ntop: {<<: *m, z: 3}\n")
+	merged("inside a sequence item", "- &a {k: 1}\n- {<<: *a, j: 2}\n")
+	merged("quoted key is ordinary", "\"<<\": {k: 1}\na: 2\n")
+	merged("scalar refused", "a: 1\nb:\n  <<: 1\n")
+	merged("sequence with a scalar refused", "a: &a {k: 1}\nb: {<<: [*a, 2]}\n")
+	merged("no merge key unchanged", "a: [1, {b: 2}]\nc: &c d\n")
+}
