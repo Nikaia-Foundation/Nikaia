@@ -133,4 +133,7 @@ together with the specification section and an example test.
 * the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
 * pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
 * A checker change that makes a tools file fail to check must be lowered with the old binary first (`$OLD lower-std`), or the change never reaches `lowered/`. (issue-1388)
+* A probe whose `main` calls `println` needs `fn main() throws`, or every shape stops at NK2605 before the defect can show. (issue-1445)
+* `container_of` in `tiers.nika` returns null for `ref` types, so the tiers pass does not follow a `ref Vec[...]` parameter, and its `String`s stay `String` below (`lent_whole`). (issue-1449)
+* Probes for `print` need `fn main() throws` (ADR-392), or the first error is NK2605. (issue-1449)
 

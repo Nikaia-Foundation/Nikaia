@@ -174,6 +174,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * `std` contracts write `fn(T)` for code whose result they leave open (`Seq::filter`), so a `Ty::Fn` with `result == null` means "hands back nothing" only for the program's own types. (issue-1321)
 * A lambda body is written in several places (`emit_core_flow` plain, failing and kept paths, and the pausing path in `emit_core_args`), and an emitter fix must cover each one. (issue-1321)
 * A list of string literals is tiered to `Vec<&'static str>`, so `ref $T` binds `T` to a view and a walk gives `&&str`; `AsRef::<str>::as_ref` treats `&str`, `&&str` and `&String` alike. (issue-1388)
+* The emitter knows a call borrows its root mutably through `emit_lends_mut` (facts `mut_receivers`/`mut_args`); use it rather than a new checker fact. (issue-1445)
+* An index *write* already hoists a position that names the target's root (#570); an index *read* is `emit_core_index_read`, and it hoists inside a `*{ let ..; get(..) }` block. (issue-1445)
 
 ### Grammar
 
