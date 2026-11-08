@@ -1840,7 +1840,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::Spawn { child, .. } if { let child = *child; child } => { pending.push(check_child_binding(state, world, block, at, names, value, group)); },
-                    Expr::Async(inner, _, _) => {
+                    Expr::Async(inner, _, _, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         pending.push(check_async_binding(state, world, block, at, names, value, group, beside, last, &stmt.span));
                         check_async_in(state, inner, group, &stmt.span);
@@ -1849,7 +1849,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         let guarded = nikaia_std::boxed::open(guarded);
                         match guarded {
                             Expr::Spawn { child, .. } if { let child = *child; child } => { pending.push(check_child_binding(state, world, block, at, names, guarded, group)); },
-                            Expr::Async(inner, _, _) => {
+                            Expr::Async(inner, _, _, _) => {
                                 let inner = nikaia_std::boxed::open(inner);
                                 pending.push(check_async_binding(state, world, block, at, names, guarded, group, beside, last, &stmt.span));
                                 check_async_in(state, inner, group, &stmt.span);
@@ -1862,7 +1862,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         for part in parts.iter() { if check_async_computes(part) { computed += 1; } }
                         for part in parts.iter() {
                             match part {
-                                Expr::Async(inner, _, _) => {
+                                Expr::Async(inner, _, _, _) => {
                                     let inner = nikaia_std::boxed::open(inner);
                                     pending.push(check_async_binding(state, world, block, at, names, part, group, beside + computed - 1, last, &stmt.span));
                                     check_async_in(state, inner, group, &stmt.span);
@@ -1885,7 +1885,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
                         pending.push(count);
                     },
-                    Expr::Async(inner, _, _) => {
+                    Expr::Async(inner, _, _, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
                         if last && beside == 0 { state.a_task_with_nothing_beside_it(&stmt.span, "it is the last statement of its group, which waits for it at once"); }
@@ -1979,11 +1979,11 @@ pub(crate) fn check_a_child_task(expr: &Expr) -> bool {
 pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Let { value, .. } => match value {
-            Expr::Async(_, _, _) => true,
-            Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); matches!(expr, Expr::Async(_, _, _)) },
+            Expr::Async(_, _, _, _) => true,
+            Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); matches!(expr, Expr::Async(_, _, _, _)) },
             _ => false,
         },
-        Stmt::Expr(value) => matches!(value, Expr::Async(_, _, _)),
+        Stmt::Expr(value) => matches!(value, Expr::Async(_, _, _, _)),
         _ => false,
     }
 }
@@ -2021,7 +2021,7 @@ pub(crate) fn check_async_in(state: &mut CheckState, expr: &Expr, group: i64, sp
             check_async_operands(state, &parts, id_of(expr) as i64, group, span);
         },
         Expr::Spawn { child, .. } if { let child = *child; child } => { state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Handle, group }); },
-        Expr::Async(inner, _, _) => {
+        Expr::Async(inner, _, _, _) => {
             let inner = nikaia_std::boxed::open(inner);
             state.facts.async_waits.insert(id_of(expr) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(id_of(expr) as i64), group });
             state.a_task_with_nothing_beside_it(span, "where it stands, its value is needed at once");
@@ -2042,7 +2042,7 @@ pub(crate) fn check_async_operands(state: &mut CheckState, parts: &[&Expr], at: 
     for part in parts.iter() {
         let part = *part;
         match part {
-            Expr::Async(inner, _, _) => {
+            Expr::Async(inner, _, _, _) => {
                 let inner = nikaia_std::boxed::open(inner);
                 state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group });
                 if computed < 2 { state.a_task_with_nothing_beside_it(span, "nothing beside it in the same call or operation is computed while it runs"); }

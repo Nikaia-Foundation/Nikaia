@@ -841,7 +841,7 @@ impl MpBody {
             Expr::Unary { expr, .. } => self.expr(expr),
             Expr::Cast { expr, .. } => self.expr(expr),
             Expr::Try(inner, _) => self.expr(inner),
-            Expr::Async(inner, _, _) => self.expr(inner),
+            Expr::Async(inner, _, _, _) => self.expr(inner),
             Expr::Throw(inner, _) => self.expr(inner),
             Expr::Coalesce { value, fallback, .. } => {
                 self.expr(value)

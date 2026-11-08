@@ -1,0 +1,15 @@
+// `admission:` on a form that starts one task takes a `task::Admission`
+// (ADR-async-5 D15, D18, #986).
+struct Plain {
+	n: i64,
+}
+
+fn f() -> i64 {
+	return 1
+}
+
+fn main() throws {
+	let a = async(admission: Plain { n: 1 }) f()
+	let b = f()
+	println(f"{a + b}")
+}

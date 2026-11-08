@@ -279,7 +279,7 @@ fn panics_expr(expr: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_
     match expr {
         // **A task runs elsewhere** (D35): its panic reaches this function as
         // `task::Crashed`, a failure; only a deadline is read here.
-        Expr::Async(_, _, within) => {
+        Expr::Async(_, _, within, _) => {
             match within {
                 null => {}
                 deadline => panics_expr(deadline, items, names, holes_of, facts, own, library, reach),

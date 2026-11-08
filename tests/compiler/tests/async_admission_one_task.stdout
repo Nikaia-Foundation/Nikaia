@@ -1,0 +1,12 @@
+eager starts
+main goes on after eager
+main goes on after late
+late starts
+3
+main goes on after lambda
+lambda starts
+3
+main goes on after handle
+handle starts
+4
+41

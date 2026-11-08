@@ -209,7 +209,7 @@ pub(crate) fn panics_division(divisor: &Expr, reach: &mut PanicReach) {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn panics_expr(expr: &Expr, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, facts: &PanicFacts, own: &Ledger, library: &Ledger, reach: &mut PanicReach) {
     match expr {
-        Expr::Async(_, _, within) => {
+        Expr::Async(_, _, within, _) => {
             let within = nikaia_std::boxed::open(within);
             match within {
                 None => { },

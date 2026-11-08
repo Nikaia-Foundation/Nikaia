@@ -678,7 +678,7 @@ impl EmitState {
         }
         let mut fallback = false;
         match guarded_expr {
-            Expr::Async(_, _, _) => { fallback = true; },
+            Expr::Async(_, _, _, _) => { fallback = true; },
             _ => { },
         }
         let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr);
@@ -923,6 +923,10 @@ impl EmitState {
         let handles = self.emit_task_handles(task);
         let deadline = walk.async_within.to_string();
         walk.async_within = String::from("");
+        let admission = walk.async_admission.to_string();
+        walk.async_admission = String::from("");
+        let mut first: &'static str = "";
+        if admission != "" { first = "nikaia_std::task::admission_first(__nikaia_admission).await; "; }
         let mut fallback_inside = false;
         if deadline != "" && body.stmts.len() == 1 {
             match &nikaia_std::index::get(&body.stmts, 0).node {
@@ -936,10 +940,12 @@ impl EmitState {
                 _ => { },
             }
         }
-        if !handles.is_empty() || deadline != "" {
+        let opened = !handles.is_empty() || deadline != "" || admission != "";
+        if opened {
             out.push("{ ");
             for name in handles.iter() { out.push(&format!("let {} = {}.clone(); ", name, name)); }
             if deadline != "" { out.push(&format!("let __nikaia_deadline = {}; ", deadline)); }
+            if admission != "" { out.push(&format!("let __nikaia_admission = nikaia_std::task::admitted_sent({}); ", admission)); }
         }
         let bound_outside = deadline != "" && !fallback_inside;
         if bound_outside && !flow.can_throw { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("`async(detached, within: d)` ends with `task::TimedOut` on running out, which the starter must be able to throw."), at: Some(flow.statement) }, &"emit_flow_task")); }
@@ -960,7 +966,7 @@ impl EmitState {
         }
         if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
         if failing {
-            out.push("{ let __nikaia_task = ");
+            out.push(&format!("{{ {}let __nikaia_task = ", first));
             if bound_outside {
                 out.push("__nikaia_deadline.bound(async { let __nikaia_value = ");
                 out.append(&inner);
@@ -972,11 +978,13 @@ impl EmitState {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();
             if fallback_inside { walk.async_bound = String::from("__nikaia_deadline"); }
+            if first != "" { out.push(&format!("{{ {}", first)); }
             self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &EmitTail::Return)?;
             walk.async_bound = String::from("");
+            if first != "" { out.push(" }"); }
             out.push(")");
         }
-        if !self.emit_task_handles(task).is_empty() || deadline != "" { out.push(" }"); }
+        if opened { out.push(" }"); }
         Ok(())
     }
 }

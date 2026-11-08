@@ -1,0 +1,20 @@
+// `admission:` on `async(detached) fn { … }` (ADR-async-5 D15, D18, #986):
+// the task waits, unstarted, until its strategy admits it.
+struct Late {
+	asked: i64,
+}
+
+impl task::Admission for Late {
+	fn decide(mut self, load: task::Load) -> task::Decision sync {
+		self.asked += 1
+		if self.asked >= 3 {
+			return task::Decision { start: 1 }
+		}
+		return task::Decision { start: 0 }
+	}
+}
+
+fn main() throws {
+	let h = async(detached, admission: Late { asked: 0 }) fn { 7 }
+	println(f"{h.join()}")
+}

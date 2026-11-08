@@ -44,7 +44,7 @@ pub(crate) fn check_walks_tasks_in<'a>(state: &CheckState, block: &'a Block, gro
     for stmt in block.stmts.iter() {
         for each in check_visit_stmt(&stmt.node) {
             match each {
-                Expr::Async(_, _, _) => {
+                Expr::Async(_, _, _, _) => {
                     let wait = match state.facts.async_waits.get(&(id_of(each) as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if wait.group == group { out.push(each); }
                 },
@@ -166,7 +166,7 @@ pub(crate) fn check_walks_operations_clash(first: &[Operation], second: &[Operat
 pub(crate) fn check_walks_starts_a_task(stmt: &Stmt) -> bool {
     for each in check_visit_stmt(stmt) {
         match each {
-            Expr::Async(_, _, _) => { return true; },
+            Expr::Async(_, _, _, _) => { return true; },
             Expr::Spawn { .. } => { return true; },
             _ => { },
         }
@@ -280,7 +280,7 @@ impl CheckState {
         for each in started.iter() {
             let each = *each;
             match each {
-                Expr::Async(inner, _, _) => {
+                Expr::Async(inner, _, _, _) => {
                     let inner = nikaia_std::boxed::open(inner);
                     let task = match check_walks_task(self, world, &walking, id_of(each), inner) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     tasks.push(task);
@@ -406,7 +406,7 @@ impl CheckState {
 pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
     match expr {
         Expr::Spawn { .. } => "starts a task",
-        Expr::Async(_, _, _) => "starts a task",
+        Expr::Async(_, _, _, _) => "starts a task",
         Expr::Select(_, _) => "waits in a `select`",
         Expr::Overlap(_, _) => "runs an `overlap`",
         Expr::Dsl { .. } => "runs a `dsl` block",

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1363] — 2026-11-08
+
+**admission: on every form that starts one task (ADR-async-5 D15, D18, D37; #986 item 11)**
+- `admission:` on `async e`, `async fn { … }`, `async(handle)` and `async(detached)`: the task starts only once its strategy admits it; until then it waits unstarted, the main line goes on, and the value is waited for where it is read. Where the main line waits for it and nothing else of the group runs, it starts, so a strategy that never admits cannot hang the program.
+
 ## [0.0.1362] — 2026-11-08
 
 **The par_iter chain takes limit:, within: and admission:; a deadline travels through zip and chain (ADR-async-5 D15, D27; #986, #1423)**

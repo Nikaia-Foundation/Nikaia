@@ -11,6 +11,6 @@ error[NK1164]: `admission:` needs a `task::Admission` here, but `Plain` isn't on
  12 | 	let x = async(admission: Plain { n: 1 }, limit: "two") {
     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The strategy decides when the next task of the group starts, through its `decide` method (ADR-async-5 D18).
+    = note: The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18).
     = help: Write `impl task::Admission for Plain { … }`, or pass a type that already has one.
 2 type errors

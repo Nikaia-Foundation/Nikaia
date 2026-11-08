@@ -1276,7 +1276,7 @@ fn spawn_bodies(expr: ref Expr, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut ou
         }
         Expr::Unary { expr, .. } => spawn_bodies(expr, holes_of, out),
         Expr::Try(inner, _) => spawn_bodies(inner, holes_of, out),
-        Expr::Async(inner, _, _) => spawn_bodies(inner, holes_of, out),
+        Expr::Async(inner, _, _, _) => spawn_bodies(inner, holes_of, out),
         Expr::Throw(inner, _) => spawn_bodies(inner, holes_of, out),
         Expr::Cast { expr, .. } => spawn_bodies(expr, holes_of, out),
         Expr::Field { base, .. } => spawn_bodies(base, holes_of, out),
@@ -1353,7 +1353,7 @@ fn effects(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Exp
         }
         Expr::TryCatch { expr, .. } => effects(expr, ask, holes_of, unaliased, walk),
         Expr::Try(expr, _) => effects(expr, ask, holes_of, unaliased, walk),
-        Expr::Async(expr, _, _) => effects(expr, ask, holes_of, unaliased, walk),
+        Expr::Async(expr, _, _, _) => effects(expr, ask, holes_of, unaliased, walk),
         else => {
             origins_of(expr, ask, holes_of, unaliased, walk)
         }
@@ -1534,7 +1534,7 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
         Expr::Unsafe(block, _) => tail_origins(block, ask, holes_of, unaliased, walk),
         Expr::Unary { expr, .. } => origins_of(expr, ask, holes_of, unaliased, walk),
         Expr::Try(inner, _) => origins_of(inner, ask, holes_of, unaliased, walk),
-        Expr::Async(inner, _, _) => origins_of(inner, ask, holes_of, unaliased, walk),
+        Expr::Async(inner, _, _, _) => origins_of(inner, ask, holes_of, unaliased, walk),
         Expr::Cast { expr, .. } => origins_of(expr, ask, holes_of, unaliased, walk),
         Expr::TryCatch { expr, handler, .. } => {
             let mut out = origins_of(expr, ask, holes_of, unaliased, walk)
