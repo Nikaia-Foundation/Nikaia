@@ -336,9 +336,11 @@ pub fn element_walked(over: ref Ty, bindings: i64) -> Ty {
         Ty::Named { name, args, view } => {
             let last = type_last_segment(name)
             // One argument is a list's or a set's element and nothing else's:
-            // an `Array` written with one is a run, read as `Pointed`.
+            // an `Array` written with one is a run, read as `Pointed`. A cut
+            // of a list (`xs[a..]`) is a view of a run, its element the
+            // list's (ADR-293 D23).
             if args.len() == 1 {
-                if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" { args[0].clone() } else { Ty::Unknown }
+                if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" || (view && name == ARRAY) { args[0].clone() } else { Ty::Unknown }
             } else if args.len() > 0 && !view && name == ARRAY {
                 args[0].clone()
             } else if args.len() == 0 && last == "Bytes" {

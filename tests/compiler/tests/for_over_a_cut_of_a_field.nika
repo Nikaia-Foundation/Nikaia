@@ -1,0 +1,46 @@
+// A `for` over a cut of a list field (`block.items[from..]`, ADR-293 D23)
+// binds each element as a view of it, as a `for` over the field does: a
+// `match` on a part of the element binds by reference. The binding was
+// untyped, and the lowered `match` moved out of the borrowed element
+// (rustc refused it, NK1343).
+enum Node { Named(String), Pair { a: String, b: String }, Empty }
+struct Item { node: Node, at: i64 }
+struct Block { items: Vec[Item] }
+
+fn names(block: ref Block, from: i64) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for item in block.items[from..] {
+        match item.node {
+            Node::Named(n) => out.push(n.clone()),
+            Node::Pair { a, .. } => out.push(a.clone()),
+            else => {},
+        }
+    }
+    return out
+}
+
+fn kept(block: ref Block, from: i64) -> i64 {
+    let rest = block.items[from..]
+    let mut sum = 0
+    for item in rest {
+        sum += item.at
+    }
+    return sum
+}
+
+fn main() throws {
+    let b = Block {
+        items: [
+            Item { node: Node::Named("x"), at: 1 },
+            Item { node: Node::Pair { a: "y", b: "z" }, at: 2 },
+            Item { node: Node::Empty, at: 3 },
+        ],
+    }
+    for n in names(b, 0) {
+        println(n)
+    }
+    for n in names(b, 1) {
+        println(n)
+    }
+    println(f"{kept(b, 1)}")
+}
