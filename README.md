@@ -194,7 +194,7 @@ optimized. Both Nikaia programs mispredict 0.14 branches a row, the person's pro
 | **Aimed at** | services that mostly wait; data in unusual formats; heavy computation; code written by AI, with the compiler as reviewer ([Manifesto](manifesto.md), §8) |
 | **Not planned** | an interactive REPL: the checks look at the whole program, and a typed line has none |
 | **Not yet** | something to ship next quarter, a large ecosystem, years of answered questions online |
-| **Status** | pre-alpha. [`examples/`](examples/) holds a calculator, a JSON parser, a log analyser, a small HTTP server and more, and the tests compile and run them. No package registry, no editor integration and no database access yet |
+| **Status** | pre-alpha. [`examples/`](examples/) holds a calculator, a JSON parser, a log analyser, a small HTTP server and more, and the tests compile and run them. A dependency is found by version through crates.io, though no Nikaia package is published there yet; `nikaia lsp` shows the checker's messages in the editor; there is no database access yet |
 | **Self-hosting** | the compiler is moving into Nikaia a module at a time ([ADR-294](docs/specification/adr/adr-294.md)); the badge above shows the share |
 
 What works today, the limits you will hit and the progress over time are in
