@@ -1,0 +1,5 @@
+bounds in tests/prove_element_bound_field_over.nika: 2 indexes, 1 proved; 1 operations, 1 proved
+    10  clause.atoms[k]  proved
+    11  values[atom]     checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    14  k += 1           proved
+  derived  eval: 0 <= clause.atoms[..], proved at the calls on lines 24

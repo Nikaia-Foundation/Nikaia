@@ -2399,7 +2399,7 @@ pub mod bounds_derived {
 }
 pub mod bounds_frame {
     #[allow(unused_imports)]
-    pub use super::{bounds_around, frame_at_call, frame_writes};
+    pub use super::{bounds_around, frame_at_call, frame_writes, FieldsSeen, fields_seen};
 }
 pub mod bounds_interval {
     #[allow(unused_imports)]
@@ -2427,7 +2427,7 @@ pub mod bounds_shape {
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive};
+    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields};
 }
 pub mod buffers {
     #[allow(unused_imports)]
