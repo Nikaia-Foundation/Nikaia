@@ -1,0 +1,41 @@
+// An entry marked `@stream` is a sequence of its items, walked once
+// (ADR-grammar-2 D7, #1440): a `for` takes each item owned, so it outlives the
+// loop, and a `break` stops the walk. The same call held in a name is that
+// sequence, and walking it a second time is NK2702, the only refusal here.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.to_string() } }
+}
+
+grammar Listed {
+	@stream entry rule items -> Item = "[" => list(item, ",") "]"
+	rule item -> Item = w:until("," | "]") -> { Item { word: w.to_string() } }
+}
+
+fn main() throws {
+	let mut kept: Vec[Item] = []
+	for it in Words::items("a;b;stop;c;") {
+		if it.word == "stop" {
+			break
+		}
+		kept.push(it)
+	}
+	for it in Listed::items("[x,y]") {
+		kept.push(it)
+	}
+	for k in kept {
+		println(k.word)
+	}
+	let all = Words::items("a;b;")
+	for it in all {
+		println(it.word)
+	}
+	for it in all {
+		println(it.word)
+	}
+}

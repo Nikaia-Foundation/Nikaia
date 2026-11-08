@@ -1,0 +1,7 @@
+error: Only an entry can be `@stream`: its items are handed to the program's `for`, and only an entry is called by the program.
+  --> tests/grammar_stream_misplaced.nika:5:15
+   |
+ 5 | 	@stream rule items -> String = item*
+   |               ^^^^^
+   |
+   = help: Write `@stream entry rule`.

@@ -117,7 +117,7 @@ pub(crate) fn numbers_item(item: Item, st: &mut NodeNumbersState) -> Item {
                 let alts = numbers_alts(rule.alts, st);
                 let args = numbers_fn_args(rule.args, st);
                 let config = numbers_config_params(rule.config, st);
-                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts, span: rule.span, args, config, generics: rule.generics });
+                rules.push(GrammarRule { name: rule.name, is_entry: rule.is_entry, stream: rule.stream, frame: rule.frame, ret_type: rule.ret_type, label: rule.label, alts, span: rule.span, args, config, generics: rule.generics });
             }
             return Item::Grammar(GrammarDef { name: def.name, rules, public: def.public });
         },

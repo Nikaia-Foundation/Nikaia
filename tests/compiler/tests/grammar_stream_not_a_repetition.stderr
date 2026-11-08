@@ -1,0 +1,49 @@
+error[NK1349]: `items` is `@stream`, so its body has to repeat one item on a fixed path, but no element of it repeats a rule of type `Item`.
+  --> tests/grammar_stream_not_a_repetition.nika:9:2
+   |
+ 9 | 	@stream entry rule items -> Item = item
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.
+   = help: Repeat the rule of one item: `item*`, `item+` or `list(item, ",")`, where `item` is a rule `-> Item`.
+error[NK1349]: `items` is `@stream`, so its body has to repeat one item on a fixed path, but 2 of its elements repeat a rule of type `Item`.
+   --> tests/grammar_stream_not_a_repetition.nika:14:2
+    |
+ 14 | 	@stream entry rule items -> Item = item* "|" item*
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.
+    = help: Stream one repetition, and fold the others into the item's rule.
+error[NK1349]: `items` is `@stream`, so its body has to repeat one item on a fixed path, but it has an action.
+   --> tests/grammar_stream_not_a_repetition.nika:19:2
+    |
+ 19 | 	@stream entry rule items -> Item = all:item* -> { Item { word: "" } }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.
+    = help: Leave the action out: each item goes to the caller as it is parsed, so there is no list for an action to read.
+error[NK1349]: `items` is `@stream`, so its body has to repeat one item on a fixed path, but it has 2 alternatives.
+   --> tests/grammar_stream_not_a_repetition.nika:24:2
+    |
+ 24 | 	@stream entry rule items -> Item = item* | "-"
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.
+    = help: Put the choice into the item's rule, and leave the entry one repetition: `item*`.
+error[NK1349]: `items` is `@stream`, so its body has to repeat one item on a fixed path, but no element of it repeats a rule of type `Item`.
+   --> tests/grammar_stream_not_a_repetition.nika:29:2
+    |
+ 29 | 	@stream entry rule items -> Item = word*
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.
+    = help: Repeat the rule of one item: `item*`, `item+` or `list(item, ",")`, where `item` is a rule `-> Item`.
+error[NK1349]: `items` is `@stream`, so its body has to repeat one item on a fixed path, but it names no item type.
+   --> tests/grammar_stream_not_a_repetition.nika:34:2
+    |
+ 34 | 	@stream entry rule items = item*
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it.
+    = help: Write the type of one item after the arrow: `@stream entry rule items -> Item = item*`.
+6 type errors
