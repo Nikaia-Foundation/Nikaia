@@ -1,0 +1,23 @@
+/// A name a loop moves one way only, by steps that differ (the Lomuto
+/// counter grows by 0 or 1 a turn), stays on its side of its start: the
+/// closed forms give `i >= i@start`, so `lo <= i` is proved through the
+/// loop with no `assert` inside it (#1384, ADR-361 D5).
+fn pick(a: ref Vec[i64], lo: i64, hi: i64) -> i64 {
+	assert(0 <= lo)
+	assert(lo <= hi)
+	assert(hi < a.len())
+	let mut i = lo
+	for j in lo..<hi {
+		if a[j] < 3 {
+			i = i + 1
+		}
+	}
+	assert(lo <= i)
+	assert(i <= hi)
+	return i
+}
+
+fn main() throws {
+	let v: Vec[i64] = [5, 3, 9, 1, 4]
+	println(f"{pick(v, 0, 4)}")
+}

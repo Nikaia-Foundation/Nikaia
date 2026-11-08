@@ -1,21 +1,21 @@
 -- the asserts are the invariant
 asserts in p.nika: 5 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 5 (proved 2, through a loop 2, preconditions proved at every call 3); derived from the callers 1
-  p.nika:8  assert(lo <= i)  proved inside the loop that changes `i`, `j`, with the invariant `j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
-  p.nika:9  assert(i <= j)  proved inside the loop that changes `i`, `j`, with the invariant `j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
+  p.nika:8  assert(lo <= i)  proved inside the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
+  p.nika:9  assert(i <= j)  proved inside the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
   p.nika:2  assert(0 <= lo)  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
   p.nika:3  assert(lo <= hi)  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
   p.nika:4  assert(hi < a.len())  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
 -- i <= j found without its assert
 asserts in p.nika: 4 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 4 (proved 1, through a loop 1, preconditions proved at every call 3); derived from the callers 1
-  p.nika:8  assert(lo <= i)  proved inside the loop that changes `i`, `j`, with the invariant `j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and octagons and checked by three queries
+  p.nika:8  assert(lo <= i)  proved inside the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and octagons and checked by three queries
   p.nika:2  assert(0 <= lo)  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
   p.nika:3  assert(lo <= hi)  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
   p.nika:4  assert(hi < a.len())  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
 -- an assert a turn does not keep
 asserts in p.nika: 6 - not proved 1 (refused 1, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 5 (proved 2, through a loop 2, preconditions proved at every call 3); derived from the callers 1
   p.nika:10  assert(i == lo)  refused, not proved: nothing before it shows it; no invariant found for the loop that changes `i`, `j` carries it
-  p.nika:8  assert(lo <= i)  proved inside the loop that changes `i`, `j`, with the invariant `j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
-  p.nika:9  assert(i <= j)  proved inside the loop that changes `i`, `j`, with the invariant `j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
+  p.nika:8  assert(lo <= i)  proved inside the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
+  p.nika:9  assert(i <= j)  proved inside the loop that changes `i`, `j`, with the invariant `i >= lo && j >= lo && j < hi + 1 && lo <= i && i <= j`, found by closed forms and asserts and checked by three queries
   p.nika:2  assert(0 <= lo)  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
   p.nika:3  assert(lo <= hi)  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
   p.nika:4  assert(hi < a.len())  precondition of `count`: proved at every call the compiler sees; any other reaches the entry that checks it
