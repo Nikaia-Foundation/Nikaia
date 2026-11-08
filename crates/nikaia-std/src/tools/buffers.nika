@@ -1627,11 +1627,80 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
         origins_of(receiver, ask, holes_of, unaliased, walk)
         return out
     }
-    add_all(lent_origins(receiver, ask, holes_of, unaliased, walk), out)
+    // **Only what the result is from is a source** (#1390): where every
+    // method by that name names its result's sources (`returns = "ref(self)"`,
+    // `-> T from self`, Part III 13.5), a key handed to `m.get(key)` is not
+    // one; where any names none, every argument is.
+    let named = method_sources(ask, method)
+    let of_receiver = lent_origins(receiver, ask, holes_of, unaliased, walk)
+    if named == null || (named?.contains(-1) ?? true) {
+        add_all(of_receiver, out)
+    }
+    let mut position = 0
     for arg in args {
-        add_all(lent_origins(arg, ask, holes_of, unaliased, walk), out)
+        let of = lent_origins(arg, ask, holes_of, unaliased, walk)
+        if named == null || (named?.contains(position) ?? true) {
+            add_all(of, out)
+        }
+        position += 1
     }
     return out
+}
+
+/// The arguments the result of a method named `method` is from, by position
+/// (`-1` the receiver), over every method of both ledgers by that name; null
+/// where there is none, or one names no sources.
+fn method_sources(ask: ref BufferAsk, method: ref String) -> collections::BTreeSet[i64]? {
+    let mut out: collections::BTreeSet[i64] = collections::BTreeSet()
+    let mut any = false
+    for key in method_keys(ask.own_methods, method) {
+        let contract = ask.own.functions[key] ?? return null
+        any = true
+        if !sources_of_a_method(contract, out) {
+            return null
+        }
+    }
+    for key in method_keys(ask.library_methods, method) {
+        let contract = ask.library.functions[key] ?? return null
+        any = true
+        if !sources_of_a_method(contract, out) {
+            return null
+        }
+    }
+    if !any {
+        return null
+    }
+    return out
+}
+
+// Adds the positions a method's result is from to `into` (`-1` the
+// receiver); false where its contract names none, or one that is no
+// parameter of it.
+fn sources_of_a_method(contract: ref FnContract, mut into: collections::BTreeSet[i64]) -> bool {
+    if contract.borrows.is_empty() {
+        return false
+    }
+    let signature = contract.signature ?? return false
+    // A method's first parameter is its receiver; the arguments follow.
+    if signature.params.is_empty() || signature.params[0].0 != "self" {
+        return false
+    }
+    for b in contract.borrows {
+        let mut found = false
+        let mut at = 0
+        for (name, _) in signature.params {
+            let dotted = f"{name}."
+            if b == name || b.starts_with(dotted) {
+                into.insert(at - 1)
+                found = true
+            }
+            at += 1
+        }
+        if !found {
+            return false
+        }
+    }
+    return true
 }
 
 /// Whether every method of `ledger` named `method` hands back a result that

@@ -1,0 +1,30 @@
+// #1390: the result of a `std` lookup views the receiver only
+// (`returns = "ref(self)"` in `std.contracts`), so the buffer pass takes its
+// sources from the entry: a key made in a loop and handed to `m.get(named)`
+// is not put into the frame's keep each turn.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let source = "use std::collections\n\nfn located(keys: ref Vec[String], m: ref collections::BTreeMap[String, String]) -> Vec[String] {\n    let mut out: Vec[String] = []\n    for key in keys {\n        let named = f\"n_{key}\"\n        let at = m.get(named) ?? return []\n        out.push(at.clone())\n    }\n    return out\n}\n\nfn main() throws {\n    let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()\n    m.insert(\"n_a\", \"A\")\n    m.insert(\"n_b\", \"B\")\n    println(located([\"a\", \"b\"], m).join(\",\"))\n}\n"
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    println(lowered.stdout.trim())
+    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    println(f"a keep in the frame: {rust.contains("__keep_frame")}")
+    for line in rust.lines() {
+        if line.contains("let named") {
+            println(line.trim())
+        }
+    }
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    println(ran.stdout.trim())
+    process::run("rm", ["-rf", tmp])
+}
