@@ -1,0 +1,13 @@
+built: true
+name = "nikaia_tally_up"
+version = "0.3.0"
+license = "MIT"
+base = { package = "nikaia_base", version = "0.2" }
+Cargo.lock
+Cargo.toml
+Cargo.toml.orig
+lib.rs
+nikaia.contracts
+nikaia.toml
+src/main.nika
+src/parts/more.nika

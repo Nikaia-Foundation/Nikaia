@@ -3033,6 +3033,14 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         self.held(write_if_changed(path, text).map(|_| ()))
     }
 
+    fn write_publishable(&self) -> HostResult<()> {
+        let written = nikaia_std::rt::exec::block_on(project_drive::project_drive_publishable(
+            &self.project.root,
+            self.project.manifest.file(),
+        ));
+        self.held(written.map_err(|thrown| anyhow!("{thrown}")))
+    }
+
     fn gen_dir(&self) -> PathBuf {
         self.project.gen_dir()
     }

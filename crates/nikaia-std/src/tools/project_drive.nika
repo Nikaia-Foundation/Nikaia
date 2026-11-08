@@ -65,6 +65,9 @@ pub trait ProjectDriveHost {
     fn write_if_changed(ref self, path: ref fs::Path, text: ref String) sync throws
     /// Where the generated Rust goes.
     fn gen_dir(ref self) -> fs::Path sync
+    /// The entry package as `cargo publish` takes it:
+    /// `project_drive_publishable` over its root and its manifest.
+    fn write_publishable(ref self) sync throws
     /// The switches file the cache keys on.
     fn switches_path(ref self) -> fs::Path sync
     /// `target/nikaia` of the project.
@@ -233,6 +236,11 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         // directory is Cargo's.
         if !(at == 0 && host.tests_build()) && member.fetched == null {
             host.write_ledgers(at, locked)
+        }
+        // **The package as `cargo publish` takes it** (ADR-286 D25): the
+        // entry's, beside its build, once its ledger is written.
+        if at == 0 && !host.tests_build() {
+            host.write_publishable()
         }
         // **The note is the entry's** (ADR-288 D29): what a dependency's
         // author could promise is theirs to hear, in their own build.
@@ -471,6 +479,80 @@ fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, link_flags: ref Vec
         list => env.push(("NIKAIA_ALLOW_READ_FROM_LIST", list.to_text())),
     }
     return env
+}
+
+/// Whether `[package]` key `key` of `nikaia.toml` is one a published crate
+/// carries as written: what crates.io shows of a package, none of it a path.
+fn project_drive_published_key(key: ref String) -> bool {
+    return key == "description" || key == "license" || key == "authors" || key == "repository" || key == "homepage" || key == "documentation" || key == "keywords" || key == "categories"
+}
+
+/// **The `Cargo.toml` that makes the package publishable** (ADR-286 D25, #99):
+/// the crate `nikaia_<name>` at the package's version, carrying `nikaia.toml`,
+/// its `src/*.nika` and `nikaia.contracts`, and its own packages by version as
+/// the renaming the consumer's resolution follows (D27). Its one Rust file is
+/// there because Cargo wants a target; it is never built, nothing lowered is
+/// published, and the consuming compiler lowers the sources itself.
+pub fn project_drive_publish_stub(file: ref ManifestFile) -> String {
+    let name = file.name ?? "package"
+    let crate_name = f"nikaia_{name.replace("-", "_")}"
+    let mut out = f"# Written by `nikaia build`: `cargo publish` on this file publishes the Nikaia\n# package `{name}` (ADR-286 D25). Cargo only finds it; nothing here is built.\n[package]\nname = \"{crate_name}\"\nversion = \"{file.version}\"\nedition = \"2024\"\n"
+    if !file.package.contains_key("description") {
+        out = f"{out}description = \"The Nikaia package `{name}`.\"\n"
+    }
+    for (key, text) in file.package.iter() {
+        if project_drive_published_key(key) {
+            out = f"{out}{key} = {text}\n"
+        }
+    }
+    out = f"{out}include = [\"Cargo.toml\", \"lib.rs\", \"nikaia.toml\", \"nikaia.contracts\", \"src/**/*.nika\"]\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n"
+    for (key, declared) in file.dependencies.iter() {
+        match declared.cargo {
+            null => {},
+            entry => { out = f"{out}{key} = {entry}\n" },
+        }
+    }
+    return out
+}
+
+/// **The package as `cargo publish` takes it**, in `target/nikaia/publish/`
+/// under `root`: the stub, its empty `lib.rs`, and copies of `nikaia.toml`,
+/// `nikaia.contracts` and every `.nika` file under `src/`. A copy, so the
+/// package's own directory gains no `Cargo.toml`; each file is written only
+/// where it changed, and a source no longer there is dropped.
+pub fn project_drive_publishable(root: ref fs::Path, file: ref ManifestFile) throws {
+    let dir = root.join("target").join("nikaia").join("publish")
+    let src = root.join("src")
+    let mut wanted: Vec[(String, String)] = [("Cargo.toml", project_drive_publish_stub(file)), ("lib.rs", "")]
+    for name in ["nikaia.toml", "nikaia.contracts"] {
+        let text = fs::read_to_string(root.join(name), fs::Root::Anywhere) catch { continue }
+        wanted.push((name.clone(), text))
+    }
+    let sources = fs::walk(src, fs::Root::Anywhere) catch { throw ProjectDriveRefusal::Failed(f"reading {src.display()}: {error}") }
+    for name in sources.iter() {
+        if (name.extension()?.text_of() ?? "") != "nika" {
+            continue
+        }
+        let text = fs::read_to_string(src.join(name), fs::Root::Anywhere) catch { continue }
+        wanted.push((f"src/{name.to_text()}", text))
+    }
+    let old_src = dir.join("src")
+    let old = fs::walk(old_src, fs::Root::Anywhere) catch { [] }
+    for name in old.iter() {
+        let at = f"src/{name.to_text()}"
+        if !wanted.iter().any(fn(pair) { pair.0 == at }) {
+            fs::remove(old_src.join(name), fs::Root::Anywhere) catch {}
+        }
+    }
+    for (name, text) in wanted.iter() {
+        let path = dir.join(name)
+        let parent = path.parent() ?? continue
+        fs::create_dir(parent, fs::Root::Anywhere; recursive: true) catch { throw ProjectDriveRefusal::Failed(f"making {parent.display()}: {error}") }
+        let was = fs::read_to_string(path, fs::Root::Anywhere) catch { "\u{0}" }
+        if was != text {
+            fs::write(path, fs::Root::Anywhere, text) catch { throw ProjectDriveRefusal::Failed(f"writing {path.display()}: {error}") }
+        }
+    }
 }
 
 /// **The library and its header, together where a C build looks**
