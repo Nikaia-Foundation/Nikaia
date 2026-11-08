@@ -747,3 +747,19 @@ with the fallback's value, and no sibling is cancelled. Only a crash that no
 fallback takes cancels the tasks after it and is thrown where the group ends.
 Otherwise a task that cannot panic, of which D35 asks nothing, could still
 fail through a crash that was already handled.
+
+### D37 - A task that waits for a place does not stop the main line (supervisor, 2026-11-08, by D7, D15, D18 and D20; #986).
+
+A task over its form's `limit:`, or one the strategy does not admit yet, is
+queued unstarted in written order, and the main line goes on after its start
+as after any other (D7). The runtime starts the next queued task when a place
+frees: where tasks run in parallel, on the thread whose task just ended; at
+`user_parallelism = no`, where the main line next pauses or waits, as a task
+that never pauses already runs there (ADR-292 D6); a pausing child is started
+at its group's next poll (D20). Where the main line reads a queued task's
+value, it waits there as for any task. The strategy of D18 decides for every
+group, also one that writes neither `limit:` nor `admission:`; `std`'s is
+`task::Adaptive()`. `task::Load` carries `running`, `waiting`,
+`descriptors_in_use` and `descriptors_allowed` (the budget left joins it with
+ADR-327's blocks, #490), and `task::Decision { start }` says how many may start
+until the next decision.
