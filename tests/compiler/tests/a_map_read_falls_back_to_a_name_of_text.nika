@@ -1,0 +1,22 @@
+// A map's text read falls back to a name of text, which is viewed where it
+// stands and not taken (ADR-279 D7, ADR-293 D28, #1324).
+use std::collections
+
+fn owned_text(m: collections::HashMap[String, String], k: String) -> String {
+    let l: String = (m[k] ?? k).clone()
+    return l + k
+}
+
+fn main() throws {
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    m.insert("b", "B")
+    let k: String = "a"
+    let j: String = "b"
+    let l = m[k] ?? k
+    println(l)
+    let s: String = (m[j] ?? k).clone()
+    println(s)
+    println(m.get(k) ?? k)
+    println(k)
+    println(owned_text(m, "c"))
+}
