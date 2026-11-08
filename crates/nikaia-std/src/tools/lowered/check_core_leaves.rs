@@ -248,6 +248,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 Expr::Closure { .. } => {
                     state.facts.kept_lambdas.insert(id_of(value) as i64, (!is_sync, can_throw));
                     state.a_kept_lambdas_result(id_of(value) as i64, (result).as_ref(), !is_sync, can_throw);
+                    state.a_lambda_hands_back_nothing(id_of(value) as i64, (result).as_ref());
                     state.a_lambdas_text_is_its_own(world, &inner, value);
                     state.a_kept_lambdas_hulls(world, value);
                     state.a_kept_lambda_takes_these(world, value, !is_sync, "a function kept for later", span);
@@ -493,8 +494,25 @@ pub fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>, tail:
         seen.push(one.ty.clone());
     }
     if ends_in_a_return && first.is_some() { result = nikaia_std::index::or(first, || Ty::Unknown); }
-    result
+    check_core_lambda_some_at_plain_ends(state, &returns, ends_in_a_return, tail, body, result)
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_lambda_some_at_plain_ends(state: &mut CheckState, returns: &[CheckLambdaReturn], ends_in_a_return: bool, tail: &Ty, body: &Block, result: Ty) -> Ty {
+    let mut nullable = false;
+    let mut plain: Option<Ty> = None;
+    let tail_plain = !ends_in_a_return && !a_body_never_ends(body) && check_core_lambda_plain(tail);
+    if tail_plain { plain = Some(tail.clone()); } else if !ends_in_a_return && check_function_is_nullable(tail) { nullable = true; }
+    for one in returns.iter() { if check_function_is_nullable(&one.ty) { nullable = true; } else if plain.is_none() && one.value.len() == 1 && check_core_lambda_plain(&one.ty) { plain = Some(one.ty.clone()); } }
+    let held: Ty = match plain { Some(__nikaia_value) => __nikaia_value, None => return result };
+    if !nullable { return result; }
+    if tail_plain { for value in block_tail(body) { state.some_at_the_tails(value); } }
+    for one in returns.iter() { if !check_function_is_nullable(&one.ty) && check_core_lambda_plain(&one.ty) { for value in one.value.iter() { state.some_at_the_tails(value); } } }
+    Ty::Nullable(Box::new(held))
+}
+
+pub(crate) fn check_core_lambda_plain(ty: &Ty) -> bool { wholly_known(ty) && !check_core_lambda_a_unit(ty) && !check_function_is_nullable(ty) }
 
 pub(crate) fn check_core_lambda_results_agree(a: &Ty, b: &Ty) -> bool {
     let x = a.unseen();

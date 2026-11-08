@@ -677,48 +677,6 @@ fn the_manifest_becomes_a_cargo_manifest() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// Part III 13.3 shows `http-server = "1.2"` beside the Rust crate, and nothing
-/// anywhere decides what resolving it would mean. Refused with the reason,
-/// rather than silently handed to Cargo - which would look for it on crates.io
-/// and fail somewhere that explains nothing.
-///
-/// **A version, specifically.** A path dependency is decided and built
-/// ([ADR-286](../../../docs/specification/adr/adr-286.md) D15); what a version
-/// would need is a registry, a version grammar and a distribution format, which
-/// are the three things [ADR-002](../../../docs/specification/adr/adr-002.md)
-/// D1 §5 refuses to guess at. So the message names the form that works.
-#[test]
-fn a_nikaia_package_is_refused_and_says_why() {
-    let dir = a_project(
-        "project-nikaia-dep",
-        "[package]\nname = \"consumer\"\nversion = \"0.1.0\"\n\n\
-         [dependencies]\nhttp-server = \"1.2\"\n",
-        HELLO,
-    );
-
-    let project = Project::open(&dir, None, None).expect("the project opens");
-    let members = project.members().expect("the packages resolve");
-    let error = project
-        .cargo_workspace(&members, &["fn main() {}".to_string()])
-        .expect_err("a Nikaia package has nowhere to come from");
-    let text = format!("{error:#}");
-    assert!(text.contains("http-server"), "{text}");
-    // A **version** is what is not decided: no registry, no version grammar, no
-    // distribution format (ADR-002 D1 §5). A path is decided and built
-    // (ADR-286 D15), so the message names both ways that work.
-    assert!(
-        text.contains("given by version, but there's no package registry yet"),
-        "{text}"
-    );
-    assert!(text.contains("path = \"../http-server\""), "{text}");
-    assert!(
-        text.contains("type = \"rust\""),
-        "and the crates.io form too: {text}"
-    );
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
 /// A directory with no manifest is not a project, and saying so beats whatever
 /// Cargo would have said about a file it was never given.
 #[test]

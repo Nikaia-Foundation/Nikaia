@@ -122,6 +122,19 @@ impl CheckState {
         }
     }
 
+    /// Whether the expression is a name a `let` bound to views and text of
+    /// its own (#1310), which holds `EitherText`, not the view it is typed.
+    pub fn an_either_name(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
+        return match expr {
+            Expr::Variable(symbol, _) => {
+                let name = world.words.resolve(symbol).clone()
+                let found = self.binding(name) ?? return false
+                self.flow.either_bindings.contains(found.id)
+            },
+            else => false,
+        }
+    }
+
     /// Whether the expression is a name whose binding was lent to this code.
     pub fn a_name_that_is_lent(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {

@@ -1417,8 +1417,8 @@ pub(crate) fn buffers_view_call(arg: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, 
                 None => None,
             }, || "".into());
             match ask.own.functions.contains_key(&named) {
-                true => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.own.functions, &named)) && !a_static_view_result(match *nikaia_std::index::get(&ask.own.functions, &named) { Some(__nikaia_value) => __nikaia_value, None => return false }),
-                false => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.library.functions, &named)),
+                true => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.own.functions, &named), ask) && !a_static_view_result(match *nikaia_std::index::get(&ask.own.functions, &named) { Some(__nikaia_value) => __nikaia_value, None => return false }),
+                false => buffers_hands_back_a_view(*nikaia_std::index::get(&ask.library.functions, &named), ask),
             }
         },
         _ => false,
@@ -1434,12 +1434,12 @@ pub(crate) fn a_static_view_result(contract: &FnContract) -> bool {
     true
 }
 
-pub(crate) fn buffers_hands_back_a_view(found: Option<&FnContract>) -> bool {
+pub(crate) fn buffers_hands_back_a_view(found: Option<&FnContract>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let contract = match found { Some(__nikaia_value) => __nikaia_value, None => return false };
     if takes_a_keep(contract) { return false; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    result.is_a_view()
+    a_result_of_views(result, ask)
 }
 
 pub(crate) fn made_in_the_call(arg: &Expr) -> bool { !matches!(arg, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. } | Expr::Path(_, _) | Expr::LitStr { .. } | Expr::LitInt { .. } | Expr::LitFloat { .. } | Expr::LitBool(_, _) | Expr::LitNull(_)) }

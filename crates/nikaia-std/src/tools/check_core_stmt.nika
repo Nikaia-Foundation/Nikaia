@@ -1354,6 +1354,11 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     if mutable && state.facts.mut_view_reads.contains_key(id_of(value) as i64) {
         state.flow.mut_view_bindings.insert(id)
     }
+    // **A name bound to views and text of its own holds `EitherText`**
+    // (ADR-282 D14, #1310): a choice of both, or a literal later given both.
+    if state.facts.mixed_choices.contains(node_key(value)) || state.facts.mixed_leaves.contains_key(node_key(check_peeled(value))) {
+        state.flow.either_bindings.insert(id)
+    }
     return check_core_stmt_unit()
 }
 

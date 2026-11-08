@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1359] — 2026-11-08
+
+**Packages by version through crates.io, and two lowering fixes (#99)**
+- A dependency written `http = "1.2"` (or with `git` and `tag`/`branch`/`rev`) is the crate `nikaia_http` found by Cargo; a crate under the prefix without `nikaia.toml`, `.nika` sources and `nikaia.contracts` is refused by name; a package's own version dependencies are resolved in the same pass (ADR-103, ADR-286 D23-D27).
+- `nikaia build` writes the package to `target/nikaia/publish/` as `cargo publish` takes it; nothing is published by the toolchain.
+- Lowering: a text `let` kept past its scope is a map's or a set's key as it is (`m.get(named)`, was rustc `Borrow<&String>`).
+- Checker: a lambda that returns `null` on one path and a value on another comes to `T?`, so a `filter_map` lambda with `?? return null` builds.
+
 ## [0.0.1358] — 2026-11-08
 
 **A panic in a task ends only that task: task::Crashed where the task can panic, and a fallback takes it (ADR-async-5 D35, D36, #1355)**

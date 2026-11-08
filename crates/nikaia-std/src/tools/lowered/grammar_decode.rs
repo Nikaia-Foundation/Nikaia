@@ -122,7 +122,7 @@ pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &dyn Fn(i64) -> O
             at.fail(format!("`{}` is not a whole number", digits));
             return None;
         }
-        Some(BuildValue::Int(integer(nikaia_std::index::or(magnitude, || 0), negative)))
+        Some(BuildValue::Int(integer(nikaia_std::index::or(magnitude, || 0u64), negative)))
     } else if tag == "f" {
         let written = at.word();
         let number = text::parse_f64(&written);

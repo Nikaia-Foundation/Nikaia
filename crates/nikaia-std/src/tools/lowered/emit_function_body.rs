@@ -56,6 +56,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         walk.keep_function = key.to_string();
+        walk.kept_names = collections::BTreeSet::new();
         let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();
         let known = host.known_nonnegative(body);
         match known {

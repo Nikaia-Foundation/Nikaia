@@ -233,6 +233,10 @@ pub struct CheckFlow {
     /// The bindings a `let mut` made a mutable view of a place, by their id:
     /// the `&mut` already, lent on to a `mut` parameter as `&mut *x` (#975).
     pub mut_view_bindings: collections::BTreeSet[i64],
+    /// **The bindings a `let` gave views and text of its own**, by their id
+    /// (ADR-282 D14, #1310): typed as the view they may be, they hold
+    /// `EitherText`, which a read-only `String` parameter is lent (`&x`).
+    pub either_bindings: collections::BTreeSet[i64],
     /// The ledger key the last method call resolved to (ADR-293 D24).
     pub last_resolved: String?,
     /// The name of the receiver of the method call being walked, where it is a
@@ -421,6 +425,7 @@ impl CheckFlow {
             view_reads: collections::BTreeSet(),
             std_entry_views: collections::BTreeSet(),
             mut_view_bindings: collections::BTreeSet(),
+            either_bindings: collections::BTreeSet(),
             last_resolved: null,
             receiver_name: null,
             receiver_from_text: false,

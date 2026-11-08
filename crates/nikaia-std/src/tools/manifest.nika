@@ -124,8 +124,9 @@ pub enum DependencyShape {
     Rust,
     /// `path = "…"`: a Nikaia package, read as part of this program.
     Path,
-    /// Any other way of naming a Nikaia package: carried to the place that
-    /// refuses it, with the reason, since nothing has decided a registry.
+    /// A version, or a table with `version` or `git`: a Nikaia package Cargo
+    /// finds as the crate `nikaia_<key>`
+    /// ([ADR-286](../../../docs/specification/adr/adr-286.md) D23, D24).
     Nikaia,
 }
 
@@ -224,6 +225,10 @@ pub struct ManifestDependency {
     /// directory, the only reading that survives the project being checked out
     /// somewhere else.
     pub path: String?,
+    /// For a package by version, the entry the generated `Cargo.toml` writes
+    /// for it: Cargo's own renaming to the crate `nikaia_<key>`
+    /// (`manifest_by_version`).
+    pub cargo: String?,
 }
 
 /// Where a `nikaia.toml` was found, and what it said.
@@ -423,9 +428,70 @@ fn manifest_dependencies(items: ref Vec[ManifestItem]) -> collections::BTreeMap[
         let typed = kind != null
         let has_path = path != null
         let shape = dependency(value.name, typed, kind ?? "", has_path)
-        out.insert(value.name.clone(), ManifestDependency { shape: shape, text: value.text.clone(), path: path })
+        let cargo: String? = match shape {
+            DependencyShape::Nikaia => manifest_by_version(items, value),
+            else => null,
+        }
+        out.insert(value.name.clone(), ManifestDependency { shape: shape, text: value.text.clone(), path: path, cargo: cargo })
     }
     return out
+}
+
+/// The keys a Nikaia package by version may carry: Cargo's words for where a
+/// crate comes from, which the generated entry hands on as written.
+fn by_version_keys() -> Vec[String] {
+    return ["version", "git", "tag", "branch", "rev"]
+}
+
+/// **A Nikaia package by version** (ADR-286 D23, D24): the entry the generated
+/// `Cargo.toml` writes for dependency `value`, Cargo's own renaming to the
+/// crate `nikaia_<key>`, so the prefix is written once, where Cargo reads it.
+/// `"1.2"` is the `version`; a table carries `version`, or `git` with a `tag`,
+/// `branch` or `rev`. The key is the name a `use` line writes, so it is an
+/// identifier.
+fn manifest_by_version(items: ref Vec[ManifestItem], value: ref ManifestItem) -> String throws {
+    let key = value.name.clone()
+    if !manifest_an_identifier(key) {
+        let word = key.replace("-", "_")
+        throw Refused::Because(f"Dependency `{key}` is a Nikaia package by version, and its key is the name a `use` line writes, so it has to be an identifier. Write `{word}`.")
+    }
+    let shapes = f"A Nikaia package is named by a version (`{key} = \"1.2\"`), by a table with `version` or `git`, or by a `path`; a Rust crate says `type = \"rust\"`."
+    if !value.table {
+        if value.word == null {
+            throw Refused::Because(f"Dependency `{key}` is `{value.text}`. {shapes}")
+        }
+        return f"{{ package = \"nikaia_{key}\", version = {value.text} }}"
+    }
+    let mut out = f"{{ package = \"nikaia_{key}\""
+    let mut located = false
+    for item in items {
+        if item.section != "dependencies" || item.name != key || item.key.len() == 0 {
+            continue
+        }
+        if !contains(by_version_keys(), item.key) {
+            let expected = choices(by_version_keys())
+            throw Refused::Because(f"Dependency `{key}` has a key `{item.key}`, which a Nikaia package by version doesn't take. Its keys are: {expected}.")
+        }
+        located = located || item.key == "version" || item.key == "git"
+        out = f"{out}, {item.key} = {item.text}"
+    }
+    if !located {
+        throw Refused::Because(f"Dependency `{key}` says neither a `version` nor a `git`. {shapes}")
+    }
+    return f"{out} }}"
+}
+
+/// Whether `word` is an identifier: letters, digits and `_`, not starting
+/// with a digit.
+fn manifest_an_identifier(word: ref String) -> bool {
+    let mut first = true
+    for c in word.chars() {
+        if !(c.is_alphanumeric() || c == '_') || (first && c >= '0' && c <= '9') {
+            return false
+        }
+        first = false
+    }
+    return !first
 }
 
 // --- Tests moved from the compiler's `manifest` (ADR-294, #125) ---

@@ -664,7 +664,7 @@ fn a_view_handed_back_out_of_a_parameter_that_holds_views_is_the_buffers() {
         "{rust}"
     );
     assert!(
-        rust.contains("fn label(e: Entry<'_>) -> nikaia_std::either_text::EitherText<'_>"),
+        rust.contains("fn label<'r>(e: Entry<'r>) -> nikaia_std::either_text::EitherText<'r>"),
         "{rust}"
     );
 }

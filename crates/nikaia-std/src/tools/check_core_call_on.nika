@@ -1212,6 +1212,11 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // task work's (#605), asked of the host.
     if key == "task::Scope::spawn" {
         check_crossings_a_task_of_a_scope(state, args)
+        // **And hands back nothing** (ADR-346 D7, #1321): its body's value
+        // is dropped.
+        for arg in args {
+            state.a_lambda_hands_back_nothing(id_of(arg) as i64, null)
+        }
     }
     // **The items of a walk of an open number are that number** (ADR-285
     // D34, #594): handed to a lambda, and handed on.

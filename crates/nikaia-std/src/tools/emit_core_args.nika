@@ -549,7 +549,7 @@ impl EmitState {
                     // **Arms that are views and values made there** (#894):
                     // the one value they are put in lives through the call.
                     out.push("&*")
-                } else if lend && !self.facts.views_handed_on.contains(node) {
+                } else if lend && !self.facts.views_handed_on.contains(node) && !emit_stmt_a_kept_name(world, walk, arg) {
                     // **A part an expression arm binds as a view** is one
                     // already (#456); the others are lent here, an operator
                     // expression whole: `&(l ^ 1)`, never `&l ^ 1` (#1290).
@@ -690,14 +690,17 @@ impl EmitState {
                 // **Code whose type says `throws` hands back a `Result`**
                 // (#1360), as a kept lambda does: a failing call in the body
                 // leaves through its `?`, and the value goes inside the `Ok`.
+                // **Code that hands back nothing drops the body's value**
+                // (#1321).
+                let valueless = self.facts.valueless_lambdas.contains(node_key(arg))
                 if self.facts.failing_lambdas.contains(node_key(arg)) {
                     let plain = EmitFlow::plain().at(inside.statement)
                     let failing = plain with { can_throw: true }
                     out.push("{ let __nikaia_done = ")
-                    self.emit_core_block(world, walk, out, host, body, depth, failing, inner, EmitTail::Value)
+                    self.emit_core_block(world, walk, out, host, body, depth, failing, inner, if valueless { EmitTail::Statement } else { EmitTail::Value })
                     out.push("; Ok(__nikaia_done) }")
                 } else {
-                    self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), inner, EmitTail::Return)
+                    self.emit_core_block(world, walk, out, host, body, depth, EmitFlow::plain().at(inside.statement), inner, if valueless { EmitTail::Statement } else { EmitTail::Return })
                 }
                 if !runs {
                     out.push(")")

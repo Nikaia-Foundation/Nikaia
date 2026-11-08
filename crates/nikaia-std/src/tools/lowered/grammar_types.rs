@@ -513,7 +513,7 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
                 let mut path = work.path.to_owned();
                 path.push(grammar_types_called(words, called, &types));
                 work.queue.push(GrammarTypesWanted { call: GrammarTypesCall { owner, rule: name, types }, from: work.from, path });
-                copy.node = Pattern::Ref { name: intern(&copied), generics: vec![], args: parts };
+                copy.node = Pattern::Ref { name: intern(copied), generics: vec![], args: parts };
             } else { copy.node = Pattern::Ref { name, generics: types, args: parts }; }
         },
         _ => { },
@@ -645,7 +645,7 @@ pub fn grammar_types_whole(items: Vec<Spanned<Item>>, spans: &collections::BTree
     let mut walk = GrammarTypesWalk { putting: false, bound: collections::BTreeMap::new(), rules: generic.rules, calls: vec![], call_ids: vec![], refused_at: None, refused_callee: String::from("") };
     for item in all.iter_mut() { grammar_types_walk_item(&mut (*item).node, words, intern, &mut walk); }
     if walk.refused_at.is_some() {
-        let at = nikaia_std::index::or(parsed_span_of(spans, nikaia_std::index::or(walk.refused_at, || 0)), || Span { start: 0, end: 0 });
+        let at = nikaia_std::index::or(parsed_span_of(spans, nikaia_std::index::or(walk.refused_at, || 0u32)), || Span { start: 0, end: 0 });
         return GrammarTypesExpanded { items: all, refused: vec![grammar_types_value_refused(&walk.refused_callee, &at)] };
     }
     let mut expanded = grammar_types_expand(&mut all, &walk.calls, words, intern);

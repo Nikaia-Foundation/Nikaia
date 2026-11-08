@@ -1,0 +1,40 @@
+// A struct of views made by a call and handed by value to another (#1378):
+// the temporary holds views, so it is lent, not put into a keep.
+struct N { raw: String, tag: String }
+
+fn look(n: N) -> N sync {
+    return N { raw: n.raw, tag: n.tag }
+}
+
+fn make(s: String) -> N {
+    let t = s.trim()
+    return N { raw: t, tag: t }
+}
+
+fn fixed() -> N {
+    return N { raw: "a", tag: "b" }
+}
+
+fn pair(s: String) -> (String, i64) {
+    return (s.trim(), 1)
+}
+
+fn first(p: (String, i64)) -> String {
+    return p.0
+}
+
+fn main() throws {
+    let text = "  hello  "
+    let m = look(make(text))
+    print(f"{m.raw}|{m.tag}\n")
+    print(f"{look(make(text)).tag}\n")
+    let f = look(fixed())
+    print(f"{f.raw}{f.tag}\n")
+    let w = first(pair(text))
+    print(f"{w}\n")
+    let mut all: Vec[N] = []
+    for i in 0..<2 {
+        all.push(look(make(text)))
+    }
+    print(f"{all.len()} {all[1].raw}\n")
+}

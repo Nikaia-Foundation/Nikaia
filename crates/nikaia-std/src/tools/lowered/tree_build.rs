@@ -112,7 +112,7 @@ pub fn counted_pattern(pat: Spanned<Pattern>, low: Expr, comma: bool, high: Opti
         None => { },
     }
     if lo.is_some() && high_written {
-        let n = nikaia_std::index::or(lo, || 0);
+        let n = nikaia_std::index::or(lo, || 0u32);
         let mut rep = Repeat::Exactly(n);
         if comma {
             rep = match hi {

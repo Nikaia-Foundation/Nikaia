@@ -241,7 +241,13 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         if at < given.len() as i64 && (lent || want.is_a_view()) && !check_arguments_nullable(&want) && state.lent_arms_view_and_new(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))) { continue; }
         let string = Ty::Named { name: String::from("String"), args: vec![], view: false };
-        if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own { continue; }
+        if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own {
+            if given_here.is_some() {
+                let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if state.an_either_name(world, value) { state.facts.lent_args.insert(id_of(value) as i64); }
+            }
+            continue;
+        }
         if views_into_text(&found_here, &want) && either_param(&world.here, key, at) {
             if argument.arm && at < given.len() as i64 && check_arguments_a_choice(nikaia_std::index::get(&given, nikaia_std::index::at(at))) && given_here.is_some() { state.note_mixed(world, nikaia_std::index::get(&given, nikaia_std::index::at(at)), check_arguments_nullable(&want)); } else if given_here.is_some() && check_arguments_nullable(&want) && !check_arguments_nullable(&found_here) {
                 let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };

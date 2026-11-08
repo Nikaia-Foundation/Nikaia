@@ -1,0 +1,9 @@
+error[NK1116]: `4294967296` doesn't fit in a `u32`.
+  --> tests/large_literal_default_too_large.nika:5:2
+   |
+ 5 | 	let q = o ?? 4294967296
+   |  ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A `u32` holds 0 to 4294967295.
+   = help: Use `u64` where the number needs more room.
+1 type error

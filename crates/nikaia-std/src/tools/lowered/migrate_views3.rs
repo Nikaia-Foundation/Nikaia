@@ -448,7 +448,37 @@ pub(crate) fn migrate_trait_end(tokens: &[MigrateToken], k: i64) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn migrate_views3_unwritten(code: &str) -> Vec<String> {
+pub fn migrate_views3_unwritten(code: &str) -> Vec<String> { migrate_unwritten_from(code, 0) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn migrate_views3_markdown_unwritten(source: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    let mut block: String = String::from("");
+    let mut inside = false;
+    let mut opened: i64 = 0;
+    let mut line: i64 = 0;
+    for text in source.split("\n") {
+        line += 1;
+        let fence = text.trim();
+        if inside && fence == "```" {
+            out.extend(migrate_unwritten_from(&block, opened));
+            block = String::from("");
+            inside = false;
+        } else if inside {
+            block.push_str(text);
+            block.push('\n');
+        } else if fence == "```nika" || fence == "```nikaia" {
+            inside = true;
+            opened = line;
+        }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn migrate_unwritten_from(code: &str, before: i64) -> Vec<String> {
     let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let tokens = &lexer.tokens;
@@ -461,7 +491,7 @@ pub fn migrate_views3_unwritten(code: &str) -> Vec<String> {
         if k < in_trait && k > guarded && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text == "fn" {
             let (last, _, from, choices) = migrate_trait_result(&tokens, k);
             if last >= 0 && from.is_empty() {
-                let mut line = 1;
+                let mut line = before + 1;
                 let mut at: i64 = 0;
                 for c in code.chars() {
                     if at >= nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).at { break; }

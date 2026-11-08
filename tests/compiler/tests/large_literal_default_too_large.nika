@@ -1,0 +1,7 @@
+// A `??` default literal that does not fit what the optional holds is
+// refused at the `??`, not left to the language below (#1297, Part I 2.2).
+fn main() throws {
+	let o: u32? = null
+	let q = o ?? 4294967296
+	println(f"{q}")
+}

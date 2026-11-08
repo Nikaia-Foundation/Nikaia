@@ -60,11 +60,15 @@ pub fn run(named: &[PathBuf]) -> Result<i32> {
         };
         // A trait's `ref` result whose source the old declaration does not fix
         // keeps its `ref`, and the choices are named (ADR-views-3 D14).
-        if file.extension().is_none_or(|e| e != "md") {
-            for unwritten in nikaia_std::tools::migrate_views3::migrate_views3_unwritten(&source) {
-                eprintln!("{}:{unwritten}", file.display());
-                code = 1;
-            }
+        // A Markdown file is asked block by block, its lines counted in the file.
+        let unwritten = if file.extension().is_some_and(|e| e == "md") {
+            nikaia_std::tools::migrate_views3::migrate_views3_markdown_unwritten(&source)
+        } else {
+            nikaia_std::tools::migrate_views3::migrate_views3_unwritten(&source)
+        };
+        for unwritten in unwritten {
+            eprintln!("{}:{unwritten}", file.display());
+            code = 1;
         }
         if migrated != source {
             std::fs::write(file, &migrated)
