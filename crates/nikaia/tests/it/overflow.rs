@@ -181,7 +181,10 @@ fn the_generated_manifest_checks_the_program_and_not_its_dependencies() {
 
 /// The generated workspace root's `Cargo.toml` - the one that carries the
 /// profile ([ADR-286](../../../docs/specification/adr/adr-286.md) D19). A member's
-/// is one directory further down and carries none, so the shallowest wins.
+/// is one directory further down and carries none, so the shallowest wins. The
+/// crate a build writes for `cargo publish` (`target/nikaia/publish/`) sits as
+/// deep as the root and carries none either, so only a manifest with a profile
+/// counts; without that, the directory order chose between the two.
 fn find_manifest(under: &Path) -> Option<std::path::PathBuf> {
     let mut stack = vec![(0usize, under.to_path_buf())];
     let mut best: Option<(usize, std::path::PathBuf)> = None;
@@ -192,6 +195,7 @@ fn find_manifest(under: &Path) -> Option<std::path::PathBuf> {
                 stack.push((depth + 1, path));
             } else if path.file_name().is_some_and(|n| n == "Cargo.toml")
                 && best.as_ref().is_none_or(|(at, _)| depth < *at)
+                && std::fs::read_to_string(&path).is_ok_and(|text| text.contains("[profile."))
             {
                 best = Some((depth, path));
             }
