@@ -11,8 +11,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Parser nodes that change
 
-* **`Expr::AsyncGroup` gains two `Option` fields** with #986 (ADR-async-5
-  D37, the async lane): a new match on it in `tools/*.nika` is written with
+* **`Expr::AsyncGroup` gains two `Option` fields** with #986 (the async
+  lane): a new match on it in `tools/*.nika` is written with
   `..`, so it does not break when the fields land.
 
 ### Tests and the gate
