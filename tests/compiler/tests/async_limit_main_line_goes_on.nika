@@ -1,0 +1,23 @@
+// A task waiting for a place does not stop the main line (ADR-async-5 D37,
+// #986): under `limit: 1`, two of three tasks wait unstarted while the main
+// line goes on to its `println`, which sees one started; they start as
+// places free, where the main line waits.
+use std::time
+
+fn work(n: i64, started: SharedMut[i64]) -> i64 {
+	started.update fn(mut v) { v += 1 }
+	time::sleep(2.millis())
+	return n
+}
+
+fn main() throws {
+	let started = SharedMut(0)
+	let total = async(limit: 1) {
+		let a = async work(1, started)
+		let b = async work(2, started)
+		let c = async work(3, started)
+		println(f"after three starts, {started.get()} started")
+		a + b + c
+	}
+	println(f"total {total}, {started.get()} started")
+}

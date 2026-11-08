@@ -856,7 +856,7 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 		Expr::Block(block, _) => fields_block(block, words, scan),
 		Expr::Unsafe(block, _) => fields_block(block, words, scan),
 		Expr::Overlap(block, _) => fields_block(block, words, scan),
-		Expr::AsyncGroup(block, _, _) => fields_unwalked(block, words, scan),
+		Expr::AsyncGroup(block, _, _, _, _) => fields_unwalked(block, words, scan),
 		Expr::Closure { body, .. } => fields_unwalked(body, words, scan),
 		Expr::Spawn { body, .. } => {
 			let was = scan.walked

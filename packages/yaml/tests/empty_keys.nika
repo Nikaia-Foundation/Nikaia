@@ -1,0 +1,32 @@
+// Empty implicit keys (YAML 1.2.2 7.4.2, 8.2.2): a `:` with no key before it,
+// in a block mapping, a flow mapping and a flow sequence's single pair, with
+// a value and without (suite CFD4, NKF9, #1419).
+use yaml
+
+fn show(text: String) throws {
+	println(f"# {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::documents(input) catch {
+		println(f"error {error.line}:{error.column}")
+		return
+	}
+	for e in yaml::events(docs) {
+		println(yaml::event_line(e))
+	}
+}
+
+fn main() throws {
+	// in a flow sequence, with a space before the `:` and without (CFD4)
+	show("[ : empty key ]")
+	show("[: another empty key]")
+	show("[ : ]")
+	show("[a, : b]")
+	// in a flow mapping
+	show("{ key: value, : empty key }")
+	show("{ : }")
+	show("{a: 1, :}")
+	// in a block mapping (NKF9)
+	show("key: value\n: empty key\n")
+	show(":\n")
+	show("# empty key and value\n:\n")
+}

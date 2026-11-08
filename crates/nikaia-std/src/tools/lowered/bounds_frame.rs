@@ -500,7 +500,7 @@ pub(crate) fn fields_expr(expr: &Expr, words: &winnow_grammar::InternerContext, 
         Expr::Block(block, _) => { fields_block(block, words, scan); },
         Expr::Unsafe(block, _) => { fields_block(block, words, scan); },
         Expr::Overlap(block, _) => { fields_block(block, words, scan); },
-        Expr::AsyncGroup(block, _, _) => { fields_unwalked(block, words, scan); },
+        Expr::AsyncGroup(block, _, _, _, _) => { fields_unwalked(block, words, scan); },
         Expr::Closure { body, .. } => { fields_unwalked(body, words, scan); },
         Expr::Spawn { body, .. } => {
             let body = nikaia_std::boxed::open(body);

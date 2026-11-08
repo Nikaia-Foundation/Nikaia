@@ -706,7 +706,11 @@ impl EmitState {
                             let mut inner = EmitOut::empty();
                             let outer_groups = walk.async_groups.to_owned();
                             walk.async_groups = vec![group];
+                            let outer_gates = walk.async_gates.to_owned();
+                            walk.async_gates = vec![];
+                            if pausing != "" { walk.async_gates = vec![group]; }
                             self.emit_function_body(world, walk, &mut inner, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?;
+                            walk.async_gates = outer_gates;
                             walk.async_groups = outer_groups;
                             walk.async_pausing = outer_pausing;
                             walk.async_pending = vec![];
@@ -717,8 +721,9 @@ impl EmitState {
                             let raised = throws_ && !grouped;
                             if pausing != "" {
                                 if grouped { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, channel, name, ret)); } else if raised { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({}, (async ||{} ", name, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
+                                out.push(&format!("{{ let {}_gate = nikaia_std::task::Gate::new(usize::MAX, nikaia_std::task::admitted(nikaia_std::task::Adaptive())); let {}_waiting = nikaia_std::task::Waiting::new(&{}_gate); ", name, name, name));
                                 out.append(&inner);
-                                out.push(")()).await }");
+                                out.push(" })()).await }");
                             } else {
                                 if grouped { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else if raised { out.push(&format!("{{ nikaia_std::task::group_raised(|{}|{} ", name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
                                 out.append(&inner);

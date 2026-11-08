@@ -1,0 +1,24 @@
+// Queued tasks start where the main line pauses, not only where it waits
+// for a task (ADR-async-5 D37, #986): under `limit: 1`, while the main line
+// sleeps the first task ends and the next ones start.
+use std::time
+
+fn work(n: i64, started: SharedMut[i64]) -> i64 {
+	started.update fn(mut v) { v += 1 }
+	time::sleep(2.millis())
+	return n
+}
+
+fn main() throws {
+	let started = SharedMut(0)
+	let total = async(limit: 1) {
+		let a = async work(1, started)
+		let b = async work(2, started)
+		let c = async work(3, started)
+		println(f"before the pause, {started.get()} started")
+		time::sleep(50.millis())
+		println(f"after the pause, {started.get()} started")
+		a + b + c
+	}
+	println(f"total {total}")
+}

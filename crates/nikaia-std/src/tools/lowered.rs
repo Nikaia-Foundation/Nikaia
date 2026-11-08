@@ -2765,7 +2765,7 @@ pub mod check_texts {
 }
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, a_float_type, an_integer_literal, type_last_segment, view_of_type, viewed_from_type, unviewed_type, hands_a_run, hands_a_run_view, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
+    pub use super::{a_number_name, a_float_type, an_integer_literal, type_last_segment, view_of_type, viewed_from_type, unviewed_type, hands_a_run, hands_a_run_view, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, the_command_line, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
 }
 pub mod check_values {
     #[allow(unused_imports)]
@@ -2871,7 +2871,10 @@ pub mod emit_contracts {
     #[allow(unused_imports)]
     pub use super::{EmitContractsProven, EmitContractsBuild, EmitContractsMade, EmitContractsHost, emit_contracts_state, EmitReachGraphs, emit_contracts_package_graphs};
 }
-pub mod emit_core_args {}
+pub mod emit_core_args {
+    #[allow(unused_imports)]
+    pub use super::{emit_async_line, emit_async_pause, emit_async_during};
+}
 pub mod emit_core_below {
     #[allow(unused_imports)]
     pub use super::{EmitHeldFound, emit_held_in, emit_filled_at_once, emit_resize_args, emit_branch_values};
@@ -3150,7 +3153,7 @@ pub mod parse_errors {
 }
 pub mod parse_findings {
     #[allow(unused_imports)]
-    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_refusal, parse_findings_types_refusal};
+    pub use super::{ParseFindingsRefusal, parse_findings_too_long, parse_findings_char_of, parse_findings_at, parse_findings_parse_error, parse_findings_failure, parse_findings_mut_name_in_a_tuple, parse_findings_misplaced_async, parse_findings_one_task_limit, parse_findings_refusal, parse_findings_types_refusal};
 }
 pub mod parse_notes {
     #[allow(unused_imports)]

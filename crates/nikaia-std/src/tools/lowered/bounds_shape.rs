@@ -440,7 +440,7 @@ pub(crate) fn look_expr(expr: &Expr, look: &Look, deferred: bool, around: &Aroun
             for arm in arms.iter() { look_block(&arm.body, &look, true, around, words, seen); }
         },
         Expr::Block(b, _) => { look_block(b, &look, deferred, around, words, seen); },
-        Expr::AsyncGroup(b, _, _) => { look_block(b, &look, deferred, around, words, seen); },
+        Expr::AsyncGroup(b, _, _, _, _) => { look_block(b, &look, deferred, around, words, seen); },
         Expr::Overlap(b, _) => { look_block(b, &look, true, around, words, seen); },
         Expr::Unsafe(b, _) => { look_block(b, &look, deferred, around, words, seen); },
         Expr::Closure { body, .. } => { look_block(body, &look, true, around, words, seen); },

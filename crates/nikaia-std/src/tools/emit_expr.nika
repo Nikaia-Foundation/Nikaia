@@ -501,7 +501,7 @@ impl EmitState {
                     throw EmitRefused { message: "The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988).", at: emit_async_at(flow.statement) }
                 }
             },
-            Expr::AsyncGroup(block, id, within) => self.emit_async_group(world, walk, out, host, block, id.get(), within, depth, flow, scope),
+            Expr::AsyncGroup(block, id, within, limit, admission) => self.emit_async_group(world, walk, out, host, block, id.get(), within, limit, admission, depth, flow, scope),
             else => {
                 throw EmitRefused { message: "The compiler can't translate this expression yet: an `asm` block in expression position", at: flow.statement }
             },

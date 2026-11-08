@@ -1038,7 +1038,7 @@ fn flow_tuple_parts(going: ref TierGoing, value: ref Expr, kinds: ref Kinds, ask
         // **Each way a choice ends** goes in as a value of its own, so that
         // a tuple built in a branch is taken part by part.
         Expr::Block(block, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
-        Expr::AsyncGroup(block, _, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
+        Expr::AsyncGroup(block, _, _, _, _) => return flow_tuple_tail(going, block, kinds, ask, walk),
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = else_branch ?? return false
             flow_tuple_tail(going, then_branch, kinds, ask, walk)
@@ -1111,7 +1111,14 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
         // stay a view there: the position holds text of its own, and the
         // view is refused with NK1102 (write `.clone()`), not left to rustc.
         let mut flowed = kinds.clone()
-        if plain && kinds.view && value != null {
+        if plain && value != null {
+            let read = value ?? return
+            let to = position_word(owner, path)
+            if reads_back(read, to, ask, walk) {
+                flowed = coalesce_beside(read, to, ask, walk) ?? flowed
+            }
+        }
+        if plain && flowed.view && value != null {
             let given = value ?? return
             if views_a_temporary(given, ask, walk) || unkept_root(given, ask, walk) {
                 flowed = owned_kinds()
@@ -1295,6 +1302,51 @@ fn element_text_word(base: ref Expr, index: ref Expr, ask: ref TierAsk, mut walk
         return null
     }
     return seen(found.owner, [at], walk)
+}
+
+/// **A `??` with a side that reads its own position back** (#1405): `n.a ??
+/// m.a` put into the field `a` both read. Whether a side of it, through
+/// nested `??`, is the position `to` itself.
+fn reads_back(value: ref Expr, to: ref String, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            return reads_back(first, to, ask, walk) || reads_back(fallback, to, ask, walk)
+        }
+        else => {}
+    }
+    if !tier_a_name(value) {
+        return false
+    }
+    let back = text_source_word(value, ask, walk) ?? return false
+    return back == to
+}
+
+/// What such a `??` puts into `to`: only its other sides' kinds, as text read
+/// out of a position and put back adds nothing there (#659); else the side
+/// read before this round's tiers is taken as text of its own, and the
+/// position stays mixed for good. None where a side is neither `to`, `null`
+/// nor a declared place, whose kinds the walk has counted already.
+fn coalesce_beside(value: ref Expr, to: ref String, ask: ref TierAsk, mut walk: TierWalk) -> Kinds? {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let a = coalesce_beside(first, to, ask, walk) ?? return null
+            let b = coalesce_beside(fallback, to, ask, walk) ?? return null
+            return kinds_joined(a, b)
+        }
+        else => {}
+    }
+    if a_null(value) {
+        return no_kinds()
+    }
+    if !tier_a_name(value) {
+        return null
+    }
+    let back = text_source_word(value, ask, walk) ?? ""
+    if back == to {
+        return no_kinds()
+    }
+    let found = place_of(value, ask, walk) ?? return null
+    return kinds_of_declared(found, ask, walk)
 }
 
 /// `return`, `break` or `continue`: a fallback that hands out nothing.
@@ -1985,7 +2037,7 @@ fn lent_whole(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
 fn still_sources(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out: Vec[String]) {
     match value {
         Expr::Block(block, _) => still_tail(block, ask, walk, out),
-        Expr::AsyncGroup(block, _, _) => still_tail(block, ask, walk, out),
+        Expr::AsyncGroup(block, _, _, _, _) => still_tail(block, ask, walk, out),
         Expr::If { then_branch, else_branch, .. } => {
             still_tail(then_branch, ask, walk, out)
             let otherwise = else_branch ?? return
@@ -2731,7 +2783,7 @@ fn a_literal_text(value: ref Expr) -> bool {
     return match value {
         Expr::LitStr { .. } => true,
         Expr::Block(block, _) => a_literal_tail(block),
-        Expr::AsyncGroup(block, _, _) => a_literal_tail(block),
+        Expr::AsyncGroup(block, _, _, _, _) => a_literal_tail(block),
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = else_branch ?? return false
             a_literal_tail(then_branch) && a_literal_tail(otherwise)
@@ -4236,7 +4288,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_choice_closed(leaf, held, late)
         }
         Expr::Block(block, _) => late_block(block, leaf, ask, late),
-        Expr::AsyncGroup(block, _, _) => late_block(block, leaf, ask, late),
+        Expr::AsyncGroup(block, _, _, _, _) => late_block(block, leaf, ask, late),
         Expr::Unsafe(block, _) => late_block(block, false, ask, late),
         Expr::Overlap(block, _) => late_block(block, false, ask, late),
         Expr::LitInterpolated { parts, .. } => {
@@ -4839,7 +4891,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             walk.tail_back = back
             tier_block(block, ask, walk)
         }
-        Expr::AsyncGroup(block, _, _) => {
+        Expr::AsyncGroup(block, _, _, _, _) => {
             walk.tail_back = back
             tier_block(block, ask, walk)
         }
@@ -6597,7 +6649,7 @@ fn a_keeping_target(function: ref FnDecl, at: i64, ask: ref TierAsk) -> bool {
 fn param_arm_leaves(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     match value {
         Expr::Block(block, _) => param_arm_tail(block, ask, walk),
-        Expr::AsyncGroup(block, _, _) => param_arm_tail(block, ask, walk),
+        Expr::AsyncGroup(block, _, _, _, _) => param_arm_tail(block, ask, walk),
         Expr::If { then_branch, else_branch, .. } => {
             param_arm_tail(then_branch, ask, walk)
             let otherwise = else_branch ?? return
@@ -7073,7 +7125,7 @@ fn tw_lets_expr(mut expr: Expr, job: ref TwLets) {
             tw_lets_fields(fields, job)
         },
         Expr::Block(block, _) => tw_lets_block(block, job),
-        Expr::AsyncGroup(block, _, _) => tw_lets_block(block, job),
+        Expr::AsyncGroup(block, _, _, _, _) => tw_lets_block(block, job),
         Expr::Unsafe(block, _) => tw_lets_block(block, job),
         Expr::Overlap(block, _) => tw_lets_block(block, job),
         Expr::Closure { body, .. } => tw_lets_block(body, job),
@@ -8091,7 +8143,7 @@ fn hb_ways_out(body: ref Block) -> Vec[ref Expr] {
         match expr {
             Expr::Return(value, _) => out.extend(hb_maybe(value)),
             Expr::Block(block, _) => out.extend(hb_returns_of(block)),
-            Expr::AsyncGroup(block, _, _) => out.extend(hb_returns_of(block)),
+            Expr::AsyncGroup(block, _, _, _, _) => out.extend(hb_returns_of(block)),
             Expr::Unsafe(block, _) => out.extend(hb_returns_of(block)),
             Expr::Overlap(block, _) => out.extend(hb_returns_of(block)),
             Expr::If { then_branch, else_branch, .. } => {

@@ -89,7 +89,7 @@ pub fn blocks_of_expr(expr: &Expr) -> Vec<&Block> {
             out.push(block);
             return out;
         },
-        Expr::AsyncGroup(block, _, _) => {
+        Expr::AsyncGroup(block, _, _, _, _) => {
             out.push(block);
             return out;
         },

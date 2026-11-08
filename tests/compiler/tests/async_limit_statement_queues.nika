@@ -1,0 +1,25 @@
+// A statement task queues for its place like any task (ADR-async-5 D9, D37,
+// #986): under `limit: 1` it does not stop the main line, which goes on to
+// its `println` before the statement task runs.
+use std::time
+
+fn work(n: i64) -> i64 {
+	time::sleep(1.millis())
+	return n
+}
+
+fn say(n: i64) throws {
+	time::sleep(1.millis())
+	println(f"task {n}")
+}
+
+fn main() throws {
+	let x = async(limit: 1) {
+		let a = async work(5)
+		async say(1)
+		async say(2)
+		println("main line goes on")
+		a
+	}
+	println(f"x {x}")
+}

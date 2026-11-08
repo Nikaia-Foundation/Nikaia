@@ -1,0 +1,26 @@
+// A `??` put into a field whose one side reads that same field back (#1405):
+// `p.a ?? v.a` into `N.a`. The side read back adds nothing to what flows
+// into the field (#659), so `N.a` stays the view of the input it was, and
+// is no `EitherText` the emitted Rust cannot hand over.
+struct P {
+	a: String?,
+}
+struct N {
+	a: String?,
+	b: String?,
+}
+grammar G {
+	rule WS = "" -> { }
+	entry rule top -> N =
+		p:Pr " " v:Inner -> { N { a: p.a ?? v.a, b: v.b ?? p.a } }
+	rule Inner -> N = "x" s:text("y"+) -> { N { a: s, b: null } }
+	rule Pr -> P = "&" s:text("z"+) -> { P { a: s } }
+}
+fn main() throws {
+	let n = G::top("&zz xyy") catch {
+		println("refused")
+		return
+	}
+	println(n.a ?? "none")
+	println(n.b ?? "none")
+}

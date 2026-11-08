@@ -124,7 +124,7 @@ pub(crate) fn fields_leave_within(fields: &[FieldInit], throwing: &dyn Fn(&Expr)
 pub(crate) fn blocks_leave(expr: &Expr, throwing: &dyn Fn(&Expr) -> bool, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, with_continue: bool) -> bool {
     match expr {
         Expr::Block(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
-        Expr::AsyncGroup(block, _, _) => leaves_block(block, &throwing, &holes_of, with_continue),
+        Expr::AsyncGroup(block, _, _, _, _) => leaves_block(block, &throwing, &holes_of, with_continue),
         Expr::Unsafe(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
         Expr::Overlap(block, _) => leaves_block(block, &throwing, &holes_of, with_continue),
         Expr::Closure { body, .. } => leaves_block(body, &throwing, &holes_of, with_continue),

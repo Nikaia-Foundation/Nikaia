@@ -1,0 +1,19 @@
+// `limit: 1` written as the literal (ADR-async-5 D15, D7, #986): the tasks run
+// one at a time, in written order, so two that print are not checked against
+// each other (without the limit they are NK2104).
+use std::time
+
+fn say(n: i64, wait: i64) throws {
+	time::sleep(wait.millis())
+	println(f"task {n}")
+}
+
+fn main() throws {
+	async(limit: 1) {
+		async say(1, 3)
+		async say(2, 1)
+		async fn { println("task 3") }
+		async fn { println("task 4") }
+	}
+	println("done")
+}

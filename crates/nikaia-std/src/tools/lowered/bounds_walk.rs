@@ -1212,7 +1212,7 @@ pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFac
                 _ => None,
             };
         },
-        Expr::AsyncGroup(block, _, _) => {
+        Expr::AsyncGroup(block, _, _, _, _) => {
             let last = block.stmts.len() as i64 - 1;
             if last < 0 { return None; }
             for k in 0..last { if !bounding_an_assert(&nikaia_std::index::get(&block.stmts, (k) as usize).node, words) { return None; } }
@@ -3218,7 +3218,7 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             bounding_after_change(walk, facts, &changed);
         },
         Expr::Block(block, _) => { bounding_inner_block(walk, block, facts, context, program, words, &ask); },
-        Expr::AsyncGroup(block, _, _) => { bounding_inner_block(walk, block, facts, context, program, words, &ask); },
+        Expr::AsyncGroup(block, _, _, _, _) => { bounding_inner_block(walk, block, facts, context, program, words, &ask); },
         Expr::Unsafe(block, _) => {
             bounding_inner_block(walk, block, facts, context, program, words, &ask);
             for cond in prover_assumed_in_unsafe(block, words) { bounding_assume(walk, facts, &cond, context, program, words); }
@@ -3689,7 +3689,7 @@ pub(crate) fn changed_in_expr(expr: &Expr, context: &BoundsContext, words: &winn
             }
         },
         Expr::Block(b, _) => { changed_in_block(b, context, words, out); },
-        Expr::AsyncGroup(b, _, _) => { changed_in_block(b, context, words, out); },
+        Expr::AsyncGroup(b, _, _, _, _) => { changed_in_block(b, context, words, out); },
         Expr::Overlap(b, _) => { changed_in_block(b, context, words, out); },
         Expr::Unsafe(b, _) => { changed_in_block(b, context, words, out); },
         Expr::Closure { body, .. } => { changed_in_block(body, context, words, out); },

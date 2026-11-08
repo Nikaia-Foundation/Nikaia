@@ -284,7 +284,7 @@ fn calls_in(expr: ref Expr, span: ref Span, words: ref winnow_grammar::InternerC
             }
         }
         Expr::Block(block, _) => calls_in_block(block, span, words, bound, takers, found),
-        Expr::AsyncGroup(block, _, _) => calls_in_block(block, span, words, bound, takers, found),
+        Expr::AsyncGroup(block, _, _, _, _) => calls_in_block(block, span, words, bound, takers, found),
         Expr::Overlap(block, _) => calls_in_block(block, span, words, bound, takers, found),
         Expr::If { cond, then_branch, else_branch, .. } => {
             calls_in(cond, span, words, bound, takers, found)
@@ -359,7 +359,7 @@ fn statements_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut
             }
         }
         Expr::Block(block, _) => statements_in_block(block, words, out),
-        Expr::AsyncGroup(block, _, _) => statements_in_block(block, words, out),
+        Expr::AsyncGroup(block, _, _, _, _) => statements_in_block(block, words, out),
         Expr::Overlap(block, _) => statements_in_block(block, words, out),
         Expr::If { cond, then_branch, else_branch, .. } => {
             statements_in(cond, words, out)

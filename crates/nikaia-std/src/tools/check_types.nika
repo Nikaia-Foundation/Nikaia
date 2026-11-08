@@ -348,6 +348,12 @@ pub fn element_walked(over: ref Ty, bindings: i64) -> Ty {
                 // **A `Bytes` is walked byte by byte** (ADR-320 D7), so a
                 // `'…'` compared with one is a `u8` (D8).
                 Ty::Named { name: "u8", args: [], view: false }
+            } else if the_command_line(over) {
+                // **`cli::args()` is walked word by word, each an owned
+                // `String`** (`std.contracts`, `cli::args`; `Iterator for
+                // Args` in `cli.rs`): without it every word was `Unknown`
+                // and a view of one handed to a `String` reached rustc (#1416).
+                Ty::Named { name: "String", args: [], view: false }
             } else {
                 Ty::Unknown
             }
@@ -355,6 +361,16 @@ pub fn element_walked(over: ref Ty, bindings: i64) -> Ty {
         Ty::Pointed { item, slice, mutable } => if slice && !mutable { item.clone() } else { Ty::Unknown },
         Ty::Seq { item, .. } => item.clone(),
         else => Ty::Unknown,
+    }
+}
+
+/// **The words the program was started with**, `cli::args()`'s `cli::Args`:
+/// an iterator, so a `for` walks it by value and uses it up, as a sequence
+/// that does not replay (ADR-105 D2, ADR-293 D19; #1416).
+pub fn the_command_line(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => !view && args.len() == 0 && name == "cli::Args",
+        else => false,
     }
 }
 
@@ -470,7 +486,7 @@ pub fn check_peeled(value: ref Expr) -> ref Expr {
             let tail = tail_value_of(block) ?? return value
             check_peeled(tail)
         }
-        Expr::AsyncGroup(block, _, _) => {
+        Expr::AsyncGroup(block, _, _, _, _) => {
             let tail = tail_value_of(block) ?? return value
             check_peeled(tail)
         }

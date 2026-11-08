@@ -247,7 +247,7 @@ pub(crate) fn panics_blocks(expr: &Expr) -> Vec<&Block> {
     let mut out: Vec<&Block> = vec![];
     match expr {
         Expr::Block(block, _) => { out.push(block); },
-        Expr::AsyncGroup(block, _, _) => { out.push(block); },
+        Expr::AsyncGroup(block, _, _, _, _) => { out.push(block); },
         Expr::Unsafe(block, _) => { out.push(block); },
         Expr::Overlap(block, _) => { out.push(block); },
         Expr::Closure { body, .. } => { out.push(body); },

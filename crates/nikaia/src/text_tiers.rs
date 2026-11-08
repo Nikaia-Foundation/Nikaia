@@ -410,7 +410,7 @@ pub(crate) fn visit_expr_mut(
         Expr::Block(block, _)
         | Expr::Unsafe(block, _)
         | Expr::Overlap(block, _)
-        | Expr::AsyncGroup(block, _, _) => visit_block_mut(block, f, s),
+        | Expr::AsyncGroup(block, _, _, _, _) => visit_block_mut(block, f, s),
         Expr::Closure { body, .. } => visit_block_mut(body, f, s),
         Expr::Spawn { body, .. } => visit_expr_mut(body, f, s),
         _ => {}

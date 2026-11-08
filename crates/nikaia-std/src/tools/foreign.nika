@@ -304,7 +304,7 @@ fn statement_blocks(stmt: ref Stmt, names: ref winnow_grammar::InternerContext, 
 fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
     match expr {
         Expr::Block(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
-        Expr::AsyncGroup(block, _, _) => block_names(block, names, unaliased, holes_of, root_at, found),
+        Expr::AsyncGroup(block, _, _, _, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::Unsafe(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::Overlap(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::Closure { body, .. } => block_names(body, names, unaliased, holes_of, root_at, found),

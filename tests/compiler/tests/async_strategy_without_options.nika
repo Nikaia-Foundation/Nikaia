@@ -1,0 +1,28 @@
+// A group that writes neither `limit:` nor `admission:` is under std's
+// strategy too (ADR-async-5 D18, D37, #986): while the main line waits for one
+// task, the others of the group run, so the short task has ended when the long
+// one is joined.
+use std::time
+
+fn long(n: i64) -> i64 {
+	time::sleep(20.millis())
+	return n
+}
+
+fn short(done: SharedMut[i64]) -> i64 {
+	time::sleep(1.millis())
+	done.update fn(mut v) { v += 1 }
+	return 1
+}
+
+fn main() throws {
+	let done = SharedMut(0)
+	let total = async {
+		let a = async long(1)
+		let b = async short(done)
+		let first = a
+		println(f"after the long one, {done.get()} short ended")
+		first + b
+	}
+	println(f"total {total}")
+}

@@ -182,9 +182,9 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/memory.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>How many run at once</h3>
-        <p>A form that starts tasks is specified to take <code>limit:</code>, the number that may run at once, and <code>admission:</code>, what happens to the next one when that many are running. Neither is built yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">#986</a>), and serving many connections at once is not possible yet.</p>
+        <p><code>async(limit: n) { … }</code> lets at most <code>n</code> of its tasks run at once, and the others wait, unstarted, in the order they are written. <code>admission:</code> names the strategy that decides when the next one starts. A <code>limit:</code> on a form that starts one task is refused before the program runs. The same options on <code>xs.par_iter()</code> are not built yet (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">#986</a>), and serving many connections at once is not possible yet.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5, D15 →</a>
       </div>
     </div>

@@ -236,7 +236,7 @@ pub(crate) fn counted_children(expr: &Expr, over: &[CountedLoop], words: &winnow
 pub(crate) fn counted_blocks(expr: &Expr, over: &[CountedLoop], words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<i64>) {
     match expr {
         Expr::Block(b, _) => { counted_block(b, &mut copied(over), words, out); },
-        Expr::AsyncGroup(b, _, _) => { counted_block(b, &mut copied(over), words, out); },
+        Expr::AsyncGroup(b, _, _, _, _) => { counted_block(b, &mut copied(over), words, out); },
         Expr::Overlap(b, _) => { counted_block(b, &mut copied(over), words, out); },
         Expr::Unsafe(b, _) => { counted_block(b, &mut copied(over), words, out); },
         Expr::If { then_branch, else_branch, .. } => {
@@ -435,7 +435,7 @@ pub(crate) fn seek_expr(expr: &Expr, seek: &Seek, words: &winnow_grammar::Intern
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); seek_expr(value, seek, words) || seek_expr(fallback, seek, words) },
         Expr::Select(arms, _) => seek_select(arms, seek, words),
         Expr::Block(b, _) => seek_block(b, seek, words),
-        Expr::AsyncGroup(b, _, _) => seek_block(b, seek, words),
+        Expr::AsyncGroup(b, _, _, _, _) => seek_block(b, seek, words),
         Expr::Overlap(b, _) => seek_block(b, seek, words),
         Expr::Unsafe(b, _) => seek_block(b, seek, words),
         Expr::Closure { body, .. } => seek_block(body, seek, words),

@@ -337,7 +337,7 @@ impl EmitState {
                     self.emit_async_task(world, walk, out, host, task, i64::from(id.get()), &kind, depth, &flow, scope)?;
                 } else { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its value is waited for at a later statement but it is not a `let` of its own (#988)."), at: emit_async_at(flow.statement) }, &"emit_expr_written")); }
             },
-            Expr::AsyncGroup(block, id, within) => { let within = nikaia_std::boxed::open(within); let id = *id; self.emit_async_group(world, walk, out, host, block, i64::from(id.get()), (within).as_ref(), depth, flow, scope)?; },
+            Expr::AsyncGroup(block, id, within, limit, admission) => { let within = nikaia_std::boxed::open(within); let limit = nikaia_std::boxed::open(limit); let admission = nikaia_std::boxed::open(admission); let id = *id; self.emit_async_group(world, walk, out, host, block, i64::from(id.get()), (within).as_ref(), (limit).as_ref(), (admission).as_ref(), depth, flow, scope)?; },
             _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate this expression yet: an `asm` block in expression position"), at: Some(flow.statement) }, &"emit_expr_written")); },
         }
         Ok(())

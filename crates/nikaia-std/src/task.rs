@@ -27,8 +27,13 @@
 //! *compiler* put together — went with the automatic grouping itself
 //! (ADR-292 D1).
 
+mod gate;
 mod group;
 
+pub use gate::{
+    Adaptive, Admission, Decision, Gate, Line, Load, OnLine, Placed, Pollable, Waiting, admitted,
+    limit,
+};
 pub use group::{ChildHandle, Deferred, Ended, Polled, Receiver, Rest};
 use group::{Group, ended, ran};
 
@@ -1514,6 +1519,50 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         E: 'b,
         F: std::future::Future<Output = Result<T, E>> + 'b,
     {
+        ChildHandle::kept(self, rest, body).await
+    }
+
+    /// **`async e` whose task pauses, under the gates of `line`**
+    /// (ADR-async-5 D15, D18, D37, D38): as [`Scope::start_paused`] where a
+    /// place is free in each and no task before it waits; else the task
+    /// waits, unstarted, for a place, and the main line goes on, and `line`
+    /// starts it when a place frees. It holds its places from its start to
+    /// its end, and the tasks its body starts are under them too.
+    pub async fn start_paused_gated<'g, T: 'g, F>(
+        &'g self,
+        line: &Waiting<'_>,
+        body: impl FnOnce() -> F + 'g,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'g,
+        F: std::future::Future<Output = Result<T, E>> + 'g,
+    {
+        let queued = line.queues();
+        let gates = line.gates();
+        let body = move || gate::placed(gates, body());
+        if queued {
+            return ChildHandle::held_queued(self, body);
+        }
+        ChildHandle::held(self, body).await
+    }
+
+    /// [`Scope::start_kept`] under a gate, as [`Scope::start_paused_gated`].
+    pub async fn start_kept_gated<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        line: &Waiting<'_>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let queued = line.queues();
+        let gates = line.gates();
+        let body = move || gate::placed(gates, body());
+        if queued {
+            return ChildHandle::kept_queued(self, rest, body);
+        }
         ChildHandle::kept(self, rest, body).await
     }
 

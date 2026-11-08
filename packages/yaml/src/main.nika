@@ -372,7 +372,7 @@ grammar Yaml {
 	// What follows `---`: a node on that line, on the lines below, or none.
 	rule DocAfter(ds: Vec[Dir], left: i64) -> Node =
 		s:count(" " | "\t") if(s > 0) v:Propped(ds, left, -1) -> { v }
-		| s:count(" " | "\t") if(s > 0) v:BlockScalar(-1) Blanks -> { v }
+		| s:count(" " | "\t") if(s > 0) v:BlockScalar(-1) BlockTail -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, -1) Eol Blanks -> { v }
 		| Eol Blanks v:Block(ds, left, -1) -> { v }
 		| a:here Eol Blanks -> {
@@ -393,13 +393,14 @@ grammar Yaml {
 
 	// Spaces and tabs inside a line.
 	rule Sp = (" " | "\t")* -> { }
-	// The rest of a line: spaces, a comment, the line break or the end.
-	rule Eol = (" " | "\t")* Comment? ("\n" | eof) -> { }
+	// The rest of a line: spaces, a comment after one of them, the line break
+	// or the end (`s-l-comments`: a comment is separated from what precedes).
+	rule Eol = s:count(" " | "\t") (if(s > 0) Comment)? ("\n" | eof) -> { }
 	rule Comment = "#" until("\n" | eof) -> { }
 	// Lines holding nothing but spaces and a comment.
 	rule Blanks = Blank* LastBlank? -> { }
 	rule Blank = (" " | "\t")* Comment? "\n" -> { }
-	rule LastBlank = (" " | "\t")* Comment eof -> { }
+	rule LastBlank = (" " | "\t")* Comment eof -> { } | s:count(" " | "\t") if(s > 0) eof -> { }
 
 	// A block node on the lines below its parent at indentation `n`, at the
 	// indentation of its first line, which exceeds `n` (`s-l+block-node`). A
@@ -407,16 +408,24 @@ grammar Yaml {
 	// indentation (`seq-spaces(n, block-out)`).
 	// `k` is the tag a property line above gave it.
 	rule Block(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
-		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; k: k) -> { v }
+		not(Marker) m:count(" ") if(m > n) v:Content(ds, left, m, n; c: c, k: k) -> { v }
 		| not(Marker) m:count(" ") if(c == Ctx::BlockOut && m == n) v:Seq(ds, left, m) -> { v }
+		| not(Marker) m:count(" ") if(m > n) Sep1 v:Spaced(ds, left, n; c: c, k: k) -> { v }
+	// A node after tabs past the indentation (`s-separate-in-line`): a tab
+	// never indents, so no block collection begins there (`s-indent` is
+	// spaces only), but properties, a block scalar or a flow node may.
+	rule Spaced(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		v:Propped(ds, left, n; c: c, k: k) -> { v }
+		| v:BlockScalar(n; k: k) BlockTail -> { v }
+		| v:Inline(ds, left, n; k: k) Eol Blanks -> { v }
 
 	// A node whose first character is at column `m`, under a parent at `n`;
 	// it ends after its last line's break and the blank lines behind it.
-	rule Content(ds: Vec[Dir], left: i64, m: i64, n: i64; k: TagKind = TagKind::Untagged) -> Node =
+	rule Content(ds: Vec[Dir], left: i64, m: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
 		v:Seq(ds, left, m) -> { v }
 		| v:Map(ds, left, m) -> { v }
-		| v:Propped(ds, left, n) -> { v }
-		| v:BlockScalar(n; k: k) Blanks -> { v }
+		| v:Propped(ds, left, n; c: c, k: k) -> { v }
+		| v:BlockScalar(n; k: k) BlockTail -> { v }
 		| v:Inline(ds, left, n; k: k) Eol Blanks -> { v }
 
 	// A collection takes one nesting level (D8); past the last, the parse
@@ -520,9 +529,10 @@ grammar Yaml {
 		s:count(" ") if(s > 0) v:Compact(ds, left, m + 1 + s) -> { v }
 		| v:After(ds, left, m; c: Ctx::BlockOut) -> { v }
 
-	// An implicit key: one line, a flow collection, a quoted or a plain scalar.
+	// An implicit key: one line (`ns-s-implicit-yaml-key`, `c-s-implicit-json-key`),
+	// a flow collection, a quoted or a plain scalar.
 	rule Key(ds: Vec[Dir], left: i64) -> Node =
-		p:Props(ds) Sep1 v:KeyNode(ds, left, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		p:Props(ds) Sep1 t:text(v:KeyNode(ds, left, tag_kind(ds, p.tag))) if(one_line(t), "an implicit key on one line") if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -534,12 +544,17 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| v:KeyNode(ds, left, TagKind::Untagged) -> { v }
+		| t:text(v:KeyNode(ds, left, TagKind::Untagged)) if(one_line(t), "an implicit key on one line") -> {
+			v
+		}
+		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") peek(Sp ":" Gap) -> {
+			empty_of(tag_kind(ds, p.tag), p)
+		}
 	rule KeyNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
-		v:FlowSeq(ds, left) -> { v }
-		| v:FlowMap(ds, left) -> { v }
-		| v:Double(k) -> { v }
-		| v:Single(k) -> { v }
+		v:FlowSeq(ds, left, -1) -> { v }
+		| v:FlowMap(ds, left, -1) -> { v }
+		| v:Double(-1, k) -> { v }
+		| v:Single(-1, k) -> { v }
 		| v:Alias -> { v }
 		| v:Plain(-1, false, false; k: k) -> { v }
 
@@ -547,9 +562,13 @@ grammar Yaml {
 	// content on the same line, a block scalar, a node on the lines below (a
 	// block collection, as a rule), or none, an empty node. A core tag that
 	// fixes a kind is checked here, against a collection, and where a scalar
-	// is read, against its text; an alias takes no properties.
-	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn) -> Node =
-		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: tag_kind(ds, p.tag)) Blanks -> {
+	// is read, against its text; an alias takes no properties. Properties on
+	// a line of their own may be split over two lines, the tag on one and
+	// the anchor on the other (`c-ns-properties` with `s-separate-lines`):
+	// the node below then holds the other one, and the two join. `k` is the
+	// tag a property line above gave it.
+	rule Propped(ds: Vec[Dir], left: i64, n: i64; c: Ctx = Ctx::BlockIn, k: TagKind = TagKind::Untagged) -> Node =
+		p:Props(ds) s:count(" " | "\t") if(s > 0) v:BlockScalar(n; k: kind_with(ds, p.tag, k)) BlockTail -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -561,7 +580,7 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") Eol Blanks -> {
+		| p:Props(ds) s:count(" " | "\t") if(s > 0) v:Inline(ds, left, n; k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") Eol Blanks -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -573,46 +592,20 @@ grammar Yaml {
 				value: v.value,
 			}
 		}
-		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+		| p:Props(ds) Eol Blanks v:Block(ds, left, n; c: c, k: kind_with(ds, p.tag, k)) if(fits_node(kind_with(ds, p.tag, k), v), "a node its tag fits") if(p.anchor == null || v.anchor == null, "one anchor to a node") if(p.tag == null || v.tag == null, "one tag to a node") -> {
 			Node {
 				start: p.start,
 				end: v.end,
-				anchor: p.anchor,
-				tag: p.tag,
+				anchor: p.anchor ?? v.anchor,
+				tag: p.tag ?? v.tag,
 				flow: v.flow,
 				raw: v.raw,
 				style: v.style,
 				value: v.value,
 			}
 		}
-		| p:Props(ds) if(empty_fits(tag_kind(ds, p.tag)), "a node its tag fits") e:text(Nothing) Eol Blanks -> {
-			let v = match tag_kind(ds, p.tag) {
-				TagKind::Str => Value::Str(Scalar {
-					raw: e,
-					value: e,
-					style: Style::Plain,
-					indent: 0,
-					chomp: Chomp::Clip,
-				})
-				TagKind::NonSpecific => Value::Str(Scalar {
-					raw: e,
-					value: e,
-					style: Style::Plain,
-					indent: 0,
-					chomp: Chomp::Clip,
-				})
-				else => Value::Null
-			}
-			Node {
-				start: p.start,
-				end: p.end,
-				anchor: p.anchor,
-				tag: p.tag,
-				flow: false,
-				raw: "",
-				style: Style::Plain,
-				value: v,
-			}
+		| p:Props(ds) if(empty_fits(kind_with(ds, p.tag, k)), "a node its tag fits") Eol Blanks -> {
+			empty_of(kind_with(ds, p.tag, k), p)
 		}
 	rule Nothing = "" -> { }
 
@@ -662,7 +655,7 @@ grammar Yaml {
 	rule After(ds: Vec[Dir], left: i64, m: i64; c: Ctx = Ctx::BlockIn) -> Node =
 		s:count(" ") if(s > 0 && c == Ctx::BlockIn) v:Compact(ds, left, m + 1 + s) -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Propped(ds, left, m; c: c) -> { v }
-		| s:count(" " | "\t") if(s > 0) v:BlockScalar(m) Blanks -> { v }
+		| s:count(" " | "\t") if(s > 0) v:BlockScalar(m) BlockTail -> { v }
 		| s:count(" " | "\t") if(s > 0) v:Inline(ds, left, m) Eol Blanks -> { v }
 		| Eol Blanks v:Block(ds, left, m; c: c) -> { v }
 		| a:here Eol Blanks -> {
@@ -684,20 +677,28 @@ grammar Yaml {
 
 	// A node in flow style inside a block, under a parent at `n`.
 	rule Inline(ds: Vec[Dir], left: i64, n: i64; k: TagKind = TagKind::Untagged) -> Node =
-		v:FlowSeq(ds, left) -> { v }
-		| v:FlowMap(ds, left) -> { v }
-		| v:Double(k) -> { v }
-		| v:Single(k) -> { v }
+		v:FlowSeq(ds, left, n) -> { v }
+		| v:FlowMap(ds, left, n) -> { v }
+		| v:Double(n, k) -> { v }
+		| v:Single(n, k) -> { v }
 		| v:Alias -> { v }
 		| v:Plain(n, false, true; k: k) -> { v }
 
 	// Flow collections: spaces, comments and line breaks between their parts
 	// (`s-separate-lines`); a trailing comma.
-	rule Fs = Sp (Comment? "\n" Sp)* -> { }
+	// A comment needs a space before it; a line the content goes on in is
+	// indented past `n` and is no document marker (`s-flow-line-prefix(n)`,
+	// `c-forbidden`); blank and comment lines between need neither.
+	rule Fs(n: i64) = s:count(" " | "\t") (if(s > 0) Comment)? FsBreak(n)? -> { }
+	rule FsBreak(n: i64) = "\n" Blank* Indent(n) Sp -> { }
+	// The start of a further line of a flow or a quoted node under a parent
+	// at `n`: no document marker, and more than `n` spaces.
+	rule Indent(n: i64) = not(Marker) m:count(" ") if(m > n, "a line indented past its parent") -> { }
 
-	rule FlowSeq(ds: Vec[Dir], left: i64) -> Node =
+	rule FlowSeq(ds: Vec[Dir], left: i64, n: i64) -> Node =
 		a:here "[" if(left > 0, "nesting within the depth limit")
-		Fs first:FlowItem(ds, left - 1) Fs rest:FlowNext(ds, left - 1)* ("," Fs)? "]" b:here -> {
+		Fs(n) first:FlowItem(ds, left - 1, n) Fs(n) rest:FlowNext(ds, left - 1, n)
+		* ("," Fs(n))? "]" b:here -> {
 			let mut all = [first]
 			all.extend(rest)
 			Node {
@@ -711,7 +712,7 @@ grammar Yaml {
 				value: Value::Seq(all),
 			}
 		}
-		| a:here "[" if(left > 0, "nesting within the depth limit") Fs "]" b:here -> {
+		| a:here "[" if(left > 0, "nesting within the depth limit") Fs(n) "]" b:here -> {
 			Node {
 				start: a,
 				end: b,
@@ -723,11 +724,14 @@ grammar Yaml {
 				value: Value::Seq([]),
 			}
 		}
-	rule FlowNext(ds: Vec[Dir], left: i64) -> Node = "," Fs v:FlowItem(ds, left) Fs -> { v }
-	// A flow sequence's entry may be a single pair, `[a: b]` or `[? a : b]`, a
-	// mapping that takes a nesting level.
-	rule FlowItem(ds: Vec[Dir], left: i64) -> Node =
-		if(left > 0, "nesting within the depth limit") a:here "?" not(PlainSafe(true)) Fs p:FlowExplicit(ds, left - 1) -> {
+	rule FlowNext(ds: Vec[Dir], left: i64, n: i64) -> Node = "," Fs(n) v:FlowItem(ds, left, n) Fs(n) -> {
+		v
+	}
+	// A flow sequence's entry may be a single pair, `[a: b]`, `[? a : b]` or
+	// `[: b]` with an empty key (`c-ns-flow-map-empty-key-entry`), a mapping
+	// that takes a nesting level.
+	rule FlowItem(ds: Vec[Dir], left: i64, n: i64) -> Node =
+		if(left > 0, "nesting within the depth limit") a:here "?" not(PlainSafe(true)) Fs(n) p:FlowExplicit(ds, left - 1, n) -> {
 			let b = p.value.end
 			Node {
 				start: a,
@@ -740,7 +744,8 @@ grammar Yaml {
 				value: Value::Map([p]),
 			}
 		}
-		| k:FlowAny(ds, left) t:FlowTail(ds, left - 1)?
+		| kt:text(k:FlowAny(ds, left, n)) t:FlowTail(ds, left - 1, n; pair: true)?
+		if(t == null || one_line(kt), "an implicit key on one line")
 		if(pair_fits(left, k, t), "nesting within the depth limit") -> {
 			let a = k.start
 			match t {
@@ -760,12 +765,40 @@ grammar Yaml {
 				}
 			}
 		}
+		| if(left > 0, "nesting within the depth limit") a:here t:FlowTail(ds, left - 1, n; pair: true) -> {
+			let b = t.end
+			Node {
+				start: a,
+				end: b,
+				anchor: null,
+				tag: null,
+				flow: true,
+				raw: "",
+				style: Style::Plain,
+				value: Value::Map([
+					Entry {
+						key: Node {
+							start: a,
+							end: a,
+							anchor: null,
+							tag: null,
+							flow: false,
+							raw: "",
+							style: Style::Plain,
+							value: Value::Null,
+						},
+						value: t,
+					},
+				]),
+			}
+		}
 	// A pair's `:` and its value, or none, `Null` where the `:` ends
 	// (`c-ns-flow-map-separate-value`). The key before it is read once, so a
-	// nested key is not read again for each way its entry may end.
-	rule FlowTail(ds: Vec[Dir], left: i64) -> Node =
-		Fs ":" Fs v:FlowAny(ds, left) -> { v }
-		| Fs ":" b:here -> {
+	// nested key is not read again for each way its entry may end. A pair in
+	// a sequence (`pair`) has its `:` on its key's line (`ns-flow-pair-entry`).
+	rule FlowTail(ds: Vec[Dir], left: i64, n: i64; pair: bool = false) -> Node =
+		KeyGap(n, pair) ":" Fs(n) v:FlowAny(ds, left, n) -> { v }
+		| KeyGap(n, pair) ":" b:here -> {
 			Node {
 				start: b,
 				end: b,
@@ -778,10 +811,12 @@ grammar Yaml {
 			}
 		}
 
-	rule FlowMap(ds: Vec[Dir], left: i64) -> Node =
+	rule KeyGap(n: i64, pair: bool) = if(pair) Sp -> { } | if(!pair) Fs(n) -> { }
+
+	rule FlowMap(ds: Vec[Dir], left: i64, n: i64) -> Node =
 		a:here "{" if(left > 0, "nesting within the depth limit")
-		Fs first:FlowEntry(ds, left - 1) Fs rest:FlowEntryNext(ds, left - 1)
-		* ("," Fs)? "}" b:here -> {
+		Fs(n) first:FlowEntry(ds, left - 1, n) Fs(n) rest:FlowEntryNext(ds, left - 1, n)
+		* ("," Fs(n))? "}" b:here -> {
 			let mut all = [first]
 			all.extend(rest)
 			Node {
@@ -795,7 +830,7 @@ grammar Yaml {
 				value: Value::Map(all),
 			}
 		}
-		| a:here "{" if(left > 0, "nesting within the depth limit") Fs "}" b:here -> {
+		| a:here "{" if(left > 0, "nesting within the depth limit") Fs(n) "}" b:here -> {
 			Node {
 				start: a,
 				end: b,
@@ -807,15 +842,17 @@ grammar Yaml {
 				value: Value::Map([]),
 			}
 		}
-	rule FlowEntryNext(ds: Vec[Dir], left: i64) -> Entry = "," Fs e:FlowEntry(ds, left) Fs -> { e }
+	rule FlowEntryNext(ds: Vec[Dir], left: i64, n: i64) -> Entry = "," Fs(n) e:FlowEntry(ds, left, n) Fs(n) -> {
+		e
+	}
 	// An explicit entry, `? a : b`, or an implicit one.
-	rule FlowEntry(ds: Vec[Dir], left: i64) -> Entry =
-		"?" not(PlainSafe(true)) Fs e:FlowExplicit(ds, left) -> { e }
-		| e:FlowImplicit(ds, left) -> { e }
+	rule FlowEntry(ds: Vec[Dir], left: i64, n: i64) -> Entry =
+		"?" not(PlainSafe(true)) Fs(n) e:FlowExplicit(ds, left, n) -> { e }
+		| e:FlowImplicit(ds, left, n) -> { e }
 	// What follows `?` (`ns-flow-map-explicit-entry`): an implicit entry, or
 	// nothing, an empty key and value.
-	rule FlowExplicit(ds: Vec[Dir], left: i64) -> Entry =
-		e:FlowImplicit(ds, left) -> { e }
+	rule FlowExplicit(ds: Vec[Dir], left: i64, n: i64) -> Entry =
+		e:FlowImplicit(ds, left, n) -> { e }
 		| a:here -> {
 			Entry {
 				key: Node {
@@ -840,9 +877,10 @@ grammar Yaml {
 				},
 			}
 		}
-	// `{a: b}`, `{a: }`, `{a}` and `{: b}`: a missing key or value is `Null`.
-	rule FlowImplicit(ds: Vec[Dir], left: i64) -> Entry =
-		k:FlowAny(ds, left) t:FlowTail(ds, left)? -> {
+	// `{a: b}`, `{a: }`, `{a}`, `{: b}` and `{:}`: a missing key or value is
+	// `Null`.
+	rule FlowImplicit(ds: Vec[Dir], left: i64, n: i64) -> Entry =
+		k:FlowAny(ds, left, n) t:FlowTail(ds, left, n)? -> {
 			let b = k.end
 			Entry {
 				key: k,
@@ -859,7 +897,7 @@ grammar Yaml {
 					},
 			}
 		}
-		| a:here ":" Fs v:FlowAny(ds, left) -> {
+		| a:here t:FlowTail(ds, left, n) -> {
 			Entry {
 				key: Node {
 					start: a,
@@ -871,14 +909,14 @@ grammar Yaml {
 					style: Style::Plain,
 					value: Value::Null,
 				},
-				value: v,
+				value: t,
 			}
 		}
 
 	// A flow node, with properties or without; properties alone are an empty
 	// node.
-	rule FlowAny(ds: Vec[Dir], left: i64) -> Node =
-		p:Props(ds) Fs v:FlowNode(ds, left, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
+	rule FlowAny(ds: Vec[Dir], left: i64, n: i64) -> Node =
+		p:Props(ds) Fs(n) v:FlowNode(ds, left, n, tag_kind(ds, p.tag)) if(fits_node(tag_kind(ds, p.tag), v), "a node its tag fits") -> {
 			Node {
 				start: p.start,
 				end: v.end,
@@ -919,14 +957,14 @@ grammar Yaml {
 				value: v,
 			}
 		}
-		| v:FlowNode(ds, left, TagKind::Untagged) -> { v }
-	rule FlowNode(ds: Vec[Dir], left: i64, k: TagKind) -> Node =
-		v:FlowSeq(ds, left) -> { v }
-		| v:FlowMap(ds, left) -> { v }
-		| v:Double(k) -> { v }
-		| v:Single(k) -> { v }
+		| v:FlowNode(ds, left, n, TagKind::Untagged) -> { v }
+	rule FlowNode(ds: Vec[Dir], left: i64, n: i64, k: TagKind) -> Node =
+		v:FlowSeq(ds, left, n) -> { v }
+		| v:FlowMap(ds, left, n) -> { v }
+		| v:Double(n, k) -> { v }
+		| v:Single(n, k) -> { v }
 		| v:Alias -> { v }
-		| v:Plain(-1, true, true; k: k) -> { v }
+		| v:Plain(n, true, true; k: k) -> { v }
 
 	// `c-double-quoted`: `raw` is the text between the quotes, as written. A
 	// scalar with neither an escape nor a line break is its own value, a view;
@@ -937,7 +975,7 @@ grammar Yaml {
 	// proved by the guard before it.
 	// `k` is the node's tag: a core tag that fixes a kind other than a string
 	// reads the text between the quotes as that kind, its shape checked here.
-	rule Double(k: TagKind) -> Node =
+	rule Double(n: i64, k: TagKind) -> Node =
 		a:here "\"" s:text(DoublePlain*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, false) {
 				Kind::Null => Value::Null
@@ -964,7 +1002,7 @@ grammar Yaml {
 				value: v,
 			}
 		}
-		| a:here "\"" s:text(parts:DoublePart*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
+		| a:here "\"" s:text(parts:DoublePart(n)*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
 			let mut d = String()
 			for p in parts {
 				d.push_str(p)
@@ -997,18 +1035,19 @@ grammar Yaml {
 	rule DoublePlain = x:any if(x != '"' && x != '\\' && x != '\n') -> { }
 	// One part of a double-quoted scalar's value (YAML 1.2.2 7.3.1): a run of
 	// characters, spaces inside a line, a folded line break (6.5), an escaped
-	// line break, an escape.
-	rule DoublePart -> String =
+	// line break, an escape. A further line is indented past the parent at
+	// `n` (`s-flow-line-prefix(n)`) and is no document marker.
+	rule DoublePart(n: i64) -> String =
 		t:text(DoubleWord+) -> { t.clone() }
 		| w:text((" " | "\t")+) not("\n") -> { w.clone() }
-		| (" " | "\t")* "\n" n:count(Empty) (" " | "\t")* -> {
-			if n == 0 {
+		| (" " | "\t")* "\n" e:count(Empty) Indent(n) (" " | "\t")* -> {
+			if e == 0 {
 				" "
 			} else {
-				breaks(n)
+				breaks(e)
 			}
 		}
-		| "\\\n" n:count(Empty) (" " | "\t")* -> { breaks(n) }
+		| "\\\n" e:count(Empty) Indent(n) (" " | "\t")* -> { breaks(e) }
 		| "\\x" v:Hex2 if(v >= 0 && v <= 0xFF) -> { one(scalar::from(v)) }
 		| "\\u" v:Hex4 if(v >= 0 && v <= 0xFFFF && (v < 0xD800 || v > 0xDFFF)) -> {
 			one(scalar::from(v))
@@ -1050,6 +1089,10 @@ grammar Yaml {
 				}),
 			}
 		}
+	// What may follow a block scalar (`l-chomped-empty`): its lines of spaces
+	// are its own, then comment lines, the first at most as indented as its
+	// content; a line of tabs is no empty line, and none follows (8.1.1.2).
+	rule BlockTail = (" " | "\t")* Comment Eol Blanks -> { } | " "* eof -> { } | "" -> { }
 	rule BlockStyle -> Style = "|" -> { Style::Literal } | ">" -> { Style::Folded }
 	// `c-b-block-header`: the two indicators in either order, each optional.
 	rule Head -> Head =
@@ -1062,24 +1105,28 @@ grammar Yaml {
 	rule ChompInd -> Chomp = "-" -> { Chomp::Strip } | "+" -> { Chomp::Keep }
 	// The rest of the header's line: a comment, after a space.
 	rule HeadEnd = s:count(" " | "\t") (if(s > 0) Comment)? ("\n" | eof) -> { }
-	// The content lines; their indentation is the result, 0 where there is no
-	// text line. Without an indicator, the leading empty lines may not be
+	// The content lines; their indentation is the result, where there is no
+	// text line the most spaces an empty line holds, so each is empty. Without an indicator, the leading empty lines may not be
 	// indented past the first text line (`l-literal-content`).
 	rule BlockBody(n: i64, d: i64) -> i64 =
 		if(d > 0) BlockLine(explicit_indent(n, d))* -> { explicit_indent(n, d) }
 		| lead:LeadLine* not(Marker) m:count(" ") if(m > n && m >= most(lead)) x:any if(x != '\n') until("\n" | eof) ("\n" | eof) BlockLine(m)* -> {
 			m
 		}
-		| LeadLine* -> { 0 }
-	rule LeadLine -> i64 = s:count(" ") "\n" -> { s }
+		| lead:LeadLine* not(TextLine(n)) -> { most(lead) }
+	// A line of text indented past `n`: where it follows empty lines indented
+	// further, those are an error, not the scalar's lines (8.1.1.1).
+	rule TextLine(n: i64) = not(Marker) m:count(" ") if(m > n) x:any if(x != '\n') -> { }
+	// An empty line; the last may end at the end of the input.
+	rule LeadLine -> i64 = s:count(" ") "\n" -> { s } | s:count(" ") if(s > 0) eof -> { s }
 	// A text line indented `k` or more, or an empty line indented less.
 	rule BlockLine(k: i64) =
 		not(Marker) " "{k} x:any if(x != '\n') until("\n" | eof) ("\n" | eof) -> { }
 		| " "* "\n" -> { }
 
 	// `c-single-quoted`: `''` is a quote.
-	rule Single(k: TagKind) -> Node =
-		a:here "'" s:text(SingleChar*) "'" b:here if(fits(k, s), "a scalar its tag fits") -> {
+	rule Single(n: i64, k: TagKind) -> Node =
+		a:here "'" s:text(SingleChar(n)*) "'" b:here if(fits(k, s), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, false) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
@@ -1105,7 +1152,10 @@ grammar Yaml {
 				value: v,
 			}
 		}
-	rule SingleChar = "''" -> { } | x:any if(x != '\'') -> { }
+	rule SingleChar(n: i64) =
+		"''" -> { }
+		| "\n" Empty* Indent(n) -> { }
+		| x:any if(x != '\'' && x != '\n') -> { }
 
 	// A plain scalar, resolved by the core schema. In flow the flow
 	// indicators end it; `multi` lets it go on over lines indented past `n`.
@@ -1150,8 +1200,13 @@ grammar Yaml {
 	rule PlainMore(n: i64, flow: bool, multi: bool) =
 		PlainChar(flow) -> { }
 		| (" " | "\t")+ PlainChar(flow; after_space: true) -> { }
-		| if(multi) (" " | "\t")* "\n" Empty* not(Marker) m:count(" ") if(flow || m > n) (" " | "\t")* PlainChar(flow; after_space: true) -> { }
+		| if(multi) (" " | "\t")* "\n" Empty* not(Marker) m:count(" ") if(m > n) (" " | "\t")* PlainChar(flow; after_space: true) -> { }
 	rule Empty = (" " | "\t")* "\n" -> { }
+}
+
+// Whether an implicit key's text stays on its line.
+fn one_line(t: String) -> bool sync {
+	return !t.contains('\n')
 }
 
 fn is_word(x: scalar) -> bool sync {
@@ -1305,6 +1360,47 @@ fn empty_fits(k: TagKind) -> bool sync {
 		TagKind::Seq => false
 		TagKind::Map => false
 		else => true
+	}
+}
+
+// The kind a node's own tag `t` says, or, with none, the kind `k` a property
+// line above gave it.
+fn kind_with(ds: ref Vec[Dir], t: String?, k: TagKind) -> TagKind sync {
+	return match t {
+		null => k
+		x => tag_kind(ds, t)
+	}
+}
+
+// An empty node with properties `p` and kind `k`: null, or with `!!str` or
+// `!` the empty string.
+fn empty_of(k: TagKind, p: Props) -> Node sync {
+	let v = match k {
+		TagKind::Str => Value::Str(Scalar {
+			raw: "",
+			value: "",
+			style: Style::Plain,
+			indent: 0,
+			chomp: Chomp::Clip,
+		})
+		TagKind::NonSpecific => Value::Str(Scalar {
+			raw: "",
+			value: "",
+			style: Style::Plain,
+			indent: 0,
+			chomp: Chomp::Clip,
+		})
+		else => Value::Null
+	}
+	return Node {
+		start: p.start,
+		end: p.end,
+		anchor: p.anchor,
+		tag: p.tag,
+		flow: false,
+		raw: "",
+		style: Style::Plain,
+		value: v,
 	}
 }
 
@@ -2275,21 +2371,30 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 	let mut lines: Vec[String] = []
 	let mut line = String()
 	let mut column = 0
+	// Whether the line read so far holds only spaces.
+	let mut blank = true
 	for c in raw.chars() {
 		if c == '\n' {
 			lines.push(line.clone())
 			line = String()
 			column = 0
+			blank = true
 		} else {
 			if column >= indent {
 				line.push(c)
 			}
+			if c != ' ' {
+				blank = false
+			}
 			column += 1
 		}
 	}
-	// The last line has no break only at the end of the input.
-	let broken = line.len() == 0
-	if !broken {
+	// The last line has no break only at the end of the input; one that
+	// holds only spaces there counts as broken, an empty line or one spaces
+	// past the indentation (`l-chomped-empty`), as the suite's reference
+	// parser reads it.
+	let broken = line.len() == 0 || blank
+	if column > 0 {
 		lines.push(line.clone())
 	}
 	let n = lines.len() as i64

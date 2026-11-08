@@ -340,7 +340,7 @@ fn panics_blocks(expr: ref Expr) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []
     match expr {
         Expr::Block(block, _) => out.push(block),
-        Expr::AsyncGroup(block, _, _) => out.push(block),
+        Expr::AsyncGroup(block, _, _, _, _) => out.push(block),
         Expr::Unsafe(block, _) => out.push(block),
         Expr::Overlap(block, _) => out.push(block),
         Expr::Closure { body, .. } => out.push(body),

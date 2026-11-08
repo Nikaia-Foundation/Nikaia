@@ -156,7 +156,7 @@ panics = false
 sync = true
 touches = ["args read"]
 provenance = "trusted"
-signature = "() -> Args"
+signature = "() -> cli::Args"
 
 # The argument at a position, and **there may not be one** - which is the half
 # the corpus writes every time: `cli::args().nth(1) ?? "default"` opens six of
@@ -170,7 +170,7 @@ signature = "() -> Args"
 #
 # There may not be one, which is why this hands back a `String?`: the shape the
 # examples write is `cli::args().nth(1) ?? some_default`.
-[fn."Args::nth"]
+[fn."cli::Args::nth"]
 pub = true
 panics = false
 sync = true
@@ -180,7 +180,7 @@ signature = "(ref mut self, at: i64) -> String?"
 
 # How many arguments are left to read, the program's name among them until it
 # is read: `cli::args().len()` is the whole command line's count.
-[fn."Args::len"]
+[fn."cli::Args::len"]
 pub = true
 panics = false
 sync = true
@@ -189,7 +189,7 @@ provenance = "trusted"
 signature = "(ref self) -> i64"
 
 # Whether no argument is left to read.
-[fn."Args::is_empty"]
+[fn."cli::Args::is_empty"]
 pub = true
 panics = false
 sync = true
@@ -5419,6 +5419,51 @@ crosses = true
 compares = true
 copies = true
 variants = ["Keep", "Cancel"]
+
+# **What the runtime counts for an admission strategy** (ADR-async-5 D18):
+# the tasks of the form running and waiting, and the descriptors the process
+# holds and may hold (`0` allowed where the system does not say). The memory
+# budget joins it with #490.
+[type."task::Load"]
+pub = true
+crosses = true
+compares = true
+copies = true
+fields = ["pub running: i64", "pub waiting: i64", "pub descriptors_in_use: i64", "pub descriptors_allowed: i64"]
+
+# **How many tasks may start until the next decision** (ADR-async-5 D18).
+[type."task::Decision"]
+pub = true
+crosses = true
+compares = true
+copies = true
+fields = ["pub start: i64"]
+
+# **Who decides when the next task of a form starts** (ADR-async-5 D18):
+# `async(admission: s) { … }` takes one; asked where a task wants to start and
+# the last decision's starts are used up. Where none runs, one starts whatever
+# it says.
+[trait."task::Admission"]
+
+[fn."task::Admission::decide"]
+pub = true
+sync = true
+signature = "(mut self, load: task::Load) -> task::Decision"
+
+# **`std`'s strategy** (ADR-async-5 D18): tasks start while descriptors are
+# free, a quarter of the free ones at a time, keeping a reserve.
+[type."task::Adaptive"]
+pub = true
+crosses = true
+
+# `std`'s strategy, the one an `async { … }` without `admission:` has.
+[fn."task::Adaptive"]
+pub = true
+sync = true
+touches = []
+signature = "() -> task::Adaptive"
+
+[impl."task::Admission for task::Adaptive"]
 
 # **What `join(within:)` throws when the time ran out** (ADR-346 D4).
 [type."task::TimedOut"]

@@ -1,0 +1,40 @@
+// `admission:` on `async { … }` (ADR-async-5 D18, #986): a strategy of the
+// program's own that lets a task start only where none runs, so of three tasks
+// that pause never more than one runs at once.
+use std::time
+
+struct OneAtATime {}
+
+impl task::Admission for OneAtATime {
+	fn decide(mut self, load: task::Load) -> task::Decision sync {
+		if load.running == 0 {
+			return task::Decision { start: 1 }
+		}
+		return task::Decision { start: 0 }
+	}
+}
+
+fn work(n: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+	now.update fn(mut v) { v += 1 }
+	let seen = now.get()
+	most.update fn(mut m) {
+		if seen > m {
+			m = seen
+		}
+	}
+	time::sleep(1.millis())
+	now.update fn(mut v) { v -= 1 }
+	return n
+}
+
+fn main() throws {
+	let now = SharedMut(0)
+	let most = SharedMut(0)
+	let total = async(admission: OneAtATime {}) {
+		let a = async work(1, now, most)
+		let b = async work(2, now, most)
+		let c = async work(3, now, most)
+		a + b + c
+	}
+	println(f"total {total}, at most {most.get()} at once")
+}
