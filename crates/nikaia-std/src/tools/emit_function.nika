@@ -512,7 +512,10 @@ impl EmitState {
                     if self.carries_a_view(world, args[at].ty) && self.borrows(world, args[at].ty.name) && args[at].ty.generics.is_empty() {
                         match ret_type {
                             each => {
-                                source_nested = each.name != args[at].ty.name || !emit_holds_a_ref_of_a_type(world, each)
+                                // A result both kinds flow into may hand back
+                                // the parameter's own text, so it is a borrow
+                                // of the parameter (#1341).
+                                source_nested = !each.either && (each.name != args[at].ty.name || !emit_holds_a_ref_of_a_type(world, each))
                             },
                             null => {},
                         }
