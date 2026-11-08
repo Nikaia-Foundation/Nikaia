@@ -46,6 +46,14 @@ fn check_reference_a_library_text_view(world: ref CheckWorld, given: ref Expr, f
     return !world.own.functions.contains_key(callee) && world.library.functions.contains_key(callee)
 }
 
+/// Whether a type is the one text view, `str` (ADR-184 D2).
+fn check_reference_a_plain_text_view(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Named { name, args, view } => view && args.len() == 0 && name == TEXT_VIEW,
+        else => false,
+    }
+}
+
 fn check_reference_nullable(ty: ref Ty) -> bool {
     return match ty {
         Ty::Nullable(_) => true,
@@ -305,7 +313,10 @@ impl CheckState {
             // **An argument that is already a view is passed as it is** (Part
             // I 6.6, #872): a `for` element `ref Person` handed to a `Person`
             // the callee only reads is lent, and the view is the reference.
-            if !fits && !wrote_a_reference && found.is_a_view() {
+            // **Not a view of text** (ADR-282 D27, #1388): the one text view
+            // unviewed is `String`, which a keeper asks for, and a described
+            // crate's `String` is refused with the copy named, not lent.
+            if !fits && !wrote_a_reference && found.is_a_view() && !check_reference_a_plain_text_view(found) {
                 let owned = unviewed_type(found)
                 if owned.fits(want) || self.fits_through_deref(world, owned, want) {
                     already_a_view = true
