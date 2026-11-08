@@ -152,6 +152,13 @@ pub struct EmitState {
     pub uses_std: bool,
     /// The file is `std` itself.
     pub is_std: bool,
+    /// The path of the package's root a generated sum is written below:
+    /// `crate`, or `crate::<native>` under a hand-written root (ADR-393 D7,
+    /// #1447).
+    pub crate_root: String,
+    /// **The package is offered to Rust** (`artifact = "rust-library"`,
+    /// ADR-393 D1): its error sums are `pub`, as `std`'s are (#1447).
+    pub offered_to_rust: bool,
     /// Some function in the file can throw.
     pub fails: bool,
     /// The whole input is trusted.
