@@ -26,7 +26,7 @@ description: >-
       <span class="safe-chip safe-chip-build">Measured</span>
       <h2>1BRC study: the Nikaia compiler vs. human vs. AI</h2>
       <p><strong>The study sets Nikaia's programs for the One Billion Row Challenge against Rust written by people and by an AI assistant.</strong></p>
-      <p>It shows how well the compiler optimises a plain program on its own, what hand-tuned Nikaia reaches today, safe and unsafe, and where the journey goes. Along the way it shows what Rust can do, who is ahead, and which tricks the fastest programs use: searching sixteen bytes at once, a name read as two words, a temperature without a branch, checks proved instead of made. And how Nikaia lets a program use each of them, most without <code>unsafe</code>.</p>
+      <p>It shows how well the compiler optimises a plain program on its own, what hand-tuned Nikaia reaches today, safe and unsafe, and where the journey goes. Along the way it shows what Rust can do, who is ahead, and which tricks the fastest programs use, such as searching sixteen bytes at once, a name read as two words, a temperature without a branch and checks proved instead of made. And how Nikaia lets a program use each of them, most without <code>unsafe</code>.</p>
     </div>
     <div class="home-code-side">
 <div class="safe-stat"><p class="stat-value">106&nbsp;/&nbsp;131</p><p class="stat-label">instructions per row at <code>x86-64</code>: safe Nikaia / the fastest Rust written by a person</p></div>
@@ -42,8 +42,8 @@ description: >-
       <span class="safe-chip safe-chip-build">Parallelism by configuration</span>
       <h2>One core or all of them</h2>
       <p><strong>Code written for one core usually has to be rewritten, or at least re-checked, to use several.</strong></p>
-      <p>The choice is one line in <code>nikaia.toml</code>: <code>user-parallelism = "no"</code> (the default) or <code>"yes"</code>. At <code>no</code>, two pieces of your code are never running at the same moment. At <code>yes</code>, a multi-threaded runtime spreads the work over the cores, and thread safety is checked at compile time. A library built at <code>no</code> is still checked against the rules parallel code needs, so it also works when a program built at <code>yes</code> uses it.</p>
-      <p>The setting allows parallelism; it does not set a thread count. How many threads serve <code>yes</code> is the runtime&rsquo;s choice, because it depends on the machine. At <code>no</code>, only your own code is limited to one thread: waiting for I/O happens on the runtime&rsquo;s own threads, and the standard library may still use every core.</p>
+      <p>The choice is one line in <code>nikaia.toml</code>, either <code>user-parallelism = "no"</code> (the default) or <code>"yes"</code>. At <code>no</code>, two pieces of your code are never running at the same moment. At <code>yes</code>, a multi-threaded runtime spreads the work over the cores, and thread safety is checked at compile time. A library built at <code>no</code> is still checked against the rules parallel code needs, so it also works when a program built at <code>yes</code> uses it.</p>
+      <p>The setting allows parallelism; it does not set a thread count. How many threads serve <code>yes</code> is the runtime&rsquo;s choice, because it depends on the machine. At <code>no</code>, only your own code is limited to one thread, since waiting for I/O happens on the runtime&rsquo;s own threads and the standard library may still use every core.</p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-toml">[build]
@@ -74,9 +74,9 @@ user-parallelism = "no"    # or "yes"</code></pre></div>
     <div class="home-split-text">
       <span class="safe-chip safe-chip-part">Off by default</span>
       <h2>Index and overflow checks removed where proved safe</h2>
-      <p><strong>Safety checks cost time: an index check on every access, an overflow check on every <code>+</code>.</strong></p>
+      <p><strong>Safety checks cost time, such as an index check on every access and an overflow check on every <code>+</code>.</strong></p>
       <p>Nikaia keeps the checks, and drops one only where it has proved it cannot fail. <code>remove-bounds-checks:on</code> writes an index without its check where the compiler has proved <code>0 &lt;= i &lt; xs.len()</code>. <code>remove-overflow-checks:on</code> does the same for a <code>+</code>, <code>-</code> or <code>*</code> whose result stays inside its type. A check that is not proved is not dropped.</p>
-      <p>Both are off by default: you ask for them in <code>nikaia.toml</code>. What is proved does not depend on them; they only choose what is written.</p>
+      <p>Both are off by default, and you ask for them in <code>nikaia.toml</code>. What is proved does not depend on them; they only choose what is written.</p>
     </div>
     <div class="home-code-side">
 <div class="home-code markdown-body"><pre><code class="language-toml">[build]
