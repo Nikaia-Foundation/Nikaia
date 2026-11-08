@@ -143,6 +143,12 @@ pub struct CheckPendingCoalesce {
     pub opened: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckPendingConcat {
+    pub node: i64,
+    pub taken: CheckTaken,
+}
+
 pub fn a_path_overlaps(read: &str, taken: &str) -> bool {
     if read == taken { return true; }
     if read.starts_with(taken) && nikaia_std::index::or(read.strip_prefix(taken), || "").starts_with('.') { return true; }

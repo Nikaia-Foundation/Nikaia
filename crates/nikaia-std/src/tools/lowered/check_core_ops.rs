@@ -285,6 +285,8 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
     }
     if check_core_ops_add(&op) && (is_text_type(left) || is_text_type(right)) {
         state.facts.concatenations.insert(at.start as i64);
+        state.a_concatenated_name(world, lhs, left, span);
+        state.a_concatenated_name(world, rhs, right, span);
         return check_core_ops_named("String");
     }
     if check_core_ops_arithmetic(&op) && (check_core_ops_has_no_arithmetic(world, left) || check_core_ops_has_no_arithmetic(world, right)) {
@@ -657,6 +659,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     if nullable && from_a_map && check_core_ops_variable(fallback) && !other.is_a_view() && check_core_ops_held_matches(&inner, &other) && moves(&other) {
         state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
         return view_of_type(&other);
+    }
+    if nullable && from_a_map && check_core_ops_variable(fallback) && (check_core_ops_plain_text(&inner) && check_core_ops_plain_text(&other) || inner == check_core_ops_view("str") && other == check_core_ops_view("str")) {
+        state.facts.lent_map_fallbacks.insert(id_of(expr) as i64);
+        return check_core_ops_view("str");
     }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {

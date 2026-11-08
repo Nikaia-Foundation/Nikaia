@@ -198,6 +198,8 @@ pub struct CheckFlow {
     pub read_index: collections::BTreeMap[(i64, i64), i64],
     /// `??`s that may lend their left side (ADR-279 D5).
     pub pending_coalesces: Vec[CheckPendingCoalesce],
+    /// Names of owned text beside a `+` that are lent if read again (#1324).
+    pub pending_concatenations: Vec[CheckPendingConcat],
     /// **Bindings a `let` declared as an owned `T?`** (#1291): what they hold
     /// was copied out at the `let`, so a read of them is not copied again.
     pub declared_options: collections::BTreeSet[i64],
@@ -413,6 +415,7 @@ impl CheckFlow {
             choice_arms: collections::BTreeMap(),
             read_index: collections::BTreeMap(),
             pending_coalesces: Vec(),
+            pending_concatenations: Vec(),
             declared_options: collections::BTreeSet(),
             writing_index: false,
             read_a_map: false,
