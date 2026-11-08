@@ -56,7 +56,8 @@ pub fn viewed_from_type(view: ref Ty) -> Vec[Ty] {
 /// The type itself, read without `ref`.
 pub fn unviewed_type(ty: ref Ty) -> Ty {
     return match ty {
-        Ty::Named { name, args, .. } => Ty::Named { name: name.clone(), args: args.clone(), view: false },
+        // The text view's own is `String` (ADR-184 D2, #1388).
+        Ty::Named { name, args, view } => if view && args.len() == 0 && name == TEXT_VIEW { Ty::Named { name: TEXT.clone(), args: [], view: false } } else { Ty::Named { name: name.clone(), args: args.clone(), view: false } },
         else => ty.clone(),
     }
 }

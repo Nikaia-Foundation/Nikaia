@@ -244,6 +244,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
+* Whether a body keeps a list's length is answered by `changes_length_in` plus `rebinds` (`bounds_body.nika`, `bounds_basic.nika`); parameters are registered in `prover_walk.nika`'s function walk, near `has_a_length`. (issue-1375)
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 
@@ -268,6 +269,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
   `entry.0`/`entry.1`.
 * **Delete the dead locals** a replaced block leaves, and re-grep function names
   instead of trusting line numbers from an earlier listing.
+* the old binary lowers `for x in xs.f[a..]` wrong (NK1343, `expected Symbol, found &Symbol`); after the checker fix in fb2698e9, the first build of a tool that uses it needs the index-skip form, then a switch back. (issue-1383)
 
 ### Syntax gaps of tools/*.nika
 

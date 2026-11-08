@@ -1025,6 +1025,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
     check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     let substituted = substitute(&result, &bound);
+    state.flow.text_slot = views_text_slots(&result, &bound, true);
+    state.flow.text_walk = views_text_slots(&result, &bound, false);
     let shaped = shape_through(contract, on, &found, substituted);
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
     state.stamped_through(contract, &found, paused)

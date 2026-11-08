@@ -1170,11 +1170,31 @@ pub(crate) fn substituted(name: &str, view: bool, bound: &collections::BTreeMap<
     }, || Ty::Unknown);
     if view {
         match found {
-            Ty::Named { ref name, ref args, .. } => { return Ty::Named { name: name.to_string(), args: args.to_owned(), view: true }; },
+            Ty::Named { ref name, ref args, .. } => { return viewed_name(name, args, false); },
             _ => { },
         }
     }
     found.clone()
+}
+
+pub fn views_text_slots(ty: &Ty, bound: &collections::BTreeMap<String, Ty>, owned: bool) -> bool {
+    match ty {
+        Ty::Var { name, view } => { let view = *view; view && text_bound(name, bound, owned) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); views_text_slots(inner, bound, owned) },
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); views_text_slots(item, bound, owned) },
+        _ => false,
+    }
+}
+
+pub(crate) fn text_bound(name: &str, bound: &collections::BTreeMap<String, Ty>, owned: bool) -> bool {
+    let found = nikaia_std::index::or(match *nikaia_std::index::get(&bound, name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || Ty::Unknown);
+    match found {
+        Ty::Named { name: ref held, ref args, view } => args.is_empty() && (!view && (held == TEXT || held.ends_with("::String")) || !owned && view && held == TEXT_VIEW),
+        _ => false,
+    }
 }
 
 pub(crate) fn substituted_each(parts: &[Ty], bound: &collections::BTreeMap<String, Ty>) -> Vec<Ty> {

@@ -1,0 +1,42 @@
+use std::collections
+
+// A collect of text views read from `String` slots lowers to the `&str`
+// a list of text views holds (#1388, ADR-282 D1), on both settings: from a
+// list's `iter()`, through `filter` and `map`, and from a map's `values()`
+// and `keys()`; from a list of literals too, whose items are `&&str` below.
+fn names() -> Vec[String] {
+    let mut out: Vec[String] = []
+    for i in 0..<3 {
+        out.push(f"n{i}")
+    }
+    return out
+}
+
+fn longest(xs: ref Vec[ref String]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        if x.len() > n {
+            n = x.len()
+        }
+    }
+    return n
+}
+
+fn main() throws {
+    let ws = names()
+    let all: Vec[ref String] = ws.iter().collect()
+    let some: Vec[ref String] = ws.iter().filter(fn(w) { w != "n0" }).collect()
+    let trimmed: Vec[ref String] = ws.iter().map(fn(w) { w.trim() }).collect()
+    let g = ws.iter().collect()
+    println(f"{all.len()} {some.len()} {trimmed.len()} {longest(g)}")
+    let mut m: collections::BTreeMap[String, String] = collections::BTreeMap()
+    m.insert(f"k{1}", f"value{1}")
+    let vs: Vec[ref String] = m.values().collect()
+    let ks: Vec[ref String] = m.keys().collect()
+    println(f"{longest(vs)} {ks[0]}")
+    let lits: Vec[String] = ["a", "bc", "def"]
+    let long: Vec[ref String] = lits.iter().filter(fn(w) { w.len() > 1 }).collect()
+    for x in long {
+        println(x)
+    }
+}

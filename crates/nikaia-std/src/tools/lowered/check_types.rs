@@ -37,7 +37,7 @@ pub fn viewed_from_type(view: &Ty) -> Vec<Ty> {
 
 pub fn unviewed_type(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, .. } => Ty::Named { name: name.to_string(), args: args.to_owned(), view: false },
+        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && name == TEXT_VIEW { Ty::Named { name: TEXT.to_string(), args: vec![], view: false } } else { Ty::Named { name: name.to_string(), args: args.to_owned(), view: false } } },
         _ => ty.clone(),
     }
 }

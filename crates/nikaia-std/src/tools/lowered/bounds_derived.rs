@@ -57,7 +57,13 @@ pub fn derived_of(program: &Program, beside: &[&Program], beside_words: &[&winno
             Item::Impl { methods, .. } => {
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { config, body, .. } => { called.push(derived_body(config, body, words, &mut everywhere)); },
+                        Item::Fn { name, config, body, .. } => {
+                            let name = *name;
+                            called.push(derived_body(config, body, words, &mut everywhere));
+                            let named = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                            let text = words.resolve(named).to_string();
+                            defined.insert(text.to_string(), nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) + 1);
+                        },
                         _ => { called.push(collections::BTreeSet::new()); },
                     }
                 }
@@ -75,27 +81,41 @@ pub fn derived_of(program: &Program, beside: &[&Program], beside_words: &[&winno
     let mut position: i64 = 0;
     for item in program.items.iter() {
         match &item.node {
-            Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
-                let is_extern = *is_extern; let is_public = *is_public; let name = *name; let spread = *spread;
-                let at: i64 = position;
+            Item::Fn { .. } => {
+                derived_candidate(&mut derived, &item.node, position, false, &defined, &everywhere, words);
                 position += 1;
-                let named = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let text = words.resolve(named).to_string();
-                if is_public || is_extern || receiver.is_some() || spread.is_some() || !config.is_empty() || args.is_empty() { continue; }
-                if nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) != 1 || everywhere.values.contains(&text) { continue; }
-                let sites = match *nikaia_std::index::get(&everywhere.calls, &text) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let claims = derived_claims(args, body, words);
-                if sites.is_empty() || claims.is_empty() { continue; }
-                let mut params: Vec<String> = vec![];
-                for arg in args.iter() { params.push(words.resolve(arg.name).to_string()); }
-                derived.functions.insert(text.to_string(), DerivedFunction { name: text.to_string(), key: nikaia_std::index::get(&args, 0).span.start as i64, position: at, params, claims, sites: sites.to_owned() });
             },
-            Item::Impl { methods, .. } => { position += methods.len() as i64; },
+            Item::Impl { trait_name, methods, .. } => {
+                let trait_name = *trait_name;
+                for method in methods.iter() {
+                    if trait_name.is_none() { derived_candidate(&mut derived, &method.node, position, true, &defined, &everywhere, words); }
+                    position += 1;
+                }
+            },
             _ => { },
         }
     }
     derived.order = derived_callers_first(&derived, &called);
     derived
+}
+
+pub(crate) fn derived_candidate(derived: &mut Derived, item: &Item, position: i64, method: bool, defined: &collections::BTreeMap<String, i64>, everywhere: &DerivedScan, words: &winnow_grammar::InternerContext) {
+    match item {
+        Item::Fn { name, receiver, args, config, spread, body, is_public, is_extern, .. } => {
+            let is_extern = *is_extern; let is_public = *is_public; let name = *name; let spread = *spread;
+            let named = match name { Some(__nikaia_value) => __nikaia_value, None => return };
+            let text = words.resolve(named).to_string();
+            if is_public || is_extern || (receiver.is_some()) != method || spread.is_some() || !config.is_empty() || args.is_empty() { return; }
+            if nikaia_std::index::or(*nikaia_std::index::get(&defined, &text), || 0) != 1 || everywhere.values.contains(&text) { return; }
+            let sites = match *nikaia_std::index::get(&everywhere.calls, &text) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let claims = derived_claims(args, body, method, words);
+            if sites.is_empty() || claims.is_empty() { return; }
+            let mut params: Vec<String> = vec![];
+            for arg in args.iter() { params.push(words.resolve(arg.name).to_string()); }
+            derived.functions.insert(text.to_string(), DerivedFunction { name: text.to_string(), key: nikaia_std::index::get(&args, 0).span.start as i64, position, params, claims, sites: sites.to_owned() });
+        },
+        _ => { },
+    }
 }
 
 pub(crate) fn derived_body(config: &[ConfigParam], body: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) -> collections::BTreeSet<String> {
@@ -152,7 +172,7 @@ pub(crate) fn derived_callers_first(derived: &Derived, called: &[collections::BT
     order
 }
 
-pub(crate) fn derived_claims(args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext) -> Vec<DerivedClaim> {
+pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: &winnow_grammar::InternerContext) -> Vec<DerivedClaim> {
     let mut ints: Vec<String> = vec![];
     let mut unsigned: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut lists: Vec<String> = vec![];
@@ -181,6 +201,13 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, words: &winnow_gramma
                     Expr::Variable(name, _) => {
                         let name = *name;
                         indexed.insert(words.resolve(name).to_string());
+                    },
+                    Expr::Field { .. } => {
+                        let path = nikaia_std::index::or(path_of(base, words), || "".into());
+                        if method && path.starts_with("self.") && !nikaia_std::list::contains(&lists, &path) {
+                            indexed.insert(path.to_string());
+                            lists.push(path);
+                        }
                     },
                     _ => { },
                 }
@@ -324,6 +351,16 @@ pub(crate) fn derived_symbol(name: Option<winnow_grammar::Symbol>, words: &winno
     scan.values.insert(words.resolve(named).to_string());
 }
 
+pub(crate) fn derived_method_site(call: &Expr, method: winnow_grammar::Symbol, at: i64, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) {
+    let text = words.resolve(method).to_string();
+    let mut sites = nikaia_std::index::or(match *nikaia_std::index::get(&scan.calls, &text) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into());
+    sites.push((node_key(call), at));
+    scan.calls.insert(text, sites);
+}
+
 pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) {
     match expr {
         Expr::Variable(name, _) => {
@@ -354,14 +391,16 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
             derived_all(args, at, words, scan);
             derived_settings(config, at, words, scan);
         },
-        Expr::MethodCall { receiver, args, config, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            derived_method_site(expr, method, at, words, scan);
             derived_expr(receiver, at, words, scan);
             derived_all(args, at, words, scan);
             derived_settings(config, at, words, scan);
         },
-        Expr::SafeMethod { receiver, args, config, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver);
+        Expr::SafeMethod { receiver, method, args, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            derived_method_site(expr, method, at, words, scan);
             derived_expr(receiver, at, words, scan);
             derived_all(args, at, words, scan);
             derived_settings(config, at, words, scan);

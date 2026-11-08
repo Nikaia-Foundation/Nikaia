@@ -475,7 +475,14 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.receiver_from_text = state.made_from_text(world, receiver);
     state.flow.walk_open = None;
     state.flow.walk_lent = false;
+    state.flow.text_slot = false;
+    state.flow.text_walk = false;
     let value: Ty = check_core_call_on(state, world, host, &on.clone(), receiver, method, args, written, span);
+    if state.flow.text_slot { state.flow.text_slot_views.insert(id_of(expr) as i64); }
+    if state.flow.text_walk { state.flow.text_walks.insert(id_of(expr) as i64); }
+    state.flow.text_slot = false;
+    state.flow.text_walk = false;
+    if name == "collect" && args.is_empty() && check_core_method_text_views(&value) && state.check_core_method_from_text_slots(receiver) { state.facts.text_slot_collects.insert(id_of(receiver) as i64); }
     let summed = check_core_method_summed(&name, &on, &value);
     if summed != "" { state.facts.summed.insert(id_of(receiver) as i64, summed); }
     let walk_open: Option<i64> = state.flow.walk_open;
@@ -879,6 +886,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         }
         return check_core_method_called(state, world, host, expr, on, receiver, method, &given, "join(within)", span);
     }
+    if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: TEXT.to_string(), args: vec![], view: true }, receiver, method, args, &name, span); }
     check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)
 }
 
@@ -904,4 +912,35 @@ pub(crate) fn check_core_method_char_literal(c: scalar) -> String {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_method_a_tuple(ty: &Ty) -> bool { matches!(ty, Ty::Tuple(_)) }
+
+pub(crate) fn check_core_method_text_views(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { args, .. } => args.len() == 1 && match nikaia_std::index::get(&args, 0) {
+            Ty::Named { name, args: none, view } => { let view = *view; view && none.is_empty() && name == TEXT_VIEW },
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+impl CheckState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn check_core_method_on_a_text_slot(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, on: &Ty) -> bool {
+        let text_view = match on {
+            Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == TEXT_VIEW },
+            _ => false,
+        };
+        text_view && (self.a_text_slot_name(world, receiver) || self.flow.text_slot_views.contains(&(id_of(receiver) as i64)))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn check_core_method_from_text_slots(&self, receiver: &Expr) -> bool {
+        if self.flow.text_walks.contains(&(id_of(receiver) as i64)) { return true; }
+        match receiver {
+            Expr::MethodCall { receiver: inner, .. } => { let inner = nikaia_std::boxed::open(inner); self.check_core_method_from_text_slots(inner) },
+            _ => false,
+        }
+    }
+}
 

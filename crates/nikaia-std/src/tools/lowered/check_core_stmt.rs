@@ -980,6 +980,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     if declared_option && names.len() == 1 && shape.is_empty() { state.flow.declared_options.insert(local.id); }
     state.bind_local(local);
     if mutable && state.facts.mut_view_reads.contains_key(&(id_of(value) as i64)) { state.flow.mut_view_bindings.insert(id); }
+    if mutable && state.flow.text_slot_views.contains(&(id_of(check_core_stmt_slot_read(value)) as i64)) { state.flow.text_slot_bindings.insert(id); }
     if state.facts.mixed_choices.contains(&node_key(value)) || state.facts.mixed_leaves.contains_key(&node_key(check_peeled(value))) { state.flow.either_bindings.insert(id); }
     check_core_stmt_unit()
 }
@@ -1239,7 +1240,7 @@ pub fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world: &Chec
             Ty::Named { ref name, .. } => name == "str",
             _ => false,
         };
-        if !of_text { into = unviewed_type(&into); }
+        if state.a_text_slot_name(world, target) { into = Ty::Named { name: TEXT.to_string(), args: vec![], view: false }; } else if !of_text { into = unviewed_type(&into); }
     }
     check_narrow_written_through(state, target);
     if check_core_stmt_an_index(target) {
@@ -2047,4 +2048,11 @@ pub(crate) fn check_async_operands(state: &mut CheckState, parts: &[&Expr], at: 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_async_computes(expr: &Expr) -> bool { !matches!(expr, Expr::LitInt { .. } | Expr::LitStr { .. } | Expr::LitChar(_, _) | Expr::LitBool(_, _) | Expr::LitFloat(_, _) | Expr::LitNull(_) | Expr::Variable(_, _) | Expr::Path(_, _)) }
+
+pub(crate) fn check_core_stmt_slot_read(value: &Expr) -> &Expr {
+    match value {
+        Expr::Coalesce { value: read, .. } => { let read = nikaia_std::boxed::open(read); read },
+        _ => value,
+    }
+}
 

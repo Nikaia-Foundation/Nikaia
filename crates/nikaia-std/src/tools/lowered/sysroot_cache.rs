@@ -187,7 +187,7 @@ pub async fn sysroot_drift(files: &[(String, String)], dir: &std::path::Path) ->
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn sysroot_stale(dir: &std::path::Path, kept: &[String]) -> Vec<String> {
-    let mut stale: Vec<String> = sysroot_generated(dir).iter().filter(|&name| { !kept.contains(name) }).map(|name| { name.to_string() }).collect::<Vec<_>>();
+    let mut stale: Vec<String> = sysroot_generated(dir).iter().filter(|&name| { !nikaia_std::list::contains(&kept, &name) }).map(|name| { name.to_string() }).collect::<Vec<_>>();
     stale.sort();
     stale
 }

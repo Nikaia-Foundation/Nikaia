@@ -1,0 +1,52 @@
+/// **What no private method derives** (ADR-391 D1): a name two `impl`s
+/// define, a method also called inside a lambda, and a trait's method, each
+/// keep the check on `self.arms[at]`, though every call here is in bounds.
+struct A {
+	arms: Vec[i64],
+}
+
+struct B {
+	arms: Vec[i64],
+}
+
+trait Pick {
+	fn pick(ref self, at: i64) -> i64
+}
+
+impl A {
+	// Two methods named `twice`: neither derives.
+	fn twice(ref self, at: i64) -> i64 {
+		return self.arms[at] * 2
+	}
+
+	// Called inside a lambda too: derives nothing.
+	fn late(ref self, at: i64) -> i64 {
+		return self.arms[at]
+	}
+}
+
+impl B {
+	fn twice(ref self, at: i64) -> i64 {
+		return self.arms[at] * 3
+	}
+}
+
+// A trait's method: called wherever the trait is.
+impl Pick for A {
+	fn pick(ref self, at: i64) -> i64 {
+		return self.arms[at]
+	}
+}
+
+fn main() throws {
+	let a = A { arms: [1, 2, 3] }
+	let b = B { arms: [4, 5] }
+	let mut k = 0
+	while k < a.arms.len() {
+		println(f"{a.twice(k)} {a.late(k)} {a.pick(k)}")
+		k += 1
+	}
+	println(b.twice(0))
+	let f: fn(i64) -> i64 = fn(i) { a.late(i) }
+	println(f(1))
+}

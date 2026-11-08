@@ -289,6 +289,10 @@ pub struct CheckFacts {
     pub arm_subjects: collections::BTreeMap[i64, i64],
     pub guards_inside_boxes: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub collected_into: collections::BTreeSet[i64],
+    /// **A `collect` of text views read from `String` slots**, by the
+    /// receiver (#1388): the items are `&String` below, so they are made the
+    /// `&str` a list of text views holds (ADR-282 D1).
+    pub text_slot_collects: collections::BTreeSet[i64],
     /// **A sequence's `sum`, by the receiver: the number type it hands
     /// back** (#1007). The language below infers no result type for `sum`
     /// where nothing annotates it, so the call names it (`.sum::<i64>()`).
@@ -652,6 +656,7 @@ impl CheckFacts {
             arm_subjects: collections::BTreeMap(),
             guards_inside_boxes: collections::BTreeMap(),
             collected_into: collections::BTreeSet(),
+            text_slot_collects: collections::BTreeSet(),
             summed: collections::BTreeMap(),
             copied_walks: collections::BTreeSet(),
             owned_clones: collections::BTreeSet(),
