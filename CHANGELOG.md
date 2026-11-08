@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1365] — 2026-11-08
+
+**Data from outside through a method, and options at a method call are checked (#1446)**
+- The prover takes the checker's method resolution: an unmarked call of an untrusted std method (`conn.read()`) is data from outside, so a claim about it is NK1202 until a guard handles the bad case; a `trusted: true` read stays trusted.
+- A method call's options are checked against the entry it resolves to (NK1109 for an unknown option, NK1106 for a wrong type); options of a program's own methods with a text literal, a left-out text default or a value to a nullable option compile (were rustc errors).
+
 ## [0.0.1364] — 2026-11-08
 
 **Builders' fixes: a lookup's key is not kept, lower-std runs the sync check, trusted: true is recorded with its place (#1390, #1387, #1357)**
