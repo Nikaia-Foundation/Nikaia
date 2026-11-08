@@ -11,13 +11,23 @@
 //! **Where a value lives is its handle, [`Place`]**: the running task's block,
 //! or outside, where `std`'s global allocator answers (D8, D9). Which
 //! allocation sites are in the block is the emitter's decision (#490 step 5);
-//! until it decides, every site is outside, and the emitter still writes
-//! `Vec` and `String`.
+//! until it decides, every site is outside.
+//!
+//! **[`List`] and [`Text`] are the ground of Nikaia's `List` and `String`**
+//! (D4): a list or text placed by its handle, `FromIterator` for `.collect()`
+//! (a newtype, since the orphan rule allows none on `allocator-api2`'s `Vec`),
+//! and the allocating text methods built where the handle says, with no
+//! `String` between ([`to_uppercase`], [`to_lowercase`], [`replace`],
+//! [`replacen`], [`repeat`], [`join`], [`format`]). Toward Rust they convert
+//! with `From`/`Into`, the same memory where it is outside the running
+//! task's block (D8). The emitter still writes `Vec` and `String` until it
+//! switches to them (#490).
 //!
 //! **A full block ends the task in [`full`]**, outside the allocator, which
 //! only refuses (D6); so every growth of a [`List`] or a [`Text`] goes
 //! through `try_reserve` ([`push`], [`reserve`], [`extend`]).
 
+pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
     BLOCK, Block, Entered, List, Place, Text, enter, extend, full, list, push, reserve,
 };
