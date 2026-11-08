@@ -984,7 +984,7 @@ fn grammar_types_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerCo
         },
         Expr::Unary { expr: inner, .. } => grammar_types_walk_expr(inner, words, intern, walk),
         Expr::Try(inner, _) => grammar_types_walk_expr(inner, words, intern, walk),
-        Expr::Async(inner, _, _) => grammar_types_walk_expr(inner, words, intern, walk),
+        Expr::Async(inner, _, _, _) => grammar_types_walk_expr(inner, words, intern, walk),
         Expr::Throw(inner, _) => grammar_types_walk_expr(inner, words, intern, walk),
         Expr::Cast { expr: inner, .. } => grammar_types_walk_expr(inner, words, intern, walk),
         Expr::Return(value, _) => grammar_types_walk_maybe(value, words, intern, walk),

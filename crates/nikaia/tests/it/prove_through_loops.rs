@@ -92,7 +92,12 @@ fn a_slot_carried_through_a_loop_is_proved_inside_its_table() {
     let off = lowered("through-loops-off", WALK_ONLY);
     let probe = body(&off, "probe");
     assert!(probe.contains("nikaia_std::index::get(&xs"), "{probe}");
-    assert!(probe.contains("at = at + 1 & 16383"), "{probe}");
+    // ADR-306 D23: past the checked read, `at` is inside the list, so its `+ 1` is proved
+    // by the walk alone; the index's check is what stays.
+    assert!(
+        probe.contains("proven::add::<i64>(at, 1) } & 16383"),
+        "{probe}"
+    );
 }
 
 /// A loop whose bound really fails keeps its checks under `on`, and the
@@ -102,7 +107,12 @@ fn a_loop_that_leaves_its_table_keeps_its_check_and_stops_there() {
     let on = lowered("through-loops-runaway", ALL_ON);
     let runaway = body(&on, "runaway");
     assert!(runaway.contains("nikaia_std::index::get(&xs"), "{runaway}");
-    assert!(runaway.contains("at = at + 1;"), "{runaway}");
+    // The read before it bounds `at` (ADR-306 D23), so the `+ 1` is proved; the read
+    // of the next turn is what leaves the table, and its check stays.
+    assert!(
+        runaway.contains("at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };"),
+        "{runaway}"
+    );
     let stops = |purpose: &str, words: &[&str]| -> (String, String) {
         let dir = common::scratch_dir(purpose);
         std::fs::write(dir.join("main.nika"), PROBED).expect("the source");

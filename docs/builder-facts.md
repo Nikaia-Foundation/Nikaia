@@ -26,6 +26,7 @@ together with the specification section and an example test.
 
 ### Every run
 
+* **ADRs live in `docs/specification/adr/`**; search them with the Grep tool, since a `grep -r` from the root runs into `target/`. A script test run by hand resolves a relative `target/fast/nikaia` under its tmp dir: run a copy with the absolute path. (issue-1397, issue-1414)
 * **Copy `target/fast/nikaia` to your scratchpad before your first build**: it
   is the before binary for the fails-before run, and the binary long test runs
   use, since another agent may rebuild `target/fast/nikaia` mid-run (P5a, j5).

@@ -1380,7 +1380,7 @@ fn read_through(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out: 
             read_through(inner, ask, walk, out)
             return
         }
-        Expr::Async(inner, _, _) => {
+        Expr::Async(inner, _, _, _) => {
             read_through(inner, ask, walk, out)
             return
         }
@@ -2356,7 +2356,7 @@ fn source_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring
         Expr::Call { func, .. } => called_result(func, ask, walk),
         Expr::MethodCall { method, .. } => method_result(ask.names.resolve(method), walk),
         Expr::Try(inner, _) => source_of(inner, ask, walk),
-        Expr::Async(inner, _, _) => source_of(inner, ask, walk),
+        Expr::Async(inner, _, _, _) => source_of(inner, ask, walk),
         else => null,
     }
 }
@@ -3183,7 +3183,7 @@ fn ties_of(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Vec[TextTie
         }
         Expr::Field { base, .. } => return ties_of(base, ask, walk),
         Expr::Try(inner, _) => return ties_of(inner, ask, walk),
-        Expr::Async(inner, _, _) => return ties_of(inner, ask, walk),
+        Expr::Async(inner, _, _, _) => return ties_of(inner, ask, walk),
         Expr::ListLit { items, .. } => {
             for item in items {
                 for tie in ties_of(item, ask, walk) {
@@ -3478,7 +3478,7 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
         Expr::Variable(name, _) => struct_of_local(ask.names.resolve(name), walk),
         Expr::Unary { expr, .. } => tier_struct_of(expr, ask, walk),
         Expr::Try(inner, _) => tier_struct_of(inner, ask, walk),
-        Expr::Async(inner, _, _) => tier_struct_of(inner, ask, walk),
+        Expr::Async(inner, _, _, _) => tier_struct_of(inner, ask, walk),
         Expr::Field { base, name, .. } => field_struct_or_bytes(base, ask.names.resolve(name), ask, walk),
         Expr::Index { base, index, .. } => cut_bytes(base, index, ask, walk),
         // **A struct a function of the program returns** (#803): its fields
@@ -4406,7 +4406,7 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
             late_expr(rhs, false, ask, late)
         }
         Expr::Try(inner, _) => late_expr(inner, false, ask, late),
-        Expr::Async(inner, _, _) => late_expr(inner, false, ask, late),
+        Expr::Async(inner, _, _, _) => late_expr(inner, false, ask, late),
         Expr::Throw(inner, _) => {
             late.leaving += 1
             late_expr(inner, false, ask, late)
@@ -4547,7 +4547,7 @@ fn late_sources(value: ref Expr, ask: ref TierAsk, late: ref TierLate) -> Vec[St
             }
         }
         Expr::Try(inner, _) => return late_sources(inner, ask, late),
-        Expr::Async(inner, _, _) => return late_sources(inner, ask, late),
+        Expr::Async(inner, _, _, _) => return late_sources(inner, ask, late),
         else => late_read_off(value, ask, late, out),
     }
     return out
@@ -4650,7 +4650,7 @@ fn late_made(value: ref Expr) -> ref Expr {
     return match value {
         Expr::Coalesce { value: first, .. } => late_made(first),
         Expr::Try(inner, _) => late_made(inner),
-        Expr::Async(inner, _, _) => late_made(inner),
+        Expr::Async(inner, _, _, _) => late_made(inner),
         else => value,
     }
 }
@@ -4961,7 +4961,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             kinds_joined(out, tier_block(handler, ask, walk))
         }
         Expr::Try(inner, _) => tier_expr(inner, ask, walk),
-        Expr::Async(inner, _, _) => tier_expr(inner, ask, walk),
+        Expr::Async(inner, _, _, _) => tier_expr(inner, ask, walk),
         Expr::Unary { expr, .. } => tier_expr(expr, ask, walk),
         Expr::Throw(inner, _) => {
             tier_expr(inner, ask, walk)
@@ -7121,7 +7121,7 @@ fn tw_lets_expr(mut expr: Expr, job: ref TwLets) {
         },
         Expr::Unary { expr: inner, .. } => tw_lets_expr(inner, job),
         Expr::Try(inner, _) => tw_lets_expr(inner, job),
-        Expr::Async(inner, _, _) => tw_lets_expr(inner, job),
+        Expr::Async(inner, _, _, _) => tw_lets_expr(inner, job),
         Expr::Throw(inner, _) => tw_lets_expr(inner, job),
         Expr::Cast { expr: inner, .. } => tw_lets_expr(inner, job),
         Expr::Return(value, _) => tw_lets_maybe(value, job),

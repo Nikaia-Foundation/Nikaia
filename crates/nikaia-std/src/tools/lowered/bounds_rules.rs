@@ -31,7 +31,7 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                     if field.default.is_some() { defaults.insert(format!("{}.{}", owner, f), rules_shape(field.default.as_ref().map(|__nikaia_it| &__nikaia_it.value))); }
                     found.push(f);
                 }
-                if found.len() >= 2 { lists.insert(owner, found); }
+                if !found.is_empty() { lists.insert(owner, found); }
             },
             _ => { },
         }
@@ -121,7 +121,7 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                 None => None,
             }, || vec![].into());
             for b in fields.iter() {
-                if a == b || dropped.contains(&format!("{}.{}", owner, b)) { continue; }
+                if dropped.contains(&format!("{}.{}", owner, b)) { continue; }
                 let shapes_b = nikaia_std::index::or(match built.get(&format!("{}.{}", owner, b)) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -241,7 +241,7 @@ pub(crate) fn rules_inside(owner: &str, changed: &BoundsChanged, types: &collect
         let list = frame_list(place);
         if path_root(&list) != "self" { away.elements.insert(place.to_string()); } else if list == "self" { dropped.insert(format!("{}.", owner)); } else {
             let fields = rules_fields_of(&list);
-            if fields.len() == 1 { dropped.insert(format!("{}.{}[]", owner, *nikaia_std::index::get(&fields, 0))); } else { rules_from_self(owner, &list, 0, lists, dropped, &mut lengths); }
+            if fields.len() == 1 { } else { rules_from_self(owner, &list, 0, lists, dropped, &mut lengths); }
         }
     }
     rules_outside(&away, types, lists, dropped);
@@ -411,7 +411,7 @@ pub(crate) fn rules_built(expr: &Expr, owner: &str, lists: &collections::BTreeMa
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); rules_built(base, owner, lists, defaults, built, dropped, words); },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); rules_built(inner, owner, lists, defaults, built, dropped, words); },
         Expr::TryCatch { expr: inner, handler, .. } => {
@@ -681,13 +681,95 @@ pub(crate) fn rules_position(walk: &mut BoundsWalk, facts: &BoundsFacts, value: 
         let (root, owner, method) = match called { Some(__nikaia_value) => __nikaia_value, None => return false };
         if root == "self" && rules_has(&walk.rules, &owner, "result", &method, b) { return true; }
     }
-    let v = match bounding_lin(walk, value, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let read = rules_element_read(walk, value, facts, words);
+    let v = match read { Some(__nikaia_value) => __nikaia_value, None => match bounding_lin(walk, value, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false } };
     let zero = walk.arena.int(0);
     let len = walk.arena.var(&length_of(&format!("self.{}", b)));
     let low = walk.arena.ge(v, zero);
     let high = walk.arena.lt(v, len);
     let goal = walk.arena.and(vec![low, high]);
     bounding_proves(&walk, facts, goal, ask)
+}
+
+pub(crate) fn rules_element_read(walk: &mut BoundsWalk, value: &Expr, facts: &BoundsFacts, words: &winnow_grammar::InternerContext) -> Option<i64> {
+    let base = match value {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+        _ => return None,
+    };
+    let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let element = bounding_element_of(&list);
+    if !facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, &element) }) { return None; }
+    Some(walk.arena.var(&element))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rules_up_to(walk: &mut BoundsWalk, facts: &BoundsFacts, value: &Expr, b: &str, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
+    let v = match bounding_lin(walk, value, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let zero = walk.arena.int(0);
+    let len = walk.arena.var(&length_of(&format!("self.{}", b)));
+    let low = walk.arena.ge(v, zero);
+    let high = walk.arena.le(v, len);
+    let goal = walk.arena.and(vec![low, high]);
+    bounding_proves(&walk, facts, goal, ask)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rules_element_write(walk: &mut BoundsWalk, facts: &BoundsFacts, target: &Expr, op: Option<&BinaryOp>, value: &Expr, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    if !walk.checking || !walk.rule_roots.contains_key("self") { return; }
+    let list = match target {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return } },
+        _ => return,
+    };
+    for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        if rule.kind != "index" || list != format!("self.{}", rule.a) { continue; }
+        if op.is_some() || !rules_position(walk, facts, value, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); }
+    }
+}
+
+pub(crate) fn rules_read_inside(walk: &mut BoundsWalk, base: &Expr, index: &Expr, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) {
+    let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut known = walk.shape.roots.contains(&list) || walk.lists.contains(&list);
+    if context.list_indices.contains(&node_key(base)) && !walk.shape.twice.contains(&path_root(&list)) { known = true; }
+    match base {
+        Expr::Field { name, .. } => {
+            let name = *name;
+            if walk.shape.fields.contains(&format!(".{}", words.resolve(name))) { known = true; }
+        },
+        _ => { },
+    }
+    for (root, owner) in walk.rule_roots.to_owned() { for rule in walk.rules.iter() { if rule.owner == owner && (list == format!("{}.{}", root, rule.b) || rule.kind != "result" && list == format!("{}.{}", root, rule.a)) { known = true; } } }
+    if !known || walk.collecting || walk.pinned.contains(&path_root(&list)) { return; }
+    let at = match bounding_lin(walk, index, &facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let len = bounding_list_length(walk, &list, node_key(base), context);
+    let zero = walk.arena.int(0);
+    let low = walk.arena.ge(at, zero);
+    let high = walk.arena.lt(at, len);
+    bounding_push(&walk, facts, low);
+    bounding_push(&walk, facts, high);
+}
+
+pub(crate) fn rules_element_kept(walk: &mut BoundsWalk, facts: &mut BoundsFacts, target: &Expr, words: &winnow_grammar::InternerContext) {
+    let list = match target {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return } },
+        _ => return,
+    };
+    rules_elements_kept(walk, facts, &list);
+}
+
+pub(crate) fn rules_elements_kept(walk: &mut BoundsWalk, facts: &mut BoundsFacts, list: &str) {
+    for (root, owner) in walk.rule_roots.to_owned() {
+        for rule in walk.rules.to_owned() {
+            let of = format!("{}.{}", root, rule.a);
+            if rule.owner != owner || rule.kind != "index" || list != "" && list != of { continue; }
+            let zero = walk.arena.int(0);
+            let b = walk.arena.var(&length_of(&format!("{}.{}", root, rule.b)));
+            let each = walk.arena.var(&bounding_element_of(&of));
+            let low = walk.arena.ge(each, zero);
+            let high = walk.arena.lt(each, b);
+            bounding_push(&walk, facts, low);
+            bounding_push(&walk, facts, high);
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -705,6 +787,11 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
     for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
         let a = format!("self.{}", rule.a);
         let b = format!("self.{}", rule.b);
+        if rule.kind == "index" && on == a && rule.a == rule.b {
+            let kept = if method == "push" && args.len() == 1 { rules_up_to(walk, facts, nikaia_std::index::get(&args, 0), &rule.b, context, program, words, ask) } else { keeps_length(method) && method != "fill" };
+            if !kept { walk.rule_failed.insert(at); }
+            continue;
+        }
         if rule.kind == "index" && on == a {
             let kept = if method == "push" && args.len() == 1 { rules_position(walk, facts, nikaia_std::index::get(&args, 0), &rule.b, context, program, words, ask) } else { rules_takes_away(method) || keeps_length(method) && method != "fill" };
             if !kept { walk.rule_failed.insert(at); }

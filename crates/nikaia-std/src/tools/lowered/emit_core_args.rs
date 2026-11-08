@@ -852,6 +852,8 @@ impl EmitState {
         walk.async_fallback = false;
         let mut deadline = walk.async_within.to_string();
         walk.async_within = String::from("");
+        let admission = walk.async_admission.to_string();
+        walk.async_admission = String::from("");
         if deadline == "" && walk.async_deadlines.contains(&group) { deadline = format!("{}_deadline", emit_async_group_name(group)); }
         let mut bound_inside = false;
         match task {
@@ -913,29 +915,41 @@ impl EmitState {
         if body.buf.contains(".await") || gated {
             if kind == "spawn" && gated {
                 let cell = format!("__rest_{}", id);
-                out.push(&format!("{{ let _ = {}.keep({}.start_kept_gated(&{}, &{}, async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await); }}", line, name, cell, line, channel, body.buf));
+                let mut kept = format!("start_kept_gated(&{}, &{}, ", cell, line);
+                if admission != "" { kept = format!("start_kept_admitted(&{}, &{}, nikaia_std::task::admitted({}), ", cell, line, admission); }
+                out.push(&format!("{{ let _ = {}.keep({}.{}async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await); }}", line, name, kept, channel, body.buf));
                 walk.async_kept.push(cell);
                 return Ok(());
             }
+            let mut asked: String = String::from("");
+            if admission != "" && !gated { asked = format!("nikaia_std::task::asked(nikaia_std::task::admitted({})); ", admission); }
             if kind == "spawn" {
-                out.push(&format!("{}.spawn_paused_here(async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await", name, channel, body.buf));
+                let spawned = format!("{}.spawn_paused_here(async || -> Result<(), {}> {{ let _ = {}; Ok(()) }}).await", name, channel, body.buf);
+                if asked != "" { out.push(&format!("async {{ {}{} }}.await", asked, spawned)); } else { out.push(&spawned); }
                 return Ok(());
             }
             let mut start: String = String::from("start_paused(");
-            if line != "" { start = format!("start_paused_gated(&{}, ", line); }
+            if line != "" {
+                start = format!("start_paused_gated(&{}, ", line);
+                if admission != "" { start = format!("start_paused_admitted(&{}, nikaia_std::task::admitted({}), ", line, admission); }
+            }
             let mut held = format!("{}.{}async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, start, channel, body.buf);
             if kind == "handle" && walk.async_keeps {
                 let cell = format!("__rest_{}", id);
                 let mut kept = format!("start_kept(&{}, ", cell);
-                if line != "" { kept = format!("start_kept_gated(&{}, &{}, ", cell, line); }
+                if line != "" {
+                    kept = format!("start_kept_gated(&{}, &{}, ", cell, line);
+                    if admission != "" { kept = format!("start_kept_admitted(&{}, &{}, nikaia_std::task::admitted({}), ", cell, line, admission); }
+                }
                 held = format!("{}.{}async || -> Result<_, {}> {{ let __value = {}; Ok(__value) }}).await", name, kept, channel, body.buf);
                 walk.async_kept.push(cell);
             }
-            if line != "" { held = format!("async {{ {}.keep({}) }}.await", line, held); }
+            if line != "" { held = format!("async {{ {}.keep({}) }}.await", line, held); } else if asked != "" { held = format!("async {{ {}{} }}.await", asked, held); }
             if kind == "join" { out.push(&emit_async_joined_paused(&held, &channel, fallback, &line)); } else { out.push(&held); }
             return Ok(());
         }
-        let enter = format!("{}{}", emit_async_wait(&gates), emit_async_occupy(&gates));
+        let mut enter = format!("{}{}", emit_async_wait(&gates), emit_async_occupy(&gates));
+        if admission != "" { enter = format!("nikaia_std::task::asked(nikaia_std::task::admitted({})); {}", admission, enter); }
         if kind == "spawn" {
             let spawned = format!("{}.spawn_here(|| -> Result<(), {}> {{ let _ = {}; Ok(()) }})", name, channel, body.buf);
             if enter != "" { out.push(&format!("{{ {}{} }}", enter, spawned)); } else { out.push(&spawned); }
@@ -962,7 +976,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_async_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, option: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
+    pub fn emit_async_option<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, option: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
         let value = match option { Some(__nikaia_value) => __nikaia_value, None => return Ok(String::from("")) };
         let mut text = EmitOut::empty();
         self.emit_expr(world, walk, &mut text, host, value, depth, EmitFlow::plain().at(flow.statement), scope)?;
@@ -1072,6 +1086,7 @@ impl EmitState {
     pub fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         let mut tasks: Vec<(Expr, i64)> = vec![];
         let mut deadlines: Vec<String> = vec![];
+        let mut admissions: Vec<String> = vec![];
         let mut named: String = String::from("");
         let mut whole = true;
         let mut fallback = false;
@@ -1079,32 +1094,35 @@ impl EmitState {
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
-                        Expr::Async(inner, id, within) => {
-                            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let id = *id;
+                        Expr::Async(inner, id, within, admission) => {
+                            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
                             if names.len() == 1 {
                                 tasks.push((inner.clone(), id.get() as i64));
                                 deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
+                                admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                                 named = emit_text(world, *nikaia_std::index::get(&names, 0));
                                 fallback = true;
                             }
                         },
                         _ => { },
                     }; },
-                    Expr::Async(inner, id, within) => {
-                        let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let id = *id;
+                    Expr::Async(inner, id, within, admission) => {
+                        let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
                         if names.len() == 1 {
                             tasks.push((inner.clone(), id.get() as i64));
                             deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
+                            admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                             named = emit_text(world, *nikaia_std::index::get(&names, 0));
                         }
                     },
                     Expr::Tuple(parts, _) => {
                         for part in parts.iter() {
                             match part {
-                                Expr::Async(inner, id, within) => {
-                                    let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let id = *id;
+                                Expr::Async(inner, id, within, admission) => {
+                                    let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
                                     tasks.push((inner.clone(), id.get() as i64));
                                     deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
+                                    admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                                 },
                                 _ => { whole = false; },
                             }
@@ -1137,6 +1155,7 @@ impl EmitState {
             let mut started = EmitOut::empty();
             walk.async_fallback = fallback;
             walk.async_within = (*nikaia_std::index::get(&deadlines, nikaia_std::index::at(index))).to_string();
+            walk.async_admission = (*nikaia_std::index::get(&admissions, nikaia_std::index::at(index))).to_string();
             index = index + 1;
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, &here, scope)?;
             walk.async_fallback = false;

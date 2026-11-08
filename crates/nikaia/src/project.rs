@@ -3192,6 +3192,16 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         self.held(written.map_err(|thrown| anyhow!("{thrown}")))
     }
 
+    fn write_spliced(&self, src: &Path, lowered: &str) -> HostResult<()> {
+        let written = nikaia_std::rt::exec::block_on(project_drive::project_drive_spliced(
+            &self.project.root,
+            self.project.manifest.file(),
+            src,
+            lowered,
+        ));
+        self.held(written.map_err(|thrown| anyhow!("{thrown}")))
+    }
+
     fn gen_dir(&self) -> PathBuf {
         self.project.gen_dir()
     }
@@ -3252,6 +3262,10 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
 
     fn features(&self) -> Vec<nikaia_std::tools::manifest::ManifestFeature> {
         self.project.manifest.file().features.clone()
+    }
+
+    fn rust_library(&self) -> Option<nikaia_std::tools::manifest::ManifestRustLibrary> {
+        self.project.manifest.file().rust_library.clone()
     }
 
     fn manifest_text(&self) -> (String, String) {

@@ -411,7 +411,7 @@ pub(crate) fn look_expr(expr: &Expr, look: &Look, deferred: bool, around: &Aroun
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, &look, deferred, around, words, seen); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); look_expr(inner, &look, deferred, around, words, seen); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); look_expr(expr, &look, deferred, around, words, seen); },
         Expr::TryCatch { expr, handler, .. } => {

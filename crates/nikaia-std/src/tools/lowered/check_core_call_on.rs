@@ -1016,8 +1016,19 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.a_sequence_that_cannot_do_this(world, on, method, contract, &found, span);
     state.counts_in_usize(key, args);
     if key.starts_with("fs::Path::") && !state.facts.path_methods.contains_key(&node) { state.facts.path_methods.insert(node, false); }
-    let no_options: Vec<(String, Ty)> = vec![];
-    let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &no_options, span);
+    let mut passed: Vec<(String, Ty)> = vec![];
+    let mut values: Vec<i64> = vec![];
+    let mut literals: Vec<bool> = vec![];
+    for (name, ty, value, literal) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
+        passed.push((name, ty));
+        values.push(value);
+        literals.push(literal);
+    }
+    state.flow.option_values = values;
+    state.flow.option_literals = literals;
+    let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &passed, span);
+    state.flow.option_values = vec![];
+    state.flow.option_literals = vec![];
     state.a_lookup_key_lent(world, key, on, args, &found);
     if (key == "collections::HashMap::entry" || key == "collections::BTreeMap::entry") && args.len() == 1 && found.len() == 1 {
         let keys: Ty = nikaia_std::index::or(match bound.get("K") {

@@ -88,7 +88,7 @@ fn check_walks_tasks_in(state: ref CheckState, block: ref Block, group: i64, mut
     for stmt in block.stmts {
         for each in check_visit_stmt(stmt.node) {
             match each {
-                Expr::Async(_, _, _) => {
+                Expr::Async(_, _, _, _) => {
                     let wait = state.facts.async_waits.get(id_of(each) as i64) ?? continue
                     if wait.group == group {
                         out.push(each)
@@ -250,7 +250,7 @@ fn check_walks_operations_clash(first: ref Vec[Operation], second: ref Vec[Opera
 fn check_walks_starts_a_task(stmt: ref Stmt) -> bool {
     for each in check_visit_stmt(stmt) {
         match each {
-            Expr::Async(_, _, _) => return true,
+            Expr::Async(_, _, _, _) => return true,
             Expr::Spawn { .. } => return true,
             else => {},
         }
@@ -410,7 +410,7 @@ impl CheckState {
         let mut tasks: Vec[CheckWalksTask] = []
         for each in started {
             match each {
-                Expr::Async(inner, _, _) => {
+                Expr::Async(inner, _, _, _) => {
                     let task = check_walks_task(self, world, walking, id_of(each), inner) ?? continue
                     tasks.push(task)
                 },
@@ -567,7 +567,7 @@ impl CheckState {
 fn check_walks_form(expr: ref Expr) -> String {
     return match expr {
         Expr::Spawn { .. } => "starts a task",
-        Expr::Async(_, _, _) => "starts a task",
+        Expr::Async(_, _, _, _) => "starts a task",
         Expr::Select(_, _) => "waits in a `select`",
         Expr::Overlap(_, _) => "runs an `overlap`",
         Expr::Dsl { .. } => "runs a `dsl` block",

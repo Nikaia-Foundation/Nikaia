@@ -1328,9 +1328,22 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     if key.starts_with("fs::Path::") && !state.facts.path_methods.contains_key(node) {
         state.facts.path_methods.insert(node, false)
     }
-    // **The source's own name and not the ledger's.**
-    let no_options: Vec[(String, Ty)] = []
-    let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, no_options, span)
+    // **The source's own name and not the ledger's.** The options the call
+    // names are checked against the entry as a function's are (#1446): one
+    // it does not have is `NK1109`, one of another type `NK1102`.
+    let mut passed: Vec[(String, Ty)] = []
+    let mut values: Vec[i64] = []
+    let mut literals: Vec[bool] = []
+    for (name, ty, value, literal) in state.flow.method_passed.remove(node) ?? [] {
+        passed.push((name, ty))
+        values.push(value)
+        literals.push(literal)
+    }
+    state.flow.option_values = values
+    state.flow.option_literals = literals
+    let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, passed, span)
+    state.flow.option_values = []
+    state.flow.option_literals = []
     state.a_lookup_key_lent(world, key, on, args, found)
     // **`entry`'s key is the map's** (#676): a literal or a view of text, on a
     // map keyed by owned text, is built into text of its own, as `insert`'s is.

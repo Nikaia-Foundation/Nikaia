@@ -111,7 +111,7 @@ pub fn visited_in_expr(expr: ref Expr) -> Vec[ref Expr] {
             out.extend(visited_in_expr(rhs))
         },
         Expr::Try(inner, _) => out.extend(visited_in_expr(inner)),
-        Expr::Async(inner, _, _) => out.extend(visited_in_expr(inner)),
+        Expr::Async(inner, _, _, _) => out.extend(visited_in_expr(inner)),
         Expr::Throw(inner, _) => out.extend(visited_in_expr(inner)),
         Expr::Return(value, _) => out.extend(visited_in_maybe(value)),
         Expr::Index { base, index, .. } => {

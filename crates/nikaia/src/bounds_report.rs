@@ -75,7 +75,7 @@ pub fn report_checked(
     let proven = crate::bounds::proven(
         parsed,
         beside,
-        &crate::bounds::Sites::of(&checked.facts),
+        &checked.facts,
         &[&published, library],
         &std::collections::BTreeSet::new(),
         through_loops,
@@ -117,7 +117,7 @@ pub fn derived(
     let proven = crate::bounds::proven(
         parsed,
         beside,
-        &crate::bounds::Sites::of(&checked.facts),
+        &checked.facts,
         &[&published, library],
         &std::collections::BTreeSet::new(),
         through_loops,

@@ -863,19 +863,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
         let proven = crate::bounds::proven(
             self.parsed,
             self.beside,
-            &crate::bounds::Sites {
-                lengths: &facts.std_lengths,
-                sized: &facts.sized_lengths,
-                char_codes: &facts.char_codes,
-                arithmetic: &facts.arithmetic,
-                negations: &facts.negations,
-                whole_fields: &facts.whole_fields,
-                array_lengths: &facts.array_lengths,
-                shifts: &facts.shifts,
-                std_receivers: &facts.std_receivers,
-                simd_loads: &facts.simd_loads,
-                comptime_values: &facts.comptime_values,
-            },
+            facts,
             &[published, std_ledger()],
             &std::collections::BTreeSet::new(),
             self.build.prove_through_loops,
@@ -1088,22 +1076,6 @@ impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
 // ---------------------------------------------------------------------------
 
 impl Emitter<'_> {}
-
-/// **The counters of a function body that are never negative**
-/// ([`Emitter::nonnegative`]): a `let` of a non-negative literal whose name is
-/// only ever given or added a non-negative literal, and a range's binding where
-/// the range starts at one. A name declared twice, or handed to a call - which
-/// might change it - is left out.
-/// [`nonnegative_locals`], for [`crate::bounds`].
-pub(crate) fn nonnegative_names(body: &Block) -> HashSet<Symbol> {
-    nonnegative_locals(body)
-}
-
-fn nonnegative_locals(body: &Block) -> HashSet<Symbol> {
-    nikaia_std::tools::emit_locals::nonnegative_locals(body)
-        .into_iter()
-        .collect()
-}
 
 #[cfg(test)]
 mod target_tests {

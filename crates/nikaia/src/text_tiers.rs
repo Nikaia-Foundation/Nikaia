@@ -337,7 +337,7 @@ pub(crate) fn visit_expr_mut(
         }
         Expr::Unary { expr, .. }
         | Expr::Try(expr, _)
-        | Expr::Async(expr, _, _)
+        | Expr::Async(expr, _, _, _)
         | Expr::Throw(expr, _)
         | Expr::Cast { expr, .. } => visit_expr_mut(expr, f, s),
         Expr::Return(value, _) => {

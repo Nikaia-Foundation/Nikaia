@@ -1,0 +1,62 @@
+// `admission:` on a form that starts one task (ADR-async-5 D15, D18, D37,
+// #986): the task waits, unstarted, until its strategy admits it, and the
+// main line goes on; its value is waited for where it is read. A strategy
+// that admits at once starts the task where it is written.
+use std::time
+
+struct Eager {}
+
+impl task::Admission for Eager {
+	fn decide(mut self, load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1 }
+	}
+}
+
+// Admits the task only the third time it is asked.
+struct Late {
+	asked: i64,
+}
+
+impl task::Admission for Late {
+	fn decide(mut self, load: task::Load) -> task::Decision sync {
+		self.asked += 1
+		if self.asked >= 3 {
+			return task::Decision { start: 1 }
+		}
+		return task::Decision { start: 0 }
+	}
+}
+
+fn work(name: String, n: i64) -> i64 throws {
+	println(f"{name} starts")
+	time::sleep(1.millis())
+	return n
+}
+
+// A function that never pauses: the strategy is asked, and the task runs
+// where it starts.
+fn plain(n: i64) -> i64 {
+	return n * 10
+}
+
+fn sum() -> i64 throws {
+	let a = async(admission: Late { asked: 0 }) plain(4)
+	let b = plain(0) + 1
+	return a + b
+}
+
+fn main() throws {
+	let a = async(admission: Eager {}) work("eager", 1)
+	println("main goes on after eager")
+	let b = async(admission: Late { asked: 0 }) work("late", 2)
+	println("main goes on after late")
+	time::sleep(1.millis())
+	println(f"{a + b}")
+	let c = async(within: 5.seconds(), admission: Late { asked: 0 }) fn { work("lambda", 3) }
+	println("main goes on after lambda")
+	println(f"{c}")
+	let h = async(handle, admission: Late { asked: 0 }) fn { work("handle", 4) }
+	println("main goes on after handle")
+	println(f"{h.join()}")
+	println(f"{sum()}")
+}

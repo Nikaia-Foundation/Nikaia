@@ -1407,6 +1407,9 @@ impl EmitState {
         // **Its deadline** (D16, #986): its own `within:`, else its group's.
         let mut deadline = walk.async_within.clone()
         walk.async_within = ""
+        // **Its own strategy** (`admission: s`, D15, D18): `""` for none.
+        let admission = walk.async_admission.clone()
+        walk.async_admission = ""
         if deadline == "" && walk.async_deadlines.contains(group) {
             deadline = f"{emit_async_group_name(group)}_deadline"
         }
@@ -1506,12 +1509,28 @@ impl EmitState {
             // reaches the group as an unread one.
             if kind == "spawn" && gated {
                 let cell = f"__rest_{id}"
-                out.push(f"{{ let _ = {line}.keep({name}.start_kept_gated(&{cell}, &{line}, async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
+                let mut kept = f"start_kept_gated(&{cell}, &{line}, "
+                if admission != "" {
+                    kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
+                }
+                out.push(f"{{ let _ = {line}.keep({name}.{kept}async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
                 walk.async_kept.push(cell)
                 return
             }
+            // **A task with a strategy of its own outside a gate** (D15,
+            // D18): nothing would ask it again, so it is asked once, where
+            // the task starts.
+            let mut asked: String = ""
+            if admission != "" && !gated {
+                asked = f"nikaia_std::task::asked(nikaia_std::task::admitted({admission})); "
+            }
             if kind == "spawn" {
-                out.push(f"{name}.spawn_paused_here(async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await")
+                let spawned = f"{name}.spawn_paused_here(async || -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await"
+                if asked != "" {
+                    out.push(f"async {{ {asked}{spawned} }}.await")
+                } else {
+                    out.push(spawned)
+                }
                 return
             }
             // Under a gate it starts at once where a place is free and no
@@ -1521,6 +1540,9 @@ impl EmitState {
             let mut start: String = "start_paused("
             if line != "" {
                 start = f"start_paused_gated(&{line}, "
+                if admission != "" {
+                    start = f"start_paused_admitted(&{line}, nikaia_std::task::admitted({admission}), "
+                }
             }
             let mut held = f"{name}.{start}async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
             // **A handle named later keeps its rest in a cell of its block**
@@ -1531,6 +1553,9 @@ impl EmitState {
                 let mut kept = f"start_kept(&{cell}, "
                 if line != "" {
                     kept = f"start_kept_gated(&{cell}, &{line}, "
+                    if admission != "" {
+                        kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
+                    }
                 }
                 held = f"{name}.{kept}async || -> Result<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
                 walk.async_kept.push(cell)
@@ -1540,6 +1565,8 @@ impl EmitState {
             // the wait for it that it pauses.
             if line != "" {
                 held = f"async {{ {line}.keep({held}) }}.await"
+            } else if asked != "" {
+                held = f"async {{ {asked}{held} }}.await"
             }
             if kind == "join" {
                 out.push(emit_async_joined_paused(held, channel, fallback, line))
@@ -1550,7 +1577,10 @@ impl EmitState {
         }
         // A task that never pauses runs to its end where it starts, holding
         // its places until then.
-        let enter = f"{emit_async_wait(gates)}{emit_async_occupy(gates)}"
+        let mut enter = f"{emit_async_wait(gates)}{emit_async_occupy(gates)}"
+        if admission != "" {
+            enter = f"nikaia_std::task::asked(nikaia_std::task::admitted({admission})); {enter}"
+        }
         if kind == "spawn" {
             let spawned = f"{name}.spawn_here(|| -> Result<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})"
             if enter != "" {
@@ -1597,7 +1627,7 @@ impl EmitState {
     }
 
     /// The text of an option's value; `""` for an option not written.
-    fn emit_async_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, option: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
+    pub fn emit_async_option[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, option: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
         let value = option ?? return ""
         let mut text = EmitOut::empty()
         self.emit_expr(world, walk, text, host, value, depth, EmitFlow::plain().at(flow.statement), scope)
@@ -1753,6 +1783,9 @@ impl EmitState {
         let mut tasks: Vec[(Expr, i64)] = []
         // Each task's deadline (D16), by the same index; `""` for none.
         let mut deadlines: Vec[String] = []
+        // Each task's own strategy (D15, D18), by the same index; `""` for
+        // none.
+        let mut admissions: Vec[String] = []
         let mut named: String = ""
         let mut whole = true
         let mut fallback = false
@@ -1760,29 +1793,32 @@ impl EmitState {
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::TryCatch { expr: guarded, .. } => match guarded {
-                        Expr::Async(inner, id, within) => {
+                        Expr::Async(inner, id, within, admission) => {
                             if names.len() == 1 {
                                 tasks.push((inner.clone(), id.get() as i64))
                                 deadlines.push(self.emit_async_deadline(world, walk, host, within, depth, flow, scope))
+                                admissions.push(self.emit_async_option(world, walk, host, admission, depth, flow, scope))
                                 named = emit_text(world, names[0])
                                 fallback = true
                             }
                         },
                         else => {},
                     },
-                    Expr::Async(inner, id, within) => {
+                    Expr::Async(inner, id, within, admission) => {
                         if names.len() == 1 {
                             tasks.push((inner.clone(), id.get() as i64))
                             deadlines.push(self.emit_async_deadline(world, walk, host, within, depth, flow, scope))
+                            admissions.push(self.emit_async_option(world, walk, host, admission, depth, flow, scope))
                             named = emit_text(world, names[0])
                         }
                     },
                     Expr::Tuple(parts, _) => {
                         for part in parts {
                             match part {
-                                Expr::Async(inner, id, within) => {
+                                Expr::Async(inner, id, within, admission) => {
                                     tasks.push((inner.clone(), id.get() as i64))
                                     deadlines.push(self.emit_async_deadline(world, walk, host, within, depth, flow, scope))
+                                    admissions.push(self.emit_async_option(world, walk, host, admission, depth, flow, scope))
                                 },
                                 else => {
                                     whole = false
@@ -1831,6 +1867,7 @@ impl EmitState {
             let mut started = EmitOut::empty()
             walk.async_fallback = fallback
             walk.async_within = deadlines[index].clone()
+            walk.async_admission = admissions[index].clone()
             index = index + 1
             self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
             walk.async_fallback = false

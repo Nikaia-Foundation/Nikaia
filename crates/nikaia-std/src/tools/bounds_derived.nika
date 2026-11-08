@@ -793,7 +793,7 @@ fn derived_expr(
 		},
 		Expr::Unary { expr: inner, .. } => derived_expr(inner, at, words, scan),
 		Expr::Try(inner, _) => derived_expr(inner, at, words, scan),
-		Expr::Async(inner, _, _) => derived_expr(inner, at, words, scan),
+		Expr::Async(inner, _, _, _) => derived_expr(inner, at, words, scan),
 		Expr::Cast { expr: inner, .. } => derived_expr(inner, at, words, scan),
 		Expr::Index { base, index, .. } => {
 			derived_expr(base, at, words, scan)

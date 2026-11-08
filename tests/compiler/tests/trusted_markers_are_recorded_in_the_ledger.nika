@@ -1,0 +1,46 @@
+// #1357, ADR-365 D2, ADR-010 D3: every `trusted: true` a program writes is
+// recorded in its ledger, on the calling function's entry, as the source and
+// its place (`trusted = ["SOURCE at FILE:LINE"]`), so a diff of the ledger
+// shows a new marker as a review item. Method sources take the marker as the
+// free ones do: `process::Child::wait(trusted: true)` is trusted, and an
+// unmarked one stays untrusted, so an `assert` about it is `NK1202`.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn said(nikaia: String, tmp: String, label: String, source: String, verb: Vec[String]) throws {
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    let mut args = verb.clone()
+    args.push("p.nika")
+    let out = process::run(nikaia, args; dir: tmp.clone())
+    println(f"-- {label}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        let kept = line.starts_with("error") || line.starts_with("Checked") || line.starts_with("    ") && line.contains(" is ")
+        if kept {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let two = "use std::fs\nuse std::process\n\nfn config() -> String throws {\n    return fs::read_to_string(\"in.txt\", fs::Root::Anywhere; trusted: true)\n}\n\nfn main() throws {\n    let mut child = process::spawn(\"echo\", [\"a\"])\n    let out = child.wait(trusted: true)\n    let mut again = process::spawn(\"echo\", [\"b\"])\n    let other = again.wait()\n    println(f\"{config()} {out.stdout} {other.stdout}\")\n}\n"
+    said(nikaia, tmp, "two markers, lowered", two, ["lower", "--trust", "-o", "p.rs"])
+    println("-- the ledger")
+    for line in fs::read_to_string(f"{tmp}/nikaia.contracts", fs::Root::Anywhere).lines() {
+        if line.starts_with("[fn.") || line.starts_with("trusted") {
+            println(line)
+        }
+    }
+    let head = "use std::process\nuse std::text\n\nfn main() throws {\n    let mut child = process::spawn(\"echo\", [\"5\"])\n"
+    let tail = "    let n: i64 = text::parse_i64(out.stdout.trim()) ?? 0\n    assert(n > 0)\n    println(n)\n}\n"
+    said(nikaia, tmp, "an unmarked method read", f"{head}    let out = child.wait()\n{tail}", ["check"])
+    said(nikaia, tmp, "a marked method read, a claim as any other", f"{head}    let out = child.wait(trusted: true)\n{tail}", ["check"])
+    process::run("rm", ["-rf", tmp])
+}

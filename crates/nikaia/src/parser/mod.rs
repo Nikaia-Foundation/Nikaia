@@ -657,6 +657,20 @@ pub fn fits(length: usize) -> Result<()> {
 }
 
 /// Where a parse of `input` stops, or `None` where it goes through.
+/// **The options of a form that starts one task**, as `async_task_option`
+/// reads them (ADR-async-5 D15, D16, D18): `[within, admission]`, a later
+/// one of the same name winning.
+fn async_task_options(
+    head: Vec<(usize, ast::Expr)>,
+    tail: Vec<(usize, ast::Expr)>,
+) -> [Option<ast::Expr>; 2] {
+    let mut options: [Option<ast::Expr>; 2] = [None, None];
+    for (which, value) in head.into_iter().chain(tail) {
+        options[which] = Some(value);
+    }
+    options
+}
+
 fn stops_at(input: &str) -> Option<usize> {
     let mut stream = ParseInput::<Trivia> {
         state: ParseContext::<Trivia>::default(),
@@ -3870,11 +3884,13 @@ grammar! {
         // A list of several options not built yet names the first. The task of
         // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
-            KW_ASYNC "(" h:async_within_head? OPT_DETACHED t:async_within_tail? ")" body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: true, child: false, within: Box::new(h.or(t)), id: NodeId::parsed() }
+            KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h, t);
+                Expr::Spawn { body: Box::new(body), written_async: true, child: false, within: Box::new(within), admission: Box::new(admission), id: NodeId::parsed() }
             }
-          | KW_ASYNC "(" h:async_within_head? OPT_HANDLE t:async_within_tail? ")" body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: true, child: true, within: Box::new(h.or(t)), id: NodeId::parsed() }
+          | KW_ASYNC "(" h:async_task_head* OPT_HANDLE t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h, t);
+                Expr::Spawn { body: Box::new(body), written_async: true, child: true, within: Box::new(within), admission: Box::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" head:async_group_option tail:async_group_option_tail* ")" peek("{") b:block not(KW_CATCH) -> {
                 let mut options: [Option<Expr>; 3] = [None, None, None];
@@ -3885,11 +3901,13 @@ grammar! {
                 Expr::AsyncGroup(b, NodeId::parsed(), Box::new(within), Box::new(limit), Box::new(admission))
             }
           | KW_ASYNC "(" async_built_options l:async_one_task_limit -> { l }
-          | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") not("{") e:unary_expr -> {
-                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(Some(d)))
+          | KW_ASYNC "(" head:async_task_option t:async_task_tail* ")" not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") not("{") e:unary_expr -> {
+                let [within, admission] = async_task_options(vec![head], t);
+                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(within), Box::new(admission))
             }
-          | KW_ASYNC "(" OPT_WITHIN ":" d:expr ")" peek(KW_FN) l:trailing_lambda -> {
-                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(Some(d)))
+          | KW_ASYNC "(" head:async_task_option t:async_task_tail* ")" peek(KW_FN) l:trailing_lambda -> {
+                let [within, admission] = async_task_options(vec![head], t);
+                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(within), Box::new(admission))
             }
           | KW_ASYNC "(" OPT_HANDLE ")" fail(
                 "`async(handle)` takes a lambda. Write `async(handle) fn { … }`."
@@ -3906,10 +3924,10 @@ grammar! {
                 Expr::AsyncGroup(b, NodeId::parsed(), Box::new(None), Box::new(None), Box::new(None))
             }
           | KW_ASYNC not(KW_FN) not(KW_LET) not(KW_FOR) not(KW_WHILE) not("(") e:unary_expr -> {
-                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(None))
+                Expr::Async(Box::new(e), NodeId::parsed(), Box::new(None), Box::new(None))
             }
           | KW_ASYNC peek(KW_FN) not(async_named_fn) l:trailing_lambda -> {
-                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(None))
+                Expr::Async(Box::new(l), NodeId::parsed(), Box::new(None), Box::new(None))
             }
           | KW_ASYNC peek("{") block peek(KW_CATCH) fail(
                 "A `catch` after an `async` form isn't built yet (#986). Put the `catch` inside \
@@ -3933,13 +3951,18 @@ grammar! {
         // `async_unbuilt_option` names: of the built ones only `detached` stands
         // before it, so the scan stops there and its `fail` is the furthest any
         // arm of `async_expr` reaches.
-        rule async_built_options = ((OPT_DETACHED | OPT_HANDLE | async_within_option) ",")* -> { () }
-        rule async_within_option = OPT_WITHIN ":" expr -> { () }
+        rule async_built_options = ((OPT_DETACHED | OPT_HANDLE | async_task_option_read) ",")* -> { () }
+        rule async_task_option_read = async_task_option -> { () }
 
-        // `within: d` (D16) before or after `detached` / `handle`, in the one
-        // list of options.
-        rule async_within_head -> Expr = OPT_WITHIN ":" d:expr "," -> { d }
-        rule async_within_tail -> Expr = "," OPT_WITHIN ":" d:expr -> { d }
+        // **The options of a form that starts one task** (ADR-async-5 D15,
+        // D16, D18): `within: d` (0) and `admission: s` (1), in any order,
+        // before or after `detached` / `handle`, in the one list of options;
+        // a later one of the same name wins.
+        rule async_task_option -> (usize, Expr) =
+            OPT_WITHIN ":" d:expr -> { (0, d) }
+          | OPT_ADMISSION ":" s:expr -> { (1, s) }
+        rule async_task_head -> (usize, Expr) = o:async_task_option "," -> { o }
+        rule async_task_tail -> (usize, Expr) = "," o:async_task_option -> { o }
 
         // **The options of `async { … }`** (ADR-async-5 D15, D16, D18), in any
         // order: `within:` (0), `limit:` (1), `admission:` (2); a later one of
@@ -3965,12 +3988,6 @@ grammar! {
                 "`async(deferred) fn { … }` isn't built yet (#986). Start the task where it \
                  should run, with `async(detached) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
-          | peek(OPT_ADMISSION) fail(
-                "`admission:` on a form that starts one task isn't built yet (#986): \
-                 write it on `async { … }`."
-            ) -> {
-                Expr::ListLit { items: Vec::new(), id: NodeId::parsed() }
-            }
 
         rule OPT_HANDLE = "handle" not(ident)
         rule OPT_DEFERRED = "deferred" not(ident)
@@ -3992,7 +4009,7 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: Box::new(body), written_async: false, child: false, within: Box::new(None), id: NodeId::parsed() }
+                Expr::Spawn { body: Box::new(body), written_async: false, child: false, within: Box::new(None), admission: Box::new(None), id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
@@ -4001,7 +4018,7 @@ grammar! {
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, child: false, within: Box::new(None), id: NodeId::parsed()
+                    written_async: false, child: false, within: Box::new(None), admission: Box::new(None), id: NodeId::parsed()
                 }
             }
 

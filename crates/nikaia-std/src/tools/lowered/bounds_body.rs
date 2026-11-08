@@ -397,7 +397,7 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tally_expr(expr, ask, deferred, words, tally); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tally_expr(inner, ask, deferred, words, tally); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tally_expr(expr, ask, deferred, words, tally); },
         Expr::TryCatch { expr, handler, .. } => {

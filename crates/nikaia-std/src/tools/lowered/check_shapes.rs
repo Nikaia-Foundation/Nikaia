@@ -10,7 +10,7 @@ pub fn roots_in_a_binding(expr: &Expr) -> bool {
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); roots_in_a_binding(base) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); roots_in_a_binding(base) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); roots_in_a_binding(inner) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); roots_in_a_binding(inner) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); roots_in_a_binding(inner) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); roots_in_a_binding(expr) },
         _ => false,
     }

@@ -205,13 +205,20 @@ impl Manifest {
     }
 }
 
-/// The five sections `tools/manifest.nika` reads, their entries, and the keys
+/// The six sections `tools/manifest.nika` reads, their entries, and the keys
 /// of an entry that is a table, in the file's order: the document in plain
 /// words. Whether `--target` takes a `[build.<target>]` name is
 /// `emit::Target::parse`'s answer, handed over as `machine`.
 fn items_of(document: &toml::Value) -> Vec<decide::ManifestItem> {
     let mut items = Vec::new();
-    for section in ["package", "dependencies", "library", "build", "features"] {
+    for section in [
+        "package",
+        "dependencies",
+        "library",
+        "build",
+        "features",
+        "rust-library",
+    ] {
         let Some(value) = document.get(section) else {
             continue;
         };

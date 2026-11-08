@@ -576,7 +576,7 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         // 12.7, ADR-328 D8): the function that starts it throws
         // `task::Crashed`, as a `task::scope` in it does, where the task can
         // panic (ADR-async-5 D35); the host's answer for the form says so.
-        Expr::Async(inner, _, within) => {
+        Expr::Async(inner, _, within, _) => {
             if !caught {
                 out.direct.extend(contribution_of(expr).errors.clone())
             }

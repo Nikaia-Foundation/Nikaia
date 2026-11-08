@@ -60,13 +60,21 @@ pub struct Proved {
 /// Read off the checker's `comptime_values` (the type below and the literal,
 /// by the start of the item or statement): each one whose type is a whole
 /// number and whose literal an `i64` holds; and its `whole_lets`, each
-/// `let` without a written type that binds a whole number (#1358).
+/// `let` without a written type that binds a whole number (#1358); and the
+/// entry each method call resolved to (#1446).
 pub fn comptimes_of(
     parsed: &Parsed,
     values: &BTreeMap<i64, (String, String)>,
     whole_lets: &BTreeMap<i64, String>,
+    method_callees: &BTreeMap<i64, String>,
 ) -> Comptimes {
-    prove_run::prove_comptimes_of(&parsed.program, &parsed.interner, values, whole_lets)
+    prove_run::prove_comptimes_of(
+        &parsed.program,
+        &parsed.interner,
+        values,
+        whole_lets,
+        method_callees,
+    )
 }
 
 /// **How a call is run while the program is built** (ADR-359 D11): the call

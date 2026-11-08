@@ -53,7 +53,7 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
     context.around
 }
 
-pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.to_owned(), simd_loads: simd_loads.to_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, decided: collections::BTreeMap::new() } }
+pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.to_owned(), simd_loads: simd_loads.to_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new() } }
 
 pub(crate) fn frames_round(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, BoundsChanged> {
     let mut out: collections::BTreeMap<String, BoundsChanged> = collections::BTreeMap::new();
@@ -509,7 +509,7 @@ pub(crate) fn fields_expr(expr: &Expr, words: &winnow_grammar::InternerContext, 
             fields_expr(body, words, scan);
             scan.walked = was;
         },
-        Expr::Async(inner, _, _) => {
+        Expr::Async(inner, _, _, _) => {
             let inner = nikaia_std::boxed::open(inner);
             let was = scan.walked;
             scan.walked = false;

@@ -24,6 +24,7 @@ pub struct BoundsContext {
     pub array_lengths: collections::BTreeMap<i64, i64>,
     pub through_loops: bool,
     pub decided: collections::BTreeMap<String, bool>,
+    pub list_indices: collections::BTreeSet<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +68,7 @@ pub struct BoundsChanged {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BoundsWalk {
     pub(crate) arena: TermArena,
+    pub(crate) lists: collections::BTreeSet<String>,
     pub(crate) proven: BoundsProven,
     pub(crate) axioms: collections::BTreeMap<String, Vec<i64>>,
     pub(crate) unsized_names: collections::BTreeSet<String>,
@@ -260,27 +262,35 @@ pub(crate) fn bounding_new(args: &[FnArg], body: &Block, nonnegative: collection
             _ => { },
         }
     }
-    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), assumed_ends: collections::BTreeMap::new(), written_ends: collections::BTreeMap::new(), steady: bounding_changed(body, context, words), end_roots: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new() };
+    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), assumed_ends: collections::BTreeMap::new(), written_ends: collections::BTreeMap::new(), steady: bounding_changed(body, context, words), end_roots: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new(), lists: collections::BTreeSet::new() };
     for arg in args.iter() {
         let name = words.resolve(arg.name).to_string();
         let ty = words.resolve(arg.ty.name).to_string();
+        if bounding_is_list_type(&arg.ty, words) && !walk.shape.twice.contains(&name) { walk.lists.insert(name.to_string()); }
         if arg.ty.generics.is_empty() && is_whole_number(&ty) && !walk.shape.twice.contains(&name) { walk.typed.insert(name.to_string(), ty); }
         if !walk.shape.twice.contains(&name) { walk.end_roots.insert(name); }
     }
     walk.end_roots.insert(String::from("self"));
     for stmt in body.stmts.iter() {
         match &stmt.node {
-            Stmt::Let { names, .. } => {
+            Stmt::Let { names, ty, .. } => {
                 for symbol in names.iter() {
                     let symbol = *symbol;
                     let name = words.resolve(symbol);
                     if !walk.shape.twice.contains(name) { walk.end_roots.insert(name.to_string()); }
                 }
+                let declared = match ty { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if names.len() == 1 && bounding_is_list_type(declared, words) && !walk.shape.twice.contains(words.resolve(*nikaia_std::index::get(&names, 0))) { walk.lists.insert(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()); }
             },
             _ => { },
         }
     }
     walk
+}
+
+pub(crate) fn bounding_is_list_type(ty: &Type, words: &winnow_grammar::InternerContext) -> bool {
+    let name = words.resolve(ty.name);
+    !ty.is_nullable && !ty.is_tuple && (name == "Vec" || name == "List" || name == "Array")
 }
 
 pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
@@ -1133,6 +1143,7 @@ pub(crate) fn bounding_after_change(walk: &mut BoundsWalk, facts: &mut BoundsFac
     for name in changed.lengths.iter() { bounding_forget_length(&walk, facts, name); }
     for name in changed.parts.iter() { bounding_forget_parts(&walk, facts, name); }
     for place in changed.elements.iter() { bounding_forget_element(&walk, facts, place, false); }
+    rules_elements_kept(walk, facts, "");
 }
 
 pub(crate) fn bounding_lin(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
@@ -1887,6 +1898,7 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
             let at = walk.at;
             bounding_expr(walk, value, facts, context, program, words, &ask);
             bounding_place(walk, target, facts, context, program, words, &ask);
+            rules_element_write(walk, &facts, target, (op).as_ref(), value, context, program, words, &ask);
             bounding_compound(walk, (op).as_ref(), target, value, at, &facts, context, program, words, &ask);
             if op.is_none() {
                 match target {
@@ -1920,6 +1932,7 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
                 },
                 _ => { },
             }
+            rules_element_kept(walk, facts, target, words);
             return false;
         },
         Stmt::For { .. } => {
@@ -3205,6 +3218,7 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             bounding_expr(walk, base, facts, context, program, words, ask);
             bounding_expr(walk, index, facts, context, program, words, ask);
             bounding_index(walk, base, index, &facts, context, program, words, &ask);
+            rules_read_inside(walk, base, index, facts, context, program, words);
         },
         Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); bounding_binary(walk, op, lhs, rhs, span.start as i64, facts, context, program, words, &ask); },
         Expr::If { cond, then_branch, else_branch, .. } => {
@@ -3498,7 +3512,7 @@ pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut 
             bounding_expr(walk, inner, facts, context, program, words, &ask);
             rules_exit(walk, &facts, None, true, context, program, words, &ask);
         },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
         Expr::Throw(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             bounding_expr(walk, inner, facts, context, program, words, &ask);
@@ -3658,7 +3672,7 @@ pub(crate) fn changed_in_expr(expr: &Expr, context: &BoundsContext, words: &winn
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); changed_in_expr(expr, context, words, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); changed_in_expr(expr, context, words, out); },
         Expr::TryCatch { expr, handler, .. } => {

@@ -16,8 +16,10 @@
 //   given it at its start.
 // * `index`: every element of `a` lies in `0..b.len()`. A candidate where `a`
 //   holds whole numbers and every literal builds it empty; it holds where
-//   each push to `a` is proved to put a position of `b`, nothing else adds to
-//   `a`, and nothing takes from `b`.
+//   each push to `a` and each element written by `=` is proved to put a
+//   position of `b`, nothing else adds to or writes into `a`, and nothing
+//   takes from `b`. `b` may be `a` itself (ADR-306 D22, union-find's
+//   `parent`): a push then puts at most the length before it.
 // * `result`: the method `a` hands back a position of `b`: what a push to
 //   `a` may put. It holds where each `return` of the method is proved to.
 //
@@ -78,7 +80,8 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                     }
                     found.push(f)
                 }
-                if found.len() >= 2 {
+                // One list may be a list of its own positions (ADR-306 D22).
+                if !found.is_empty() {
                     lists.insert(owner, found)
                 }
             },
@@ -182,7 +185,7 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
             }
             let shapes_a = built.get(f"{owner}.{a}")?.clone() ?? []
             for b in fields {
-                if a == b || dropped.contains(f"{owner}.{b}") {
+                if dropped.contains(f"{owner}.{b}") {
                     continue
                 }
                 let shapes_b = built.get(f"{owner}.{b}")?.clone() ?? []
@@ -371,7 +374,10 @@ fn rules_inside(owner: ref String, changed: ref BoundsChanged, types: ref collec
         } else {
             let fields = rules_fields_of(list)
             if fields.len() == 1 {
-                dropped.insert(f"{owner}.{fields[0]}[]")
+                // A write of one element is checked where it stands
+                // (`rules_element_write`, ADR-306 D22): a direct `=` keeps
+                // a list of positions where its value is one; anything
+                // else drops it there.
             } else {
                 rules_from_self(owner, list, 0, lists, dropped, lengths)
             }
@@ -577,7 +583,7 @@ fn rules_built(expr: ref Expr, owner: ref String, lists: ref collections::BTreeM
         Expr::SafeField { base, .. } => rules_built(base, owner, lists, defaults, built, dropped, words),
         Expr::Unary { expr: inner, .. } => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::Try(inner, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
-        Expr::Async(inner, _, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
+        Expr::Async(inner, _, _, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::Throw(inner, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::Cast { expr: inner, .. } => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::TryCatch { expr: inner, handler, .. } => {
@@ -942,13 +948,137 @@ fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr,
             return true
         }
     }
-    let v = bounding_lin(walk, value, facts, context, program, words) ?? return false
+    // An element read out of a list whose every element facts bound: what
+    // holds of each element holds of it (ADR-306 D22).
+    let read = rules_element_read(walk, value, facts, words)
+    let v = read ?? bounding_lin(walk, value, facts, context, program, words) ?? return false
     let zero = walk.arena.int(0)
     let len = walk.arena.var(length_of(f"self.{b}"))
     let low = walk.arena.ge(v, zero)
     let high = walk.arena.lt(v, len)
     let goal = walk.arena.and([low, high])
     return bounding_proves(walk, facts, goal, ask)
+}
+
+/// **`list[i]` where facts hold of every element of `list`**: the term of
+/// its elements, of which those facts speak.
+fn rules_element_read(mut walk: BoundsWalk, value: ref Expr, facts: ref BoundsFacts, words: ref winnow_grammar::InternerContext) -> i64? {
+    let base = match value {
+        Expr::Index { base, .. } => base,
+        else => return null,
+    }
+    let list = path_of(base, words) ?? return null
+    let element = bounding_element_of(list)
+    if !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, element) }) {
+        return null
+    }
+    return walk.arena.var(element)
+}
+
+/// Whether `value` is at most `len(self.b)`: what a push onto `b` itself
+/// may put, the list one longer after it (ADR-306 D22).
+fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let v = bounding_lin(walk, value, facts, context, program, words) ?? return false
+    let zero = walk.arena.int(0)
+    let len = walk.arena.var(length_of(f"self.{b}"))
+    let low = walk.arena.ge(v, zero)
+    let high = walk.arena.le(v, len)
+    let goal = walk.arena.and([low, high])
+    return bounding_proves(walk, facts, goal, ask)
+}
+
+/// **An element of a list of `self` written in a checked body**
+/// (`self.a[i] = value`, ADR-306 D22): an `index` rule of `a` holds on
+/// where the value is a position of its `b`; a compound write drops it.
+fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref Expr, op: ref BinaryOp?, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    if !walk.checking || !walk.rule_roots.contains_key("self") {
+        return
+    }
+    let list = match target {
+        Expr::Index { base, .. } => path_of(base, words) ?? return,
+        else => return,
+    }
+    for (at, rule) in walk.rules.clone().iter().enumerate() {
+        if rule.kind != "index" || list != f"self.{rule.a}" {
+            continue
+        }
+        if op != null || !rules_position(walk, facts, value, rule.b, context, program, words, ask) {
+            walk.rule_failed.insert(at)
+        }
+    }
+}
+
+/// **Past a read of a list**: the read stops the program where its
+/// position lies outside, so past it `0 <= i < len` holds, as what an
+/// `assert` claims does (ADR-269 D4). Only a list known to be one - a rule
+/// speaks of it, the body built it, its type says so, or it is a list field
+/// the walks see (D21), or the checker typed it a std list (#1431) - for a
+/// map's key may lie past its length.
+fn rules_read_inside(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, mut facts: BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext) {
+    let list = path_of(base, words) ?? return
+    let mut known = walk.shape.roots.contains(list) || walk.lists.contains(list)
+    if context.list_indices.contains(node_key(base)) && !walk.shape.twice.contains(path_root(list)) {
+        known = true
+    }
+    match base {
+        Expr::Field { name, .. } => {
+            if walk.shape.fields.contains(f".{words.resolve(name)}") {
+                known = true
+            }
+        },
+        else => {},
+    }
+    for (root, owner) in walk.rule_roots.clone() {
+        for rule in walk.rules {
+            if rule.owner == owner && (list == f"{root}.{rule.b}" || (rule.kind != "result" && list == f"{root}.{rule.a}")) {
+                known = true
+            }
+        }
+    }
+    if !known || walk.collecting || walk.pinned.contains(path_root(list)) {
+        return
+    }
+    let at = bounding_lin(walk, index, facts, context, program, words) ?? return
+    let len = bounding_list_length(walk, list, node_key(base), context)
+    let zero = walk.arena.int(0)
+    let low = walk.arena.ge(at, zero)
+    let high = walk.arena.lt(at, len)
+    bounding_push(walk, facts, low)
+    bounding_push(walk, facts, high)
+}
+
+/// **After a write of one element of a list an `index` rule holds of**:
+/// the write kept the rule or a checked body found it fails
+/// (`rules_element_write`), so what holds of every element holds again.
+fn rules_element_kept(mut walk: BoundsWalk, mut facts: BoundsFacts, target: ref Expr, words: ref winnow_grammar::InternerContext) {
+    let list = match target {
+        Expr::Index { base, .. } => path_of(base, words) ?? return,
+        else => return,
+    }
+    rules_elements_kept(walk, facts, list)
+}
+
+/// **What holds of every element of a list an `index` rule holds of**,
+/// given again after a change forgot it (`list` one list, or `""` every
+/// one): each write that could break it is checked where it stands
+/// (`rules_element_write`, `rules_at_call`), and one that does fails the
+/// rule for the whole program (ADR-306 D22).
+fn rules_elements_kept(mut walk: BoundsWalk, mut facts: BoundsFacts, list: ref String) {
+    for (root, owner) in walk.rule_roots.clone() {
+        for rule in walk.rules.clone() {
+            let of = f"{root}.{rule.a}"
+            if rule.owner != owner || rule.kind != "index" || (list != "" && list != of) {
+                continue
+            }
+            let zero = walk.arena.int(0)
+            let b = walk.arena.var(length_of(f"{root}.{rule.b}"))
+            let each = walk.arena.var(bounding_element_of(of))
+            let low = walk.arena.ge(each, zero)
+            let high = walk.arena.lt(each, b)
+            bounding_push(walk, facts, low)
+            bounding_push(walk, facts, high)
+        }
+    }
 }
 
 /// **A call in a checked body** (`receiver` a path, or nothing for a free
@@ -974,6 +1104,19 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
     for (at, rule) in walk.rules.clone().iter().enumerate() {
         let a = f"self.{rule.a}"
         let b = f"self.{rule.b}"
+        if rule.kind == "index" && on == a && rule.a == rule.b {
+            // A list of its own positions: a push puts at most the length
+            // before it, and nothing may take from it.
+            let kept = if method == "push" && args.len() == 1 {
+                rules_up_to(walk, facts, args[0], rule.b, context, program, words, ask)
+            } else {
+                keeps_length(method) && method != "fill"
+            }
+            if !kept {
+                walk.rule_failed.insert(at)
+            }
+            continue
+        }
         if rule.kind == "index" && on == a {
             let kept = if method == "push" && args.len() == 1 {
                 rules_position(walk, facts, args[0], rule.b, context, program, words, ask)

@@ -1,0 +1,15 @@
+error[NK1106]: The option `from` of `str::find` takes `i64`, but you're passing `ref String`.
+   --> tests/a_method_option_of_another_type.nika:15:5
+    |
+ 15 |     println(s.find("b"; from: "x") ?? -1)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it an `i64`, or change the declaration to `ref String`.
+error[NK1106]: The option `by` of `P::at` takes `i64`, but you're passing `ref String`.
+   --> tests/a_method_option_of_another_type.nika:17:5
+    |
+ 17 |     println(p.at(by: "x"))
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it an `i64`, or change the declaration to `ref String`.
+2 type errors

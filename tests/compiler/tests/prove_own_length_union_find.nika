@@ -1,0 +1,50 @@
+// ADR-306 D22 and D23 (#1414): union-find. `parent` holds positions of
+// itself: every write puts a position of it (`self.parent[up]`, a
+// `find`, the length before a push), so a read of it lies inside
+// `parent`. A checked read stops the program where it lies outside, so
+// past the loop's condition `at` is inside, and `find` returns a
+// position of `parent`: `union` reads `rank` at it, as long as `parent`.
+// Only `start`, which nothing bounds, stays checked.
+struct Forest {
+	parent: Vec[i64],
+	rank: Vec[i64],
+}
+
+impl Forest {
+	fn find(ref mut self, start: i64) -> i64 {
+		let mut at = start
+		while self.parent[at] != at {
+			let up = self.parent[at]
+			self.parent[at] = self.parent[up]
+			at = self.parent[at]
+		}
+		return at
+	}
+
+	fn union(ref mut self, a: i64, b: i64) {
+		let one = self.find(a)
+		let other = self.find(b)
+		if one != other {
+			self.parent[one] = other
+			self.rank[other] += 1
+		}
+	}
+
+	fn add(ref mut self) -> i64 {
+		let id = self.parent.len()
+		self.parent.push(id)
+		self.rank.push(0)
+		return id
+	}
+}
+
+fn main() throws {
+	let mut f = Forest { parent: [], rank: [] }
+	let a = f.add()
+	let b = f.add()
+	let c = f.add()
+	f.union(a, b)
+	f.union(b, c)
+	let root = f.find(c)
+	println(f"{f.find(a) == root} {root} {f.rank[root]}")
+}

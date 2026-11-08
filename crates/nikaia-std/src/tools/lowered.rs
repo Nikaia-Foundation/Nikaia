@@ -109,6 +109,14 @@ mod bounds_matched_lowered {
 #[allow(unused_imports)]
 pub use bounds_matched_lowered::*;
 
+mod bounds_proven_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    include!("lowered/bounds_proven.rs");
+}
+#[allow(unused_imports)]
+pub use bounds_proven_lowered::*;
+
 mod bounds_reasons_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -2409,6 +2417,10 @@ pub mod bounds_matched {
     #[allow(unused_imports)]
     pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_required, bm_each, bm_changing_methods};
 }
+pub mod bounds_proven {
+    #[allow(unused_imports)]
+    pub use super::{BoundsAllProven, bounds_proven};
+}
 pub mod bounds_reasons {
     #[allow(unused_imports)]
     pub use super::{blocked_index, blocked_operation};
@@ -3113,7 +3125,7 @@ pub mod lsp {
 }
 pub mod manifest {
     #[allow(unused_imports)]
-    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
+    pub use super::{Switch, known, build_key, targets, codegen_keys, codegen_units, codegen_table, codegen_key, DependencyShape, dependency, crate_name, ManifestItem, ManifestDependency, ManifestFile, manifest_empty, ManifestFeature, ManifestRustLibrary, manifest_parse, manifest_has_build_section, manifest_foreign_crates};
 }
 pub mod maps {
     #[allow(unused_imports)]
@@ -3189,7 +3201,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_no_std_for, project_drive_publish_stub, project_drive_publishable, project_drive_rust_crate, project_drive_splice_span, project_drive_spliced, project_drive_rust_manifest, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
@@ -3434,7 +3446,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, Place, render, MapPlan, trusted_maps};
+    pub use super::{Wrote, spelled, written_root, Reason, says_trusted, SourceCall, source_calls, mark_trusted, Place, render, MapPlan, trusted_maps};
 }
 pub mod ty {
     #[allow(unused_imports)]

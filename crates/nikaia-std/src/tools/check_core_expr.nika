@@ -292,8 +292,9 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         // **`async e`** (ADR-async-5 D6, D10): the value is `e`'s, a lambda's
         // the lambda's result, since the lambda is run as the task; no jump
         // leaves it (`NK1132`). Its wait point is the block's (`check_async_block`).
-        Expr::Async(inner, _, within) => {
+        Expr::Async(inner, _, within, admission) => {
             check_core_async_within(state, world, host, within, span)
+            check_core_async_admission(state, world, host, admission, span)
             // **Not inside a door** (Part I 8.1.2, `NK2203`): said once, at
             // the outermost form.
             let held = state.inside_a_door
@@ -423,8 +424,9 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         },
         Expr::Range { start, end, .. } => check_core_range(state, world, host, start, end, span),
         Expr::TryCatch { expr: guarded, handler, .. } => check_core_flow_try_catch(state, world, host, expr, guarded, handler, span),
-        Expr::Spawn { body, written_async, child, within, .. } => {
+        Expr::Spawn { body, written_async, child, within, admission, .. } => {
             check_core_async_within(state, world, host, within, span)
+            check_core_async_admission(state, world, host, admission, span)
             if written_async && state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
             }
@@ -847,7 +849,7 @@ fn check_core_async_admission[H: CheckHost](mut state: CheckState, world: ref Ch
     if !state.structs.contains_key(named) && !state.enums.contains_key(named) {
         return
     }
-    state.findings.push(check_refusal("NK1164", span, f"`admission:` needs a `task::Admission` here, but `{named}` isn't one.", ["The strategy decides when the next task of the group starts, through its `decide` method (ADR-async-5 D18)."], f"Write `impl task::Admission for {named} {{ … }}`, or pass a type that already has one."))
+    state.findings.push(check_refusal("NK1164", span, f"`admission:` needs a `task::Admission` here, but `{named}` isn't one.", ["The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18)."], f"Write `impl task::Admission for {named} {{ … }}`, or pass a type that already has one."))
 }
 
 /// Whether `limit:` is the literal `1`: the tasks run one at a time (D15).

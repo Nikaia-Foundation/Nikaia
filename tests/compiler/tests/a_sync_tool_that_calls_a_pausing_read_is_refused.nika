@@ -1,0 +1,36 @@
+// #1387, Part I 8 / ADR-288: a `sync` function that calls `fs::read_to_string`
+// or `fs::walk` is refused (`NK2202`) in a program, and in a `tools/*.nika`
+// file too: `lower-std` checked the toolchain's files without the `sync`
+// walk, and lowered the call to an `.await` rustc refused in a non-async fn.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn said(label: String, out: process::Output, tmp: String) throws {
+    println(f"-- {label}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        let shown = line.trim_start_matches("Error: ")
+        if shown.starts_with("error") || shown.starts_with("Lowered") {
+            println(shown.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let source = "use std::fs\n\npub fn size(p: String) -> i64 sync throws {\n    return fs::read_to_string(p, fs::Root::Anywhere).len()\n}\n\npub fn count(p: String) -> i64 sync throws {\n    return fs::walk(p, fs::Root::Anywhere).len()\n}\n"
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, f"{source}\nfn main() throws {{\n    println(f\"{{size(\"p.nika\")}} {{count(\".\")}}\")\n}}\n")
+    said("a program", process::run(nikaia, ["check", "p.nika"]; dir: tmp.clone()), tmp)
+    // A sysroot of one tools file: `lower-std` checks it as it checks the
+    // toolchain's own.
+    process::run("mkdir", ["-p", f"{tmp}/root/nikaia-std/src/tools"])
+    fs::write(f"{tmp}/root/nikaia-std/src/tools/probe.nika", fs::Root::Anywhere, source)
+    said("a tools file", process::run(nikaia, ["lower-std", "--sysroot", f"{tmp}/root"]; dir: tmp.clone()), tmp)
+    process::run("rm", ["-rf", tmp])
+}

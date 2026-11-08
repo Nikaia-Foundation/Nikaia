@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1362 (Draft)
+**Version:** 0.0.1365 (Draft)
 **Date:** 2026-11-08
 
 ---
@@ -702,7 +702,12 @@ names and list indices on its stack are the value's path (`$.contacts[3].email`)
 
 **An entry marked `@stream`**, whose body repeats an item on a fixed path,
 hands its items over one at a time instead of a list (D7); a generic `@frame`
-rule may be folded in parallel (10.7).
+rule may be folded in parallel (10.7). The call is a sequence walked once:
+`for ev in Yaml::events(bytes)` takes each item as the parser produces it, and
+a `break` stops the parse. The items are owned and do not borrow from the
+input. A Rust user of a rust-library also gets `parse_<rule>_reader` over a
+`std::io::Read` where a feature reaches the entry (ADR-393 D4); a Nikaia entry
+takes `String` or `Bytes`.
 
 **An action may not pause.** A call that can pause is refused where it stands
 with `NK2209`. A fold's `init`, `step` and `merge` are action code. An action

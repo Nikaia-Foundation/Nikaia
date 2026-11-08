@@ -44,6 +44,12 @@ it, like the checks in `docs/supervisor.md`.
 
 * **I8. Done when**: one sentence saying what is true when the issue is
   finished, checkable without the author.
+* **I8a. Measured sizes** (2026-11-08, #1397, #1414): an item that promises to
+  remove sites gives the count it measured per group, with one probe per group,
+  and checks the group against the governing ADR's *does not decide* list; an
+  estimate not measured says so. A *Done when* figure names the reason it
+  counts (the walk's report line), and each item says which reason it moves;
+  an item that moves none of the counted reasons does not promise the figure.
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/` (or the package's tests), and the rows it must show.

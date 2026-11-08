@@ -2582,6 +2582,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[K, V](self: ref collections::HashMap[K, V], key: ?) -> V?"
 
 # **Written into, by name** ([ADR-293](../../docs/specification/adr/adr-293.md)
@@ -2845,6 +2846,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[K, V](self: ref collections::BTreeMap[K, V], key: ?) -> V?"
 
 # Take a key and what it names out of the map, and hand back what it named
@@ -2939,6 +2941,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
 
 # The largest element, or nothing where the set is empty.
@@ -2947,6 +2950,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[T](self: ref collections::BTreeSet[T]) -> T?"
 
 # The elements in either set, each once, smallest first.
@@ -3185,6 +3189,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[T](self: ref Vec[T]) -> T?"
 
 # The last element, or nothing where the list is empty.
@@ -3193,6 +3198,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[T](self: ref Vec[T]) -> T?"
 
 # The element at a position, or nothing past the end (ADR-293 D20: a negative
@@ -3202,6 +3208,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[T](self: ref Vec[T], at: i64) -> T?"
 
 # Whether the list holds nothing.
@@ -3283,6 +3290,7 @@ pub = true
 panics = false
 sync = true
 touches = []
+returns = "ref(self)"
 signature = "[K, V](self: ref Fixed[K, V], key: ?) -> V?"
 
 # Whether this key is one of the table's.
@@ -4126,6 +4134,7 @@ panics = true
 touches = ["lock read"]
 sync = true
 locks = true
+returns = "ref(self)"
 signature = "[T](self: ref Locked[T]) -> Seen[T]"
 
 # Put a value in, whatever is there now.
@@ -4232,6 +4241,7 @@ panics = true
 touches = ["lock read"]
 sync = true
 locks = true
+returns = "ref(self)"
 signature = "[T](self: ref SharedMut[T]) -> Seen[T]"
 
 # Put a value in, whatever is there now.
@@ -6124,13 +6134,14 @@ signature = "(mut self: ref process::Child)"
 # as U+FFFD, so a program's output never fails the wait. The wait gives the
 # thread up, as `run`'s does. `user_time`, `system_time` and `max_rss_kib`
 # are the child's where this wait saw it end, zero and `null` where
-# `try_wait` saw it first; `timed_out` is `false`.
+# `try_wait` saw it first; `timed_out` is `false`. What it hands back is
+# **untrusted** unless the call says `trusted: true` (ADR-365 D2).
 [fn."process::Child::wait"]
 pub = true
 panics = false
 throws = ["io::IoError"]
 provenance = "untrusted"
-signature = "(mut self: ref process::Child) -> process::Output"
+signature = "(mut self: ref process::Child; trusted: bool = false) -> process::Output"
 
 # Throw `process::Exit::Code(code)`, with `code` from 0 to 255: a fatal error
 # (ADR-345), which a `catch` takes only in an arm naming it. At the end of
@@ -6239,14 +6250,14 @@ signature = "(self: ref Listener) -> String"
 # The next bytes the peer sent, waiting for them where there are none yet.
 #
 # **Empty means the peer closed.** What comes back is **untrusted**: somebody
-# else chose these bytes.
+# else chose these bytes, unless the call says `trusted: true` (ADR-365 D2).
 [fn."net::Connection::read"]
 pub = true
 panics = false
 touches = ["socket read"]
 throws = ["io::IoError"]
 provenance = "untrusted"
-signature = "(mut self: ref Connection) -> Bytes"
+signature = "(mut self: ref Connection; trusted: bool = false) -> Bytes"
 
 # `?` for the bytes, for `fs::write`'s reason: it takes a `Bytes`, a `ref String`\
 # and a buffer, and writing one of them here would refuse a correct program.

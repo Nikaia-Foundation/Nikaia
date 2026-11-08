@@ -960,7 +960,7 @@ pub(crate) fn spawn_bodies(expr: &Expr, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, o
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); spawn_bodies(expr, holes_of, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); spawn_bodies(expr, holes_of, out); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); spawn_bodies(base, holes_of, out); },
@@ -1019,7 +1019,7 @@ pub(crate) fn effects(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '
         },
         Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
         Expr::Try(expr, _) => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
-        Expr::Async(expr, _, _) => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
+        Expr::Async(expr, _, _, _) => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
         _ => { origins_of(expr, ask, &holes_of, &unaliased, walk); },
     }
 }
@@ -1167,7 +1167,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
         Expr::Unsafe(block, _) => tail_origins(block, ask, &holes_of, &unaliased, walk),
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); origins_of(expr, ask, holes_of, unaliased, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); origins_of(expr, ask, holes_of, unaliased, walk) },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
@@ -1238,9 +1238,59 @@ pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
         origins_of(receiver, ask, &holes_of, &unaliased, walk);
         return out;
     }
-    add_all(&lent_origins(receiver, ask, &holes_of, &unaliased, walk), &mut out);
-    for arg in args.iter() { add_all(&lent_origins(arg, ask, &holes_of, &unaliased, walk), &mut out); }
+    let named = method_sources(ask, &method);
+    let of_receiver = lent_origins(receiver, ask, &holes_of, &unaliased, walk);
+    if named.is_none() || nikaia_std::index::or(match named.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.contains(&-1)),
+        None => None,
+    }, || true) { add_all(&of_receiver, &mut out); }
+    let mut position: i64 = 0;
+    for arg in args.iter() {
+        let of = lent_origins(arg, ask, &holes_of, &unaliased, walk);
+        if named.is_none() || nikaia_std::index::or(match named.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.contains(&position)),
+            None => None,
+        }, || true) { add_all(&of, &mut out); }
+        position += 1;
+    }
     out
+}
+
+pub(crate) fn method_sources(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, method: &str) -> Option<collections::BTreeSet<i64>> {
+    let mut out: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let mut any = false;
+    for key in method_keys(ask.own_methods, method) {
+        let contract = match *nikaia_std::index::get(&ask.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        any = true;
+        if !sources_of_a_method(contract, &mut out) { return None; }
+    }
+    for key in method_keys(ask.library_methods, method) {
+        let contract = match *nikaia_std::index::get(&ask.library.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        any = true;
+        if !sources_of_a_method(contract, &mut out) { return None; }
+    }
+    if !any { return None; }
+    Some(out)
+}
+
+pub(crate) fn sources_of_a_method(contract: &FnContract, into: &mut collections::BTreeSet<i64>) -> bool {
+    if contract.borrows.is_empty() { return false; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
+    for b in contract.borrows.iter() {
+        let mut found = false;
+        let mut at: i64 = 0;
+        for (name, _) in signature.params.iter() {
+            let dotted = format!("{}.", name);
+            if b == name || b.starts_with(&dotted) {
+                into.insert(at - 1);
+                found = true;
+            }
+            at += 1;
+        }
+        if !found { return false; }
+    }
+    true
 }
 
 pub(crate) fn owned_by_every_method(ledger: &Ledger, methods: &MethodIndex, method: &str) -> bool {
