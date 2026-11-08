@@ -1,0 +1,12 @@
+// #1416: a `for` uses `cli::Args` up, as it does a sequence, so a second
+// walk of the same name is NK2702, not a rustc error.
+use std::cli
+fn main() throws {
+	let words = cli::args()
+	for word in words {
+		println(word)
+	}
+	for word in words {
+		println(word)
+	}
+}

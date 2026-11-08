@@ -1,0 +1,10 @@
+error[NK2702]: `words` is a sequence, and it was already used up.
+  --> tests/cli_args_walked_twice.nika:9:2
+   |
+ 9 | 	for word in words {
+   |  ^
+   |
+   = note: A sequence of `String` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.
+   = note: A `Vec` is different: it already holds its elements and can be walked as often as you like.
+   = help: Walk a second `cli::args()`: each call reads the words again from the first.
+1 sequence walked a second time

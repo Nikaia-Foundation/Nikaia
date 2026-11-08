@@ -1970,6 +1970,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates")
     let over = check_core_expr(state, world, host, iter, span)
     state.a_loop_over_a_nullable(world, over, iter, span)
+    state.a_loop_over_what_holds_no_elements(world, over, iter, span)
     // **A `for` walks what it counts, one turn per element or entry**
     // (ADR-361 D13): its length is recorded as `.len()`'s is.
     if check_core_method_counted(over) {
@@ -1987,6 +1988,12 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     state.fallible_step(world, over, width, span)
     // A fallible walk bound to several names is `NK2701` already.
     let stepped_fallibly = state.findings.len() > before
+    // **A `for` over a walk with `within:` ends it** (ADR-async-5 D27): the
+    // walk is listed first, and throws `task::TimedOut` there.
+    if shape_timed(over) {
+        state.facts.timed_loops.insert(span.start as i64)
+        check_core_walk_timed_out(state, span)
+    }
     state.pausing_step(over, span)
     // **A `for` walks a produced sequence, and that consumes it** (ADR-105 D2).
     state.a_sequence_is_walked(iter, over, span, world)
@@ -2025,7 +2032,7 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     // **A name that holds a sequence is handed over, not lent** (ADR-293 D19).
     let a_seq = match over {
         Ty::Seq { .. } => true,
-        else => false,
+        else => the_command_line(over),
     }
     let owned = is_a_place(iter) && a_seq
     if owned {

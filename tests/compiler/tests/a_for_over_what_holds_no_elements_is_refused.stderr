@@ -1,0 +1,33 @@
+error[NK1206]: A `for` can't walk `foo`: a `Foo` holds no elements.
+   --> tests/a_for_over_what_holds_no_elements_is_refused.nika:15:5
+    |
+ 15 |     for l in foo {
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `foo` is a `Foo`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3).
+    = help: Walk a list the `Foo` holds, `for … in foo.<field> { … }`, or put the values in a list first.
+error[NK1206]: A `for` can't walk `light`: a `Light` holds no elements.
+   --> tests/a_for_over_what_holds_no_elements_is_refused.nika:19:5
+    |
+ 19 |     for l in light {
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `light` is a `Light`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3).
+    = help: Put the values in a list and walk that: `for … in [light] { … }`.
+error[NK1206]: A `for` can't walk `n`: an `i64` holds no elements.
+   --> tests/a_for_over_what_holds_no_elements_is_refused.nika:23:5
+    |
+ 23 |     for i in n {
+    |     ^^^^^^^^^^^^
+    |
+    = note: `n` is an `i64`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3).
+    = help: Walk a range up to it: `for … in 0..<n { … }`.
+error[NK1206]: A `for` can't walk `ready`: a `bool` holds no elements.
+   --> tests/a_for_over_what_holds_no_elements_is_refused.nika:27:5
+    |
+ 27 |     for r in ready {
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: `ready` is a `bool`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3).
+    = help: Test it with `if ready { … }`, or walk a list of such values.
+4 type errors

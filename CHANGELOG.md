@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1362] — 2026-11-08
+
+**The par_iter chain takes limit:, within: and admission:; a deadline travels through zip and chain (ADR-async-5 D15, D27; #986, #1423)**
+- `xs.par_iter(limit:, within:, admission:)`: every step that ends the walk runs on at most `limit` workers (a fold takes the smaller of its own and the walk's); once the deadline has passed no element starts, and the ending step fails with `task::TimedOut`, which the checker asks to be handled (NK2605).
+- A walk handed to `zip` or `chain` passes its deadline on, so no ending step returns a partial result after its deadline ran out (#1423).
+- An `overlap`, a `select` and a pausing `for` step on a gated main line start the waiting tasks too (D37).
+- ADR-async-5 D26: NK2107 stays on a lambda of `par_iter(limit: 1)` that changes an outer name, as it does under `async(limit: 1)`.
+
 ## [0.0.1361] — 2026-11-08
 
 **async { … } takes limit: and admission:; a task waiting for a place does not stop the main line (ADR-async-5 D15, D18, D37, D38; #986)**

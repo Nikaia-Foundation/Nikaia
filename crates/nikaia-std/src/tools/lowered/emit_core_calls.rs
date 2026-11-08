@@ -752,6 +752,31 @@ impl EmitState {
         if boxed { out.push("Box::pin("); }
         if name == "par_iter" && args.is_empty() && emit_candidates(&self.own_contracts, "par_iter").is_empty() {
             let piece = emit_call_option_named(world, config, "piece");
+            let limit = emit_call_option_named(world, config, "limit");
+            let within = emit_call_option_named(world, config, "within");
+            let admission = emit_call_option_named(world, config, "admission");
+            if !limit.is_empty() || !within.is_empty() || !admission.is_empty() {
+                if host.user_parallelism() {
+                    out.push("nikaia_std::par::gated(&");
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+                } else {
+                    out.push("nikaia_std::par::gated_in_order(");
+                    self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+                    out.push(".iter()");
+                }
+                let strategy = !admission.is_empty();
+                for option in [piece, limit, within, admission] {
+                    if !option.is_empty() {
+                        out.push(", Some(");
+                        self.emit_expr(world, walk, out, host, nikaia_std::index::get(&option, 0), depth, flow, scope)?;
+                        out.push(")");
+                    } else { out.push(", None"); }
+                }
+                if !strategy { out.push("::<()>"); }
+                out.push(")");
+                if boxed { out.push(")"); }
+                return Ok(());
+            }
             if host.user_parallelism() {
                 if !piece.is_empty() { out.push("nikaia_std::par::iter_in_pieces(&"); } else { out.push("nikaia_std::par::iter(&"); }
                 self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
@@ -803,6 +828,8 @@ impl EmitState {
                 return Ok(());
             }
         }
+        let timed = self.facts.timed_ends.contains(&on_node);
+        if timed { out.push("nikaia_std::par::ended("); }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
         if kind == 1 {
             out.push(&format!("nikaia_std::seq::{}(", entry));
@@ -887,6 +914,10 @@ impl EmitState {
         if self.method_pauses(on_node) {
             if flow.in_lambda { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
             out.push(&emit_async_pause(&walk));
+        }
+        if timed {
+            if length { out.push(" as i64"); }
+            out.push(")");
         }
         let fails = self.method_can_fail(on_node);
         if flow.can_throw && !flow.caught && fails { out.push("?"); }
@@ -1072,8 +1103,8 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple79370| {
-        let (i, word) = __nikaia_tuple79370;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple81365| {
+        let (i, word) = __nikaia_tuple81365;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

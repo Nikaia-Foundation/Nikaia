@@ -1,0 +1,31 @@
+// #1422: a struct or `enum` of another package has no text form unless it
+// is an error, as one of this package (NK1201): an `f"…"` hole or a print
+// call of it is refused by the checker, not by rustc's NK1343, and the help
+// offers only the fields the package lets a program read. Its error is text.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub struct Node {\n\tpub line: i64,\n\tpub raw: String,\n\tkept: i64,\n}\n\npub enum Kind {\n\tPlain,\n\tQuoted,\n}\n\npub struct Fault {\n\tpub line: i64,\n}\n\nimpl Error for Fault {\n\tfn message(ref self) -> String {\n\t\treturn f\"fault at line {self.line}\"\n\t}\n}\n\npub fn nodes() -> Vec[Node] {\n\treturn [Node { line: 1, raw: \"a\", kept: 0 }]\n}\n\npub fn fault() -> Fault {\n\treturn Fault { line: 7 }\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\n\nfn main() throws {\n\tfor n in lib::nodes() {\n\t\tprintln(f\"{n}\")\n\t}\n\tprintln(lib::Kind::Plain)\n\tprintln(f\"{lib::fault()}\")\n}\n")
+    let out = process::run(toolchain(), ["check", "src/main.nika"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        if !line.trim().starts_with("Compiling") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

@@ -886,6 +886,14 @@ fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckW
 /// D35): the form fails with `error`, as a written call that can fail does
 /// (`NK2605`), so a `catch` around it or its fallback has it to handle, and a
 /// function that handles it nowhere says `throws`.
+/// **A walk with `within:` can fail where it ends** (ADR-async-5 D27): the
+/// step that ends it throws `task::TimedOut` once the deadline ran out, and
+/// that enters the function's throw set as any failing call's does.
+pub fn check_core_walk_timed_out(mut state: CheckState, span: ref Span) sync {
+    let function = state.current?.clone() ?? ""
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.")
+}
+
 fn check_core_async_fails(mut state: CheckState, span: ref Span, error: ref String, message: ref String, note: ref String, help: ref String) sync {
     let fails: Vec[String] = [error.clone()]
     if state.flow.guarded != null {

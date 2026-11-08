@@ -101,8 +101,7 @@ pub fn error_kind(declared: &collections::BTreeSet<String>, library: &Ledger, na
     0
 }
 
-pub fn sum_member_type(declared: &collections::BTreeSet<String>, library: &Ledger, name: &str, params: &str, is_std: bool) -> String {
-    let kind = error_kind(declared, library, name);
+pub fn sum_member_type(kind: i64, name: &str, params: &str, is_std: bool) -> String {
     if kind == 0 { return name.to_string(); }
     if kind == 2 { return format!("nikaia_std::error::Thrown<{}{}>", library_error_path(name, is_std), params); }
     format!("nikaia_std::error::Thrown<{}{}>", name, params)

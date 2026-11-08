@@ -1092,7 +1092,9 @@ impl EmitState {
             // A produced sequence is walked by value (ADR-105 D2).
             out.push(";\n")
             out.push(inner)
-            out.push(f"{allowed}while let Some({bound}) = __nikaia_sequence.next().await ")
+            // **Each step is a pause of the main line** (ADR-async-5 D37):
+            // under a gate, the waiting tasks start meanwhile.
+            out.push(f"{allowed}while let Some({bound}) = __nikaia_sequence.next(){emit_async_pause(walk)} ")
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))
             out.push("\n")
             out.push(pad)
@@ -1100,11 +1102,20 @@ impl EmitState {
             return
         }
         out.push(f"{allowed}for {bound} in ")
+        // **A `for` over a walk with `within:` lists it first** (ADR-async-5
+        // D27), and throws `task::TimedOut` there where its deadline ran out.
+        let timed = self.facts.timed_loops.contains(at)
+        if timed {
+            out.push("nikaia_std::par::listed(")
+        }
         // **A `for` lends** (ADR-094 D4), a place and not a call, a range or a
         // literal; **a name holding a sequence is not a place that lends**
         // (ADR-293 D19): the checker says which loops walk by value.
-        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at)
+        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at) && !timed
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)
+        if timed {
+            out.push(")?")
+        }
         if lends && viewed {
             out.push(".iter_mut()")
         } else if lends {

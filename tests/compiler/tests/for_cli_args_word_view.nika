@@ -1,0 +1,12 @@
+// #1416: a word of `cli::args()` is an owned `String`, so a view of it
+// handed to a `String` is NK1105, not a rustc error.
+use std::cli
+fn main() throws {
+	for name in cli::args() {
+		let mut path = f"b/{name}"
+		if name.starts_with("/") {
+			path = name.strip_prefix("/") ?? ""
+		}
+		println(path)
+	}
+}

@@ -2423,7 +2423,7 @@ pub mod bounds_rules {
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]
-    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_removes, key_root, root_name, is_unsigned, is_whole_number};
+    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_adds, only_removes, key_root, root_name, is_unsigned, is_whole_number};
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
@@ -2510,7 +2510,7 @@ pub mod check_buildtime {}
 pub mod check_buildtime2 {}
 pub mod check_calls {
     #[allow(unused_imports)]
-    pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, a_paused_chain, a_pausing_sequence};
+    pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, shape_timed, a_paused_chain, a_pausing_sequence};
 }
 pub mod check_claims {
     #[allow(unused_imports)]
@@ -2550,7 +2550,7 @@ pub mod check_core_comptime {
 }
 pub mod check_core_expr {
     #[allow(unused_imports)]
-    pub use super::{check_core_expr, check_core_value_of};
+    pub use super::{check_core_expr, check_core_value_of, check_core_walk_timed_out};
 }
 pub mod check_core_flow {
     #[allow(unused_imports)]
@@ -2765,7 +2765,7 @@ pub mod check_texts {
 }
 pub mod check_types {
     #[allow(unused_imports)]
-    pub use super::{a_number_name, a_float_type, an_integer_literal, type_last_segment, view_of_type, viewed_from_type, unviewed_type, hands_a_run, hands_a_run_view, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
+    pub use super::{a_number_name, a_float_type, an_integer_literal, type_last_segment, view_of_type, viewed_from_type, unviewed_type, hands_a_run, hands_a_run_view, copies_as_a_view, value_of_a_copy, is_a_view_of_a_string, a_copy_by_value, moves_away, copies_plainly, holds_an_array, is_a_list_type, is_a_collection_type, is_text_type, is_a_hull, locked_content_of, is_a_handle, locked_content, becomes_shared, way_out_of_a_mismatch, element_walked, the_command_line, elements_walked, wholly_known, a_map_type, is_a_literal_other_than, a_copied_part, tail_value_of, check_peeled};
 }
 pub mod check_values {
     #[allow(unused_imports)]

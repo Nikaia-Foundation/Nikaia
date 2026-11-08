@@ -1,0 +1,13 @@
+// #1416: `cli::args()` is a `cli::Args`, as written, and a `for` over a
+// name holding one walks it by value, each word an owned `String`.
+use std::cli
+fn main() throws {
+	let some: cli::Args = cli::args()
+	println(some.len() > 0)
+	let words = cli::args()
+	let mut kept: Vec[String] = []
+	for word in words {
+		kept.push(word)
+	}
+	println("walked")
+}

@@ -528,6 +528,13 @@ pub struct CheckFacts {
     /// `fold_merged` below, which a list's `iter()` at `no` has as well as a
     /// walk on every core, beside the language below's own two-argument `fold`.
     pub par_folds: collections::BTreeSet[i64],
+    /// **The steps that end a walk with `within:`** (ADR-async-5 D27), by
+    /// their receiver's node: the lowering writes `par::ended(…)` around
+    /// each, which throws `task::TimedOut`.
+    pub timed_ends: collections::BTreeSet[i64],
+    /// **The `for` loops over a walk with `within:`**, by the loop's start:
+    /// the lowering lists the walk first, through `par::listed`.
+    pub timed_loops: collections::BTreeSet[i64],
     /// **A fold's step or merge that changes its accumulator in place**
     /// (ADR-372 D9), by the argument: `1` takes the second argument by value,
     /// `2` lent. The lowering wraps it in `|mut a, x| { f(&mut a, x); a }`.
@@ -769,6 +776,8 @@ impl CheckFacts {
             map_drains: collections::BTreeSet(),
             take_drains: collections::BTreeSet(),
             par_folds: collections::BTreeSet(),
+            timed_ends: collections::BTreeSet(),
+            timed_loops: collections::BTreeSet(),
             in_place_folds: collections::BTreeMap(),
             kept_drains: collections::BTreeSet(),
             kept_byte_fields: collections::BTreeSet(),

@@ -1,0 +1,3 @@
+18  values[atom]               checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+29  values[atom]               proved
+40  values[atom]               checked: a value read out of a list, of which the walk knows no fact (#797, #798)

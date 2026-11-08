@@ -18,6 +18,26 @@ fn check_exprs_part_name(index: i64) -> String {
     return f"p{index}"
 }
 
+/// The ledger entry of `name` (`yaml::Node`) where it is a type a package
+/// this file `use`s declares, with the fields or variants it records (#1422):
+/// not a `std` module's, which this file reached with `use std::…`, and not a
+/// Rust crate's, which the ledger records with neither. A dependency's entries
+/// are in the program's ledger or in `library`, under its qualified name.
+fn check_exprs_package_type(world: ref CheckWorld, std_in_scope: ref collections::BTreeSet[String], name: ref String) -> TypeContract? sync {
+    let parts: Vec[ref String] = name.split("::").collect()
+    let head = parts[0].to_string()
+    if std_in_scope.contains(head) || !imports_a_package(world.here, head) {
+        return null
+    }
+    for ledger in [world.own, world.library] {
+        let contract = ledger.types.get(name) ?? continue
+        if contract.fields.len() > 0 || contract.variants.len() > 0 {
+            return contract.clone()
+        }
+    }
+    return null
+}
+
 /// Whether a type is exactly `String`, held.
 pub fn a_plain_string(ty: ref Ty) -> bool {
     return match ty {
@@ -225,12 +245,24 @@ impl CheckState {
                     self.findings.push(check_refusal("NK1201", span, message, [note], out))
                     return
                 }
-                if name.contains("::") || name == "Self" {
+                if name == "Self" {
                     return
                 }
-                let is_enum = self.enums.contains_key(name)
-                let is_struct = self.structs.contains_key(name)
-                if !is_enum && !is_struct && !world.own.types.contains_key(name) {
+                // **A struct or `enum` of a package this file `use`s** (#1422):
+                // its ledger says what it is made of, and the lowering writes
+                // a text form only for an error of it, as for one of this
+                // package. A `std` type or a Rust crate's is left alone.
+                let mut package_type: TypeContract? = null
+                if name.contains("::") {
+                    package_type = check_exprs_package_type(world, self.std_in_scope, name)
+                }
+                let from_a_package = package_type != null
+                if name.contains("::") && !from_a_package {
+                    return
+                }
+                let is_enum = !from_a_package && self.enums.contains_key(name)
+                let is_struct = !from_a_package && self.structs.contains_key(name)
+                if !is_enum && !is_struct && !from_a_package && !world.own.types.contains_key(name) {
                     return
                 }
                 let own = world.own.implementations.get("Error")
@@ -251,6 +283,15 @@ impl CheckState {
                     for field in own_fields {
                         fields.push(field.name.clone())
                     }
+                } else if from_a_package {
+                    // Only what another package lets a program read is offered.
+                    let contract = package_type ?? return
+                    for field in contract.fields {
+                        if field.public {
+                            fields.push(field.name.clone())
+                        }
+                    }
+                    an_enum = contract.variants.len() > 0
                 } else if !is_enum {
                     let contract = world.own.types.get(name) ?? return
                     for field in contract.fields {
@@ -311,6 +352,28 @@ impl CheckState {
         let note = f"`{written}` is a `{over.text()}`: a `{inner}` or nothing, and a `for` walks a list, not the maybe of one."
         let help = f"Say what `null` walks first: `for … in {written} ?? [] {{ … }}`, or check it for `null` before the loop."
         self.findings.push(check_refusal("NK1206", span, f"`{written}` may be `null`, so a `for` can't walk it directly.", [note], help))
+    }
+
+    /// `NK1206` too: a `for` over a value that holds no elements, a number,
+    /// a `bool` or a `struct` or `enum` the package declares (Part I 3.3: a
+    /// `for` walks a sequence; no `impl` gives a type one, NK1117). Without it
+    /// the lowering asked rustc for `.iter()` and NK1343 came back (#1421).
+    /// Fail-open: a type with arguments or one not known here passes.
+    pub fn a_loop_over_what_holds_no_elements(ref mut self, world: ref CheckWorld, over: ref Ty, iter: ref Expr, span: ref Span) sync {
+        let name: String = match over {
+            Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { return },
+            else => return,
+        }
+        let a_number = integer_named(Ty::Named { name: name.clone(), args: [], view: false }) != null || name == "int" || name == "f64" || name == "f32"
+        let a_scalar = a_number || name == "bool" || name == "char"
+        let declared = self.structs.contains_key(name) || self.enums.contains_key(name) || self.parts_beside.contains_key(name)
+        if !a_scalar && !declared {
+            return
+        }
+        let written = written_expression(world.words, iter)
+        let note = f"`{written}` is a `{name}`, which holds no elements: a `for` walks a sequence, a range, a list, a set, a map or what a call produces (Part I 3.3)."
+        let help = if a_number { f"Walk a range up to it: `for … in 0..<{written} {{ … }}`." } else if a_scalar { f"Test it with `if {written} {{ … }}`, or walk a list of such values." } else if self.enums.contains_key(name) { f"Put the values in a list and walk that: `for … in [{written}] {{ … }}`." } else { f"Walk a list the `{name}` holds, `for … in {written}.<field> {{ … }}`, or put the values in a list first." }
+        self.findings.push(check_refusal("NK1206", span, f"A `for` can't walk `{written}`: a `{name}` holds no elements.", [note], help))
     }
 
     /// `NK1185`: a `??` whose left side is a view of what a map keeps and whose

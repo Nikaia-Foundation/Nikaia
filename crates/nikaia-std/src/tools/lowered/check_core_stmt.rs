@@ -1437,6 +1437,7 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.the_caller_writes_no_reference(iter, span, "a `for` lends what it iterates");
     let over = check_core_expr(state, world, host, iter, span);
     state.a_loop_over_a_nullable(world, &over, iter, span);
+    state.a_loop_over_what_holds_no_elements(world, &over, iter, span);
     if check_core_method_counted(&over) {
         state.facts.std_lengths.insert(id_of(iter) as i64);
         if state.elements_take_space(&over) { state.facts.sized_lengths.insert(id_of(iter) as i64); }
@@ -1446,6 +1447,10 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let before = state.findings.len() as i64;
     state.fallible_step(world, &over, width, span);
     let stepped_fallibly = (state.findings.len() as i64) > before;
+    if shape_timed(&over) {
+        state.facts.timed_loops.insert(span.start as i64);
+        check_core_walk_timed_out(state, span);
+    }
     state.pausing_step(&over, span);
     state.a_sequence_is_walked(iter, &over, span, world);
     let mut elements = elements_walked(&over, width);
@@ -1472,7 +1477,10 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         }
         state.stored_code.insert(to, entry);
     }
-    let a_seq = matches!(over, Ty::Seq { .. });
+    let a_seq = match over {
+        Ty::Seq { .. } => true,
+        _ => the_command_line(&over),
+    };
     let owned = is_a_place(iter) && a_seq;
     if owned { state.facts.owned_loops.insert(span.start as i64); }
     let lent = is_a_place(iter) && !owned;

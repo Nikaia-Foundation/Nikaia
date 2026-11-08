@@ -1,0 +1,30 @@
+// A `for` walks a sequence (Part I 3.3). A struct, an enum, a number or a
+// `bool` holds no elements, so a `for` over one is NK1206 and never reaches
+// rustc as NK1343 "no method named `iter`" (#1421).
+struct Foo {
+    a: i64,
+}
+
+enum Light {
+    Red,
+    Green,
+}
+
+fn main() throws {
+    let foo = Foo { a: 1 }
+    for l in foo {
+        println(l)
+    }
+    let light = Light::Red
+    for l in light {
+        println(l)
+    }
+    let n: i64 = 5
+    for i in n {
+        println(i)
+    }
+    let ready = true
+    for r in ready {
+        println(r)
+    }
+}

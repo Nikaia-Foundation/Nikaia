@@ -1,0 +1,7 @@
+// A `limit:` below one on the `par_iter` chain stops the program, naming the
+// option (ADR-async-5 D27), as a fold's does.
+fn main() throws {
+    let xs = [1, 2, 3]
+    let ys: Vec[i64] = xs.par_iter(limit: 0).map(fn(x) { x * 2 }).collect()
+    println(f"{ys.len()}")
+}

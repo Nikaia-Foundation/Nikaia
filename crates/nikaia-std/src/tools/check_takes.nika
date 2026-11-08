@@ -370,7 +370,9 @@ impl CheckState {
 
     /// A sequence walked by a `for`.
     pub fn a_sequence_is_walked(ref mut self, iter: ref Expr, over: ref Ty, span: ref Span, world: ref CheckWorld) sync {
-        if !a_sequence_that_is_used_up(over) {
+        // `cli::Args` is used up by a `for` and only by it: its own methods
+        // read it (`len`, `nth`), so it is not a sequence to every call.
+        if !a_sequence_that_is_used_up(over) && !the_command_line(over) {
             return
         }
         let name = match iter {
@@ -710,7 +712,13 @@ impl CheckState {
             }
             said.insert(used.at)
             let item = an_item_text(taken.ty)
-            found.push(check_refusal("NK2702", Span { start: used.at as u32, end: used.at as u32 }, f"`{taken.path}` is a sequence, and it was already used up.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], f"Collect it first and walk the collection: `let {taken.path} = {taken.path}.collect()`."))
+            // `cli::Args` has no `collect()`; a second `cli::args()` reads
+            // the words again from the first.
+            let mut help = f"Collect it first and walk the collection: `let {taken.path} = {taken.path}.collect()`."
+            if the_command_line(taken.ty) {
+                help = "Walk a second `cli::args()`: each call reads the words again from the first."
+            }
+            found.push(check_refusal("NK2702", Span { start: used.at as u32, end: used.at as u32 }, f"`{taken.path}` is a sequence, and it was already used up.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], help))
         }
         self.walked = []
         for one in found {
@@ -983,7 +991,7 @@ fn a_sequence_that_is_used_up(ty: ref Ty) -> bool {
 fn an_item_text(ty: ref Ty) -> String {
     return match ty {
         Ty::Seq { item, .. } => item.text(),
-        else => "?",
+        else => if the_command_line(ty) { "String" } else { "?" },
     }
 }
 

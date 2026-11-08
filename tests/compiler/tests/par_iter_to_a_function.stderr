@@ -1,0 +1,17 @@
+error[NK1135]: There's no type called `Par`.
+  --> tests/par_iter_to_a_function.nika:6:1
+   |
+ 6 | fn total(p: Par[i64]) -> i64 { return p.fold(0, fn(a, x) { a + x }, fn(a, b) { a + b }) }
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A type is either built in, declared in your program with `struct` or `enum`, provided by `std`, or a type parameter.
+   = help: Check the spelling, or declare `Par` with `struct` or `enum`.
+error[NK1102]: `total` expects `p` to be `Par[i64]`, but you're passing `Par[?] sync ends sized`.
+   --> tests/par_iter_to_a_function.nika:10:22
+    |
+ 10 |     println(f"{total(xs.par_iter(within: 1.millis()))}")
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It's declared as `total(p: Par[i64]) -> i64`.
+    = help: Make it a `Par[i64]`, or change the declaration to `Par[?] sync ends sized`.
+2 type errors

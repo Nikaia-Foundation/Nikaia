@@ -1,0 +1,6 @@
+2
+caught at line 7
+Error: fault at line 7
+  raised at parse
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+exit 1

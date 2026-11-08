@@ -1,0 +1,47 @@
+// A walk with `within:` handed to another walk's `zip` or `chain`
+// (ADR-async-5 D27, #1423): its deadline goes with it into what they make, so
+// the step that ends that walk throws `task::TimedOut` once it ran out,
+// rather than handing back what was made in time. A walk without `within:`
+// handed on asks for nothing.
+use std::task
+use std::time
+
+fn pairs(xs: ref Vec[i64], ys: ref Vec[i64]) -> i64 {
+    return ys.iter().zip(xs.par_iter().map(fn(x) { x * 2 })).count()
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    let ys = [4, 5, 6]
+    println(f"untimed {pairs(xs, ys)}")
+    let zipped = ys.iter().zip(xs.par_iter(within: 0.millis()).map(fn(x) { x * 2 })).count() catch {
+        match error {
+            task::TimedOut => -1,
+        }
+    }
+    println(f"zip into a list's walk {zipped}")
+    let paired = ys.par_iter().zip(xs.par_iter(within: 0.millis())).count() catch {
+        match error {
+            task::TimedOut => -1,
+        }
+    }
+    println(f"zip into a parallel walk {paired}")
+    let chained = ys.iter().chain(xs.par_iter(within: 0.millis())).count() catch {
+        match error {
+            task::TimedOut => -1,
+        }
+    }
+    println(f"chain {chained}")
+    let both = ys.par_iter(within: 10.seconds()).zip(xs.par_iter(within: 0.millis())).count() catch {
+        match error {
+            task::TimedOut => -1,
+        }
+    }
+    println(f"two deadlines {both}")
+    let in_time = ys.iter().zip(xs.par_iter(within: 10.seconds())).count() catch {
+        match error {
+            task::TimedOut => -1,
+        }
+    }
+    println(f"in time {in_time}")
+}

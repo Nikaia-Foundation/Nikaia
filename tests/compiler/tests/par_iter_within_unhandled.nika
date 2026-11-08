@@ -1,0 +1,12 @@
+// `within:` on the `par_iter` chain (ADR-async-5 D27): the step that ends the
+// walk throws `task::TimedOut`, so a function that neither handles it nor
+// says `throws` is refused.
+use std::time
+
+fn doubled(xs: Vec[i64]) -> Vec[i64] {
+    return xs.par_iter(within: 1.seconds()).map(fn(x) { x * 2 }).collect()
+}
+
+fn main() throws {
+    println(f"{doubled([1, 2]).len()}")
+}
