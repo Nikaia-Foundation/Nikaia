@@ -97,6 +97,21 @@ pub fn features_lists_checked(features: &[ManifestFeature], package: &str) -> Op
     None
 }
 
+pub fn features_chosen_checked(features: &[ManifestFeature], chosen: &[String]) -> Option<FeaturesRefusal> {
+    let mut declared: Vec<String> = vec![];
+    for feature in features.iter() { declared.push(feature.name.to_string()); }
+    for name in chosen.iter() {
+        if nikaia_std::list::contains(&declared, &name) { continue; }
+        let mut help: Option<String> = None;
+        if declared.is_empty() { help = Some(String::from("This package declares no `[features]`: leave out `--features` to bind all of it.")); } else {
+            let near = nearest_name(name, &declared);
+            help = Some(if near.is_some() { format!("Did you mean `{}`?", nikaia_std::index::or(near.as_deref(), || "")) } else { format!("The features are {}.", declared.join(", ")) });
+        }
+        return Some(FeaturesRefusal { code: String::from("NK1347"), feature: String::from(""), entry: String::from(""), message: format!("`--features` names the feature `{}`, and `[features]` declares none of that name.", name), help });
+    }
+    None
+}
+
 pub(crate) fn features_hashes_follow(c: &[scalar], at: i64, hashes: i64) -> bool {
     if hashes <= 0 { return true; }
     for k in 0..hashes { if at + k >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != '#' { return false; } }
@@ -357,7 +372,118 @@ pub(crate) fn features_dependency_keys(manifest: &str) -> Vec<String> {
     keys
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FeaturesReach {
+    pub(crate) lines: Vec<String>,
+    pub(crate) items: Vec<FeatureItem>,
+    pub(crate) resolved: Vec<FeatureRoots>,
+    pub(crate) reached: Vec<Vec<bool>>,
+    pub(crate) core: Vec<bool>,
+    pub(crate) default: Vec<String>,
+}
+
 pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature], package: &str) -> Result<FeaturesMade, nikaia_std::error::Thrown<FeaturesRefusal>> {
+    let reach = features_reach(rust, features, package)?;
+    let mut lines = reach.lines.to_owned();
+    let items = reach.items.to_owned();
+    let resolved = reach.resolved.to_owned();
+    let reached = reach.reached.to_owned();
+    let core = reach.core.to_owned();
+    let default = reach.default.to_owned();
+    let mut homes: Vec<(String, String)> = vec![];
+    for at in 0..items.len() as i64 {
+        if *nikaia_std::index::get(&core, (at) as usize) { continue; }
+        let mut condition: String = String::from("");
+        if nikaia_std::index::get(&items, (at) as usize).kind == "impl" {
+            let mut parts: Vec<String> = vec![];
+            for owner in nikaia_std::index::get(&items, (at) as usize).owners.iter() {
+                let owner = nikaia_std::num::value(owner);
+                if *nikaia_std::index::get(&core, nikaia_std::index::at(owner)) { continue; }
+                let mut names: Vec<String> = vec![];
+                for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), nikaia_std::index::at(owner)) { names.push(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string()); } }
+                let part = features_condition(&names);
+                if !nikaia_std::list::contains(&parts, &part) { parts.push(part); }
+            }
+            if parts.is_empty() { continue; }
+            condition = if parts.len() == 1 { (*nikaia_std::index::get(&parts, 0)).to_string() } else { format!("all({})", parts.join(", ")) };
+        } else {
+            let mut names: Vec<String> = vec![];
+            for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), (at) as usize) { names.push(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string()); } }
+            if names.is_empty() { continue; }
+            condition = features_condition(&names);
+            if !nikaia_std::index::get(&items, (at) as usize).name.is_empty() { homes.push((nikaia_std::index::get(&items, (at) as usize).name.to_string(), (*nikaia_std::index::get(&names, 0)).to_string())); }
+        }
+        let first = nikaia_std::index::get(&items, (at) as usize).first;
+        { let __nikaia_stored = format!("#[cfg({})] {}", condition, *nikaia_std::index::get(&lines, nikaia_std::index::at(first))); nikaia_std::index::set(&mut lines, nikaia_std::index::at(first), __nikaia_stored); }
+    }
+    let mut optional: Vec<String> = vec![];
+    let mut uses: Vec<Vec<String>> = vec![];
+    for _ in resolved.iter() { uses.push(vec![]); }
+    for key in features_dependency_keys(manifest) {
+        let word = key.replace('-', "_");
+        let mut in_core = false;
+        let mut users: Vec<i64> = vec![];
+        for at in 0..items.len() as i64 {
+            if !nikaia_std::list::contains(&nikaia_std::index::get(&items, (at) as usize).words, &word) { continue; }
+            if *nikaia_std::index::get(&core, (at) as usize) {
+                in_core = true;
+                continue;
+            }
+            for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), (at) as usize) && !users.contains(&k) { users.push(k); } }
+        }
+        if in_core || users.is_empty() { continue; }
+        optional.push(key.to_string());
+        for k in users.iter() {
+            let k = nikaia_std::num::value(k);
+            uses[nikaia_std::index::at(k)].push(format!("dep:{}", key));
+        }
+        let names: Vec<String> = users.iter().copied().map(|k| { nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string() }).collect::<Vec<_>>();
+        let condition = features_condition(&names);
+        for i in 0..lines.len() as i64 { if (*nikaia_std::index::get(&lines, (i) as usize)).trim().starts_with("beside:") { { let __nikaia_stored = (*nikaia_std::index::get(&lines, (i) as usize)).replace(&format!("&::{}::__NIKAIA_PLACES", word), &format!("#[cfg({})] &::{}::__NIKAIA_PLACES", condition, word)); nikaia_std::index::set(&mut lines, (i) as usize, __nikaia_stored); } } }
+    }
+    let mut table = String::from("[features]\n");
+    let quoted: Vec<String> = default.iter().map(|name| { format!("\"{}\"", name) }).collect::<Vec<_>>();
+    if features.iter().any(|feature| { feature.name == "default" }) { table = format!("{}default = [{}]\n", table, quoted.join(", ")); }
+    let mut edges: Vec<(i64, i64)> = vec![];
+    for f in 0..resolved.len() as i64 {
+        for g in 0..resolved.len() as i64 {
+            if f == g || edges.contains(&(g, f)) { continue; }
+            let mut implies = nikaia_std::list::contains(&nikaia_std::index::get(&resolved, (f) as usize).implied, &nikaia_std::index::get(&resolved, (g) as usize).name);
+            if !implies && !nikaia_std::index::get(&resolved, (g) as usize).roots.is_empty() { implies = nikaia_std::index::get(&resolved, (g) as usize).roots.iter().copied().all(|root| { *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(f)), nikaia_std::index::at(root)) }); }
+            if implies { edges.push((f, g)); }
+        }
+    }
+    let mut names: Vec<String> = vec![];
+    for f in 0..resolved.len() as i64 {
+        names.push(nikaia_std::index::get(&resolved, (f) as usize).name.to_string());
+        let mut entries: Vec<String> = vec![];
+        for edge in edges.iter() { if edge.0 == f { entries.push(format!("\"{}\"", nikaia_std::index::get(&resolved, nikaia_std::index::at(edge.1)).name)); } }
+        for dep in (*nikaia_std::index::get(&uses, (f) as usize)).iter() { entries.push(format!("\"{}\"", dep)); }
+        table = format!("{}{} = [{}]\n", table, nikaia_std::index::get(&resolved, (f) as usize).name, entries.join(", "));
+    }
+    Ok(FeaturesMade { rust: lines.join("\n"), table, optional, names, homes })
+}
+
+pub fn features_kept(rust: &str, features: &[ManifestFeature], package: &str, chosen: Option<&Vec<String>>) -> Result<Vec<String>, nikaia_std::error::Thrown<FeaturesRefusal>> {
+    let reach = features_reach(rust, features, package)?;
+    let mut wanted: Vec<String> = vec![];
+    let named = match chosen {
+        None => reach.default.to_owned(),
+        Some(list) => list.to_owned(),
+    };
+    for name in named.iter() { if name == "default" { for listed in reach.default.iter() { wanted.push(listed.to_string()); } } else { wanted.push(name.to_string()); } }
+    let mut kept: Vec<String> = vec![];
+    for at in 0..reach.items.len() as i64 {
+        let item = nikaia_std::index::get(&reach.items, (at) as usize);
+        if item.name.is_empty() || item.kind == "use" || nikaia_std::list::contains(&kept, &item.name) { continue; }
+        let mut inside = *nikaia_std::index::get(&reach.core, (at) as usize);
+        for k in 0..reach.resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reach.reached, (k) as usize), (at) as usize) && nikaia_std::list::contains(&wanted, &nikaia_std::index::get(&reach.resolved, (k) as usize).name) { inside = true; } }
+        if inside { kept.push(item.name.to_string()); }
+    }
+    Ok(kept)
+}
+
+pub(crate) fn features_reach(rust: &str, features: &[ManifestFeature], package: &str) -> Result<FeaturesReach, nikaia_std::error::Thrown<FeaturesRefusal>> {
     let mut lines: Vec<String> = vec![];
     for line in rust.split("\n") { lines.push(line.to_string()); }
     let mut items = features_items(&lines);
@@ -410,78 +536,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
         if !claimed { seeds.push(at); }
     }
     let core = features_closure(&items, &named, &seeds, false);
-    let mut homes: Vec<(String, String)> = vec![];
-    for at in 0..items.len() as i64 {
-        if *nikaia_std::index::get(&core, nikaia_std::index::at(at)) { continue; }
-        let mut condition: String = String::from("");
-        if nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind == "impl" {
-            let mut parts: Vec<String> = vec![];
-            for owner in nikaia_std::index::get(&items, nikaia_std::index::at(at)).owners.iter() {
-                let owner = nikaia_std::num::value(owner);
-                if *nikaia_std::index::get(&core, nikaia_std::index::at(owner)) { continue; }
-                let mut names: Vec<String> = vec![];
-                for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), nikaia_std::index::at(owner)) { names.push(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string()); } }
-                let part = features_condition(&names);
-                if !nikaia_std::list::contains(&parts, &part) { parts.push(part); }
-            }
-            if parts.is_empty() { continue; }
-            condition = if parts.len() == 1 { (*nikaia_std::index::get(&parts, 0)).to_string() } else { format!("all({})", parts.join(", ")) };
-        } else {
-            let mut names: Vec<String> = vec![];
-            for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), nikaia_std::index::at(at)) { names.push(nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string()); } }
-            if names.is_empty() { continue; }
-            condition = features_condition(&names);
-            if !nikaia_std::index::get(&items, nikaia_std::index::at(at)).name.is_empty() { homes.push((nikaia_std::index::get(&items, nikaia_std::index::at(at)).name.to_string(), (*nikaia_std::index::get(&names, 0)).to_string())); }
-        }
-        let first = nikaia_std::index::get(&items, nikaia_std::index::at(at)).first;
-        { let __nikaia_stored = format!("#[cfg({})] {}", condition, *nikaia_std::index::get(&lines, nikaia_std::index::at(first))); nikaia_std::index::set(&mut lines, nikaia_std::index::at(first), __nikaia_stored); }
-    }
-    let mut optional: Vec<String> = vec![];
-    let mut uses: Vec<Vec<String>> = vec![];
-    for _ in resolved.iter() { uses.push(vec![]); }
-    for key in features_dependency_keys(manifest) {
-        let word = key.replace('-', "_");
-        let mut in_core = false;
-        let mut users: Vec<i64> = vec![];
-        for at in 0..items.len() as i64 {
-            if !nikaia_std::list::contains(&nikaia_std::index::get(&items, nikaia_std::index::at(at)).words, &word) { continue; }
-            if *nikaia_std::index::get(&core, nikaia_std::index::at(at)) {
-                in_core = true;
-                continue;
-            }
-            for k in 0..resolved.len() as i64 { if *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(k)), nikaia_std::index::at(at)) && !users.contains(&k) { users.push(k); } }
-        }
-        if in_core || users.is_empty() { continue; }
-        optional.push(key.to_string());
-        for k in users.iter() {
-            let k = nikaia_std::num::value(k);
-            uses[nikaia_std::index::at(k)].push(format!("dep:{}", key));
-        }
-        let names: Vec<String> = users.iter().copied().map(|k| { nikaia_std::index::get(&resolved, nikaia_std::index::at(k)).name.to_string() }).collect::<Vec<_>>();
-        let condition = features_condition(&names);
-        for i in 0..lines.len() as i64 { if (*nikaia_std::index::get(&lines, (i) as usize)).trim().starts_with("beside:") { { let __nikaia_stored = (*nikaia_std::index::get(&lines, (i) as usize)).replace(&format!("&::{}::__NIKAIA_PLACES", word), &format!("#[cfg({})] &::{}::__NIKAIA_PLACES", condition, word)); nikaia_std::index::set(&mut lines, (i) as usize, __nikaia_stored); } } }
-    }
-    let mut table = String::from("[features]\n");
-    let quoted: Vec<String> = default.iter().map(|name| { format!("\"{}\"", name) }).collect::<Vec<_>>();
-    if features.iter().any(|feature| { feature.name == "default" }) { table = format!("{}default = [{}]\n", table, quoted.join(", ")); }
-    let mut edges: Vec<(i64, i64)> = vec![];
-    for f in 0..resolved.len() as i64 {
-        for g in 0..resolved.len() as i64 {
-            if f == g || edges.contains(&(g, f)) { continue; }
-            let mut implies = nikaia_std::list::contains(&nikaia_std::index::get(&resolved, (f) as usize).implied, &nikaia_std::index::get(&resolved, (g) as usize).name);
-            if !implies && !nikaia_std::index::get(&resolved, (g) as usize).roots.is_empty() { implies = nikaia_std::index::get(&resolved, (g) as usize).roots.iter().copied().all(|root| { *nikaia_std::index::get(nikaia_std::index::get(&reached, nikaia_std::index::at(f)), nikaia_std::index::at(root)) }); }
-            if implies { edges.push((f, g)); }
-        }
-    }
-    let mut names: Vec<String> = vec![];
-    for f in 0..resolved.len() as i64 {
-        names.push(nikaia_std::index::get(&resolved, (f) as usize).name.to_string());
-        let mut entries: Vec<String> = vec![];
-        for edge in edges.iter() { if edge.0 == f { entries.push(format!("\"{}\"", nikaia_std::index::get(&resolved, nikaia_std::index::at(edge.1)).name)); } }
-        for dep in (*nikaia_std::index::get(&uses, (f) as usize)).iter() { entries.push(format!("\"{}\"", dep)); }
-        table = format!("{}{} = [{}]\n", table, nikaia_std::index::get(&resolved, (f) as usize).name, entries.join(", "));
-    }
-    Ok(FeaturesMade { rust: lines.join("\n"), table, optional, names, homes })
+    Ok(FeaturesReach { lines, items, resolved, reached, core, default })
 }
 
 pub fn features_manifest(manifest: &str, made: &FeaturesMade) -> String {
@@ -537,12 +592,15 @@ pub fn features_first_error(said: &str) -> String {
 pub fn features_span(toml: &str, feature: &str, entry: &str) -> Span {
     let mut offset: i64 = 0;
     let mut inside = false;
-    let mut header: i64 = 0;
+    let mut header: i64 = -1;
+    let mut build: i64 = 0;
+    let mut width: i64 = 10;
     for line in toml.split("\n") {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
             inside = trimmed == "[features]";
             if inside { header = offset; }
+            if trimmed == "[build]" { build = offset; }
         } else if inside && !feature.is_empty() {
             let key = nikaia_std::index::or(trimmed.split('=').next(), || "");
             let key = key.trim().replace("\"", "");
@@ -562,6 +620,10 @@ pub fn features_span(toml: &str, feature: &str, entry: &str) -> Span {
         }
         offset += line.len() as i64 + 1;
     }
-    Span { start: u32::try_from(header).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(header + 10).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }
+    if header < 0 {
+        header = build;
+        width = 7;
+    }
+    Span { start: u32::try_from(header).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(header + width).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }
 }
 

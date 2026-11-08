@@ -112,6 +112,7 @@ pub trait ProjectDriveHost {
     fn report(&self, messages: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn package_name(&self) -> Option<String>;
     fn bind(&self) -> Option<String>;
+    fn bind_features(&self) -> Option<Vec<String>>;
     fn own_copy(&self, built: &std::path::Path) -> Result<fs::Path, Box<dyn std::error::Error>>;
     fn record_resolved_dependencies(&self) -> Option<String>;
     fn cargo_run(&self, args: &[String]) -> Result<i32, Box<dyn std::error::Error>>;
@@ -148,8 +149,17 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if rust_library && subcommand == "run" { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(String::from("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")), &"project_drive_drive_to")); }
     let crate_build = rust_library && subcommand == "build" && !host.tests_build();
     let features = host.features();
+    let chosen = host.bind_features();
+    if chosen.is_some() && !host.tests_build() {
+        if !host.is_library() {
+            let refusal = FeaturesRefusal { code: String::from("NK1346"), feature: String::from(""), entry: String::from(""), message: String::from("`--features` chooses the parts of a library a binding carries, and a program has no user who chooses its parts."), help: Some(String::from("Write `artifact = \"c-library\"` under `[build]` to bind the package, or leave out `--features`.")) };
+            return Ok((project_drive_features_refused(host, &refusal), None));
+        }
+        let checked = features_chosen_checked(&features, &nikaia_std::index::or(chosen, || vec![].into()));
+        if checked.is_some() { return Ok((project_drive_features_refused(host, &match checked { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(String::from("no refusal")), &"project_drive_drive_to")) }), None)); }
+    }
     if !features.is_empty() && !host.tests_build() && (subcommand == "build" || subcommand == "run") {
-        if !rust_library {
+        if !rust_library && !host.is_library() {
             let refusal = FeaturesRefusal { code: String::from("NK1346"), feature: String::from(""), entry: String::from(""), message: String::from("`[features]` is for a package built as a Rust library: a program has no user who chooses its parts."), help: Some(String::from("Write `artifact = \"rust-library\"` under `[build]`, or remove `[features]`.")) };
             return Ok((project_drive_features_refused(host, &refusal), None));
         }
@@ -637,8 +647,8 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple48838| {
-        let (a, b) = __nikaia_tuple48838;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple49841| {
+        let (a, b) = __nikaia_tuple49841;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     if a_program {

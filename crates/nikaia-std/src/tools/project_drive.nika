@@ -125,6 +125,8 @@ pub trait ProjectDriveHost {
     fn package_name(ref self) -> String? sync
     /// The binding asked for (`--bind`), where one was.
     fn bind(ref self) -> String? sync
+    /// The features `nikaia bind --features` named, where it did (ADR-393 D5).
+    fn bind_features(ref self) -> Vec[String]? sync
     /// The program built in the shared directory, under the project's name.
     fn own_copy(ref self, built: ref fs::Path) -> fs::Path sync throws
     /// Records the versions Cargo resolved in `nikaia.lock`: why it could
@@ -174,12 +176,24 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         throw ProjectDriveRefusal::Refused("This package is built as a library (`artifact = \"rust-library\"`), and a library has nothing to run: `nikaia build` writes it as a Rust crate, and a Rust program depends on it.")
     }
     let crate_build = rust_library && subcommand == "build" && !host.tests_build()
-    // **`[features]` is a rust-library's** (ADR-393 D5): a program has no
-    // user who chooses parts (`NK1346`); a feature list is checked before
-    // anything is lowered (`NK1347`).
+    // **`[features]` is a library's** (ADR-393 D5): a program has no user
+    // who chooses parts (`NK1346`), a C library is built whole and only its
+    // binding is narrowed; a feature list, and `nikaia bind --features`, are
+    // checked before anything is lowered (`NK1347`).
     let features = host.features()
+    let chosen = host.bind_features()
+    if chosen != null && !host.tests_build() {
+        if !host.is_library() {
+            let refusal = FeaturesRefusal { code: "NK1346", feature: "", entry: "", message: "`--features` chooses the parts of a library a binding carries, and a program has no user who chooses its parts.", help: "Write `artifact = \"c-library\"` under `[build]` to bind the package, or leave out `--features`." }
+            return (project_drive_features_refused(host, refusal), null)
+        }
+        let checked = features_chosen_checked(features, chosen ?? [])
+        if checked != null {
+            return (project_drive_features_refused(host, checked ?? throw ProjectDriveRefusal::Failed("no refusal")), null)
+        }
+    }
     if features.len() > 0 && !host.tests_build() && (subcommand == "build" || subcommand == "run") {
-        if !rust_library {
+        if !rust_library && !host.is_library() {
             let refusal = FeaturesRefusal { code: "NK1346", feature: "", entry: "", message: "`[features]` is for a package built as a Rust library: a program has no user who chooses its parts.", help: "Write `artifact = \"rust-library\"` under `[build]`, or remove `[features]`." }
             return (project_drive_features_refused(host, refusal), null)
         }
