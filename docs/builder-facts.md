@@ -34,6 +34,8 @@ together with the specification section and an example test.
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
   to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
   views syntax and cannot serve.
+* A rebuild while `nikaia test` runs fails tests at random: rerun the failed
+  ones alone before calling them failures. (issue-1414)
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is

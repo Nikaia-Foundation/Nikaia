@@ -245,13 +245,19 @@ goes into the section of its topic, in one line, with the run that paid for it.
   prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
   before and after on the same tree. Where the walk stops:
   `docs/formal-verification.md` §2.
+  The two can differ: `check --bounds FILE` proved a site D23 reaches that
+  `lower-std --bounds` did not (#1465); a figure is claimed only from
+  `lower-std`. (issue-1414)
+* **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
+  check it before blaming the prover when a guard on `for k in ks` is lost.
+  (issue-1414)
 * **A test's `.bounds` keys sites by line**: an edited comment keeps its line
   count, or bless again. A precondition on a parameter's length is carried to
   the function's start (ADR-269 D20); a call is carried back only from the top
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
-* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist; `touch` them first. (issue-1397)
+* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist, a new test's included: create an empty `NAME.bounds` first. (issue-1397, issue-1414)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
 * **`f.rank[f.find(c)]` (a `ref mut` method call in an index of the same value) passes the checker and fails rustc (E0502)**: a defect, #1445; until it lands, a test probe binds the call to a `let`, and no code under `tools/` relies on the form. (issue-1414)
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
