@@ -84,7 +84,7 @@ grammar! {
     }
 }
 
-pub(crate) fn fields(lines: Vec<Line<'_>>) -> Vec<Field<'_, '_>> {
+pub(crate) fn fields<'r>(lines: Vec<Line<'r>>) -> Vec<Field<'r, 'r>> {
     let mut all = Vec::new();
     for line in lines.into_iter() {
         match line {
