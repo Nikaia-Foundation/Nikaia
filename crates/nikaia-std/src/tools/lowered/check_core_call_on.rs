@@ -883,7 +883,12 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     if key == "Par::fold" { state.facts.par_folds.insert(node); }
     state.method_options(world, method, contract, node);
     let fails = !known_text && (!contract.fails_with.is_empty() || state.walks_a_failing_sequence(on, contract));
-    state.method_propagates(node, fails);
+    let timed_end = walks && shape_timed(on) && !check_core_call_on_hands_back_a_sequence(contract);
+    if timed_end {
+        state.facts.timed_ends.insert(node);
+        check_core_walk_timed_out(state, span);
+    }
+    state.method_propagates(node, fails || timed_end);
     let chained = a_paused_chain(key, on);
     let seq_pauses = match on {
         Ty::Seq { pauses, .. } => { let pauses = *pauses; pauses },

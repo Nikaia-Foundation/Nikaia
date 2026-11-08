@@ -1446,6 +1446,10 @@ pub fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     let before = state.findings.len() as i64;
     state.fallible_step(world, &over, width, span);
     let stepped_fallibly = (state.findings.len() as i64) > before;
+    if shape_timed(&over) {
+        state.facts.timed_loops.insert(span.start as i64);
+        check_core_walk_timed_out(state, span);
+    }
     state.pausing_step(&over, span);
     state.a_sequence_is_walked(iter, &over, span, world);
     let mut elements = elements_walked(&over, width);

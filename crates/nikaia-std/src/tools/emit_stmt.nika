@@ -1100,11 +1100,20 @@ impl EmitState {
             return
         }
         out.push(f"{allowed}for {bound} in ")
+        // **A `for` over a walk with `within:` lists it first** (ADR-async-5
+        // D27), and throws `task::TimedOut` there where its deadline ran out.
+        let timed = self.facts.timed_loops.contains(at)
+        if timed {
+            out.push("nikaia_std::par::listed(")
+        }
         // **A `for` lends** (ADR-094 D4), a place and not a call, a range or a
         // literal; **a name holding a sequence is not a place that lends**
         // (ADR-293 D19): the checker says which loops walk by value.
-        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at)
+        let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at) && !timed
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)
+        if timed {
+            out.push(")?")
+        }
         if lends && viewed {
             out.push(".iter_mut()")
         } else if lends {

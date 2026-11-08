@@ -685,6 +685,16 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
+    let function = nikaia_std::index::or(match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", &format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_async_fails(state: &mut CheckState, span: &Span, error: &str, message: &str, note: &str, help: &str) {
     let fails: Vec<String> = vec![error.to_string()];
     if state.flow.guarded.is_some() {

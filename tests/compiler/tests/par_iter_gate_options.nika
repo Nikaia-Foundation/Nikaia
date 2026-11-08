@@ -1,0 +1,52 @@
+// `limit:`, `within:` and `admission:` on the `par_iter` chain (ADR-async-5
+// D15, D27, #986): the walk carries them to the step that ends it. `limit: n`
+// runs at most n elements at once, `limit: 1` one at a time; `within: d`
+// makes that step throw `task::TimedOut` once d ran out; `admission:` is read
+// and ignored, since a `par_iter` lambda never pauses.
+use std::task
+use std::time
+
+fn counted(x: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+    now.update fn(mut v) { v += 1 }
+    let seen = now.get()
+    most.update fn(mut m) {
+        if seen > m {
+            m = seen
+        }
+    }
+    now.update fn(mut v) { v -= 1 }
+    return x * 2
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 4, 5, 6, 7, 8]
+    let now = SharedMut(0)
+    let most = SharedMut(0)
+    let doubled: Vec[i64] = xs.par_iter(limit: 2).map(fn(x) { counted(x, now, most) }).collect()
+    let two = most.get() <= 2
+    println(f"doubled {doubled[0]} {doubled[7]}, at most two at once: {two}")
+    let alone = SharedMut(0)
+    let peak = SharedMut(0)
+    let one: Vec[i64] = xs.par_iter(limit: 1, admission: task::Adaptive()).map(fn(x) { counted(x, alone, peak) }).collect()
+    let p = peak.get()
+    println(f"one at a time: {one[0]} {one[7]}, at most {p} at once")
+    let sum = xs.par_iter(limit: 3, piece: 2).fold(fn() { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b })
+    println(f"sum {sum}")
+    let n = xs.par_iter(within: 10.seconds()).map(fn(x) { x * 3 }).count()
+    println(f"count {n}")
+    let quick: Vec[i64] = xs.par_iter(within: 10.seconds()).map(fn(x) { x * 3 }).collect()
+    println(f"in time {quick.len()}")
+    let late: Vec[i64] = xs.par_iter(within: 0.millis()).map(fn(x) { x * 3 }).collect() catch {
+        match error {
+            task::TimedOut => [],
+        }
+    }
+    println(f"late {late.len()}")
+    let mut seen = 0
+    for x in xs.par_iter(within: 10.seconds()).map(fn(x) { x * 2 }) {
+        seen += x
+    }
+    println(f"for {seen}")
+    let folded = xs.par_iter(limit: 4, within: 10.seconds()).fold(fn() { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b }; limit: 2)
+    println(f"fold {folded}")
+}

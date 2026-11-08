@@ -15,7 +15,10 @@
 //! the list allocates nothing it would not have.
 
 use rayon::prelude::*;
+use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering as Atomic};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// **Whether a fold keeps the input's order**
 /// ([ADR-372](../../../docs/specification/adr/adr-372.md) D5): `Kept` merges
@@ -47,7 +50,10 @@ pub fn iter_in_pieces<T: Sync>(
     piece: i64,
 ) -> Par<rayon::iter::MaxLen<rayon::iter::MinLen<rayon::slice::Iter<'_, T>>>> {
     let piece = at_least_one("piece", piece);
-    Par(items.par_iter().with_min_len(piece).with_max_len(piece))
+    Par(
+        items.par_iter().with_min_len(piece).with_max_len(piece),
+        Run::default(),
+    )
 }
 
 /// **The options a grammar's `par_fold` names after its `;`**
@@ -155,8 +161,206 @@ pub trait SeqFold: Iterator + Sized {
 
 impl<I: Iterator> SeqFold for I {}
 
-/// A walk of a list on every core at once.
-pub struct Par<I>(I);
+/// A walk of a list on every core at once, and what its options ask of the
+/// step that ends it.
+pub struct Par<I>(I, Run);
+
+/// **What a walk's `limit:` and `within:` ask of the step that ends it**
+/// (ADR-async-5 D15, D27): at most `limit` workers run its elements, and once
+/// the deadline has passed no element starts and the walk ends with
+/// `task::TimedOut`. A walk with neither carries an open one.
+#[derive(Clone, Default)]
+pub struct Run {
+    limit: Option<usize>,
+    deadline: Option<Instant>,
+    /// Set by the first element that finds the deadline passed.
+    expired: Arc<AtomicBool>,
+}
+
+thread_local! {
+    /// **Whether the walk that just ended on this thread ran out of its
+    /// deadline**: written by the step that ends a walk with `within:`, and
+    /// taken by [`ended`] around that step.
+    static TIMED_OUT: Cell<bool> = const { Cell::new(false) };
+}
+
+impl Run {
+    /// The options as written; a `limit:` below 1 panics, naming it.
+    #[track_caller]
+    fn gated(limit: Option<i64>, within: Option<Duration>) -> Run {
+        // Checked here and not in a closure, which would hide the caller.
+        let mut cap = None;
+        if let Some(n) = limit {
+            cap = Some(at_least_one("limit", n));
+        }
+        Run {
+            limit: cap,
+            deadline: within.map(|span| Instant::now() + span),
+            expired: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Whether an element may still start: always without a deadline.
+    fn live(&self) -> bool {
+        let Some(at) = self.deadline else {
+            return true;
+        };
+        if self.expired.load(Atomic::Relaxed) {
+            return false;
+        }
+        if Instant::now() >= at {
+            self.expired.store(true, Atomic::Relaxed);
+            return false;
+        }
+        true
+    }
+
+    /// `body` on at most `limit` workers.
+    fn limited<R: Send>(&self, body: impl FnOnce() -> R + Send) -> R {
+        match self.limit {
+            Some(workers) => on_workers(workers, body),
+            None => body(),
+        }
+    }
+
+    /// Says on this thread whether the walk ran out of its deadline, for the
+    /// [`ended`] around the step that ends it.
+    fn settle(&self) {
+        if self.deadline.is_some() {
+            TIMED_OUT.with(|t| t.set(self.expired.load(Atomic::Relaxed)));
+        }
+    }
+
+    /// The step that ends a walk: on at most `limit` workers, and settled.
+    fn end<R: Send>(self, body: impl FnOnce() -> R + Send) -> R {
+        let out = self.limited(body);
+        self.settle();
+        out
+    }
+}
+
+/// **The elements of `items` on every core at once, under the walk's
+/// options** (`xs.par_iter(limit:, within:, admission:, piece:)`,
+/// ADR-async-5 D15, D27, ADR-372 D6). `admission:` names the strategy of a
+/// walk whose lambdas pause; a `par_iter` lambda never pauses, so it is read
+/// and does nothing else.
+#[track_caller]
+pub fn gated<'a, T: Sync, A>(
+    items: &'a [T],
+    piece: Option<i64>,
+    limit: Option<i64>,
+    within: Option<Duration>,
+    admission: Option<A>,
+) -> Par<impl ParallelIterator<Item = &'a T> + 'a> {
+    drop(admission);
+    let (least, most) = match piece {
+        Some(n) => {
+            let piece = at_least_one("piece", n);
+            (piece, piece)
+        }
+        None => (1, usize::MAX),
+    };
+    let run = Run::gated(limit, within);
+    let held = run.clone();
+    Par(
+        items
+            .par_iter()
+            .with_min_len(least)
+            .with_max_len(most)
+            .filter(move |_| held.live()),
+        run,
+    )
+}
+
+/// [`gated`] at `user_parallelism = no` (ADR-372 D7): the list's own walk,
+/// in order on this thread; the options are checked, and once the deadline
+/// has passed no element starts and the walk ends with `task::TimedOut`.
+#[track_caller]
+pub fn gated_in_order<I: Iterator, A>(
+    walk: I,
+    piece: Option<i64>,
+    limit: Option<i64>,
+    within: Option<Duration>,
+    admission: Option<A>,
+) -> InOrder<I> {
+    drop(admission);
+    if let Some(n) = piece {
+        at_least_one("piece", n);
+    }
+    if let Some(n) = limit {
+        at_least_one("limit", n);
+    }
+    TIMED_OUT.with(|t| t.set(false));
+    InOrder {
+        walk,
+        deadline: within.map(|span| Instant::now() + span),
+        done: false,
+    }
+}
+
+/// A list's own walk under a deadline, at `user_parallelism = no`.
+pub struct InOrder<I> {
+    walk: I,
+    deadline: Option<Instant>,
+    done: bool,
+}
+
+impl<I> InOrder<I> {
+    /// Whether an element may still start; the first that may not says so
+    /// for [`ended`].
+    fn live(&mut self) -> bool {
+        if self.done {
+            return false;
+        }
+        if self.deadline.is_some_and(|at| Instant::now() >= at) {
+            self.done = true;
+            TIMED_OUT.with(|t| t.set(true));
+            return false;
+        }
+        true
+    }
+}
+
+impl<I: Iterator> Iterator for InOrder<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<I::Item> {
+        if !self.live() {
+            return None;
+        }
+        self.walk.next()
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.walk.size_hint()
+    }
+}
+
+impl<I: DoubleEndedIterator> DoubleEndedIterator for InOrder<I> {
+    fn next_back(&mut self) -> Option<I::Item> {
+        if !self.live() {
+            return None;
+        }
+        self.walk.next_back()
+    }
+}
+
+impl<I: ExactSizeIterator> ExactSizeIterator for InOrder<I> {}
+
+/// **What the step that ends a walk with `within:` comes to**: its value, or
+/// `task::TimedOut` where the deadline ran out first (ADR-async-5 D27). The
+/// lowering writes it around that step.
+pub fn ended<T>(value: T) -> Result<T, crate::task::TimedOut> {
+    if TIMED_OUT.with(|t| t.replace(false)) {
+        return Err(crate::task::TimedOut);
+    }
+    Ok(value)
+}
+
+/// **A `for` over a walk with `within:`**: its elements, worked out first,
+/// or `task::TimedOut` where the deadline ran out first.
+pub fn listed<I: IntoIterator>(walk: I) -> Result<Vec<I::Item>, crate::task::TimedOut> {
+    let all: Vec<I::Item> = walk.into_iter().collect();
+    ended(all)
+}
 
 /// A walk over a list this module made, for the walks rayon has only over one.
 pub type Listed<T> = rayon::vec::IntoIter<T>;
@@ -166,7 +370,7 @@ pub type Zipped<T, U> = rayon::iter::Zip<Listed<T>, Listed<U>>;
 
 /// The elements of `items`, walked on every core at once.
 pub fn iter<T: Sync>(items: &[T]) -> Par<rayon::slice::Iter<'_, T>> {
-    Par(items.par_iter())
+    Par(items.par_iter(), Run::default())
 }
 
 /// **The size a piece of `Bytes` is cut near** where `piece:` is left out
@@ -201,11 +405,14 @@ pub fn pieces<'a, B: AsRef<[u8]> + ?Sized>(
     let bytes = bytes.as_ref();
     let size = piece.map_or(PIECE_BYTES, |n| at_least_one("piece", n));
     let count = bytes.len().div_ceil(size);
-    Par((0..count)
-        .into_par_iter()
-        .with_max_len(1)
-        .map(move |k| piece_at(bytes, sep, size, k))
-        .filter(|cut| !cut.is_empty()))
+    Par(
+        (0..count)
+            .into_par_iter()
+            .with_max_len(1)
+            .map(move |k| piece_at(bytes, sep, size, k))
+            .filter(|cut| !cut.is_empty()),
+        Run::default(),
+    )
 }
 
 /// [`pieces`] at `user_parallelism = no` (ADR-372 D7): the same pieces, in
@@ -237,7 +444,7 @@ impl<I: ParallelIterator> Par<I> {
         self,
         f: F,
     ) -> Par<rayon::iter::Map<I, F>> {
-        Par(self.0.map(f))
+        Par(self.0.map(f), self.1)
     }
 
     /// Only the elements the function says yes to.
@@ -245,12 +452,13 @@ impl<I: ParallelIterator> Par<I> {
         self,
         f: F,
     ) -> Par<rayon::iter::Filter<I, F>> {
-        Par(self.0.filter(f))
+        Par(self.0.filter(f), self.1)
     }
 
     /// Each element through a function, for what the function does.
     pub fn for_each<F: Fn(I::Item) + Sync + Send>(self, f: F) {
-        self.0.for_each(f)
+        let Par(walk, run) = self;
+        run.end(move || walk.for_each(f))
     }
 
     /// Views of values that copy, as the values (ADR-231 D1).
@@ -258,18 +466,22 @@ impl<I: ParallelIterator> Par<I> {
     where
         I: ParallelIterator<Item = &'a T>,
     {
-        Par(self.0.copied())
+        Par(self.0.copied(), self.1)
     }
 
     /// Everything the walk produces, in the list's order, as what the place it
     /// goes declares - a list where nothing does (ADR-293 D25).
-    pub fn collect<C: FromParallelIterator<I::Item>>(self) -> C {
-        self.0.collect()
+    pub fn collect<C: FromParallelIterator<I::Item> + Send>(self) -> C {
+        let Par(walk, run) = self;
+        run.end(move || walk.collect())
     }
 
-    /// The elements as a list, for the walks rayon has only over one.
-    fn listed(self) -> Vec<I::Item> {
-        self.0.collect()
+    /// The elements as a list, for the walks rayon has only over one, and
+    /// what the walk carries on.
+    fn listed(self) -> (Vec<I::Item>, Run) {
+        let Par(walk, run) = self;
+        let all = run.limited(move || walk.collect());
+        (all, run)
     }
 
     /// **Every element folded into accumulators that are merged into one**
@@ -292,9 +504,12 @@ impl<I: ParallelIterator> Par<I> {
         S: Fn(A, I::Item) -> A + Sync + Send,
         G: Fn(A, A) -> A + Sync + Send,
     {
+        // **A walk's own `limit:` caps its fold's** (ADR-async-5 D15: a task
+        // is under every limit around it).
         let limit = at_least_one("limit", limit);
-        let walk = self.0;
-        on_workers(limit, move || match order {
+        let Par(walk, run) = self;
+        let limit = run.limit.map_or(limit, |gate| gate.min(limit));
+        let folded = on_workers(limit, move || match order {
             Order::Kept => walk
                 .fold(&init, &step)
                 .reduce_with(&merge)
@@ -348,18 +563,23 @@ impl<I: ParallelIterator> Par<I> {
                     .reduce(&merge)
                     .unwrap_or_else(&init)
             }
-        })
+        });
+        run.settle();
+        folded
     }
 
     /// How many elements the walk produces.
     pub fn count(self) -> usize {
-        self.0.count()
+        let Par(walk, run) = self;
+        run.end(move || walk.count())
     }
 
     /// The element at a position, or nothing where there are fewer.
     pub fn nth(self, at: i64) -> Option<I::Item> {
+        let (all, run) = self.listed();
+        run.settle();
         let at = usize::try_from(at).ok()?;
-        self.listed().into_iter().nth(at)
+        all.into_iter().nth(at)
     }
 
     /// Every element written one after another with this text between them.
@@ -367,32 +587,35 @@ impl<I: ParallelIterator> Par<I> {
     where
         I::Item: std::fmt::Display,
     {
-        self.0
-            .map(|item| item.to_string())
-            .collect::<Vec<_>>()
-            .join(separator)
+        let Par(walk, run) = self;
+        let texts: Vec<String> = run.end(move || walk.map(|item| item.to_string()).collect());
+        texts.join(separator)
     }
 
     /// The same elements, from the last to the first.
     pub fn rev(self) -> Par<rayon::iter::Rev<Listed<I::Item>>> {
-        Par(self.listed().into_par_iter().rev())
+        let (all, run) = self.listed();
+        Par(all.into_par_iter().rev(), run)
     }
 
     /// The first `n` elements.
     pub fn take(self, n: usize) -> Par<rayon::iter::Take<Listed<I::Item>>> {
-        Par(self.listed().into_par_iter().take(n))
+        let (all, run) = self.listed();
+        Par(all.into_par_iter().take(n), run)
     }
 
     /// Everything after the first `n` elements.
     pub fn skip(self, n: usize) -> Par<rayon::iter::Skip<Listed<I::Item>>> {
-        Par(self.listed().into_par_iter().skip(n))
+        let (all, run) = self.listed();
+        Par(all.into_par_iter().skip(n), run)
     }
 
     /// The first element, and then every `step`-th after it. A step of `0`
     /// aborts, as the language below's does.
     pub fn step_by(self, step: usize) -> Par<rayon::iter::StepBy<Listed<I::Item>>> {
         assert!(step != 0, "step_by: a step of 0 would never move");
-        Par(self.listed().into_par_iter().step_by(step))
+        let (all, run) = self.listed();
+        Par(all.into_par_iter().step_by(step), run)
     }
 
     /// Pairs, one element of each, until the shorter ends.
@@ -401,7 +624,8 @@ impl<I: ParallelIterator> Par<I> {
         J::Item: Send,
     {
         let other: Vec<J::Item> = other.into_iter().collect();
-        Par(self.listed().into_par_iter().zip(other.into_par_iter()))
+        let (all, run) = self.listed();
+        Par(all.into_par_iter().zip(other.into_par_iter()), run)
     }
 }
 
@@ -411,7 +635,9 @@ impl<I: ParallelIterator> IntoIterator for Par<I> {
     type Item = I::Item;
     type IntoIter = std::vec::IntoIter<I::Item>;
     fn into_iter(self) -> Self::IntoIter {
-        self.listed().into_iter()
+        let (all, run) = self.listed();
+        run.settle();
+        all.into_iter()
     }
 }
 

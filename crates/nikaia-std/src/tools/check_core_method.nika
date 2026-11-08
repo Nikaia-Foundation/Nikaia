@@ -941,13 +941,37 @@ pub fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWo
     if code_keys.len() > 0 {
         state.stored_frames.push(CheckStoredCode::empty())
     }
-    let found = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
+    let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
+    let found = check_core_method_deadline(state, world, receiver, config, walked)
     check_core_method_option_names(state, world, receiver, name, config, span)
     if code_keys.len() > 0 {
         let last = args.len() as i64 - 1
         check_core_places_stored_keys(state, world, host, args[last], code_keys)
     }
     return found
+}
+
+/// **`xs.par_iter(within: d)` is a walk with a deadline** (ADR-async-5
+/// D27): what it hands back carries it, through `map`, `filter` and the rest,
+/// to the step that ends the walk, which throws `task::TimedOut`.
+fn check_core_method_deadline(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr, config: ref Vec[ConfigArg], found: Ty) -> Ty sync {
+    let key = state.facts.method_callees.get(id_of(receiver) as i64)?.clone() ?? return found
+    if key != "Vec::par_iter" {
+        return found
+    }
+    let mut within = false
+    for option in config {
+        if world.words.resolve(option.name) == "within" {
+            within = true
+        }
+    }
+    if !within {
+        return found
+    }
+    return match found {
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } },
+        else => found,
+    }
 }
 
 /// **An option a method does not have is `NK1109`** (Part I 5.1), as it is

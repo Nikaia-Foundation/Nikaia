@@ -19,10 +19,11 @@ pub struct Shape {
     pub ends: bool,
     pub sized: bool,
     pub replays: bool,
+    pub timed: bool,
 }
 
 impl Shape {
-    pub fn none() -> Shape { Shape { ends: false, sized: false, replays: false } }
+    pub fn none() -> Shape { Shape { ends: false, sized: false, replays: false, timed: false } }
     pub fn meets(&self, wanted: &Shape) -> bool { self.missing(wanted).is_empty() }
     pub fn missing(&self, wanted: &Shape) -> Vec<String> {
         let mut words: Vec<String> = vec![];
@@ -399,7 +400,7 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
     if is_sync && pauses { return None; }
     if !tail.is_empty() { return None; }
     let item = parse(&between(&c, 1, close));
-    let shape = Shape { ends, sized, replays };
+    let shape = Shape { ends, sized, replays, timed: false };
     Some(Ty::Seq { item: Box::new(item), is_sync, pauses, can_throw, parallel, shape })
 }
 

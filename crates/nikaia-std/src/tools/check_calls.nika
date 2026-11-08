@@ -81,6 +81,7 @@ pub fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[
     let mut ends = true
     let mut sized = true
     let mut on_every_core = parallel
+    let mut timed = false
     if contract.signature != null {
         let signature = contract.signature?.clone() ?? Signature::empty()
         if signature.params.len() > 0 && signature.params[0].0 == "self" && a_sequence_type(signature.params[0].1) {
@@ -90,6 +91,9 @@ pub fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[
             // `filter` and the rest are `Seq`'s entries, and what they hand
             // back still runs on every core, so it has `Par`'s `fold`.
             on_every_core = on_every_core || shape_parallel(receiver)
+            // **And a walk's deadline goes on to the step that ends it**
+            // (ADR-async-5 D27).
+            timed = shape_timed(receiver)
         }
         let arguments = call_arguments(signature)
         let mut at = 0
@@ -102,12 +106,21 @@ pub fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[
         }
     }
     ends = ends && (!contract.ends_by_length || sized)
-    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays } }
+    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed } }
 }
 
 fn shape_parallel(ty: ref Ty) -> bool {
     return match ty {
         Ty::Seq { parallel, .. } => parallel,
+        else => false,
+    }
+}
+
+/// Whether a walk carries a deadline to the step that ends it (ADR-async-5
+/// D27).
+pub fn shape_timed(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Seq { shape, .. } => shape.timed,
         else => false,
     }
 }
@@ -143,7 +156,7 @@ pub fn a_pausing_sequence(result: Ty, on: ref Ty) -> Ty {
         else => false,
     }
     return match result {
-        Ty::Seq { item, can_throw, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel: parallel, shape: Shape { ends: false, sized: false, replays: shape.replays } },
+        Ty::Seq { item, can_throw, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel: parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed } },
         else => result,
     }
 }

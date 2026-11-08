@@ -1987,6 +1987,12 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     state.fallible_step(world, over, width, span)
     // A fallible walk bound to several names is `NK2701` already.
     let stepped_fallibly = state.findings.len() > before
+    // **A `for` over a walk with `within:` ends it** (ADR-async-5 D27): the
+    // walk is listed first, and throws `task::TimedOut` there.
+    if shape_timed(over) {
+        state.facts.timed_loops.insert(span.start as i64)
+        check_core_walk_timed_out(state, span)
+    }
     state.pausing_step(over, span)
     // **A `for` walks a produced sequence, and that consumes it** (ADR-105 D2).
     state.a_sequence_is_walked(iter, over, span, world)
