@@ -379,6 +379,14 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         // `ref` the source wrote**, which is `NK1137`'s below.
         let string = Ty::Named { name: "String", args: [], view: false }
         if !kept && !check_arguments_wrote_ref(given_here) && found_here == text_view && want == string && own {
+            // **Unless it is a name holding `EitherText`** (ADR-282 D14,
+            // #1310): that is lent, `&x`, as text of its own is.
+            if given_here != null {
+                let value = given_here ?? continue
+                if state.an_either_name(world, value) {
+                    state.facts.lent_args.insert(id_of(value) as i64)
+                }
+            }
             continue
         }
         // **A view handed to a parameter both kinds flow into** is borrowed as
