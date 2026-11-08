@@ -1,0 +1,46 @@
+// ADR-306 D22 (#1414): a write of what is not shown to be a position of
+// `parent` (`other + 1`) breaks `parent`'s rule: `self.parent[up]`
+// stays checked. `find` still returns a position (its loop's condition
+// read it), so `union`'s reads stay proved.
+struct Forest {
+	parent: Vec[i64],
+	rank: Vec[i64],
+}
+
+impl Forest {
+	fn find(ref mut self, start: i64) -> i64 {
+		let mut at = start
+		while self.parent[at] != at {
+			let up = self.parent[at]
+			self.parent[at] = self.parent[up]
+			at = self.parent[at]
+		}
+		return at
+	}
+
+	fn union(ref mut self, a: i64, b: i64) {
+		let one = self.find(a)
+		let other = self.find(b)
+		if one != other {
+			self.parent[one] = other + 1
+			self.rank[other] += 1
+		}
+	}
+
+	fn add(ref mut self) -> i64 {
+		let id = self.parent.len()
+		self.parent.push(id)
+		self.rank.push(0)
+		return id
+	}
+}
+
+fn main() throws {
+	let mut f = Forest { parent: [], rank: [] }
+	let a = f.add()
+	let b = f.add()
+	let c = f.add()
+	f.union(a, b)
+	f.union(a, b)
+	println(f"{f.find(c)}")
+}

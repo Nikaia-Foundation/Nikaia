@@ -1,0 +1,9 @@
+bounds in tests/prove_own_length_broken_by_a_write.nika: 7 indexes, 5 proved; 1 operations, 0 proved
+    13  self.parent[at]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    14  self.parent[at]   proved
+    15  self.parent[at]   proved
+    15  self.parent[up]   checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+    16  self.parent[at]   proved
+    25  self.parent[one]  proved
+    25  other + 1         checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    26  self.rank[other]  proved
