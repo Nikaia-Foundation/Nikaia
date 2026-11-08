@@ -89,6 +89,10 @@ announces the topic, followed by an explanation ("**No failure is lost.** Every
 failure reaches…", "Safety: …"). The same goes for colon lead-ins, bold
 phrases inside running text, and lists of slogans.
 
+The name of one of the website's four areas is not running text and may be a
+short list of words (owner, 2026-11-08): the safety area is called "Safe,
+secure, reliable", in its eyebrow, its page title and the navigation.
+
 When a paragraph deserves its own heading, it gets a real heading. The heading
 describes what the section is about ("What happens when a task fails"), rather
 than making a hard claim ("Failures are never lost"). Prose follows under it.
