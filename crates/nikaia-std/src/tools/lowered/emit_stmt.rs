@@ -813,7 +813,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)?;
             out.push(";\n");
             out.push(&inner);
-            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next().await ", allowed, bound));
+            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next(){} ", allowed, bound, emit_async_pause(&walk)));
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))?;
             out.push("\n");
             out.push(&pad);
