@@ -499,6 +499,10 @@ impl EmitState {
         // A grammar's own `WS` under the recording one keeps its body and
         // takes `renamed` (`emit_grammar_body`).
         let rule_name = if renamed.is_empty() { emit_text(world, rule.name) } else { renamed.clone() }
+        if rule.stream && rule.is_entry {
+            self.emit_stream_rule(world, walk, out, host, rule, rule_name, taken, label)
+            return
+        }
         out.push(f"        {vis}rule {rule_name}{taken}{ret}{label} =\n")
 
         for i in 0..<rule.alts.len() {
@@ -572,6 +576,64 @@ impl EmitState {
                 },
             }
         }
+    }
+
+    /// **A `@stream` entry is the engine's `#[stream(each)]`** (ADR-grammar-2
+    /// D7, amended 2026-11-08): its `item*` becomes a `fold` that counts, on
+    /// the path the reader hands each item over on, and the caller sees the
+    /// items through `each` (`nikaia_std::grammar::stream`).
+    fn emit_stream_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, rule_name: ref String, taken: ref String, label: ref String) sync throws {
+        let item = match rule.ret_type {
+            ty => host.ty_named(walk, ty),
+            null => throw EmitRefused { message: "A `@stream` entry names the type of its items: `@stream entry rule items -> Item = item*`.", at: rule.span.start as i64 },
+        }
+        if rule.alts.len() != 1 || rule.alts[0].action != null {
+            throw EmitRefused { message: "The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns.", at: rule.span.start as i64 }
+        }
+        let pattern = rule.alts[0].pattern
+        let parts: Vec[Spanned[Pattern]] = match pattern.node {
+            Pattern::Seq(seq) => seq.clone(),
+            else => [pattern.clone()],
+        }
+        let mut folds = 0
+        for part in parts {
+            if stream_item(part.node) != null {
+                folds += 1
+            }
+        }
+        if folds != 1 {
+            throw EmitRefused { message: "The compiler can't translate this `@stream` entry yet: its body holds one `item*`, a call of a rule repeated, and the engine reads only that form one item at a time (`list(item, sep)`, `item+` and counted repeats wait for a fold of their own in winnow-grammar).", at: rule.span.start as i64 }
+        }
+        out.push("        #[stream(each)]\n")
+        out.push(f"        pub rule {rule_name}{taken} -> usize{label} =\n          ")
+        for i in 0..<parts.len() {
+            if i > 0 {
+                out.push(" ")
+            }
+            match stream_item(parts[i].node) {
+                inner => {
+                    out.push("__wg_n:fold(")
+                    self.emit_pattern(world, walk, out, host, inner)
+                    out.push(f", || 0usize, |n: usize, _item: {item}| n + 1)")
+                },
+                null => self.emit_pattern(world, walk, out, host, parts[i]),
+            }
+        }
+        out.push("\n            -> { __wg_n }\n")
+    }
+}
+
+/// The rule a `@stream` entry repeats: `item*`, the pattern under the `*`.
+fn stream_item(pattern: ref Pattern) -> Spanned[Pattern]? {
+    return match pattern {
+        Pattern::Repeat { pat, rep } => match rep {
+            Repeat::Star => match pat.node {
+                Pattern::Ref { .. } => pat.clone(),
+                else => null,
+            },
+            else => null,
+        },
+        else => null,
     }
 }
 
