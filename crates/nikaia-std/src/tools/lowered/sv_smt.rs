@@ -237,7 +237,7 @@ pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
         if !s.fresh {
             let next = s.sat.pick();
             if next.is_some() {
-                s.sat.decide(nikaia_std::index::or(next, || 0));
+                s.sat.decide(nikaia_std::index::or(next, || 0u32));
                 continue;
             }
         }
@@ -265,7 +265,7 @@ pub(crate) fn sv_smt_search<T: SvTh>(s: &mut SvSmt<T>) -> SvSmtEnd {
             if end.is_some() { return nikaia_std::index::or(end, || SvSmtEnd::Sat); }
             continue;
         }
-        s.sat.decide(nikaia_std::index::or(next, || 0));
+        s.sat.decide(nikaia_std::index::or(next, || 0u32));
     }
 }
 

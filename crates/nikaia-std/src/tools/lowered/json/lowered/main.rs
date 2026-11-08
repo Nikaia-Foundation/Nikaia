@@ -330,11 +330,11 @@ pub fn as_i64(v: &Value) -> Result<i64, nikaia_std::error::Thrown<ConvertError>>
 pub fn as_u64(v: &Value) -> Result<u64, nikaia_std::error::Thrown<ConvertError>> {
     let t = number_text(&v, "a u64")?;
     let direct = text::parse_u64(&t.to_string());
-    if direct.is_some() { return Ok(nikaia_std::index::or(direct, || 0)); }
+    if direct.is_some() { return Ok(nikaia_std::index::or(direct, || 0u64)); }
     let whole = zero_fraction(&t.to_string());
     if whole.is_some() {
         let n = text::parse_u64(nikaia_std::index::or(whole.as_deref(), || ""));
-        if n.is_some() { return Ok(nikaia_std::index::or(n, || 0)); }
+        if n.is_some() { return Ok(nikaia_std::index::or(n, || 0u64)); }
         return Err(nikaia_std::error::throwing(ConvertError { message: format!("`{}` does not fit in a u64", t) }, &"as_u64"));
     }
     let x = nikaia_std::index::or(text::parse_f64(&t.to_string()), || 0.0);

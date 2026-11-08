@@ -204,6 +204,15 @@ fn check_core_ops_unsigned(ty: ref Ty) -> String? sync {
     return null
 }
 
+/// `u32` or `u64`, where a `??`'s left side holds one, read through a view
+/// or not.
+fn check_core_ops_unsigned_held(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 && (name == "u32" || name == "u64") { name.clone() } else { null },
+        else => null,
+    }
+}
+
 /// Whether a side may stand in an unchecked operation: a literal, or one
 /// whole-number type that is not a view.
 fn check_core_ops_whole(side: ref Expr, ty: ref Ty) -> bool sync {
@@ -840,6 +849,16 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
     let nullable = check_core_ops_nullable(left)
     let inner = check_core_ops_inside(left)
     let place = check_core_ops_place(value)
+    // **A number falling back for an unsigned value is of its type** (#1297,
+    // Part I 2.2): a literal takes the type its place expects where it fits,
+    // so `m.get(k) ?? 4294967295` of a `u32` map is a `u32`, not the `i64` a
+    // bare literal above `i32` would be; one that does not fit is `NK1116`.
+    if nullable && written_in_literals(fallback) {
+        let held: String? = check_core_ops_unsigned_held(inner)
+        if held != null {
+            state.constant_fits(world, fallback, check_core_ops_named(held ?? ""), span)
+        }
+    }
     // **A left side that holds a type nothing can tell is refused** (#1322,
     // `NK1342`): the fallback would be converted into a type the language
     // below has to guess. A number or a jump as the fallback leaves the type to

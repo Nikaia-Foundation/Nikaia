@@ -106,6 +106,15 @@ pub(crate) fn check_core_ops_unsigned(ty: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_unsigned_held(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Named { name, args, .. } => if args.is_empty() && (name == "u32" || name == "u64") { Some(name.to_string()) } else { None },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_whole(side: &Expr, ty: &Ty) -> bool {
     if check_core_ops_lit_int(side) { return true; }
     let plain = ty.unseen();
@@ -587,6 +596,10 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
     let nullable = check_core_ops_nullable(&left);
     let inner = check_core_ops_inside(&left);
     let place = check_core_ops_place(value);
+    if nullable && written_in_literals(fallback) {
+        let held: Option<String> = check_core_ops_unsigned_held(&inner);
+        if held.is_some() { state.constant_fits(world, fallback, Some(&check_core_ops_named(nikaia_std::index::or(held.as_deref(), || ""))), span); }
+    }
     if nullable && inner.is_unknown() && !state.jumps(world, fallback) && !state.number_shaped(world, fallback) {
         let shown = arith_shown(&written_expression(world.words, value));
         state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` holds, so it can't tell what the fallback of this `??` becomes.", shown), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T? = …`."))));
