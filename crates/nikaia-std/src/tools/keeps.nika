@@ -726,12 +726,13 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
                 // **A name an outer arm bound is a part of the parameter that
                 // arm takes apart**: an inner arm that hands on what it binds
                 // takes the parameter (#1158), as `Ran::Hit(wall) => match
-                // wall { Refused { detail } => detail, .. }` does.
+                // wall { Refused { detail } => detail, .. }` does. **So does a
+                // field of a name a `let` bound to the parameter** (#928):
+                // `let w = m` or `let w = f(m)`, then `match w.value { V::Map(es)
+                // => es }` moves the field out of what `m` handed over.
                 if an_arm_hands_on_what_it_binds(arms, interner) {
-                    let aliased = match value {
-                        Expr::Variable(ident, _) => walk.aliases[interner.resolve(ident)]?.clone() ?? collections::BTreeSet(),
-                        else => collections::BTreeSet(),
-                    }
+                    let root = field_root(value, interner) ?? ""
+                    let aliased = walk.aliases[root]?.clone() ?? collections::BTreeSet()
                     for one in aliased {
                         if one != "self" && !context.lent.contains(one) {
                             walk.uses.kept.insert(one.clone())
@@ -1356,6 +1357,16 @@ fn part_of_a_parameter(expr: ref Expr, interner: ref winnow_grammar::InternerCon
         else => {
             return parameter_named(expr, interner, context)
         }
+    }
+}
+
+// The name a field chain starts from (`w` of `w.value.kind`, `w` itself), or
+// null for any other expression.
+fn field_root(expr: ref Expr, interner: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Variable(ident, _) => interner.resolve(ident).clone(),
+        Expr::Field { base, .. } => field_root(base, interner),
+        else => null,
     }
 }
 

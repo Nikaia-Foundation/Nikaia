@@ -1,0 +1,35 @@
+// A method of a struct holding a `ref Bytes`, called on a local bound to a
+// struct literal, hands back a result built from its by-value struct
+// argument: the result points into that argument only, so the caller's
+// signature ties it to `n` and not to `input` (#1094).
+
+struct N { raw: String, tag: String, kids: Vec[E] }
+struct E { key: N }
+struct H { input: ref Bytes }
+
+impl H {
+	fn walk(ref self, n: N) -> N sync {
+		let mut out: Vec[E] = []
+		for e in n.kids.drain() {
+			out.push(E { key: self.walk(e.key) })
+		}
+		return N { raw: n.raw, tag: n.tag, kids: out }
+	}
+}
+
+fn keep(n: N, input: ref Bytes) -> N sync {
+	let h = H { input: input }
+	return h.walk(n)
+}
+
+fn make(s: String) -> N {
+	let t = s.trim()
+	return N { raw: t, tag: t, kids: [E { key: N { raw: t, tag: t, kids: [] } }] }
+}
+
+fn main() throws {
+	let text = "  hello  "
+	let input = Bytes(text.bytes().collect())
+	let m = keep(make(text), input)
+	println(f"{m.raw} {m.tag} {m.kids.len()}")
+}

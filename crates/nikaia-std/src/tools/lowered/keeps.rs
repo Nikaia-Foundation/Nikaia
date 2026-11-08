@@ -464,13 +464,11 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
             if parameter_named(value, interner, context).is_none() {
                 if part_of_a_parameter(value, interner, context).is_some() && an_arm_hands_on_what_it_binds(arms, interner) { keep_part(Some(value), interner, context, own, library, walk); }
                 if an_arm_hands_on_what_it_binds(arms, interner) {
-                    let aliased = match value {
-                        Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::index::or(match *nikaia_std::index::get(&walk.aliases, interner.resolve(ident)) {
-                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
-                            None => None,
-                        }, || collections::BTreeSet::new().into()) },
-                        _ => collections::BTreeSet::new(),
-                    };
+                    let root = nikaia_std::index::or(field_root(value, interner), || "".into());
+                    let aliased = nikaia_std::index::or(match *nikaia_std::index::get(&walk.aliases, &root) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || collections::BTreeSet::new().into());
                     for one in aliased.iter() { if one != "self" && !context.lent.contains(one) { walk.uses.kept.insert(one.to_string()); } }
                 }
                 return;
@@ -896,6 +894,14 @@ pub(crate) fn part_of_a_parameter(expr: &Expr, interner: &winnow_grammar::Intern
     }
 }
 
+pub(crate) fn field_root(expr: &Expr, interner: &winnow_grammar::InternerContext) -> Option<String> {
+    match expr {
+        Expr::Variable(ident, _) => { let ident = *ident; Some(interner.resolve(ident).to_string()) },
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); field_root(base, interner) },
+        _ => None,
+    }
+}
+
 pub(crate) fn not_self(name: String) -> Option<String> {
     if name == "self" { return None; }
     Some(name)
@@ -1092,11 +1098,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81153| {
-                            let (at, arg) = __nikaia_tuple81153; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81687| {
+                            let (at, arg) = __nikaia_tuple81687; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple81329| {
-                            let (at, arg) = __nikaia_tuple81329;
+                        }).map(|__nikaia_tuple81863| {
+                            let (at, arg) = __nikaia_tuple81863;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

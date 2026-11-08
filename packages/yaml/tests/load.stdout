@@ -1,0 +1,20 @@
+{str(a): &x {str(k): str(v)}, str(b): &x {str(k): str(v)}, str(c): &x {str(k): str(v)}}
+[&n str(one), [str(x), {str(y): [&n str(one)]}], &n str(two), &n str(two)]
+error 3:4: unknown anchor *a
+error 1:4: unknown anchor *nowhere
+error 1:5: alias *a inside its own anchor
+error 2:10: alias *a inside its own anchor
+&a [&a str(b), &a str(b)]
+error 5:8: alias expansion exceeds 11000 nodes (alias_nodes limit 10000)
+error 5:8: alias expansion exceeds 10560 nodes (alias_nodes limit 10000)
+74738 nodes
+931 nodes
+error 22:3: alias expansion exceeds 610 nodes (alias_nodes limit 0)
+error 2:1: duplicate key at 2:1, first at 1:1
+error 2:1: duplicate key at 2:1, first at 1:1
+error 1:13: duplicate key at 1:13, first at 1:2
+error 1:11: duplicate key at 1:11, first at 1:2
+error 4:3: duplicate key at 4:3, first at 3:3
+{int(1): str(a), str(1): str(b)}
+{float(.nan): str(a), float(.nan): str(b)}
+{str(base): &base {str(x): int(1)}, str(m): {str(<<): &base {str(x): int(1)}, str(y): int(2)}}

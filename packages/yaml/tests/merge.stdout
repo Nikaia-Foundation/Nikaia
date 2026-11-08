@@ -1,0 +1,23 @@
+-- own key overrides base
+base=&base {a=1, b=2}
+x={b=3, c=4, a=1}
+-- first merged mapping wins
+a=&a {k=1, p=2}
+b=&b {k=9, q=3}
+m={k=1, p=2, q=3}
+-- nested merge
+base=&b {x=1}
+mid=&m {y=2, x=1}
+top={z=3, y=2, x=1}
+-- inside a sequence item
+[&a {k=1}, {j=2, k=1}]
+-- quoted key is ordinary
+<<={k=1}
+a=2
+-- scalar refused
+error 3:7: expected a mapping or a list of mappings to merge, found an integer
+-- sequence with a scalar refused
+error 2:14: expected a mapping to merge in the list, found an integer
+-- no merge key unchanged
+a=[1, {b=2}]
+c=&c d
