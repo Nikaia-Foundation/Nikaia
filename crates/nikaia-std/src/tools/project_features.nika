@@ -534,6 +534,7 @@ pub fn features_applied(rust: ref String, manifest: ref String, features: ref Ve
     let reached = reach.reached.clone()
     let core = reach.core.clone()
     let default = reach.default.clone()
+    features_readers_sent(reach, features, package)
 
     // The conditions, written before each item's first line.
     let mut homes: Vec[(String, String)] = []
@@ -638,6 +639,74 @@ pub fn features_applied(rust: ref String, manifest: ref String, features: ref Ve
         table = f"{table}{resolved[f].name} = [{entries.join(", ")}]\n"
     }
     return FeaturesMade { rust: lines.join("\n"), table: table, optional: optional, names: names, homes: homes }
+}
+
+/// **A reader's items cross a thread** (ADR-grammar-2 D7, amended
+/// 2026-11-08, #1468): the reader a feature roots parses on a thread of its
+/// own and sends each item over, so an item type made of something that is
+/// not `Send` is `NK1345` on the feature's root, before rustc runs. What the
+/// walk cannot decide is left to the build of the feature.
+fn features_readers_sent(reach: ref FeaturesReach, features: ref Vec[ManifestFeature], package: ref String) throws {
+    for k in 0..<reach.resolved.len() {
+        let feature = reach.resolved[k].name.clone()
+        for at in 0..<reach.items.len() {
+            if !reach.reached[k][at] { continue }
+            let path = features_reader_path(reach.items[at].name) ?? continue
+            let mut text = ""
+            for i in reach.items[at].first..<reach.items[at].last + 1 {
+                text = f"{text}{reach.lines[i]}\n"
+            }
+            let after = text.split("Iterator<Item = Result<").nth(1) ?? continue
+            let item = after.split(", nikaia_std::grammar::ParseError").next() ?? continue
+            let (owner, field) = features_unsendable(reach.items, reach.lines, item.trim()) ?? continue
+            let mut entry: String = ""
+            for one in features {
+                if one.name != feature { continue }
+                for written in one.entries {
+                    let full = f"{package}::{path}"
+                    if entry.len() == 0 && (written == full || full.starts_with(f"{written}::")) { entry = written.clone() }
+                }
+            }
+            let holds = if field.len() > 0 { f"`{owner}.{field}` holds" } else { "it is" }
+            throw FeaturesRefusal { code: "NK1345", feature: feature.clone(), entry: entry, message: f"The `@stream` entry `{path}` yields `{item.trim()}`, which cannot move to another thread: {holds} a value that is not `Send`. The reader the feature `{feature}` adds parses on a thread of its own and sends each item to the caller.", help: f"Give `{owner}` fields that can cross a thread, or take `{path}` out of the feature `{feature}`." }
+        }
+    }
+}
+
+/// **What keeps a type from crossing a thread**, walked through the types
+/// of the lowered crate it names: the type and the field whose written type
+/// is made of something that never crosses (`crosses`), the field empty
+/// where the type itself is; null where nothing plainly refuses.
+fn features_unsendable(items: ref Vec[FeatureItem], lines: ref Vec[String], ty: ref String) -> (String, String)? {
+    let own: Vec[String] = [ty.clone()]
+    if crosses(own).may_not() { return (ty.clone(), "") }
+    let mut lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 }
+    let mut queue = features_scan_line(ty, lexer).words
+    let mut seen: Vec[String] = []
+    let mut next = 0
+    while next < queue.len() {
+        let name = queue[next].clone()
+        next += 1
+        if seen.contains(name) { continue }
+        seen.push(name.clone())
+        for item in items {
+            if item.name != name || (item.kind != "struct" && item.kind != "enum") { continue }
+            for i in item.first..<item.last + 1 {
+                let line = lines[i].trim()
+                if line.starts_with("#[") || line.starts_with("//") { continue }
+                let field: Vec[String] = [line.clone()]
+                if crosses(field).may_not() {
+                    let bare = line.replace("pub(crate) ", "").replace("pub ", "")
+                    let named = bare.split(":").next() ?? ""
+                    let named = named.split("(").next() ?? ""
+                    let named = named.split("{").next() ?? ""
+                    return (name.clone(), named.trim().clone())
+                }
+            }
+            for word in item.words { queue.push(word.clone()) }
+        }
+    }
+    return null
 }
 
 /// **The items a binding carries** (ADR-393 D5): the names of the items of

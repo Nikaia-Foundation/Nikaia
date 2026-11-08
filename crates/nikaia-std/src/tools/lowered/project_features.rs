@@ -414,6 +414,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
     let reached = reach.reached.to_owned();
     let core = reach.core.to_owned();
     let default = reach.default.to_owned();
+    features_readers_sent(&reach, features, package)?;
     let mut homes: Vec<(String, String)> = vec![];
     for at in 0..items.len() as i64 {
         if *nikaia_std::index::get(&core, (at) as usize) { continue; }
@@ -494,6 +495,64 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
         table = format!("{}{} = [{}]\n", table, nikaia_std::index::get(&resolved, (f) as usize).name, entries.join(", "));
     }
     Ok(FeaturesMade { rust: lines.join("\n"), table, optional, names, homes })
+}
+
+pub(crate) fn features_readers_sent(reach: &FeaturesReach, features: &[ManifestFeature], package: &str) -> Result<(), nikaia_std::error::Thrown<FeaturesRefusal>> {
+    for k in 0..reach.resolved.len() as i64 {
+        let feature = nikaia_std::index::get(&reach.resolved, (k) as usize).name.to_string();
+        for at in 0..reach.items.len() as i64 {
+            if !*nikaia_std::index::get(nikaia_std::index::get(&reach.reached, (k) as usize), (at) as usize) { continue; }
+            let path = match features_reader_path(&nikaia_std::index::get(&reach.items, (at) as usize).name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut text = String::from("");
+            for i in nikaia_std::index::get(&reach.items, (at) as usize).first..nikaia_std::index::get(&reach.items, (at) as usize).last + 1 { text = format!("{}{}\n", text, *nikaia_std::index::get(&reach.lines, nikaia_std::index::at(i))); }
+            let after = match text.split("Iterator<Item = Result<").nth(1) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let item = match after.split(", nikaia_std::grammar::ParseError").next() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let (owner, field) = match features_unsendable(&reach.items, &reach.lines, item.trim()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut entry: String = String::from("");
+            for one in features.iter() {
+                if one.name != feature { continue; }
+                for written in one.entries.iter() {
+                    let full = format!("{}::{}", package, path);
+                    if entry.is_empty() && (*written == full || full.starts_with(&format!("{}::", written))) { entry = written.to_string(); }
+                }
+            }
+            let holds = if !field.is_empty() { format!("`{}.{}` holds", owner, field) } else { String::from("it is") };
+            return Err(nikaia_std::error::throwing(FeaturesRefusal { code: String::from("NK1345"), feature: feature.to_string(), entry, message: format!("The `@stream` entry `{}` yields `{}`, which cannot move to another thread: {} a value that is not `Send`. The reader the feature `{}` adds parses on a thread of its own and sends each item to the caller.", path, item.trim(), holds, feature), help: Some(format!("Give `{}` fields that can cross a thread, or take `{}` out of the feature `{}`.", owner, path, feature)) }, &"features_readers_sent"));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &str) -> Option<(String, String)> {
+    let own: Vec<String> = vec![ty.to_string()];
+    if crosses(&own).may_not() { return Some((ty.to_string(), String::from(""))); }
+    let mut lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 };
+    let mut queue = features_scan_line(ty, &mut lexer).words;
+    let mut seen: Vec<String> = vec![];
+    let mut next: i64 = 0;
+    while ((next) as usize) < queue.len() {
+        let name = (*nikaia_std::index::get(&queue, (next) as usize)).to_string();
+        next += 1;
+        if nikaia_std::list::contains(&seen, &name) { continue; }
+        seen.push(name.to_string());
+        for item in items.iter() {
+            if item.name != name || item.kind != "struct" && item.kind != "enum" { continue; }
+            for i in item.first..item.last + 1 {
+                let line = (*nikaia_std::index::get(&lines, nikaia_std::index::at(i))).trim();
+                if line.starts_with("#[") || line.starts_with("//") { continue; }
+                let field: Vec<String> = vec![line.to_string()];
+                if crosses(&field).may_not() {
+                    let bare = line.replace("pub(crate) ", "").replace("pub ", "");
+                    let named = nikaia_std::index::or(bare.split(':').next(), || "");
+                    let named = nikaia_std::index::or(named.split('(').next(), || "");
+                    let named = nikaia_std::index::or(named.split('{').next(), || "");
+                    return Some((name.to_string(), named.trim().to_string()));
+                }
+            }
+            for word in item.words.iter() { queue.push(word.to_string()); }
+        }
+    }
+    None
 }
 
 pub fn features_kept(rust: &str, features: &[ManifestFeature], package: &str, chosen: Option<&Vec<String>>) -> Result<Vec<String>, nikaia_std::error::Thrown<FeaturesRefusal>> {

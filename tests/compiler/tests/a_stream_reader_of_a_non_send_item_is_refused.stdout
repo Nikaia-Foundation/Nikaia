@@ -1,0 +1,16 @@
+exit 1
+error[NK1345]: The `@stream` entry `G::doc` yields `Item`, which cannot move to another thread: `Item.word` holds a value that is not `Send`. The reader the feature `stream` adds parses on a thread of its own and sends each item to the caller.
+  --> TMP/nikaia.toml:9:11
+   |
+ 9 | stream = ["demo::G::doc"]
+   |           ^^^^^^^^^^^^^^
+   |
+   = help: Give `Item` fields that can cross a thread, or take `G::doc` out of the feature `stream`.
+exit 1
+error[NK1345]: The `@stream` entry `G::doc` yields `Item`, which cannot move to another thread: `Inner.text` holds a value that is not `Send`. The reader the feature `stream` adds parses on a thread of its own and sends each item to the caller.
+  --> TMP/nikaia.toml:9:11
+   |
+ 9 | stream = ["demo::G"]
+   |           ^^^^^^^^^
+   |
+   = help: Give `Inner` fields that can cross a thread, or take `G::doc` out of the feature `stream`.
