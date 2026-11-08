@@ -333,7 +333,7 @@ pub struct ChildHandle<'g, T, E> {
     /// **The rest of a pausing task of `async e`** (ADR-async-5 D6, D20,
     /// #1226), after its first pause: polled where the checker waits, its
     /// `join`. Dropped unjoined, the task is cancelled at that pause.
-    held: std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'g>>>>,
+    held: std::rc::Rc<Rested<'g>>,
     /// **The cell that holds the rest of a bound pausing task** (Part I 8.2,
     /// #987): where the handle is named after its `let`, the rest lives in a
     /// [`Rest`] the emitted code declares before it and finishes at the end of
@@ -348,6 +348,8 @@ pub trait Polled {
     fn poll_rest(&self, cx: &mut std::task::Context<'_>);
     /// Drop the rest: the task stops at its pause.
     fn cancel_rest(&self);
+    /// The cell of the rest, for a gate to poll (D15, D18).
+    fn pollable(&self) -> std::rc::Weak<dyn super::Pollable + '_>;
 }
 
 /// **The rest of a bound pausing task of `async e`** (Part I 8.2,
@@ -357,13 +359,19 @@ pub trait Polled {
 /// rest whose handle was dropped live (its failure then reaches the group as
 /// an unread one); leaving the block early drops it, at its pause.
 pub struct Rest<'b> {
-    held: std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'b>>>>,
+    held: std::rc::Rc<Rested<'b>>,
 }
+
+/// **Where the rest of a pausing task lives** after its first pause: shared
+/// with the gates of `limit:` and `admission:` around it (ADR-async-5 D15,
+/// D18), which poll it while a sibling waits for a place.
+pub(super) type Rested<'b> =
+    std::cell::RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'b>>>>;
 
 impl Rest<'_> {
     pub fn new() -> Self {
         Rest {
-            held: std::cell::RefCell::new(None),
+            held: std::rc::Rc::new(std::cell::RefCell::new(None)),
         }
     }
 
@@ -395,6 +403,11 @@ impl Polled for Rest<'_> {
     fn cancel_rest(&self) {
         drop(self.held.take());
     }
+
+    fn pollable(&self) -> std::rc::Weak<dyn super::Pollable + '_> {
+        let cell: std::rc::Weak<Rested<'_>> = std::rc::Rc::downgrade(&self.held);
+        cell
+    }
 }
 
 impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
@@ -406,7 +419,7 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             deferred: None,
             is_deferred: false,
             claimed: std::cell::Cell::new(false),
-            held: std::cell::RefCell::new(None),
+            held: std::rc::Rc::new(std::cell::RefCell::new(None)),
             kept: None,
         }
     }
@@ -461,7 +474,7 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             std::future::poll_fn(|cx| std::task::Poll::Ready(task.as_mut().poll(cx).is_ready()))
                 .await;
         if !ended {
-            *handle.held.get_mut() = Some(task);
+            *handle.held.borrow_mut() = Some(task);
         }
         handle
     }
@@ -519,6 +532,16 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             false => handle.at = launch(),
         }
         handle
+    }
+
+    /// **The rest of its pausing task, for the gates around it** (D15, D18):
+    /// polled by a sibling that waits for a place.
+    pub fn pollable(&self) -> std::rc::Weak<dyn super::Pollable + 'g> {
+        if let Some(rest) = self.kept {
+            return rest.pollable();
+        }
+        let cell: std::rc::Weak<Rested<'g>> = std::rc::Rc::downgrade(&self.held);
+        cell
     }
 
     /// **`h.start()`** (D12): start a deferred task; the handle stays. A second

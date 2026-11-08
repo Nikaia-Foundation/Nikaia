@@ -987,7 +987,7 @@ fn list_shaped(value: ref Expr) -> bool {
             true
         }
         Expr::Block(block, _) => list_shaped_block(block),
-        Expr::AsyncGroup(block, _, _) => list_shaped_block(block),
+        Expr::AsyncGroup(block, _, _, _, _) => list_shaped_block(block),
         else => false,
     }
 }
@@ -1216,7 +1216,7 @@ fn handed_back(unit: ref Unit, asked: ref Asked, value: ref Expr, span: ref Span
             }
         }
         Expr::Block(block, _) => walk_block(unit, asked, block, true, own_buffer, here),
-        Expr::AsyncGroup(block, _, _) => walk_block(unit, asked, block, true, own_buffer, here),
+        Expr::AsyncGroup(block, _, _, _, _) => walk_block(unit, asked, block, true, own_buffer, here),
         else => stores(unit, asked, value, span, own_buffer, here),
     }
 }
@@ -1640,7 +1640,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::Match { value, arms, .. } => mentions(unit, asked, here, value) || arms_mention(unit, asked, here, arms),
         Expr::If { cond, then_branch, else_branch, .. } => mentions(unit, asked, here, cond) || block_mentions(unit, asked, here, then_branch) || maybe_block_mentions(unit, asked, here, else_branch),
         Expr::Block(block, _) => block_mentions(unit, asked, here, block),
-        Expr::AsyncGroup(block, _, _) => block_mentions(unit, asked, here, block),
+        Expr::AsyncGroup(block, _, _, _, _) => block_mentions(unit, asked, here, block),
         Expr::Unsafe(block, _) => block_mentions(unit, asked, here, block),
         Expr::Overlap(block, _) => block_mentions(unit, asked, here, block),
         Expr::Closure { body, .. } => block_mentions(unit, asked, here, body),
@@ -1862,7 +1862,7 @@ fn descend(unit: ref Unit, asked: ref Asked, node: ref Expr, span: ref Span, own
             walk_maybe_block(unit, asked, else_branch, own_buffer, here)
         }
         Expr::Block(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
-        Expr::AsyncGroup(block, _, _) => walk_block(unit, asked, block, false, own_buffer, here),
+        Expr::AsyncGroup(block, _, _, _, _) => walk_block(unit, asked, block, false, own_buffer, here),
         Expr::Unsafe(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
         Expr::Overlap(block, _) => walk_block(unit, asked, block, false, own_buffer, here),
         Expr::Closure { body, .. } => walk_block(unit, asked, body, false, own_buffer, here),
@@ -2325,7 +2325,7 @@ fn rsrc_passes_whole(node: ref Expr) -> bool {
     return match node {
         Expr::Variable(_, _) => true,
         Expr::Block(_, _) => true,
-        Expr::AsyncGroup(_, _, _) => true,
+        Expr::AsyncGroup(_, _, _, _, _) => true,
         Expr::Unsafe(_, _) => true,
         Expr::Overlap(_, _) => true,
         Expr::If { .. } => true,
@@ -2374,7 +2374,7 @@ fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref c
         Expr::Call { func, args, config, .. } => rsrc_call(unit, asked, here, known, own_buffer, func, args, config, flow),
         Expr::Return(value, _) => rsrc_return(unit, asked, here, known, own_buffer, value, flow),
         Expr::Block(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
-        Expr::AsyncGroup(block, _, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
+        Expr::AsyncGroup(block, _, _, _, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
         Expr::Unsafe(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
         Expr::Overlap(block, _) => rsrc_block(unit, asked, here, known, own_buffer, block, flow),
         Expr::If { cond, then_branch, else_branch, .. } => rsrc_if(unit, asked, here, known, own_buffer, cond, then_branch, else_branch, flow),

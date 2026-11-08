@@ -1,0 +1,8 @@
+error[NK2112]: `limit:` stands on a form that starts one task.
+  --> tests/async_limit_on_one_task.nika:8:17
+   |
+ 8 | 		let a = async(limit: 2) f()
+   |                 ^^^^^
+   |
+   = note: `limit: n` says how many tasks of one form run at once, and this form starts only one.
+   = help: Remove `limit:`, or write it on the `async { … }` around the tasks it should hold back.

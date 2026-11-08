@@ -428,7 +428,7 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
             }
         },
         Expr::Block(b, _) => { tally_block(b, ask, deferred, words, tally); },
-        Expr::AsyncGroup(b, _, _) => { tally_block(b, ask, deferred, words, tally); },
+        Expr::AsyncGroup(b, _, _, _, _) => { tally_block(b, ask, deferred, words, tally); },
         Expr::Overlap(b, _) => { tally_block(b, ask, true, words, tally); },
         Expr::Unsafe(b, _) => { tally_block(b, ask, deferred, words, tally); },
         Expr::Closure { body, .. } => { tally_block(body, ask, true, words, tally); },

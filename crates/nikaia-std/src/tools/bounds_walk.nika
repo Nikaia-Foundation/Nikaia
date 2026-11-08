@@ -1716,7 +1716,7 @@ fn bounding_lin(
 				else => null,
 			}
 		},
-		Expr::AsyncGroup(block, _, _) => {
+		Expr::AsyncGroup(block, _, _, _, _) => {
 			let last = block.stmts.len() - 1
 			if last < 0 {
 				return null
@@ -4901,7 +4901,7 @@ fn bounding_expr(
 			words,
 			ask,
 		),
-		Expr::AsyncGroup(block, _, _) => bounding_inner_block(
+		Expr::AsyncGroup(block, _, _, _, _) => bounding_inner_block(
 			walk,
 			block,
 			facts,
@@ -5692,7 +5692,7 @@ fn changed_in_expr(
 			}
 		},
 		Expr::Block(b, _) => changed_in_block(b, context, words, out),
-		Expr::AsyncGroup(b, _, _) => changed_in_block(b, context, words, out),
+		Expr::AsyncGroup(b, _, _, _, _) => changed_in_block(b, context, words, out),
 		Expr::Overlap(b, _) => changed_in_block(b, context, words, out),
 		Expr::Unsafe(b, _) => changed_in_block(b, context, words, out),
 		Expr::Closure { body, .. } => changed_in_block(body, context, words, out),

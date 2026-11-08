@@ -831,7 +831,7 @@ pub(crate) fn escape_word(escaping: &Escape) -> String {
 pub(crate) fn nested_blocks(expr: &Expr, at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) {
     match expr {
         Expr::Block(block, _) => { nested_arm(at, block, ask, &holes_of, &unaliased, walk); },
-        Expr::AsyncGroup(block, _, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
+        Expr::AsyncGroup(block, _, _, _, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
         Expr::Unsafe(block, _) => { nested_arm(at, block, ask, &holes_of, &unaliased, walk); },
         Expr::Overlap(block, _) => { nested_keeping_statement(at, block, ask, &holes_of, &unaliased, walk); },
         Expr::Closure { body, .. } => { nested_keeping_statement(at, body, ask, &holes_of, &unaliased, walk); },
@@ -1057,7 +1057,7 @@ pub(crate) fn moved_origins(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
             out
         },
         Expr::Block(block, _) => moved_tail_origins(block, ask, &holes_of, &unaliased, walk),
-        Expr::AsyncGroup(block, _, _) => moved_tail_origins(block, ask, &holes_of, &unaliased, walk),
+        Expr::AsyncGroup(block, _, _, _, _) => moved_tail_origins(block, ask, &holes_of, &unaliased, walk),
         _ => origins_of(expr, ask, &holes_of, &unaliased, walk),
     }
 }
@@ -1163,7 +1163,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
             out
         },
         Expr::Block(block, _) => tail_origins(block, ask, &holes_of, &unaliased, walk),
-        Expr::AsyncGroup(block, _, _) => tail_origins(block, ask, &holes_of, &unaliased, walk),
+        Expr::AsyncGroup(block, _, _, _, _) => tail_origins(block, ask, &holes_of, &unaliased, walk),
         Expr::Unsafe(block, _) => tail_origins(block, ask, &holes_of, &unaliased, walk),
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); origins_of(expr, ask, holes_of, unaliased, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },

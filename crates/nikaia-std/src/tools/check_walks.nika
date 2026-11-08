@@ -282,10 +282,18 @@ fn check_walks_statement_operations(state: ref CheckState, stmt: ref Stmt, words
 fn check_walks_window(state: ref CheckState, world: ref CheckWorld, walking: ref Walking, block: ref Block, group: i64, tasks: ref Vec[CheckWalksTask], mut out: Vec[CheckFinding]) {
     for stmt in block.stmts {
         let mut holds = false
+        let mut inside = false
         for task in tasks {
             if task.span.start >= stmt.span.start && task.span.end <= stmt.span.end {
                 holds = true
+            } else if stmt.span.start >= task.span.start && stmt.span.end <= task.span.end {
+                inside = true
             }
+        }
+        // **A statement of a task's own body runs in that task**, not on the
+        // main line: it is no statement of the window (D7).
+        if inside {
+            continue
         }
         if holds {
             if group >= 0 {
@@ -412,6 +420,11 @@ impl CheckState {
         let mut beside: Vec[CheckFinding] = []
         check_walks_window(self, world, walking, block, group, tasks, beside)
         self.findings.extend(beside.drain())
+        // **`limit: 1` written as the literal** (D15): its tasks never run
+        // at once, so only the window is asked of them.
+        if self.flow.async_one_at_a_time.contains(group) {
+            return
+        }
         for j in 0..<tasks.len() {
             for i in 0..<tasks.len() {
                 if i == j {
@@ -567,7 +580,7 @@ fn check_walks_form(expr: ref Expr) -> String {
         Expr::Break(_) => "jumps",
         Expr::Continue(_) => "jumps",
         Expr::Block(_, _) => "contains a block, which might change something",
-        Expr::AsyncGroup(_, _, _) => "waits for a group of tasks",
+        Expr::AsyncGroup(_, _, _, _, _) => "waits for a group of tasks",
         Expr::If { .. } => "contains a block, which might change something",
         Expr::Match { .. } => "contains a block, which might change something",
         Expr::Closure { .. } => "contains a block, which might change something",

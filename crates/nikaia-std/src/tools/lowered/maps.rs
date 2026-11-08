@@ -534,7 +534,7 @@ impl<'a> MpBody<'a> {
                 self.expr(count);
             },
             Expr::Block(b, _) => { self.block(b, false); },
-            Expr::AsyncGroup(b, _, _) => { self.block(b, false); },
+            Expr::AsyncGroup(b, _, _, _, _) => { self.block(b, false); },
             Expr::Unsafe(b, _) => { self.block(b, false); },
             Expr::If { cond, then_branch, else_branch, .. } => {
                 let cond = nikaia_std::boxed::open(cond);

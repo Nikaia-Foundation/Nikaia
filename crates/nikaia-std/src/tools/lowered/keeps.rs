@@ -166,7 +166,7 @@ pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext
             if !context.lent.contains(&subject) && an_arm_hands_on_what_it_binds(arms, interner) { found.insert(subject); }
         },
         Expr::Block(block, _) => { reached_by_last(block, interner, context, own, library, walk, through_calls, &mut found); },
-        Expr::AsyncGroup(block, _, _) => { reached_by_last(block, interner, context, own, library, walk, through_calls, &mut found); },
+        Expr::AsyncGroup(block, _, _, _, _) => { reached_by_last(block, interner, context, own, library, walk, through_calls, &mut found); },
         Expr::Variable(ident, _) => {
             let ident = *ident;
             let name = interner.resolve(ident).to_string();
@@ -227,7 +227,7 @@ pub(crate) fn keeps_viewed_of(expr: &Expr, interner: &winnow_grammar::InternerCo
         },
         Expr::Match { arms, .. } => { for arm in arms.iter() { found.extend(keeps_viewed_of(&arm.body, interner, context, own, library, walk)); } },
         Expr::Block(block, _) => { viewed_by_last(block, interner, context, own, library, walk, &mut found); },
-        Expr::AsyncGroup(block, _, _) => { viewed_by_last(block, interner, context, own, library, walk, &mut found); },
+        Expr::AsyncGroup(block, _, _, _, _) => { viewed_by_last(block, interner, context, own, library, walk, &mut found); },
         _ => { },
     }
     found
@@ -375,7 +375,7 @@ pub(crate) fn keeps_maybe(expr: Option<&Expr>, interner: &winnow_grammar::Intern
 pub(crate) fn keeps_blocks_in(expr: &Expr, interner: &winnow_grammar::InternerContext, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     match expr {
         Expr::Block(block, _) => { keeps_block(block, interner, &holes_of, context, own, library, walk); },
-        Expr::AsyncGroup(block, _, _) => { keeps_block(block, interner, &holes_of, context, own, library, walk); },
+        Expr::AsyncGroup(block, _, _, _, _) => { keeps_block(block, interner, &holes_of, context, own, library, walk); },
         Expr::Unsafe(block, _) => { keeps_block(block, interner, &holes_of, context, own, library, walk); },
         Expr::Overlap(block, _) => { keeps_block(block, interner, &holes_of, context, own, library, walk); },
         Expr::Closure { body, .. } => { keeps_block(body, interner, &holes_of, context, own, library, walk); },
@@ -681,7 +681,7 @@ pub(crate) fn keep_what_a_task_names(body: &Expr, interner: &winnow_grammar::Int
     let seen = match body {
         Expr::Closure { body, .. } => seen_in(body, interner, &name_as_it_is, holes_of, &no_root, true),
         Expr::Block(block, _) => seen_in(block, interner, &name_as_it_is, holes_of, &no_root, true),
-        Expr::AsyncGroup(block, _, _) => seen_in(block, interner, &name_as_it_is, holes_of, &no_root, true),
+        Expr::AsyncGroup(block, _, _, _, _) => seen_in(block, interner, &name_as_it_is, holes_of, &no_root, true),
         _ => {
             walk.uses.kept.extend(context.parameters.iter().cloned());
             return;
@@ -965,7 +965,7 @@ pub(crate) fn hands_on_a_bound_name(value: &Expr, interner: &winnow_grammar::Int
             Some(one) => hands_on_a_bound_name(one, interner, bound),
         } },
         Expr::Block(block, _) => hands_on_a_bound_tail(block, interner, bound),
-        Expr::AsyncGroup(block, _, _) => hands_on_a_bound_tail(block, interner, bound),
+        Expr::AsyncGroup(block, _, _, _, _) => hands_on_a_bound_tail(block, interner, bound),
         Expr::If { then_branch, else_branch, .. } => hands_on_a_bound_tail(then_branch, interner, bound) || match else_branch {
             None => false,
             Some(other) => hands_on_a_bound_tail(other, interner, bound),
@@ -1098,11 +1098,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81687| {
-                            let (at, arg) = __nikaia_tuple81687; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81717| {
+                            let (at, arg) = __nikaia_tuple81717; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple81863| {
-                            let (at, arg) = __nikaia_tuple81863;
+                        }).map(|__nikaia_tuple81893| {
+                            let (at, arg) = __nikaia_tuple81893;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

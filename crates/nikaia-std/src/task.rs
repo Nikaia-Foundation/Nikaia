@@ -27,8 +27,12 @@
 //! *compiler* put together — went with the automatic grouping itself
 //! (ADR-292 D1).
 
+mod gate;
 mod group;
 
+pub use gate::{
+    Adaptive, Admission, Decision, Gate, Load, Placed, Pollable, Waiting, admitted, limit,
+};
 pub use group::{ChildHandle, Deferred, Ended, Polled, Receiver, Rest};
 use group::{Group, ended, ran};
 

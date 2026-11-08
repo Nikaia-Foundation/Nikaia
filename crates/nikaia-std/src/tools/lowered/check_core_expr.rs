@@ -284,9 +284,12 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
                 tail
             } else { ty }
         },
-        Expr::AsyncGroup(block, _, within) => {
-            let within = nikaia_std::boxed::open(within);
+        Expr::AsyncGroup(block, _, within, limit, admission) => {
+            let within = nikaia_std::boxed::open(within); let limit = nikaia_std::boxed::open(limit); let admission = nikaia_std::boxed::open(admission);
             check_core_async_within(state, world, host, (within).as_ref(), span);
+            check_core_async_limit(state, world, host, (limit).as_ref(), span);
+            check_core_async_admission(state, world, host, (admission).as_ref(), span);
+            if check_core_async_one_at_a_time((limit).as_ref()) { state.flow.async_one_at_a_time.insert(id_of(expr) as i64); }
             let held = state.inside_a_door;
             if state.an_async_inside_a_door(span) { state.inside_a_door = false; }
             if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
@@ -598,6 +601,44 @@ pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, worl
         None => None,
     }, || "".into());
     check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).", &format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_async_limit<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, limit: Option<&Expr>, span: &Span) {
+    let n = match limit { Some(__nikaia_value) => __nikaia_value, None => return };
+    let walked = check_core_expr(state, world, host, n, span);
+    let mut found = walked.clone();
+    if walked.is_unknown() && state.number_shaped(world, n) { found = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
+    state.expect_type(world, &found, &Ty::Named { name: String::from("i64"), args: vec![], view: false }, span, "argument", &|found_text, wanted_text| { format!("This limit is `{}`, but `limit:` takes an `{}`.", found_text, wanted_text) });
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_async_admission<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, admission: Option<&Expr>, span: &Span) {
+    let s = match admission { Some(__nikaia_value) => __nikaia_value, None => return };
+    let walked = check_core_expr(state, world, host, s, span);
+    let named = match walked {
+        Ty::Named { ref name, .. } => name.to_string(),
+        _ => return,
+    };
+    if named == "task::Adaptive" { return; }
+    for ledger in [world.own, world.library] {
+        let types = match ledger.implementations.get("task::Admission") { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if types.contains(&named) { return; }
+    }
+    if !state.structs.contains_key(&named) && !state.enums.contains_key(&named) { return; }
+    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when the next task of the group starts, through its `decide` method (ADR-async-5 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_async_one_at_a_time(limit: Option<&Expr>) -> bool {
+    let n = match limit { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match n {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; value == 1u64 && !negative },
+        _ => false,
+    }
 }
 
 pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: &Expr, span: &Span) {

@@ -208,7 +208,7 @@ impl CheckState {
             Expr::Throw(_, _) => true,
             Expr::Return(_, _) => true,
             Expr::Block(block, _) => self.block_exits(world, block),
-            Expr::AsyncGroup(block, _, _) => self.block_exits(world, block),
+            Expr::AsyncGroup(block, _, _, _, _) => self.block_exits(world, block),
             _ => self.a_panic(world, expr),
         }
     }
@@ -228,7 +228,7 @@ impl CheckState {
         if self.jumps(world, expr) { return true; }
         match expr {
             Expr::Block(block, _) => self.block_leaves(world, block),
-            Expr::AsyncGroup(block, _, _) => self.block_leaves(world, block),
+            Expr::AsyncGroup(block, _, _, _, _) => self.block_leaves(world, block),
             _ => false,
         }
     }

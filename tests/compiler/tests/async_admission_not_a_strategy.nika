@@ -1,0 +1,18 @@
+// `admission:` takes a `task::Admission` and `limit:` an `i64` (ADR-async-5
+// D15, D18, #986).
+struct Plain {
+	n: i64,
+}
+
+fn f() -> i64 {
+	return 1
+}
+
+fn main() throws {
+	let x = async(admission: Plain { n: 1 }, limit: "two") {
+		let a = async f()
+		let b = f()
+		a + b
+	}
+	println(f"{x}")
+}

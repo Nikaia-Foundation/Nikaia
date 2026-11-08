@@ -78,7 +78,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             }
         },
         Expr::Block(block, _) => { names_in_block(block, words, out); },
-        Expr::AsyncGroup(block, _, _) => { names_in_block(block, words, out); },
+        Expr::AsyncGroup(block, _, _, _, _) => { names_in_block(block, words, out); },
         Expr::Unsafe(block, _) => { names_in_block(block, words, out); },
         Expr::Overlap(block, _) => { names_in_block(block, words, out); },
         Expr::Closure { body, .. } => { names_in_block(body, words, out); },

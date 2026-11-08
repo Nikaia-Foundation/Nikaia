@@ -1,0 +1,15 @@
+// A `limit:` below one on `async { … }` stops the program where the group
+// starts, naming the option (ADR-async-5 D15, #986).
+fn twice(n: i64) -> i64 {
+	return n * 2
+}
+
+fn main() throws {
+	let none = 0
+	let x = async(limit: none) {
+		let a = async twice(1)
+		let b = twice(2)
+		a + b
+	}
+	println(f"{x}")
+}

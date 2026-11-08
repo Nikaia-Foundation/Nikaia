@@ -442,7 +442,7 @@ pub(crate) fn rules_built(expr: &Expr, owner: &str, lists: &collections::BTreeMa
             }
         },
         Expr::Block(b, _) => { rules_built_block(b, owner, lists, defaults, built, dropped, words); },
-        Expr::AsyncGroup(b, _, _) => { rules_built_block(b, owner, lists, defaults, built, dropped, words); },
+        Expr::AsyncGroup(b, _, _, _, _) => { rules_built_block(b, owner, lists, defaults, built, dropped, words); },
         Expr::Overlap(b, _) => { rules_built_block(b, owner, lists, defaults, built, dropped, words); },
         Expr::Unsafe(b, _) => { rules_built_block(b, owner, lists, defaults, built, dropped, words); },
         Expr::Closure { body, .. } => { rules_built_block(body, owner, lists, defaults, built, dropped, words); },

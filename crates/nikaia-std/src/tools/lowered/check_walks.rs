@@ -187,7 +187,9 @@ pub(crate) fn check_walks_statement_operations(state: &CheckState, stmt: &Stmt, 
 pub(crate) fn check_walks_window(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, block: &Block, group: i64, tasks: &[CheckWalksTask], out: &mut Vec<CheckFinding>) {
     for stmt in block.stmts.iter() {
         let mut holds = false;
-        for task in tasks.iter() { if task.span.start >= stmt.span.start && task.span.end <= stmt.span.end { holds = true; } }
+        let mut inside = false;
+        for task in tasks.iter() { if task.span.start >= stmt.span.start && task.span.end <= stmt.span.end { holds = true; } else if stmt.span.start >= task.span.start && stmt.span.end <= task.span.end { inside = true; } }
+        if inside { continue; }
         if holds {
             if group >= 0 { for nested in check_visit_stmt_blocks(&stmt.node) { check_walks_window(state, world, walking, nested, group, tasks, out); } }
             continue;
@@ -289,6 +291,7 @@ impl CheckState {
         let mut beside: Vec<CheckFinding> = vec![];
         check_walks_window(self, world, &walking, block, group, &tasks, &mut beside);
         self.findings.extend(beside.into_iter());
+        if self.flow.async_one_at_a_time.contains(&group) { return; }
         for j in 0..tasks.len() as i64 {
             for i in 0..tasks.len() as i64 {
                 if i == j { continue; }
@@ -416,7 +419,7 @@ pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
         Expr::Break(_) => "jumps",
         Expr::Continue(_) => "jumps",
         Expr::Block(_, _) => "contains a block, which might change something",
-        Expr::AsyncGroup(_, _, _) => "waits for a group of tasks",
+        Expr::AsyncGroup(_, _, _, _, _) => "waits for a group of tasks",
         Expr::If { .. } => "contains a block, which might change something",
         Expr::Match { .. } => "contains a block, which might change something",
         Expr::Closure { .. } => "contains a block, which might change something",

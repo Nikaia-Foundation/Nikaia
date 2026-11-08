@@ -1,0 +1,31 @@
+// `limit: 2` on `async { … }` (ADR-async-5 D15, #986): of four tasks that pause,
+// never more than two run at once; the others wait, unstarted, in written order.
+use std::time
+
+fn work(n: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+	now.update fn(mut v) { v += 1 }
+	let seen = now.get()
+	most.update fn(mut m) {
+		if seen > m {
+			m = seen
+		}
+	}
+	time::sleep(2.millis())
+	now.update fn(mut v) { v -= 1 }
+	return n
+}
+
+fn main() throws {
+	let now = SharedMut(0)
+	let most = SharedMut(0)
+	let total = async(limit: 2) {
+		let a = async work(1, now, most)
+		let b = async work(2, now, most)
+		let c = async work(3, now, most)
+		let d = async work(4, now, most)
+		println("started")
+		a + b + c + d
+	}
+	let m = most.get()
+	println(f"total {total}, at most {m} at once")
+}
