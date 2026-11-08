@@ -2004,6 +2004,19 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     if shape.len() > 0 {
         elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
     }
+    // **A `for` over whole numbers binds a number of the bounds walk**
+    // (ADR-306 D7): `for k in ks` is bounded by every test of `k` in the
+    // body, as a name bound to a call's whole result is (#781).
+    if bindings.len() == 1 && elements.len() == 1 {
+        match elements[0] {
+            Ty::Named { name, args, .. } => {
+                if args.is_empty() && is_whole_number(name) {
+                    state.facts.whole_loops.insert(id_of(iter) as i64)
+                }
+            },
+            else => {}
+        }
+    }
     // **An element of a list of code is given what the list was** (ADR-351
     // D1, D4).
     if bindings.len() == 1 && state.current != null && check_core_stmt_holds_code(over) {

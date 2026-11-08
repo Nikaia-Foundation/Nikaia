@@ -2439,7 +2439,7 @@ pub mod bounds_shape {
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields};
+    pub use super::{BoundsContext, BoundsReturns, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields, bounds_returns};
 }
 pub mod buffers {
     #[allow(unused_imports)]

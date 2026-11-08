@@ -1,0 +1,12 @@
+bounds in tests/prove_a_found_result_bounds_a_read.nika: 8 indexes, 5 proved; 3 operations, 0 proved
+    10  parent[x]     checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    20  parent[ra]    proved
+    20  parent[rb]    proved
+    26  xs[k]         proved
+    36  sum += xs[k]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    36  xs[k]         proved
+    40  sum += xs[k]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    40  xs[k]         proved
+    48  parent[r]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    57  xs[r - 1]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    57  r - 1         checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

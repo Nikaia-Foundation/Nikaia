@@ -358,6 +358,8 @@ enum Seek {
     Rebound(String),
     /// The name read anywhere, or assigned.
     Mentioned(String),
+    /// A `return` whose value is not among these nodes (ADR-306 D23).
+    Unvisited(collections::BTreeSet[i64]),
 }
 
 /// **Nothing in `body` can change `list`'s length.**
@@ -459,6 +461,10 @@ fn statement_says(stmt: ref Stmt, seek: ref Seek, words: ref winnow_grammar::Int
             Stmt::Assign { target, .. } => is_variable(target, name, words),
             else => false,
         },
+        Seek::Unvisited(seen) => match stmt {
+            Stmt::Return(value) => unseen_return(value, seen),
+            else => false,
+        },
     }
 }
 
@@ -478,7 +484,17 @@ fn expression_says(expr: ref Expr, seek: ref Seek, words: ref winnow_grammar::In
             else => false,
         },
         Seek::Mentioned(name) => is_variable(expr, name, words),
+        Seek::Unvisited(seen) => match expr {
+            Expr::Return(value, _) => unseen_return(value, seen),
+            else => false,
+        },
     }
+}
+
+/// Whether a `return` of `value` is not among the `seen` (ADR-306 D23).
+fn unseen_return(value: ref Expr?, seen: ref collections::BTreeSet[i64]) -> bool {
+    let returned = value ?? return true
+    return !seen.contains(node_key(returned))
 }
 
 fn seek_block(block: ref Block, seek: ref Seek, words: ref winnow_grammar::InternerContext) -> bool {

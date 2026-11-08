@@ -152,10 +152,12 @@ fn frame_context(
 		text_classes: collections::BTreeMap(),
 		around: around,
 		whole_fields: collections::BTreeSet(),
+		whole_loops: collections::BTreeSet(),
 		array_lengths: collections::BTreeMap(),
 		through_loops: false,
 		decided: collections::BTreeMap(),
 		list_indices: collections::BTreeSet(),
+		returns: collections::BTreeMap(),
 	}
 }
 

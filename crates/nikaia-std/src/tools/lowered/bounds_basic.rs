@@ -266,6 +266,7 @@ pub(crate) enum Seek {
     LengthChanged(String),
     Rebound(String),
     Mentioned(String),
+    Unvisited(collections::BTreeSet<i64>),
 }
 
 pub fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(list.to_string()), words) }
@@ -346,6 +347,10 @@ pub(crate) fn statement_says(stmt: &Stmt, seek: &Seek, words: &winnow_grammar::I
             Stmt::Assign { target, .. } => is_variable(target, name, words),
             _ => false,
         },
+        Seek::Unvisited(seen) => match stmt {
+            Stmt::Return(value) => unseen_return((value).as_ref(), seen),
+            _ => false,
+        },
     }
 }
 
@@ -364,7 +369,16 @@ pub(crate) fn expression_says(expr: &Expr, seek: &Seek, words: &winnow_grammar::
             _ => false,
         },
         Seek::Mentioned(name) => is_variable(expr, name, words),
+        Seek::Unvisited(seen) => match expr {
+            Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); unseen_return((value).as_ref(), seen) },
+            _ => false,
+        },
     }
+}
+
+pub(crate) fn unseen_return(value: Option<&Expr>, seen: &collections::BTreeSet<i64>) -> bool {
+    let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+    !seen.contains(&node_key(returned))
 }
 
 pub(crate) fn seek_block(block: &Block, seek: &Seek, words: &winnow_grammar::InternerContext) -> bool {
