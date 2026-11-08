@@ -535,18 +535,53 @@ pub fn to_lowercase(s: &str, place: Place) -> Text {
     text
 }
 
+/// **What [`replace`] and [`replacen`] look for**: the patterns the emitter
+/// writes, a text or a character (`str::Pattern` is not stable Rust).
+pub trait Needle {
+    /// Where it is found in `s`, and what it matched, as `match_indices`.
+    fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)>;
+}
+
+impl Needle for &str {
+    #[inline]
+    fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
+        s.match_indices(self)
+    }
+}
+
+impl Needle for &String {
+    #[inline]
+    fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
+        s.match_indices(self.as_str())
+    }
+}
+
+impl Needle for &Text {
+    #[inline]
+    fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
+        s.match_indices(self.as_str())
+    }
+}
+
+impl Needle for char {
+    #[inline]
+    fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
+        s.match_indices(self)
+    }
+}
+
 /// **`s` with every `from` replaced by `to`, built at `place`**, as
 /// `str::replace` makes it.
-pub fn replace(s: &str, from: &str, to: &str, place: Place) -> Text {
+pub fn replace(s: &str, from: impl Needle, to: &str, place: Place) -> Text {
     replacen(s, from, to, usize::MAX, place)
 }
 
 /// **`s` with the first `count` of `from` replaced by `to`, built at
 /// `place`**, as `str::replacen` makes it.
-pub fn replacen(s: &str, from: &str, to: &str, count: usize, place: Place) -> Text {
+pub fn replacen(s: &str, from: impl Needle, to: &str, count: usize, place: Place) -> Text {
     let mut text = Text::with_capacity_in(s.len(), place);
     let mut last = 0;
-    for (at, found) in s.match_indices(from).take(count) {
+    for (at, found) in from.found_in(s).take(count) {
         text.push_str(&s[last..at]);
         text.push_str(to);
         last = at + found.len();
@@ -671,6 +706,8 @@ mod tests {
             assert_eq!(replace(s, "Σ", "<>", at), s.replace("Σ", "<>"));
             assert_eq!(replace(s, "", "-", at), s.replace("", "-"));
             assert_eq!(replacen(s, "s", "", 1, at), s.replacen("s", "", 1));
+            assert_eq!(replace(s, 'Σ', "x", at), s.replace('Σ', "x"));
+            assert_eq!(replace(s, &Text::from("ü"), "u", at), s.replace("ü", "u"));
             assert_eq!(repeat(s, 3, at), s.repeat(3));
         }
         assert_eq!(join(&["a", "b", "c"], ", ", at), ["a", "b", "c"].join(", "));
