@@ -156,7 +156,7 @@ panics = false
 sync = true
 touches = ["args read"]
 provenance = "trusted"
-signature = "() -> Args"
+signature = "() -> cli::Args"
 
 # The argument at a position, and **there may not be one** - which is the half
 # the corpus writes every time: `cli::args().nth(1) ?? "default"` opens six of
@@ -170,7 +170,7 @@ signature = "() -> Args"
 #
 # There may not be one, which is why this hands back a `String?`: the shape the
 # examples write is `cli::args().nth(1) ?? some_default`.
-[fn."Args::nth"]
+[fn."cli::Args::nth"]
 pub = true
 panics = false
 sync = true
@@ -180,7 +180,7 @@ signature = "(ref mut self, at: i64) -> String?"
 
 # How many arguments are left to read, the program's name among them until it
 # is read: `cli::args().len()` is the whole command line's count.
-[fn."Args::len"]
+[fn."cli::Args::len"]
 pub = true
 panics = false
 sync = true
@@ -189,7 +189,7 @@ provenance = "trusted"
 signature = "(ref self) -> i64"
 
 # Whether no argument is left to read.
-[fn."Args::is_empty"]
+[fn."cli::Args::is_empty"]
 pub = true
 panics = false
 sync = true

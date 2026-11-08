@@ -1,0 +1,8 @@
+error[NK1105]: You're assigning `ref String` to something that holds `String`.
+  --> tests/for_cli_args_word_view.nika:8:11
+   |
+ 8 | 			path = name.strip_prefix("/") ?? ""
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: Write `.clone()` to turn this view into text of its own.
+1 type error

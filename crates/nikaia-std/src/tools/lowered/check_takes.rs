@@ -226,7 +226,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_sequence_is_walked(&mut self, iter: &Expr, over: &Ty, span: &Span, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
-        if !a_sequence_that_is_used_up(over) { return; }
+        if !a_sequence_that_is_used_up(over) && !the_command_line(over) { return; }
         let name = match iter {
             Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
             _ => return,
@@ -466,7 +466,9 @@ impl CheckState {
             if said.contains(&used.at) { continue; }
             said.insert(used.at);
             let item = an_item_text(&taken.ty);
-            found.push(check_refusal("NK2702", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("`{}` is a sequence, and it was already used up.", taken.path), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", item), String::from("A `Vec` is different: it already holds its elements and can be walked as often as you like.")], Some(format!("Collect it first and walk the collection: `let {} = {}.collect()`.", taken.path, taken.path))));
+            let mut help = format!("Collect it first and walk the collection: `let {} = {}.collect()`.", taken.path, taken.path);
+            if the_command_line(&taken.ty) { help = String::from("Walk a second `cli::args()`: each call reads the words again from the first."); }
+            found.push(check_refusal("NK2702", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, format!("`{}` is a sequence, and it was already used up.", taken.path), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.", item), String::from("A `Vec` is different: it already holds its elements and can be walked as often as you like.")], Some(help)));
         }
         self.walked = vec![];
         for one in found.iter() { self.findings.push(one.clone()); }
@@ -631,7 +633,7 @@ pub(crate) fn a_sequence_that_is_used_up(ty: &Ty) -> bool {
 pub(crate) fn an_item_text(ty: &Ty) -> String {
     match ty {
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.text() },
-        _ => String::from("?"),
+        _ => if the_command_line(ty) { String::from("String") } else { String::from("?") },
     }
 }
 
