@@ -763,3 +763,15 @@ group, also one that writes neither `limit:` nor `admission:`; `std`'s is
 `descriptors_in_use` and `descriptors_allowed` (the budget left joins it with
 ADR-327's blocks, #490), and `task::Decision { start }` says how many may start
 until the next decision.
+
+### D38 - A task that waits for its own children gives its place back while it waits (supervisor, 2026-11-08, by D15 and D37; #986).
+
+"A task is under every limit around it" (D15): a task started inside another
+task's body needs a place in its own form's gate and in every gate around it.
+A task that holds a place and then waits for tasks it started would, under
+`limit: n`, block once `n` such parents hold every place. So a task gives its
+place back while it waits for its own children (at their wait point or its
+group's end) and takes a place again, as a queued task does (D37), before it
+goes on. "At most `n` in flight" counts the tasks that run, not the ones
+waiting for their children, and no nesting of forms can block on its own
+places.
