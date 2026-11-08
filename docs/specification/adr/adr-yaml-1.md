@@ -256,6 +256,4 @@ action, that is a compiler defect, fixed before the decoding is built.
 ## 6. What this does not decide
 
 * The edit model's API (D10): its own record when the tree carries comments.
-* Where the facade crate's hand-written files lie inside `packages/yaml/`:
-  decided with #978's build, which fixes how a package becomes a crate.
 * Python and JS layers: separate issues once the facade stands (#928 step 8).

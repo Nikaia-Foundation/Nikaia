@@ -1,0 +1,18 @@
+error[NK1201]: You can't put the struct `lib::Node` in an `f"…"` hole.
+  --> src/main.nika:5:3
+   |
+ 5 | 		println(f"{n}")
+   |   ^^^^^^^^^^^^^^^
+   |
+   = note: A hole is written as its value's text, and a struct that is not an error has no text form. `n` is `lib::Node`.
+   = help: Write its fields in holes of their own: `{n.line}`, `{n.raw}`.
+error[NK1201]: You can't print the `enum` `lib::Kind`.
+  --> src/main.nika:7:2
+   |
+ 7 | 	println(lib::Kind::Plain)
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A print call writes its value's text, and an `enum` that is not an error has no text form. `lib::Kind::Plain` is `lib::Kind`.
+   = help: Match on it and give each variant its text first, or print `f"{(lib::Kind::Plain):?}"` for its debug form.
+2 type errors
+exit 1

@@ -583,7 +583,7 @@ fn rules_built(expr: ref Expr, owner: ref String, lists: ref collections::BTreeM
         Expr::SafeField { base, .. } => rules_built(base, owner, lists, defaults, built, dropped, words),
         Expr::Unary { expr: inner, .. } => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::Try(inner, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
-        Expr::Async(inner, _, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
+        Expr::Async(inner, _, _, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::Throw(inner, _) => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::Cast { expr: inner, .. } => rules_built(inner, owner, lists, defaults, built, dropped, words),
         Expr::TryCatch { expr: inner, handler, .. } => {

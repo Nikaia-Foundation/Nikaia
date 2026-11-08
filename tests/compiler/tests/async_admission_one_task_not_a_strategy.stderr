@@ -1,0 +1,9 @@
+error[NK1164]: `admission:` needs a `task::Admission` here, but `Plain` isn't one.
+   --> tests/async_admission_one_task_not_a_strategy.nika:12:2
+    |
+ 12 | 	let a = async(admission: Plain { n: 1 }) f()
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18).
+    = help: Write `impl task::Admission for Plain { … }`, or pass a type that already has one.
+1 type error

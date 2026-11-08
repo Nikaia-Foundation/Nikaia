@@ -384,7 +384,7 @@ impl EmitState {
             Expr::Block(block, _) => return self.emit_block_can_fail(world, statement, block),
             Expr::AsyncGroup(block, _, _, _, _) => return self.emit_block_can_fail(world, statement, block),
             Expr::Try(inner, _) => return self.branch_can_fail(world, statement, inner),
-            Expr::Async(inner, _, _) => return self.branch_can_fail(world, statement, inner),
+            Expr::Async(inner, _, _, _) => return self.branch_can_fail(world, statement, inner),
             Expr::Unary { expr, .. } => return self.branch_can_fail(world, statement, expr),
             Expr::Binary { lhs, rhs, .. } => {
                 return self.branch_can_fail(world, statement, lhs) || self.branch_can_fail(world, statement, rhs)

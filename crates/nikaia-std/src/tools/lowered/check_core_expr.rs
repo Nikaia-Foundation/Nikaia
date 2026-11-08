@@ -240,9 +240,10 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_expr(state, world, host, inner, span);
             Ty::Unknown
         },
-        Expr::Async(inner, _, within) => {
-            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
+        Expr::Async(inner, _, within, admission) => {
+            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
             check_core_async_within(state, world, host, (within).as_ref(), span);
+            check_core_async_admission(state, world, host, (admission).as_ref(), span);
             let held = state.inside_a_door;
             if state.an_async_inside_a_door(span) { state.inside_a_door = false; }
             if state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
@@ -355,9 +356,10 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_range(state, world, host, start, end, span) },
         Expr::TryCatch { expr: guarded, handler, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_core_flow_try_catch(state, world, host, expr, guarded, handler, span) },
-        Expr::Spawn { body, written_async, child, within, .. } => {
-            let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let child = *child; let written_async = *written_async;
+        Expr::Spawn { body, written_async, child, within, admission, .. } => {
+            let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let child = *child; let written_async = *written_async;
             check_core_async_within(state, world, host, (within).as_ref(), span);
+            check_core_async_admission(state, world, host, (admission).as_ref(), span);
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             if child {
                 state.flow.async_started += 1;
@@ -660,7 +662,7 @@ pub(crate) fn check_core_async_admission<H: CheckHost>(state: &mut CheckState, w
         if types.contains(&named) { return; }
     }
     if !state.structs.contains_key(&named) && !state.enums.contains_key(&named) { return; }
-    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when the next task of the group starts, through its `decide` method (ADR-async-5 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
+    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -681,6 +683,16 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
         None => None,
     }, || "".into());
     check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
+    let function = nikaia_std::index::or(match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", &format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

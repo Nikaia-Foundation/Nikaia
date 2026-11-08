@@ -107,12 +107,12 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     }
     if (ty == "String" || ty == "str") && field == "scalars" {
         state.facts.text_scalars.insert(id_of(expr) as i64);
-        return Ty::Seq { item: Box::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false } };
+        return Ty::Seq { item: Box::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
     }
     if (ty == "String" || ty == "str") && field == "graphemes" {
         state.facts.text_graphemes.insert(id_of(expr) as i64);
         let grapheme = check_core_places_str_view();
-        return Ty::Seq { item: Box::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false } };
+        return Ty::Seq { item: Box::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
     }
     let boxed = state.facts.boxed_members.get(ty);
     if boxed.is_some() {
@@ -1002,6 +1002,6 @@ pub fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
     let to = check_core_expr(state, world, host, end, span);
     let mut item: Ty = from;
     if item.is_unknown() { item = to; }
-    Ty::Seq { item: Box::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true } }
+    Ty::Seq { item: Box::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
 }
 

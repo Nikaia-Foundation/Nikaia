@@ -11,7 +11,7 @@ pub(crate) fn emit_read_a_length(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr)
 pub(crate) fn emit_read_a_call(expr: &Expr) -> bool {
     match expr {
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
         _ => emit_read_is_call(expr),
     }
 }
@@ -498,11 +498,12 @@ impl EmitState {
         }
         out.push(&"    ".repeat(nikaia_std::count::of(depth + extra)));
         out.push(")");
+        let pause = emit_async_pause(&walk);
         if !bound {
-            out.push(".await");
+            out.push(&pause);
             return Ok(());
         }
-        out.push(&format!(".await;\n{}", inner));
+        out.push(&format!("{};\n{}", pause, inner));
         if fallible { out.push(&format!("nikaia_std::task::combine{}(", count)); } else { out.push("("); }
         for written in 0..count {
             if written > 0 { out.push(", "); }
@@ -564,7 +565,7 @@ impl EmitState {
             if fallible { out.push(")"); }
             out.push(" },\n");
         }
-        out.push(&format!("{}).await {{\n", pad));
+        out.push(&format!("{}){} {{\n", pad, emit_async_pause(&walk)));
         let mut at: i64 = 0;
         for arm in arms.iter() {
             let mut named: String = String::from("_");

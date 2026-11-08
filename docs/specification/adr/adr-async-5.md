@@ -571,7 +571,12 @@ setting of `user_parallelism` changes the duration only.
 * `NK2104` is asked of a `par_iter` lambda against itself, as of tasks that run
   beside each other: a lambda that writes stdout or another resource is
   refused, naming it. `limit: 1` written as the literal exempts it (D15).
-* `NK2107`: a lambda that changes a name bound outside it.
+* `NK2107`: a lambda that changes a name bound outside it, whatever the
+  chain's `limit:` (2026-11-08, #1423). `limit: 1` frees
+  the lambda from meeting its own other runs (`NK2104`), as it frees the tasks
+  of an `async(limit: 1)` group from meeting each other; a name a task changes
+  is refused on its own there as well (D7), since the elements still run on a
+  worker of the pool and not on the line that bound the name.
 
 ### D27 - `limit:` replaces `workers:`; `within:` and `admission:` are taken by the chain.
 
@@ -581,6 +586,15 @@ or tasks run at once; below `1` it panics, naming the option. `within:`
 cancels the call's running tasks when it runs out, and the call throws
 `task::TimedOut`. `admission:` names the strategy for a pausing chain; a
 computing one ignores it.
+
+The deadline goes with the walk to the step that ends it, through `let`,
+`map`, `filter` and the rest, and through a walk it is handed to: `zip` and
+`chain` make a walk with the deadline of each walk they take, so the step that
+ends `ys.iter().zip(xs.par_iter(within: d))` throws `task::TimedOut` rather than
+hand back the pairs made in time (#1423). No other door is open: a program
+cannot hand a walk to a function of its own nor take one back ([ADR-105](adr-105.md)
+D4), so no step ends a walk whose deadline the checker has not seen, and a
+chain without `within:` keeps no failure slot (D28).
 
 ### D28 - What the shared rules add is paid only where the compiler knows it is needed.
 

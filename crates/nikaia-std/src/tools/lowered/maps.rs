@@ -596,7 +596,7 @@ impl<'a> MpBody<'a> {
             Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr); },
             Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); self.expr(expr); },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
-            Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
+            Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.expr(inner); },
             Expr::Coalesce { value, fallback, .. } => {
                 let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);

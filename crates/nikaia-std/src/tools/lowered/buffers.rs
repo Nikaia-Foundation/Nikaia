@@ -960,7 +960,7 @@ pub(crate) fn spawn_bodies(expr: &Expr, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, o
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); spawn_bodies(expr, holes_of, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); spawn_bodies(inner, holes_of, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); spawn_bodies(expr, holes_of, out); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); spawn_bodies(base, holes_of, out); },
@@ -1019,7 +1019,7 @@ pub(crate) fn effects(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '
         },
         Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
         Expr::Try(expr, _) => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
-        Expr::Async(expr, _, _) => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
+        Expr::Async(expr, _, _, _) => { let expr = nikaia_std::boxed::open(expr); effects(expr, ask, holes_of, unaliased, walk); },
         _ => { origins_of(expr, ask, &holes_of, &unaliased, walk); },
     }
 }
@@ -1167,7 +1167,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
         Expr::Unsafe(block, _) => tail_origins(block, ask, &holes_of, &unaliased, walk),
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); origins_of(expr, ask, holes_of, unaliased, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); origins_of(inner, ask, holes_of, unaliased, walk) },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); origins_of(expr, ask, holes_of, unaliased, walk) },
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);

@@ -3511,7 +3511,7 @@ pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut 
             bounding_expr(walk, inner, facts, context, program, words, &ask);
             rules_exit(walk, &facts, None, true, context, program, words, &ask);
         },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); bounding_expr(walk, inner, facts, context, program, words, &ask); },
         Expr::Throw(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             bounding_expr(walk, inner, facts, context, program, words, &ask);
@@ -3671,7 +3671,7 @@ pub(crate) fn changed_in_expr(expr: &Expr, context: &BoundsContext, words: &winn
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); changed_in_expr(expr, context, words, out); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); changed_in_expr(inner, context, words, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); changed_in_expr(expr, context, words, out); },
         Expr::TryCatch { expr, handler, .. } => {

@@ -22,7 +22,7 @@ fn emit_read_a_length(world: ref EmitWorld, expr: ref Expr) -> bool {
 fn emit_read_a_call(expr: ref Expr) -> bool {
     return match expr {
         Expr::Try(inner, _) => emit_read_is_call(inner),
-        Expr::Async(inner, _, _) => emit_read_is_call(inner),
+        Expr::Async(inner, _, _, _) => emit_read_is_call(inner),
         else => emit_read_is_call(expr),
     }
 }
@@ -717,11 +717,14 @@ impl EmitState {
         }
         out.push("    ".repeat(depth + extra))
         out.push(")")
+        // **A pause of a gated main line starts the waiting tasks** (ADR-async-5
+        // D37): the read's wait is one, as a call's is.
+        let pause = emit_async_pause(walk)
         if !bound {
-            out.push(".await")
+            out.push(pause)
             return
         }
-        out.push(f".await;\n{inner}")
+        out.push(f"{pause};\n{inner}")
         // **The branches become one outcome in `std`** (ADR-292 D18): `combine<n>`
         // takes them in written order and answers the first `Err` among them
         // (D5).
@@ -845,7 +848,8 @@ impl EmitState {
             }
             out.push(" },\n")
         }
-        out.push(f"{pad}).await {{\n")
+        // **And so is a race's** (D37).
+        out.push(f"{pad}){emit_async_pause(walk)} {{\n")
         let mut at = 0
         for arm in arms {
             let mut named: String = "_"

@@ -3831,14 +3831,19 @@ signature = "[T](self: Seq[T], step: i64) -> Seq[T] ends sized"
 # list's.
 #
 # `piece:` bounds how many elements a piece holds (ADR-372 D6); a value below
-# 1 panics. Where it is left out the runtime decides, and the `0` written here
-# is never read: the call is lowered without it.
+# 1 panics. `limit:` caps how many elements run at once, and a value below 1
+# panics; `within:` is a deadline from the call, after which no element starts
+# and the step that ends the walk throws `task::TimedOut`; `admission:` names
+# the strategy of a walk whose lambdas pause, and these never do, so it is
+# read and ignored (ADR-async-5 D15, D27). Where one is left out the runtime
+# decides, and the default written here is never read: the call is lowered
+# without it.
 [fn."Vec::par_iter"]
 pub = true
 panics = true
 sync = true
 touches = []
-signature = "[T](self: ref Vec[T]; piece: i64 = 0) -> Par[ref(self) T] sync ends sized"
+signature = "[T, S: task::Admission](self: ref Vec[T]; piece: i64 = 0, limit: i64 = 0, within: time::Duration = 0.seconds(), admission: S = task::Adaptive()) -> Par[ref(self) T] sync ends sized"
 
 # **A fold with nothing shared** ([ADR-372](../../docs/specification/adr/adr-372.md)
 # D2, D5, D6): `init` is called once per accumulator, never copied; the three

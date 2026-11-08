@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1361 (Draft)
+**Version:** 0.0.1363 (Draft)
 **Date:** 2026-11-08
 
 ---
@@ -702,7 +702,12 @@ names and list indices on its stack are the value's path (`$.contacts[3].email`)
 
 **An entry marked `@stream`**, whose body repeats an item on a fixed path,
 hands its items over one at a time instead of a list (D7); a generic `@frame`
-rule may be folded in parallel (10.7).
+rule may be folded in parallel (10.7). The call is a sequence walked once:
+`for ev in Yaml::events(bytes)` takes each item as the parser produces it, and
+a `break` stops the parse. The items are owned and do not borrow from the
+input. A Rust user of a rust-library also gets `parse_<rule>_reader` over a
+`std::io::Read` where a feature reaches the entry (ADR-393 D4); a Nikaia entry
+takes `String` or `Bytes`.
 
 **An action may not pause.** A call that can pause is refused where it stands
 with `NK2209`. A fold's `init`, `step` and `merge` are action code. An action
@@ -1185,7 +1190,7 @@ let bright_pixels = pixels.par_iter()
 let pages = urls.par_iter(limit: 8).map fn(u) { http::get(u) }.collect()
 ```
 
-**One rule set for every chain, the same as for `async`.** The results come back in input order. Every failure is kept: the first in input order is thrown where the call returns, the others are its `secondary` list in input order (Part I 7.1). A full block fails only its element, with `task::OverBudget`; a panic cancels the other elements, and the call throws `task::Crashed`. A lambda is checked as two of its runs at once would be: one that writes stdout or another resource is refused (`NK2104`), naming it, unless the chain is `limit: 1` written as the literal; one that changes a name bound outside it is `NK2107`. Where the committed ledger had a chain running in pieces and its lambda can now pause, the build warns (`NK2119`) at the call that made it pause; committing the ledger acknowledges it. What the rules add is paid only where the compiler knows it is needed: a failure slot only for a lambda that can throw, its list allocated on the failure path; a block reset only for a lambda that allocates and keeps memory; every check at compile time.
+**One rule set for every chain, the same as for `async`.** The results come back in input order. Every failure is kept: the first in input order is thrown where the call returns, the others are its `secondary` list in input order (Part I 7.1). A full block fails only its element, with `task::OverBudget`; a panic cancels the other elements, and the call throws `task::Crashed`. A lambda is checked as two of its runs at once would be: one that writes stdout or another resource is refused (`NK2104`), naming it, unless the chain is `limit: 1` written as the literal; one that changes a name bound outside it is `NK2107`, whatever its `limit:`. Where the committed ledger had a chain running in pieces and its lambda can now pause, the build warns (`NK2119`) at the call that made it pause; committing the ledger acknowledges it. What the rules add is paid only where the compiler knows it is needed: a failure slot only for a lambda that can throw, its list allocated on the failure path; a block reset only for a lambda that allocates and keeps memory; every check at compile time.
 
 **A chain beside the code after it** is one task: `let pages = async urls.par_iter().map fn(u) { http::get(u) }.collect()` runs the chain while the next statements run, and is waited for where `pages` is first named (Part I 8.1.2).
 
@@ -1206,7 +1211,7 @@ let summary = rows.par_iter().fold(Summary, fn(acc, r) { acc.record(r) }, Summar
 | :--- | :--- | :--- | :--- |
 | `order: par::Order` | `fold`, `par_fold` | `Kept` | as above |
 | `limit: i64` | `par_iter`, `fold`, `par_fold` | `task::cores()` for a chain that computes; admission for one that pauses | at most this many pieces, accumulators or tasks at once |
-| `within: time::Duration` | `par_iter` | none | when it runs out, the call's running tasks are cancelled and it throws `task::TimedOut` |
+| `within: time::Duration` | `par_iter` | none | when it runs out, the call's running tasks are cancelled and the step that ends the walk throws `task::TimedOut`; a walk handed to `zip` or `chain` takes its deadline into what they make |
 | `admission: task::Admission` | `par_iter` | `std`'s | who decides when the next task starts, for a chain that pauses (Chapter 12) |
 | `piece: i64` | `par_iter`, `par_pieces`, `par_fold` | the runtime's | the size a piece is cut near: elements of a list, bytes of `Bytes` or of a grammar's input |
 

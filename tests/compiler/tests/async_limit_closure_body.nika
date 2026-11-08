@@ -1,0 +1,50 @@
+// A closure task's own group is under the gates around the task (ADR-async-5
+// D15, D38, #986): under `limit: 2`, two `async fn { … }` tasks each start
+// three children in an `async { … }` of their body, and never more than two
+// tasks run at once.
+use std::time
+
+fn enter(now: SharedMut[i64], most: SharedMut[i64]) {
+	now.update fn(mut v) { v += 1 }
+	let k = now.get()
+	most.update fn(mut v) { if k > v { v = k } }
+}
+
+fn leave(now: SharedMut[i64]) {
+	now.update fn(mut v) { v -= 1 }
+}
+
+fn child(n: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+	enter(now, most)
+	time::sleep(2.millis())
+	leave(now)
+	return n
+}
+
+fn main() throws {
+	let now = SharedMut(0)
+	let most = SharedMut(0)
+	let total = async(limit: 2) {
+		let a = async fn {
+			enter(now, most)
+			time::sleep(1.millis())
+			leave(now)
+			async {
+				let x = async child(10, now, most)
+				let y = async child(11, now, most)
+				let z = async child(12, now, most)
+				x + y + z
+			}
+		}
+		let b = async fn {
+			async {
+				let x = async child(20, now, most)
+				let y = async child(21, now, most)
+				let z = async child(22, now, most)
+				x + y + z
+			}
+		}
+		a + b
+	}
+	println(f"total {total}, at most {most.get()} at once")
+}

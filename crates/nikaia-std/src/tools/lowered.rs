@@ -2510,7 +2510,7 @@ pub mod check_buildtime {}
 pub mod check_buildtime2 {}
 pub mod check_calls {
     #[allow(unused_imports)]
-    pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, a_paused_chain, a_pausing_sequence};
+    pub use super::{call_arguments, expected_arguments, receiver_bindings, argument_bindings, walks_by_value, shape_through, shape_timed, a_paused_chain, a_pausing_sequence};
 }
 pub mod check_claims {
     #[allow(unused_imports)]
@@ -2550,7 +2550,7 @@ pub mod check_core_comptime {
 }
 pub mod check_core_expr {
     #[allow(unused_imports)]
-    pub use super::{check_core_expr, check_core_value_of};
+    pub use super::{check_core_expr, check_core_value_of, check_core_walk_timed_out};
 }
 pub mod check_core_flow {
     #[allow(unused_imports)]

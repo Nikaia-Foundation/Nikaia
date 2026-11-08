@@ -239,7 +239,7 @@ impl EmitState {
             Expr::Block(block, _) => { return self.emit_block_can_fail(world, statement, block); },
             Expr::AsyncGroup(block, _, _, _, _) => { return self.emit_block_can_fail(world, statement, block); },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.branch_can_fail(world, statement, inner); },
-            Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); return self.branch_can_fail(world, statement, inner); },
+            Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); return self.branch_can_fail(world, statement, inner); },
             Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return self.branch_can_fail(world, statement, expr); },
             Expr::Binary { lhs, rhs, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);

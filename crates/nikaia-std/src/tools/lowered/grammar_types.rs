@@ -754,7 +754,7 @@ pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::I
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); grammar_types_walk_expr(&mut *inner, words, intern, walk); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); grammar_types_walk_maybe(&mut *value, words, &intern, walk); },

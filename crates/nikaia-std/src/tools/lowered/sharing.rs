@@ -932,7 +932,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, holes_of, ty_of, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, holes_of, ty_of, walk); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, holes_of, ty_of, walk); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); sharing_expression(base, asked, holes_of, ty_of, walk); },

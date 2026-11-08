@@ -316,7 +316,7 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); keeps_expression(expr, interner, holes_of, context, own, library, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); keeps_expression(inner, interner, holes_of, context, own, library, walk); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); keeps_expression(inner, interner, holes_of, context, own, library, walk); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); keeps_expression(inner, interner, holes_of, context, own, library, walk); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); keeps_expression(inner, interner, holes_of, context, own, library, walk); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); keeps_expression(expr, interner, holes_of, context, own, library, walk); },
         Expr::Field { base, .. } => {
@@ -453,7 +453,7 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
             if parameter.is_none() || !a_field_that_copies(nikaia_std::index::or(parameter.as_deref(), || ""), interner.resolve(name), context) { keep_named(base, interner, context, own, library, walk); }
         },
         Expr::Try(value, _) => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, own, library, walk); },
-        Expr::Async(value, _, _) => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, own, library, walk); },
+        Expr::Async(value, _, _, _) => { let value = nikaia_std::boxed::open(value); keep_named(value, interner, context, own, library, walk); },
         Expr::With { base, fields, .. } => {
             let base = nikaia_std::boxed::open(base);
             keep_named(base, interner, context, own, library, walk);
@@ -1098,11 +1098,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81717| {
-                            let (at, arg) = __nikaia_tuple81717; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple81723| {
+                            let (at, arg) = __nikaia_tuple81723; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple81893| {
-                            let (at, arg) = __nikaia_tuple81893;
+                        }).map(|__nikaia_tuple81899| {
+                            let (at, arg) = __nikaia_tuple81899;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);

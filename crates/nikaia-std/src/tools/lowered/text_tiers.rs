@@ -904,7 +904,7 @@ pub(crate) fn read_through(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk
             read_through(inner, ask, walk, out);
             return;
         },
-        Expr::Async(inner, _, _) => {
+        Expr::Async(inner, _, _, _) => {
             let inner = nikaia_std::boxed::open(inner);
             read_through(inner, ask, walk, out);
             return;
@@ -1609,7 +1609,7 @@ pub(crate) fn source_of(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); called_result(func, ask, &walk) },
         Expr::MethodCall { method, .. } => { let method = *method; method_result(ask.names.resolve(method), &walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); source_of(inner, ask, walk) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); source_of(inner, ask, walk) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); source_of(inner, ask, walk) },
         _ => None,
     }
 }
@@ -2267,7 +2267,7 @@ pub(crate) fn ties_of(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mu
         },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); return ties_of(base, ask, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return ties_of(inner, ask, walk); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); return ties_of(inner, ask, walk); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); return ties_of(inner, ask, walk); },
         Expr::ListLit { items, .. } => { for item in items.iter() { for tie in ties_of(item, ask, walk) { out.push(tie); } } },
         Expr::Tuple(items, _) => { for item in items.iter() { for tie in ties_of(item, ask, walk) { out.push(tie); } } },
         Expr::StructLit { fields, .. } => {
@@ -2476,7 +2476,7 @@ pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wal
         Expr::Variable(name, _) => { let name = *name; struct_of_local(ask.names.resolve(name), &walk) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tier_struct_of(expr, ask, walk) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); tier_struct_of(inner, ask, walk) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct_or_bytes(base, ask.names.resolve(name), ask, walk) },
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); cut_bytes(base, index, ask, walk) },
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); called_struct(func, ask, &walk) },
@@ -3137,7 +3137,7 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
             late_expr(rhs, false, ask, late);
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); late_expr(inner, false, ask, late); },
         Expr::Throw(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
             late.leaving += 1;
@@ -3229,7 +3229,7 @@ pub(crate) fn late_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, late
             }
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); return late_sources(inner, ask, late); },
         _ => { late_read_off(value, ask, late, &mut out); },
     }
     out
@@ -3309,7 +3309,7 @@ pub(crate) fn late_made(value: &Expr) -> &Expr {
     match value {
         Expr::Coalesce { value: first, .. } => { let first = nikaia_std::boxed::open(first); late_made(first) },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); late_made(inner) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); late_made(inner) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); late_made(inner) },
         _ => value,
     }
 }
@@ -3580,7 +3580,7 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             kinds_joined(&out, &tier_block(handler, ask, walk))
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); tier_expr(expr, ask, walk) },
         Expr::Throw(inner, _) => {
             let inner = nikaia_std::boxed::open(inner);
@@ -5220,7 +5220,7 @@ pub(crate) fn tw_lets_expr(expr: &mut Expr, job: &TwLets) {
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); tw_lets_expr(&mut *inner, job); },
         Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); tw_lets_maybe(&mut *value, job); },

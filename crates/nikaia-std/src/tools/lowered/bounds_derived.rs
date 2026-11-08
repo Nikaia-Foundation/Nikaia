@@ -501,7 +501,7 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
         },
         Expr::Unary { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); derived_expr(inner, at, words, scan); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); derived_expr(inner, at, words, scan); },
-        Expr::Async(inner, _, _) => { let inner = nikaia_std::boxed::open(inner); derived_expr(inner, at, words, scan); },
+        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); derived_expr(inner, at, words, scan); },
         Expr::Cast { expr: inner, .. } => { let inner = nikaia_std::boxed::open(inner); derived_expr(inner, at, words, scan); },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);

@@ -1,0 +1,6 @@
+before the overlap, 1 started
+after the overlap, 3 started, 70
+before the select, 1 started
+select 40
+after the select, 2 started
+total 6 3

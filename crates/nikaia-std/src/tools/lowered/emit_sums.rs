@@ -86,7 +86,7 @@ impl EmitState {
                 params = format!("<{}>", sum_input_lifetime());
             }
             let shared = if self.is_std { "pub " } else { "" };
-            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[derive(Debug)]\n#[allow(non_camel_case_types)]\n{}enum {}{} {{\n", shared, name, decl));
+            out.push(&format!("// The failure channel of every function in this file that fails in exactly\n// these ways ([ADR-280](docs/specification/adr/adr-280.md) D15). A program never\n// writes this name: a `catch` matches on the **members'** variants.\n//\n// `non_camel_case_types` is allowed rather than avoided: the name is spelled\n// so that nothing a program declares collides with it, and a warning about\n// this file is a defect here ([Part III C.1](docs/specification/30-nikaia-tooling.md)).\n#[allow(non_camel_case_types)]\n{}enum {}{} {{\n", shared, name, decl));
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
@@ -122,6 +122,12 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => e.fmt(f),\n", name, variant));
             }
             out.push(&format!("        }}\n    }}\n}}\nimpl{} std::error::Error for {}{} {{}}\n", decl, name, params));
+            out.push(&format!("impl{} std::fmt::Debug for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        match self {{\n", decl, name, params));
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                out.push(&format!("            {}::{}(e) => std::fmt::Debug::fmt(e, f),\n", name, variant));
+            }
+            out.push("        }\n    }\n}\n");
             out.push(&format!("impl{} nikaia_std::error::Joined for {}{} {{\n    fn joined_by(&mut self, later: Self) {{\n        #[allow(unreachable_patterns)]\n        match (self, later) {{\n", decl, name, params));
             for member in members.iter() {
                 let variant = sum_variant(member);
