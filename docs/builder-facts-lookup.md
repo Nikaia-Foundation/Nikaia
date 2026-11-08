@@ -182,6 +182,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * Rust generics get no deref coercion, so an argument at a lent type-variable parameter gets exactly one `&` (`&&C` does not satisfy `C: Bound`). (issue-1342)
 * In the checker state a type parameter is `Ty::Named` (listed in `state.type_parameters`), not `Ty::Var`; `Ty::Var` appears only in contracts and signatures from `parameterise`. (issue-1342)
 * Under `impl<'a>` (`EmitLifetimes::Inner`), `EmitLifetimes::Named` means the impl's `'a`, so a store into self ties the source to it without declaring a new lifetime. (issue-1344)
+* `ref Array[T]` is `Ty::Pointed { slice: true, mutable: false }` in the checker, not `Named { view: true }`, and a `Vec` fits it, so `!found.fits(want)` guards never fire for it. (issue-1362)
 
 ### Grammar
 
