@@ -12,3 +12,4 @@ bounds in tests/prove_struct_rule_candidates.nika: 7 indexes, 2 proved; 6 operat
    123  self.refs[i]              proved
    146  self.ks[i]                checked: the length of another list, which bounds the loop and not this index (#388)
    147  i += 1                    proved
+  derived  follow: 0 <= i, i <= self.items.len(), i <= self.refs.len(), proved at the calls on lines 171

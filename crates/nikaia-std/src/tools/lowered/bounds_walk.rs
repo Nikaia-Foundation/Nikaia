@@ -1135,16 +1135,15 @@ pub(crate) fn bounding_required(walk: &mut BoundsWalk, expr: &Expr, receiver: &E
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, func: &Expr, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &str, on: Option<String>, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     if walk.collecting { return; }
-    let name = match bounding_variable(func, words) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let callee = match *nikaia_std::index::get(&context.around.derived.functions, &name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let callee = match *nikaia_std::index::get(&context.around.derived.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut proved: collections::BTreeSet<i64> = collections::BTreeSet::new();
     if (args.len() as i64) == callee.params.len() as i64 {
         for k in 0..callee.claims.len() as i64 {
             let claim = (*nikaia_std::index::get(&callee.claims, nikaia_std::index::at(k))).clone();
-            let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, args, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let right = match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, args, facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, args, (on).as_deref(), facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let right = match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, args, (on).as_deref(), facts, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let goal = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
             if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); }
         }
@@ -1165,8 +1164,15 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, func: &E
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], param: &str, length: bool, args: &[Expr], facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
+pub(crate) fn bounding_derived_side(walk: &mut BoundsWalk, params: &[String], param: &str, length: bool, args: &[Expr], on: Option<&str>, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
     if param == "" { return Some(walk.arena.int(0)); }
+    let field = param.strip_prefix("self.");
+    if field.is_some() {
+        if !length { return None; }
+        let path = format!("{}.{}", match on { Some(__nikaia_value) => __nikaia_value, None => return None }, nikaia_std::index::or(field, || ""));
+        if walk.pinned.contains(&path_root(&path)) { return None; }
+        return Some(bounding_length_named(walk, &path, true));
+    }
     for k in 0..params.len() as i64 {
         if *nikaia_std::index::get(&params, (k) as usize) != param { continue; }
         if !length { return bounding_lin(walk, nikaia_std::index::get(&args, (k) as usize), facts, context, program, words); }
@@ -2929,13 +2935,19 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
         Expr::Select(_, _) => { },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            bounding_derived_call(walk, expr, words.resolve(method), path_of(receiver, words), args, &facts, context, program, words, &ask);
             bounding_required(walk, expr, receiver, words.resolve(method), args, &facts, context, program, words, &ask);
             bounding_method_call(walk, expr, receiver, words.resolve(method), args, facts, context, program, words, &ask);
         },
-        Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; bounding_method_call(walk, expr, receiver, words.resolve(method), args, facts, context, program, words, &ask); },
+        Expr::SafeMethod { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            bounding_derived_call(walk, expr, words.resolve(method), path_of(receiver, words), args, &facts, context, program, words, &ask);
+            bounding_method_call(walk, expr, receiver, words.resolve(method), args, facts, context, program, words, &ask);
+        },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
-            bounding_derived_call(walk, expr, func, args, &facts, context, program, words, &ask);
+            let called = bounding_variable(func, words);
+            if called.is_some() { bounding_derived_call(walk, expr, nikaia_std::index::or(called.as_deref(), || ""), None, args, &facts, context, program, words, &ask); }
             bounding_expr(walk, func, facts, context, program, words, ask);
             for arg in args.iter() { bounding_expr(walk, arg, facts, context, program, words, ask); }
             for c in config.iter() { bounding_expr(walk, &c.value, facts, context, program, words, ask); }

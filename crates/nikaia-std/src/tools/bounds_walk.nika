@@ -1992,7 +1992,8 @@ fn bounding_required(
 fn bounding_derived_call(
 	mut walk: BoundsWalk,
 	expr: ref Expr,
-	func: ref Expr,
+	name: ref String,
+	on: String?,
 	args: ref Vec[Expr],
 	facts: ref BoundsFacts,
 	context: ref BoundsContext,
@@ -2003,7 +2004,6 @@ fn bounding_derived_call(
 	if walk.collecting {
 		return
 	}
-	let name = bounding_variable(func, words) ?? return
 	let callee = context.around.derived.functions[name] ?? return
 	let mut proved: collections::BTreeSet[i64] = collections::BTreeSet()
 	if args.len() == callee.params.len() {
@@ -2015,6 +2015,7 @@ fn bounding_derived_call(
 				claim.left,
 				false,
 				args,
+				on,
 				facts,
 				context,
 				program,
@@ -2027,6 +2028,7 @@ fn bounding_derived_call(
 				claim.right,
 				claim.length,
 				args,
+				on,
 				facts,
 				context,
 				program,
@@ -2057,13 +2059,15 @@ fn bounding_derived_call(
 }
 
 /// One side of a claim at a call: `0` for an empty `param`, the argument
-/// handed for it, or that argument's length where `length`.
+/// handed for it, or that argument's length where `length`; a field of
+/// `self` is the receiver's field, where the receiver is a path.
 fn bounding_derived_side(
 	mut walk: BoundsWalk,
 	params: ref Vec[String],
 	param: String,
 	length: bool,
 	args: ref Vec[Expr],
+	on: ref String?,
 	facts: ref BoundsFacts,
 	context: ref BoundsContext,
 	program: ref Program,
@@ -2071,6 +2075,17 @@ fn bounding_derived_side(
 ) -> i64? {
 	if param == "" {
 		return walk.arena.int(0)
+	}
+	let field = param.strip_prefix("self.")
+	if field != null {
+		if !length {
+			return null
+		}
+		let path = f"{on ?? return null}.{field ?? ""}"
+		if walk.pinned.contains(path_root(path)) {
+			return null
+		}
+		return bounding_length_named(walk, path, true)
 	}
 	for k in 0..<params.len() {
 		if params[k] != param {
@@ -5220,6 +5235,18 @@ fn bounding_expr(
 		Expr::Overlap(_, _) => {},
 		Expr::Select(_, _) => {},
 		Expr::MethodCall { receiver, method, args, .. } => {
+			bounding_derived_call(
+				walk,
+				expr,
+				words.resolve(method),
+				path_of(receiver, words),
+				args,
+				facts,
+				context,
+				program,
+				words,
+				ask,
+			)
 			bounding_required(
 				walk,
 				expr,
@@ -5245,20 +5272,48 @@ fn bounding_expr(
 				ask,
 			)
 		},
-		Expr::SafeMethod { receiver, method, args, .. } => bounding_method_call(
-			walk,
-			expr,
-			receiver,
-			words.resolve(method),
-			args,
-			facts,
-			context,
-			program,
-			words,
-			ask,
-		),
+		Expr::SafeMethod { receiver, method, args, .. } => {
+			bounding_derived_call(
+				walk,
+				expr,
+				words.resolve(method),
+				path_of(receiver, words),
+				args,
+				facts,
+				context,
+				program,
+				words,
+				ask,
+			)
+			bounding_method_call(
+				walk,
+				expr,
+				receiver,
+				words.resolve(method),
+				args,
+				facts,
+				context,
+				program,
+				words,
+				ask,
+			)
+		},
 		Expr::Call { func, args, config, .. } => {
-			bounding_derived_call(walk, expr, func, args, facts, context, program, words, ask)
+			let called = bounding_variable(func, words)
+			if called != null {
+				bounding_derived_call(
+					walk,
+					expr,
+					called ?? "",
+					null,
+					args,
+					facts,
+					context,
+					program,
+					words,
+					ask,
+				)
+			}
 			bounding_expr(walk, func, facts, context, program, words, ask)
 			for arg in args {
 				bounding_expr(walk, arg, facts, context, program, words, ask)
