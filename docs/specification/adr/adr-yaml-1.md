@@ -51,7 +51,7 @@ Probed with `target/fast/nikaia` on `develop` (2026-10-30):
 * The engine (winnow-grammar 3b2dd3d) has `parse_<rule>_reader`, `#[stream]`
   and `#[stream(each)]`; the lowering does not write them yet.
 * A package becomes a program or a C library only; `artifact = "rust-library"`
-  and `[features]` are #978.
+  and `[features]` are decided in [ADR-393](adr-393.md) and built under #978.
 
 ## 4. Decision
 
