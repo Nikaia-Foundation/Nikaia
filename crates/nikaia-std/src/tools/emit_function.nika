@@ -1147,7 +1147,18 @@ impl EmitState {
                             let mut inner = EmitOut::empty()
                             let outer_groups = walk.async_groups.clone()
                             walk.async_groups = [group]
+                            // **Its gate** (ADR-async-5 D18, D37): std's
+                            // strategy decides when each task starts, where
+                            // the function pauses; one that never pauses
+                            // runs each task to its end where it starts, so
+                            // every start is admitted.
+                            let outer_gates = walk.async_gates.clone()
+                            walk.async_gates = []
+                            if pausing != "" {
+                                walk.async_gates = [group]
+                            }
                             self.emit_function_body(world, walk, inner, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                            walk.async_gates = outer_gates
                             walk.async_groups = outer_groups
                             walk.async_pausing = outer_pausing
                             walk.async_pending = []
@@ -1174,8 +1185,13 @@ impl EmitState {
                                 } else {
                                     out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, (async ||{ret} ")
                                 }
+                                // The gate and its tasks' line are made inside
+                                // the group's function, before its body, so
+                                // the rests they keep never outlive what they
+                                // borrow.
+                                out.push(f"{{ let {name}_gate = nikaia_std::task::Gate::new(usize::MAX, nikaia_std::task::admitted(nikaia_std::task::Adaptive())); let {name}_waiting = nikaia_std::task::Waiting::new(&{name}_gate); ")
                                 out.append(inner)
-                                out.push(")()).await }")
+                                out.push(" })()).await }")
                             } else {
                                 if grouped {
                                     out.push(f"{{ nikaia_std::task::group::<_, {channel}>(|{name}|{ret} ")

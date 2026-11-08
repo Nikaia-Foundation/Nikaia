@@ -162,6 +162,12 @@ impl Gate {
         if state.running >= self.limit {
             return false;
         }
+        // Where none runs, one starts whatever the strategy says, so it is
+        // not asked: a group whose tasks run one after the other never counts
+        // descriptors.
+        if state.running == 0 {
+            return true;
+        }
         if state.allowance <= 0 {
             let load = Load {
                 running: state.running as i64,
@@ -178,7 +184,7 @@ impl Gate {
             state.allowance -= 1;
             return true;
         }
-        state.running == 0
+        false
     }
 
     /// **The place a task holds** from its start to its end, its cancel or

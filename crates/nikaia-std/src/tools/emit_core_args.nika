@@ -1001,7 +1001,8 @@ pub fn emit_async_during(line: ref String, wait: ref String) -> String {
 fn emit_async_occupy(gates: ref Vec[i64]) -> String {
     let mut out: String = ""
     for group in gates {
-        out = f"{out}let __place_{group} = {emit_async_group_name(group)}_gate.occupy(); "
+        let gate = emit_async_group_name(group)
+        out = f"{out}let {gate}_place = {gate}_gate.occupy(); "
     }
     return out
 }
@@ -1552,11 +1553,15 @@ impl EmitState {
     /// **`limit: n` and `admission: s` of a group** (ADR-async-5 D15, D18,
     /// #986), read where the group starts, before its function: `n` below
     /// `1` panics there, naming the option; without `admission:` std's
-    /// strategy decides. `""` for a group without either.
+    /// strategy decides, also for a group that writes neither, where its
+    /// function pauses (D37). `""` for a group of a function that never
+    /// pauses and writes neither: each of its tasks runs to its end where it
+    /// starts, so none holds a place when the next starts, and every start is
+    /// admitted whatever the strategy says.
     pub fn emit_async_gate_options[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, name: ref String, limit: ref Expr?, admission: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {
         let n = self.emit_async_option(world, walk, host, limit, depth, flow, scope)
         let s = self.emit_async_option(world, walk, host, admission, depth, flow, scope)
-        if n == "" && s == "" {
+        if n == "" && s == "" && !walk.async_pausing {
             return ""
         }
         let mut cap: String = "usize::MAX"
@@ -1791,6 +1796,9 @@ impl EmitState {
         let here = flow.at(span.start as i64)
         let mut first = true
         let mut joins: Vec[String] = []
+        // The joins inside another task (D8): that task's body polls the
+        // handle alone, since the gate's line is the main line's (D37).
+        let mut inside: Vec[String] = []
         let mut index: i64 = 0
         for each in tasks {
             let handle = f"__task_{each.1}"
@@ -1806,9 +1814,12 @@ impl EmitState {
             self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
             walk.async_fallback = false
             let mut joined = emit_async_joined(handle, channel, fallback)
+            let mut alone = joined.clone()
             if started.buf.ends_with(".await") {
                 joined = emit_async_joined_paused(handle, channel, fallback, emit_async_line(walk.async_gates))
+                alone = emit_async_joined_paused(handle, channel, fallback, "")
             }
+            inside.push(alone)
             out.append(started)
             out.push(";")
             walk.async_joining.insert(each.1, joined.clone())
@@ -1821,7 +1832,7 @@ impl EmitState {
             // Named in another task alone (D8): that task waits for it.
             walk.async_joining = collections::BTreeMap()
             if named != "" {
-                walk.async_handles.insert(named, joins[0].clone())
+                walk.async_handles.insert(named, inside[0].clone())
             }
             return true
         }

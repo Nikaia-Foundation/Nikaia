@@ -599,7 +599,8 @@ pub(crate) fn emit_async_occupy(gates: &[i64]) -> String {
     let mut out: String = String::from("");
     for group in gates.iter() {
         let group = nikaia_std::num::value(group);
-        out = format!("{}let __place_{} = {}_gate.occupy(); ", out, group, emit_async_group_name(group));
+        let gate = emit_async_group_name(group);
+        out = format!("{}let {}_place = {}_gate.occupy(); ", out, gate, gate);
     }
     out
 }
@@ -937,7 +938,7 @@ impl EmitState {
     pub fn emit_async_gate_options<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, name: &str, limit: Option<&Expr>, admission: Option<&Expr>, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<String, nikaia_std::error::Thrown<EmitRefused>> {
         let n = self.emit_async_option(world, walk, host, limit, depth, &flow, scope)?;
         let s = self.emit_async_option(world, walk, host, admission, depth, &flow, scope)?;
-        if n == "" && s == "" { return Ok(String::from("")); }
+        if n == "" && s == "" && !walk.async_pausing { return Ok(String::from("")); }
         let mut cap: String = String::from("usize::MAX");
         if n != "" { cap = format!("nikaia_std::task::limit({})", n); }
         let mut strategy: String = String::from("nikaia_std::task::Adaptive()");
@@ -1112,6 +1113,7 @@ impl EmitState {
         let here = flow.at(span.start as i64);
         let mut first = true;
         let mut joins: Vec<String> = vec![];
+        let mut inside: Vec<String> = vec![];
         let mut index: i64 = 0;
         for each in tasks.iter() {
             let handle = format!("__task_{}", each.1);
@@ -1125,7 +1127,12 @@ impl EmitState {
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, &here, scope)?;
             walk.async_fallback = false;
             let mut joined = emit_async_joined(&handle, &channel, fallback);
-            if started.buf.ends_with(".await") { joined = emit_async_joined_paused(&handle, &channel, fallback, &emit_async_line(&walk.async_gates)); }
+            let mut alone = joined.to_string();
+            if started.buf.ends_with(".await") {
+                joined = emit_async_joined_paused(&handle, &channel, fallback, &emit_async_line(&walk.async_gates));
+                alone = emit_async_joined_paused(&handle, &channel, fallback, "");
+            }
+            inside.push(alone);
             out.append(&started);
             out.push(";");
             walk.async_joining.insert(each.1, joined.to_string());
@@ -1134,7 +1141,7 @@ impl EmitState {
         if waits < 0 && fallback { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         if waits < 0 {
             walk.async_joining = collections::BTreeMap::new();
-            if named != "" { walk.async_handles.insert(named, (*nikaia_std::index::get(&joins, 0)).to_string()); }
+            if named != "" { walk.async_handles.insert(named, (*nikaia_std::index::get(&inside, 0)).to_string()); }
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
