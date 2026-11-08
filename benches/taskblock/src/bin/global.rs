@@ -1,4 +1,4 @@
-//! The system allocator, declared as the global one as the other two declare
+//! The system allocator, declared as the global one as the others declare
 //! theirs: without a declaration every allocation goes through `std`'s
 //! default shims (`__rdl_alloc`, `__rdl_realloc`), which are not inlined and
 //! cost about 420 instructions a task here - a difference of the declaration,
