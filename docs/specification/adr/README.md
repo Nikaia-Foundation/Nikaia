@@ -62,6 +62,7 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
+| [registry-1](adr-registry-1.md) | Nikaia packages leave crates.io for a registry of their own: a Git index whose versions arrive by pull request (metadata only, checked by `nikaia registry check` building the pinned commit); a canonical `nkpkg` archive hashed with SHA-256; ownership proved by the commit and kept by a signing key in the index; the newest compatible version solved with ADR-270's logic package, semver checked from API and ledger, a cooling period; mirrors are a file layout anyone hosts; two versions of a package side by side where no public edge joins them; replaces ADR-286 D23-D27 if accepted | Open | no |
 | [decision-records-1](adr-decision-records-1.md) | A record is named `ADR-<topic>-<n>` (one to three lowercase words, a number per topic); the numbered records keep their numbers until a consolidation replaces them; names are claimed under Reserved numbers; `check-adr-refs.py` checks both schemes and stays Python until `std::regex` is built | Accepted | yes |
 | [355](adr-355.md) | List patterns `[]`, `[x]`, `[a, .., z]`, `[h, ..rest]` (the rest a view `ref Array[T]`); `..` in a tuple or variant is the remaining values; one `..` per pattern (`NK1258`); a list `match` needs `else` | Accepted | yes |
 | [352](adr-352.md) | `null` is a pattern in a `match` over a `T?`: the other arms match the `T` (a bare name binds it, a literal compares with it); an unguarded `null` arm and a catch-all make it complete; `null` over a value that is never `null` is `NK1256` | Accepted | yes |
@@ -371,7 +372,7 @@ either finds the other. Records replaced as a whole are not here: they are in
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `lambdas`, `regex`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `lambdas`, `regex`, `registry`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
