@@ -1,0 +1,12 @@
+# The package of `tests/a_rust_library_reads_a_stream_entry.nika` (ADR-grammar-2
+# D7 and ADR-393 D4, both amended 2026-11-08): the feature `stream` roots the
+# `@stream` entry `Words::items`, so the crate offers `Words::items_reader`.
+[package]
+name = "lines"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[features]
+stream = ["lines::Words::items"]

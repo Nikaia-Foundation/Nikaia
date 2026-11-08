@@ -1,0 +1,24 @@
+// A `for _ in` over a `@stream` entry whose step can fail (ADR-025 D1,
+// ADR-grammar-2 D7): the step is bound under a hidden name before it is
+// unwrapped, so a walk that names no item counts them.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+fn counted(text: String) -> i64 throws {
+	let mut n = 0
+	for _ in Words::items(text) {
+		n += 1
+	}
+	return n
+}
+
+fn main() throws {
+	println(f"{counted("a;b;c;")} items")
+}

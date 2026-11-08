@@ -1046,9 +1046,17 @@ impl EmitState {
                 return
             }
         }
+        // **A step that can fail is bound before it is unwrapped** (ADR-025
+        // D1): a `_` there takes a hidden name, which `let _ = _?` cannot read.
+        let fallible = self.facts.fallible_loops.contains(at)
         let mut each: Vec[String] = []
         for one in bindings {
-            each.push(self.emit_stmt_local(emit_text(world, one)))
+            let local = self.emit_stmt_local(emit_text(world, one))
+            if fallible && local == "_" {
+                each.push(f"__nikaia_step_{each.len()}")
+            } else {
+                each.push(local)
+            }
         }
         // **`mut` in front of the head marks every name in it** (ADR-views-2
         // D1, D3): Rust's `for mut x in …` and `for (mut a, mut b) in …`.

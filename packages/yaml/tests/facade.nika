@@ -1,0 +1,54 @@
+// The serde_yaml facade (#1439; ADR-yaml-1 D10, ADR-393 D7): `nikaia build`
+// writes the package as the Rust crate `nikaia_yaml`, with `rust/` as its
+// hand-written root over `native`, and the Rust crate `tests/facade` runs
+// serde_yaml 0.9's `test_de.rs` cases that use only `from_str` and `Value`.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let from = f"{repo}/packages/yaml"
+	process::run("mkdir", ["-p", f"{tmp}/yaml/tests"])
+	process::run("cp", ["-r", f"{from}/nikaia.toml", f"{from}/src", f"{from}/rust", f"{tmp}/yaml"])
+	process::run("cp", ["-r", f"{from}/tests/facade", f"{tmp}/yaml/tests"])
+	let cache = f"{repo}/target/nikaia-project-tests/yaml-facade"
+	let mut env: Vec[(String, String)] = []
+	env.push(("CARGO_TARGET_DIR", cache.clone()))
+	env.push(("CARGO_NET_OFFLINE", "true"))
+	let built = process::run(nikaia, ["build"]; dir: f"{tmp}/yaml", env: env.clone())
+	println(built.stdout.trim().replace(tmp, "TMP"))
+	if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
+	let ran = process::run(
+		"cargo",
+		["run", "-q"]; dir: f"{tmp}/yaml/tests/facade",
+		env: env.clone(),
+	)
+	println(ran.stdout.trim())
+	if ran.code != 0 { println(ran.stderr.trim()) }
+	process::run("rm", ["-rf", tmp])
+}

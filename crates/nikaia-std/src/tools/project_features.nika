@@ -32,6 +32,8 @@ struct FeatureLine {
 struct FeatureItem {
     /// The line its first attribute or its header is on: where its `#[cfg]` goes.
     first: i64,
+    /// The line it ends on.
+    last: i64,
     kind: String,
     /// Empty for an `impl` and a `use`.
     name: String,
@@ -318,15 +320,18 @@ fn features_items(lines: ref Vec[String]) -> Vec[FeatureItem] {
             let head = lines[i].split("{").next() ?? ""
             header = features_scan_line(head, head_lexer).words
         }
-        // `beside:` of the place table names the packages it uses, not code.
-        if !lines[i].trim().starts_with("beside:") {
+        // `beside:` of the place table names the packages it uses, not code;
+        // the module taking a reader in does not reach it (ADR-393 D4).
+        if !lines[i].trim().starts_with("beside:") && !lines[i].trim().starts_with("pub use super::__nikaia_reader_") {
             for word in line.words {
                 words.push(word.clone())
             }
         }
         if lexer.depth == 0 && (line.last == '}' || line.last == ';') {
             let first = if pending >= 0 { pending } else { current }
-            items.push(features_item(first, words, header))
+            let mut item = features_item(first, words, header)
+            item.last = i
+            items.push(item)
             current = -1
             pending = -1
         }
@@ -361,7 +366,7 @@ fn features_item(first: i64, words: ref Vec[String], header: ref Vec[String]) ->
     if kind == "impl" {
         kept = header.clone()
     }
-    return FeatureItem { first: first, kind: kind, name: name, public: public, words: words.clone(), header: kept, methods: methods, owners: [] }
+    return FeatureItem { first: first, last: first, kind: kind, name: name, public: public, words: words.clone(), header: kept, methods: methods, owners: [] }
 }
 
 /// **What `seeds` reach**: an item reaches each item its words name and each
@@ -428,6 +433,10 @@ fn features_roots(feature: ref ManifestFeature, package: ref String, items: ref 
         if item.public && item.name.len() > 0 && !item.name.starts_with("__") {
             offered.push(f"{package}::{item.name}")
         }
+        let path = features_reader_path(item.name) ?? continue
+        offered.push(f"{package}::{path}")
+        let book = path.split("::").next() ?? ""
+        if !offered.contains(f"{package}::{book}") { offered.push(f"{package}::{book}") }
     }
     for entry in feature.entries {
         if declared.contains(entry) && !entry.contains("::") && entry != package {
@@ -436,7 +445,8 @@ fn features_roots(feature: ref ManifestFeature, package: ref String, items: ref 
         }
         if entry == package {
             for at in 0..<items.len() {
-                if items[at].public && items[at].name.len() > 0 && !items[at].name.starts_with("__") && items[at].kind != "use" {
+                let offered_item = !items[at].name.starts_with("__") || features_reader_path(items[at].name) != null
+                if items[at].public && items[at].name.len() > 0 && offered_item && items[at].kind != "use" {
                     roots.push(at)
                 }
             }
@@ -451,6 +461,19 @@ fn features_roots(feature: ref ManifestFeature, package: ref String, items: ref 
                     found = at
                 }
             }
+            // **A grammar's `@stream` entry by its path**, and the grammar
+            // for all of them (ADR-393 D4, amended 2026-11-08): the readers
+            // written beside it. The grammar's own module, written under its
+            // name to take them in (`emit_grammar`), is not the root.
+            let mut readers: Vec[i64] = []
+            for at in 0..<items.len() {
+                let path = features_reader_path(items[at].name) ?? continue
+                if path == rest || path.starts_with(f"{rest}::") { readers.push(at) }
+            }
+            if readers.len() > 0 {
+                for at in readers { roots.push(at) }
+                continue
+            }
         }
         let mut help: String? = null
         let near = nearest_name(entry, offered)
@@ -458,7 +481,7 @@ fn features_roots(feature: ref ManifestFeature, package: ref String, items: ref 
             help = f"The closest `pub` path is `{near ?? ""}`."
         }
         if found < 0 {
-            throw FeaturesRefusal { code: "NK1344", feature: feature.name.clone(), entry: entry.clone(), message: f"The root `{entry}` of the feature `{feature.name}` names nothing: a root is the package `{package}`, standing for all its `pub` items, or one `pub` item written `{package}::<name>`.", help: help }
+            throw FeaturesRefusal { code: "NK1344", feature: feature.name.clone(), entry: entry.clone(), message: f"The root `{entry}` of the feature `{feature.name}` names nothing: a root is the package `{package}`, standing for all its `pub` items, or one `pub` item written `{package}::<name>`, or the `@stream` entry of a `pub grammar` written `{package}::<Grammar>::<rule>`.", help: help }
         }
         if !items[found].public {
             throw FeaturesRefusal { code: "NK1344", feature: feature.name.clone(), entry: entry.clone(), message: f"The root `{entry}` of the feature `{feature.name}` is not `pub`: a Rust user can take only what the package offers.", help: f"Make `{items[found].name}` `pub`, or name a `pub` item that uses it." }
@@ -516,6 +539,11 @@ pub fn features_applied(rust: ref String, manifest: ref String, features: ref Ve
     let mut homes: Vec[(String, String)] = []
     for at in 0..<items.len() {
         if core[at] { continue }
+        // A reader no feature roots is not written (ADR-393 D4).
+        if features_reader_path(items[at].name) != null && !reached.iter().any(fn(one) { one[at] }) {
+            features_reader_blanked(lines, items[at])
+            continue
+        }
         let mut condition: String = ""
         if items[at].kind == "impl" {
             let mut parts: Vec[String] = []
@@ -541,6 +569,14 @@ pub fn features_applied(rust: ref String, manifest: ref String, features: ref Ve
         }
         let first = items[at].first
         lines[first] = f"#[cfg({condition})] {lines[first]}"
+        // The module under the grammar's name takes it in under its own
+        // name (`emit_grammar` in `emit_grammar.nika`).
+        if features_reader_path(items[at].name) != null {
+            let taken = f"pub use super::{items[at].name} as "
+            for i in 0..<lines.len() {
+                if lines[i].trim().starts_with(taken) { lines[i] = lines[i].replace(taken, f"#[cfg({condition})] {taken}") }
+            }
+        }
     }
 
     // A dependency only feature items name is optional (D3).
@@ -636,6 +672,46 @@ pub fn features_kept(rust: ref String, features: ref Vec[ManifestFeature], packa
     return kept
 }
 
+/// **The path a Rust user names a reader by** (ADR-393 D4, amended
+/// 2026-11-08): `<Grammar>::<rule>` for the function the lowering writes
+/// beside the grammar for its `@stream` entry (`emit_stream_reader_name` in
+/// `emit_grammar.nika`), null for any other item.
+fn features_reader_path(name: ref String) -> String? {
+    let prefix = "__nikaia_reader_"
+    if !name.starts_with(prefix) { return null }
+    let rest = name.replace(prefix, "")
+    let book = rest.split("__").next() ?? ""
+    let rule = rest.splitn(2, "__").nth(1) ?? return null
+    return f"{book}::{rule}"
+}
+
+/// **A reader left out**: its lines, and the line the module under the
+/// grammar's name takes it in with, blanked, so the place table's line count holds.
+fn features_reader_blanked(mut lines: Vec[String], item: ref FeatureItem) {
+    for i in item.first..<item.last + 1 {
+        lines[i] = ""
+    }
+    let taken = f"pub use super::{item.name} as "
+    for i in 0..<lines.len() {
+        if lines[i].trim().starts_with(taken) { lines[i] = "" }
+    }
+}
+
+/// **The readers of a crate no feature chooses from** (ADR-393 D4): a
+/// rust-library without `[features]`, or a package built whole beside the
+/// one that has them, holds only the forms over a whole input.
+pub fn features_readers_dropped(rust: ref String) -> String {
+    let mut lines: Vec[String] = []
+    for line in rust.split("\n") {
+        lines.push(line.clone())
+    }
+    let items = features_items(lines)
+    for item in items {
+        if features_reader_path(item.name) != null { features_reader_blanked(lines, item) }
+    }
+    return lines.join("\n")
+}
+
 /// **What the roots reach**, the part of the derivation `features_applied`
 /// and `features_kept` share (ADR-393 D2): the items of the lowered crate,
 /// each feature's roots resolved (`NK1344`), the closure of each, and the core,
@@ -694,6 +770,8 @@ fn features_reach(rust: ref String, features: ref Vec[ManifestFeature], package:
     let mut seeds: Vec[i64] = []
     for at in 0..<items.len() {
         if items[at].kind == "impl" && items[at].owners.len() > 0 { continue }
+        // A reader is a feature's only (ADR-393 D4).
+        if features_reader_path(items[at].name) != null { continue }
         let mut claimed = false
         for one in reached {
             if one[at] { claimed = true }
@@ -709,11 +787,18 @@ fn features_reach(rust: ref String, features: ref Vec[ManifestFeature], package:
 pub fn features_manifest(manifest: ref String, made: ref FeaturesMade) -> String {
     let mut out = ""
     let mut inside = false
+    // A crate that already has a table (a grammar's `trace`) takes the
+    // features into it: TOML has one table of a name.
+    let merged = manifest.lines().any(fn(line) { line.trim() == "[features]" })
     for line in manifest.lines() {
         if line.starts_with("[") {
             inside = line.trim() == "[dependencies]"
-            if line.trim() == "[workspace]" {
+            if line.trim() == "[workspace]" && !merged {
                 out = f"{out}{made.table}\n"
+            }
+            if line.trim() == "[features]" {
+                out = f"{out}{made.table}"
+                continue
             }
             out = f"{out}{line}\n"
             continue
