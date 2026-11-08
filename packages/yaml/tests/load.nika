@@ -1,0 +1,134 @@
+// `load` (ADR-yaml-1 D6, D8): the tree a program reads. Each alias is replaced
+// by a copy of the resolved node of the most recent anchor of its name before
+// it in the same document; an unknown anchor, an alias inside its own anchor,
+// an expansion past the alias limit and a key given twice in one mapping are
+// errors with their position. `<<` is an ordinary key.
+use yaml
+
+fn props(n: ref yaml::Node) -> String {
+	let a = match n.anchor {
+		null => ""
+		x => f"&{x} "
+	}
+	let t = match n.tag {
+		null => ""
+		x => f"{x} "
+	}
+	return f"{a}{t}"
+}
+
+fn show(n: ref yaml::Node) -> String {
+	let p = props(n)
+	return match n.value {
+		yaml::Value::Null => f"{p}null"
+		yaml::Value::Bool(b) => f"{p}bool({b})"
+		yaml::Value::Int(t) => f"{p}int({t})"
+		yaml::Value::Float(t) => f"{p}float({t})"
+		yaml::Value::Str(s) => f"{p}str({yaml::text(s)})"
+		yaml::Value::Alias(a) => f"{p}alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"{p}[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{p}{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn count(n: ref yaml::Node) -> i64 {
+	return match n.value {
+		yaml::Value::Seq(items) => 1 + items.iter().map(fn(x) { count(x) }).sum()
+		yaml::Value::Map(entries) => 1
+			+ entries.iter().map(fn(e) { count(e.key) + count(e.value) }).sum()
+		else => 1
+	}
+}
+
+fn line(text: String) throws {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::load(input) catch {
+		println(f"error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+// The node count of each document, or the error, within `alias_nodes`.
+fn sized(text: String, alias_nodes: i64) throws {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::load(input; limits: yaml::Limits {
+		depth: 128,
+		alias_nodes: alias_nodes,
+		bytes: 4294967295,
+	}) catch {
+		println(f"error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { f"{count(d)} nodes" }).collect()
+	println(parts.join(" | "))
+}
+
+// A billion laughs of `levels` levels, nine aliases each.
+fn laughs(levels: i64) -> String {
+	let names = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
+	let mut out = "a: &a [lol, lol, lol, lol, lol, lol, lol, lol, lol]\n"
+	let mut i = 1
+	while i < levels {
+		let n = names[i]
+		let p = names[i - 1]
+		out = f"{out}{n}: &{n} [*{p}, *{p}, *{p}, *{p}, *{p}, *{p}, *{p}, *{p}, *{p}]\n"
+		i += 1
+	}
+	return out
+}
+
+// An anchor of 30 nodes, used 30 times: 900 nodes produced, 61 its own.
+fn ordinary() -> String {
+	let mut out = "- &x [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]\n"
+	let mut i = 0
+	while i < 30 {
+		out = f"{out}- *x\n"
+		i += 1
+	}
+	return out
+}
+
+fn main() throws {
+	// an anchor used twice: both copies, the anchor kept on each
+	line("a: &x {k: v}\nb: *x\nc: *x\n")
+	// an alias inside a nested collection; the most recent anchor of a name
+	line("- &n one\n- [x, {y: [*n]}]\n- &n two\n- *n\n")
+	// anchors are per document: the second document's `*a` is unknown
+	line("a: &a 1\n--- \nb: *a\n")
+	// an unknown anchor
+	line("a: *nowhere\n")
+	// an alias inside its own anchor, even after an earlier finished one
+	line("&a [*a]\n")
+	line("- &a x\n- &a [y, *a]\n")
+	// an anchor inside an anchor, finished before the alias
+	line("&a [&a b, *a]\n")
+	// a billion laughs stops at the first alias past the limit
+	sized(laughs(9), 10000)
+	// five levels: past the default limit, built with a raised one
+	sized(laughs(5), 10000)
+	sized(laughs(5), 100000)
+	// an ordinary anchor within the default limit, past a lowered one
+	sized(ordinary(), 10000)
+	sized(ordinary(), 0)
+	// duplicate keys, compared by kind and value after alias expansion
+	line("a: 1\n\"a\": 2\n")
+	line("16: x\n0x10: y\n")
+	line("{[1, 2]: a, [1, 2]: b}\n")
+	line("{&k a: 1, *k : 2}\n")
+	line("x: 1\ny:\n  1.0: a\n  1.00: b\n")
+	// not duplicates: different kinds, and a NaN, which equals no key
+	line("1: a\n\"1\": b\n")
+	line(".nan: a\n.nan: b\n")
+	// `<<` is an ordinary key: nothing is merged
+	line("base: &base {x: 1}\nm:\n  <<: *base\n  y: 2\n")
+}

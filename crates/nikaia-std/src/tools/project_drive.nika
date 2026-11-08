@@ -107,8 +107,9 @@ pub trait ProjectDriveHost {
     fn make_cargo(ref self, manifest: ref fs::Path, env: ref Vec[(String, String)], unset: ref Vec[String], shared: bool) sync throws
     /// Whether the package is built as a C library.
     fn is_library(ref self) -> bool sync
-    /// Cargo's `build` with `args`: its exit code and its JSON messages.
-    fn cargo_messages(ref self, args: ref Vec[String]) -> (i32, String) sync throws
+    /// Cargo's `verb` (`build`, or `check` for `nikaia check --rustc`) with
+    /// `args`: its exit code and its JSON messages.
+    fn cargo_messages(ref self, verb: ref String, args: ref Vec[String]) -> (i32, String) sync throws
     /// Holds the user cache to its limit.
     fn settle(ref self) sync
     /// Says what the backend said, against the `.nika` line it was about.
@@ -363,10 +364,13 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // and on a terminal they mix into what the program prints. `--quiet`
     // keeps what Cargo cannot do (a manifest it cannot read) on stderr;
     // the diagnostics arrive on the JSON channel either way.
-    if subcommand == "run" {
+    if subcommand == "run" || subcommand == "check" {
         build_args.push("--quiet")
     }
-    let (built_code, messages) = host.cargo_messages(build_args)
+    // **`nikaia check --rustc` is Cargo's `check`** (#1373): the same
+    // lowering and the same reading of what rustc said, with no program made.
+    let verb = if subcommand == "check" { "check" } else { "build" }
+    let (built_code, messages) = host.cargo_messages(verb, build_args)
     let mut code = built_code
     // Cargo is done with what this build added to the user cache, so its
     // size is known: hold the cache to its limit before a `run` starts the
@@ -375,7 +379,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     host.report(messages)
     // **The library and its header, together where a C build looks**
     // (ADR-284 D4, D12): `target/nikaia/c-library/`.
-    if code == 0 {
+    if code == 0 && subcommand != "check" {
         match header {
             null => {},
             text => project_drive_c_library(host, text, python, node, messages),

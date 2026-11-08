@@ -248,6 +248,10 @@ pub enum Command {
         /// The `.nika` file.
         #[arg(value_name = "FILE")]
         file: PathBuf,
+        /// Also run Cargo's `check` on the lowered Rust (#1373): what rustc
+        /// refuses in a program the checker accepted is reported as NK1343.
+        #[arg(long)]
+        rustc: bool,
     },
     /// The language server an editor starts (#1347): LSP's JSON-RPC on
     /// standard input and output, until the editor sends `exit`.
@@ -971,7 +975,7 @@ fn report_moved_keys(manifest: &Manifest) {
 /// **What a verb that takes one file does with it** (ADR-260 D3).
 enum Verb<'a> {
     Lower { output: Option<&'a std::path::Path> },
-    Check,
+    Check { rustc: bool },
     Interpret,
     Explain,
 }
@@ -1013,7 +1017,7 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
             Ok(())
         }
         Verb::Lower { output } => lower_to_rust(input, output, args, &settings),
-        Verb::Check => {
+        Verb::Check { rustc } => {
             let packages = explained(input, args, &settings)?;
             project::lower_reading(
                 input,
@@ -1022,6 +1026,25 @@ fn single_file(args: &Cli, input: &std::path::Path, verb: Verb<'_>) -> Result<()
                 &packages,
                 args.allow_read_from_list.as_deref(),
             )?;
+            if rustc {
+                let mut project = project::project_for_file(
+                    input,
+                    args.target.as_deref(),
+                    args.user_parallelism.as_deref(),
+                    args.no_cache,
+                    args.allow_read_from_list.as_deref(),
+                )?;
+                project.settings.optimize(&args.optimization)?;
+                project.settings.choose_cpu(args.cpu.as_deref())?;
+                project.settings.refutations(
+                    args.refuted_claims.as_deref(),
+                    args.unproved_claims.as_deref(),
+                )?;
+                let code = drive(args, &project, "check", &[])?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
             println!("Checked {}", input.display());
             Ok(())
         }
@@ -1126,7 +1149,7 @@ fn run() -> Result<()> {
                 output: output.as_deref(),
             },
         ),
-        Command::Check { file } => single_file(&args, file, Verb::Check),
+        Command::Check { file, rustc } => single_file(&args, file, Verb::Check { rustc: *rustc }),
         Command::Lsp => {
             let code =
                 nikaia_std::rt::exec::block_on(nikaia_std::tools::lsp::lsp_serve(&project::Lsp))

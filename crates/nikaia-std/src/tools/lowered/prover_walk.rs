@@ -164,7 +164,8 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
                     scope.entry.insert(arg_name.to_string(), at_entry);
                     if ty.starts_with('u') { scope.not_negative(&mut walk.arena, &arg_name); }
                 }
-                if !arg.mutable && has_a_length(ty) {
+                let kept = !arg.mutable || !changes_length_in(body, &arg_name, &walk.state.readers, words) && !rebinds(body, &arg_name, words);
+                if kept && has_a_length(ty) {
                     scope.has_length(&mut walk.arena, &arg_name, None);
                     params.insert(arg_name.to_string());
                     let length = length_of(&arg_name);
@@ -2009,7 +2010,7 @@ pub(crate) fn prover_else_lengths_changed(changed: &mut collections::BTreeSet<St
 
 pub(crate) fn prover_loop_keeps(n: &str, changed: &collections::BTreeSet<String>, body: &Block, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
     let length = length_of(n);
-    scope.mutables.contains(&length) && !changed.contains(&length) && !rebinds(body, n, words)
+    scope.ints.contains(&length) && !changed.contains(&length) && !rebinds(body, n, words)
 }
 
 pub(crate) fn prover_relength(walk: &mut ProverWalk, n: &str, scope: &mut ProverScope) { if n.ends_with(".len()") && scope.mutables.contains(n) { scope.has_length(&mut walk.arena, &nikaia_std::index::or(n.strip_suffix(".len()"), || "").to_string(), None); } }
@@ -2233,6 +2234,52 @@ pub(crate) fn prover_reads_only(contract: &FnContract) -> bool {
         None => false,
         Some(sig) => !sig.takes_a_receiver() && sig.mutable.is_empty(),
     }
+}
+
+pub(crate) fn prover_length_keepers(program: &Program, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
+    let mut keepers = readers.to_owned();
+    let mut candidates: Vec<String> = vec![];
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Fn { name, receiver, args, .. } => {
+                let name = *name;
+                if receiver.is_none() && name.is_some() {
+                    let mut lists = true;
+                    for arg in args.iter() { if arg.mutable && !has_a_length(words.resolve(arg.ty.name)) { lists = false; } }
+                    let n = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string();
+                    if lists && !readers.contains(&n) {
+                        keepers.insert(n.to_string());
+                        candidates.push(n);
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    let mut falling = true;
+    while falling {
+        falling = false;
+        for item in program.items.iter() {
+            match &item.node {
+                Item::Fn { name, receiver, args, body, .. } => {
+                    let name = *name;
+                    if receiver.is_some() || name.is_none() { continue; }
+                    let n = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string();
+                    if !nikaia_std::list::contains(&candidates, &n) || !keepers.contains(&n) { continue; }
+                    for arg in args.iter() {
+                        let arg_name = words.resolve(arg.name).to_string();
+                        if arg.mutable && (changes_length_in(body, &arg_name, &keepers, words) || rebinds(body, &arg_name, words)) {
+                            keepers.remove(&n);
+                            falling = true;
+                            break;
+                        }
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    keepers
 }
 
 pub(crate) fn prover_readers(program: &Program, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {

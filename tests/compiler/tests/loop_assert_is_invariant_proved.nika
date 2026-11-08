@@ -1,0 +1,36 @@
+// #1376, ADR-361 D3, D5: an `assert` in a loop's body that reads names the
+// loop changes is a candidate invariant of its own, kept once the three
+// queries pass; and a difference of two names whose steps keep a sign
+// (`i <= j`, D5.2) is found without one. Quicksort's partition proves all
+// five asserts; one a turn does not keep (`i == lo`) stays refused.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn said(nikaia: String, tmp: String, label: String, source: String) throws {
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
+    let out = process::run(nikaia, ["check", "--asserts", "p.nika"]; dir: tmp.clone())
+    println(f"-- {label}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("asserts in") || line.starts_with("  p.nika:") || line.starts_with("error[") {
+            println(line.replace(tmp, "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let head = "fn count(a: ref Vec[i64], lo: i64, hi: i64) -> i64 sync {\n    assert(0 <= lo)\n    assert(lo <= hi)\n    assert(hi < a.len())\n    let pivot = a[hi]\n    let mut i = lo\n    for j in lo..<hi {\n"
+    let asserts = "        assert(lo <= i)\n        assert(i <= j)\n"
+    let tail = "        if a[j] < pivot {\n            let x = a[i]\n            i = i + 1\n        }\n    }\n    return i\n}\nfn main() throws { let v: Vec[i64] = [5, 3, 9, 1, 4]; println(f\"{count(v, 0, 4)}\") }\n"
+    said(nikaia, tmp, "the asserts are the invariant", f"{head}{asserts}{tail}")
+    said(nikaia, tmp, "i <= j found without its assert", f"{head}        assert(lo <= i)\n{tail}")
+    said(nikaia, tmp, "an assert a turn does not keep", f"{head}{asserts}        assert(i == lo)\n{tail}")
+    process::run("rm", ["-rf", tmp])
+}

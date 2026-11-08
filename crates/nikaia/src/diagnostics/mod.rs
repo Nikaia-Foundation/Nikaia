@@ -242,6 +242,11 @@ pub struct Diagnostic {
     /// half of *mismatched types* that says which types
     /// ([ADR-290](../../../../docs/specification/adr/adr-290.md) D21 reads it).
     pub label: Option<String>,
+    /// Whether the message is a statement about the program rather than this
+    /// compiler's defect: the parser backend's frame check (ADR-296 D18,
+    /// `tools/diagnostics.nika`) or a stale ledger ([`a_stale_boundary`]).
+    /// Every other backend error is `NK1343` (Part III C.1, #1373).
+    pub about_the_program: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -315,6 +320,7 @@ pub fn translate_units(json: &str, map: &SourceMap, sources: &[&str]) -> Vec<Dia
             notes: placed.notes,
             internal: placed.internal,
             label: placed.label,
+            about_the_program: placed.about_the_program,
         })
         .collect()
 }
@@ -357,6 +363,7 @@ pub fn a_stale_boundary(
     };
     diagnostic.message = restated.message;
     diagnostic.notes = restated.notes;
+    diagnostic.about_the_program = true;
     true
 }
 
@@ -422,6 +429,7 @@ pub fn render(diagnostic: &Diagnostic, path: &str, source: &str, generated_path:
             span,
             word,
             notes: diagnostic.notes.clone(),
+            about_the_program: diagnostic.about_the_program,
         },
         path,
         source,
@@ -584,6 +592,7 @@ mod stale_boundaries {
             notes: Vec::new(),
             internal: None,
             label: None,
+            about_the_program: false,
         }
     }
 

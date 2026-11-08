@@ -8,6 +8,7 @@ pub struct LoopRecord {
     pub steps: collections::BTreeMap<String, Vec<i64>>,
     pub counter: String,
     pub turns: Vec<LoopTurn>,
+    pub asserts: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +27,7 @@ pub(crate) struct LoopPath {
     pub(crate) constraints: Vec<i64>,
     pub(crate) values: collections::BTreeMap<String, i64>,
     pub(crate) unread: collections::BTreeSet<String>,
+    pub(crate) asserted: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +85,7 @@ pub(crate) fn loop_record_of(arena: &mut TermArena, start: i64, outer: &[String]
         let begins = arena.substitute(low, &before);
         fixed.push(arena.equal(ghost, begins));
     }
-    let first = LoopPath { constraints: vec![], values: head, unread: collections::BTreeSet::new() };
+    let first = LoopPath { constraints: vec![], values: head, unread: collections::BTreeSet::new(), asserted: vec![] };
     let mut ends: Vec<LoopEnd> = vec![];
     let live = match loop_block(arena, body, &vec![first], &mut ends, &state, ints, pinned, words, claims, throwing, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
     for path in live.iter() { ends.push(LoopEnd { kind: String::from("turn"), path: path.clone() }); }
@@ -146,8 +148,28 @@ pub(crate) fn loop_record_of(arena: &mut TermArena, start: i64, outer: &[String]
     for name in unsteady.iter() { steps.remove(name); }
     let mut step = arena.boolean(false);
     if !turns.is_empty() { step = arena.or(turns); }
+    let mut asserts: Vec<i64> = vec![];
+    let mut asserted_texts: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for end in ends.iter() {
+        for claim in end.path.asserted.iter() {
+            let claim = nikaia_std::num::value(claim);
+            let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+            arena.variables(claim, &mut read);
+            let mut reads_state = false;
+            let mut made_up = false;
+            for n in read.iter() {
+                if nikaia_std::list::contains(&state, &n) { reads_state = true; }
+                if n.contains('~') { made_up = true; }
+            }
+            let text = arena.text(claim);
+            if reads_state && !made_up && !asserted_texts.contains(&text) {
+                asserted_texts.insert(text);
+                asserts.push(claim);
+            }
+        }
+    }
     let problem = LgLoop { state: state.to_owned(), fixed, entry, condition, step, exits, goals: vec![] };
-    Some(LoopRecord { start, problem, steps, counter: counter.to_string(), turns: kept_turns })
+    Some(LoopRecord { start, problem, steps, counter: counter.to_string(), turns: kept_turns, asserts })
 }
 
 pub(crate) fn loop_constant_step(arena: &mut TermArena, name: &str, value: i64) -> Option<i64> {
@@ -290,7 +312,10 @@ pub(crate) fn loop_expr_stmt(arena: &mut TermArena, expr: &Expr, span: &Span, pa
             if prover_an_assert_call(func, args, &span, claims) {
                 let mut p = path.clone();
                 let c = loop_read(arena, nikaia_std::index::get(&args, 0), &p, ints, &pinned, words, true);
-                if c.is_some() { p.constraints.push(nikaia_std::index::or(c, || 0)); }
+                if c.is_some() {
+                    p.constraints.push(nikaia_std::index::or(c, || 0));
+                    p.asserted.push(nikaia_std::index::or(c, || 0));
+                }
                 next.push(p);
                 return Some(true);
             }
@@ -395,8 +420,60 @@ pub fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl
             found.push((arena.ge(here, l), String::from("intervals")));
         }
     }
+    for claim in record.asserts.iter() {
+        let claim = nikaia_std::num::value(claim);
+        found.push((claim, String::from("asserts")));
+    }
+    found.extend(loop_octagons(arena, record));
     found.extend(loop_unrolled(arena, record, &steady, proved, asked));
     found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn loop_octagons(arena: &mut TermArena, record: &LoopRecord) -> Vec<(i64, String)> {
+    let mut found: Vec<(i64, String)> = vec![];
+    let origin: &'static str = "octagons";
+    let mut names: Vec<String> = vec![];
+    for (name, _) in record.steps.iter() { names.push(name.to_string()); }
+    for a in 0..names.len() as i64 {
+        for b in a + 1..names.len() as i64 {
+            let x = (*nikaia_std::index::get(&names, (a) as usize)).to_string();
+            let y = (*nikaia_std::index::get(&names, nikaia_std::index::at(b))).to_string();
+            let dx = match *nikaia_std::index::get(&record.steps, &x) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let dy = match *nikaia_std::index::get(&record.steps, &y) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if dx.is_empty() || (dx.len() as i64) != dy.len() as i64 { continue; }
+            let mut at_most = true;
+            let mut at_least = true;
+            let mut x_steady = true;
+            let mut y_steady = true;
+            for k in 0..dx.len() as i64 {
+                if *nikaia_std::index::get(&dx, (k) as usize) > *nikaia_std::index::get(&dy, (k) as usize) { at_most = false; }
+                if *nikaia_std::index::get(&dx, (k) as usize) < *nikaia_std::index::get(&dy, (k) as usize) { at_least = false; }
+                if *nikaia_std::index::get(&dx, (k) as usize) != *nikaia_std::index::get(&dx, 0) { x_steady = false; }
+                if *nikaia_std::index::get(&dy, (k) as usize) != *nikaia_std::index::get(&dy, 0) { y_steady = false; }
+            }
+            if x_steady && y_steady || at_most && at_least { continue; }
+            let mut left = arena.var(&x);
+            let mut right = arena.var(&y);
+            let sx = loop_start_of(arena, record, &x);
+            let sy = loop_start_of(arena, record, &y);
+            if arena.text(sx) != arena.text(sy) {
+                left = arena.sub(left, sx);
+                right = arena.sub(right, sy);
+            }
+            if at_most { found.push((arena.le(left, right), origin.to_string())); }
+            if at_least { found.push((arena.ge(left, right), origin.to_string())); }
+        }
+    }
+    found
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn loop_start_of(arena: &mut TermArena, record: &LoopRecord, name: &str) -> i64 {
+    let ghost = loop_before_name(name, record.start);
+    nikaia_std::index::or(loop_start_term(&arena, &record.problem.fixed, &ghost), || arena.var(&ghost).into())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -1,0 +1,43 @@
+// #1385 (ADR-269 D9, D17): a function that writes only the elements of its
+// `mut` list, and hands it only to functions that keep its length, keeps it;
+// recursion is assumed to keep it, then checked. So `sort`'s `a.len()` is a
+// name the prover reads, `partition` keeps it at the call, and every claim
+// of quicksort is proved. `mut_list_length_push_across_call_refused` holds
+// the callees that may change it.
+fn partition(mut a: Vec[i64], lo: i64, hi: i64) -> i64 {
+    assert(0 <= lo)
+    assert(lo <= hi)
+    assert(hi < a.len())
+    let pivot = a[hi]
+    let mut i = lo
+    for j in lo..<hi {
+        assert(lo <= i)
+        assert(i <= j)
+        if a[j] < pivot {
+            let t = a[i]
+            a[i] = a[j]
+            a[j] = t
+            i = i + 1
+        }
+    }
+    let t = a[i]
+    a[i] = a[hi]
+    a[hi] = t
+    assert(lo <= i)
+    assert(i <= hi)
+    return i
+}
+fn sort(mut a: Vec[i64], lo: i64, hi: i64) {
+    assert(0 <= lo)
+    assert(hi < a.len())
+    if lo < hi {
+        let p = partition(a, lo, hi)
+        sort(a, lo, p - 1)
+        sort(a, p + 1, hi)
+    }
+}
+fn main() throws {
+    let mut v: Vec[i64] = [5, 3, 9, 1, 4]
+    sort(v, 0, v.len() - 1)
+    for x in v { println(f"{x}") }
+}

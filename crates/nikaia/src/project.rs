@@ -3191,8 +3191,8 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         self.project.settings.library()
     }
 
-    fn cargo_messages(&self, args: &[String]) -> HostResult<(i32, String)> {
-        self.held(self.cargo().messages("build", args))
+    fn cargo_messages(&self, verb: &str, args: &[String]) -> HostResult<(i32, String)> {
+        self.held(self.cargo().messages(verb, args))
     }
 
     fn settle(&self) {

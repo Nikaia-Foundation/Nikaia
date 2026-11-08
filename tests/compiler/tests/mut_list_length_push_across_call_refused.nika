@@ -1,0 +1,27 @@
+// #1385 (ADR-269 D9, D17): a callee that may push to the list, or hands it
+// on to one that may (here through recursion), does not keep its length:
+// `first`'s `a.len()` is not a name the prover reads, before the call or
+// after it. `mut_list_length_kept_across_call` holds the callees that keep it.
+fn grow(mut a: Vec[i64], n: i64) {
+    if n > 0 {
+        a.push(n)
+    }
+}
+fn deeper(mut a: Vec[i64], n: i64) {
+    if n > 0 {
+        deeper(a, n - 1)
+    } else {
+        grow(a, 1)
+    }
+}
+fn first(mut a: Vec[i64], hi: i64) -> i64 {
+    assert(0 <= hi)
+    assert(hi < a.len())
+    deeper(a, 2)
+    assert(hi < a.len())
+    return a[hi]
+}
+fn main() throws {
+    let mut v: Vec[i64] = [5, 3, 9]
+    println(f"{first(v, 2)}")
+}
