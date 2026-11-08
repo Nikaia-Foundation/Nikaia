@@ -1,13 +1,13 @@
 // #706: the two parts of `split_once` kept in a `mut` parameter's list.
 
-fn pair(s: String, mut v: Vec[ref String]) {
+fn pair(s: String, mut v: Vec[String]) {
     let parts = s.split_once("=") ?? return
     v.push(parts.0)
     v.push(parts.1)
 }
 
 fn main() throws {
-    let mut v: Vec[ref String] = []
+    let mut v: Vec[String] = []
     pair(f"k={1}", v)
     pair("name=ada", v)
     println(v.len())

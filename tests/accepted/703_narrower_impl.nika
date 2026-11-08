@@ -6,19 +6,19 @@
 use std::time
 
 trait Source {
-    fn load(ref self) -> String throws
+    fn load(self) -> String throws
 }
 
 trait Count {
-    fn count(ref self) -> i64
+    fn count(self) -> i64
 }
 
 trait Check {
-    fn check(ref self, limit: i64) -> bool sync throws
+    fn check(self, limit: i64) -> bool sync throws
 }
 
 trait Fetch {
-    fn fetch(ref self, key: String) -> String throws
+    fn fetch(self, key: String) -> String throws
 }
 
 pub struct Fixed {
@@ -26,43 +26,43 @@ pub struct Fixed {
 }
 
 impl Source for Fixed {
-    fn load(ref self) -> String sync {
+    fn load(self) -> String sync {
         return self.text.clone()
     }
 }
 
 impl Count for Fixed {
-    fn count(ref self) -> i64 sync {
+    fn count(self) -> i64 sync {
         return self.text.len()
     }
 }
 
 impl Check for Fixed {
-    fn check(ref self, limit: i64) -> bool sync {
+    fn check(self, limit: i64) -> bool sync {
         return self.text.len() <= limit
     }
 }
 
 impl Fetch for Fixed {
-    fn fetch(ref self, key: String) -> String {
+    fn fetch(self, key: String) -> String {
         time::sleep(1.millis())
         return f"{self.text}:{key}"
     }
 }
 
-fn through[S: Source](s: ref S) -> String throws {
+fn through[S: Source](s: S) -> String throws {
     return s.load()
 }
 
-fn counted[C: Count](c: ref C) -> i64 {
+fn counted[C: Count](c: C) -> i64 {
     return c.count()
 }
 
-fn checked[C: Check](c: ref C, limit: i64) -> bool throws {
+fn checked[C: Check](c: C, limit: i64) -> bool throws {
     return c.check(limit)
 }
 
-fn fetched[F: Fetch](f: ref F) -> String throws {
+fn fetched[F: Fetch](f: F) -> String throws {
     return f.fetch("k")
 }
 

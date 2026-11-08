@@ -2,11 +2,11 @@
 // list; the buffer is the struct's (ADR-283 D1), the argument the caller's.
 
 struct Bag {
-    items: Vec[ref String],
+    items: Vec[String],
 }
 
 impl Bag {
-    fn add(ref mut self, s: ref String) {
+    fn add(mut self, s: String) {
         for w in s.split(",") {
             self.items.push(w)
         }

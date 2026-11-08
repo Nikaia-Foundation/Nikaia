@@ -3,17 +3,17 @@
 // as a value, and an arm of an `if` or a `match` that is a `String?` already
 // goes into the result as it is, beside a view.
 
-fn ns(name: ref String) -> ref String? {
+fn ns(name: String) -> String? {
     if name == "self" { return null }
     return name
 }
 
-fn own(n: ref String) -> String? {
+fn own(n: String) -> String? {
     if n == "" { return null }
     return f"{n}!"
 }
 
-fn part(n: ref String, c: bool) -> String? {
+fn part(n: String, c: bool) -> String? {
     match c {
         true => {
             let d = ns(n) ?? return null
@@ -23,15 +23,15 @@ fn part(n: ref String, c: bool) -> String? {
     }
 }
 
-fn leaving_if(a: ref String, c: bool) -> String? {
+fn leaving_if(a: String, c: bool) -> String? {
     if c { return a } else { return own(a) }
 }
 
-fn by_if(a: ref String, c: bool) -> String? {
+fn by_if(a: String, c: bool) -> String? {
     if c { a } else { own(a) }
 }
 
-fn by_match(a: ref String, c: i64) -> String? {
+fn by_match(a: String, c: i64) -> String? {
     match c {
         0 => a,
         1 => null,
@@ -39,7 +39,7 @@ fn by_match(a: ref String, c: i64) -> String? {
     }
 }
 
-fn early(a: ref String, c: i64) -> String? {
+fn early(a: String, c: i64) -> String? {
     if c == 0 { return null }
     if c == 1 { return a }
     let o = own(a) ?? return null
