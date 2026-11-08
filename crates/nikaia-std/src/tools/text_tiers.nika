@@ -1111,7 +1111,14 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
         // stay a view there: the position holds text of its own, and the
         // view is refused with NK1102 (write `.clone()`), not left to rustc.
         let mut flowed = kinds.clone()
-        if plain && kinds.view && value != null {
+        if plain && value != null {
+            let read = value ?? return
+            let to = position_word(owner, path)
+            if reads_back(read, to, ask, walk) {
+                flowed = coalesce_beside(read, to, ask, walk) ?? flowed
+            }
+        }
+        if plain && flowed.view && value != null {
             let given = value ?? return
             if views_a_temporary(given, ask, walk) || unkept_root(given, ask, walk) {
                 flowed = owned_kinds()
@@ -1295,6 +1302,51 @@ fn element_text_word(base: ref Expr, index: ref Expr, ask: ref TierAsk, mut walk
         return null
     }
     return seen(found.owner, [at], walk)
+}
+
+/// **A `??` with a side that reads its own position back** (#1405): `n.a ??
+/// m.a` put into the field `a` both read. Whether a side of it, through
+/// nested `??`, is the position `to` itself.
+fn reads_back(value: ref Expr, to: ref String, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            return reads_back(first, to, ask, walk) || reads_back(fallback, to, ask, walk)
+        }
+        else => {}
+    }
+    if !tier_a_name(value) {
+        return false
+    }
+    let back = text_source_word(value, ask, walk) ?? return false
+    return back == to
+}
+
+/// What such a `??` puts into `to`: only its other sides' kinds, as text read
+/// out of a position and put back adds nothing there (#659); else the side
+/// read before this round's tiers is taken as text of its own, and the
+/// position stays mixed for good. None where a side is neither `to`, `null`
+/// nor a declared place, whose kinds the walk has counted already.
+fn coalesce_beside(value: ref Expr, to: ref String, ask: ref TierAsk, mut walk: TierWalk) -> Kinds? {
+    match value {
+        Expr::Coalesce { value: first, fallback, .. } => {
+            let a = coalesce_beside(first, to, ask, walk) ?? return null
+            let b = coalesce_beside(fallback, to, ask, walk) ?? return null
+            return kinds_joined(a, b)
+        }
+        else => {}
+    }
+    if a_null(value) {
+        return no_kinds()
+    }
+    if !tier_a_name(value) {
+        return null
+    }
+    let back = text_source_word(value, ask, walk) ?? ""
+    if back == to {
+        return no_kinds()
+    }
+    let found = place_of(value, ask, walk) ?? return null
+    return kinds_of_declared(found, ask, walk)
 }
 
 /// `return`, `break` or `continue`: a fallback that hands out nothing.
