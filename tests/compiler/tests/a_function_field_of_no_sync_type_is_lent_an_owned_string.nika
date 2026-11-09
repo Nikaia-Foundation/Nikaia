@@ -1,0 +1,38 @@
+// **A function field is lent the owned `String` it is called with**
+// (ADR-views-3 D2, D14, #1379): the field's type is not `sync`, so it holds
+// a named function behind the async wrapper, and `h.f(g)` must hand `&g`
+// below as a call of `len` itself does; `rustc` refused it (NK1343).
+struct H {
+    f: fn(s: String) -> i64,
+}
+
+struct W {
+    h: H,
+}
+
+fn len(s: String) -> i64 {
+    return s.len()
+}
+
+fn made() -> String {
+    let mut g = String()
+    g.push_str("abcd")
+    return g
+}
+
+fn through(h: H, g: String) -> i64 {
+    return h.f(g)
+}
+
+fn main() throws {
+    let h = H { f: len }
+    let g: String = "abc"
+    println(h.f(g))
+    println(g)
+    println(h.f(made()))
+    println(through(h.clone(), g))
+    let w = W { h: H { f: fn(s) { s.len() + 1 } } }
+    println(w.h.f(g))
+    let hs = [h]
+    println(hs[0].f(g))
+}
