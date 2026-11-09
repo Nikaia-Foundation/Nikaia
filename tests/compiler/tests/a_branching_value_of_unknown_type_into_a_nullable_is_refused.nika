@@ -1,0 +1,22 @@
+// What is not known is not written (#1374, ADR-005 D7): an `if` whose every
+// end is of no known type is not wrapped at each end into a `String?`, which
+// left the type to the language below; each end is `NK1342`, at a `return`,
+// a function's tail and a typed `let`, as at an argument.
+fn id[T](x: T) -> T {
+	return x
+}
+
+fn handed(c: bool) -> String? {
+	return if c { id(3) } else { id(4) }
+}
+
+fn tail(c: bool) -> String? {
+	if c { id(5) } else { id(6) }
+}
+
+fn main() throws {
+	let x: String? = if true { id(7) } else { id(8) }
+	println(handed(true) ?? "n")
+	println(tail(true) ?? "n")
+	println(x ?? "n")
+}
