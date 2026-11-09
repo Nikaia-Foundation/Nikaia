@@ -1368,8 +1368,12 @@ fn parameter_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext
 // (#1472): `let s = c.signature ?? return -1` reads the field in place.
 fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
     return match expr {
-        Expr::Coalesce { value, .. } => match value {
+        Expr::Coalesce { value, fallback, .. } => match value {
             Expr::Field { base, name, .. } => {
+                // Only a jump on the right reads the field in place (check_core_ops D10).
+                if !keeps_a_jump(fallback) {
+                    return null
+                }
                 let parameter = parameter_named(base, interner, context) ?? return null
                 if parameter != "self" && an_option_field(parameter, interner.resolve(name), context) { parameter } else { null }
             },
@@ -1379,6 +1383,16 @@ fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContex
             },
         },
         else => null,
+    }
+}
+
+fn keeps_a_jump(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Throw(_, _) => true,
+        Expr::Return(_, _) => true,
+        Expr::Break(_) => true,
+        Expr::Continue(_) => true,
+        else => false,
     }
 }
 

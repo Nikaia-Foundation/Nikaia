@@ -879,9 +879,10 @@ pub(crate) fn parameter_named(expr: &Expr, interner: &winnow_grammar::InternerCo
 
 pub(crate) fn coalesced_option(expr: &Expr, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>) -> Option<String> {
     match expr {
-        Expr::Coalesce { value, .. } => { let value = nikaia_std::boxed::open(value); match value {
+        Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); match value {
             Expr::Field { base, name, .. } => {
                 let base = nikaia_std::boxed::open(base); let name = *name;
+                if !keeps_a_jump(fallback) { return None; }
                 let parameter = match parameter_named(base, interner, context) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 if parameter != "self" && an_option_field(&parameter, interner.resolve(name), context) { Some(parameter) } else { None }
             },
@@ -893,6 +894,8 @@ pub(crate) fn coalesced_option(expr: &Expr, interner: &winnow_grammar::InternerC
         _ => None,
     }
 }
+
+pub(crate) fn keeps_a_jump(expr: &Expr) -> bool { matches!(expr, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)) }
 
 pub(crate) fn an_option_field(parameter: &str, field: &str, context: &KeepsBody<'_, '_>) -> bool {
     let fields = match *nikaia_std::index::get(&context.fields, parameter) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -1155,11 +1158,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple86092| {
-                            let (at, arg) = __nikaia_tuple86092; let at = nikaia_std::num::value(at);
+                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple86524| {
+                            let (at, arg) = __nikaia_tuple86524; let at = nikaia_std::num::value(at);
                             by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple86268| {
-                            let (at, arg) = __nikaia_tuple86268;
+                        }).map(|__nikaia_tuple86700| {
+                            let (at, arg) = __nikaia_tuple86700;
                             at
                         }).collect::<Vec<_>>();
                         let called = view.text(method.node.name);
