@@ -1414,6 +1414,12 @@ impl EmitState {
             if closes == "cleanup::close" && !self.method_pauses(on_node) {
                 out.push("_sync")
             }
+            // **A method that runs a kept function in tasks of its own has
+            // the pool's twin** where tasks run on threads (ADR-326 D10), as
+            // `net::serve` has.
+            if host.overlaps_user_code() && emit_call_on_the_pool(closes) {
+                out.push("_on_pool")
+            }
             if self.emit_call_method_proved(world, host, receiver, on_node, name, args, scope) {
                 out.push("__unchecked")
             }

@@ -3471,7 +3471,7 @@ pub mod emit_contracts {
 }
 pub mod emit_core_args {
     #[allow(unused_imports)]
-    pub use super::{emit_async_line, emit_async_pause, emit_async_during};
+    pub use super::{emit_call_on_the_pool, emit_async_line, emit_async_pause, emit_async_during};
 }
 pub mod emit_core_below {
     #[allow(unused_imports)]

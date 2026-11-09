@@ -960,9 +960,10 @@ fn emit_arg_passing(names: ref Vec[String], lent: ref Vec[bool]) -> String {
 }
 
 /// `std`'s entries that run a kept function in a task of their own and have a
-/// twin for `user_parallelism = yes`, named `<name>_on_pool`.
-fn emit_call_on_the_pool(key: ref String) -> bool {
-    return key == "net::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope"
+/// twin for `user_parallelism = yes`, named `<name>_on_pool`: a function, or a
+/// method by its ledger key (`net::Listener::serve`, ADR-326 D10).
+pub fn emit_call_on_the_pool(key: ref String) -> bool {
+    return key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope"
 }
 
 /// **The channel a scope's tasks fail in** (ADR-346 D7): the box where a

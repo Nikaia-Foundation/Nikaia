@@ -171,7 +171,8 @@ impl Connection {
 
 /// **Accept connections at `address` and run `handler` on each, in a task of
 /// its own** ([ADR-326](../../../docs/specification/adr/adr-326.md) D1): the
-/// one place a protocol accepts, and `http` is one of its users.
+/// one place a protocol accepts, and `http` is one of its users. It is
+/// `listen` followed by [`Listener::serve`] (D10).
 ///
 /// One thread runs every connection at `user_parallelism = no`, each giving the
 /// thread up where it waits; [`serve_on_pool`] is the same at `yes`, which the
@@ -182,28 +183,75 @@ impl Connection {
 /// **A descriptor ceiling pauses the accepting and never ends it** (D3): the
 /// system's queue holds the next connection until one closes.
 pub async fn serve(address: &str, handler: Handler) -> Result<(), IoError> {
-    let listener = listen(address).await?;
-    loop {
-        let Some(connection) = accepted(&listener).await? else {
-            continue;
-        };
-        let handler = handler.clone();
-        // **Started as a `spawn` is**, so a panic is caught at the task's edge
-        // and ends this connection alone (D4); nobody joins it.
-        crate::task::TaskHandle::start(async move { said(handler(connection).await) });
-    }
+    listen(address).await?.serve(handler, 0).await
 }
 
 /// [`serve`] where tasks run on threads (`user_parallelism = yes`): the
 /// handler and its futures cross one.
 pub async fn serve_on_pool(address: &str, handler: PoolHandler) -> Result<(), IoError> {
-    let listener = listen(address).await?;
-    loop {
-        let Some(connection) = accepted(&listener).await? else {
-            continue;
-        };
-        let handler = handler.clone();
-        crate::task::TaskHandle::start_on_pool(async move { said(handler(connection).await) });
+    listen(address).await?.serve_on_pool(handler, 0).await
+}
+
+impl Listener {
+    /// **[`serve`] on a listener already bound** (ADR-326 D10): a program that
+    /// must know the address before it serves - port `0`, the line a server
+    /// prints - binds first and serves this.
+    ///
+    /// `connections` (D5, a test's tool) counts accepted connections: after
+    /// that many it accepts no more and returns once they have all finished;
+    /// `0` serves until the program ends.
+    pub async fn serve(&self, handler: Handler, connections: i64) -> Result<(), IoError> {
+        let mut started = Vec::new();
+        while connections <= 0 || (started.len() as i64) < connections {
+            let Some(connection) = accepted(self).await? else {
+                continue;
+            };
+            let handler = handler.clone();
+            // **Started as a `spawn` is**, so a panic is caught at the task's
+            // edge and ends this connection alone (D4).
+            let task =
+                crate::task::TaskHandle::start(async move { said(handler(connection).await) });
+            // Only a counted server waits for its connections; one that serves
+            // until the program ends keeps no handle.
+            if connections > 0 {
+                started.push(task);
+            }
+        }
+        finished(started).await;
+        Ok(())
+    }
+
+    /// [`Listener::serve`] where tasks run on threads (`user_parallelism =
+    /// yes`).
+    pub async fn serve_on_pool(
+        &self,
+        handler: PoolHandler,
+        connections: i64,
+    ) -> Result<(), IoError> {
+        let mut started = Vec::new();
+        while connections <= 0 || (started.len() as i64) < connections {
+            let Some(connection) = accepted(self).await? else {
+                continue;
+            };
+            let handler = handler.clone();
+            let task =
+                crate::task::TaskHandle::start_on_pool(
+                    async move { said(handler(connection).await) },
+                );
+            if connections > 0 {
+                started.push(task);
+            }
+        }
+        finished(started).await;
+        Ok(())
+    }
+}
+
+/// **Every counted connection has ended**, one that panicked too: its panic
+/// was its own (D4), so what `join` says of it is not this call's to throw.
+async fn finished(started: Vec<crate::task::TaskHandle<()>>) {
+    for task in started {
+        let _ = task.join().await;
     }
 }
 

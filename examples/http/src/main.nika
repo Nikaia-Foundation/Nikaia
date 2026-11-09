@@ -246,16 +246,19 @@ pub fn status_line(status: i32) -> String {
     }
 }
 
-// The server. It takes one connection at a time: read the request, run the
-// handler, send the answer, close. A slow client holds up everyone else, and
-// `head_wait` limits how long. The limits are options after the `;`, so a
-// program names only the ones it changes.
+// The server. Each connection is served in a task of its own: read the
+// request, run the handler, send the answer, close. A slow client holds up
+// only itself, and `head_wait` limits how long it keeps its own connection.
+// The limits are options after the `;`, so a program names only the ones it
+// changes.
 //
-// Nothing here waits in a special way. `accept` and `read` are plain calls
-// with no `async` or `await`.
+// The accepting is `std::net`'s (ADR-326 D10): bind first, so the address can
+// be printed (port `0` picks any free one), then `serve` the listener. Nothing
+// here waits in a special way. `serve` and `read` are plain calls with no
+// `async` or `await`.
 pub fn listen(
     at: String,
-    handler: fn(keep Request) -> Response;
+    keep handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
     head_wait: i64 = 10,
@@ -265,14 +268,11 @@ pub fn listen(
     let bound = listener.address()
     println(f"http: listening on {bound}")
 
-    let mut served = 0
-    // `connections: 0` means serve forever. Any other number stops after that
-    // many connections.
-    while connections == 0 || served < connections {
-        let mut connection = listener.accept()
+    // `connections: 0` means serve forever. Any other number stops accepting
+    // after that many connections and returns once they are answered.
+    listener.serve(fn(mut connection) {
         answer(connection, handler; body_cap: body_cap, head_cap: head_cap, head_wait: head_wait)
-        served = served + 1
-    }
+    }; connections: connections)
 }
 
 // One connection, from its first byte to its close.
@@ -285,7 +285,7 @@ pub fn listen(
 // call site writes nothing extra.
 fn answer(
     mut connection: net::Connection,
-    handler: fn(keep Request) -> Response;
+    keep handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
     head_wait: i64 = 10
@@ -339,7 +339,14 @@ fn answer(
         return
     }
 
-    let answered = handler(Request { head: asked, body: body })
+    // A handler that panics ends its own task, and the client, whose answer
+    // has not begun, is told `500` (ADR-326 D4). The server goes on.
+    let request = Request { head: asked, body: body }
+    let running = spawn fn { handler(request) }
+    let answered = running.join() catch {
+        refuse(connection, 500, "500 the handler stopped")
+        return
+    }
     send(connection, answered) catch { return }
 }
 

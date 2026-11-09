@@ -1,0 +1,32 @@
+// #121, ADR-326 D10: `Listener.serve` runs each connection in a task of its
+// own, so a client that has connected and sent nothing holds up only itself.
+// The second client is answered while the first is still open and silent;
+// then the first is answered too, and after `connections: 2` the call returns
+// once both have finished. A server that took one connection at a time would
+// wait on the first client's read forever.
+use std::net
+
+fn echo(mut conn: net::Connection) throws {
+    let got = conn.read()
+    conn.write(got)
+}
+
+fn clients(at: String) throws {
+    let mut silent = net::connect(at)
+    let mut second = net::connect(at)
+    second.write("second")
+    let back = second.read()
+    println(f"answered {back.text()}, the first still silent")
+    silent.write("first")
+    let first = silent.read()
+    println(f"answered {first.text()}")
+}
+
+fn main() throws {
+    let listener = net::listen("127.0.0.1:0")
+    let at = listener.address()
+    let client = spawn fn { clients(at) }
+    listener.serve(fn(mut conn) { echo(conn) }; connections: 2)
+    client.join()
+    println("serve returned after two connections")
+}

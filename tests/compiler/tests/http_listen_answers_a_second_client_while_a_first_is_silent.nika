@@ -1,0 +1,33 @@
+// #121, ADR-326 D4 and D10: `http::listen` serves each connection in a task
+// of its own. A first client connects and sends nothing; a second one is
+// answered while the first is still open; then the first is answered too. A
+// handler that panics is answered `500` and ends only its own connection.
+// After `connections: 3`, `listen` returns. The server runs in a package of
+// its own that depends on `examples/http` by path.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let repo = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nhttp = { path = \"" + repo + "/examples/http\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use http\nuse std::net\n\nfn free() -> String throws {\n\tlet probe = net::listen(\"127.0.0.1:0\")\n\treturn probe.address()\n}\n\nfn ask(mut conn: net::Connection, path: String) -> String throws {\n\tconn.write(f\"GET {path} HTTP/1.1\\r\\nhost: x\\r\\n\\r\\n\")\n\tlet mut got = String()\n\twhile true {\n\t\tlet more = conn.read()\n\t\tif more.len() == 0 {\n\t\t\tbreak\n\t\t}\n\t\tgot.push_str(more.text())\n\t}\n\tlet lines: Vec[String] = got.lines().collect()\n\treturn f\"{lines[0]} / {lines[lines.len() - 1]}\"\n}\n\nfn clients(at: String) throws {\n\tlet mut silent = net::connect(at)\n\tlet mut second = net::connect(at)\n\tprintln(f\"second: {ask(second, \"/second\")}\")\n\tprintln(f\"first, connected before it: {ask(silent, \"/first\")}\")\n\tlet mut crashing = net::connect(at)\n\tprintln(f\"crash: {ask(crashing, \"/crash\")}\")\n}\n\nfn main() throws {\n\tlet at = free()\n\tlet copy = at.clone()\n\tlet client = spawn fn { clients(copy) }\n\thttp::listen(at; connections: 3) fn(request) {\n\t\tif request.path() == \"/crash\" {\n\t\t\tpanic(\"the handler crashed\")\n\t\t}\n\t\treturn http::Response::text(f\"answered {request.path()}\")\n\t}\n\tclient.join()\n\tprintln(\"listen returned after three connections\")\n}\n")
+    let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+    for line in out.stdout.lines() {
+        if !line.starts_with("http: listening on ") {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    if out.code != 0 {
+        println(out.stderr.replace(tmp, "TMP"))
+    }
+    process::run("rm", ["-rf", tmp])
+}

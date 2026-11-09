@@ -948,6 +948,7 @@ impl EmitState {
                 None => None,
             }, || "".into());
             if closes == "cleanup::close" && !self.method_pauses(on_node) { out.push("_sync"); }
+            if host.overlaps_user_code() && emit_call_on_the_pool(&closes) { out.push("_on_pool"); }
             if self.emit_call_method_proved(world, host, receiver, on_node, &name, args, scope) { out.push("__unchecked"); }
         }
         let mut declared = false;
@@ -1206,8 +1207,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple89273| {
-        let (i, word) = __nikaia_tuple89273;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple89587| {
+        let (i, word) = __nikaia_tuple89587;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

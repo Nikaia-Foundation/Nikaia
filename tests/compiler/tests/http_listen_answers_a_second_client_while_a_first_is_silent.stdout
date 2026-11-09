@@ -1,0 +1,5 @@
+second: HTTP/1.1 200 OK / answered /second
+first, connected before it: HTTP/1.1 200 OK / answered /first
+crash: HTTP/1.1 500 Internal Server Error / 500 the handler stopped
+listen returned after three connections
+exit 0
