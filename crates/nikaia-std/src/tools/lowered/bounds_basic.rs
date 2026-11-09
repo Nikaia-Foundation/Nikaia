@@ -249,7 +249,7 @@ pub(crate) fn counted_blocks(expr: &Expr, over: &[CountedLoop], words: &winnow_g
     }
 }
 
-pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be" | "find_all") }
+pub fn keeps_length(method: &str) -> bool { matches!(method, "len" | "is_empty" | "contains" | "iter" | "first" | "last" | "get" | "clone" | "to_vec" | "index_of" | "starts_with" | "ends_with" | "join" | "sum" | "min" | "max" | "sort" | "sort_by" | "sort_by_key" | "reverse" | "swap" | "fill" | "map" | "filter" | "any" | "all" | "count" | "find" | "position" | "enumerate" | "zip" | "windows" | "chunks" | "rev" | "fold" | "binary_search" | "to_string" | "chars" | "bytes" | "u32_le" | "u32_be" | "u64_le" | "u64_be" | "find_all" | "contains_key" | "keys" | "values") }
 
 pub fn bytes_word_width(method: &str) -> i64 {
     match method {
@@ -266,6 +266,7 @@ pub(crate) enum Seek {
     LengthChanged(String),
     Rebound(String),
     Mentioned(String),
+    Unvisited(collections::BTreeSet<i64>),
 }
 
 pub fn length_stays(body: &Block, list: &str, words: &winnow_grammar::InternerContext) -> bool { !seek_block(body, &Seek::LengthChanged(nikaia_std::block::Text::from(list.to_string())), words) }
@@ -346,6 +347,10 @@ pub(crate) fn statement_says(stmt: &Stmt, seek: &Seek, words: &winnow_grammar::I
             Stmt::Assign { target, .. } => is_variable(target, name, words),
             _ => false,
         },
+        Seek::Unvisited(seen) => match stmt {
+            Stmt::Return(value) => unseen_return((value).as_ref(), seen),
+            _ => false,
+        },
     }
 }
 
@@ -364,7 +369,16 @@ pub(crate) fn expression_says(expr: &Expr, seek: &Seek, words: &winnow_grammar::
             _ => false,
         },
         Seek::Mentioned(name) => is_variable(expr, name, words),
+        Seek::Unvisited(seen) => match expr {
+            Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); unseen_return((value).as_ref(), seen) },
+            _ => false,
+        },
     }
+}
+
+pub(crate) fn unseen_return(value: Option<&Expr>, seen: &collections::BTreeSet<i64>) -> bool {
+    let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+    !seen.contains(&node_key(returned))
 }
 
 pub(crate) fn seek_block(block: &Block, seek: &Seek, words: &winnow_grammar::InternerContext) -> bool {

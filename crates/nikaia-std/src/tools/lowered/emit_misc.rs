@@ -316,7 +316,7 @@ impl EmitState {
         (last, String::from(""))
     }
     pub fn narrows(&self, operand: &Expr) -> Option<FactNarrowing> {
-        let found = match self.facts.narrowing_casts.get(&node_key(operand)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let found = match self.facts.narrowing_casts.get(&node_key(operand)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(found.clone())
     }
     pub fn a_code_parameter_taken_whole(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, name: &str) -> bool {

@@ -3021,11 +3021,11 @@ pub mod bounds_rules {
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]
-    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_adds, only_removes, key_root, root_name, is_unsigned, is_whole_number};
+    pub use super::{BodyShape, Around, shape_of, elements_key, tracks, writes_a_value, only_adds, only_removes, key_root, root_name, is_unsigned, is_whole_number, is_empty_map};
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields};
+    pub use super::{BoundsContext, BoundsReturns, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields, bounds_returns};
 }
 pub mod buffers {
     #[allow(unused_imports)]
@@ -3172,7 +3172,7 @@ pub mod check_core_pilot {
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
-    pub use super::{check_core_places_beyond_f32, check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
+    pub use super::{check_core_places_beyond_f32, check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_places_store_handle, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]
@@ -4004,7 +4004,7 @@ pub mod tether {
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
-    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_type_may_be_a_view, hb_plain_enums};
+    pub use super::{Kinds, Tier, TextOwner, TextPosition, Hand, hand_number, TierAsk, tier_beside_fields, HoleWrap, TextTiers, TierRefusal, TierForced, TierAdopted, unaliased_in, own_text_items_written, text_tiers, TierWritten, tier_write, tier_hand_back, SliceFills, tier_slice_fills, hands_back_a_piece_of_self, hb_type_may_be_a_view, hb_plain_enums};
 }
 pub mod threads {
     #[allow(unused_imports)]

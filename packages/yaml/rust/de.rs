@@ -159,7 +159,10 @@ fn scalar<'de>(event: &native::Event<'de, 'de>) -> Scalar<'de> {
     };
     let raw: &'de str = event.value;
     let value = match &event.text {
-        _ if style == Style::Block => Cow::Owned(event.text.clone().unwrap_or_default()),
+        // A block scalar's text is folded and chomped; one a core tag reads
+        // as a number, a `bool` or null has no text, and is its trimmed raw.
+        Some(text) if style == Style::Block => Cow::Owned(text.clone()),
+        None if style == Style::Block => Cow::Borrowed(raw.trim()),
         None => Cow::Borrowed(raw),
         Some(text) if text == raw => Cow::Borrowed(raw),
         Some(text) => match borrowed_inside(raw, text, style) {

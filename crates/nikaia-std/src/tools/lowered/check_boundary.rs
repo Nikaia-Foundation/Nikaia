@@ -168,6 +168,41 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_made_element_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, expected: &Ty) -> bool {
+        let viewed = match expected {
+            Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (a_type_base(name) == "str" || a_type_base(name) == "String") },
+            _ => false,
+        };
+        if !viewed { return false; }
+        self.flow.made_element_reads.contains(&node_key(value))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_element_of_a_made_list(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        let (base, index) = match value {
+            Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); (base, index) },
+            _ => return false,
+        };
+        if a_range(index) { return false; }
+        let name = match base {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+            _ => return false,
+        };
+        let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if held.kind != CheckKind::Let { return false; }
+        let (list, args, view) = match found.ty {
+            Ty::Named { ref name, args, view } => (a_type_base(name), args, view),
+            _ => return false,
+        };
+        if view || args.len() != 1 || list != "Vec" && list != "Array" { return false; }
+        match *nikaia_std::index::get(&args, 0) {
+            Ty::Named { ref name, args: ref inner, view: element_view } => !element_view && inner.is_empty() && a_type_base(name) == "String",
+            _ => false,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn a_get_off_a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         let expected = match match self.expected.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),

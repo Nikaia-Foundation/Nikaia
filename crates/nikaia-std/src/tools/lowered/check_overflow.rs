@@ -186,6 +186,18 @@ pub fn check_wrap_undecided(found: &Ty, want: &Ty, literal: bool) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_overflow_unknown_ends<'r>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &'r Expr) -> Vec<&'r Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    for leaf in state.value_leaves(world, given) {
+        if ends_in_null(check_peeled(leaf)) { continue; }
+        let ty = match state.arm_type_of(leaf) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if ty.is_unknown() { out.push(leaf); }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_overflow_a_number_inside(want: &Ty) -> bool {
     match want {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
@@ -230,14 +242,22 @@ pub fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWor
         }
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
         if check_overflow_leaves_none(&state, world, given) { return None; }
+        let mut unknown_ends: Vec<&Expr> = vec![];
         if check_function_is_branching(given) {
-            state.some_at_the_tails(given);
-            return None;
+            unknown_ends = check_overflow_unknown_ends(&state, world, given);
+            if unknown_ends.is_empty() || check_overflow_a_number_inside(want) {
+                state.some_at_the_tails(given);
+                return None;
+            }
         }
         if check_overflow_a_number_inside(want) { return Some(FactWrap::Constructor); }
-        let shown = arith_shown(&written_expression(world.words, given));
+        if unknown_ends.is_empty() { unknown_ends.push(given); }
         let wanted = check_overflow_wanted(want);
-        state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` is, so it can't put it into a `{}`.", shown, wanted), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T = …`."))));
+        for each in unknown_ends.iter() {
+            let each = *each;
+            let shown = arith_shown(&written_expression(world.words, each));
+            state.findings.push(check_refusal("NK1342", span, format!("The compiler can't tell what type `{}` is, so it can't put it into a `{}`.", shown, wanted), vec![String::from("What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).")], Some(String::from("Write the type down where the value is made, such as `let x: T = …`."))));
+        }
         return None;
     }
     let how = match check_wrap_for(found, want, literal) { Some(__nikaia_value) => __nikaia_value, None => return None };

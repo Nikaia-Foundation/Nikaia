@@ -12,7 +12,7 @@ error[NK1102]: The value for `n` here is `ref String`, but it has to be `i64`.
  10 |     entry rule b -> i64 = v:Item("x") -> { v }
     |                             ^^^^^^^^^
     |
-    = help: Make it an `i64`, or change the declaration to `ref String`.
+    = help: Make it an `i64`.
 error[NK1109]: `Item` has no option called `wide`.
    --> tests/grammar_values_are_checked_where_they_stand.nika:11:29
     |

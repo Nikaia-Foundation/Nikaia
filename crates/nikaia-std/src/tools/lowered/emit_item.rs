@@ -319,8 +319,9 @@ impl EmitState {
         let trait_text = emit_item_text_of(world, trait_name);
         let has_trait = trait_name.is_some();
         if has_trait && trait_text == "Error" {
+            let public = emit_item_public_type(world, &target_name);
             out.push(&format!("impl{} {}{} {{\n", params, target_name, params));
-            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, None)?; }
+            for method in methods.iter() { self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, None, Some(public))?; }
             out.push("}\n");
             out.push(&format!("impl{} std::fmt::Display for {}{} {{\n    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{\n        f.write_str(&self.message())\n    }}\n}}\n", params, target_name, params));
             out.push(&format!("impl{} std::error::Error for {}{} {{}}\n", params, target_name, params));

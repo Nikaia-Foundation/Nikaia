@@ -1,0 +1,10 @@
+// `&` in a type: the note says a view is written without a mark, not
+// `ref T` (ADR-views-3 D4; #1403).
+
+fn total(xs: &Vec[i64]) -> i64 {
+	return xs.len() as i64
+}
+
+fn main() throws {
+	println(f"{total([1])}")
+}

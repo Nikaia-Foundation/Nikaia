@@ -334,6 +334,23 @@ the build fixed. D11's rule applies to both, one type over:
 The migration writes these by dropping `ref`; it keeps the type, and it does
 not write `keep` for a parameter whose only use is a read.
 
+### D16 — A list, struct or tuple built from a parameter and handed back holds views of it; its result is `from` it.
+
+*Added November 8, 2026 (#1472), from migrating the tests.*
+
+D5 says building a value from a parameter is not keeping it, and D12 says
+handing a parameter back is a view, not a keep. Together they decide the case
+the migration met: a function that builds a list, a struct, a variant's value
+or a tuple from a lent parameter and returns it hands back views of that
+parameter.
+
+* `fn names(n: String) -> Vec[String] { ["a", n] }` keeps nothing; the result
+  is `from n`, as returning `n` itself is (D12).
+* The parameter stays lent; the caller may pass the same value twice, and the
+  result lives no longer than what it points into.
+* A function that must hand back a value independent of the parameter writes
+  `keep` on it, or copies (`n.clone()`); the checker does not choose for it.
+
 ## 5. Consequences
 
 A signature now tells a reader what a function does with each argument: kept

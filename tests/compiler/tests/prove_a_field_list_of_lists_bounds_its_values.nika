@@ -1,0 +1,103 @@
+/// **A field's list of lists bounds the values of every inner list**
+/// (ADR-306 D28, #1470): where every push into an inner list of `col` is
+/// proved below `atoms.len()`, a value read out of one indexes `atoms`
+/// unchecked. An unchecked push leaves the read checked, and so does a
+/// read the inner lists say nothing of.
+struct W {
+	atoms: Vec[i64],
+	col: Vec[Vec[i64]],
+}
+
+pub fn local() -> i64 {
+	let atoms = [5, 6, 7]
+	let mut col: Vec[Vec[i64]] = []
+	col.push([])
+	col[0].push(2)
+	col[0].push(1)
+	let mut s = 0
+	for a in col[0] {
+		s += atoms[a]
+	}
+	s
+}
+
+impl W {
+	pub fn add(ref mut self, c: i64, x: i64) {
+		if c < 0 || c >= self.col.len() || x < 0 || x >= self.atoms.len() {
+			return
+		}
+		self.col[c].push(x)
+	}
+
+	pub fn set(ref mut self, c: i64, i: i64, x: i64) {
+		if c < 0 || c >= self.col.len() || i < 0 || i >= self.col[c].len() || x < 0 || x >= self.atoms.len() {
+			return
+		}
+		self.col[c][i] = x
+	}
+
+	pub fn grow(ref mut self) {
+		self.col.push([])
+		self.atoms.push(0)
+	}
+
+	pub fn sum(ref self, c: i64) -> i64 {
+		let mut s = 0
+		if c < 0 || c >= self.col.len() {
+			return 0
+		}
+		for a in self.col[c] {
+			s += self.atoms[a]
+		}
+		s
+	}
+
+	pub fn at(ref self, c: i64, i: i64) -> i64 {
+		if c < 0 || c >= self.col.len() || i < 0 || i >= self.col[c].len() {
+			return 0
+		}
+		let a = self.col[c][i]
+		return self.atoms[a]
+	}
+
+	/// The inner lists may all be empty: they say nothing of `atoms`.
+	pub fn first(ref self) -> i64 {
+		return self.atoms[0]
+	}
+}
+
+/// A push nobody checks: the values of `col` are bounded by nothing.
+struct V {
+	atoms: Vec[i64],
+	col: Vec[Vec[i64]],
+}
+
+impl V {
+	pub fn add(ref mut self, c: i64, x: i64) {
+		if c < 0 || c >= self.col.len() {
+			return
+		}
+		self.col[c].push(x)
+	}
+
+	pub fn sum(ref self, c: i64) -> i64 {
+		let mut s = 0
+		if c < 0 || c >= self.col.len() {
+			return 0
+		}
+		for a in self.col[c] {
+			s += self.atoms[a]
+		}
+		s
+	}
+}
+
+fn main() throws {
+	let mut w = W { atoms: [1, 2], col: [[]] }
+	w.add(0, 1)
+	w.set(0, 0, 0)
+	w.grow()
+	let mut v = V { atoms: [1, 2], col: [[]] }
+	v.add(0, 1)
+	println(f"{w.sum(0)} {w.at(0, 0)} {w.first()} {local()} {v.sum(0)}")
+}

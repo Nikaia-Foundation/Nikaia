@@ -1,0 +1,20 @@
+// An element of a local list handed where a value of its own is wanted
+// (#1404): a `keep` parameter or a `push` takes it, but what the list keeps
+// is lent. Refused with a `.clone()` help (NK1131), never a move out of a
+// reference that the language below refuses (NK1343).
+
+struct P {
+    name: String,
+}
+
+fn store(keep p: P, mut into: Vec[P]) {
+    into.push(p)
+}
+
+fn main() throws {
+    let xs: Vec[P] = [P { name: "a" }]
+    let mut all: Vec[P] = []
+    store(xs[0], all)
+    all.push(xs[0])
+    println(all.len())
+}

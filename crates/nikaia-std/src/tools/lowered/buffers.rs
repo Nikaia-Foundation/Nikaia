@@ -1777,13 +1777,16 @@ pub(crate) fn element_refusal(keeper: &str, why: &str, help: &str, plan: &Buffer
 }
 
 pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> UntetheredWalk {
-    let mut walk = UntetheredWalk { owned: collections::BTreeSet::new(), views: collections::BTreeMap::new(), carrying: collections::BTreeMap::new(), lets: collections::BTreeMap::new(), lists: collections::BTreeSet::new(), anchored: collections::BTreeMap::new(), findings: vec![] };
+    let mut walk = UntetheredWalk { owned: collections::BTreeSet::new(), views: collections::BTreeMap::new(), carrying: collections::BTreeMap::new(), lets: collections::BTreeMap::new(), lists: collections::BTreeSet::new(), made: collections::BTreeSet::new(), elements: collections::BTreeMap::new(), anchored: collections::BTreeMap::new(), findings: vec![] };
     let written = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return walk };
-    let fields = untethered_fields(written, ask, false);
+    let fields = untethered_fields(written, ask, 0);
     let bare = untethered_view(written, ask);
-    let text_fields = untethered_fields(written, ask, true);
-    if !bare && fields.is_empty() && text_fields.is_empty() { return walk; }
-    let asked = UntetheredAsk { function: nikaia_std::block::Text::from(function.to_string()), bare, struct_name: nikaia_std::block::Text::from(ask.names.resolve(written.name).to_string()), fields, text_fields };
+    let text_fields = untethered_fields(written, ask, 1);
+    let text = untethered_text_view(written, ask);
+    let owned_text = untethered_owned_text(written, ask);
+    let owned_text_fields = untethered_fields(written, ask, 2);
+    if !bare && !text && !owned_text && fields.is_empty() && text_fields.is_empty() && owned_text_fields.is_empty() { return walk; }
+    let asked = UntetheredAsk { function: nikaia_std::block::Text::from(function.to_string()), bare, text, owned_text, struct_name: nikaia_std::block::Text::from(ask.names.resolve(written.name).to_string()), fields, text_fields, owned_text_fields };
     untethered_block(body, &asked, ask, &mut walk);
     if !body.stmts.is_empty() {
         let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
@@ -1799,9 +1802,12 @@ pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: 
 pub(crate) struct UntetheredAsk {
     pub(crate) function: String,
     pub(crate) bare: bool,
+    pub(crate) text: bool,
+    pub(crate) owned_text: bool,
     pub(crate) struct_name: String,
     pub(crate) fields: collections::BTreeSet<String>,
     pub(crate) text_fields: collections::BTreeSet<String>,
+    pub(crate) owned_text_fields: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1811,6 +1817,8 @@ pub(crate) struct UntetheredWalk {
     pub(crate) carrying: collections::BTreeMap<String, String>,
     pub(crate) lets: collections::BTreeMap<String, Source>,
     pub(crate) lists: collections::BTreeSet<String>,
+    pub(crate) made: collections::BTreeSet<String>,
+    pub(crate) elements: collections::BTreeMap<String, String>,
     pub(crate) anchored: collections::BTreeMap<i64, Source>,
     pub(crate) findings: Vec<Finding>,
 }
@@ -1823,13 +1831,18 @@ pub(crate) fn untethered_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
     true
 }
 
+pub(crate) fn untethered_owned_text(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    if ty.is_view || ty.is_tuple || (*ty.code).is_some() || ty.is_nullable || ty.lasting { return false; }
+    last_segment(ask.names.resolve(ty.name)) == "String"
+}
+
 pub(crate) fn untethered_text_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     if !ty.is_view || ty.is_tuple || (*ty.code).is_some() || ty.is_nullable { return false; }
     let base = last_segment(ask.names.resolve(ty.name));
     base == "String" || base == "str"
 }
 
-pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, text: bool) -> collections::BTreeSet<String> {
+pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, kind: i64) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     if ty.is_view || ty.is_tuple { return out; }
     let wanted = nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string());
@@ -1837,7 +1850,7 @@ pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '
         match &item.node {
             Item::Struct { name, fields, .. } => {
                 let name = *name;
-                if ask.names.resolve(name) == wanted { for field in fields.iter() { if !text && untethered_view(&field.ty, ask) || text && untethered_text_view(&field.ty, ask) { out.insert(nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string())); } } }
+                if ask.names.resolve(name) == wanted { for field in fields.iter() { if kind == 0 && untethered_view(&field.ty, ask) || kind == 1 && untethered_text_view(&field.ty, ask) || kind == 2 && untethered_owned_text(&field.ty, ask) { out.insert(nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string())); } } }
             },
             _ => { },
         }
@@ -1888,7 +1901,12 @@ pub(crate) fn untethered_let(name: String, value: &Expr, ty: Option<&Type>, span
     walk.carrying.remove(&name);
     walk.lets.remove(&name);
     walk.lists.remove(&name);
-    if untethered_made_list(value, ty, ask) {
+    walk.made.remove(&name);
+    walk.elements.remove(&name);
+    let element_of = untethered_element(value, ask, &walk);
+    if element_of.is_some() { walk.elements.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(element_of, || "".into())); }
+    if !untethered_a_read(value) && untethered_owned_items(value, ty, ask) { walk.made.insert(nikaia_std::block::Text::from(name.to_string())); }
+    if untethered_made_list(value, ty, ask) || ty.is_none() && own_text_items_written(value) {
         walk.lets.insert(nikaia_std::block::Text::from(name.to_string()), Source::Buffer { at: span.start as i64, name: nikaia_std::block::Text::from(name.to_string()), ty: String::from(""), span: span.clone() });
         walk.lists.insert(nikaia_std::block::Text::from(name.to_string()));
     }
@@ -1914,11 +1932,84 @@ pub(crate) fn untethered_let(name: String, value: &Expr, ty: Option<&Type>, span
 pub(crate) fn untethered_made_list(value: &Expr, ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
     let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
     if written.is_view || written.is_nullable || written.is_tuple || !is_a_container_name(ask.names.resolve(written.name)) { return false; }
+    if written.generics.iter().any(|g| { g.is_view }) { return false; }
     !matches!(value, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. })
+}
+
+pub(crate) fn untethered_a_read(value: &Expr) -> bool {
+    match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        Expr::SafeField { .. } => true,
+        Expr::Index { .. } => true,
+        Expr::Unary { op, .. } => matches!(op, UnaryOp::Ref),
+        _ => false,
+    }
+}
+
+pub(crate) fn untethered_owned_items(value: &Expr, ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    if ty.is_some() {
+        let written = match ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+        return untethered_owned_list(written, ask);
+    }
+    if own_text_items_written(value) { return true; }
+    let called = match value {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
+            _ => return false,
+        } },
+        _ => return false,
+    };
+    for item in ask.items.iter() {
+        match &item.node {
+            Item::Fn { name, ret_type, receiver, .. } => {
+                let name = *name;
+                if receiver.is_none() && name.is_some() && ask.names.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }) == called {
+                    let returned = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    return untethered_owned_list(returned, ask);
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
+pub(crate) fn untethered_owned_list(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
+    if ty.is_view || ty.is_nullable || ty.is_tuple || ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(ty.name)) { return false; }
+    untethered_owned_text(nikaia_std::index::get(&ty.generics, 0), ask)
+}
+
+pub(crate) fn untethered_element(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &UntetheredWalk) -> Option<String> {
+    match value {
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let named = nikaia_std::block::Text::from(ask.names.resolve(name).to_string());
+                if a_range(index) || !walk.made.contains(&named) { return None; }
+                Some(named)
+            },
+            _ => None,
+        } },
+        Expr::Variable(name, _) => { let name = *name; match *nikaia_std::index::get(&walk.elements, ask.names.resolve(name)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } },
+        _ => None,
+    }
 }
 
 pub(crate) fn untethered_text_root(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &UntetheredWalk) -> Option<String> {
     match value {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let list = match match *nikaia_std::index::get(&walk.elements, ask.names.resolve(name)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if !walk.lists.contains(&list) { return None; }
+            Some(list)
+        },
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
             Expr::Variable(name, _) => {
                 let name = *name;
@@ -1994,9 +2085,36 @@ pub(crate) fn untethered_struct(value: &Expr, asked: &UntetheredAsk, ask: &Buffe
     None
 }
 
-pub(crate) fn untethered_returned(value: &Expr, at: &Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+pub(crate) fn untethered_returned(value: &Expr, at: &Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) { for tail in untethered_tails(value) { untethered_returned_one(tail, at, asked, ask, walk); } }
+
+pub(crate) fn untethered_tails(value: &Expr) -> Vec<&Expr> {
+    let mut out: Vec<&Expr> = vec![];
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return vec![value] };
+            out.extend(untethered_block_tails(then_branch));
+            out.extend(untethered_block_tails(otherwise));
+        },
+        Expr::Block(block, _) => { out.extend(untethered_block_tails(block)); },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { out.extend(untethered_tails(&arm.body)); } },
+        _ => { out.push(value); },
+    }
+    out
+}
+
+pub(crate) fn untethered_block_tails(block: &Block) -> Vec<&Expr> {
+    if block.stmts.is_empty() { return vec![]; }
+    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        Stmt::Expr(last) => untethered_tails(last),
+        _ => vec![],
+    }
+}
+
+pub(crate) fn untethered_returned_one(value: &Expr, at: &Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+    untethered_unplaced(value, at, asked, ask, walk);
     let mut found: Option<String> = None;
-    if asked.bare {
+    if asked.text { found = untethered_text_root(value, ask, &walk); }
+    if found.is_none() && asked.bare {
         let root = nikaia_std::index::or(untethered_root(value, ask, &walk), || "".into());
         if root != "" && walk.owned.contains(&root) { found = Some(root); }
     }
@@ -2017,4 +2135,36 @@ pub(crate) fn untethered_returned(value: &Expr, at: &Span, asked: &UntetheredAsk
     let bound = match *nikaia_std::index::get(&walk.lets, &root) { Some(__nikaia_value) => __nikaia_value, None => return };
     walk.anchored.insert(source_at(bound), bound.clone());
 }
+
+pub(crate) fn untethered_unplaced(value: &Expr, at: &Span, asked: &UntetheredAsk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut UntetheredWalk) {
+    if asked.owned_text || asked.text {
+        let list = untethered_element(value, ask, &walk);
+        if list.is_some() && (asked.owned_text || untethered_text_root(value, ask, &walk).is_none()) {
+            walk.findings.push(untethered_refusal(nikaia_std::index::or(list.as_deref(), || ""), at));
+            return;
+        }
+    }
+    if asked.owned_text_fields.is_empty() && asked.text_fields.is_empty() { return; }
+    let (name, fields) = match value {
+        Expr::StructLit { name, fields, .. } => { let name = *name; (name, fields) },
+        _ => return,
+    };
+    if ask.names.resolve(name) != asked.struct_name { return; }
+    for field in fields.iter() {
+        let named = nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string());
+        let owned = asked.owned_text_fields.contains(&named);
+        if !owned && !asked.text_fields.contains(&named) { continue; }
+        let shorthand = Expr::Variable(field.name, fresh_id());
+        let (list, rooted) = match &field.value {
+            None => (untethered_element(&shorthand, ask, &walk), untethered_text_root(&shorthand, ask, &walk).is_some()),
+            Some(given) => (untethered_element(given, ask, &walk), untethered_text_root(given, ask, &walk).is_some()),
+        };
+        if list.is_some() && (owned || !rooted) {
+            walk.findings.push(untethered_refusal(nikaia_std::index::or(list.as_deref(), || ""), at));
+            return;
+        }
+    }
+}
+
+pub(crate) fn untethered_refusal(list: &str, at: &Span) -> Finding { refusal("NK2304", at.clone(), format!("An element of `{}`, a list this function made, is handed back as text of its own, which the tether cannot lower.", list), vec![String::from("An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type or a list literal of text made there.")], format!("Hand back a copy of the element with `.clone()`, or declare the list's type: `let {}: Vec[String] = …`.", list)) }
 

@@ -1,0 +1,30 @@
+// A `String` parameter its callers hand both a view and text of its own is
+// still lent in the body (ADR-282 D15, #1479): `s` reads as a view, so a `??`
+// that falls back on it and a later read of it both check.
+
+fn is_float(s: String) -> bool sync {
+    let body = s.strip_prefix("-") ?? (s.strip_prefix("+") ?? s)
+    if body == ".inf" {
+        return true
+    }
+    return s == ".nan"
+}
+
+fn fits(k: i64, s: String) -> bool sync {
+    return match k {
+        1 => is_float(s)
+        else => true
+    }
+}
+
+fn made(raw: String) -> String sync {
+    return f"{raw.trim()}"
+}
+
+fn main() throws {
+    let raw = f" -.inf{""}"
+    println(fits(1, made(raw)))
+    println(fits(1, raw.trim()))
+    println(is_float(".nan"))
+    println(is_float(f"+1{""}"))
+}

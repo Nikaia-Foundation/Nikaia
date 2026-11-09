@@ -444,6 +444,12 @@ pub(crate) fn check_core_places_a_declared_field<H: CheckHost>(state: &mut Check
             state.hands_over(world, v, &given, &to, span);
         }
     }
+    if check_core_places_a_handle(&given) {
+        if value.is_none() { state.facts.stored_handle_fields.insert((id_of(expr) as i64, nikaia_std::block::Text::from(field.to_string()))); } else {
+            let v: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return true };
+            check_core_places_store_handle(state, v, &given);
+        }
+    }
     state.field_is_reachable(name, &found_field, span);
     let mut found: Ty = given.clone();
     if value.is_some() {
@@ -541,6 +547,23 @@ pub(crate) fn check_core_places_a_kept_fn(state: &CheckState, name: &str, given:
         Ty::Fn { .. } => state.lookup(name).is_some() && !state.run_code.contains(name),
         _ => false,
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_places_a_handle(ty: &Ty) -> bool {
+    match ty {
+        Ty::Named { name, view, .. } => { let view = *view; !view && (name == "Shared" || name == "SharedMut") },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: &Ty) {
+    if !check_core_places_a_handle(ty) { return; }
+    let place = matches!(value, Expr::Variable(_, _) | Expr::Field { .. });
+    if place { state.facts.stored_handles.insert(id_of(value) as i64); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

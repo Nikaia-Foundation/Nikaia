@@ -455,15 +455,20 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
         Expr::Variable(other, _) => {
             let other = *other;
             let held = vc_last_named(outer, ask.names.resolve(other));
-            if held < 0 { return None; }
+            if held < 0 {
+                if ask.lent.contains(&(at.start as i64)) { return vc_place_view(at, name, value, outer, ask); }
+                return None;
+            }
             let mut view = (*nikaia_std::index::get(&outer, nikaia_std::index::at(held))).clone();
             view.name = nikaia_std::block::Text::from(name.to_string());
             view.made = at.clone();
             return Some(view);
         },
-        Expr::Index { .. } => {
+        Expr::Index { index, .. } => {
+            let index = nikaia_std::boxed::open(index);
             if ask.mut_viewed.contains(&(id_of(value) as i64)) { return vc_mut_view(at, name, value, outer, ask); }
-            if !ask.lent.contains(&(at.start as i64)) { return None; }
+            let cut = matches!(index, Expr::Range { .. });
+            if !cut && !ask.lent.contains(&(at.start as i64)) { return None; }
             return vc_place_view(at, name, value, outer, ask);
         },
         Expr::Field { .. } => {

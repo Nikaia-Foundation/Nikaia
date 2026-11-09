@@ -198,15 +198,15 @@ fn main() throws {
     // [ADR-094](../../../docs/specification/adr/adr-094.md) D1, so a help that
     // asked for one named a way out that does not exist ([Part III
     // C.2](../../../docs/specification/30-nikaia-tooling.md)). The other half —
-    // *declare the result a view* — is real and is offered, in the field's own
-    // type and never always `&str`.
+    // *a result that is a view* — is real and is named, with no mark to
+    // write since ADR-views-3 D4 and D7 (#1403), never a `ref`.
     assert!(
         refusal
             .help
             .as_deref()
             .is_some_and(|h| h.contains("self.tags.clone()")
                 && h.contains("take `keep self`")
-                && h.contains("Declare the result `ref Vec[i64]`")
+                && h.contains("handed back as it is, with no mark")
                 && !h.contains("&self.tags")),
         "the ways out, and no `&` for the author to write: {:?}",
         refusal.help
@@ -317,7 +317,7 @@ fn the_third_way_out_is_named_only_where_the_result_is() {
             .unwrap_or_else(|| panic!("a field by value is refused: {found:#?}"));
         let help = refusal.help.as_deref().expect("every refusal has one");
         assert_eq!(
-            help.contains("Declare the result `ref String`"),
+            help.contains("handed back as it is, with no mark"),
             offered,
             "{body}\n{help}"
         );

@@ -187,7 +187,7 @@ impl EmitState {
     pub fn count_at(&self, crossings: bool, function: &str, value: &str) -> Count {
         if !crossings { return Count::Plain; }
         let key = format!("{}::{}", function, value);
-        let found = match self.shared.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Count::Atomic };
+        let found = match self.shared.get(&key).copied() { Some(__nikaia_value) => __nikaia_value, None => return Count::Atomic };
         found.clone()
     }
     pub(crate) fn emit_any_can_fail(&self, world: &EmitWorld<'_, '_, '_, '_>, statement: i64, all: &[Expr]) -> bool {

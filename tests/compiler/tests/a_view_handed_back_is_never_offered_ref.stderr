@@ -1,0 +1,47 @@
+error[NK1131]: You can't give away `self.items` here: this method only borrows `self`.
+   --> tests/a_view_handed_back_is_never_offered_ref.nika:13:4
+    |
+ 13 | 			return self.items
+    |    ^^^^^^^^^^^^^^^^^
+    |
+    = note: `self` and `mut self` borrow the value, and `items` is a `Vec[Item]`. Giving it away would take a piece out of something this method doesn't own.
+    = help: Write `self.items.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark.
+error[NK1131]: You can't give away `shelf.items` here: `shelf` is only borrowed.
+   --> tests/a_view_handed_back_is_never_offered_ref.nika:22:3
+    |
+ 22 | 		return shelf.items
+    |   ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `shelf` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `shelf.items` is a `Vec[Item]`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `shelf.items.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.
+error[NK1104]: You're returning `ref Vec[Item]`, but the function is declared to return `Vec[Item]`.
+   --> tests/a_view_handed_back_is_never_offered_ref.nika:30:10
+    |
+ 30 | 		return items
+    |          ^^^^^
+    |
+    = help: Write `.clone()` to turn this view into a value of its own.
+warning[NK1261]: `ref` is redundant here: a result written `ref String` says what `String` already says.
+   --> tests/a_view_handed_back_is_never_offered_ref.nika:40:1
+    |
+ 40 | fn label() -> ref String {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+error[NK1104]: You're returning `String`, but the function is declared to return `ref String`.
+   --> tests/a_view_handed_back_is_never_offered_ref.nika:42:9
+    |
+ 42 | 	return s
+    |         ^
+    |
+    = help: Write `String` without `ref` in the declaration: text of its own is lent wherever a view suffices.
+error[NK1102]: `total` expects `xs` to be `Vec[i64]`, but you're passing `ref Array[?]`.
+   --> tests/a_view_handed_back_is_never_offered_ref.nika:48:98
+    |
+ 48 | 	println(f"{label()} {shelf.items_of(true).len()} {items_in([]).len()} {copied([]).len()} {total(v[0..<2])}")
+    |                                                                                                  ^^^^^^^^
+    |
+    = note: It's declared as `total(xs: Vec[i64]) -> i64`.
+    = help: This is part of a list. Declare the parameter `Array[i64]` to take a part or a whole list alike.
+5 type errors

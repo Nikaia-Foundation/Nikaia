@@ -1,0 +1,10 @@
+error[NK2105]: You're using `s` again, but it was passed to `insert`, which keeps it.
+   --> tests/ownership_matrix_owned_lent_map_value.nika:17:5
+    |
+ 17 |     println(s)
+    |     ^
+    |
+    = note: `s` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `s.clone()`.
+

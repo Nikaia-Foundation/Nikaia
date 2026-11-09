@@ -42,7 +42,7 @@ pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &
 
 impl EmitState {
     pub(crate) fn emit_place_reach(&self, base: &Expr, place: &str, flattens: bool) -> String {
-        let view = match self.facts.viewed_reaches.get(&node_key(base)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(place.to_string()) };
+        let view = match self.facts.viewed_reaches.get(&node_key(base)).copied() { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(place.to_string()) };
         match view {
             FactViewed::Text => emit_place_text_reach(place, flattens),
             FactViewed::Plain => emit_place_plain_reach(place, flattens),
@@ -163,6 +163,7 @@ impl EmitState {
             if i > 0 { out.push(", "); }
             i += 1;
             self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
+            if self.facts.stored_handles.contains(&node_key(item)) { out.push(".clone()"); }
         }
         out.push("]");
         Ok(())
@@ -457,17 +458,18 @@ impl EmitState {
                 if same {
                     let mut inner = EmitOut::empty();
                     self.emit_expr(world, walk, &mut inner, host, value, depth, flow, scope)?;
-                    if inner.buf == written && !self.facts.lent_fields.contains(&node_key(value)) { continue; }
+                    if inner.buf == written && !self.facts.lent_fields.contains(&node_key(value)) && !self.facts.stored_handles.contains(&node_key(value)) { continue; }
                 }
                 out.push(": ");
                 out.push(&before);
                 if self.facts.lent_fields.contains(&node_key(value)) { out.push("&"); }
                 self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+                if self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
                 out.push(&after);
-            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) {
+            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.stored_handle_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) {
                 let mut put = nikaia_std::block::Text::from(written.to_string());
                 if self.facts.kept_byte_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
-                if self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("{}.clone()", written); }
+                if self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.stored_handle_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("{}.clone()", written); }
                 if wrapped { put = format!("Some({})", put); }
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }

@@ -67,6 +67,11 @@ pub struct BoundsContext {
 	/// **The field reads of a whole-number type**, by node (ADR-306 D17):
 	/// a path of fields from a name, `p.end`, is a number of the walk.
 	pub whole_fields: collections::BTreeSet[i64],
+	/// The `for` heads that bind one whole number, by the node walked.
+	pub whole_loops: collections::BTreeSet[i64],
+	/// The `for` heads that bind several names, by the node walked, with
+	/// the positions of those bound to a whole number.
+	pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
 	/// **The length an `Array[T, N]`'s type says**, by the node of the
 	/// array read or counted: `len()` is `N` (#711).
 	pub array_lengths: collections::BTreeMap[i64, i64],
@@ -80,6 +85,28 @@ pub struct BoundsContext {
 	/// #1431), by node: a read of one stops the program outside, so past it
 	/// the position is inside, whatever bound the base.
 	pub list_indices: collections::BTreeSet[i64],
+	/// **What each function of the file is found to return** (ADR-306 D23),
+	/// by name: never published, like a frame (ADR-391 D4).
+	pub returns: collections::BTreeMap[String, BoundsReturns],
+}
+
+/// **A callee's found postcondition** (ADR-306 D23): the list parameters, by
+/// position, that what it returns lies below the length of, `0 <= result <
+/// p.len()`; with `each`, every element of the list it returns does (D24).
+/// `sized` holds those of them whose length the callee's walk read as one
+/// of a list whose elements take space (#383): the caller's length of the
+/// list handed there is at most `length_below()` as well (#1465).
+///
+/// `range` is the bound D7 found on every element of the list returned
+/// (D24): `0 <= x < 10` of a list of digits. `pending` while the rounds
+/// collect: a call of one adds nothing to what it is written into, as a
+/// recursive call has not returned yet.
+pub struct BoundsReturns {
+	pub each: bool,
+	pub below: collections::BTreeSet[i64],
+	pub sized: collections::BTreeSet[i64],
+	pub range: Range?,
+	pub pending: bool,
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -122,6 +149,10 @@ pub struct BoundsProven {
 	/// unbounded into.
 	pub fields: collections::BTreeMap[String, Range],
 	pub fields_lost: collections::BTreeSet[String],
+	/// **The list parameters the body's every return was proved below**
+	/// (ADR-306 D23), by position, where the walk was asked; nothing where a
+	/// return was lost.
+	pub returned: collections::BTreeSet[i64]?,
 }
 
 /// What holds at one point of a body.
@@ -257,12 +288,30 @@ struct BoundsWalk {
 	/// `bounds_rules.nika`), and the values they hold of, by their type.
 	rules: Vec[BoundsRule],
 	rule_roots: collections::BTreeMap[String, String],
+	/// What the `index` and `inner` rules say of every element, by the
+	/// element it names (`self.col[].each()`): they hold at every point
+	/// (each write is checked where it stands), so they stand beside the
+	/// facts, not among the newest `most_facts()`, and join a question that
+	/// names that element (`bounding_known`).
+	rule_facts: Vec[(String, i64)],
 	/// Whether this walk checks `rules` in a method: the index of each rule
 	/// the method is not proved to keep goes into `rule_failed`; the
 	/// `result` rules of the method are `checked_results`.
 	checking: bool,
 	checked_results: collections::BTreeSet[i64],
 	rule_failed: collections::BTreeSet[i64],
+	/// **The postcondition this walk looks for** (ADR-306 D23): the name of
+	/// each list parameter by position, empty for any other and when the
+	/// walk looks for none; whether the function returns a list (`each`).
+	return_params: Vec[String],
+	return_each: bool,
+	/// Of `return_params`, the positions every return seen was proved below
+	/// (`null` before the first); the lists a list return handed back; the
+	/// returns seen, by the node of their value; whether one was lost.
+	return_below: collections::BTreeSet[i64]?,
+	return_names: collections::BTreeSet[String],
+	return_seen: collections::BTreeSet[i64],
+	return_lost: bool,
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -312,6 +361,7 @@ fn no_proofs() -> BoundsProven {
 		derived: collections::BTreeMap(),
 		fields: collections::BTreeMap(),
 		fields_lost: collections::BTreeSet(),
+		returned: null,
 	}
 }
 
@@ -349,6 +399,19 @@ pub fn bounds_aggressive(
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> BoundsProven {
 	let mut walk = bounding_new(args, body, nonnegative, context, program, words)
+	return bounds_rounds(walk, args, body, context, program, words, ask)
+}
+
+/// **D7's rounds over one body**, with `walk` made for it.
+fn bounds_rounds(
+	mut walk: BoundsWalk,
+	args: ref Vec[FnArg],
+	body: ref Block,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> BoundsProven {
 	rules_settle(walk, args, body, context, program, words, ask)
 	let mut settled = false
 	if !walk.shape.roots.is_empty() {
@@ -425,7 +488,10 @@ pub fn bounds_aggressive(
 			walk.proven.fields_lost.insert(key_root(key))
 		}
 	}
-	return walk.proven
+	if !walk.return_params.is_empty() {
+		walk.proven.returned = bounding_returns_found(walk, body, words)
+	}
+	return walk.proven.clone()
 }
 
 /// **The bounds of the list fields' values, found program-wide** (ADR-306
@@ -590,10 +656,17 @@ fn bounding_new(
 		typed: collections::BTreeMap(),
 		rules: [],
 		rule_roots: collections::BTreeMap(),
+		rule_facts: [],
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
 		lists: collections::BTreeSet(),
+		return_params: [],
+		return_each: false,
+		return_below: null,
+		return_names: collections::BTreeSet(),
+		return_seen: collections::BTreeSet(),
+		return_lost: false,
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -651,6 +724,10 @@ fn bounding_pass(
 	walk.written = collections::BTreeMap()
 	walk.poisoned = collections::BTreeSet()
 	walk.written_ends = collections::BTreeMap()
+	walk.return_below = null
+	walk.return_names = collections::BTreeSet()
+	walk.return_seen = collections::BTreeSet()
+	walk.return_lost = false
 	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [] }
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -684,7 +761,7 @@ fn bounding_pass(
 	bounding_derived_entry(walk, facts, args, context)
 	// **The rules between list fields** (ADR-369 D4), of `self` and of each
 	// parameter of a type that has them.
-	rules_given(walk, facts)
+	rules_given(walk, facts, args, words)
 	let leaves = bounding_block(walk, body, facts, context, program, words, ask)
 	if !leaves {
 		// What the body ends with is what it hands back.
@@ -985,6 +1062,10 @@ fn bounding_field_list(
 		},
 		else => {},
 	}
+	// An empty map writes no value (ADR-306 D24).
+	if is_empty_map(value, words) {
+		return
+	}
 	let elements = elements_key(walk.shape, value, words)
 	if elements != null {
 		let bound = bounding_assumed(walk, elements ?? "")
@@ -1061,12 +1142,24 @@ fn bounding_proves(
 	goal: i64,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
-	return ask(walk.arena, bounding_known(walk, facts), goal)
+	return ask(walk.arena, bounding_known(walk, facts, goal), goal)
 }
 
 /// The facts and what the ledgers ensure of the values the walk named.
-fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts) -> Vec[i64] {
+fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64) -> Vec[i64] {
 	let mut all = facts.facts.clone()
+	if !walk.rule_facts.is_empty() {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(asked, read)
+		for fact in facts.facts {
+			walk.arena.variables(fact, read)
+		}
+		for (each, fact) in walk.rule_facts {
+			if read.contains(each) {
+				all.push(fact)
+			}
+		}
+	}
 	for (name, axiom) in walk.axioms {
 		if !walk.unsized_names.contains(name) {
 			for fact in axiom {
@@ -1096,7 +1189,7 @@ fn bounding_term(
 	if known != null {
 		return Range::exactly(known ?? 0)
 	}
-	let guess = candidate(term, bounding_known(walk, facts), fn(at) { walk.arena.at(at) })
+	let guess = candidate(term, bounding_known(walk, facts, term), fn(at) { walk.arena.at(at) })
 	let mut confirmed = Range::open()
 	if guess.hi != null {
 		let hi = guess.hi ?? 0
@@ -1189,6 +1282,12 @@ fn bounding_range(
 				}
 				return into
 			}
+			// **A value read out of a map lies where every value put into it
+			// does** (ADR-306 D24), as one read out of a list.
+			if args.len() == 1 && words.resolve(method) == "get" {
+				let key = elements_key(walk.shape, receiver, words) ?? return null
+				return bounding_assumed(walk, key)
+			}
 		},
 		Expr::Index { base, .. } => {
 			let key = elements_key(walk.shape, base, words) ?? return null
@@ -1210,6 +1309,10 @@ fn bounding_range(
 		Expr::Coalesce { value, fallback, .. } => {
 			let held = bounding_range(walk, value, facts, context, program, words, ask)
 				?? return null
+			// `x ?? return`, `?? continue`, `?? break` leave: `x` is read.
+			if bounding_leaves(fallback) {
+				return held
+			}
 			let otherwise = bounding_range(walk, fallback, facts, context, program, words, ask)
 				?? return null
 			let joined = held.join(otherwise)
@@ -1882,6 +1985,17 @@ fn bounding_element_written(
 		Expr::Index { base, index, .. } => {
 			let list = path_of(base, words)
 			if list == null {
+				// An element of an element of a list (`t.col[c][i]`): every
+				// element of that list (ADR-306 D28).
+				match base {
+					Expr::Index { base: outer, .. } => {
+						let of = path_of(outer, words)
+						if of != null {
+							return ((of ?? "").clone(), "", "")
+						}
+					},
+					else => {},
+				}
 				let root = bounding_root_of(base, words) ?? return null
 				return (root, "", "")
 			}
@@ -2034,7 +2148,6 @@ fn bounding_after_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: 
 	for place in changed.elements {
 		bounding_forget_element(walk, facts, place, false)
 	}
-	rules_elements_kept(walk, facts, "")
 }
 
 /// **`expr` as a linear term**, where it is one.
@@ -2471,9 +2584,11 @@ fn bounding_derived_call(
 				words,
 			)
 				?? continue
-			let goal = if claim.strict { walk.arena.lt(left, right) } else {
+			let side = if claim.strict { walk.arena.lt(left, right) } else {
 				walk.arena.le(left, right)
 			}
+			// Of every value of a list: as the callee knows it (#1483).
+			let goal = bounding_each_guarded(walk, side)
 			if given.is_empty() {
 				if bounding_proves(walk, facts, goal, ask) {
 					proved.insert(k)
@@ -2596,11 +2711,13 @@ fn bounding_derived_each(
 			let bound = bounding_assumed(walk, key ?? "") ?? return element
 			if bound.lo != null {
 				let lo = walk.arena.int(bound.lo ?? 0)
-				given.push(walk.arena.ge(element, lo))
+				let low = walk.arena.ge(element, lo)
+				given.push(bounding_each_guarded(walk, low))
 			}
 			if bound.hi != null {
 				let hi = walk.arena.int(bound.hi ?? 0)
-				given.push(walk.arena.le(element, hi))
+				let high = walk.arena.le(element, hi)
+				given.push(bounding_each_guarded(walk, high))
 			}
 		}
 		return element
@@ -2632,9 +2749,11 @@ fn bounding_derived_entry(
 		} else {
 			walk.arena.var(claim.right)
 		}
-		let fact = if claim.strict { walk.arena.lt(left, right) } else {
+		let side = if claim.strict { walk.arena.lt(left, right) } else {
 			walk.arena.le(left, right)
 		}
+		// A claim over every value says nothing of an empty list (#1483).
+		let fact = bounding_each_guarded(walk, side)
 		bounding_push(walk, facts, fact)
 	}
 }
@@ -2692,6 +2811,28 @@ fn bounding_each(
 				out.push(walk.arena.substitute(read, given))
 			}
 		},
+		// **Each element of a list a call is found to return** (ADR-306
+		// D23, D24): `0 <= item < p.len()`.
+		Expr::Call { .. } => {
+			let zero = walk.arena.int(0)
+			// The length is one as `len()` hands back (ADR-385 D1), so that
+			// `item + 1` is proved as after a counted loop (#1465).
+			for (list, sized) in bounding_returned_below(walk, iter, true, context, words) {
+				out.push(walk.arena.ge(item, zero))
+				let len = bounding_length_named(walk, list, sized)
+				out.push(walk.arena.lt(item, len))
+			}
+			// And the range D7 found of its values (D24): `lo <= item <= hi`.
+			let range = bounding_returned_values(walk, iter, context, words) ?? return out
+			if range.lo != null && (range.lo ?? 0) >= 0 - solvable() {
+				let lo = walk.arena.int(range.lo ?? 0)
+				out.push(walk.arena.ge(item, lo))
+			}
+			if range.hi != null && (range.hi ?? 0) <= solvable() {
+				let hi = walk.arena.int(range.hi ?? 0)
+				out.push(walk.arena.le(item, hi))
+			}
+		},
 		else => {},
 	}
 	return out
@@ -2726,6 +2867,38 @@ fn bounding_fresh(mut walk: BoundsWalk) -> i64 {
 /// when `name` changes.
 fn bounding_element_of(name: ref String) -> String {
 	return f"{name}.each()"
+}
+
+/// **What holds of every element says nothing of an empty list** (ADR-306
+/// D21, #1483): `len(xs) <= 0 || fact` for each list `xs` whose element
+/// `xs.each()` the fact reads. Unguarded, `0 <= xs.each() < len(ys)` would
+/// claim `len(ys) >= 1` where `xs` is empty, and contradict `len(ys) == 0`.
+fn bounding_each_guarded(mut walk: BoundsWalk, fact: i64) -> i64 {
+	let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+	walk.arena.variables(fact, read)
+	let zero = walk.arena.int(0)
+	let mut parts: Vec[i64] = []
+	for name in read {
+		let pieces: Vec[ref String] = name.split(".each()").collect()
+		if pieces.len() < 2 {
+			continue
+		}
+		let len = walk.arena.var(length_of(pieces[0]))
+		parts.push(walk.arena.le(len, zero))
+	}
+	if parts.is_empty() {
+		return fact
+	}
+	parts.push(fact)
+	return walk.arena.or(parts)
+}
+
+/// `len(list) >= 1`: where an element of `list` was read, or a loop over it
+/// runs its body, so that what holds of every element holds of that one.
+fn bounding_each_present(mut walk: BoundsWalk, list: ref String) -> i64 {
+	let len = walk.arena.var(length_of(list))
+	let one = walk.arena.int(1)
+	return walk.arena.ge(len, one)
 }
 
 /// The name `expr` is, where it is a bare one.
@@ -3393,7 +3566,6 @@ fn bounding_stmt(
 				},
 				else => {},
 			}
-			rules_element_kept(walk, facts, target, words)
 			return false
 		},
 		Stmt::For { .. } => {
@@ -4999,20 +5171,22 @@ fn bounding_let(
 	// **A sequence held under a name keeps what `std`'s ledger states of
 	// each element** (ADR-375 D5), as facts of a name within it.
 	let held = walk.arena.var(bounding_element_of(name))
-	for fact in bounding_each(walk, value, held, facts, context, program, words) {
+	for each in bounding_each(walk, value, held, facts, context, program, words) {
+		// Nothing where the sequence is empty (#1483).
+		let fact = bounding_each_guarded(walk, each)
 		bounding_push(walk, facts, fact)
 	}
 	// **What a rule between list fields says of the value** (ADR-369 D4):
 	// a method's result inside a list, an element of a list of positions.
 	rules_result_facts(walk, facts, name, value, context, words)
-	match value {
-		Expr::Index { base, .. } => {
-			let key = elements_key(walk.shape, base, words)
-			if key != null {
-				bounding_end_facts(walk, facts, name, key ?? "")
-			}
-		},
-		else => {},
+	// **What the callee is found to return** (ADR-306 D23).
+	bounding_returned_facts(walk, facts, name, value, context, words)
+	let read_from = bounding_read_out_of(value, words)
+	if read_from != null {
+		let key = elements_key(walk.shape, read_from ?? value, words)
+		if key != null {
+			bounding_end_facts(walk, facts, name, key ?? "")
+		}
 	}
 	rules_element_facts(walk, facts, name, value, words)
 	if whole {
@@ -5032,7 +5206,7 @@ fn bounding_let(
 			bounding_bounded(walk, facts, name, value_range ?? Range::open())
 		}
 	}
-	bounding_built(walk, facts, name, value)
+	bounding_built(walk, facts, name, value, words)
 	if walk.shape.roots.contains(name) {
 		match value {
 			Expr::ListLit { items, .. } => {
@@ -5050,8 +5224,41 @@ fn bounding_let(
 				words,
 				ask,
 			),
+			Expr::Call { .. } => bounding_call_root(walk, name, value, context, words),
 			else => {},
 		}
+	}
+}
+
+/// **What `value` is an element of**: `xs` of `xs[i]` and of a map's
+/// `m.get(k)`, through a `??` that leaves (ADR-306 D21, D24).
+fn bounding_read_out_of(value: ref Expr, words: ref winnow_grammar::InternerContext) -> ref Expr? {
+	return match value {
+		Expr::Index { base, .. } => base,
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if args.len() == 1 && words.resolve(method) == "get" {
+				return receiver
+			}
+			return null
+		},
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if bounding_leaves(fallback) {
+				return bounding_read_out_of(inner, words)
+			}
+			return null
+		},
+		else => null,
+	}
+}
+
+/// Whether evaluating `expr` leaves where it stands: `return`, `continue`,
+/// `break`.
+fn bounding_leaves(expr: ref Expr) -> bool {
+	return match expr {
+		Expr::Return(_, _) => true,
+		Expr::Continue(_) => true,
+		Expr::Break(_) => true,
+		else => false,
 	}
 }
 
@@ -5234,6 +5441,21 @@ fn bounding_for(
 			}
 		}
 	}
+	// `for x in xs` over whole numbers: `x` is a number of the walk, of
+	// which every test in the body is a fact (ADR-306 D7, #781).
+	if bindings.len() == 1 && !counted && context.whole_loops.contains(node_key(iter)) {
+		inner.ints.insert(words.resolve(bindings[0]).clone())
+	}
+	// `for (at, unit) in rows`: each name bound to a whole number is one
+	// too, of which every test in the body is a fact.
+	let parts = context.whole_parts.get(node_key(iter))
+	if bindings.len() > 1 && parts != null {
+		for (at, binding) in bindings.iter().enumerate() {
+			if parts?.contains(at as i64) ?? false {
+				inner.ints.insert(words.resolve(binding).clone())
+			}
+		}
+	}
 	// `for x in xs`, where what `xs` holds is bounded (ADR-306 D7).
 	if bindings.len() == 1 && !counted {
 		let key = elements_key(walk.shape, iter, words)
@@ -5256,15 +5478,37 @@ fn bounding_for(
 		let only = words.resolve(bindings[0]).clone()
 		let item = walk.arena.var(only)
 		let mut stated = bounding_each(walk, iter, item, facts, context, program, words)
-		let held = bounding_variable(iter, words)
+		// An inner list of a field (`t.col[c]`, its `.clone()`) is named
+		// by its list's `t.col[]` (ADR-306 D28).
+		let mut held = bounding_variable(iter, words)
+		if held == null {
+			let outer = rules_inner_of(iter, words)
+			if outer != null {
+				held = f"{outer ?? ""}[]"
+			}
+		}
 		if held != null {
 			let element = bounding_element_of(held ?? "")
 			let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
 			given.insert(element.clone(), item)
+			let mut of_every = false
 			for fact in facts.facts {
 				if walk.arena.mentions(fact, element) {
 					stated.push(walk.arena.substitute(fact, given))
+					of_every = true
 				}
+			}
+			for (each, fact) in walk.rule_facts.clone() {
+				if each == element {
+					stated.push(walk.arena.substitute(fact, given))
+					of_every = true
+				}
+			}
+			// The body runs only where the sequence holds an element, so
+			// what holds of every one, guarded by its emptiness, holds of
+			// the binding (#1483).
+			if of_every {
+				stated.push(bounding_each_present(walk, held ?? ""))
 			}
 		}
 		for fact in stated {
@@ -5458,7 +5702,7 @@ fn bounding_assign(
 			walk.fall_failed.insert(name.clone())
 		}
 		bounding_forget(walk, facts, name)
-		bounding_built(walk, facts, name, value)
+		bounding_built(walk, facts, name, value, words)
 		return
 	}
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
@@ -5532,7 +5776,7 @@ fn bounding_is_op(op: ref BinaryOp?, wanted: BinaryOp) -> bool {
 }
 
 /// What is known of `name`'s length from the value it was given.
-fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr) {
+fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext) {
 	match value {
 		Expr::ListLit { items, .. } => {
 			let length = length_of(name)
@@ -5540,6 +5784,27 @@ fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 			let n = walk.arena.int(items.len())
 			let fact = walk.arena.equal(len, n)
 			bounding_push(walk, facts, fact)
+		},
+		// **A copy is as long as what it copies** (ADR-306 D4).
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "clone" {
+				return
+			}
+			let from = path_of(receiver, words) ?? return
+			if path_within(from, name) || path_within(name, from) {
+				return
+			}
+			let len = walk.arena.var(length_of(name))
+			let copied = walk.arena.var(length_of(from))
+			let fact = walk.arena.equal(len, copied)
+			bounding_push(walk, facts, fact)
+		},
+		// Each list field of a literal, as its value is built.
+		Expr::StructLit { fields, .. } => {
+			for field in fields {
+				let given = field.value ?? continue
+				bounding_built(walk, facts, f"{name}.{words.resolve(field.name)}", given, words)
+			}
 		},
 		else => {},
 	}
@@ -6105,7 +6370,8 @@ fn bounding_method_call(
 	if walk.checking {
 		let mut handed: Vec[String] = []
 		if context.around.changing_receivers.contains(method) {
-			handed.push(path_of(receiver, words) ?? "self")
+			// An inner list (`t.col[c]`) is part of its list (ADR-306 D28).
+			handed.push(path_of(receiver, words) ?? rules_inner_of(receiver, words) ?? "self")
 		}
 		if context.around.changing_methods.contains(method) {
 			for arg in args {
@@ -6201,6 +6467,12 @@ fn bounding_method(
 	if (method == "push" && count == 1) || (method == "insert" && count == 2) {
 		let one = walk.arena.int(1)
 		bounding_shift(walk, facts, length, one)
+		// **A list just grown holds at least one element**: a fact of the
+		// length even where none was left, as at the head of a loop that
+		// grows it, so a value below it is seen to be (ADR-306 D21).
+		let len = walk.arena.var(length)
+		let fact = walk.arena.ge(len, one)
+		bounding_push(walk, facts, fact)
 		return
 	}
 	if (method == "remove" || method == "swap_remove") && count == 1 {
@@ -6753,4 +7025,502 @@ fn changed_by_frame(
 		}
 	}
 	bounding_extend(out, frame_at_call(frame, path_of(on, words), frame_handed(args, words)))
+}
+
+/// **What every function of the file returns, found** (ADR-306 D23): each
+/// free function that hands back a whole number or a list of them and takes
+/// a list, walked for the list parameters its every return lies below. A
+/// call in a cycle (a recursive `find`) takes the bound as D7's third pass
+/// takes a loop's: every one is assumed, then each walk keeps those proved
+/// at every return under the assumption, until none is dropped. A name
+/// two free functions share has none.
+pub fn bounds_returns(
+	mut context: BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	let mut assumed: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+	let mut bodies: Vec[ref Spanned[Item]] = []
+	// A name two free functions share is no candidate: a call is resolved
+	// by its name alone.
+	let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+	let mut twice: collections::BTreeSet[String] = collections::BTreeSet()
+	for item in program.items {
+		match item.node {
+			Item::Fn { name, receiver, .. } => {
+				if receiver == null {
+					let named = words.resolve(name ?? continue).clone()
+					if seen.contains(named) {
+						twice.insert(named)
+					} else {
+						seen.insert(named)
+					}
+				}
+			},
+			else => {},
+		}
+	}
+	for item in program.items {
+		match item.node {
+			Item::Fn { name, generics, receiver, args, config, spread, ret_type, .. } => {
+				if receiver != null || !config.is_empty() || spread != null || !generics.is_empty() {
+					continue
+				}
+				let symbol = name ?? continue
+				if twice.contains(words.resolve(symbol)) {
+					continue
+				}
+				let each = bounding_returns_each(ret_type ?? continue, words) ?? continue
+				let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
+				for k in 0..<args.len() {
+					if bounding_is_list_type(args[k].ty, words) {
+						below.insert(k)
+					}
+				}
+				// A list of numbers may be bounded by its values alone (D24).
+				if below.is_empty() && !each {
+					continue
+				}
+				assumed.insert(words.resolve(symbol).clone(), BoundsReturns {
+					each: each,
+					below: below,
+					sized: collections::BTreeSet(),
+					range: null,
+					pending: each,
+				})
+				bodies.push(item)
+			},
+			else => {},
+		}
+	}
+	if assumed.is_empty() {
+		return
+	}
+	for (name, wanted) in assumed {
+		if wanted.each {
+			context.around.returning.insert(name.clone())
+		}
+	}
+	// **The values each returned list holds, collected** (D24, as D7's
+	// first passes): every candidate's call adds nothing, so a recursive
+	// one's base cases are what its values start from; the rounds below
+	// assume them and keep those proved.
+	context.returns = assumed.clone()
+	let collected = bounding_returns_round(context, bodies, assumed, program, words, ask)
+	let mut started: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+	for (name, wanted) in assumed {
+		let mut next = wanted.clone()
+		next.pending = false
+		next.range = collected.get(name)?.range?.clone()
+		started.insert(name.clone(), next)
+	}
+	assumed = started
+	// Each round keeps a part of the last one's bounds, so the rounds end
+	// where one keeps them all, or none is left.
+	let rounds = bounding_returns_count(assumed) + 1
+	for _round in 0..<rounds {
+		context.returns = assumed.clone()
+		let found = bounding_returns_round(context, bodies, assumed, program, words, ask)
+		if bounding_returns_count(found) == bounding_returns_count(assumed) {
+			bounding_returns_settle(context, found)
+			return
+		}
+		assumed = found
+	}
+	bounding_returns_settle(context, collections::BTreeMap())
+}
+
+/// **The returns found, settled**: the functions a `let` root may be bound
+/// to a call of are those found to return a list (ADR-306 D24).
+fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTreeMap[String, BoundsReturns]) {
+	context.around.returning = collections::BTreeSet()
+	for (name, wanted) in found {
+		if wanted.each {
+			context.around.returning.insert(name.clone())
+		}
+	}
+	context.returns = found
+}
+
+/// **One round of [`bounds_returns`]**: each body walked for the bounds
+/// `assumed` asks, with `context.returns` assumed of its calls; of each, the
+/// list parameters every return was proved below, and the range D7 found
+/// on the values of every list returned, held within the assumed one where
+/// one was assumed.
+fn bounding_returns_round(
+	context: ref BoundsContext,
+	bodies: ref Vec[ref Spanned[Item]],
+	assumed: ref collections::BTreeMap[String, BoundsReturns],
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> collections::BTreeMap[String, BoundsReturns] {
+	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+	for item in bodies {
+		match item.node {
+			Item::Fn { name, args, body, .. } => {
+				let key = words.resolve(name ?? continue).clone()
+				let wanted = assumed.get(key) ?? continue
+				let mut walk = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
+				for k in 0..<args.len() {
+					let param = words.resolve(args[k].name).clone()
+					if wanted.below.contains(k) && walk.lists.contains(param) {
+						walk.return_params.push(param)
+					} else {
+						walk.return_params.push("")
+					}
+				}
+				walk.return_each = wanted.each
+				let proven = bounds_rounds(walk, args, body, context, program, words, ask)
+				let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
+				let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
+				let returned = proven.returned != null
+				for k in proven.returned ?? collections::BTreeSet() {
+					if wanted.below.contains(k) {
+						held.insert(k)
+						if walk.axioms.contains_key(length_of(walk.return_params[k])) {
+							sized.insert(k)
+						}
+					}
+				}
+				let mut range: Range? = null
+				if wanted.each && returned {
+					range = bounding_returned_range(walk)
+				}
+				if range != null && !wanted.pending {
+					let seen = range ?? Range::open()
+					if !(wanted.range ?? Range::open()).holds(seen) || wanted.range == null {
+						range = null
+					} else {
+						range = wanted.range?.clone()
+					}
+				}
+				if !held.is_empty() || range != null {
+					found.insert(key, BoundsReturns {
+						each: wanted.each,
+						below: held,
+						sized: sized,
+						range: range,
+						pending: false,
+					})
+				}
+			},
+			else => {},
+		}
+	}
+	return found
+}
+
+/// **The range of every value of the lists a walk returned** (ADR-306
+/// D24): the join of what D7 found of each, nothing where one has none or
+/// only empty lists were returned. A list nothing was written into holds
+/// no value to join.
+fn bounding_returned_range(walk: ref BoundsWalk) -> Range? {
+	let mut out: Range? = null
+	for name in walk.return_names {
+		if !walk.written.contains_key(name) && !bounding_poisoned(walk, name) {
+			continue
+		}
+		let bound = walk.assumed.get(name) ?? return null
+		if out == null {
+			out = bound.clone()
+		} else {
+			out = (out ?? Range::open()).join(bound)
+		}
+	}
+	let range = out ?? return null
+	if !range.is_bounded() {
+		return null
+	}
+	return range
+}
+
+/// Whether a function returning `ty` is one D23 finds a bound of: `false`
+/// for a whole number, `true` for a list of them, nothing for any other.
+fn bounding_returns_each(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool? {
+	if ty.is_nullable || ty.is_tuple {
+		return null
+	}
+	let name = words.resolve(ty.name)
+	if ty.generics.is_empty() && is_whole_number(name) {
+		return false
+	}
+	if ty.generics.len() == 1 && (name == "Vec" || name == "List") {
+		let inner = ty.generics[0]
+		if !inner.is_nullable && !inner.is_tuple && inner.generics.is_empty() && is_whole_number(words.resolve(inner.name)) {
+			return true
+		}
+	}
+	return null
+}
+
+/// How many bounds `returns` holds, over every function.
+fn bounding_returns_count(returns: ref collections::BTreeMap[String, BoundsReturns]) -> i64 {
+	let mut out = 0
+	for (_name, found) in returns {
+		out += found.below.len()
+		if found.range != null {
+			out += 1
+		}
+	}
+	return out
+}
+
+/// **A return, against the postcondition the walk looks for** (ADR-306
+/// D23): a number proved `0 <= value < p.len()` for each list parameter
+/// `p`, the positions joined over every return; a list one whose every
+/// write the walk sees, its ends read at the end. Any other return is lost.
+fn bounding_returned(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	returned: ref Expr?,
+	throwing: bool,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if walk.return_params.is_empty() || throwing {
+		return
+	}
+	let value = returned ?? {
+		walk.return_lost = true
+		return
+	}
+	walk.return_seen.insert(node_key(value))
+	if walk.return_each {
+		match value {
+			Expr::Variable(name, _) => {
+				let list = words.resolve(name)
+				if walk.shape.roots.contains(list) {
+					walk.return_names.insert(list.clone())
+				} else {
+					walk.return_lost = true
+				}
+			},
+			Expr::ListLit { items, .. } => {
+				if !items.is_empty() {
+					walk.return_lost = true
+				}
+			},
+			else => {
+				walk.return_lost = true
+			},
+		}
+		return
+	}
+	let called = bounding_returned_below(walk, value, false, context, words)
+	let term = bounding_lin(walk, value, facts, context, program, words)
+	let mut below: collections::BTreeSet[i64] = collections::BTreeSet()
+	for k in 0..<walk.return_params.len() {
+		let param = walk.return_params[k].clone()
+		if param.is_empty() {
+			continue
+		}
+		if called.contains_key(param) {
+			below.insert(k)
+			continue
+		}
+		let v = term ?? continue
+		let zero = walk.arena.int(0)
+		let len = walk.arena.var(length_of(param))
+		let low = walk.arena.ge(v, zero)
+		let high = walk.arena.lt(v, len)
+		let goal = walk.arena.and([low, high])
+		if bounding_proves(walk, facts, goal, ask) {
+			below.insert(k)
+		}
+	}
+	let before = walk.return_below?.clone() ?? {
+		walk.return_below = below
+		return
+	}
+	let mut kept: collections::BTreeSet[i64] = collections::BTreeSet()
+	for k in before {
+		if below.contains(k) {
+			kept.insert(k)
+		}
+	}
+	walk.return_below = kept
+}
+
+/// **The list parameters every return was found below**, by position, at
+/// the end of the walk; nothing where a return was lost or one the body
+/// holds was not seen (a `return` in a lambda among them). A list return's
+/// are the ends its every list kept that stay ends all through the body.
+fn bounding_returns_found(
+	walk: ref BoundsWalk,
+	body: ref Block,
+	words: ref winnow_grammar::InternerContext,
+) -> collections::BTreeSet[i64]? {
+	if walk.return_lost || seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
+		return null
+	}
+	if !walk.return_each {
+		return walk.return_below?.clone()
+	}
+	let mut out: collections::BTreeSet[i64] = collections::BTreeSet()
+	for k in 0..<walk.return_params.len() {
+		let param = walk.return_params[k]
+		if param.is_empty() {
+			continue
+		}
+		let mut held = true
+		for name in walk.return_names {
+			let ends = walk.assumed_ends.get(name) ?? {
+				held = false
+				break
+			}
+			if !ends.contains(param) || !bounding_end_list(walk, param, name) {
+				held = false
+				break
+			}
+		}
+		if held {
+			out.insert(k)
+		}
+	}
+	return out
+}
+
+/// **The lists a call's result lies below** (ADR-306 D23): of a function
+/// the file found a bound of (`each` for a list's elements), the arguments
+/// at its positions that are paths the walk reads, each with whether its
+/// length is a sized one (`BoundsReturns.sized`).
+fn bounding_returned_below(
+	walk: ref BoundsWalk,
+	value: ref Expr,
+	each: bool,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> collections::BTreeMap[String, bool] {
+	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
+	match value {
+		Expr::Call { func, args, .. } => {
+			let callee = bounding_callee(func, words) ?? return out
+			if walk.shape.bound.contains(callee) {
+				return out
+			}
+			let found = context.returns.get(callee) ?? return out
+			if found.each != each {
+				return out
+			}
+			for k in found.below {
+				if k < 0 || k >= args.len() {
+					continue
+				}
+				let path = bounding_argument_path(args[k], words) ?? continue
+				if !walk.pinned.contains(path_root(path)) {
+					out.insert(path, found.sized.contains(k))
+				}
+			}
+		},
+		else => {},
+	}
+	return out
+}
+
+/// **The range a call's list is found to hold its values in** (ADR-306
+/// D24), of a callee the walk does not bind again; nothing while the
+/// rounds collect or where none was found.
+fn bounding_returned_values(
+	walk: ref BoundsWalk,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) -> Range? {
+	return match value {
+		Expr::Call { func, .. } => {
+			let callee = bounding_callee(func, words) ?? return null
+			if walk.shape.bound.contains(callee) {
+				return null
+			}
+			let found = context.returns.get(callee) ?? return null
+			if !found.each || found.pending {
+				return null
+			}
+			found.range?.clone()
+		},
+		else => null,
+	}
+}
+
+/// **A `let` root bound to a call's list** (ADR-306 D24): its first values
+/// lie in the range the callee is found to return, below the lists it is
+/// found to return them below; while the rounds collect, they add nothing.
+fn bounding_call_root(
+	mut walk: BoundsWalk,
+	key: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let callee = match value {
+		Expr::Call { func, .. } => bounding_callee(func, words) ?? "",
+		else => "",
+	}
+	// **Only a call of a function found to return whole numbers** writes
+	// the root here: `collections::BTreeMap()` of an empty map is a call
+	// too, and its writes come later.
+	let found = context.returns.get(callee)
+	if found == null || !(found?.each ?? false) || (found?.pending ?? false) {
+		return
+	}
+	let range = bounding_returned_values(walk, value, context, words)
+	if range != null {
+		bounding_join(walk, key, range ?? Range::open())
+	} else {
+		walk.poisoned.insert(key.clone())
+	}
+	let mut below: collections::BTreeSet[String] = collections::BTreeSet()
+	for (list, _sized) in bounding_returned_below(walk, value, true, context, words) {
+		if bounding_end_list(walk, list, key) {
+			below.insert(list.clone())
+		}
+	}
+	let was = walk.written_ends.get(key)?.clone()
+	if was != null {
+		let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
+		for list in was ?? collections::BTreeSet() {
+			if below.contains(list) {
+				kept.insert(list.clone())
+			}
+		}
+		below = kept
+	}
+	walk.written_ends.insert(key.clone(), below)
+}
+
+/// An argument's path, through a `ref`.
+fn bounding_argument_path(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+	return match arg {
+		Expr::Unary { op: UnaryOp::Ref, expr, .. } => path_of(expr, words),
+		else => path_of(arg, words),
+	}
+}
+
+/// **What a call's found postcondition says of the name it is bound to**
+/// (ADR-306 D23): `0 <= name < p.len()` for each list `p` it lies below.
+fn bounding_returned_facts(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+) {
+	let lists = bounding_returned_below(walk, value, false, context, words)
+	if lists.is_empty() {
+		return
+	}
+	let n = walk.arena.var(name)
+	let zero = walk.arena.int(0)
+	let low = walk.arena.ge(n, zero)
+	bounding_push(walk, facts, low)
+	for (list, sized) in lists {
+		let len = bounding_length_named(walk, list, sized)
+		let high = walk.arena.lt(n, len)
+		bounding_push(walk, facts, high)
+	}
 }

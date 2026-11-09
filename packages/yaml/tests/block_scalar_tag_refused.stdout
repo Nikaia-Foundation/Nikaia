@@ -1,0 +1,2 @@
+error 3:1: unexpected end of input, expected a scalar its tag fits
+error 1:11: expected one of: `plain_first(x)`, a scalar its tag fits; found unexpected token `newline`

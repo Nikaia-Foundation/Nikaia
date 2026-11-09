@@ -824,6 +824,7 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
         None => None,
     }, || Ty::Unknown);
     state.a_lambda_hands_back_text_it_does_not_own(world, &place, params, body, &tail, span);
+    state.a_lambdas_result_is_its_types(world, &place, body, &tail, span);
     state.flow.lambda_tail = Some(tail.clone());
     state.leave_boundary(&saved);
     state.scope.pop();

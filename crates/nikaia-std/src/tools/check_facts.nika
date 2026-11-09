@@ -161,6 +161,13 @@ pub struct CheckFacts {
     pub kept_fn_copies: collections::BTreeSet[i64],
     /// `P { f }` over such a name, by the struct literal and the field.
     pub kept_fn_fields: collections::BTreeSet[(i64, String)],
+    /// **A handle on a shared value stored by value is duplicated** (ADR-312
+    /// D1, #1411): a name or a field path of `Shared`/`SharedMut` type put
+    /// into a struct literal's field or a list literal, by the value's id;
+    /// the lowering clones the handle, as a call's argument does.
+    pub stored_handles: collections::BTreeSet[i64],
+    /// `P { a }` over such a name, by the struct literal and the field.
+    pub stored_handle_fields: collections::BTreeSet[(i64, String)],
     pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
@@ -168,6 +175,13 @@ pub struct CheckFacts {
     /// the bounds walk reads a path of fields to one as a number. And the
     /// calls of that type a `let` binds (#781).
     pub whole_fields: collections::BTreeSet[i64],
+    /// **The `for` heads that bind one whole number**, by the node of what
+    /// they walk (ADR-306 D7): the bounds walk reads the binding as a number.
+    pub whole_loops: collections::BTreeSet[i64],
+    /// **The `for` heads that bind several names**, by the node of what they
+    /// walk, with the positions of the names bound to a whole number
+    /// (ADR-306 D7): `for (at, unit) in rows` reads each as a number.
+    pub whole_parts: collections::BTreeMap[i64, collections::BTreeSet[i64]],
     /// **Each `let` of one name without a written type whose value is a whole
     /// number**, by the statement's start, with the type (#1358): the prover
     /// reads the name as a whole number, as it reads `let n: i64`.
@@ -643,10 +657,14 @@ impl CheckFacts {
             kept_fn_reads: collections::BTreeSet(),
             kept_fn_copies: collections::BTreeSet(),
             kept_fn_fields: collections::BTreeSet(),
+            stored_handles: collections::BTreeSet(),
+            stored_handle_fields: collections::BTreeSet(),
             copied_tuple_parts: collections::BTreeSet(),
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),
             whole_fields: collections::BTreeSet(),
+            whole_loops: collections::BTreeSet(),
+            whole_parts: collections::BTreeMap(),
             whole_lets: collections::BTreeMap(),
             array_lengths: collections::BTreeMap(),
             char_codes: collections::BTreeSet(),

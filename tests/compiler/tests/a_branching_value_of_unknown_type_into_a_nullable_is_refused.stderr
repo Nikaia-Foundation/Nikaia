@@ -1,0 +1,49 @@
+error[NK1342]: The compiler can't tell what type `id(3)` is, so it can't put it into a `String?`.
+   --> tests/a_branching_value_of_unknown_type_into_a_nullable_is_refused.nika:10:2
+    |
+ 10 | 	return if c { id(3) } else { id(4) }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `id(4)` is, so it can't put it into a `String?`.
+   --> tests/a_branching_value_of_unknown_type_into_a_nullable_is_refused.nika:10:2
+    |
+ 10 | 	return if c { id(3) } else { id(4) }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `id(5)` is, so it can't put it into a `String?`.
+   --> tests/a_branching_value_of_unknown_type_into_a_nullable_is_refused.nika:14:2
+    |
+ 14 | 	if c { id(5) } else { id(6) }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `id(6)` is, so it can't put it into a `String?`.
+   --> tests/a_branching_value_of_unknown_type_into_a_nullable_is_refused.nika:14:2
+    |
+ 14 | 	if c { id(5) } else { id(6) }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `id(7)` is, so it can't put it into a `String?`.
+   --> tests/a_branching_value_of_unknown_type_into_a_nullable_is_refused.nika:18:2
+    |
+ 18 | 	let x: String? = if true { id(7) } else { id(8) }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+error[NK1342]: The compiler can't tell what type `id(8)` is, so it can't put it into a `String?`.
+   --> tests/a_branching_value_of_unknown_type_into_a_nullable_is_refused.nika:18:2
+    |
+ 18 | 	let x: String? = if true { id(7) } else { id(8) }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What is not known is not written: the compiler does not leave a type to the language below to guess (ADR-005 D7).
+    = help: Write the type down where the value is made, such as `let x: T = …`.
+6 type errors

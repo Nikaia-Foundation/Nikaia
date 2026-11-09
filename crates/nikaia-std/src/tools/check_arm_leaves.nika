@@ -260,7 +260,9 @@ impl CheckState {
             let ty = self.arm_type_of(leaf) ?? Ty::Unknown
             // **A name `Some(a)` bound over a lent place** is a view of it,
             // lent where it stands (#808).
-            if (ty == text && self.a_place_of_a_lent_parameter(world, leaf)) || world.here.viewed_arms.contains(node_key(check_peeled(leaf))) {
+            // So is an element of a list this body made, in a view (#1368).
+            let made = view && ty == text && self.flow.made_element_reads.contains(node_key(check_peeled(leaf)))
+            if (ty == text && self.a_place_of_a_lent_parameter(world, leaf)) || world.here.viewed_arms.contains(node_key(check_peeled(leaf))) || made {
                 lent.push(node_key(leaf))
             } else if arm_leaves_a_text_literal(leaf) {
                 // **A literal is a view of static text** (ADR-282 D13, #740).
@@ -542,7 +544,7 @@ impl CheckState {
             else => {},
         }
         self.a_narrowed_read_given_up(value)
-        if self.an_element_taken_out(world, value, ty, to, span) {
+        if self.an_element_taken_out(world, value, ty, to, span) || self.an_element_given_away(world, value, ty, to, span) {
             return
         }
         let at = self.flow.read_index.get((node_key(value), read_at)) ?? return
@@ -901,6 +903,10 @@ impl CheckState {
         let mut at = Span { start: span.start, end: span.end }
         if value != null {
             let whole = value ?? return
+            // **Refused by the views pass instead** (#1386, ADR-views-3 D14).
+            if what == "returns" && self.an_owned_parameter_handed_back(world, found, want, whole) {
+                return
+            }
             at = check_span_at(world, whole, span)
             if found.is_unknown() {
                 arms = self.arms_to_ask(world, whole)

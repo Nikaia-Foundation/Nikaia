@@ -1,0 +1,72 @@
+// **A found bound across a call reads the list's length as `len()` hands
+// it back** (ADR-306 D23, D24, ADR-385 D1, #1465): `k < tokens.len()`, of
+// an element of `params(tokens)`, proves `k + 2` as a counted loop's `k`
+// would, the list's elements taking space (#383). It held only where a
+// call such as `text_at(tokens, k + 2)` went to a private callee whose
+// callers ADR-391 D1 walks; `lower-std --bounds` saw `migrate_text_at`
+// called from another file, and lost it. `text_at` is `pub` here for that
+// reason. A list of elements that take no space gives `k + 1` alone.
+
+pub struct Tok {
+	pub text: String,
+}
+
+pub struct Unit {}
+
+fn params(tokens: ref Vec[Tok]) -> Vec[i64] sync {
+	let mut out: Vec[i64] = []
+	for k in 0..<tokens.len() {
+		if text_at(tokens, k + 1) == ":" {
+			out.push(k)
+		}
+	}
+	return out
+}
+
+pub fn text_at(tokens: ref Vec[Tok], k: i64) -> String sync {
+	if k >= 0 && k < tokens.len() {
+		return tokens[k].text.clone()
+	}
+	return ""
+}
+
+pub fn lent(tokens: ref Vec[Tok]) -> Vec[bool] sync {
+	let mut out: Vec[bool] = []
+	for k in params(tokens) {
+		out.push(text_at(tokens, k + 2) == "ref")
+	}
+	return out
+}
+
+pub fn last_after(tokens: ref Vec[Tok]) -> i64 sync {
+	let mut last = 0
+	let held = params(tokens)
+	for k in held {
+		last = k + 3
+	}
+	return last
+}
+
+fn unit_positions(units: ref Vec[Unit]) -> Vec[i64] sync {
+	let mut out: Vec[i64] = []
+	for k in 0..<units.len() {
+		out.push(k)
+	}
+	return out
+}
+
+pub fn unit_after(units: ref Vec[Unit]) -> i64 sync {
+	let mut last = 0
+	for k in unit_positions(units) {
+		if k + 2 > last {
+			last = k + 1
+		}
+	}
+	return last
+}
+
+fn main() throws {
+	let tokens = [Tok { text: "x" }, Tok { text: ":" }, Tok { text: "ref" }, Tok { text: "y" }]
+	let found = lent(tokens)
+	println(f"{found.len()} {found[0]} {last_after(tokens)} {unit_after([Unit {}, Unit {}])}")
+}

@@ -43,8 +43,11 @@ pub fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: C
     }
     let notes: Vec[String] = [f"`self` and `mut self` borrow the value, and `{field}` is a `{ty.text()}`. Giving it away would take a piece out of something this method doesn't own."]
     let mut help: String = f"Write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
+    // **A view of `self` is handed back without a mark** (ADR-views-3 D4,
+    // D7, #1403): `ref` left the language, so the help never offers one,
+    // which the next check would call redundant (`NK1261`).
     if what == "handed back" {
-        help = f"Declare the result `ref {ty.text()}` to return a view of it, write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value."
+        help = f"Write `self.{field}.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark."
     }
     // **`mut self` changes `self` in place** (ADR-views-3 D3, #1208): it is
     // not only borrowed, but it is still not this method's to give away.
@@ -250,7 +253,10 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
         }
         else => return,
     }
-    if root == "self" || !state.lent_here(root) {
+    // **A part of a `mut` parameter handed back is given away** (ADR-094
+    // D3, D7): the parameter is the caller's value, and once the function
+    // is left nothing gives the part back, so it is no part taken out.
+    if root == "self" || !(state.lent_here(root) || (handed_back && state.a_mut_parameter(world, root))) {
         return
     }
     let ty = check_core_expr(state, world, host, value, span)
@@ -298,10 +304,13 @@ fn check_core_a_lent_place_given_away[H: CheckHost](mut state: CheckState, world
     if state.a_text_bytes_view(world, value) {
         return
     }
-    let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.text()}`. Giving it away would take a piece out of something this function doesn't own."]
-    let mut help: String = f"Declare the result `ref {ty.text()}` to return a view of it, or write `{path}.clone()` for a copy."
+    let notes: Vec[String] = [f"`{root}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{path}` is a `{ty.text()}`. Giving it away would take a piece out of something this function doesn't own."]
+    // **The ways out in views-3's words** (ADR-views-3 D2, D4, D8, #1403):
+    // a view handed back on every way out needs no mark, and a parameter
+    // that only reads is lent without `keep`; none of them writes `ref`.
+    let mut help: String = f"Write `{path}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark."
     if !handed_back {
-        help = f"Write `{path}.clone()` to pass a copy, or declare the parameter `ref {ty.text()}` if it only reads it."
+        help = f"Write `{path}.clone()` to pass a copy, or take the parameter without `keep` if the function called only reads it."
     }
     state.findings.push(check_refusal("NK1131", span, f"You can't give away `{path}` here: `{root}` is only borrowed.", notes, help))
 }
@@ -737,6 +746,12 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
     if value != null {
         let given = value ?? return
         found = check_core_expr(state, world, host, given, span)
+        // **An element of a list this body made is lent** into a result the
+        // text pass made a view (#1368): its read is known once checked.
+        if !lending && state.a_made_element_lent(world, given, state.expected?.clone() ?? Ty::Unknown) {
+            lending = true
+            state.facts.lent_returns.insert(span.start as i64)
+        }
     }
     state.flow.lambda_expected = null
     // **A lambda's `return` is the lambda's** (#758): recorded, and checked

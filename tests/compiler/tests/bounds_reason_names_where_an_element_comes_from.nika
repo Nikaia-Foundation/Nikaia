@@ -1,0 +1,39 @@
+/// **A value read out of a list says where it comes from** (#1453 step 1):
+/// a map's value, an element of a call's result, an element of a named
+/// list, or another read, as the suffix of `--bounds`'s reason.
+use std::collections
+
+pub fn from_a_map(values: Vec[i64], at: collections::BTreeMap[String, i64]) -> i64 {
+	let k = at.get("a") ?? 0
+	return values[k]
+}
+
+pub fn positions(n: i64) -> Vec[i64] {
+	let mut out: Vec[i64] = []
+	out.push(n)
+	return out
+}
+
+pub fn from_a_call(values: Vec[i64], n: i64) -> i64 {
+	let mut sum = 0
+	for k in positions(n) {
+		sum += values[k]
+	}
+	return sum
+}
+
+pub fn from_a_named_list(values: Vec[i64], ks: Vec[i64]) -> i64 {
+	let k = ks[0]
+	return values[k]
+}
+
+pub fn from_another_read(values: Vec[i64], ks: Vec[Vec[i64]]) -> i64 {
+	let k = ks[0][0]
+	return values[k]
+}
+
+fn main() throws {
+	let mut at: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	at.insert("a", 1)
+	println(f"{from_a_map([1, 2], at)} {from_a_call([1, 2], 1)} {from_a_named_list([1, 2], [0])} {from_another_read([1, 2], [[1]])}")
+}

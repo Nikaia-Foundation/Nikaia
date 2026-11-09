@@ -26,7 +26,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn message(&self) -> String { format!("{}:{}: {} at {}", self.line, self.column, self.message, self.path) }
+    pub fn message(&self) -> String { format!("{}:{}: {} at {}", self.line, self.column, self.message, self.path) }
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,7 +41,7 @@ pub struct ConvertError {
 }
 
 impl ConvertError {
-    pub(crate) fn message(&self) -> String { nikaia_std::block::Text::from(self.message.to_string()) }
+    pub fn message(&self) -> String { nikaia_std::block::Text::from(self.message.to_string()) }
 }
 impl std::fmt::Display for ConvertError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

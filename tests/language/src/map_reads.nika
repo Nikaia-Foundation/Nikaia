@@ -57,7 +57,7 @@ test "a list read is a value" {
 // through `index::AsKey`, which lends a number and passes a view through.
 // And on a map whose key type nothing pinned, `m[1] = 2` and `m[k]` went
 // through `index::at`, which is for a list position: the key is now handed
-// over as it is on a write and read through `index::key` - neither side is a
+// over as it is on a write and read as a key - neither side is a
 // position on a map. A `String` key looked up is lent and not handed over,
 // so it is still there to use after.
 test "a map keyed by numbers is read" {

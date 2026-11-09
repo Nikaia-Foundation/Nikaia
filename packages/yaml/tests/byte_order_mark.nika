@@ -1,0 +1,41 @@
+// A byte order mark may start the stream and a document after `...` or
+// before `---` (YAML 1.2.2 5.2); it is not content (#1471).
+use yaml
+
+fn show(n: yaml::Node) -> String {
+	return match n.value {
+		yaml::Value::Null => "null"
+		yaml::Value::Bool(b) => f"bool({b})"
+		yaml::Value::Int(t) => f"int({t})"
+		yaml::Value::Float(t) => f"float({t})"
+		yaml::Value::Str(s) => f"str({yaml::text(s).replace("\n", "\\n")})"
+		yaml::Value::Alias(a) => f"alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn line(text: String) throws {
+	let input = Bytes(text.bytes().collect())
+	let docs = yaml::parse(input) catch {
+		println(f"error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	println(parts.join(" | "))
+}
+
+fn main() throws {
+	line("\u{feff}- 0\n")
+	line("\u{feff}a: b\n...\n\u{feff}c\n")
+	line("a\n\u{feff}--- b\n")
+	line("\u{feff}")
+}

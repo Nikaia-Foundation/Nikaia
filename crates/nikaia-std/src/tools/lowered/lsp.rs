@@ -79,7 +79,7 @@ pub enum LspRefusal {
 }
 
 impl LspRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             LspRefusal::Framing(why) => nikaia_std::block::Text::from(why.to_string()),
         }

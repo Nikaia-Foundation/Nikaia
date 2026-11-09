@@ -741,10 +741,25 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                 // **So is an element that is a view of text** (#1189): a
                 // `Vec[ref String]` hands `&&str` out, which compares with
                 // no text, and the `&str` it holds copies.
-                if a_copy_by_value(inner) || check_core_method_views_of_text(on) {
+                // **So is a word by its kind** (ADR-279 D8, #1460): an enum
+                // whose variants hold nothing and a type the ledger says
+                // copies (`Symbol`) are copied at a read, as a number is.
+                if a_copy_by_value(inner) || state.a_word_by_its_kind(world, inner) || check_core_method_views_of_text(on) {
                     let added = state.facts.copied_walks.insert(id_of(expr) as i64)
                 } else if check_core_method_a_tuple(inner) {
                     let lent = state.flow.lent_list_reads.insert(id_of(expr) as i64)
+                }
+            },
+            else => {}
+        }
+    }
+    // **A map's `get` of a word by its kind is the word** (ADR-279 D8,
+    // #1460): a number's read is copied by the emitter already.
+    if key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" {
+        match value {
+            Ty::Nullable(inner) => {
+                if !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) {
+                    let added = state.facts.copied_walks.insert(id_of(expr) as i64)
                 }
             },
             else => {}

@@ -172,7 +172,8 @@ impl CheckState {
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) { continue; }
             let ty = nikaia_std::index::or(self.arm_type_of(leaf), || Ty::Unknown);
-            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) || world.here.viewed_arms.contains(&node_key(check_peeled(leaf))) { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
+            let made = view && ty == text && self.flow.made_element_reads.contains(&node_key(check_peeled(leaf)));
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) || world.here.viewed_arms.contains(&node_key(check_peeled(leaf))) || made { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
         }
         if lent.is_empty() || !either && !others_view { return false; }
         if !either {
@@ -356,7 +357,7 @@ impl CheckState {
             _ => { },
         }
         self.a_narrowed_read_given_up(value);
-        if self.an_element_taken_out(world, value, ty, to, span) { return; }
+        if self.an_element_taken_out(world, value, ty, to, span) || self.an_element_given_away(world, value, ty, to, span) { return; }
         let at = match self.flow.read_index.get(&(node_key(value), read_at)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
         if !a_name_or_a_field(value) { return; }
         let path = nikaia_std::block::Text::from(nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_string());
@@ -606,6 +607,7 @@ impl CheckState {
         let mut at = Span { start: span.start, end: span.end };
         if value.is_some() {
             let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            if what == "returns" && self.an_owned_parameter_handed_back(world, found, want, whole) { return; }
             at = check_span_at(world, whole, span);
             if found.is_unknown() { arms = self.arms_to_ask(world, whole); }
         }

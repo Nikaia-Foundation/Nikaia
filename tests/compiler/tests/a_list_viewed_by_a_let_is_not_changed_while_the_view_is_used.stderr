@@ -1,0 +1,12 @@
+error[NK2305]: `v` is changed here, but `c` may point into its data and is used later.
+  --> tests/a_list_viewed_by_a_let_is_not_changed_while_the_view_is_used.nika:8:5
+   |
+ 7 |     let c: Array[Item] = v
+   |         - `c` is a view into `v`
+ 8 |     v.push(Item { name: "b" })
+   |     ^ `v` changes here
+ 9 |     println(f"{c.len()}")
+   |                - `c` is used here, after the change
+   |
+   = help: Use `c` before this change, or take a copy of it with `c.clone()` before the change.
+1 change to data a view still to be used may point into

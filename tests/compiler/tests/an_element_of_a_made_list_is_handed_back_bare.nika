@@ -1,0 +1,24 @@
+// An element of a list the function made, handed back bare: the list
+// moves into the caller's keep and the element is a view of it (#1368,
+// ADR-283 D23).
+fn bare(a: String) -> String {
+	let xs: Vec[String] = [a + " bare"]
+	return xs[0]
+}
+
+fn last(a: String) -> String {
+	let xs: Vec[String] = [a + " last"]
+	xs[0]
+}
+
+fn arms(a: String, first: bool) -> String {
+	let xs: Vec[String] = [a + " 0", a + " 1"]
+	if first { xs[0] } else { xs[1] }
+}
+
+fn main() throws {
+	println(bare("a"))
+	println(last("b"))
+	println(arms("c", true))
+	println(arms("c", false))
+}

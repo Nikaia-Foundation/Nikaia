@@ -7,7 +7,7 @@ pub enum ProjectSettingsRefusal {
 }
 
 impl ProjectSettingsRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ProjectSettingsRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
         }

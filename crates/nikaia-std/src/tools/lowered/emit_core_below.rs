@@ -362,7 +362,7 @@ impl EmitState {
         None
     }
     pub fn map_key(&self, index: &Expr, written: bool) -> Option<FactKeyForm> {
-        let form = match self.facts.map_keys.get(&(node_key(index), written)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let form = match self.facts.map_keys.get(&(node_key(index), written)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(form.clone())
     }
     pub fn stays_the_callers(&self, world: &EmitWorld<'_, '_, '_, '_>, function: &str, place: &Expr) -> bool {

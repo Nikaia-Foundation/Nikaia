@@ -1,0 +1,67 @@
+// **A value read out of a map lies where every value put into it does**
+// (ADR-306 D24, #1453): a `let` map, a field map and one read through a
+// parameter; `?? d` within the bound where `d` is, `?? return` and
+// `?? continue` as they stand. A value over the bound keeps its check.
+use std::collections
+
+pub fn let_map(values: Array[i64, 10], names: Vec[String]) -> i64 {
+	let mut at: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for name in names {
+		at.insert(name.clone(), 3)
+	}
+	at.insert("b", 9)
+	let k = at.get("a") ?? 0
+	let j = at.get("b") ?? return 0
+	let i = at["c"] ?? 2
+	return values[k] + values[j] + values[i]
+}
+
+pub fn let_map_over(values: Array[i64, 10], names: Vec[String]) -> i64 {
+	let mut at: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for name in names {
+		at.insert(name.clone(), 10)
+	}
+	let k = at.get("a") ?? 0
+	return values[k]
+}
+
+pub fn let_map_end(items: Vec[String], wanted: Vec[String]) -> i64 {
+	let mut free: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	let mut at = 0
+	while at < items.len() {
+		free.insert(items[at].clone(), at)
+		at += 1
+	}
+	let mut sum = 0
+	for w in wanted {
+		let place = free.get(w) ?? continue
+		sum += items[place].len()
+	}
+	return sum
+}
+
+pub struct Index {
+	slots: collections::BTreeMap[String, i64],
+	values: Array[i64, 8],
+}
+
+impl Index {
+	fn put(mut self, name: String) {
+		self.slots.insert(name, 4)
+	}
+	pub fn read(self, name: String) -> i64 {
+		let k = self.slots.get(name) ?? 0
+		return self.values[k]
+	}
+}
+
+pub fn through_a_parameter(index: Index, name: String) -> i64 {
+	let k = index.slots.get(name) ?? 1
+	return index.values[k]
+}
+
+fn main() throws {
+	let mut index = Index { slots: collections::BTreeMap(), values: [1, 2, 3, 4, 5, 6, 7, 8] }
+	index.put("x")
+	println(f"{let_map([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], ["a"])} {let_map_over([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [])} {let_map_end(["a", "bb"], ["bb"])} {index.read("x")} {through_a_parameter(index, "x")}")
+}

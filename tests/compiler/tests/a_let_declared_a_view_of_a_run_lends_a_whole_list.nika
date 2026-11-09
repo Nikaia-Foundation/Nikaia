@@ -1,0 +1,26 @@
+// A `let` declared `Array[T]` over a whole list or a field holding one is a
+// view of it, and the list stays (ADR-views-3 D11, #1362).
+struct Item { name: String }
+
+struct Bag { items: Vec[Item] }
+
+fn first(v: Vec[Item]) -> String {
+    let c: Array[Item] = v
+    for it in c {
+        return it.name.clone()
+    }
+    return ""
+}
+
+fn main() throws {
+    let v: Vec[Item] = [Item { name: "a" }]
+    let c: Array[Item] = v
+    println(f"{c.len()} {v.len()} {c[0].name}")
+    let r: ref Array[Item] = v
+    println(f"{r.len()} {v.len()}")
+    let bag = Bag { items: [Item { name: "b" }, Item { name: "c" }] }
+    let d: Array[Item] = bag.items
+    println(f"{d.len()} {bag.items.len()} {d[1].name}")
+    println(first(v))
+    println(f"{v.len()}")
+}

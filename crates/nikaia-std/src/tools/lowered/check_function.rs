@@ -427,13 +427,14 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
     for arg in args.iter() {
         let name = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
         state.nameable(&name, &arg.span, "a parameter");
-        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
+        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && (!arg.ty.is_view || arg.ty.either) && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable;
         let type_parameter = arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable && state.type_parameters.contains_key(world.words.resolve(arg.ty.name));
         let mut ty = Ty::Unknown;
         if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, at + offset) {
             let mut viewed = arg.ty.clone();
             viewed.is_view = true;
+            viewed.either = false;
             ty = check_walked_declared(state, world, &viewed, &arg.span);
         } else { ty = check_walked_declared(state, world, &arg.ty, &arg.span); }
         check_reflected_field_kept(state, world, &arg.ty, &arg.span, true);
@@ -489,7 +490,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
                     },
                     _ => { },
                 }
-                tail_lent = state.hands_back_a_view_of_the_subject(world, value) || state.flow.expected_either && plain && state.a_place_of_a_lent_parameter(world, value);
+                tail_lent = state.hands_back_a_view_of_the_subject(world, value) || state.flow.expected_either && plain && state.a_place_of_a_lent_parameter(world, value) || state.a_made_element_lent(world, value, &want);
                 if !tail_lent {
                     check_core_a_field_of_a_borrowed_subject(state, world, host, value, &at, "handed back");
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, &at);

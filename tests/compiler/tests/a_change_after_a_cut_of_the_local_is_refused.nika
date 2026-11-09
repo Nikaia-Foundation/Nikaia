@@ -1,0 +1,25 @@
+// A change to a local after a cut of it is made, while the cut is still
+// used, is refused (NK2305, ADR-views-3 D4, #1363): the cut points into what
+// it cuts, so the change cannot be emitted as Rust that rustc then refuses.
+
+fn pushed() -> ref Array[i64] {
+    let mut v: Vec[i64] = []
+    v.push(4)
+    let w = v[0..]
+    v.push(5)
+    return w
+}
+
+fn cut() -> String {
+    let mut s = String()
+    s.push_str("hello world")
+    let i = s.find(" ") ?? 0
+    let c = s[0..<i]
+    s.push_str("!")
+    return c
+}
+
+fn main() throws {
+    println(f"{pushed()[0]}")
+    println(cut())
+}

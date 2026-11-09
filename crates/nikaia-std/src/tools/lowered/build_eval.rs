@@ -42,7 +42,7 @@ pub enum BtRefusal {
 }
 
 impl BtRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             BtRefusal::Unevaluable => String::from("a build-time expression this does not read"),
             BtRefusal::NotHere { what, .. } => format!("`{}` is not here", what),

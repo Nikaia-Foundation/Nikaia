@@ -60,7 +60,9 @@ fn owned_text_handed_to_a_pattern_is_refused() {
         if let Some(refusal) = refusal {
             assert_eq!(
                 refusal.help.as_deref(),
-                Some("Write `ref` in front of it to pass a view of it."),
+                Some(
+                    "Write `String` without `ref` in the declaration: text of its own is lent wherever a view suffices."
+                ),
                 "{argument}"
             );
         }

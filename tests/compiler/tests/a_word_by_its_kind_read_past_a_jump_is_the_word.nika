@@ -1,0 +1,123 @@
+// #1460: an element of a list of a type copied at a read (a `Symbol`, which
+// the ledger says copies, and an enum whose variants hold nothing) taken by
+// `last()`, `first()`, `get(i)` or a map's `get(k)` past `??` is the value
+// (ADR-279 D8), handed to a call, returned, wrapped and pushed; so is the
+// read bound by a typed `let`, returned whole, matched or used as a fallback.
+
+use std::collections
+use std::winnow_grammar
+
+grammar G {
+    rule WS = "" -> { }
+    entry rule m -> winnow_grammar::Symbol = n:ident eof -> { n }
+}
+
+enum K {
+    A,
+    B,
+}
+
+fn shown(k: K) -> String {
+    return match k {
+        K::A => "A",
+        K::B => "B",
+    }
+}
+
+fn last_word(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> bool {
+    let at = segments.last() ?? return false
+    return words.resolve(at).len() > 0
+}
+
+fn first_word(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> i64 {
+    let at = segments.first() ?? return 0
+    return words.resolve(at).len()
+}
+
+fn got_word(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> i64 {
+    let at = segments.get(0) ?? return 0
+    return words.resolve(at).len()
+}
+
+fn mapped_word(m: ref collections::BTreeMap[i64, winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> i64 {
+    let at = m.get(1) ?? return 0
+    return words.resolve(at).len()
+}
+
+fn last_symbol(segments: ref Vec[winnow_grammar::Symbol]) -> winnow_grammar::Symbol? {
+    let at = segments.last() ?? return null
+    return at
+}
+
+fn kept(segments: ref Vec[winnow_grammar::Symbol]) -> Vec[winnow_grammar::Symbol] {
+    let mut out: Vec[winnow_grammar::Symbol] = []
+    let at = segments.last() ?? return out
+    out.push(at)
+    return out
+}
+
+fn last_kind(xs: ref Vec[K]) -> K {
+    let at = xs.last() ?? return K::A
+    return at
+}
+
+fn mapped_kind(m: ref collections::BTreeMap[i64, K]) -> K {
+    let at = m.get(1) ?? return K::A
+    return at
+}
+
+fn typed_kind(xs: ref Vec[K]) -> K {
+    let k: K? = xs.last()
+    return k ?? K::A
+}
+
+fn first_kind(xs: ref Vec[K]) -> K? {
+    return xs.first()
+}
+
+fn typed_mapped_kind(m: ref collections::BTreeMap[i64, K]) -> K {
+    let k: K? = m.get(1)
+    return k ?? K::A
+}
+
+fn bracketed_kind(m: ref collections::BTreeMap[i64, K]) -> K {
+    let k: K? = m[1]
+    return k ?? K::A
+}
+
+fn matched_word(segments: ref Vec[winnow_grammar::Symbol], words: ref winnow_grammar::InternerContext) -> i64 {
+    return match segments.last() {
+        null => 0,
+        s => words.resolve(s).len(),
+    }
+}
+
+fn typed_symbol(segments: ref Vec[winnow_grammar::Symbol]) -> winnow_grammar::Symbol? {
+    let s: winnow_grammar::Symbol? = segments.get(0)
+    return s
+}
+
+fn either_kind(a: K?, xs: ref Vec[K]) -> K? {
+    return a ?? xs.last()
+}
+
+fn main() throws {
+    let words = winnow_grammar::InternerContext()
+    let found = G::m(Bytes("word".bytes().collect()); words: words) catch {
+        println("refused")
+        return
+    }
+    let mut segments: Vec[winnow_grammar::Symbol] = []
+    segments.push(found)
+    let mut m: collections::BTreeMap[i64, winnow_grammar::Symbol] = collections::BTreeMap()
+    m.insert(1, found)
+    println(f"{last_word(segments, words)} {first_word(segments, words)} {got_word(segments, words)} {mapped_word(m, words)}")
+    let l = last_symbol(segments) ?? return
+    println(f"{words.resolve(l)} {kept(segments).len()}")
+    let mut n: collections::BTreeMap[i64, K] = collections::BTreeMap()
+    n.insert(1, K::B)
+    println(f"{shown(last_kind([K::A, K::B]))} {shown(mapped_kind(n))}")
+    let ks = [K::A, K::B]
+    let t = typed_symbol(segments) ?? return
+    println(f"{shown(typed_kind(ks))} {shown(first_kind(ks) ?? K::B)} {shown(typed_mapped_kind(n))} {shown(bracketed_kind(n))} {matched_word(segments, words)} {words.resolve(t)} {shown(either_kind(null, ks) ?? K::A)}")
+}

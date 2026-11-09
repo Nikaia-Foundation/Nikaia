@@ -4,14 +4,14 @@ error[NK1103]: This value is `ref Entry`, but the `let` declares `Entry`.
  10 |     let e: Entry = v[0] ?? return 0
     |                    ^^^^^^^^^^^^^^^^
     |
-    = help: Make it an `Entry`, or change the declaration to `ref Entry`.
+    = help: Write `.clone()` to turn this view into a value of its own.
 error[NK1103]: This value is `ref Entry`, but the `let` declares `Entry`.
    --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:14:20
     |
  14 |     let e: Entry = a[0] ?? b[0] ?? return 0
     |                    ^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = help: Make it an `Entry`, or change the declaration to `ref Entry`.
+    = help: Write `.clone()` to turn this view into a value of its own.
 error[NK1102]: `keep` expects `s` to be `String`, but you're passing `ref String`.
    --> tests/a_list_element_past_a_jump_is_refused_where_an_own_value_is_wanted.nika:18:10
     |

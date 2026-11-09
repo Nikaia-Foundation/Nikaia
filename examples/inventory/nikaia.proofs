@@ -4,3 +4,4 @@
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
 6b7bf23e4f37c4220592947d4a7e52b6158cd6392f4ce2450493923914d5376e proved R(h1,h3,h4,c2:1:0:1,c3:1:1:1)
+fdf69d6e360158f5108858ab1627dcc9771c224b5364f283ee01cfea776126c9 refuted v0=0,v1=-1

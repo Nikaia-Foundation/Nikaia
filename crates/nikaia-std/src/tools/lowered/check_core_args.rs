@@ -130,7 +130,7 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     let result = nikaia_std::boxed::open(result);
                     let pauses: bool = !is_sync;
                     let fails: bool = can_throw;
-                    if declared_here { state.a_lambda_hands_back_nothing(id, (result).as_ref()); }
+                    state.a_lambda_hands_back_nothing(id, (result).as_ref());
                     check_core_args_lambda_says_mut(state, world, arg, params, mutable, given, &code, span);
                     if pauses && declared_here {
                         state.facts.future_lambdas.insert(id);
@@ -149,7 +149,10 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                     if paused && !declared_here { state.flow.paused_args.push(id); }
                     state.flow.lambda_tails.insert(id, came_to.clone());
                     state.flow.lambda_firsts.insert(id, state.flow.last_lambda_first);
-                    if declared_here || keeps { state.a_lambda_hands_back_text_it_does_not_own(world, &code, params, body, &came_to, span); }
+                    if declared_here || keeps {
+                        state.a_lambda_hands_back_text_it_does_not_own(world, &code, params, body, &came_to, span);
+                        state.a_lambdas_result_is_its_types(world, &code, body, &came_to, span);
+                    }
                     let written: Ty = nikaia_std::index::or(match result.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
@@ -541,6 +544,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     let mut at: i64 = 0;
     for item in items.iter() {
         state.hands_over(world, item, nikaia_std::index::get(&walked, (at) as usize), "put into a list", span);
+        check_core_places_store_handle(state, item, nikaia_std::index::get(&walked, (at) as usize));
         at += 1;
     }
     let mut a_null = false;

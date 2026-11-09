@@ -20,8 +20,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_constant_that_owns_memory(&mut self, bound: &str, held: &Ty, computed: &BuildValue, holder: &str, span: &Span) {
         let mut owns: String = String::from("a `String`");
-        let mut fixed: &'static str = "`ref String`";
-        let mut way_out: String = String::from("Declare it as `ref String`: the text is built into the program, and the program holds a view of it.");
+        let mut fixed: &'static str = "a `String`, as a view";
+        let mut way_out: String = String::from("Declare it as `String`: the text is built into the program, and a `comptime` `String` is a view of it.");
         match computed {
             BuildValue::List(items) => {
                 let mut element: String = String::from("T");

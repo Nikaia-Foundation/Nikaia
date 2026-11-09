@@ -1,0 +1,21 @@
+bounds in tests/prove_a_field_list_of_lists_bounds_its_values.nika: 18 indexes, 14 proved; 2 operations, 0 proved
+    15  col[0]              proved
+    16  col[0]              proved
+    18  col[0]              proved
+    19  atoms[a]            proved
+    29  self.col[c]         proved
+    33  self.col[c]         proved
+    36  self.col[c][i]      checked: a list of lists, whose inner lengths the walk does not know (#385)
+    36  self.col[c]         proved
+    49  self.col[c]         proved
+    50  s += self.atoms[a]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    50  self.atoms[a]       proved
+    56  self.col[c]         proved
+    59  self.col[c][i]      checked: a list of lists, whose inner lengths the walk does not know (#385)
+    59  self.col[c]         proved
+    60  self.atoms[a]       proved
+    65  self.atoms[0]       checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    80  self.col[c]         proved
+    88  self.col[c]         proved
+    89  s += self.atoms[a]  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    89  self.atoms[a]       checked: a value read out of a list, of which the walk knows no fact (#797, #798): another read

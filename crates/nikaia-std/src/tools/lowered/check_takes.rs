@@ -118,6 +118,33 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn an_element_given_away(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, to: &str, span: &Span) -> bool {
+        if to.starts_with("bound to") || to.starts_with("assigned") || to.starts_with("written into") { return false; }
+        if !self.task_bindings.is_empty() || !self.takes_away(world, &ty.unseen()) { return false; }
+        let mut list: String = String::from("");
+        let mut at: String = String::from("");
+        match value {
+            Expr::Index { base, index, .. } => {
+                let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+                if !self.facts.list_indices.contains(&node_key(base)) { return false; }
+                list = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                at = match index {
+                    Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative { format!("-{}", n) } else { format!("{}", n) } },
+                    Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+                    _ => String::from("…"),
+                };
+            },
+            _ => { return false; },
+        }
+        let root = match self.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if root == "self" || self.lent_here(&root) { return false; }
+        let read = format!("{}[{}]", list, at);
+        let notes: Vec<String> = vec![format!("`{}` reads an element `{}` keeps, and what `{}` keeps is lent, whether `{}` is owned here or borrowed. Giving it away by value would take it out of `{}`, and Nikaia never copies behind your back.", read, list, list, list, list)];
+        self.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is an element of `{}`, which keeps it.", read, list), notes, Some(format!("Write `{}.clone()` for a copy.", read))));
+        true
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn an_element_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, read: bool) -> Option<String> {
         match expr {
             Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); self.an_element_path_of(world, base, index, read) },

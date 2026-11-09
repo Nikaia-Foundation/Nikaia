@@ -421,6 +421,36 @@ impl CheckState {
         }
     }
 
+    /// **A list of tuples with text literals beside other parts** (#1449):
+    /// each item is the tuple `tuple_literal` makes of it, so `[("a", [1])]`
+    /// handed to a `Vec[(String, Vec[i64])]` builds its text where it is kept,
+    /// as one such tuple handed alone does (#750). The list type it comes to,
+    /// or nothing where an item is not such a tuple.
+    pub fn tuple_list_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {
+        let element: Ty = match want {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return null },
+            else => return null,
+        }
+        let held: Ty = match found {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { args[0].clone() } else { return null },
+            else => return null,
+        }
+        match value {
+            Expr::ListLit { items, .. } => {
+                let mut answered: Ty? = null
+                for item in items {
+                    let got = self.tuple_literal(world, held, element, item) ?? return null
+                    if answered == null {
+                        answered = got
+                    }
+                }
+                let each = answered ?? return null
+                return Ty::Named { name: "Vec", args: [each], view: false }
+            },
+            else => return null,
+        }
+    }
+
     /// **A tuple of text literals where a tuple with text is wanted**: the
     /// tuple type it comes to, where any part was built.
     pub fn tuple_literal(ref mut self, world: ref CheckWorld, found: ref Ty, want: ref Ty, value: ref Expr) -> Ty? sync {

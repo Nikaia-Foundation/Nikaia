@@ -1,0 +1,29 @@
+// An element of a list literal of text the function made without a type,
+// handed back: the list takes `Vec[String]` from its items (#1368, ADR-283
+// D23).
+struct Word {
+	name: String,
+	rank: i64,
+}
+
+fn in_a_field(a: String) -> Word {
+	let xs = [a + " field"]
+	return Word { name: xs[0], rank: 1 }
+}
+
+fn bare(a: String) -> String {
+	let xs = [a + " bare"]
+	return xs[0]
+}
+
+fn through_a_let(a: String) -> Word {
+	let xs = [f"{a} let"]
+	let e = xs[0]
+	Word { name: e, rank: 2 }
+}
+
+fn main() throws {
+	println(in_a_field("a").name)
+	println(bare("b"))
+	println(through_a_let("c").name)
+}

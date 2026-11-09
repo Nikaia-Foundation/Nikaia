@@ -300,6 +300,17 @@ fn check_core_stmt_a_name_or_field(value: ref Expr) -> bool sync {
     }
 }
 
+/// A list or an array of its own under a view of a run of its elements.
+fn check_core_stmt_a_whole_run_viewed(found: ref Ty, want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Pointed { item, slice, mutable } => slice && !mutable && !found.is_a_view() && match found {
+            Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && args.len() >= 1 && args[0].fits(item),
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// A call of a function or a method.
 fn check_core_stmt_a_call(value: ref Expr) -> bool sync {
     return match value {
@@ -878,6 +889,10 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let t: ref Type = ty ?? return check_core_stmt_unit()
         let want = written_ty(world.words, world.here.aliases, t)
         seen_through = !found.fits(want) && state.fits_through_deref(world, found, want)
+        // **A whole list or array under a `let` declared a view of a run is
+        // lent** (ADR-views-3 D11, #1362): `let c: Array[T] = v` cannot own,
+        // having no length, so it looks at what `v` holds and `v` stays.
+        seen_through = seen_through || check_core_stmt_a_whole_run_viewed(found, want)
     }
     // **An element or a field read off a place under a `ref T` is a view of
     // it** (ADR-views-3 D5, #613).
@@ -1009,7 +1024,16 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             bound = met ?? found.clone()
         } else if found == a_string_type() {
             let lent = state.lent_arms_bound(world, value)
+            let none_lent = lent == null
             bound = lent ?? found.clone()
+            // **A plain `let` over a `String` place of a local is a view of
+            // it** (ADR-views-3 D5, #1404), as one read through a `ref`
+            // parameter is (#839): the emitter lends it (`lent_lets`), so a
+            // keeper handed it is refused here with a `.clone()` help instead
+            // of by the language below.
+            if none_lent && !mutable && !moved_out && names.len() == 1 && shape.len() == 0 && check_core_stmt_a_place(state, value) && state.facts.lent_lets.contains(span.start as i64) {
+                bound = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+            }
         } else {
             bound = found.clone()
         }
@@ -1241,7 +1265,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **And typed as one**: a `V?` read out of a map is an option of a view.
-    if of_a_map {
+    // **Unless a word by its kind is copied out of it** (ADR-279 D8, #1460):
+    // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
+    let word_copied = match bound {
+        Ty::Nullable(inner) => !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
+        else => false,
+    }
+    if of_a_map && !word_copied {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
@@ -1330,6 +1360,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // mut` element is, never copied behind the reader's back.
     if !mutable && element_read != null && (state.does_not_copy(world, local.ty) || viewed_past_a_jump) {
         local.view_of = (element_read ?? "").clone()
+    }
+    if !mutable && ty == null && names.len() == 1 && shape.len() == 0 && state.an_element_of_a_made_list(world, value) {
+        state.flow.made_elements.insert(local.id)
     }
     local.constant = constant
     local.lent = read_through_a_jump
@@ -2003,6 +2036,37 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     }
     if shape.len() > 0 {
         elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
+    }
+    // **A `for` over whole numbers binds a number of the bounds walk**
+    // (ADR-306 D7): `for k in ks` is bounded by every test of `k` in the
+    // body, as a name bound to a call's whole result is (#781).
+    if bindings.len() == 1 && elements.len() == 1 {
+        match elements[0] {
+            Ty::Named { name, args, .. } => {
+                if args.is_empty() && is_whole_number(name) {
+                    state.facts.whole_loops.insert(id_of(iter) as i64)
+                }
+            },
+            else => {}
+        }
+    }
+    // **And each name of several a `for` binds to a whole number**: a
+    // tuple's part, an `enumerate()`'s position.
+    if bindings.len() > 1 && elements.len() == bindings.len() {
+        let mut parts: collections::BTreeSet[i64] = collections::BTreeSet()
+        for (at, element) in elements.iter().enumerate() {
+            match element {
+                Ty::Named { name, args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        parts.insert(at as i64)
+                    }
+                },
+                else => {}
+            }
+        }
+        if !parts.is_empty() {
+            state.facts.whole_parts.insert(id_of(iter) as i64, parts)
+        }
     }
     // **An element of a list of code is given what the list was** (ADR-351
     // D1, D4).
