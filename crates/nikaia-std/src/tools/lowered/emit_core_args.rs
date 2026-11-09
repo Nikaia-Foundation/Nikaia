@@ -145,14 +145,21 @@ impl EmitState {
         });
         is_code && !nikaia_std::list::contains(&contract.keeps, &name)
     }
-    pub(crate) fn emit_arg_only_read(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
-        let contract = match self.own_contracts.functions.get(callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    pub(crate) fn emit_arg_only_read(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> bool {
+        let contract = match self.own_contracts.functions.get(&nikaia_std::index::or(match method_callee {
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+            None => None,
+        }, || nikaia_std::block::Text::from(callee.to_string()).into())) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if signature.takes_a_receiver() { return false; }
-        emit_arg_lends_own(contract, i, world.library, &self.described)
+        let mut at = i;
+        if signature.takes_a_receiver() {
+            if method_callee.is_none() { return false; }
+            at = i + 1;
+        }
+        emit_arg_lends_own(contract, at, world.library, &self.described)
     }
     pub(crate) fn emit_arg_keeps_bytes(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> bool {
         if method_callee.is_some() {
@@ -308,10 +315,7 @@ impl EmitState {
                 pointer = emit_arg_pointer_code((self.pointer_for(world, callee, &ty)).as_ref());
             }
         }
-        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, &nikaia_std::index::or(match method_callee {
-            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
-            None => None,
-        }, || nikaia_std::block::Text::from(callee.to_string()).into()), i) && !self.facts.mixed_choices.contains(&node_key(arg));
+        let either = !lend && !change && !emit_arg_is_null(arg) && self.either_param(world, callee, i) && !self.emit_arg_only_read(world, callee, method_callee, i) && !self.facts.mixed_choices.contains(&node_key(arg));
         let lent_option = lend && before == "Some(" && self.emit_arg_opening(world, callee, method_callee, i) == "";
         let copy_in = lent_option && emit_arg_names_a_place(arg) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if lent_option || lent_path { out.push("&"); }

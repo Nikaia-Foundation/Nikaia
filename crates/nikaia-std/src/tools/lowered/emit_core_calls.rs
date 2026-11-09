@@ -452,7 +452,7 @@ impl EmitState {
                 if flow.caught { question = ""; }
                 let mut pieces = false;
                 let mut streamed = false;
-                let mut options: Vec<String> = vec![];
+                let mut options: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let contract = self.own_contracts.functions.get(&format!("{}::{}::{}", package, book, rule));
                 if contract.is_some() {
                     let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
