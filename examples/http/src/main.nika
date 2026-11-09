@@ -289,19 +289,25 @@ pub fn listen(
     keep handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_timeout: time::Duration = 10.seconds(),
+    head_timeout: time::Duration? = null,
     body_bytes_per_second: i64 = 500,
-    idle_timeout: time::Duration = 75.seconds(),
+    idle_timeout: time::Duration? = null,
     connections: i64 = 0
 ) throws {
     let listener = net::listen(at)
     let bound = listener.address()
     println(f"http: listening on {bound}")
 
+    // The defaults are 10 seconds and 75 seconds (ADR-326 D6, D9), decided
+    // here: a default that calls a method is not computed while the program is
+    // built.
+    let head_limit = head_timeout ?? 10.seconds()
+    let idle_limit = idle_timeout ?? 75.seconds()
+
     // `connections: 0` means serve forever. Any other number stops accepting
     // after that many connections and returns once they are answered.
     listener.serve(fn(mut connection) {
-        answer(connection, handler; body_cap: body_cap, head_cap: head_cap, head_timeout: head_timeout, body_bytes_per_second: body_bytes_per_second, idle_timeout: idle_timeout)
+        answer(connection, handler, head_limit, idle_limit; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
     }; connections: connections)
 }
 
@@ -313,17 +319,17 @@ pub fn listen(
 // call site writes nothing extra.
 fn answer(
     mut connection: net::Connection,
-    keep handler: fn(keep Request) -> Response;
+    keep handler: fn(keep Request) -> Response,
+    head_timeout: time::Duration,
+    keep idle_timeout: time::Duration;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_timeout: time::Duration = 10.seconds(),
-    body_bytes_per_second: i64 = 500,
-    idle_timeout: time::Duration = 75.seconds()
+    body_bytes_per_second: i64 = 500
 ) {
     let mut buffer = http1::Buffer()
     let mut open = true
     while open {
-        open = request(connection, buffer, handler; body_cap: body_cap, head_cap: head_cap, head_timeout: head_timeout, body_bytes_per_second: body_bytes_per_second)
+        open = request(connection, buffer, handler, head_timeout; body_cap: body_cap, head_cap: head_cap, body_bytes_per_second: body_bytes_per_second)
         if open && buffer.len() == 0 {
             // A quiet connection is closed without a word: there is no request
             // to answer. A client that sends nothing more ends it the same way.
@@ -345,10 +351,10 @@ fn answer(
 fn request(
     mut connection: net::Connection,
     mut buffer: http1::Buffer,
-    keep handler: fn(keep Request) -> Response;
+    keep handler: fn(keep Request) -> Response,
+    head_timeout: time::Duration;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
-    head_timeout: time::Duration = 10.seconds(),
     body_bytes_per_second: i64 = 500
 ) -> bool {
     // Read until the head ends. `head_end` returns `0` for "not yet" and throws
