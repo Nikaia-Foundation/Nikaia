@@ -114,8 +114,18 @@ macro_rules! __nikaia_list {
         $crate::block::List::from_elem($item, $n)
     };
     ($($item:expr),+ $(,)?) => {
-        $crate::block::List::from([$($item),+])
+        $crate::block::list_of([$($item),+])
     };
+}
+
+/// The items listed, as a [`List`] outside every block (D9). A function of
+/// its own, not `List::from`: through a trait `rustc` does not carry the
+/// list's element type into the items, so `[fail, worse]` for a
+/// `Vec[fn() throws]` would not make each closure the list's `dyn Fn`.
+#[doc(hidden)]
+#[inline]
+pub fn list_of<T, const N: usize>(items: [T; N]) -> List<T> {
+    List::from(items)
 }
 
 /// `format!(…)` for a [`Text`], built with no `String` between ([`format`]),
