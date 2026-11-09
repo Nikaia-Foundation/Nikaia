@@ -1,0 +1,18 @@
+error[NK1104]: This lambda returns `s`, which it captures, but `fn() -> String` returns text of its own.
+   --> tests/ownership_matrix_owned_given_lambda_result.nika:12:34
+    |
+ 12 |     let f: fn() -> String = fn { s }
+    |                                  ^
+    |
+    = note: A lambda may run more than once, so what it captures stays with it and is not given away.
+    = help: Hand back a copy with `s.clone()`.
+error[NK2101]: You're using `s` after a function kept for later took it.
+   --> tests/ownership_matrix_owned_given_lambda_result.nika:15:5
+    |
+ 15 |     println(s)
+    |     ^
+    |
+    = note: A function kept to be called later - a supervisor's child, a handler - is called after this function has moved on, so it takes the variables it uses with it. `s` is a `String`, so it went to the function.
+    = note: Numbers, `bool`s, views and `Shared[T]` handles aren't taken: they're copied.
+    = help: Make a copy before and hand over the copy: `let copy = s.clone()`, then use `copy` inside.
+1 type error, 1 value a task took with it
