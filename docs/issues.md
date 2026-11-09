@@ -77,7 +77,8 @@ it, like the checks in `docs/supervisor.md`.
   synthetic probe passed while the real code stayed checked (#1470).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
-  in `tests/compiler/` (or the package's tests), and the rows it must show.
+  in `tests/compiler/tests/` (or the package's tests), and the rows it must show
+  (#1470: an issue that said `tests/compiler/` sent the builder to the wrong place).
   The order is the order to build in; an item resting on another says so.
 * **I10. The rule that repeats**: when a fix widens or narrows a rule, the
   other functions that test the same condition are named (or the issue says
@@ -87,6 +88,8 @@ it, like the checks in `docs/supervisor.md`.
   output that must stay byte-identical). A move into Nikaia names the Rust it
   replaces and the `std` counterparts it needs (Part III 17); a missing one
   is its own issue, linked.
+  It names the limits the work will run into: a cap the code keeps (the
+  walk's 48 facts, `most_facts()`), a set that is silently trimmed (#1470).
 * **I12. What was ruled out**: approaches tried and dropped, and why, so the
   builder does not try them again. Empty when nothing was tried.
 
