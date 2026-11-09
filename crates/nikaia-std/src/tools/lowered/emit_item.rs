@@ -351,7 +351,7 @@ impl EmitState {
                 bridge = "CleanupSend";
                 send = " + Send";
             }
-            out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), String>>{} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, send, target_name, awaited));
+            out.push(&format!("impl{} nikaia_std::cleanup::{} for {}{} {{\n    fn cleanup(&mut self) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), ::std::string::String>>{} + '_>> {{\n        Box::pin(async move {{ nikaia_std::cleanup::Outcome::reported({}::cleanup(self){}) }})\n    }}\n}}\n", declares, bridge, target_name, applied, send, target_name, awaited));
             return Ok(());
         }
         if has_trait && (trait_text == "Eq" || trait_text == "Ord") && !emit_item_declares_trait(world, &trait_text) {

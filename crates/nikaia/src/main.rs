@@ -279,8 +279,10 @@ pub enum Command {
     /// it prints (ADR-392).
     Migrate {
         /// The edition to migrate to: `views-3` or `print-throws`.
+        // Rust's `String`: a list of names is clap's `PossibleValuesParser`,
+        // which hands back that type and no other (#490).
         #[arg(value_parser = ["views-3", "print-throws"])]
-        edition: String,
+        edition: std::string::String,
         /// The files, or directories to migrate the `.nika` and `.md` files of.
         #[arg(value_name = "PATH", required = true)]
         files: Vec<PathBuf>,
