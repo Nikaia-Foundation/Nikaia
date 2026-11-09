@@ -3604,7 +3604,13 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             bounding_expr(walk, value, facts, context, program, words, ask);
             let mut changed = nothing_changed();
             for arm in arms.iter() {
-                let mut inner = BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![], evicted: 0 };
+                let mut inner = facts.clone();
+                let mut hidden: Vec<String> = vec![];
+                frame_pattern_names(&arm.pattern, words, &mut hidden);
+                for name in hidden.iter() {
+                    bounding_forget(&walk, &mut inner, name);
+                    inner.ints.remove(name);
+                }
                 bounding_maybe_expr(walk, (arm.guard).as_ref(), &mut inner, context, program, words, &ask);
                 bounding_expr(walk, &arm.body, &mut inner, context, program, words, ask);
                 bounding_extend(&mut changed, &bounding_changed_in_expr(&arm.body, context, words));

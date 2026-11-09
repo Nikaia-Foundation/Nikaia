@@ -6359,9 +6359,16 @@ fn bounding_expr(
 			bounding_expr(walk, value, facts, context, program, words, ask)
 			let mut changed = nothing_changed()
 			for arm in arms {
-				// A pattern may bind a name that hides an outer one, so
-				// nothing known outside is carried into an arm.
-				let mut inner = BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }
+				// What is known outside holds in an arm, but of the names
+				// its pattern binds: such a name hides an outer one, so
+				// what was known of that is forgotten (as a `let` hides).
+				let mut inner = facts.clone()
+				let mut hidden: Vec[String] = []
+				frame_pattern_names(arm.pattern, words, hidden)
+				for name in hidden {
+					bounding_forget(walk, inner, name)
+					inner.ints.remove(name)
+				}
 				bounding_maybe_expr(walk, arm.guard, inner, context, program, words, ask)
 				bounding_expr(walk, arm.body, inner, context, program, words, ask)
 				bounding_extend(changed, bounding_changed_in_expr(arm.body, context, words))
