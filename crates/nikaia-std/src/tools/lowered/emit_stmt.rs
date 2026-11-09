@@ -40,7 +40,7 @@ pub(crate) fn emit_stmt_tuple_part(names: &[String], shape: &[i64], at: &mut i64
         *next += 1;
         return name;
     }
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in 0..width { parts.push(emit_stmt_tuple_part(names, shape, at, next)); }
     format!("({})", nikaia_std::block::Text::from(parts.join(", ")))
 }

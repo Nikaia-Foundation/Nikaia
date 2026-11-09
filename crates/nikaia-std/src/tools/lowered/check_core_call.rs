@@ -4,7 +4,7 @@
 pub(crate) fn check_core_call_named(name: &str) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false } }
 
 pub(crate) fn check_core_call_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
         parts.push(format!("{}", world.words.resolve(segment)));
@@ -202,7 +202,7 @@ pub(crate) fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world
     for error in contract.fails_with.iter() { if throws_given(error) { any = true; } }
     if !any { return given; }
     let mut set: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut params: Vec<String> = vec![];
+    let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if contract.signature.is_some() {
         let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return given };
         for (param, _) in signature.params.iter() { params.push(nikaia_std::block::Text::from(param.to_string())); }
@@ -240,7 +240,7 @@ pub(crate) fn check_core_call_from_given<H: CheckHost>(state: &CheckState, world
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_from_newly<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, contract: &FnContract, args: &[Expr], span: &Span) {
     if state.flow.guarded.is_none() { return; }
-    let mut params: Vec<String> = vec![];
+    let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if contract.signature.is_some() {
         let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         for (param, _) in signature.params.iter() { params.push(nikaia_std::block::Text::from(param.to_string())); }
@@ -258,7 +258,7 @@ pub(crate) fn check_core_call_from_newly<H: CheckHost>(state: &mut CheckState, w
         if at < 0 || at >= args.len() as i64 { continue; }
         let mut stored = CheckStoredCode::empty();
         check_core_places_code_into(&state, world, host, nikaia_std::index::get(&args, nikaia_std::index::at(at)), &mut stored);
-        let mut names: Vec<String> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for name in stored.free.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
         for name in stored.resolved.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
         for name in names.iter() {
@@ -722,18 +722,18 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
-    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if pathed {
         parameters = signature_type_variables(&signature);
         if parameters.len() != 1 { return None; }
     } else { parameters = check_core_call_type_parameters(world, &name); }
     if parameters.is_empty() { return None; }
-    let mut written: Vec<Expr> = vec![];
+    let mut written: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match index {
         Expr::Tuple(parts, _) => { written = parts.copy_owned(); },
         _ => { written.push(index.clone()); },
     }
-    let mut filled: Vec<Ty> = vec![];
+    let mut filled: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for arg in written.iter() { filled.push(check_core_type_argument(state, world, arg, &name, span)); }
     let mut needed = false;
     let mut at: i64 = 0;

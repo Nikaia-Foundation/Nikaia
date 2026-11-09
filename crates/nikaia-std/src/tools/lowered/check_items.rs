@@ -325,7 +325,7 @@ pub(crate) fn item_placeholder_of_enum(view: &ParsedView<'_, '_, '_, '_, '_, '_>
             },
             VariantFields::Named(fields) => {
                 let mut tys: Vec<Ty> = vec![];
-                let mut holes: Vec<String> = vec![];
+                let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for f in fields.iter() {
                     tys.push(written_ty(view.words, view.aliases, &f.ty));
                     let fname = view.text(f.name);
@@ -365,7 +365,7 @@ pub(crate) fn item_placeholder_of_contract(name: &str, contract: &TypeContract) 
         let vname = nikaia_std::block::Text::from(variant.name.to_string());
         let written = format!("{}::{}", name, vname);
         let mut tys: Vec<Ty> = vec![];
-        let mut holes: Vec<String> = vec![];
+        let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for f in variant.holds.iter() {
             tys.push(f.ty.clone());
             let fname = nikaia_std::block::Text::from(f.name.to_string());
@@ -419,7 +419,7 @@ impl CheckState {
         let fields = match self.structs.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parameters = self.struct_parameters.get(&name);
         if parameters.is_some() && !match parameters { Some(__nikaia_value) => __nikaia_value, None => return None }.is_empty() { return None; }
-        let mut holes: Vec<String> = vec![];
+        let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for f in fields.iter() {
             if !item_has_a_default(&f.ty) { return None; }
             let fname = nikaia_std::block::Text::from(f.name.to_string());
@@ -435,7 +435,7 @@ impl CheckState {
     pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        #[allow(unused_mut)] let mut variants: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut variants: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let declared = item_declared_variants(view, on); #[allow(unused_mut, clippy::redundant_locals)] let mut variants = variants;
         if declared.is_some() { variants = match declared { Some(__nikaia_value) => __nikaia_value, None => return None }; } else {
             let own = world.own.types.get(on);
@@ -588,7 +588,7 @@ pub(crate) fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &P
 
 pub(crate) fn item_reaches(from: &str, to: &str, holds: &collections::BTreeMap<String, collections::BTreeSet<String>>) -> bool {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut stack: Vec<String> = vec![nikaia_std::block::Text::from(from.to_string())];
+    let mut stack: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(from.to_string())], nikaia_std::block::Place::Block);
     while !stack.is_empty() {
         let at = match stack.pop() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let next_of = match holds.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -632,7 +632,7 @@ pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_>,
 
 impl CheckState {
     pub fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) {
-        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_>> = vec![here.clone()];
+        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_>> = nikaia_std::block::List::from_array_in([here.clone()], nikaia_std::block::Place::Block);
         for other in beside.iter() { files.push(other.clone()); }
         let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
         for file in files.iter() {

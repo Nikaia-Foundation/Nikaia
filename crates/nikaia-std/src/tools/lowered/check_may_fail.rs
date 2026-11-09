@@ -23,7 +23,7 @@ impl CheckState {
             self.flow.guarded = Some(outer);
         }
         if self.flow.throwing || self.flow.caught { return; }
-        let mut quoted: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut passing = passing;
+        let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut passing = passing;
         for error in passing.iter() { quoted.push(format!("`{}`", error)); }
         let list = nikaia_std::block::Text::from(quoted.join(", "));
         self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because {} passes this `catch`.", list), vec![format!("{} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not.", list)], Some(String::from("Add `throws` to the function, or name the type in a `match error` arm of the handler."))));
@@ -73,7 +73,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut errors: Vec<String> = vec![];
+        let mut errors: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for error in contract.fails_with.iter() { errors.push(format!("`{}`", error)); }
         let list = nikaia_std::block::Text::from(errors.join(", "));
         let mut help: String = format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function);

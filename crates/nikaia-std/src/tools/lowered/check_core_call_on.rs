@@ -347,7 +347,7 @@ pub(crate) fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_
 pub fn check_core_call_on_map_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map_name: &str, key: &Expr, key_ty: &Ty, entry_key: bool, value: &Expr, value_ty: &Ty, give_value: bool, span: &Span) {
     let local = match state.binding(map_name) { Some(__nikaia_value) => __nikaia_value, None => return };
     let id = local.id;
-    let mut parts: Vec<Ty> = vec![];
+    let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut is_a_map = false;
     match local.ty {
         Ty::Named { ref name, ref args, .. } => {

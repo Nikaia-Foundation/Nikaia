@@ -153,7 +153,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in path.iter() {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
@@ -225,7 +225,7 @@ impl CheckState {
             },
             _ => { },
         }
-        let mut types: Vec<Ty> = vec![];
+        let mut types: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut inside: bool = false;
         match on {
             Ty::Tuple(parts_of) => {
@@ -263,7 +263,7 @@ impl CheckState {
         match pattern {
             MatchPattern::Named { path, fields, rest } => {
                 let rest = *rest;
-                #[allow(unused_mut)] let mut written: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for part in path.iter() {
                     let part = *part;
                     written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
@@ -274,7 +274,7 @@ impl CheckState {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                #[allow(unused_mut)] let mut named: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for each in fields.iter() {
                     let name = nikaia_std::block::Text::from(world.words.resolve(each.name).to_string());
                     named.push(nikaia_std::block::Text::from(name.to_string()));
@@ -286,7 +286,7 @@ impl CheckState {
                     }
                 }
                 if rest || declared.is_empty() { return; }
-                #[allow(unused_mut)] let mut missing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
+                #[allow(unused_mut)] let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
                 for field in declared.iter() { if !nikaia_std::list::contains(&named, &field.name) { missing.push(format!("`{}`", field.name)); } }
                 if missing.is_empty() { return; }
                 let shown = nikaia_std::block::Text::from(written.join("::")); #[allow(unused_mut, clippy::redundant_locals)] let mut missing = missing;

@@ -740,7 +740,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
         _ => 0,
     };
     if parts != params.len() as i64 { return; }
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for p in params.iter() {
         let p = *p;
         let name = world.words.resolve(p);
@@ -797,7 +797,7 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     check_core_ops_a_pair_split(state, world, (declared).as_ref(), params, span);
     check_core_ops_none_named(state, (declared).as_ref(), params, span);
     let mut frame: Vec<CheckLocal> = vec![];
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for p in params.iter() {
         let p = *p;

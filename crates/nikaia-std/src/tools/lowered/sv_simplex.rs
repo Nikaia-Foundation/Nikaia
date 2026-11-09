@@ -358,8 +358,8 @@ impl SvSimplex {
         let col = match u32::try_from(j).ok() { Some(__nikaia_value) => __nikaia_value, None => return false };
         let mut pr = (*nikaia_std::index::get(&self.rows, nikaia_std::index::at(r))).clone();
         if sv_row_coef(&pr, col) > 0 { pr = match sv_row_scale(&pr, -1) { Some(__nikaia_value) => __nikaia_value, None => return false }; }
-        let mut changed: Vec<i64> = vec![];
-        let mut made: Vec<SvRow> = vec![];
+        let mut changed: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut made: Vec<SvRow> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut t: i64 = 0;
         while t < self.rows.len() as i64 {
             if t != r && sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(t)), col) != 0 {
@@ -395,7 +395,7 @@ impl SvSimplex {
     pub(crate) fn entering(&self, r: i64, below: bool, bland: bool) -> Vec<i64> {
         let b = *nikaia_std::index::get(&self.basic, nikaia_std::index::at(r));
         let mut out: Vec<i64> = vec![];
-        let mut cost: Vec<i64> = vec![];
+        let mut cost: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut i: i64 = 0;
         while ((i) as usize) < nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).cols.len() {
             let v = *nikaia_std::index::get(&nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)).cols, (i) as usize) as i64;
@@ -570,7 +570,7 @@ impl SvTh for SvSimplex {
         let ge = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![-1], constant: match k.checked_add(1) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
         let split = match book.split(le, ge) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() };
         if !self.branching { return SvChecked::Lemmas(vec![split]); }
-        let mut refuted: Vec<SvClause> = vec![];
+        let mut refuted: Vec<SvClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for side in split.lits.iter() {
             let side = nikaia_std::num::value(side);
             let level = self.level();
@@ -846,7 +846,7 @@ impl SvSimplex {
             i += 1;
         }
         let mut cut_cols: Vec<u32> = vec![];
-        let mut cut_ks: Vec<SvRat> = vec![];
+        let mut cut_ks: Vec<SvRat> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut cut_c = sv_int(1);
         let mut side1: Vec<SvRat> = vec![];
         let mut side2: Vec<SvRat> = vec![];
@@ -914,7 +914,7 @@ impl SvSimplex {
         let s2 = *nikaia_std::index::get(&split_l.lits, 1);
         let a_hold = *nikaia_std::index::get(&split_c.lits, 0);
         let a_fail = *nikaia_std::index::get(&split_c.lits, 1);
-        let mut clauses: Vec<SvClause> = vec![];
+        let mut clauses: Vec<SvClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (side, f, weights) in [(s1, f0.clone(), side1), (s2, rest.clone(), side2)] {
             let mut parts: Vec<SvPart> = vec![SvPart { src: SvSrc::Lit(a_fail), num: f.num, scale: match f.den.checked_mul(den) { Some(__nikaia_value) => __nikaia_value, None => return None }, neg: false }, SvPart { src: SvSrc::Lit(side), num: 1, scale: 1, neg: false }];
             let mut n: i64 = 0;

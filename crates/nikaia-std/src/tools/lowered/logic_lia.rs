@@ -149,14 +149,14 @@ pub fn lg_tightened(a: &LgLin) -> LgLin {
 
 pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTreeMap<String, i64>) -> i64 {
     #[allow(unused_mut)] let mut left_names: Vec<&str> = vec![];
-    let mut left_ks: Vec<i64> = vec![];
+    let mut left_ks: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, k) in a.iter() {
         let k = nikaia_std::num::value(k);
         left_names.push(name);
         left_ks.push(k);
     }
     #[allow(unused_mut)] let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names;
-    let mut right_ks: Vec<i64> = vec![];
+    let mut right_ks: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, k) in b.iter() {
         let k = nikaia_std::num::value(k);
         right_names.push(name);
@@ -332,7 +332,7 @@ impl LgIndexed {
         by_form
     }
     pub(crate) fn hull(&self, alternatives: &[Vec<LgItem>]) -> Vec<LgLin> {
-        let mut common: Vec<LgForm> = vec![];
+        let mut common: Vec<LgForm> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut first = true;
         for alternative in alternatives.iter() {
             let each = self.strongest(alternative);
@@ -510,20 +510,20 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
     #[allow(unused_mut)] let mut round_names: Vec<String> = vec![];
     let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = vec![];
-    let mut alive: Vec<i64> = vec![];
+    let mut alive: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
     for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
     let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
-    let mut rank_names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
-    let mut quotients: Vec<bool> = vec![];
+    let mut rank_names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
+    let mut quotients: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for name in every.iter() {
         ranks.insert(nikaia_std::block::Text::from(name.to_string()), ranks.len() as i64);
         rank_names.push(nikaia_std::block::Text::from(name.to_string()));
         quotients.push(name.starts_with("quot#"));
     }
-    let mut present: Vec<bool> = vec![];
-    let mut ups: Vec<i64> = vec![];
-    let mut downs: Vec<i64> = vec![];
+    let mut present: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut ups: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut downs: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in quotients.iter() {
         present.push(false);
         ups.push(0);
@@ -617,8 +617,8 @@ pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], name: &str, budget: &LgBudget, steps: &mut Vec<LgStep>, round_names: &mut Vec<String>, round_places: &mut Vec<Vec<i64>>, ranks: &collections::BTreeMap<String, i64>, stop: &mut Vec<LgClosed>) -> Vec<i64> {
     let mut without: Vec<i64> = vec![];
-    let mut up: Vec<i64> = vec![];
-    let mut down: Vec<i64> = vec![];
+    let mut up: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut down: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut with_places: Vec<i64> = vec![];
     for place in now.iter() {
         let place = nikaia_std::num::value(place);
@@ -710,7 +710,7 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
 }
 
 pub(crate) fn lg_traced(steps: &[LgStep], last: i64) -> LgRefutation {
-    let mut needed: Vec<bool> = vec![];
+    let mut needed: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in steps.iter() { needed.push(false); }
     { let __nikaia_stored = true; nikaia_std::index::set(&mut needed, nikaia_std::index::at(last), __nikaia_stored); }
     let mut at = last;

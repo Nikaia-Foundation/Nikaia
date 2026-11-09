@@ -27,7 +27,7 @@ pub fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in payload.iter() {
                 let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -35,7 +35,7 @@ pub fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
             return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Struct { name, fields } => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
                 let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
@@ -43,7 +43,7 @@ pub fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
             return Some(format!("{} {{ {} }}", name, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::List(items) => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in items.iter() {
                 let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -51,7 +51,7 @@ pub fn rust_value(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
             return Some(format!("[{}]", nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Constant { constructor, parts } => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in parts.iter() {
                 let text = match rust_value(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -321,7 +321,7 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
                 borrow = "&";
             }
             let some_held: Option<Ty> = Some(held.clone());
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() {
                 let text = match written_below(state, world, item, (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -330,7 +330,7 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
         },
         BuildValue::Struct { name, fields } => {
             let declared = state.fields_of(world, name);
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
                 let field_want = const_field_type((declared).as_ref(), field);
                 let text = match written_below(state, world, held, (field_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -341,7 +341,7 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
             let declared = nikaia_std::index::or(payloads(ty, variant), || vec![].into());
-            #[allow(unused_mut)] let mut written: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
             for held in payload.iter() {
                 let part_want = nth_type(&declared, at);
@@ -392,7 +392,7 @@ impl CheckState {
         }
         let some_held: Option<Ty> = Some(held.clone());
         #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
-        #[allow(unused_mut)] let mut values: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
+        #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
         let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
         for pair in pairs.iter() {

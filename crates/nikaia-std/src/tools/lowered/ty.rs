@@ -1337,7 +1337,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
-    let pairs = vec![("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")];
+    let pairs = nikaia_std::block::List::from_array_in([("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")], nikaia_std::block::Place::Block);
     for (old, new) in pairs.iter() {
         let old = *old;let new = *new;
         if !(parse(old) == parse(new)) { nikaia_std::abort::assertion_failed("assert(parse(old) == parse(new))", None, &[("parse(old)", (&&nikaia_std::abort::Operand(&(parse(old)))).shown()), ("parse(new)", (&&nikaia_std::abort::Operand(&(parse(new)))).shown()), ]) };

@@ -252,7 +252,7 @@ pub(crate) fn migrate_receivers(tokens: &[MigrateToken]) -> Vec<(i64, bool)> {
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_in_params(tokens: &[MigrateToken]) -> Vec<bool> {
     let mut out: Vec<bool> = vec![];
-    let mut params: Vec<bool> = vec![];
+    let mut params: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut fn_depth: i64 = -1;
     for token in tokens.iter() {
         let t = nikaia_std::block::Text::from(token.text.to_string());
@@ -276,7 +276,7 @@ pub(crate) fn migrate_in_params(tokens: &[MigrateToken]) -> Vec<bool> {
 // this was written - see `contracts::sync`.
 pub(crate) fn migrate_parameters(tokens: &[MigrateToken]) -> Vec<i64> {
     let in_params = migrate_in_params(tokens);
-    let mut unnamed: Vec<bool> = vec![];
+    let mut unnamed: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut out: Vec<i64> = vec![];
     for k in 0..tokens.len() as i64 {
         match nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind {
@@ -320,7 +320,7 @@ pub(crate) fn migrate_a_ref_code(tokens: &[MigrateToken], k: i64, in_brackets: b
 pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut Vec<String>, suffix: &mut Vec<String>) {
     let open = k + 1;
     let close = migrate_closing(tokens, open);
-    #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut start = open + 1;
     let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
@@ -376,7 +376,7 @@ pub(crate) fn migrate_from_of_a_declaration(tokens: &[MigrateToken], k: i64, suf
     let close = migrate_closing(tokens, open);
     if migrate_text_at(tokens, close + 1) != "->" || migrate_text_at(tokens, close + 2) != "ref" || migrate_text_at(tokens, close + 3) == "mut" || migrate_text_at(tokens, close + 3) == "(" { return; }
     let mut takes_one = false;
-    #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     for j in open + 1..close {
         if migrate_a_ref_code(tokens, j, false) { takes_one = true; }
@@ -410,7 +410,7 @@ pub(crate) fn migrate_trait_result(tokens: &[MigrateToken], k: i64) -> (i64, i64
     while migrate_text_at(tokens, after) == "sync" || migrate_text_at(tokens, after) == "throws" { after += 1; }
     if migrate_text_at(tokens, after) == "from" || migrate_text_at(tokens, after) == "{" { return none; }
     let mut lent_self = false;
-    #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     for j in open + 1..close {
         match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {
@@ -543,10 +543,10 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
     let n = tokens.len() as i64;
     let receivers = migrate_receivers(&tokens);
     let parameters = migrate_parameters(&tokens);
-    let mut dropped: Vec<bool> = vec![];
-    let mut gapless: Vec<bool> = vec![];
+    let mut dropped: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut gapless: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut prefix: Vec<String> = vec![];
-    let mut guarded: Vec<bool> = vec![];
+    let mut guarded: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut suffix: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
     for _t in tokens.iter() {
         dropped.push(false);
@@ -557,9 +557,9 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
     }
     let in_params = migrate_in_params(&tokens);
     let mut in_trait: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
-    let mut kept_ref: Vec<bool> = vec![];
+    let mut kept_ref: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _t in tokens.iter() { kept_ref.push(false); }
-    let mut brackets: Vec<bool> = vec![];
+    let mut brackets: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut until: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     while k < n {

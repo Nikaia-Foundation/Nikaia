@@ -141,6 +141,7 @@ const MEMORY: std::alloc::Layout = match std::alloc::Layout::from_size_align(BLO
 /// only refuses. Cold: a task that fits its block never comes here.
 #[cold]
 #[inline(never)]
+#[track_caller]
 pub fn full() -> ! {
     panic!("the task is over its memory budget")
 }
@@ -471,18 +472,21 @@ pub fn list<T>(place: Place) -> List<T> {
 
 /// Room for `more` elements, or the task ends (D6).
 #[inline]
+#[track_caller]
 pub fn reserve<T>(list: &mut List<T>, more: usize) {
     list.reserve(more);
 }
 
 /// Push `item`, ending the task where the block refuses (D6).
 #[inline]
+#[track_caller]
 pub fn push<T>(list: &mut List<T>, item: T) {
     list.push(item);
 }
 
 /// **Append a run of elements with one copy** ([`List::extend_copied`]).
 #[inline]
+#[track_caller]
 pub fn extend<T: Copy>(list: &mut List<T>, run: &[T]) {
     list.extend_copied(run);
 }

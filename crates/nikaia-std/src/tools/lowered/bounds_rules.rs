@@ -45,7 +45,7 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
     if lists.is_empty() { return vec![]; }
     let mut quiet = frame_context(context.around.clone(), &context.std_receivers, &context.simd_loads);
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut results: Vec<(String, String)> = vec![];
+    let mut results: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { target, methods, .. } => {
@@ -200,7 +200,7 @@ pub(crate) fn rules_fields_of(path: &str) -> Vec<String> {
 }
 
 pub(crate) fn rules_outside(changed: &BoundsChanged, types: &collections::BTreeMap<String, String>, lists: &collections::BTreeMap<String, Vec<String>>, dropped: &mut collections::BTreeSet<String>) {
-    let mut paths: Vec<String> = vec![];
+    let mut paths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for p in changed.values.iter() { paths.push(nikaia_std::block::Text::from(p.to_string())); }
     for p in changed.lengths.iter() {
         let of = nikaia_std::index::or(match types.get(&path_root(p)) {
@@ -268,7 +268,7 @@ pub(crate) fn rules_typed(args: &[FnArg], body: &Block, owner: &str, context: &B
     }
     rules_typed_lets(body, &shape.twice, &mut out, words);
     if !owner.is_empty() {
-        let mut named: Vec<String> = vec![];
+        let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, of) in out.iter() { if of == "Self" { named.push(nikaia_std::block::Text::from(name.to_string())); } }
         for name in named.iter() { out.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(owner.to_string())); }
     }
@@ -770,7 +770,7 @@ pub(crate) fn rules_element_facts(walk: &mut BoundsWalk, facts: &mut BoundsFacts
     let n = walk.arena.var(name);
     let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     given.insert(nikaia_std::block::Text::from(element.to_string()), n);
-    let mut stated: Vec<i64> = vec![];
+    let mut stated: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for fact in facts.facts.iter() {
         let fact = nikaia_std::num::value(fact);
         if walk.arena.mentions(fact, &element) { stated.push(walk.arena.substitute(fact, &given)); }
@@ -994,7 +994,7 @@ pub(crate) fn rules_handed(paths: &[String]) -> BoundsChanged {
 }
 
 pub(crate) fn rules_writes(changed: &BoundsChanged, path: &str) -> bool {
-    let mut all: Vec<String> = vec![];
+    let mut all: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for p in changed.values.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
     for p in changed.lengths.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }
     for p in changed.parts.iter() { all.push(nikaia_std::block::Text::from(p.to_string())); }

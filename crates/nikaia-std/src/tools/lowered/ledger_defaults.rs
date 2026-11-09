@@ -45,7 +45,7 @@ pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow
 pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar::InternerContext, name: &str, attribute: &Attribute, computed: &impl Fn(&Ty, &Expr) -> Option<String>) -> Option<String> {
     let found = match ld_type_named(ledger, library, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut position: i64 = 0;
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in found.fields.iter() {
         let mut value: String = String::from("");
         if field.default.is_empty() {
@@ -126,7 +126,7 @@ pub fn write_result_sources(ledger: &mut Ledger, units: i64, package: &impl Fn(&
             }
             for kept in stored(unit, &ledger, &shared) { fresh.insert(kept.key, kept.stores); }
         }
-        let mut keys: Vec<String> = vec![];
+        let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (key, _) in ledger.functions.iter() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
         for key in keys.iter() {
             let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };

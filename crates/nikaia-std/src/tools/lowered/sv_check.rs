@@ -286,7 +286,7 @@ pub(crate) fn sv_unit_chain(entries: &[SvEntry], value: &mut Vec<i64>, lits: &[u
             SvEntry::Clause(c) => c,
             _ => return format!("hint {} is no clause", h),
         };
-        let mut open: Vec<u32> = vec![];
+        let mut open: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for l in clause.iter() {
             let l = nikaia_std::num::value(l);
             let v = sv_value(&value, l);

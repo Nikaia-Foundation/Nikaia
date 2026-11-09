@@ -327,7 +327,7 @@ pub fn check_core_arguments_bound<H: CheckHost>(state: &mut CheckState, world: &
 #[allow(clippy::too_many_arguments)]
 pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &Expr, found: &Ty, acc: &Ty, owner: &str, role: &str, span: &Span) {
     let mut back: Ty = Ty::Unknown;
-    let mut params: Vec<Ty> = vec![];
+    let mut params: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match found {
         Ty::Fn { params: given, result, .. } => {
             let result = nikaia_std::boxed::open(result);
@@ -390,7 +390,7 @@ pub(crate) fn check_core_fold_form_key(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     match part {
         Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
         Expr::Path(segments, _) => {
-            let mut names: Vec<String> = vec![];
+            let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for segment in segments.iter() {
                 let segment = *segment;
                 names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
@@ -583,8 +583,8 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
             _ => { },
         }
     }
-    let mut founds: Vec<Ty> = vec![];
-    #[allow(unused_mut)] let mut integers: Vec<String> = vec![];
+    let mut founds: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut integers: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut integers = integers;
     for item in items.iter() {
         let mut found: Ty = (*nikaia_std::index::get(&walked, (j) as usize)).clone();

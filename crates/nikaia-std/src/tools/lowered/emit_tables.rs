@@ -35,8 +35,8 @@ pub(crate) fn emit_tables_any_holds(words: &winnow_grammar::InternerContext, typ
 }
 
 pub fn emit_tables_borrowing_structs_beside(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], outside: &collections::BTreeSet<String>) -> Vec<winnow_grammar::Symbol> {
-    let mut names: Vec<winnow_grammar::Symbol> = vec![];
-    let mut fields_of: Vec<Vec<Type>> = vec![];
+    let mut names: Vec<winnow_grammar::Symbol> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut fields_of: Vec<Vec<Type>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut borrowing: Vec<winnow_grammar::Symbol> = vec![];
     for item in items.iter() {
         let mut types: Vec<Type> = vec![];

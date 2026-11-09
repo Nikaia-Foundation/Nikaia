@@ -6,7 +6,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
-        #[allow(unused_mut)] let mut named: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for param in params.iter() {
             let param = *param;
             named.push(format!("`{}`", world.words.resolve(param)));
@@ -69,7 +69,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
-        let mut fields: Vec<String> = vec![];
+        let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for setting in config.iter() { fields.push(nikaia_std::block::Text::from(world.words.resolve(setting.name).to_string())); }
         self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec![String::from("Parentheses after a type call its constructor; a struct literal with field names uses braces.")], Some(format!("Write `{} {{ {}: … }}`.", name, nikaia_std::block::Text::from(fields.join(": …, "))))));
     }
@@ -85,7 +85,7 @@ impl CheckState {
                     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
                     names.extend(pattern_names(world, nikaia_std::index::get(&alternatives, nikaia_std::index::at(at))));
                     if names != first {
-                        let mut missing: Vec<String> = vec![];
+                        let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                         for name in first.iter() { if !names.contains(name) { missing.push(nikaia_std::block::Text::from(name.to_string())); } }
                         for name in names.iter() { if !first.contains(name) { missing.push(nikaia_std::block::Text::from(name.to_string())); } }
                         missing.sort();

@@ -129,7 +129,7 @@ pub async fn comptime_bundle_run_bundle<H: ComptimeBundleHost>(host: &H) -> Resu
 pub(crate) fn comptime_bundle_run_fingerprint<H: ComptimeBundleHost>(host: &H) -> String {
     let mut newest: i64 = 0;
     let mut count = 0;
-    let mut pending = vec![host.std_dir()];
+    let mut pending = nikaia_std::block::List::from_array_in([host.std_dir()], nikaia_std::block::Place::Block);
     loop {
         let dir = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         let names = match fs::read_dir(&dir, &fs::Root::Anywhere) {
@@ -203,9 +203,9 @@ pub(crate) fn comptime_bundle_bundle_dir<H: ComptimeBundleHost>(flavour: &Compti
 }
 
 pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String, fs::Path)]) -> Result<String, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
-    let mut files: Vec<fs::Path> = vec![nikaia_std::fs::path::clone(&(dylib))];
+    let mut files: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(dylib))], nikaia_std::block::Place::Block);
     for (_, rlib) in rlibs.iter() { files.push(nikaia_std::fs::path::clone(&(rlib))); }
-    let mut lines: Vec<String> = vec![];
+    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for file in files.iter() {
         let meta = match fs::metadata(file, &fs::Root::Anywhere) {
             Ok(value) => value,

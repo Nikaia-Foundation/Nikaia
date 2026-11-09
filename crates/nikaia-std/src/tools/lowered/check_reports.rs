@@ -234,7 +234,7 @@ impl CheckState {
         let known = self.binding(name).is_some() || resolve_call(world, name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name);
         if known { return; }
         let suffix = format!("::{}", name);
-        let mut keys: Vec<String> = vec![];
+        let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (key, _) in world.library.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
         if keys.len() != 1 { return; }
         let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, 0)).to_string());

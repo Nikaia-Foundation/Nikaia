@@ -145,7 +145,7 @@ pub(crate) fn sv_dots(held: &[SvHeld], u: u32, v: u32) -> Option<SvDots> {
 }
 
 pub(crate) fn sv_reduce_step(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, book: &mut SvBook) -> bool {
-    let mut cols: Vec<u32> = vec![];
+    let mut cols: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for h in held.iter() {
         for c in h.row.cols.iter() {
             let c = nikaia_std::num::value(c);
@@ -193,7 +193,7 @@ pub(crate) fn sv_reduce_step(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>,
 
 pub(crate) fn sv_eliminate(held: &mut Vec<SvHeld>, solved: &mut Vec<SvSolved>, book: &mut SvBook) -> SvChecked {
     if !book.reals.is_empty() { return SvChecked::Unknown(LgUnknown::OutsideTheTheory); }
-    let mut skipped: Vec<SvRow> = vec![];
+    let mut skipped: Vec<SvRow> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut extended = false;
     let mut rounds = 0;
     while rounds < 4096 {

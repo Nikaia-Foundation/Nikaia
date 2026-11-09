@@ -39,7 +39,7 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
             return Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
         },
         Expr::Path(segments, _) => {
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
@@ -271,7 +271,7 @@ impl EmitState {
             if chosen == "HashMap" { return String::from("HashMap::<_, _>::default"); }
             if chosen != *nikaia_std::index::get(&segments, 0) { return format!("{}::default", chosen); }
         }
-        let mut mapped: Vec<String> = vec![];
+        let mut mapped: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for segment in segments.iter() { mapped.push(self.map_name(trusting, segment)); }
         let joined = nikaia_std::block::Text::from(mapped.join("::"));
         unaliased_in(world.aliases, &joined)
@@ -296,7 +296,7 @@ impl EmitState {
         let mut written: String = String::from("");
         if !args.is_empty() { written = nikaia_std::index::or(emit_callee_text(world, nikaia_std::index::get(&args, 0)), || "".into()); }
         let asked = unaliased_in(world.aliases, &written);
-        let mut values: Vec<String> = vec![];
+        let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for text in texts.iter() {
             let parts: Vec<&str> = text.split(" { ").collect::<Vec<_>>();
             if *nikaia_std::index::get(&parts, 0) == asked { values.push(self.attribute_in_rust(world, text)); }
@@ -329,7 +329,7 @@ pub fn emit_is_a_shape_bound(world: &EmitWorld<'_, '_, '_, '_>, bound: &str) -> 
 
 pub fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> String {
     let name = escaped_name(world.words.resolve(param.name));
-    let mut bounds: Vec<String> = vec![];
+    let mut bounds: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for bound in param.bounds.iter() {
         let bound = *bound;
         let written = escaped_name(world.words.resolve(bound));

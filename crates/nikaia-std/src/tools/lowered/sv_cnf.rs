@@ -302,7 +302,7 @@ impl SvTseitin {
 }
 
 pub(crate) fn sv_cnf_clause(lits: &[i64]) -> Option<Vec<u32>> {
-    let mut out: Vec<u32> = vec![];
+    let mut out: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for l in lits.iter() {
         let l = nikaia_std::num::value(l);
         if l == -1 { return None; }

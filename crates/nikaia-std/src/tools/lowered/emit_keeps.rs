@@ -35,7 +35,7 @@ impl EmitState {
     pub fn keep_prelude(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let mut lines: Vec<String> = vec![];
+        let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if plan.first == at {
             if plan.frame_keep { lines.push(String::from("let __keep_frame = nikaia_std::tether::Keep::new();")); }
             if plan.task_keep { lines.push(String::from("let __keep_task = std::sync::Arc::new(nikaia_std::tether::Keep::new());")); }

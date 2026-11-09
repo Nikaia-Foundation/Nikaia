@@ -4,7 +4,7 @@
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn members_named(members: &[Ty]) -> String {
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for member in members.iter() { names.push(format!("`{}`", member.text())); }
     nikaia_std::block::Text::from(names.join(", "))
 }

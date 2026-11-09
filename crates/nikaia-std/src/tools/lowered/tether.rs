@@ -215,7 +215,7 @@ pub(crate) fn padded(word: &str, width: i64) -> String {
 }
 
 pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTreeSet<String>, plans: &[BufferPlan], library: &Ledger) -> String {
-    #[allow(unused_mut)] let mut lines: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !texts.is_empty() {
         lines.push(String::from("text (declared `String`):\n"));
         for line in texts.iter() { lines.push(format!("    {}\n", line)); }
@@ -224,7 +224,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
     for (key, contract) in ledger.functions.iter() {
         if contract.views.is_empty() || !here.contains(key) { continue; }
         lines.push(format!("{}:\n", key));
-        let mut lent: Vec<String> = vec![];
+        let mut lent: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if contract.signature.is_some() {
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut at: i64 = 0;
@@ -258,7 +258,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         handed.insert(nikaia_std::block::Text::from(plan.key.to_string()), names);
     }
     for plan in plans.iter() {
-        let mut said: Vec<String> = vec![];
+        let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (at, keep) in plan.puts.iter() {
             let at = nikaia_std::num::value(at);let keep = *keep;
             let name = nikaia_std::index::or(buffer_named(plan, at), || "a buffer".into());
@@ -271,7 +271,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 said.push(format!("    {} lives {}\n", an_argument(&callee), keep_words(&keep)));
                 continue;
             }
-            #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let found = handed.get(callee); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };

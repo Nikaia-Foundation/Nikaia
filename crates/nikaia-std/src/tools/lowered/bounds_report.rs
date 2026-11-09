@@ -103,7 +103,7 @@ pub fn bounds_report_derived(derived: &[String], source: &str) -> Vec<String> {
     for row in derived.iter() {
         let parts: Vec<&str> = row.split("\t").map(|p| { p }).collect::<Vec<_>>();
         if parts.len() != 3 { continue; }
-        let mut lines: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let parts = parts;
+        let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
         for byte in (*nikaia_std::index::get(&parts, 2)).split(' ') { lines.push(nikaia_std::block::Text::from(bounds_report_line(source, nikaia_std::index::or(text::parse_i64(byte), || 0)).to_string())); }
         out.push(format!("{}: {}, proved at the calls on lines {}", *nikaia_std::index::get(&parts, 0), *nikaia_std::index::get(&parts, 1), nikaia_std::block::Text::from(lines.join(", "))));
     }

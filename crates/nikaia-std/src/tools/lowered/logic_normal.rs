@@ -17,7 +17,7 @@ pub(crate) struct LgOrdered {
 }
 
 pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
-    let mut ordered: Vec<LgOrdered> = vec![];
+    let mut ordered: Vec<LgOrdered> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
         let shape = lg_written(arena, fact, true, true);
@@ -308,7 +308,7 @@ impl LgNormal {
 pub fn lg_certificate_text(certificate: &LgCertificate) -> String {
     match certificate {
         LgCertificate::Refuted(refutation) => {
-            let mut steps: Vec<String> = vec![];
+            let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for step in refutation.steps.iter() {
                 let step = *step;
                 steps.push(lg_step_text(&step));
@@ -317,7 +317,7 @@ pub fn lg_certificate_text(certificate: &LgCertificate) -> String {
         },
         LgCertificate::Split { disjunction, cases } => {
             let disjunction = *disjunction;
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for one in cases.iter() { parts.push(lg_certificate_text(one)); }
             format!("S{}[{}]", disjunction, nikaia_std::block::Text::from(parts.join("|")))
         },
@@ -394,7 +394,7 @@ pub(crate) fn lg_step_of(word: &str) -> Option<LgStep> {
 
 pub fn lg_model_text(model: &LgModel) -> String {
     if model.values.is_empty() { return String::from("-"); }
-    let mut values: Vec<String> = vec![];
+    let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, value) in model.values.iter() {
         let value = nikaia_std::num::value(value);
         values.push(format!("{}={}", name, value));

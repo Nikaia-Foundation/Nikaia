@@ -339,18 +339,18 @@ impl EmitState {
         let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
         let mut inside: String = String::from("");
         if pieces.len() > 1 {
-            let mut rest: Vec<String> = vec![];
+            let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in 1..pieces.len() as i64 { rest.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, (at) as usize)).to_string())); }
             let joined = nikaia_std::block::Text::from(rest.join(" { "));
             let stripped = joined.strip_suffix(" }");
             if stripped.is_some() { inside = nikaia_std::block::Text::from(nikaia_std::index::or(stripped, || "").to_string()); } else { inside = nikaia_std::block::Text::from(joined.to_string()); }
         } ::core::mem::drop(pieces);
-        let mut fields: Vec<String> = vec![];
+        let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in top_level_parts(&inside) {
             let halves: Vec<&str> = part.split(": ").collect::<Vec<_>>();
             if halves.len() < 2 { continue; }
             let field = nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, 0)).to_string());
-            let mut value_parts: Vec<String> = vec![];
+            let mut value_parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in 1..halves.len() as i64 { value_parts.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, (at) as usize)).to_string())); }
             let value = nikaia_std::block::Text::from(value_parts.join(": "));
             let ty = emit_field_type((self.field_contract(world, &name, &field)).as_ref());

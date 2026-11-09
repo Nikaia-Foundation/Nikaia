@@ -70,7 +70,7 @@ pub fn sv_log_verified(arena: &TermArena, facts: &[i64], goal: i64, log: &[SvSte
 }
 
 pub fn sv_log_text(log: &[SvStep]) -> String {
-    let mut steps: Vec<String> = vec![];
+    let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for step in log.iter() { steps.push(sv_step_text(step)); }
     format!("{}{}", SV_LOG_PREFIX, nikaia_std::block::Text::from(steps.join(",")))
 }
@@ -89,7 +89,7 @@ pub(crate) fn sv_step_text(step: &SvStep) -> String {
 }
 
 pub(crate) fn sv_u32s_text(items: &[u32]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         let item = nikaia_std::num::value(item);
         words.push(format!("{}", item));
@@ -98,7 +98,7 @@ pub(crate) fn sv_u32s_text(items: &[u32]) -> String {
 }
 
 pub(crate) fn sv_i64s_text(items: &[i64]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         let item = nikaia_std::num::value(item);
         words.push(format!("{}", item));
@@ -107,7 +107,7 @@ pub(crate) fn sv_i64s_text(items: &[i64]) -> String {
 }
 
 pub(crate) fn sv_srcs_text(srcs: &[SvSrc]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for src in srcs.iter() {
         let src = *src;
         words.push(match src {

@@ -110,8 +110,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn lent_arms_view_and_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         if !is_a_choice(given) { return false; }
-        let mut viewed: Vec<i64> = vec![];
-        let mut made: Vec<i64> = vec![];
+        let mut viewed: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut made: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut owned: Vec<i64> = vec![];
         let mut text = false;
         let mut names: i64 = 0;
@@ -166,8 +166,8 @@ impl CheckState {
         let view = expected.is_a_view();
         if !either && !view { return false; }
         let text = a_string_type();
-        let mut lent: Vec<i64> = vec![];
-        let mut literals: Vec<i64> = vec![];
+        let mut lent: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut literals: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut others_view = true;
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) { continue; }
@@ -224,7 +224,7 @@ impl CheckState {
         let mut owned = 0;
         let mut absent = false;
         let mut lent: Vec<i64> = vec![];
-        let mut literals: Vec<i64> = vec![];
+        let mut literals: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) {
                 absent = true;
@@ -603,7 +603,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn expect_kept_asked(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &impl Fn(&str, &str) -> String) {
-        let mut arms: Vec<CheckArm<'_>> = vec![];
+        let mut arms: Vec<CheckArm<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at = Span { start: span.start, end: span.end };
         if value.is_some() {
             let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };

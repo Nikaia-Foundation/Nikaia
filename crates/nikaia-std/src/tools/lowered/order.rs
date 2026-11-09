@@ -404,7 +404,7 @@ pub(crate) fn called_key(func: &Expr, names: &winnow_grammar::InternerContext) -
 }
 
 pub(crate) fn joined_segments(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
         parts.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
@@ -489,7 +489,7 @@ pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar:
     if block.stmts.is_empty() { return; }
     let mut operations: Vec<Operation> = vec![];
     let mut present: Vec<bool> = vec![];
-    let mut lines: Vec<String> = vec![];
+    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for stmt in block.stmts.iter() {
         let answer = accounted_beside(&stmt.node, names, walking);
         let named = match answer {

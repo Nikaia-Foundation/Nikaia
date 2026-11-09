@@ -357,7 +357,7 @@ pub fn written_type(names: &winnow_grammar::InternerContext, ty: &Type) -> Strin
         out.push_str("ref ");
         if ty.is_mut { out.push_str("mut "); }
     } else if ty.is_mut { out.push_str("mut "); }
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for inner in ty.generics.iter() { parts.push(written_type(names, inner)); }
     let joined = nikaia_std::block::Text::from(parts.join(", "));
     if ty.is_tuple {
@@ -847,7 +847,7 @@ pub(crate) fn field_of_param(unit: &Unit, asked: &Asked<'_, '_, '_>, param: winn
 }
 
 pub(crate) fn joined_path(asked: &Asked<'_, '_, '_>, parts: &[winnow_grammar::Symbol]) -> String {
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = *part;
         written.push(nikaia_std::block::Text::from(asked.names.resolve(part).to_string()));
@@ -2491,7 +2491,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
             }
         }
     }
-    #[allow(unused_mut)] let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for source in sources.iter() { if reach.contains(source) { named.push(nikaia_std::block::Text::from(source.to_string())); } }
     if trait_name.is_none() || written_from { return; }
     if declared_result.found && !declared_result.view {
@@ -2630,7 +2630,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
                 None => None,
             };
             let mut places = rsrc_none();
-            #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
             if receiver.is_some() {
                 position = 1;
@@ -2694,9 +2694,9 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
         if rsrc_param_of(entry).starts_with('~') { continue; }
         if path.is_empty() { whole.insert(nikaia_std::block::Text::from(entry.to_string())); } else { paths.insert(path); }
     }
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for path in paths.iter() {
-        let mut named: Vec<String> = vec![];
+        let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for param in params.iter() { if whole.contains(param) || reach.contains(&format!("{}:{}", path, param)) { named.push(nikaia_std::block::Text::from(param.to_string())); } }
         if !named.is_empty() {
             let list = nikaia_std::block::Text::from(named.join(" | "));

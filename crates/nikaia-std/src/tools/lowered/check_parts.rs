@@ -23,7 +23,7 @@ impl CheckState {
                 name = nikaia_std::block::Text::from(world.words.resolve(written).to_string());
             },
             Expr::Path(parts, _) => {
-                let mut texts: Vec<String> = vec![];
+                let mut texts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for one in parts.iter() {
                     let one = *one;
                     texts.push(nikaia_std::block::Text::from(world.words.resolve(one).to_string()));

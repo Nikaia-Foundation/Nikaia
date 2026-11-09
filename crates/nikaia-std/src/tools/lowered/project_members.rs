@@ -247,7 +247,7 @@ pub fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> V
 pub async fn project_members_members_of<H: ProjectMembersHost>(entry_manifest: &ProjectMembersManifest, entry_root: &std::path::Path, host: &H) -> Result<Vec<ProjectMembersMember>, __NikaiaThrows_ProjectMembersRefusal__io_IoError> {
     let mut out: Vec<ProjectMembersMember> = vec![];
     let mut seen: collections::HashMap<fs::Path, i64> = collections::HashMap::<_, _>::default();
-    let mut queue: Vec<(ProjectMembersManifest, fs::Path)> = vec![(entry_manifest.clone(), project_members_canonical(entry_root))];
+    let mut queue: Vec<(ProjectMembersManifest, fs::Path)> = nikaia_std::block::List::from_array_in([(entry_manifest.clone(), project_members_canonical(entry_root))], nikaia_std::block::Place::Block);
     let fetched = project_members_fetched_of(entry_manifest, entry_root, host).await?;
     while !queue.is_empty() {
         let (manifest, root) = queue.remove(0);
@@ -332,7 +332,7 @@ pub async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &Projec
     }
     let mut entries: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut seen: collections::HashSet<fs::Path> = collections::HashSet::new();
-    let mut queue: Vec<(ProjectMembersManifest, fs::Path)> = vec![(manifest.clone(), project_members_canonical(root))];
+    let mut queue: Vec<(ProjectMembersManifest, fs::Path)> = nikaia_std::block::List::from_array_in([(manifest.clone(), project_members_canonical(root))], nikaia_std::block::Place::Block);
     while !queue.is_empty() {
         let (read, at) = queue.remove(0);
         if seen.contains(&at) { continue; }

@@ -546,7 +546,7 @@ impl CheckState {
         if empty { return; }
         let mut named: collections::BTreeSet<i64> = collections::BTreeSet::new();
         let mut bound_again = false;
-        let mut pending: Vec<Expr> = vec![];
+        let mut pending: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for expr in visited_in_expr(body) {
             match expr {
                 Expr::Variable(name, _) => {

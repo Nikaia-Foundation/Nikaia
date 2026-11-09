@@ -140,7 +140,7 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
     out.push_str(&format!("{}match {} {{\n", pad, expr));
     for variant in variants.iter() {
         if variant.named { return uncrossable(ty, &format!("`{}::{}` has named fields, and variants with named fields can't be computed at build time yet", name, variant.name)); }
-        #[allow(unused_mut)] let mut bound: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((at) as usize) < variant.carried.len() {
             bound.push(format!("__nikaia_p{}", at));

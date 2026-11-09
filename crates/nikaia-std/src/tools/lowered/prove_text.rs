@@ -26,7 +26,7 @@ pub fn rust_of(id: i64, term_of: &dyn Fn(i64) -> SolverTerm, escape: &dyn Fn(&st
 
 pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &dyn Fn(i64) -> SolverTerm, escape: &dyn Fn(&str) -> String) -> String {
     if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(rust_of(part, &term_of, &escape));
@@ -77,7 +77,7 @@ pub(crate) fn term_inner(id: i64, at_least: i64, arrow: bool, term_of: &dyn Fn(i
 pub(crate) fn term_binary(op: &str, a: i64, b: i64, r: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTerm) -> String { format!("{} {} {}", term_inner(a, r, arrow, &term_of), op, term_inner(b, r + 1, arrow, &term_of)) }
 
 pub(crate) fn term_joined(op: &str, parts: &[i64], r: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTerm) -> String {
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(term_inner(part, r + 1, arrow, &term_of));
@@ -120,7 +120,7 @@ pub(crate) fn term_whole(id: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTe
 
 pub fn shown(values: &collections::BTreeMap<String, i64>) -> String {
     if values.is_empty() { return String::from("no value of its own; the claim is false as written"); }
-    let mut said: Vec<String> = vec![];
+    let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, value) in values.iter() {
         let value = nikaia_std::num::value(value);
         said.push(format!("`{}` is {}", name, value));

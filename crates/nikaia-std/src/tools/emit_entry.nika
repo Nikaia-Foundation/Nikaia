@@ -67,10 +67,13 @@ impl EmitState {
         // ADR-345 D4: where `process::Exit` may leave `main`, the process ends
         // with its code after the drain.
         let exits = main_exits(self.own_contracts)
+        // ADR-327 D14: `main` is the root task, its body run inside a block
+        // of its own, which a full block ends as a panic in `main` does.
+        text = f"{text}    let nikaia_block = nikaia_std::block::Block::default();\n"
         if call_pauses(self.own_contracts, "main") {
-            text = f"{text}    let outcome = nikaia_std::rt::exec::block_on({body}({passed}));\n"
+            text = f"{text}    let outcome = {{\n        let _in = nikaia_std::block::enter(&nikaia_block);\n        let outcome = nikaia_std::rt::exec::block_on({body}({passed}));\n        outcome\n    }};\n"
         } else {
-            text = f"{text}    let outcome = {body}({passed});\n"
+            text = f"{text}    let outcome = {{\n        let _in = nikaia_std::block::enter(&nikaia_block);\n        let outcome = {body}({passed});\n        outcome\n    }};\n"
         }
         if exits {
             text = f"{text}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n"

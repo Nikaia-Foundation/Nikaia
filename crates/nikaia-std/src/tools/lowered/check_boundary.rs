@@ -76,7 +76,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn only_reads_its_receiver(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str) -> bool {
-        let mut candidates: Vec<FnContract> = vec![];
+        let mut candidates: Vec<FnContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for key in ledger_candidates(world.own, world.own_methods, method) {
             candidates.push(nikaia_std::index::or(match *nikaia_std::index::get(&world.own.functions, &key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),

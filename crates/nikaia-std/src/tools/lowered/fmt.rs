@@ -348,7 +348,7 @@ pub(crate) struct FmtShape {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
-    #[allow(unused_mut)] let mut stack: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut stack: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut under: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
     let mut bars = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
     let mut depth: Vec<i64> = vec![];
@@ -595,8 +595,8 @@ impl FmtPrinter {
         let toks = line.toks.copy_owned();
         let n = toks.len() as i64;
         let last = fmt_last_code(&toks);
-        let mut opens: Vec<i64> = vec![];
-        let mut kinds: Vec<String> = vec![];
+        let mut opens: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut kinds: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for f in self.frames.iter() {
             opens.push(-1);
             kinds.push(nikaia_std::block::Text::from(f.open.to_string()));
@@ -739,7 +739,7 @@ pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> 
     let inside = *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(open)) + 1;
     let block = nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "{";
     let mut pieces: Vec<FmtLine> = vec![FmtLine { toks: fmt_slice(&toks, 0, open + 1), blank: line.blank }];
-    let mut items: Vec<Vec<FmtToken>> = vec![];
+    let mut items: Vec<Vec<FmtToken>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut item: Vec<FmtToken> = vec![];
     let mut listed = false;
     for k in open + 1..close {

@@ -21,7 +21,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                     None => None,
                 }, || collections::BTreeSet::new().into());
                 let target_name = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
-                #[allow(unused_mut)] let mut given: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut given: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, .. } => {

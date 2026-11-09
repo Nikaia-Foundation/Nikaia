@@ -36,7 +36,7 @@ pub fn unclosed_quote(source: &str) -> i64 {
 
 pub fn unclosed_bracket(source: &str) -> i64 {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
-    let mut stack: Vec<i64> = vec![];
+    let mut stack: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut in_string = false;
     let mut at: i64 = 0;
     while at < c.len() as i64 {
@@ -64,7 +64,7 @@ pub(crate) fn past_the_line(c: &[scalar], at: i64) -> i64 {
 
 pub fn opening_of_an_unclosed_comment(source: &str) -> i64 {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
-    let mut open: Vec<i64> = vec![];
+    let mut open: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if open.is_empty() {

@@ -36,7 +36,7 @@ impl CheckState {
         } else if kind == "depth" { message = format!("`{}` went more than {} calls deep while the program was built.", bound, limit); }
         #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
         if !path.is_empty() {
-            let mut shown: Vec<String> = vec![];
+            let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for step in path.split(" > ").collect::<Vec<_>>() { if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&("…")) { shown.push(nikaia_std::block::Text::from(step.to_string())); } else if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&(value_fn)) { shown.push(format!("`{}`", bound)); } else { shown.push(format!("`{}`", step)); } }
             notes.push(format!("It was in {}.", nikaia_std::block::Text::from(shown.join(" > "))));
         }
@@ -54,7 +54,7 @@ impl CheckState {
         for name in sorted.iter() { if unique.is_empty() || *nikaia_std::index::get(&unique, nikaia_std::index::at(unique.len() as i64 - 1)) != *name { unique.push(nikaia_std::block::Text::from(name.to_string())); } }
         if self.said_rings.contains(&unique) { return; }
         self.said_rings.insert(unique);
-        let mut named: Vec<String> = vec![];
+        let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for name in ring.iter() { named.push(format!("`{}`", name)); }
         self.findings.push(check_refusal("NK1168", span, format!("`{}` depends on itself.", bound), vec![format!("The chain is {}, and a `comptime` has to be computable while the program is built.", nikaia_std::block::Text::from(named.join(" → ")))], Some(String::from("Give one of them a value that doesn't depend on the others, or make it a `let` so it's computed while the program runs."))));
     }

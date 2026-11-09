@@ -245,9 +245,19 @@ impl EmitState {
 
     /// **`vec![..]`, which is what a `Vec` already is below** (ADR-135 D1),
     /// **unless the use asked for an array** (ADR-152 D4): a fact about the
-    /// literal's *type*, and therefore the checker's to hand over.
+    /// literal's *type*, and therefore the checker's to hand over. **A list
+    /// the checker placed in the task's block** (ADR-327 D9,
+    /// `check_core_place_in_block`) is built there: `Place::Block`, from an
+    /// array so that its items take the list's element type.
     pub fn emit_core_list_lit[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, items: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        if self.facts.array_literals.contains(node_key(node)) {
+        let placed = self.facts.placed_in_block.contains(node_key(node))
+        if placed && items.len() == 0 {
+            out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)")
+            return
+        }
+        if placed {
+            out.push("nikaia_std::block::List::from_array_in([")
+        } else if self.facts.array_literals.contains(node_key(node)) {
             out.push("[")
         } else {
             out.push("vec![")
@@ -264,7 +274,7 @@ impl EmitState {
                 out.push(".clone()")
             }
         }
-        out.push("]")
+        out.push(if placed { "], nikaia_std::block::Place::Block)" } else { "]" })
     }
 
     /// **`[v; n]`, Rust's own spelling** (ADR-362 D1): `[v; _]` where the use

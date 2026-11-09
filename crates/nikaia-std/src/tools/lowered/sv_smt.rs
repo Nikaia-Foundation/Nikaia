@@ -308,16 +308,16 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>], short_id: &[Vec<u32>], book: &mut SvBook, units: &mut Vec<u32>, unit_ids: &mut Vec<u32>, facts: &mut Vec<u32>) -> bool {
     let mut column: i64 = -1;
-    let mut values: Vec<i64> = vec![];
-    let mut ps: Vec<u32> = vec![];
-    let mut ns: Vec<u32> = vec![];
-    let mut p_ids: Vec<u32> = vec![];
-    let mut n_ids: Vec<u32> = vec![];
+    let mut values: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut ps: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut ns: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut p_ids: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut n_ids: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for h in clause.iter() {
         let h = nikaia_std::num::value(h);
         let a = (sv_not(h) / 2u32) as i64;
         let n = (*nikaia_std::index::get(&short_lit, nikaia_std::index::at(a))).len() as i64;
-        let mut rows: Vec<SvBound> = vec![];
+        let mut rows: Vec<SvBound> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut second: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for k in 0..n {
             let r = match book.lit_bound(*nikaia_std::index::get(nikaia_std::index::get(&short_lit, nikaia_std::index::at(a)), nikaia_std::index::at(k))) { Some(__nikaia_value) => __nikaia_value, None => return true };

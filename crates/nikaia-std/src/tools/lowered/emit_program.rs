@@ -11,7 +11,7 @@ impl EmitState {
         for item in world.items.iter() {
             let shape = nikaia_std::index::or(self.walks_a_shape(world, &item.node), || "".into());
             if shape != "" {
-                let mut copies: Vec<String> = vec![];
+                let mut copies: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for ((written, on), _) in self.facts.unrolled.iter() { if *written == shape { copies.push(nikaia_std::block::Text::from(on.to_string())); } }
                 for on in copies.iter() {
                     let walked = nikaia_std::index::or(match self.facts.walks_fields.get(&shape) {
@@ -61,7 +61,7 @@ impl EmitState {
             Item::Fn { args, .. } => nikaia_std::block::Text::from(emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)).name).to_string()),
             _ => return Ok(()),
         };
-        let mut copies: Vec<(String, Vec<FieldContract>)> = vec![];
+        let mut copies: Vec<(String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for ((written, on), fields) in self.facts.field_copies.iter() { if *written == name { copies.push((nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); } }
         for (on, fields) in copies.iter() {
             for field in fields.iter() {
@@ -110,8 +110,8 @@ impl EmitState {
     }
     pub(crate) fn emit_program_shadow_types(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         for (name, parameters) in shadow_types(world.words, world.items) {
-            #[allow(unused_mut)] let mut generics: Vec<String> = vec![];
-            let mut fields: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut generics = generics;
+            #[allow(unused_mut)] let mut generics: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut generics = generics;
             for i in 0..parameters.len() as i64 {
                 generics.push(format!("P{}", i));
                 fields.push(format!("    pub {}: P{},", *nikaia_std::index::get(&parameters, (i) as usize), i));

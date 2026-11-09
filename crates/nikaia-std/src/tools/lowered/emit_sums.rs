@@ -36,7 +36,7 @@ impl EmitState {
     }
     pub fn lifetime_args(&self, name: &str, lifetime: &str) -> String {
         let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(lifetime.to_string()) };
-        #[allow(unused_mut)] let mut parts: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
+        #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let slots = slots;
         let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
         while ((at) as usize) < slots.len() {
             parts.push(nikaia_std::block::Text::from(lifetime.to_string()));
@@ -217,7 +217,7 @@ impl EmitState {
 
 pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], used_here: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut declared: Vec<collections::BTreeSet<String>> = vec![];
+    let mut declared: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for unit in units.iter() { declared.push(declared_errors(unit.words, unit.items)); }
     for (members, name) in sums.iter() {
         if units.len() < 2 {
@@ -245,7 +245,7 @@ pub(crate) fn sums_declared_here(world: &EmitWorld<'_, '_, '_, '_>) -> collectio
             },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
-                let mut owners: Vec<String> = vec![nikaia_std::block::Text::from(world.words.resolve(target.name).to_string())];
+                let mut owners: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(world.words.resolve(target.name).to_string())], nikaia_std::block::Place::Block);
                 match trait_name {
                     None => { },
                     Some(named) => { owners.push(nikaia_std::block::Text::from(world.words.resolve(named).to_string())); },

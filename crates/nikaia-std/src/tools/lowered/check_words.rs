@@ -64,13 +64,13 @@ pub fn counted(n: i64, what: &str) -> String {
 pub fn names_listed(names: &[String]) -> String {
     if names.is_empty() { return String::from("no fields"); }
     if names.len() == 1 { return format!("`{}`", *nikaia_std::index::get(&names, 0)); }
-    let mut rest: Vec<String> = vec![];
+    let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for k in 0..names.len() as i64 - 1 { rest.push(format!("`{}`", *nikaia_std::index::get(&names, (k) as usize))); }
     format!("{} and `{}`", nikaia_std::block::Text::from(rest.join(", ")), *nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1)))
 }
 
 pub fn indented_text(text: &str) -> String {
-    let mut lines: Vec<String> = vec![];
+    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for line in text.trim_end().lines() { lines.push(format!("       {}", line)); }
     nikaia_std::block::Text::from(lines.join("\n"))
 }

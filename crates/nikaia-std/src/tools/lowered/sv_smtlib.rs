@@ -437,8 +437,8 @@ impl SvSmtReader {
                 LgSexp::Atom(_) => { },
             }
         }
-        let mut names: Vec<String> = vec![];
-        let mut values: Vec<SvVal> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut values: Vec<SvVal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for binding in bindings.iter() {
             let pair = match binding.clone() {
                 LgSexp::List(inside) => inside,
@@ -549,7 +549,7 @@ impl SvSmtReader {
             self.reads(id, &mut seen, &mut names);
         }
         let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut todo: Vec<String> = vec![];
+        let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for name in names.iter() { todo.push(nikaia_std::block::Text::from(name.to_string())); }
         while !todo.is_empty() {
             let name = nikaia_std::index::or(todo.pop(), || "".into());
@@ -578,7 +578,7 @@ impl SvSmtReader {
             self.reads(definition, &mut seen, &mut more);
             for m in more.iter() { todo.push(nikaia_std::block::Text::from(m.to_string())); }
         }
-        let mut unread: Vec<String> = vec![];
+        let mut unread: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, _) in self.ites.iter() { if !done.contains(name) { unread.push(nikaia_std::block::Text::from(name.to_string())); } }
         for name in unread.iter() {
             self.ints.remove(name);
@@ -614,7 +614,7 @@ impl SvSmtReader {
             Some(fun) => { return self.apply_fun(sexp, &fun.clone(), &args); },
         }
         let mut formulas: Vec<i64> = vec![];
-        let mut lins: Vec<SvLin> = vec![];
+        let mut lins: Vec<SvLin> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for a in args.iter() {
             match a {
                 SvVal::Formula(id) => { let id = *id; formulas.push(id); },
@@ -850,7 +850,7 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
     }
     if queries > 1 { return SvSmtRead::Failed(SvReadWhy::Unsupported(format!("{} check-sat commands: a query is self-contained (ADR-270 D3)", queries))); }
     #[allow(unused_mut)] let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new() };
-    let mut stack: Vec<Vec<i64>> = vec![vec![]];
+    let mut stack: Vec<Vec<i64>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut asserted = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut reader = reader;
     for command in commands.iter() {
         let items = match command.clone() {

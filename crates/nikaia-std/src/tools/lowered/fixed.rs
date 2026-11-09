@@ -51,7 +51,7 @@ pub fn build(keys: &[String]) -> Option<Table> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Option<Table> {
-    let mut by_bucket: Vec<Vec<(i64, u32, u32)>> = vec![];
+    let mut by_bucket: Vec<Vec<(i64, u32, u32)>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in 0..buckets { by_bucket.push(vec![]); }
     for at in 0..n {
         let hash = fnv(nikaia_std::index::get(&keys, nikaia_std::index::at(at)), seed);
@@ -68,7 +68,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
     order.sort();
     let mut disps: Vec<(u32, u32)> = vec![];
     for _ in 0..buckets { disps.push((0, 0)); }
-    let mut slots: Vec<i64> = vec![];
+    let mut slots: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in 0..n { slots.push(-1); }
     for (_, bucket) in order.iter() {
         let bucket = nikaia_std::num::value(bucket);
@@ -77,7 +77,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
         while !placed && (d1 as i64) < n {
             let mut d2: u32 = 0u32;
             while !placed && (d2 as i64) < n {
-                let mut taken: Vec<(i64, i64)> = vec![];
+                let mut taken: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let mut fits = true;
                 for (at, f1, f2) in (*nikaia_std::index::get(&by_bucket, nikaia_std::index::at(bucket))).iter() {
                     let at = nikaia_std::num::value(at);let f1 = nikaia_std::num::value(f1);let f2 = nikaia_std::num::value(f2);

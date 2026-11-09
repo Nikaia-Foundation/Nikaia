@@ -80,8 +80,8 @@ pub(crate) fn result_from_note() -> String { String::from("A result's `from` nam
 pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if code.result_from.is_empty() { return None; }
-    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
-    #[allow(unused_mut)] let mut shown: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     for parameter in ty.generics.iter() {
         let mut text = written_type(names, parameter);

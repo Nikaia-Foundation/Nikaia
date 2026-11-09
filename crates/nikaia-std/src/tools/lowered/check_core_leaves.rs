@@ -270,7 +270,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                     let was_run = state.run_code.remove(&named);
                 },
                 Expr::Path(segments, _) => {
-                    let mut names: Vec<String> = vec![];
+                    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for segment in segments.iter() {
                         let segment = *segment;
                         names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
@@ -479,7 +479,7 @@ pub fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>, tail:
     let mut ends_in_a_return = false;
     if !body.stmts.is_empty() { ends_in_a_return = matches!(nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node, Stmt::Return(_)); }
     let mut first: Option<Ty> = None;
-    let mut seen: Vec<Ty> = vec![];
+    let mut seen: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !ends_in_a_return { seen.push(tail.clone()); }
     let mut result: Ty = tail.clone();
     for one in returns.iter() {

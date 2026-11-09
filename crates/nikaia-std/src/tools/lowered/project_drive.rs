@@ -359,7 +359,7 @@ pub fn project_drive_publish_stub(file: &ManifestFile) -> String {
 pub async fn project_drive_publishable(root: &std::path::Path, file: &ManifestFile) -> Result<(), __NikaiaThrows_ProjectDriveRefusal__io_IoError> {
     let dir = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")))), std::path::Path::new(&("publish")));
     let src = nikaia_std::fs::path::join(&(root), std::path::Path::new(&("src")));
-    let mut wanted: Vec<(String, String)> = vec![(String::from("Cargo.toml"), project_drive_publish_stub(file)), (String::from("lib.rs"), String::from(""))];
+    let mut wanted: Vec<(String, String)> = nikaia_std::block::List::from_array_in([(String::from("Cargo.toml"), project_drive_publish_stub(file)), (String::from("lib.rs"), String::from(""))], nikaia_std::block::Place::Block);
     for name in ["nikaia.toml", "nikaia.contracts"] {
         let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(name))), &fs::Root::Anywhere).await {
             Ok(value) => value,
@@ -511,7 +511,7 @@ pub(crate) fn project_drive_rust_library<H: ProjectDriveHost>(host: &H, members:
     check_env.push((String::from("RUSTC_WORKSPACE_WRAPPER"), String::from("")));
     let unset: Vec<String> = vec![];
     host.make_cargo(&nikaia_std::fs::path::join(&(crate_dir), std::path::Path::new(&("Cargo.toml"))), &check_env, &unset, false)?;
-    let mut runs: Vec<(String, Vec<String>)> = vec![(String::from(""), vec![String::from("--no-default-features")])];
+    let mut runs: Vec<(String, Vec<String>)> = nikaia_std::block::List::from_array_in([(String::from(""), vec![String::from("--no-default-features")])], nikaia_std::block::Place::Block);
     for name in applied.names.iter() { runs.push((nikaia_std::block::Text::from(name.to_string()), vec![String::from("--no-default-features"), String::from("--features"), nikaia_std::block::Text::from(name.to_string())])); }
     if applied.names.len() > 1 { runs.push((String::from("*"), vec![String::from("--all-features")])); }
     for run in runs.iter() {

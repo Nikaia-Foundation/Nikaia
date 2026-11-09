@@ -259,7 +259,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
 }
 
 pub(crate) fn late_puts(walk: &BufferWalk, plan: &mut BufferPlan) {
-    let mut found: Vec<(i64, Mutated)> = vec![];
+    let mut found: Vec<(i64, Mutated)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (at, _) in plan.puts.iter() {
         let at = nikaia_std::num::value(at);
         let changed = match walk.mutated.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -1607,7 +1607,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
     for (known, way) in walk.escapes.iter() { if known.0 == id.0 && known.1 == id.1 { ways.insert(escape_word(way), way.clone()); } }
     let mut leaves = false;
     let mut task = false;
-    #[allow(unused_mut)] let mut outer: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut outer: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (_, way) in ways.iter() {
         plan.escapes.push((source.clone(), way.clone()));
         match way {
@@ -1743,10 +1743,10 @@ pub(crate) fn source_refusal(source: &Source, what: &str, why: &str, help: &str)
 }
 
 pub(crate) fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, plan: &mut BufferPlan) {
-    let mut found: Vec<Finding> = vec![];
+    let mut found: Vec<Finding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for keeper in plan.element_keepers.iter() {
         let written = keeper_type(keeper, walk);
-        #[allow(unused_mut)] let mut whys: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut whys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let held = not_held_maybe((written).as_ref(), ask); #[allow(unused_mut, clippy::redundant_locals)] let mut whys = whys;
         if held.is_some() { whys.push(nikaia_std::index::or(held, || "".into())); }
         if walk.struct_puts.contains_key(keeper) {

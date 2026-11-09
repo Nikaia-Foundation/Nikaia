@@ -1,0 +1,62 @@
+// Only a list that cannot outlive its task is built in the task's block
+// (ADR-327 D9, #490): one the task returns, puts into a value or hands to
+// a call is built outside, so it is still whole after the task and its
+// block have ended, and another task's block reused that memory. Were it
+// placed, reading it here would read freed memory.
+struct Bag {
+    items: Vec[i64],
+}
+
+fn squares(n: i64) -> Vec[i64] {
+    let mut xs: Vec[i64] = []
+    for i in 0..<n {
+        xs.push(i * i)
+    }
+    return xs
+}
+
+fn bag() -> Bag {
+    let mut xs: Vec[i64] = [5]
+    xs.push(6)
+    return Bag { items: xs }
+}
+
+fn total(xs: Vec[i64]) -> i64 {
+    let mut sum = 0
+    for x in xs {
+        sum += x
+    }
+    return sum
+}
+
+// Kept to itself: placed in the block, and given back before the task ends.
+fn churn(n: i64) -> i64 {
+    let mut ys: Vec[i64] = []
+    for i in 0..<n {
+        ys.push(i)
+    }
+    let mut sum = 0
+    for y in ys {
+        sum += y
+    }
+    return sum
+}
+
+fn main() throws {
+    let a = spawn fn { squares(300) }
+    let kept = a.join()
+    let b = spawn fn { bag() }
+    let held = b.join()
+    let c = spawn fn {
+        let mut zs: Vec[i64] = [1, 2]
+        zs.push(3)
+        total(zs)
+    }
+    let handed = c.join()
+    let d = spawn fn { churn(1000) }
+    let churned = d.join()
+    let mut local: Vec[i64] = [1, 2, 3]
+    local.push(4)
+    local.sort()
+    println(f"{kept.len()} {kept[299]} {held.items[1]} {handed} {churned} {local.len()} {local[3]}")
+}

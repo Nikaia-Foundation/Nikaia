@@ -251,7 +251,7 @@ impl EmitState {
             }, || vec![].into());
             spelled = emit_core_flow_typed_names(names, &by_use);
         }
-        #[allow(unused_mut)] let mut bound: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut spelled = spelled;
+        #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut spelled = spelled;
         let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut spelled = spelled; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         for p in params.iter() {
             let p = *p;
@@ -815,7 +815,7 @@ impl EmitState {
     pub fn fatal_passing(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr, handler: &Block) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         let name = match call_callee_name(world.words, world.aliases, guarded) { Some(__nikaia_value) => __nikaia_value, None => return out };
-        #[allow(unused_mut)] let mut arriving: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut arriving: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let own = self.own_contracts.functions.get(&name);
         if own.is_some() {
             let contract = match own { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -1037,7 +1037,7 @@ pub(crate) fn emit_catch_is_a_scope(world: &EmitWorld<'_, '_, '_, '_>, guarded: 
 impl EmitState {
     pub(crate) fn emit_catch_calls_given_code(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr) -> bool {
         let name = match call_callee_name(world.words, world.aliases, guarded) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let mut set: Vec<String> = vec![];
+        let mut set: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let own = self.own_contracts.functions.get(&name);
         if own.is_some() { set = match own { Some(__nikaia_value) => __nikaia_value, None => return false }.fails_with.copy_owned(); } else {
             let theirs = match world.library.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };

@@ -97,7 +97,7 @@ pub(crate) fn emit_arg_function_key(world: &EmitWorld<'_, '_, '_, '_>, arg: &Exp
 }
 
 pub(crate) fn emit_arg_joined(world: &EmitWorld<'_, '_, '_, '_>, parts: &[winnow_grammar::Symbol]) -> String {
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = *part;
         names.push(emit_text(world, part));
@@ -399,7 +399,7 @@ impl EmitState {
     pub(crate) fn emit_arg_future<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arg: &Expr, i: i64, depth: i64, inside: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match arg {
             Expr::Closure { params, mutable, body, .. } => {
-                let mut names: Vec<String> = vec![];
+                let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for p in params.iter() {
                     let p = *p;
                     names.push(emit_local_name(&self.facts.comptime_names, &emit_text(world, p)));
@@ -431,7 +431,7 @@ impl EmitState {
         let node = node_key(arg);
         let buffers = walk.buffers_held_at(i);
         if buffers.is_some() {
-            let mut keeps: Vec<String> = vec![];
+            let mut keeps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for b in nikaia_std::index::or(buffers, || vec![].into()) { keeps.push(format!("std::sync::Arc::clone(&__keep_{})", b)); }
             let joined = nikaia_std::block::Text::from(keeps.join(", "));
             out.push("{ use nikaia_std::tether::Hold as _; (");
@@ -441,7 +441,7 @@ impl EmitState {
         }
         let kept_arity = nikaia_std::index::or(self.facts.kept_args_run_async.get(&node), || -1);
         if kept_arity >= 0 {
-            let mut names: Vec<String> = vec![];
+            let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
             let joined = nikaia_std::block::Text::from(names.join(", "));
             if !out.buf.ends_with('&') { out.push("&"); }
@@ -539,7 +539,7 @@ impl EmitState {
         };
         let lent = self.emit_arg_lent_params(world, value);
         if lent.is_empty() { return Ok(false); }
-        #[allow(unused_mut)] let mut written: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for item in world.items.iter() {
             match &item.node {
                 Item::Fn { name, receiver, generics, args, .. } => {
@@ -553,7 +553,7 @@ impl EmitState {
         }
         if (written.len() as i64) != lent.len() as i64 { return Ok(false); }
         #[allow(unused_mut)] let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
-        let mut typed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        let mut typed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
         for n in 0..lent.len() as i64 {
             names.push(format!("__nikaia_a{}", n));
             typed.push(format!("__nikaia_a{}: {}", n, *nikaia_std::index::get(&written, (n) as usize)));
@@ -566,7 +566,7 @@ impl EmitState {
 }
 
 pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
-    #[allow(unused_mut)] let mut passed: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
     for name in names.iter() {
         if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
@@ -706,7 +706,7 @@ impl EmitState {
             let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let mut fill: &'static str = "nikaia_std::hash::Keyed";
             if self.trusted_input { fill = "nikaia_std::hash::Fast"; }
-            let mut fills: Vec<String> = vec![];
+            let mut fills: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in 0..hidden.0 { if at < hidden.1 { fills.push(String::from("_")); } else { fills.push(nikaia_std::block::Text::from(fill.to_string())); } }
             out.push(&format!("::<{}>", nikaia_std::block::Text::from(fills.join(", "))));
         }
@@ -1093,9 +1093,9 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
-        let mut tasks: Vec<(Expr, i64)> = vec![];
-        #[allow(unused_mut)] let mut deadlines: Vec<String> = vec![];
-        #[allow(unused_mut)] let mut admissions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines;
+        let mut tasks: Vec<(Expr, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        #[allow(unused_mut)] let mut deadlines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        #[allow(unused_mut)] let mut admissions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines;
         let mut named: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
         let mut whole = true;
         let mut fallback = false;
@@ -1153,8 +1153,8 @@ impl EmitState {
         let channel = self.emit_async_tasks_channel(&emit_call_tasks_channel(&flow, scope)); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
         let here = flow.at(span.start as i64);
         let mut first = true;
-        #[allow(unused_mut)] let mut joins: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
-        let mut inside: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions; #[allow(unused_mut, clippy::redundant_locals)] let mut joins = joins;
+        #[allow(unused_mut)] let mut joins: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
+        let mut inside: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions; #[allow(unused_mut, clippy::redundant_locals)] let mut joins = joins;
         let mut index: i64 = 0;
         for each in tasks.iter() {
             let handle = format!("__task_{}", each.1);
@@ -1368,7 +1368,7 @@ impl EmitState {
             None => None,
         }, || "".into());
         if written == "" {
-            let mut types: Vec<String> = vec![];
+            let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let parts: Vec<Expr> = match index {
                 Expr::Tuple(parts, _) => parts.copy_owned(),
                 _ => vec![index.clone()],
@@ -1417,7 +1417,7 @@ impl EmitState {
             Expr::Tuple(parts, _) => parts.copy_owned(),
             _ => vec![index.clone()],
         };
-        let mut types: Vec<String> = vec![];
+        let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in parts.iter() {
             match part {
                 Expr::Variable(name, _) => { let name = *name; types.push(nikaia_std::block::Text::from(emit_text(world, name).to_string())); },

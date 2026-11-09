@@ -519,7 +519,7 @@ pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ha
 }
 
 pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for list in params.iter() {
         let mut depth = 0;
         let mut current: String = String::from("");

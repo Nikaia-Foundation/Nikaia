@@ -34,7 +34,7 @@ pub struct CxBuild {
 }
 
 pub(crate) fn cx_sum_name(members: &[String]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for member in members.iter() { parts.push(nikaia_std::block::Text::from(member.replace("::", "_"))); }
     format!("__NikaiaThrows_{}", nikaia_std::block::Text::from(parts.join("__")))
 }
@@ -129,8 +129,8 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             continue;
         }
         let ty = nikaia_std::block::Text::from(handle.name.to_string());
-        #[allow(unused_mut)] let mut arms: Vec<String> = vec![];
-        let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
+        #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
         for variant in handle.variants.iter() {
             arms.push(format!("{} => ({}_Kind::{}, \"{}\"),", variant.pattern, ty, cx_escaped(&variant.name), variant.name));
             names.push(cx_escaped(&variant.name));
@@ -202,7 +202,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     while at < plains.len() as i64 {
         if *nikaia_std::index::get(&build.crossing, nikaia_std::index::at(at)) {
             let plain = nikaia_std::index::get(&plains, nikaia_std::index::at(at));
-            #[allow(unused_mut)] let mut values: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
             for variant in plain.variants.iter() {
                 values.push(format!("    {}_{}_{} = {}", upper, plain.stem, nikaia_std::block::Text::from(variant.to_uppercase()), number));
@@ -246,16 +246,16 @@ pub(crate) fn cx_record_type(record: &CxRecord, ctx: &CxCtx) -> String {
     let upper = nikaia_std::block::Text::from(ctx.upper.to_string());
     if record.is_enum() {
         let ty = nikaia_std::block::Text::from(record.name.to_string());
-        #[allow(unused_mut)] let mut tags: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut tags: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut tags = tags;
         for variant in record.variants.iter() {
             tags.push(format!("    {}_{}_{} = {}", upper, nikaia_std::block::Text::from(ty.to_uppercase()), nikaia_std::block::Text::from(variant.name.to_uppercase()), tag));
             tag += 1;
         }
-        #[allow(unused_mut)] let mut members: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for variant in record.variants.iter() {
             if variant.fields.is_empty() { continue; }
-            let mut fields: Vec<String> = vec![];
+            let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, part) in variant.fields.iter() { fields.push(cx_c_field(field, part, ctx)); }
             members.push(format!("        struct {{ {} }} {};", nikaia_std::block::Text::from(fields.join(" ")), variant.member));
         }
@@ -263,7 +263,7 @@ pub(crate) fn cx_record_type(record: &CxRecord, ctx: &CxCtx) -> String {
         if !members.is_empty() { union = format!("    union {{\n{}\n    }};\n", nikaia_std::block::Text::from(members.join("\n"))); }
         return format!("typedef enum {{\n{}\n}} {}_{}_Tag;\n\ntypedef struct {{\n    {}_{}_Tag tag;\n{}}} {}_{};\n\n", nikaia_std::block::Text::from(tags.join(",\n")), prefix, ty, prefix, ty, union, prefix, ty);
     }
-    let mut fields: Vec<String> = vec![];
+    let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (field, part) in record.fields.iter() { fields.push(format!("    {}", cx_c_field(field, part, ctx))); }
     format!("typedef struct {{\n{}\n}} {}_{};\n\n", nikaia_std::block::Text::from(fields.join("\n")), prefix, record.name)
 }
@@ -341,13 +341,13 @@ pub(crate) fn cx_library_functions(prefix: &str, user_code: &str) -> String { fo
 pub(crate) fn cx_ticket(prefix: &str) -> String { format!("\n/// An `_async` call's ticket (ADR-284 D19).\n#[derive(Default)]\npub struct __NikaiaTicket {{\n    cancelled: std::sync::atomic::AtomicBool,\n    done: std::sync::atomic::AtomicBool,\n    waker: std::sync::Mutex<Option<std::task::Waker>>,\n}}\n\nimpl __NikaiaTicket {{\n    fn cancel(&self) {{\n        self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);\n        let waker = self.waker.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();\n        if let Some(waker) = waker {{\n            waker.wake();\n        }}\n    }}\n}}\n\nstd::thread_local! {{\n    /// The ticket of the `_async` call this library thread runs.\n    static __NIKAIA_TICKET: std::cell::RefCell<Option<std::sync::Arc<__NikaiaTicket>>> = const {{ std::cell::RefCell::new(None) }};\n}}\n\n/// `work`, or `None` once its ticket is cancelled: at the next pause point (ADR-284 D19).\nasync fn __nikaia_cancellable<T>(work: impl std::future::Future<Output = T>) -> Option<T> {{\n    let ticket = __NIKAIA_TICKET.with(|current| current.borrow().clone());\n    let mut work = std::pin::pin!(work);\n    std::future::poll_fn(|context| {{\n        if let Some(ticket) = &ticket {{\n            *ticket.waker.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(context.waker().clone());\n            if ticket.cancelled.load(std::sync::atomic::Ordering::SeqCst) {{\n                return std::task::Poll::Ready(None);\n            }}\n        }}\n        work.as_mut().poll(context).map(Some)\n    }})\n    .await\n}}\n\n/// Cancels an `_async` call at its next pause point; after `done`, or twice, it is `OK` (ADR-284 D19).\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}_cancel(op: *const nikaia_std::c_boundary::Handle<std::sync::Arc<__NikaiaTicket>>) -> std::ffi::c_int {{\n    // SAFETY: the C caller hands a ticket this library made and has not freed, or NULL (ADR-284 D19).\n    match unsafe {{ nikaia_std::c_boundary::shared(op) }} {{\n        Ok(ticket) => {{\n            ticket.cancel();\n            0\n        }}\n        Err(status) => status,\n    }}\n}}\n\n/// Frees a ticket after `done`; before it, `E_ARGUMENT`, and the ticket is kept (ADR-284 D19).\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}_op_free(op: *mut nikaia_std::c_boundary::Handle<std::sync::Arc<__NikaiaTicket>>) -> std::ffi::c_int {{\n    if op.is_null() {{\n        return 0;\n    }}\n    // SAFETY: as `cancel`'s.\n    let finished = match unsafe {{ nikaia_std::c_boundary::shared(op) }} {{\n        Ok(ticket) => ticket.done.load(std::sync::atomic::Ordering::SeqCst),\n        Err(status) => return status,\n    }};\n    if !finished {{\n        return -1;\n    }}\n    // SAFETY: the C caller uses the ticket no more (ADR-284 D19).\n    unsafe {{ nikaia_std::c_boundary::free(op) }}\n}}\n", prefix, prefix) }
 
 pub(crate) fn cx_arms(raising: &CxRaising) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for code in raising.codes.iter() { parts.push(format!("{} => {},", code.pattern(&raising.error), code.number)); }
     nikaia_std::block::Text::from(parts.join(" "))
 }
 
 pub(crate) fn cx_choice_arms_in(plain: &CxPlain) -> String {
-    #[allow(unused_mut)] let mut arms: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
     for variant in plain.variants.iter() {
         arms.push(format!("{} => {}::{},", number, plain.name, variant));
@@ -357,7 +357,7 @@ pub(crate) fn cx_choice_arms_in(plain: &CxPlain) -> String {
 }
 
 pub(crate) fn cx_choice_arms_out(plain: &CxPlain) -> String {
-    #[allow(unused_mut)] let mut arms: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
     for variant in plain.variants.iter() {
         arms.push(format!("{}::{} => {},", plain.name, variant, number));
@@ -569,7 +569,7 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
         let async_symbol = format!("{}_async", symbol); #[allow(unused_mut, clippy::redundant_locals)] let mut async_params = async_params;
         cx_claim(&mut build.symbols, &async_symbol, &written)?;
         build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}({}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n    let Some(__nikaia_done) = __nikaia_done else {{ return -1; }};\n    let ticket = std::sync::Arc::new(__NikaiaTicket::default());\n    if !__nikaia_op.is_null() {{\n        // SAFETY: the C caller hands a place for one ticket (ADR-284 D19).\n        unsafe {{ nikaia_std::c_boundary::put(__nikaia_op, nikaia_std::c_boundary::handle(ticket.clone())) }};\n    }}\n    // SAFETY: the C caller keeps what it handed this call, and `done`'s context, until `done` (ADR-284 D9).\n    let sent = unsafe {{ nikaia_std::c_boundary::sent(({}, __nikaia_done_ctx)) }};\n    // A library thread, kept for the next call (`rt::library`).\n    nikaia_std::rt::library::run(Box::new(move || {{\n        let ({}, __nikaia_done_ctx) = sent.into_inner();\n        __NIKAIA_TICKET.with(|current| *current.borrow_mut() = Some(ticket.clone()));\n        let status = {}({});\n        __NIKAIA_TICKET.with(|current| *current.borrow_mut() = None);\n        ticket.done.store(true, std::sync::atomic::Ordering::SeqCst);\n        __nikaia_done(status, __nikaia_done_ctx);\n    }}));\n    0\n}}\n", async_symbol, nikaia_std::block::Text::from(async_params.join(", ")), forwarded, forwarded, symbol, forwarded));
-        let mut c_async: Vec<String> = vec![];
+        let mut c_async: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if c_text != "void" { c_async.push(c_text); }
         c_async.push(format!("void (*done)(int status, void *ctx), void *ctx, {}_op **op", prefix));
         build.declarations.push_str(&format!("int {}({});\n", async_symbol, nikaia_std::block::Text::from(c_async.join(", "))));
@@ -667,10 +667,10 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             if cx_lent(contracts, key, position) { params.call_args.push(format!("&{}", local)); } else { params.call_args.push(nikaia_std::block::Text::from(local.to_string())); }
         },
         CxIn::Callback { lent, result } => {
-            #[allow(unused_mut)] let mut rust_args: Vec<String> = vec![];
-            #[allow(unused_mut)] let mut c_args: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args;
-            #[allow(unused_mut)] let mut closure_params: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
-            #[allow(unused_mut)] let mut passed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params;
+            #[allow(unused_mut)] let mut rust_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            #[allow(unused_mut)] let mut c_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args;
+            #[allow(unused_mut)] let mut closure_params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
+            #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params;
             let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
             for part in lent.iter() {
                 let name = format!("__nikaia_{}", at);
@@ -774,7 +774,7 @@ pub(crate) fn cx_matched(thrown: &[CxRaising]) -> String {
     let mut members: Vec<String> = vec![];
     for raising in thrown.iter() { members.push(nikaia_std::block::Text::from(raising.error.to_string())); }
     let sum = cx_sum_name(&members);
-    let mut each: Vec<String> = vec![];
+    let mut each: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for raising in thrown.iter() { each.push(format!("crate::{}::{}(thrown) => match thrown.split().0 {{ {} }},", sum, nikaia_std::block::Text::from(raising.error.replace("::", "_")), cx_arms(raising))); }
     format!("match thrown {{ {} }}", nikaia_std::block::Text::from(each.join(" ")))
 }

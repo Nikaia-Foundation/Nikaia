@@ -440,7 +440,7 @@ pub fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl
 pub(crate) fn loop_octagons(arena: &mut TermArena, record: &LoopRecord) -> Vec<(i64, String)> {
     let mut found: Vec<(i64, String)> = vec![];
     let origin: &'static str = "octagons";
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, _) in record.steps.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
     for a in 0..names.len() as i64 {
         for b in a + 1..names.len() as i64 {
@@ -516,7 +516,7 @@ pub(crate) fn loop_unrolled(arena: &mut TermArena, record: &LoopRecord, steady: 
         }
     }
     if turns < 0 { return found; }
-    let mut paths: Vec<LoopTurn> = vec![];
+    let mut paths: Vec<LoopTurn> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let falsum = arena.boolean(false);
     for turn in record.turns.iter() {
         asked.push(1);
@@ -766,7 +766,7 @@ pub(crate) fn loop_proved_each(arena: &TermArena, facts: &[i64], goal: i64, prov
 pub fn loop_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
     let start = record.start;
     let mut renamed: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut ghosts: Vec<String> = vec![];
+    let mut ghosts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for name in record.problem.state.iter() {
         renamed.insert(nikaia_std::block::Text::from(name.to_string()), arena.var(&loop_head_name(name, start)));
         if *name == record.counter { renamed.insert(lg_primed(name), arena.var(&loop_after_name(name, start))); } else { renamed.insert(lg_primed(name), arena.var(name)); }
@@ -797,7 +797,7 @@ pub fn loop_turn_name(name: &str, start: i64) -> String { format!("{}^{}", name,
 pub fn loop_turn_facts(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound) -> Vec<i64> {
     let start = record.start;
     let mut renamed: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut ghosts: Vec<String> = vec![];
+    let mut ghosts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for name in record.problem.state.iter() {
         renamed.insert(nikaia_std::block::Text::from(name.to_string()), arena.var(&loop_turn_name(name, start)));
         ghosts.push(loop_before_name(name, start));
@@ -828,8 +828,8 @@ pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, 
         let value = match loop_start_term(&arena, &record.problem.fixed, &ghost) { Some(__nikaia_value) => __nikaia_value, None => continue };
         known.insert(ghost, value);
     }
-    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
-    #[allow(unused_mut)] let mut origins: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+    #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut origins: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for (term, origin) in found.parts.iter() {
         let term = nikaia_std::num::value(term);
         let shown = arena.substitute(term, &known);
@@ -846,7 +846,7 @@ pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, 
 }
 
 pub fn loop_open_text(records: &[LoopRecord]) -> String {
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for record in records.iter() { for n in record.problem.state.iter() { if !nikaia_std::list::contains(&names, &n) { names.push(nikaia_std::block::Text::from(n.to_string())); } } }
     format!("nothing before it shows it; no invariant found for the loop that changes `{}` carries it", nikaia_std::block::Text::from(names.join("`, `")))
 }
@@ -885,7 +885,7 @@ pub fn loop_reads(arena: &TermArena, facts: &[i64], claim: i64, records: &[LoopR
 }
 
 pub fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
-    let mut parts: Vec<String> = vec![format!("{}", record.start)];
+    let mut parts: Vec<String> = nikaia_std::block::List::from_array_in([format!("{}", record.start)], nikaia_std::block::Place::Block);
     for fact in record.problem.fixed.iter() {
         let fact = nikaia_std::num::value(fact);
         parts.push(arena.text(fact));
@@ -901,7 +901,7 @@ pub fn loop_key(arena: &TermArena, record: &LoopRecord) -> String {
 }
 
 pub fn loop_parts_text(arena: &TermArena, found: &LoopFound) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (term, origin) in found.parts.iter() {
         let term = nikaia_std::num::value(term);
         parts.push(format!("{}={}", nikaia_std::block::Text::from(origin.replace(' ', "-")), loop_term_word(arena, term)));
@@ -935,7 +935,7 @@ pub(crate) fn loop_term_word(arena: &TermArena, id: i64) -> String {
 pub(crate) fn loop_pair_word(arena: &TermArena, op: &str, a: i64, b: i64) -> String { format!("{}({},{})", op, loop_term_word(arena, a), loop_term_word(arena, b)) }
 
 pub(crate) fn loop_list_word(arena: &TermArena, parts: &[i64]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for p in parts.iter() {
         let p = nikaia_std::num::value(p);
         words.push(loop_term_word(arena, p));

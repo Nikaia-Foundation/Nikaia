@@ -174,7 +174,7 @@ pub(crate) fn an_arm_is_an_integer(arm: &CheckArm<'_>) -> bool {
 
 pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Option<CheckFinding> {
     if arms.len() < 2 { return None; }
-    let mut known: Vec<Ty> = vec![];
+    let mut known: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut numbers = 0;
     for arm in arms.iter() {
         let ty = arm.ty.unseen();
@@ -201,7 +201,7 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
         word = "if";
         article = "`if`";
     }
-    #[allow(unused_mut)] let mut shown: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ty in known.iter() {
         let text = ty.text();
         if !nikaia_std::list::contains(&shown, &text) { shown.push(text); }

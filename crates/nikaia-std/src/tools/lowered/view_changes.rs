@@ -423,7 +423,7 @@ pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAs
             walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is read here, but `{}` changes it in the same call.", root, callee), notes: vec![format!("A `mut` parameter lends `{}`, or a part of it, for the whole call, so no argument after it reads it.", root)], help: Some(format!("Read what you need into a name before the call, `let first = {}[0]`, and hand that.", root)), warning: false, labels });
         }
     }
-    let mut changed: Vec<(String, String)> = vec![];
+    let mut changed: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for call in calls.iter() {
         if !call.method { continue; }
         let root = match call.root.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -431,7 +431,7 @@ pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAs
         if vc_methods_all(method, true, ask, &walk) { changed.push((nikaia_std::block::Text::from(root.to_string()), nikaia_std::block::Text::from(call.path.to_string()))); }
     }
     for (root, path) in changed.iter() { if vc_any_watches(views, root, path) { vc_refuse(root, at, views, walk); } }
-    let mut handed: Vec<(String, String)> = vec![];
+    let mut handed: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for call in calls.iter() {
         let callee = match call.callee.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if call.method {
@@ -869,7 +869,7 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
         match &view.callee {
             None => { },
             Some(callee) => {
-                let mut given: Vec<String> = vec![];
+                let mut given: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
                 help.push_str(&format!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", "))));
             },

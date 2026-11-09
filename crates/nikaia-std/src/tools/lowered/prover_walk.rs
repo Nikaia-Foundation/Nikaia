@@ -52,7 +52,7 @@ pub(crate) fn prover_action(walk: &mut ProverWalk, def: &GrammarDef, rule: &Gram
         if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) { prover_action_number(walk, &mut scope, &name, ty); }
     }
     for option in rule.config.iter() { scope.locals.insert(nikaia_std::block::Text::from(words.resolve(option.name).to_string())); }
-    let mut parts: Vec<Pattern> = vec![];
+    let mut parts: Vec<Pattern> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match pattern {
         Pattern::Seq(items) => { for item in items.iter() { parts.push(item.node.clone()); } },
         _ => { parts.push(pattern.clone()); },
@@ -448,7 +448,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     if value_lin.is_some() { value_at_entry = scope.at_entry(&mut walk.arena, nikaia_std::index::or(value_lin, || 0)); }
     let mut called = false;
     let mut called_whole = false;
-    let mut called_facts: Vec<i64> = vec![];
+    let mut called_facts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut called_summed: Option<Vec<SummaryAlt>> = None;
     if names.len() == 1 {
         match value {
@@ -602,7 +602,7 @@ pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &Pr
                         for bound in read.iter() {
                             let alts = match *nikaia_std::index::get(&scope.summed, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
                             if alts.is_empty() { continue; }
-                            let mut whys: Vec<String> = vec![];
+                            let mut whys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                             for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
                             said.push(format!("`{}` is {}: {}.", nikaia_std::index::get(&alts, 0).call, nikaia_std::index::or(pinned, || 0), nikaia_std::block::Text::from(whys.join("; "))));
                         }
@@ -676,7 +676,7 @@ pub(crate) fn prover_summary_exits(walk: &mut ProverWalk, value: &Expr, scope: &
     prover_call_results(walk, value, false, &mut here, program, words, own, unaliased, condition, written_of);
     let returned = match lin_term(value, words, &|name| { here.ints.contains(name) }, &|name| { prover_pinned(&walk.state.pinned, &here, name) }, &mut walk.arena.nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let truth = walk.arena.boolean(true);
-    let mut alts: Vec<SummaryAlt> = vec![SummaryAlt { guard: truth, value: returned, callee: String::from(""), call: String::from(""), why: format!("`{}` returns `{}`", function, written_of(value)) }];
+    let mut alts: Vec<SummaryAlt> = nikaia_std::block::List::from_array_in([SummaryAlt { guard: truth, value: returned, callee: String::from(""), call: String::from(""), why: format!("`{}` returns `{}`", function, written_of(value)) }], nikaia_std::block::Place::Block);
     for _ in 0..4 {
         let mut next: Vec<SummaryAlt> = vec![];
         let mut grew = false;
@@ -928,7 +928,7 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                 prover_expr(walk, &cond, span, &scope, &nested, program, words, own, library, &ask, &model, &escape, &holes_of, &unaliased, &written_of, &condition);
                 let message = prover_message(config, words);
                 let names = claim_names_in(&cond, words, &holes_of);
-                let mut leaned: Vec<String> = vec![];
+                let mut leaned: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 if !walk.state.in_test {
                     prover_call_results(walk, &cond, false, scope, program, words, own, &unaliased, &condition, &written_of);
                     leaned = prover_pin_divisors(walk, &cond, &scope, words, &ask, &model);
@@ -1068,10 +1068,10 @@ pub(crate) fn prover_changes_followed(scope: &ProverScope, assigns: &collections
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn prover_join_arms(walk: &mut ProverWalk, scope: &mut ProverScope, sides: &[ProverArm], span: &Span) {
-    #[allow(unused_mut)] let mut changed: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut changed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for side in sides.iter() { for n in side.assigns.iter() { if scope.mutables.contains(n) && !nikaia_std::list::contains(&changed, &n) { changed.push(nikaia_std::block::Text::from(n.to_string())); } } }
     if changed.is_empty() { return; }
-    #[allow(unused_mut)] let mut followed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed;
+    #[allow(unused_mut)] let mut followed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed;
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed; #[allow(unused_mut, clippy::redundant_locals)] let mut followed = followed;
     for n in changed.iter() {
         let mut on_all = true;
@@ -1558,7 +1558,7 @@ pub(crate) fn prover_record_call(walk: &mut ProverWalk, callee: &str, params: &[
     for found in outcome.findings.iter() { walk.findings.push(found.clone()); }
     if std_call.is_some() && !outcome.held.is_empty() {
         let key = (span.start as i64, nikaia_std::index::or(std_call, || 0));
-        let mut conditions: Vec<String> = vec![];
+        let mut conditions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for pre in claims.iter() { conditions.push(nikaia_std::index::or(claim_text_of((pre.computed).as_deref()), || nikaia_std::block::Text::from(pre.written.to_string()).into())); }
         walk.std_claims.insert(key, format!("{}: {}", callee, nikaia_std::block::Text::from(conditions.join(" && "))));
         walk.held.insert(key, prover_std_held(&outcome.held));
@@ -1912,7 +1912,7 @@ pub(crate) fn prover_follow_lengths(walk: &mut ProverWalk, stmt: &Stmt, span: &S
         _ => { },
     }
     if prover_a_branch(stmt) { return; }
-    let mut lists: Vec<String> = vec![];
+    let mut lists: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for m in scope.mutables.iter() { if m.ends_with(".len()") { lists.push(nikaia_std::block::Text::from(nikaia_std::index::or(m.strip_suffix(".len()"), || "").to_string())); } }
     for list in lists.iter() {
         if !changes_length_in_statement(stmt, list, &walk.state.readers, words) { continue; }
@@ -2103,7 +2103,7 @@ pub(crate) struct ProverRan {
 
 pub(crate) fn prover_claim_ran(walk: &mut ProverWalk, read: &collections::BTreeSet<String>, held: &ClaimHeld, findings: &[Finding], written: &str, span: Span, written_of: &impl Fn(&Expr) -> String) -> ProverRan {
     let mut out = ProverRan { held: held.clone(), findings: vec![] };
-    let mut values: Vec<String> = vec![];
+    let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for call in read.iter() {
         let text = written_of(match *nikaia_std::index::get(&walk.state.call_sites, call) { Some(__nikaia_value) => __nikaia_value, None => continue });
         let value = *nikaia_std::index::get(&walk.state.pinned, call);
@@ -2238,7 +2238,7 @@ pub(crate) fn prover_reads_only(contract: &FnContract) -> bool {
 
 pub(crate) fn prover_length_keepers(program: &Program, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut keepers = readers.copy_owned();
-    let mut candidates: Vec<String> = vec![];
+    let mut candidates: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, receiver, args, .. } => {

@@ -157,7 +157,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_list_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, items: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        if self.facts.array_literals.contains(&node_key(node)) { out.push("["); } else { out.push("vec!["); }
+        let placed = self.facts.placed_in_block.contains(&node_key(node));
+        if placed && items.is_empty() {
+            out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)");
+            return Ok(());
+        }
+        if placed { out.push("nikaia_std::block::List::from_array_in(["); } else if self.facts.array_literals.contains(&node_key(node)) { out.push("["); } else { out.push("vec!["); }
         let mut i = 0;
         for item in items.iter() {
             if i > 0 { out.push(", "); }
@@ -165,7 +170,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
             if self.facts.stored_handles.contains(&node_key(item)) { out.push(".clone()"); }
         }
-        out.push("]");
+        out.push(if placed { "], nikaia_std::block::Place::Block)" } else { "]" });
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -474,7 +479,7 @@ impl EmitState {
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }
         }
-        let mut names: Vec<String> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for field in fields.iter() { names.push(emit_text(world, field.name)); }
         let mut after_one = !fields.is_empty();
         for (field, default, ty) in self.field_defaults(world, &owner) {
@@ -494,7 +499,7 @@ impl EmitState {
     }
     pub fn emit_place_all_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> String {
         let owner = unaliased_in(world.aliases, name);
-        let mut parts: Vec<String> = vec![];
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (field, default, ty) in self.field_defaults(world, &owner) { parts.push(self.emit_place_field_default(&owner, &field, &default, &ty)); }
         format!("{} {{ {} }}", owner, nikaia_std::block::Text::from(parts.join(", ")))
     }

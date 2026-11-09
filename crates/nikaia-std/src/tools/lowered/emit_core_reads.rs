@@ -465,7 +465,7 @@ impl EmitState {
         let count = block.stmts.len() as i64;
         if count < 2 { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("An `overlap` block needs at least two branches to run at the same time."), at: Some(flow.statement) }, &"emit_core_overlap")); }
         if count > 8 { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `overlap` block has {} branches, but at most 8 are supported.", count), at: Some(flow.statement) }, &"emit_core_overlap")); }
-        let mut pauses: Vec<bool> = vec![];
+        let mut pauses: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut any_fails = false;
         for stmt in block.stmts.iter() {
             pauses.push(self.branch_pauses(world, &stmt.node, stmt.span.start as i64));
@@ -474,7 +474,7 @@ impl EmitState {
                 _ => { },
             }
         }
-        let mut order: Vec<i64> = vec![];
+        let mut order: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for k in 0..count { if *nikaia_std::index::get(&pauses, nikaia_std::index::at(k)) { order.push(k); } }
         for k in 0..count { if !*nikaia_std::index::get(&pauses, nikaia_std::index::at(k)) { order.push(k); } }
         let fallible = (flow.can_throw || flow.handled_here) && any_fails;

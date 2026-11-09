@@ -422,7 +422,7 @@ pub(crate) fn __nikaia_test_9() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 pub(crate) fn __nikaia_test_10() -> Result<(), Box<dyn std::error::Error>> {
-    let orders = vec![vec!["u", "r"], vec!["r", "u"], vec!["m", "u", "r"]];
+    let orders = nikaia_std::block::List::from_array_in([vec!["u", "r"], vec!["r", "u"], vec!["m", "u", "r"]], nikaia_std::block::Place::Block);
     for order in orders.iter() {
         let mut worst = Crossing::May;
         for kind in order.iter() {

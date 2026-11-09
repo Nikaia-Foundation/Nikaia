@@ -170,7 +170,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn cleanup_within(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
-        let mut held: Vec<Ty> = vec![];
+        let mut held: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match ty.unseen() {
             Ty::Named { ref name, ref args, view } => {
                 if view { return None; }

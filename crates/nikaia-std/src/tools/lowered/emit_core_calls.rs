@@ -23,7 +23,7 @@ pub(crate) fn emit_call_claim_held(claim: &FactClaim) -> bool {
 pub(crate) fn emit_call_owner(function: &str) -> Option<String> {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return None; }
-    #[allow(unused_mut)] let mut owner: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let parts = parts;
+    #[allow(unused_mut)] let mut owner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
     let mut n: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut owner = owner;
     for part in parts.iter() {
         let part = *part;
@@ -158,7 +158,7 @@ impl EmitState {
     }
     pub(crate) fn emit_call_hoisted(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> Vec<i64> {
         let callee = self.emit_call_callee(world, func);
-        let mut lent: Vec<bool> = vec![];
+        let mut lent: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0;
         for arg in args.iter() {
             lent.push(self.facts.mut_args.contains(&node_key(arg)) || self.changes_at(&callee, at));
@@ -224,7 +224,7 @@ impl EmitState {
         }
         let callee = self.emit_call_checked_callee(world, func);
         if callee.is_some() {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for arg in args.iter() { written.push(host.written(arg)); }
             let key = (nikaia_std::index::or(callee, || "".into()), nikaia_std::block::Text::from(written.join(", ")));
             if self.facts.reaches.contains_key(&key) {
@@ -264,7 +264,7 @@ impl EmitState {
         let owner = match emit_call_owner(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let callee = format!("{}::{}", owner, name);
         if !self.facts.entries.contains_key(&callee) { return false; }
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for arg in args.iter() { written.push(host.written(arg)); }
         let key = (callee, nikaia_std::block::Text::from(written.join(", ")));
         let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -638,7 +638,7 @@ impl EmitState {
             out.push(").ok()");
             return Ok(());
         }
-        let mut witness: Vec<Expr> = vec![];
+        let mut witness: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if name == "set" && self.facts.witnessed_sets.contains(&flow.statement) { witness = emit_call_option_named(world, config, "after"); }
         let mut limit: Vec<Expr> = vec![];
         if name == "join" && args.is_empty() { limit = emit_call_option_named(world, config, "within"); }
@@ -1093,7 +1093,7 @@ impl EmitState {
             out.push(&format!(", {}::{} {{ .. }})", owner, written));
             return Ok(());
         }
-        let wanted: Vec<String> = vec![String::from("attribute"), String::from("attributes")];
+        let wanted: Vec<String> = nikaia_std::block::List::from_array_in([String::from("attribute"), String::from("attributes")], nikaia_std::block::Place::Block);
         for each in wanted.iter() {
             let field = walk.reflected(world, receiver, method, each);
             let owner = walk.specialised_to();

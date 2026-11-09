@@ -18,7 +18,7 @@ pub(crate) fn emit_expr_integer_literal(value: u64, negative: bool, widen: bool)
 pub(crate) fn emit_expr_kept_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> String {
     match func {
         Expr::Path(segments, _) => {
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for s in segments.iter() {
                 let s = *s;
                 parts.push(emit_text(world, s));
@@ -409,7 +409,7 @@ impl EmitState {
         let (pauses, fails, arity) = nikaia_std::index::or(self.facts.kept_functions.get(&at), || (false.into(), false.into(), 0));
         let key = emit_expr_kept_text(world, node);
         let kept = match self.kept_calls.get(&(nikaia_std::block::Text::from(key.to_string()), arity)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(EmitRefused { message: format!("no kept call was built for `{}`", key), at: Some(flow.statement) }, &"emit_expr_kept_function")) };
-        let mut names: Vec<String> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for n in kept.names.iter() {
             let n = *n;
             names.push(emit_text(world, n));

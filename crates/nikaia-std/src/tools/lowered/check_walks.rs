@@ -222,7 +222,7 @@ impl CheckState {
         for stmt in block.stmts.iter() {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
-                    let mut bound: Vec<String> = vec![];
+                    let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for name in names.iter() {
                         let name = *name;
                         bound.push(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
@@ -233,7 +233,7 @@ impl CheckState {
                 _ => { },
             }
         }
-        let mut operations: Vec<Accounted> = vec![];
+        let mut operations: Vec<Accounted> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for stmt in block.stmts.iter() { operations.push(accounted_beside(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
         let mut mentioned: Vec<collections::BTreeSet<String>> = vec![];
         for stmt in block.stmts.iter() {
@@ -365,7 +365,7 @@ impl CheckState {
                 name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
             },
             Expr::Path(segments, _) => {
-                let mut parts: Vec<String> = vec![];
+                let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for segment in segments.iter() {
                     let segment = *segment;
                     parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));

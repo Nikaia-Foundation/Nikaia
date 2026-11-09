@@ -113,8 +113,8 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
         let v = sv_real_named(values, &t.name);
         let a = sv_real_named(values, &t.a);
         let b = sv_real_named(values, &t.b);
-        let mut names: Vec<String> = vec![];
-        let mut moved: Vec<SvRat> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut moved: Vec<SvRat> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if t.op == "*" && t.a == t.b {
             match sv_nl_root(&v) {
                 None => { },

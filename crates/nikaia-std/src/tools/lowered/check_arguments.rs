@@ -104,7 +104,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     if (wanted.len() as i64) != found.len() as i64 {
         let mut help: String = format!("Call it without arguments: `{}()`.", key);
         if !wanted.is_empty() {
-            let mut takes: Vec<String> = vec![];
+            let mut takes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.text())); }
             help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
         }
@@ -147,14 +147,14 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if !known { state.no_such_option(key, name, signature, span); }
     }
     let text_view = Ty::Named { name: String::from("str"), args: vec![], view: true };
-    let mut expanded: Vec<CheckArgument<'_>> = vec![];
+    let mut expanded: Vec<CheckArgument<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut position: i64 = 0;
     while ((position) as usize) < found.len() {
         let at: i64 = position;
         position += 1;
         let found_here = (*nikaia_std::index::get(&found, nikaia_std::index::at(at))).clone();
         let known_want = at < wanted.len() as i64 && wholly_known(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1) && !check_arguments_a_var(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
-        let mut arms: Vec<CheckArm<'_>> = vec![];
+        let mut arms: Vec<CheckArm<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if found_here.is_unknown() && known_want && at < given.len() as i64 { arms = state.arms_to_ask(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
         if arms.is_empty() {
             let here: Option<&Expr> = if at < given.len() as i64 { Some(nikaia_std::index::get(&given, nikaia_std::index::at(at))) } else { None };

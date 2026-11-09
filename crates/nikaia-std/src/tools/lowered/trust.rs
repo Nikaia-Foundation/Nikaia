@@ -135,7 +135,7 @@ pub(crate) fn sc_expr(function: &str, expr: &Expr, at: i64, names: &winnow_gramm
 pub(crate) fn sc_call(function: &str, source: &str, method: bool, config: &[ConfigArg], at: i64, names: &winnow_grammar::InternerContext) -> SourceCall { SourceCall { function: nikaia_std::block::Text::from(function.to_string()), source: nikaia_std::block::Text::from(source.to_string()), method, marked: says_trusted(names, config), at } }
 
 pub fn mark_trusted(ledger: &mut Ledger, calls: &[SourceCall], file: &str, text: &str) {
-    let mut marks: Vec<(String, i64, String)> = vec![];
+    let mut marks: Vec<(String, i64, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for call in calls.iter() {
         if call.marked && ledger.functions.contains_key(&call.function) {
             let line = line_of_byte(text, call.at);

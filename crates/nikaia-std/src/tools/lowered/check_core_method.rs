@@ -784,7 +784,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         return check_core_grammar_call(state, world, host, &entry, args, config, span);
     }
     let empty_map: i64 = check_core_method_an_empty_map_read(&state, world, receiver, &name);
-    let mut empty_entry: Vec<(String, Span)> = vec![];
+    let mut empty_entry: Vec<(String, Span)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if empty_map >= 0 {
         for (at, held) in state.flow.empty_lists.iter() {
             let at = nikaia_std::num::value(at);

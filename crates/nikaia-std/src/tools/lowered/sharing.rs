@@ -73,10 +73,10 @@ pub fn every_count_plain(sharing: &mut Sharing) {
         (*decision).why = None;
         (*decision).fallback = None;
     }
-    #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for key in sharing.counts.keys() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
     for key in keys.iter() { sharing.counts.insert(nikaia_std::block::Text::from(key.to_string()), Count::Plain); }
-    let mut functions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
+    let mut functions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     for key in sharing.summaries.keys() { functions.push(nikaia_std::block::Text::from(key.to_string())); }
     for function in functions.iter() {
         let classes = nikaia_std::index::or(match *nikaia_std::index::get(&sharing.summaries, function) {
@@ -95,7 +95,7 @@ pub fn sharing_report(sharing: &Sharing) -> String {
     let mut at: String = String::from("");
     let mut atomic: i64 = 0;
     let mut undecided = 0;
-    let mut caught: Vec<String> = vec![];
+    let mut caught: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for decision in sharing.decisions.iter() {
         if at != decision.function {
             out.push_str(&format!("{}:\n", decision.function));
@@ -153,7 +153,7 @@ pub fn split_slot(key: &str) -> (String, String) {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return (String::from(""), nikaia_std::block::Text::from(key.to_string())); }
     let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-    let mut function: Vec<String> = vec![];
+    let mut function: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for i in 0..parts.len() as i64 - 1 { function.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); }
     (nikaia_std::block::Text::from(function.join("::")), name)
 }
@@ -349,7 +349,7 @@ impl Slots {
     }
     pub(crate) fn foreign_slots_hold_the_floor(&mut self) {
         let field_prefix = format!("{}::", FIELDS);
-        let mut foreign: Vec<(String, String)> = vec![];
+        let mut foreign: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for key in self.index.keys() {
             if !key.contains("::") { continue; }
             let mut owner = before_last(key, "::");
@@ -371,7 +371,7 @@ impl Slots {
 pub(crate) fn before_last(text: &str, separator: &str) -> String {
     let parts: Vec<&str> = text.split(AsRef::<str>::as_ref(separator)).collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
-    let mut kept: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut kept: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
     for i in 0..parts.len() as i64 - 1 { kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); } ::core::mem::drop(parts);
     nikaia_std::block::Text::from(kept.join(separator))
 }

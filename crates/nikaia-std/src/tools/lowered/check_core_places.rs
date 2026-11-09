@@ -328,7 +328,7 @@ pub fn check_core_places_code_keys(state: &CheckState, world: &CheckWorld<'_, '_
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let field: String = format!("{}", world.words.resolve(name));
-            let mut owners: Vec<String> = vec![];
+            let mut owners: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut typed = false;
             match base {
                 Expr::Variable(bound, _) => {
