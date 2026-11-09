@@ -55,8 +55,8 @@ done
 # * optimized, every optimization the compiler offers on: a check the
 #   compiler proved is written without it, in `unsafe` Rust (ADR-306 D18,
 #   ADR-378), and an `assume` is believed;
-# * safe (`SAFE`), only `prove-through-loops`, which changes what is proved
-#   and nothing that is written: every check is kept, and the emitted Rust holds no `unsafe` at all, so every guarantee of safe
+# * safe (`SAFE`), no optimization: what is proved is the same in every
+#   build (ADR-361 D14), and nothing proved is dropped: every check is kept, and the emitted Rust holds no `unsafe` at all, so every guarantee of safe
 #   Rust holds for it (`skip-free-at-exit` is off too: its allocator is
 #   `unsafe`).
 proj="$work/project"
@@ -69,7 +69,7 @@ version = "0.1.0"
 
 [build]
 user-parallelism = "$1"
-optimization = "${OPTIMIZATION:-remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on,skip-free-at-exit:on}"
+optimization = "${OPTIMIZATION-remove-bounds-checks:on,remove-overflow-checks:on,skip-free-at-exit:on}"
 
 [build.x86_64-linux]
 opt-level = 3
@@ -90,7 +90,7 @@ build_nikaia() {
     cp "$proj/target/nikaia/bin/brc" "$work/nikaia.$name.cu$u"
 }
 
-SAFE="prove-through-loops:on"
+SAFE=""
 for u in $units; do
     build_nikaia "$u" parallel yes
     build_nikaia "$u" checked no

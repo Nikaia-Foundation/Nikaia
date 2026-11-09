@@ -9,7 +9,7 @@ use crate::common;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const ALL_ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on";
+const ALL_ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on";
 
 /// The command line, at `unproved-claims = "warn"` (ADR-380 D2): what these
 /// tests watch is the facts at a call, and a claim elsewhere in a program

@@ -105,9 +105,8 @@ pub fn optimizations(words: String) -> (BoundsChecks, OverflowChecks) throws {
             "remove-bounds-checks" => {
                 bounds = BoundsChecks::parse(level) ?? throw ProjectSettingsRefusal::Refused(f"`remove-bounds-checks` is `on` or `off`, not `{level}`{project_settings_renamed(level)}")
             },
-            // Read by `skip_free_at_exit` and `prove_through_loops`; checked
-            // here with the rest.
-            "skip-free-at-exit" | "prove-through-loops" => {
+            // Read by `skip_free_at_exit`; checked here with the rest.
+            "skip-free-at-exit" => {
                 if !(match level { "on" | "off" => true, else => false }) {
                     throw ProjectSettingsRefusal::Refused(f"`{name}` is `on` or `off`, not `{level}`")
                 }
@@ -115,19 +114,22 @@ pub fn optimizations(words: String) -> (BoundsChecks, OverflowChecks) throws {
             "remove-overflow-checks" => {
                 overflow = OverflowChecks::parse(level) ?? throw ProjectSettingsRefusal::Refused(f"`remove-overflow-checks` is `on` or `off`, not `{level}`{project_settings_renamed(level)}")
             },
-            else => throw ProjectSettingsRefusal::Refused(f"there is no optimization called `{name}`: the ones there are, are `remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops` and `skip-free-at-exit`"),
+            // **Every build asks through a loop** (ADR-361 D14): the word
+            // that chose it is gone, not ignored.
+            "prove-through-loops" => throw ProjectSettingsRefusal::Refused(f"there is no optimization `prove-through-loops` any more: every build asks a check a loop leaves open through the loop (ADR-361 D14). Remove `{word}`"),
+            else => throw ProjectSettingsRefusal::Refused(f"there is no optimization called `{name}`: the ones there are, are `remove-bounds-checks`, `remove-overflow-checks` and `skip-free-at-exit`"),
         }
     }
     return (bounds, overflow)
 }
 
-/// **`prove-through-loops:on`**
-/// ([ADR-361](../../../docs/specification/adr/adr-361.md) D10): an index's, an
+/// **Every build asks through a loop**
+/// ([ADR-361](../../../docs/specification/adr/adr-361.md) D14): an index's, an
 /// overflow's or a shift's check a loop leaves open is asked once more through
-/// the loop's invariant. The last word for the name wins; [`optimizations`]
-/// has already refused a word that is not `on` or `off`.
+/// the loop's invariant, whatever the words say; [`optimizations`] refuses
+/// the word `prove-through-loops` that once chose it.
 pub fn prove_through_loops(words: String) -> bool {
-    return (words.split(",").map(fn(w) { w.trim() }).filter_map(fn(w) { w.strip_prefix("prove-through-loops:") }).last() ?? "") == "on"
+    return true
 }
 
 /// **`skip-free-at-exit:on`**
@@ -182,7 +184,6 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     let removed_bounds = match bounds { BoundsChecks::Kept => "", else => f"/remove-bounds-checks:{bounds.name()}" }
     let removed_overflow = match overflow { OverflowChecks::Kept => "", else => f"/remove-overflow-checks:{overflow.name()}" }
     let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" }
-    let through_loops = if through_loops_on { "/prove-through-loops:on" } else { "" }
     // A library's lowering carries its entry points' wrappers,
     // named by the prefix.
     // A rust-library's error sums are `pub` (ADR-393 D1, #1447).
@@ -193,7 +194,7 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     // The package's items under a hand-written root are written below
     // another path (ADR-393 D7, #1447).
     let root = if crate_root == "crate" { "" } else { f"/root:{crate_root}" }
-    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{through_loops}{library}{cpu}{root}"
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}"
 }
 
 /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.

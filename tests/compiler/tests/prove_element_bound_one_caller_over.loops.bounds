@@ -1,5 +1,0 @@
-bounds in tests/prove_element_bound_one_caller_over.nika: 2 indexes, 1 proved; 1 operations, 1 proved
-     9  values[atoms[k]]  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
-     9  atoms[k]          proved
-    12  k += 1            proved
-  derived  eval: 0 <= atoms[..], proved at the calls on lines 20, 22

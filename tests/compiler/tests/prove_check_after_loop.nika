@@ -1,10 +1,10 @@
 // #1383 (ADR-361 D10): an index after a loop that reads a name the loop
 // changes is asked through the loop, as an `assert` there is. `count2`'s
-// `a[i]` and `partition`'s `a[i]` after the loop are proved under
-// `prove-through-loops:on` by the bound of `i` by the loop's turns (D13),
-// with no assert after the loop; `last`'s `a[k - 1]`, with it or without,
-// by the bound its counter keeps at each head, `k <= hi` (#1470). Without
-// the optimization the other two stay checked.
+// `a[i]` and `partition`'s `a[i]` after the loop are proved, in every
+// build (D14), by the bound of `i` by the loop's turns (D13), with no
+// assert after the loop; `last`'s `a[k - 1]` by the bound its counter
+// keeps at each head, `k <= hi` (#1470). Before D14, without
+// `prove-through-loops:on`, the other two stayed checked.
 fn count2(a: ref Vec[i64], lo: i64, hi: i64) -> i64 {
     assert(0 <= lo)
     assert(lo <= hi)
