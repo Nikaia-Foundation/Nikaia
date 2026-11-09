@@ -1517,7 +1517,9 @@ fn digits_in(s: String, from: i64, radix: i64) -> bool sync {
 	let mut i = from
 	while i < cs.len() as i64 {
 		let c = cs[i]
-		let ok = if radix == 8 {
+		let ok = if radix == 2 {
+			c == '0' || c == '1'
+		} else if radix == 8 {
 			c >= '0' && c <= '7'
 		} else if radix == 16 {
 			(c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
@@ -2649,4 +2651,641 @@ pub fn as_f64(v: ref Value) -> f64 sync throws {
 		throw ConvertError { message: f"`{t}` is not a number" }
 	}
 	return x ?? 0.0
+}
+
+// The writer (#1515): a stream of documents in block style, two spaces of
+// indentation, as serde_yaml 0.9 writes it through libyaml's emitter, byte
+// for byte: an empty collection in flow style (`[]`, `{}`), a key that is
+// not a short single-line scalar as an explicit `? ` key, and the scalar
+// styles libyaml chooses. `out` holds the document being written; `column`,
+// `indent` (-1 before the root), `whitespace` (the last character written
+// was white space) and `indention` (only indentation on the line so far) are
+// libyaml's; `open_ended` is 2 after a literal scalar that keeps its final
+// line breaks (`|+`), which the stream's end closes with `...`.
+pub struct Writer {
+	out: String,
+	column: i64,
+	indent: i64,
+	indents: Vec[i64],
+	whitespace: bool,
+	indention: bool,
+	open_ended: i64,
+	first: bool,
+}
+
+// What the text of a scalar allows (libyaml's `analyze_scalar`).
+struct Allowed {
+	multiline: bool,
+	plain: bool,
+	single: bool,
+	block: bool,
+}
+
+// A writer before the first document.
+pub fn writer() -> Writer sync {
+	return Writer {
+		out: String(),
+		column: 0,
+		indent: -1,
+		indents: [],
+		whitespace: true,
+		indention: true,
+		open_ended: 0,
+		first: true,
+	}
+}
+
+// The stream of `nodes`, one document each, `---` between them, as `load`
+// reads it back.
+pub fn write(nodes: ref Vec[Node]) -> String sync {
+	let mut w = writer()
+	let mut out = String()
+	for n in nodes.iter() {
+		out.push_str(w.document(n))
+	}
+	out.push_str(w.end())
+	return out
+}
+
+// A string node a program builds to write it, `t` its value: `Plain`, so
+// `write` quotes it by serde_yaml's rule, and `raw` `""`, as nothing was
+// read for it.
+pub fn string_node(t: String) -> Node sync {
+	return Node {
+		start: 0,
+		end: 0,
+		anchor: null,
+		tag: null,
+		flow: false,
+		raw: "",
+		style: Style::Plain,
+		value: Value::Str(Scalar {
+			raw: "",
+			value: t,
+			style: Style::Double,
+			indent: 0,
+			chomp: Chomp::Clip,
+		}),
+	}
+}
+
+impl Writer {
+	// The text of one document with `root` as its root: `---` before it
+	// unless it is the first, a line break after it.
+	pub fn document(ref mut self, root: ref Node) -> String sync {
+		self.out = String()
+		if !self.first {
+			self.line()
+			self.indicator("---", true, false, false)
+		}
+		self.first = false
+		self.open_ended = 0
+		self.node(root, false, false)
+		self.line()
+		if self.open_ended == 0 {
+			self.open_ended = 1
+		}
+		return self.out.clone()
+	}
+
+	// The text that ends the stream: `...` after a document that ended in
+	// a `|+` scalar, else nothing.
+	pub fn end(ref mut self) -> String sync {
+		self.out = String()
+		if self.open_ended == 2 {
+			self.indicator("...", true, false, false)
+			self.open_ended = 0
+			self.line()
+		}
+		return self.out.clone()
+	}
+
+	fn put(ref mut self, c: scalar) sync {
+		self.out.push(c)
+		self.column += 1
+	}
+
+	fn put_text(ref mut self, s: String) sync {
+		for c in s.chars() {
+			self.put(c)
+		}
+	}
+
+	fn put_break(ref mut self) sync {
+		self.out.push('\n')
+		self.column = 0
+	}
+
+	// A line break of the text as written: `\n` as the writer's own, any
+	// other unchanged.
+	fn put_text_break(ref mut self, c: scalar) sync {
+		if c == '\n' {
+			self.put_break()
+		} else {
+			self.out.push(c)
+			self.column = 0
+		}
+	}
+
+	// libyaml's `write_indent`: a new line where the current one has more
+	// than indentation on it, then spaces up to the indentation.
+	fn line(ref mut self) sync {
+		let indent = if self.indent >= 0 { self.indent } else { 0 }
+		if !self.indention || self.column > indent || (self.column == indent && !self.whitespace) {
+			self.put_break()
+		}
+		while self.column < indent {
+			self.put(' ')
+		}
+		self.whitespace = true
+		self.indention = true
+	}
+
+	fn indicator(
+		ref mut self,
+		s: String,
+		need_space: bool,
+		is_space: bool,
+		is_indention: bool,
+	) sync {
+		if need_space && !self.whitespace {
+			self.put(' ')
+		}
+		self.put_text(s)
+		self.whitespace = is_space
+		self.indention = self.indention && is_indention
+	}
+
+	fn increase(ref mut self, flow: bool, indentless: bool) sync {
+		self.indents.push(self.indent)
+		if self.indent < 0 {
+			self.indent = if flow { 2 } else { 0 }
+		} else if !indentless {
+			self.indent += 2
+		}
+	}
+
+	fn decrease(ref mut self) sync {
+		self.indent = self.indents.pop() ?? -1
+	}
+
+	// An anchor's and a tag's text, as written before a node.
+	fn properties(ref mut self, n: ref Node) sync {
+		let anchor = n.anchor
+		if anchor != null {
+			self.indicator("&", true, false, false)
+			self.put_text(anchor ?? "")
+			self.whitespace = false
+			self.indention = false
+		}
+		let tag = n.tag
+		if tag != null {
+			if !self.whitespace {
+				self.put(' ')
+			}
+			self.put_text(tag ?? "")
+			self.whitespace = false
+			self.indention = false
+		}
+	}
+
+	// A node, as a value of a mapping (`mapping`) or as a key on its line
+	// (`simple`).
+	fn node(ref mut self, n: ref Node, mapping: bool, simple: bool) sync {
+		match n.value {
+			Value::Alias(a) => {
+				self.indicator("*", true, false, false)
+				self.put_text(a)
+				self.whitespace = false
+				self.indention = false
+				if simple {
+					self.put(' ')
+				}
+			}
+			Value::Seq(items) => {
+				self.properties(n)
+				if items.len() == 0 {
+					self.indicator("[", true, true, false)
+					self.indicator("]", false, false, false)
+				} else {
+					self.increase(false, mapping && !self.indention)
+					for item in items.iter() {
+						self.line()
+						self.indicator("-", true, false, true)
+						self.node(item, false, false)
+					}
+					self.decrease()
+				}
+			}
+			Value::Map(entries) => {
+				self.properties(n)
+				if entries.len() == 0 {
+					self.indicator("{", true, true, false)
+					self.indicator("}", false, false, false)
+				} else {
+					self.increase(false, false)
+					for e in entries.iter() {
+						self.line()
+						if simple_key(e.key) {
+							self.node(e.key, true, true)
+							self.indicator(":", false, false, false)
+						} else {
+							self.indicator("?", true, false, true)
+							self.node(e.key, true, false)
+							self.line()
+							self.indicator(":", true, false, true)
+						}
+						self.node(e.value, true, false)
+					}
+					self.decrease()
+				}
+			}
+			else => self.scalar(n, simple)
+		}
+	}
+
+	// A scalar in the style libyaml's `select_scalar_style` gives the
+	// requested one (`requested`): 0 plain, 1 single-quoted, 2
+	// double-quoted, 3 literal.
+	fn scalar(ref mut self, n: ref Node, simple: bool) sync {
+		let t = scalar_text(n)
+		let a = allowed(t)
+		let mut style = requested(n, t)
+		if simple && a.multiline {
+			style = 2
+		}
+		if style == 0 && (!a.plain || (t.len() == 0 && simple)) {
+			style = 1
+		}
+		if style == 1 && !a.single {
+			style = 2
+		}
+		if style == 3 && (!a.block || simple) {
+			style = 2
+		}
+		self.properties(n)
+		self.increase(true, false)
+		if style == 0 {
+			self.plain(t)
+		} else if style == 1 {
+			self.single(t)
+		} else if style == 2 {
+			self.double(t)
+		} else {
+			self.literal(t)
+		}
+		self.decrease()
+	}
+
+	fn plain(ref mut self, t: String) sync {
+		if !self.whitespace && t.len() != 0 {
+			self.put(' ')
+		}
+		self.put_text(t)
+		self.whitespace = false
+		self.indention = false
+	}
+
+	fn single(ref mut self, t: String) sync {
+		self.indicator("'", true, false, false)
+		let mut breaks = false
+		for c in t.chars() {
+			if c == ' ' {
+				self.put(c)
+			} else if is_break(c) {
+				if !breaks && c == '\n' {
+					self.put_break()
+				}
+				self.put_text_break(c)
+				self.indention = true
+				breaks = true
+			} else {
+				if breaks {
+					self.line()
+				}
+				if c == '\'' {
+					self.put('\'')
+				}
+				self.put(c)
+				self.indention = false
+				breaks = false
+			}
+		}
+		if breaks {
+			self.line()
+		}
+		self.indicator("'", false, false, false)
+		self.whitespace = false
+		self.indention = false
+	}
+
+	fn double(ref mut self, t: String) sync {
+		self.indicator("\"", true, false, false)
+		for c in t.chars() {
+			if !printable(c) || is_break(c) || c == '"' || c == '\\' {
+				self.put('\\')
+				self.put_text(escape(c))
+			} else {
+				self.put(c)
+			}
+		}
+		self.indicator("\"", false, false, false)
+		self.whitespace = false
+		self.indention = false
+	}
+
+	// `|`, the indentation indicator where the text starts with a space or
+	// a line break, the chomping indicator (`-` without a final line break,
+	// `+` with more than one), then the lines.
+	fn literal(ref mut self, t: String) sync {
+		self.indicator("|", true, false, false)
+		let cs: Vec[scalar] = t.chars().collect()
+		let n = cs.len() as i64
+		if n > 0 && (cs[0] == ' ' || is_break(cs[0])) {
+			self.indicator("2", false, false, false)
+		}
+		self.open_ended = 0
+		if n == 0 || !is_break(cs[n - 1]) {
+			self.indicator("-", false, false, false)
+		} else if n == 1 || is_break(cs[n - 2]) {
+			self.indicator("+", false, false, false)
+			self.open_ended = 2
+		}
+		self.put_break()
+		self.indention = true
+		self.whitespace = true
+		let mut breaks = true
+		for c in cs.iter() {
+			if is_break(c) {
+				self.put_text_break(c)
+				self.indention = true
+				breaks = true
+			} else {
+				if breaks {
+					self.line()
+				}
+				self.put(c)
+				self.indention = false
+				breaks = false
+			}
+		}
+	}
+}
+
+// A scalar node's text as written: `null`, `true`, `false`, a number's
+// text, a string's value.
+fn scalar_text(n: ref Node) -> String sync {
+	return match n.value {
+		Value::Bool(b) => if b { "true" } else { "false" }
+		Value::Int(t) => t.clone()
+		Value::Float(t) => t.clone()
+		Value::Str(s) => text(s)
+		else => "null"
+	}
+}
+
+// The style asked for (0 plain, 1 single-quoted, 2 double-quoted, 3
+// literal): a string's as it was read, and for a plain one serde_yaml's
+// rule, literal with a line break, single-quoted where it would read back
+// as another kind; plain for every other scalar.
+fn requested(n: ref Node, t: String) -> i64 sync {
+	let quoted = match n.value {
+		Value::Str(_) => true
+		else => false
+	}
+	if !quoted {
+		return 0
+	}
+	return match n.style {
+		Style::Plain => if t.contains("\n") { 3 } else if reads_as_other(t) { 1 } else { 0 }
+		Style::Single => 1
+		Style::Double => 2
+		else => 3
+	}
+}
+
+// Whether serde_yaml 0.9 reads the plain text `t` as other than a string:
+// empty, null, a boolean, an integer (decimal, `0x`, `0o`, `0b`, a sign
+// before any) or a float, or digits after a leading zero.
+fn reads_as_other(t: String) -> bool sync {
+	if t.len() == 0 || is_null(t) || is_true(t) || is_false(t) || leading_zero_digits(t) {
+		return true
+	}
+	let unsigned = t.strip_prefix("+") ?? (t.strip_prefix("-") ?? t)
+	if unsigned.starts_with("0x") {
+		return digits_in(unsigned, 2, 16)
+	}
+	if unsigned.starts_with("0o") {
+		return digits_in(unsigned, 2, 8)
+	}
+	if unsigned.starts_with("0b") {
+		return digits_in(unsigned, 2, 2)
+	}
+	return digits_in(unsigned, 0, 10) || is_float(t)
+}
+
+// serde_yaml's `digits_but_not_number`: a sign, then `0` and more digits.
+fn leading_zero_digits(t: String) -> bool sync {
+	let unsigned = t.strip_prefix("+") ?? (t.strip_prefix("-") ?? t)
+	return unsigned.len() > 1 && unsigned.starts_with("0") && digits_in(unsigned, 1, 10)
+}
+
+// Whether a key fits on its line (libyaml's `check_simple_key`): a
+// single-line scalar, an alias or an empty collection, of at most 128 bytes
+// with its anchor and tag.
+fn simple_key(n: ref Node) -> bool sync {
+	let mut length = (n.anchor ?? "").len() as i64 + tag_length(n.tag)
+	match n.value {
+		Value::Alias(a) => {
+			length = a.len() as i64
+		}
+		Value::Seq(items) => {
+			if items.len() != 0 {
+				return false
+			}
+		}
+		Value::Map(entries) => {
+			if entries.len() != 0 {
+				return false
+			}
+		}
+		else => {
+			let t = scalar_text(n)
+			if allowed(t).multiline {
+				return false
+			}
+			length += t.len() as i64
+		}
+	}
+	return length <= 128
+}
+
+// A tag's length as libyaml counts it: a verbatim `!<t>` without its
+// brackets.
+fn tag_length(tag: String?) -> i64 sync {
+	let t = tag ?? ""
+	if t.starts_with("!<") {
+		return t.len() as i64 - 3
+	}
+	return t.len() as i64
+}
+
+// A tag as libyaml writes it: `!x` for a local tag `x` or `!x`, `!!x` for
+// `tag:yaml.org,2002:x`, the suffix's characters outside a URI's as `%XX`;
+// any other tag verbatim, `!<tag>`.
+pub fn written_tag(tag: String) -> String sync {
+	let core = "tag:yaml.org,2002:"
+	if tag.starts_with(core) && tag.len() > core.len() {
+		return f"!!{uri_escaped(tag.strip_prefix(core) ?? "")}"
+	}
+	if tag.starts_with("!") && tag.len() > 1 {
+		return f"!{uri_escaped(tag.strip_prefix("!") ?? "")}"
+	}
+	return f"!<{uri_escaped(tag)}>"
+}
+
+// A tag's text with each byte outside a URI's characters as `%XX`.
+fn uri_escaped(t: String) -> String sync {
+	let mut out = String()
+	for b in t.bytes() {
+		let c = b as scalar
+		let alpha = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		if b < 128 && (alpha || "-_;/?:@&=+$,.~*'()[]".contains(f"{c}")) {
+			out.push(c)
+		} else {
+			out.push('%')
+			out.push_str(hex(b as i64, 2))
+		}
+	}
+	return out
+}
+
+// `width` upper-case hexadecimal digits of `v`.
+fn hex(v: i64, width: i64) -> String sync {
+	let digits: Vec[scalar] = "0123456789ABCDEF".chars().collect()
+	let mut out = String()
+	let mut k = (width - 1) * 4
+	while k >= 0 {
+		out.push(digits[(v >> k) & 15])
+		k -= 4
+	}
+	return out
+}
+
+// libyaml's line breaks: CR, LF, NEL, LS and PS.
+fn is_break(c: scalar) -> bool sync {
+	let v = c as i64
+	return v == 13 || v == 10 || v == 133 || v == 8232 || v == 8233
+}
+
+// libyaml's printable characters: LF, ASCII from the space to `~`, and from
+// U+A0 on except the surrogates, the byte order mark, U+FFFE and U+FFFF.
+fn printable(c: scalar) -> bool sync {
+	let v = c as i64
+	return v == 10 || (v >= 32 && v <= 126) || (v >= 160 && v <= 55295)
+		|| (v >= 57344 && v <= 65533 && v != 65279) || v >= 65536
+}
+
+// A character's escape in a double-quoted scalar, after its `\`.
+fn escape(c: scalar) -> String sync {
+	let v = c as i64
+	return match v {
+		0 => "0"
+		7 => "a"
+		8 => "b"
+		9 => "t"
+		10 => "n"
+		11 => "v"
+		12 => "f"
+		13 => "r"
+		27 => "e"
+		34 => "\""
+		92 => "\\"
+		133 => "N"
+		160 => "_"
+		8232 => "L"
+		8233 => "P"
+		else => if v
+			<= 255 { f"x{hex(v, 2)}" } else if v
+			<= 65535 { f"u{hex(v, 4)}" } else { f"U{hex(v, 8)}" }
+	}
+}
+
+// What the text `t` allows (libyaml's `analyze_scalar`, in block context):
+// plain not where it starts or ends with white space, holds a line break, an
+// indicator or a special character; single quotes not where a line break
+// meets a space or a special character is; a block scalar not with trailing
+// spaces, a space before a line break or a special character.
+fn allowed(t: String) -> Allowed sync {
+	let cs: Vec[scalar] = t.chars().collect()
+	let n = cs.len() as i64
+	if n == 0 {
+		return Allowed { multiline: false, plain: true, single: true, block: false }
+	}
+	let mut indicators = t.starts_with("---") || t.starts_with("...")
+	let mut line_breaks = false
+	let mut special = false
+	let mut edge_space = false
+	let mut trailing_space = false
+	let mut break_space = false
+	let mut space_break = false
+	let mut previous_space = false
+	let mut previous_break = false
+	let mut preceded = true
+	let mut i = 0
+	while i < n {
+		let c = cs[i]
+		let followed = i + 1 >= n || blank(cs[i + 1])
+		if i == 0 {
+			if "#,[]{}&*!|>'\"%@`".contains(f"{c}")
+				|| ((c == '?' || c == ':' || c == '-') && followed) {
+					indicators = true
+				}
+		} else if (c == ':' && followed) || (c == '#' && preceded) {
+			indicators = true
+		}
+		if !printable(c) {
+			special = true
+		}
+		if c == ' ' {
+			if i == 0 || i == n - 1 {
+				edge_space = true
+			}
+			if i == n - 1 {
+				trailing_space = true
+			}
+			if previous_break {
+				break_space = true
+			}
+			previous_space = true
+			previous_break = false
+		} else if is_break(c) {
+			line_breaks = true
+			if i == 0 || i == n - 1 {
+				edge_space = true
+			}
+			if previous_space {
+				space_break = true
+			}
+			previous_space = false
+			previous_break = true
+		} else {
+			previous_space = false
+			previous_break = false
+		}
+		preceded = blank(c)
+		i += 1
+	}
+	let mixed = space_break || special
+	return Allowed {
+		multiline: line_breaks,
+		plain: !(edge_space || break_space || mixed || line_breaks || indicators),
+		single: !(break_space || mixed),
+		block: !(trailing_space || mixed),
+	}
+}
+
+// libyaml's `IS_BLANKZ` short of the end: a space, a tab or a line break.
+fn blank(c: scalar) -> bool sync {
+	return c == ' ' || c == '\t' || is_break(c)
 }

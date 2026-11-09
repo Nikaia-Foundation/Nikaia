@@ -1,0 +1,32 @@
+// #1515: a method that only reads a `String` parameter is lowered to take
+// `&str`; a call from another method that hands on its own parameter, a
+// literal at one call and text of its own at another, lends it unwrapped,
+// as a call of a free function does.
+struct Writer {
+	out: String,
+	count: i64,
+}
+
+impl Writer {
+	fn put(ref mut self, c: scalar) sync {
+		self.out.push(c)
+		self.count += 1
+	}
+
+	fn put_text(ref mut self, s: String) sync {
+		for c in s.chars() {
+			self.put(c)
+		}
+	}
+
+	fn mark(ref mut self, s: String) sync {
+		self.put_text(s)
+	}
+}
+
+fn main() throws {
+	let mut w = Writer { out: String(), count: 0 }
+	w.mark("ab")
+	w.put_text(f"c{w.count}")
+	println(w.out)
+}

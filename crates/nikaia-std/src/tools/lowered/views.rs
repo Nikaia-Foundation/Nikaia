@@ -1732,11 +1732,27 @@ pub(crate) fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
         let named = asked.names.resolve(field.name);
         let mut more = rsrc_none();
         if field.value.is_none() { more = rsrc_of_name(&flow, named); } else { more = rsrc_maybe(unit, asked, here, known, &own_buffer, Option::as_ref(&field.value), flow); }
+        let mut whole = true;
+        if field.value.is_some() { whole = rsrc_bare_variable(Option::as_ref(&field.value)); }
         let mut owning = false;
-        for (written, ty) in declared.iter() { if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) { owning = true; } }
+        let mut either_whole = false;
+        for (written, ty) in declared.iter() {
+            if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) { owning = true; }
+            if written == named && ty.either && rsrc_plain_text(asked, ty) && whole { either_whole = true; }
+        }
+        if either_whole {
+            let mut kept = rsrc_none();
+            for entry in more.iter() { if !entry.starts_with('!') && !entry.starts_with('=') { kept.insert(nikaia_std::block::Text::from(entry.to_string())); } }
+            more = kept;
+        }
         if !owning { rsrc_join(&mut out, &rsrc_under(named, &more)); }
     }
     out
+}
+
+pub(crate) fn rsrc_bare_variable(value: Option<&Expr>) -> bool {
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
+    matches!(given, Expr::Variable(_, _))
 }
 
 pub(crate) fn rsrc_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, known: &collections::BTreeMap<String, ResultSrcKnown>, own_buffer: &dyn Fn(&Expr) -> bool, fields: &[FieldInit], flow: &mut ResultSrcFlow) -> collections::BTreeSet<String> {
