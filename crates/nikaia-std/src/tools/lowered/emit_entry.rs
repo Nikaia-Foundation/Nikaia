@@ -34,8 +34,7 @@ impl EmitState {
         text = format!("{}{}{}", text, self.fatal_registrations(world), self.crossing_registrations(world));
         text = format!("{}    let nikaia_runtime = nikaia_std::rt::{}(nikaia_std::rt::UserCode::{});\n", text, start, user_code);
         let exits = main_exits(&self.own_contracts);
-        text = format!("{}    let nikaia_block = nikaia_std::block::Block::default();\n", text);
-        if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = {{\n        let _in = nikaia_std::block::enter(&nikaia_block);\n        let outcome = nikaia_std::rt::exec::block_on({}({}));\n        outcome\n    }};\n", text, body, passed); } else { text = format!("{}    let outcome = {{\n        let _in = nikaia_std::block::enter(&nikaia_block);\n        let outcome = {}({});\n        outcome\n    }};\n", text, body, passed); }
+        if call_pauses(&self.own_contracts, "main") { text = format!("{}    let outcome = nikaia_std::rt::exec::block_on({}({}));\n", text, body, passed); } else { text = format!("{}    let outcome = {}({});\n", text, body, passed); }
         if exits { text = format!("{}    nikaia_runtime.finish();\n    nikaia_std::process::ended(outcome)\n}}\n", text); } else { text = format!("{}    nikaia_runtime.finish();\n    outcome\n}}\n", text); }
         text
     }
