@@ -93,6 +93,9 @@ it, like the checks in `docs/supervisor.md`.
   A change to a pass every build runs (the bounds walk runs in each
   `lower-std`) names the time before it, on one named file, as a limit
   (#1470: a rule that made the walk 4.5 times slower stopped the run).
+  An issue that changes which facts the bounds walk asks with shows a
+  `--bounds-trace` of its probe on the binary of the day (#1500: the
+  trace showed the shared turn variable the rule had missed).
 * **I12. What was ruled out**: approaches tried and dropped, and why, so the
   builder does not try them again. Empty when nothing was tried.
 
