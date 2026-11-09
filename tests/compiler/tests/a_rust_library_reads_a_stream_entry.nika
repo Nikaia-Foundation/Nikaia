@@ -72,9 +72,11 @@ fn main() throws {
             if ran.code != 0 { println(ran.stderr.trim().replace(tmp, "TMP")) }
             let refused = process::run("cargo", ["build", "-q"]; dir: f"{tmp}/private", env: env.clone())
             println(f"private builds: {refused.code == 0}")
+            let mut said = 0
             for line in refused.stderr.lines() {
-                if line.starts_with("error[E0603]") { println(line) }
+                if line.starts_with("error[E0603]") { println(line); said += 1 }
             }
+            if said == 0 { println(refused.stderr.trim().replace(tmp, "TMP")) }
         }
     }
     process::run("rm", ["-rf", tmp])
