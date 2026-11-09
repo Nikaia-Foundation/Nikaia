@@ -67,6 +67,8 @@ it, like the checks in `docs/supervisor.md`.
   item counts a site only when that decision's mechanism reaches its probe
   (the D24 value range of a returned list does not reach a trait method with
   no body); the sites list goes into the issue by file and line (#1453).
+  A site that needs several mechanisms is counted under the one built last,
+  so that a group's count is what falls when its item is built (#1470).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/` (or the package's tests), and the rows it must show.

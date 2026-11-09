@@ -251,6 +251,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Prover
 
+* **An index read out of an inner list of a field** (`a = self.col[c][i]`, then `self.atoms[a]`) stays checked whatever length relation the lists have, until ADR-306 D28 is built; a local list of lists is proved already (D7). Sort such a site under D28, not under #385 (that is values computed from the same table). (issue-1470)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
   measured with `lower-std --bounds --asserts [--optimization
   prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
