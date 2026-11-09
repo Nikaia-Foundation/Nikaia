@@ -19,6 +19,8 @@
 //! bytes. Exactly one may, and the helper refuses to guess if that is not so.
 
 #![allow(dead_code)]
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -59,7 +61,7 @@ fn candidates(crate_name: &str) -> Vec<PathBuf> {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or_default();
-            name.starts_with(&prefix) && name.ends_with(".rlib")
+            name.starts_with(&*prefix) && name.ends_with(".rlib")
         })
         .collect();
     found.sort();
@@ -83,7 +85,7 @@ fn dependency_of(of: &Path, crate_name: &str) -> PathBuf {
             .and_then(|n| n.to_str())
             .expect("rlib file name");
         let hash = name
-            .trim_start_matches(&format!("lib{crate_name}"))
+            .trim_start_matches(&*format!("lib{crate_name}"))
             .trim_end_matches(".rlib");
         if contains(&bytes, hash.as_bytes()) {
             matched.push(candidate);
@@ -136,7 +138,7 @@ pub fn externs() -> Vec<String> {
         format!("winnow={}", winnow.display()),
     ]
     .into_iter()
-    .flat_map(|e| ["--extern".to_string(), e])
+    .flat_map(|e| ["--extern".to_text(), e])
     .collect()
 }
 

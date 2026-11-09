@@ -10,7 +10,7 @@ pub struct CheckCleanup {
 
 pub(crate) fn check_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string())
 }
 
 pub(crate) fn check_implements_in(ledger: &Ledger, teardown: &str, base: &str) -> bool {
@@ -24,8 +24,8 @@ pub(crate) fn check_cleanup_in(ledger: &Ledger, name: &str, base: &str, qualifie
     for one in types.iter() {
         let tail = format!("::{}", one);
         let mut hit = false;
-        if qualified { hit = one == name || name.ends_with(&tail); } else { hit = check_base(one) == base; }
-        if hit { return Some(one.to_string()); }
+        if qualified { hit = one == name || name.ends_with(AsRef::<str>::as_ref(&tail)); } else { hit = check_base(one) == base; }
+        if hit { return Some(nikaia_std::block::Text::from(one.to_string())); }
     }
     None
 }
@@ -52,13 +52,13 @@ impl CheckState {
         for option in lowered_options(contract) {
             if contract.provenance.is_some() && option.name == "trusted" { continue; }
             if option.default.starts_with("\"") && a_plain_string(&option.ty) {
-                options.push((option.name.to_string(), format!("String::from({})", option.default)));
+                options.push((nikaia_std::block::Text::from(option.name.to_string()), format!("String::from({})", option.default)));
                 continue;
             }
-            options.push((option.name.to_string(), option.default.to_string()));
+            options.push((nikaia_std::block::Text::from(option.name.to_string()), nikaia_std::block::Text::from(option.default.to_string())));
         }
         if options.is_empty() { return; }
-        let key = (on, world.words.resolve(method).to_string());
+        let key = (on, nikaia_std::block::Text::from(world.words.resolve(method).to_string()));
         self.facts.method_options.insert(key, options);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -77,8 +77,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
         if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
-        let function = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
-        let name = world.words.resolve(method).to_string();
+        let function = nikaia_std::block::Text::from(match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
+        let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         self.findings.push(check_refusal("NK2701", span, format!("This function can fail, because a step of what `{}` walks can fail.", name), vec![format!("`{}` asks the sequence for every element, and this sequence reads as it goes, so a read can fail.", name)], Some(format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -136,7 +136,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn seen_through(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Ty> {
         let name = match ty {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return None,
         };
         let key = format!("{}::deref", name);
@@ -175,7 +175,7 @@ impl CheckState {
             Ty::Named { ref name, ref args, view } => {
                 if view { return None; }
                 let base = check_base(name);
-                if !seen.insert(base.to_string()) { return None; }
+                if !seen.insert(nikaia_std::block::Text::from(base.to_string())) { return None; }
                 let qualified = name.contains("::");
                 let declared_here = !qualified && world.own.types.contains_key(name);
                 let mut owner = check_cleanup_in(world.own, name, &base, qualified);
@@ -186,14 +186,14 @@ impl CheckState {
                     let pauses = !check_cleanup_is_sync(world.own, &found) && !check_cleanup_is_sync(world.library, &found);
                     return Some(CheckCleanup { owner: found, fails, pauses });
                 }
-                held = args.to_owned();
+                held = args.copy_owned();
                 for field in self.fields_of_base(world, &base) { held.push(field); }
             },
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
                 held.push(inner.clone());
             },
-            Ty::Tuple(ref parts) => { held = parts.to_owned(); },
+            Ty::Tuple(ref parts) => { held = parts.copy_owned(); },
             _ => { return None; },
         }
         let mut any = false;
@@ -206,7 +206,7 @@ impl CheckState {
                 let one = match found { Some(__nikaia_value) => __nikaia_value, None => return None };
                 if !any {
                     any = true;
-                    owner = one.owner.to_string();
+                    owner = nikaia_std::block::Text::from(one.owner.to_string());
                 }
                 fails = fails || one.fails;
                 pauses = pauses || one.pauses;
@@ -222,12 +222,12 @@ impl CheckState {
             Ty::Named { name, view, .. } => {
                 let view = *view;
                 if view { return None; }
-                name.to_string()
+                nikaia_std::block::Text::from(name.to_string())
             },
             _ => return None,
         };
         let base = check_base(&name);
-        if !seen.insert(base.to_string()) { return None; }
+        if !seen.insert(nikaia_std::block::Text::from(base.to_string())) { return None; }
         for teardown in ["Drop", "Cleanup"] { if check_implements_in(world.own, teardown, &base) || check_implements_in(world.library, teardown, &base) { return Some(format!("`impl {} for {}`", teardown, base)); } }
         for field in self.fields_of_base(world, &base) {
             let how = self.tears_down(world, &field, seen);

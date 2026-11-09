@@ -76,7 +76,7 @@ impl CheckState {
             _ => { },
         }
         let node = id_of(value) as i64;
-        if !self.flow.map_read_sites.contains(&node) { return; }
+        if !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) { return; }
         let inner = match want {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return,
@@ -101,7 +101,7 @@ impl CheckState {
     pub fn a_map_read_handed_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, body: &Block) {
         for value in block_tail(body) {
             let node = id_of(value) as i64;
-            if !self.flow.map_read_sites.contains(&node) { return; }
+            if !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) { return; }
             let read = match found {
                 Ty::Nullable(read) => { let read = nikaia_std::boxed::open(read); read.clone() },
                 _ => return,
@@ -117,7 +117,7 @@ impl CheckState {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
                 let node = id_of(read) as i64;
-                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(&node) || into.is_a_view() || into.is_unknown() { return; }
+                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) || into.is_a_view() || into.is_unknown() { return; }
                 if self.copied(world, into) || !self.takes_away(world, into) {
                     let added = self.facts.copied_reads.insert(node);
                     return;
@@ -150,9 +150,9 @@ impl CheckState {
         match operand {
             Expr::Variable(name, _) => {
                 let name = *name;
-                let written = world.words.resolve(name).to_string();
+                let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 let local = match self.binding(&written) { Some(__nikaia_value) => __nikaia_value, None => return };
-                if local.lent { let added = self.facts.viewed_numbers.insert((span.start as i64, written.to_string())); }
+                if local.lent { let added = self.facts.viewed_numbers.insert((span.start as i64, nikaia_std::block::Text::from(written.to_string()))); }
             },
             _ => { },
         }
@@ -202,7 +202,7 @@ impl CheckState {
     pub(crate) fn a_comparison_beside_an_arm_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty, which: String, other: &Expr, other_ty: &Ty, here: i64) {
         if !self.a_side_is_a_value(world, side, ty) { return; }
         let name = match side {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
         };
         let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -258,7 +258,7 @@ impl CheckState {
         self.read_seq = self.read_seq + 1;
         self.flow.read_index.insert(key, self.reads_on_paths.len() as i64);
         let binding = self.binding(path).as_ref().map(|__nikaia_it| __nikaia_it.id);
-        self.reads_on_paths.push(CheckRead { path: path.to_string(), at: span.start as i64, choices: self.branch.to_owned(), seq: self.read_seq, binding });
+        self.reads_on_paths.push(CheckRead { path: nikaia_std::block::Text::from(path.to_string()), at: span.start as i64, choices: self.branch.copy_owned(), seq: self.read_seq, binding });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -266,12 +266,12 @@ impl CheckState {
     pub fn parts_taken_out_of_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &str, body: &Expr, subject: &Ty, parts: &collections::BTreeMap<String, Ty>, handed_from: i64, from: i64) {
         for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
         if self.scope.is_empty() { return; }
-        let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).to_owned();
+        let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).copy_owned();
         let mut found: Vec<(String, i64)> = vec![];
         for (name, _) in parts.iter() {
             for local in frame.iter() {
                 if local.name == *name {
-                    found.push((name.to_string(), local.id));
+                    found.push((nikaia_std::block::Text::from(name.to_string()), local.id));
                     break;
                 }
             }
@@ -286,7 +286,7 @@ impl CheckState {
             }
             if at >= self.handed.len() as i64 { continue; }
             any = true;
-            self.parts_out.push(CheckPartOut { subject: path.to_string(), part: part.to_string(), binding, handed: at, view: String::from(""), frame: -1, ends: -1, from, choices: self.branch.to_owned() });
+            self.parts_out.push(CheckPartOut { subject: nikaia_std::block::Text::from(path.to_string()), part: nikaia_std::block::Text::from(part.to_string()), binding, handed: at, view: String::from(""), frame: -1, ends: -1, from, choices: self.branch.copy_owned() });
         }
         if !any { return; }
         let node = id_of(body) as i64;
@@ -308,11 +308,11 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn record_cast(&mut self, from: &Ty, into: &Ty, operand: i64) {
         let from_name = match from {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return,
         };
         let into_name = match into {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return,
         };
         let fits_i64 = from_name == "i32" && into_name == "i64";

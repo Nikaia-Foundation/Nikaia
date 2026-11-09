@@ -5,6 +5,8 @@
 //! the program with status 2 before the body runs.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -66,8 +68,8 @@ fn run(binary: &Path, words: &[&str]) -> (i32, String, String) {
         .expect("run it");
     (
         out.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
     )
 }
 
@@ -87,7 +89,7 @@ fn main(a: i64; times: i64 = 4, be_loud: bool = false) throws {\n\
 #[test]
 fn the_words_are_the_parameters() {
     let (dir, prog) = built("multiply", MULTIPLY);
-    assert_eq!(run(&prog, &["5"]), (0, "20\n".to_string(), String::new()));
+    assert_eq!(run(&prog, &["5"]), (0, "20\n".to_text(), String::new()));
     assert_eq!(run(&prog, &["--times=3", "5"]).1, "15\n");
     assert_eq!(run(&prog, &["5", "--times", "3"]).1, "15\n");
     assert_eq!(run(&prog, &["--be-loud", "5"]).1, "4 * 5 = 20\n");

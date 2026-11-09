@@ -33,6 +33,8 @@
 //! in as code: the solver, the book of `nikaia.proofs`, the emitter's
 //! counters and the fold's proof.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::parser::Parsed;

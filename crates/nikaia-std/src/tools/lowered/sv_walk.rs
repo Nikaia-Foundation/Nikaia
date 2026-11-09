@@ -166,11 +166,11 @@ impl SvWalk {
             if h != *nikaia_std::index::get(&self.holds, nikaia_std::index::at(a)) {
                 { let __nikaia_stored = h; nikaia_std::index::set(&mut self.holds, nikaia_std::index::at(a), __nikaia_stored); }
                 let (made, lost) = if h { (2 * a, 2 * a + 1) } else { (2 * a + 1, 2 * a) };
-                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(made))).to_owned() {
+                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(made))).copy_owned() {
                     self.true_count[nikaia_std::index::at(c)] += 1;
                     if *nikaia_std::index::get(&self.true_count, nikaia_std::index::at(c)) == 1 { self.satisfy(c); }
                 }
-                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(lost))).to_owned() {
+                for c in (*nikaia_std::index::get(&self.lit_clauses, nikaia_std::index::at(lost))).copy_owned() {
                     self.true_count[nikaia_std::index::at(c)] -= 1;
                     if *nikaia_std::index::get(&self.true_count, nikaia_std::index::at(c)) == 0 { self.falsify(c); }
                 }
@@ -184,8 +184,8 @@ pub(crate) fn sv_walk_none() -> SvWalkRun { SvWalkRun { found: false, values: ve
 
 pub(crate) fn sv_walk_start(query: &SvQuery, carried: &[Vec<u32>]) -> Option<SvWalk> {
     let atoms = query.atoms.len() as i64;
-    let mut w = SvWalk { atoms: query.atoms.to_owned(), clauses: query.clauses.to_owned(), values: vec![], row_value: vec![], holds: vec![], col_atoms: vec![], col_ks: vec![], lit_clauses: vec![], true_count: vec![], weight: vec![], unsat_at: vec![], unsat: vec![], scratch: vec![], touched: vec![], moved_at: vec![] };
-    for clause in carried.iter() { w.clauses.push(clause.to_owned()); }
+    let mut w = SvWalk { atoms: query.atoms.copy_owned(), clauses: query.clauses.copy_owned(), values: vec![], row_value: vec![], holds: vec![], col_atoms: vec![], col_ks: vec![], lit_clauses: vec![], true_count: vec![], weight: vec![], unsat_at: vec![], unsat: vec![], scratch: vec![], touched: vec![], moved_at: vec![] };
+    for clause in carried.iter() { w.clauses.push(clause.copy_owned()); }
     let columns = query.columns as i64;
     for _ in 0..columns {
         w.values.push(0);
@@ -234,7 +234,7 @@ pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, mov
     let mut w = match sv_walk_start(query, carried) { Some(__nikaia_value) => __nikaia_value, None => return sv_walk_none() };
     let mut rng = sv_random(params.seed);
     let mut least = w.unsat.len() as i64;
-    let mut phases = w.holds.to_owned();
+    let mut phases = w.holds.copy_owned();
     let mut step: i64 = 0;
     let mut candidates: Vec<SvMove> = vec![];
     let mut scores: Vec<i64> = vec![];
@@ -244,7 +244,7 @@ pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, mov
         candidates.clear();
         scores.clear();
         let mut best: i64 = -1;
-        for l in (*nikaia_std::index::get(&w.clauses, nikaia_std::index::at(c))).to_owned() {
+        for l in (*nikaia_std::index::get(&w.clauses, nikaia_std::index::at(c))).copy_owned() {
             let a = (l / 2u32) as i64;
             let positive = l % 2u32 == 0u32;
             let mut i: i64 = 0;
@@ -280,10 +280,10 @@ pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, mov
         }
         if (w.unsat.len() as i64) < least {
             least = w.unsat.len() as i64;
-            phases = w.holds.to_owned();
+            phases = w.holds.copy_owned();
         }
     }
-    SvWalkRun { found: w.unsat.is_empty(), values: w.values.to_owned(), moves: step, least, phases }
+    SvWalkRun { found: w.unsat.is_empty(), values: w.values.copy_owned(), moves: step, least, phases }
 }
 
 pub fn sv_walk_params() -> SvWalkParams { SvWalkParams { moves_per_unit: 100, noise: 100, tenure: 3, bound: 1000000000, seed: 1 } }

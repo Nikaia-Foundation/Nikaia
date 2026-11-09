@@ -14,6 +14,8 @@
 //! configuration, a build switch, the checker or the emitted Rust.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -68,7 +70,7 @@ fn run(purpose: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    let out = String::from_utf8_lossy(&ran.stdout).to_string();
+    let out = String::from_utf8_lossy(&ran.stdout).to_text();
     std::fs::remove_dir_all(&dir).ok();
     out
 }

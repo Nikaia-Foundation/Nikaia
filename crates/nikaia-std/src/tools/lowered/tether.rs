@@ -28,11 +28,11 @@ pub fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<It
         match &item.node {
             Item::Struct { name, .. } => {
                 let name = *name;
-                package.named.insert(names.resolve(name).to_string());
+                package.named.insert(nikaia_std::block::Text::from(names.resolve(name).to_string()));
             },
             Item::Enum { name, .. } => {
                 let name = *name;
-                package.named.insert(names.resolve(name).to_string());
+                package.named.insert(nikaia_std::block::Text::from(names.resolve(name).to_string()));
             },
             _ => { },
         }
@@ -67,8 +67,8 @@ pub fn function_views(item: &Item, target: Option<&str>, names: &winnow_grammar:
     match item {
         Item::Fn { receiver, args, ret_type, .. } => {
             if receiver.is_some() && a_borrowing_target(target, borrowing) { held.push(Held { position: String::from("self"), state: State::Borrowed }); }
-            for arg in args.iter() { if carries_a_view(names, &arg.ty, borrowing) { held.push(Held { position: names.resolve(arg.name).to_string(), state: State::Borrowed }); } }
-            if result_carries(names, (ret_type).as_ref(), borrowing) { held.push(Held { position: RESULT_POSITION.to_string(), state: State::Borrowed }); }
+            for arg in args.iter() { if carries_a_view(names, &arg.ty, borrowing) { held.push(Held { position: nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), state: State::Borrowed }); } }
+            if result_carries(names, (ret_type).as_ref(), borrowing) { held.push(Held { position: nikaia_std::block::Text::from(RESULT_POSITION.to_string()), state: State::Borrowed }); }
         },
         _ => { },
     }
@@ -126,7 +126,7 @@ pub(crate) fn a_method_buffer(method: &str, receiver: &Expr) -> Buffer {
 
 pub(crate) fn a_call_buffer(func: &Expr, asked: &Asked<'_, '_, '_>, unaliased: &impl Fn(&str) -> String) -> Buffer {
     let name = match func {
-        Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(asked.names.resolve(name).to_string()) },
         Expr::Path(segments, _) => unaliased(&joined_segments(segments, asked.names)),
         _ => return Buffer::None,
     };
@@ -205,7 +205,7 @@ pub(crate) fn buffer_named(plan: &BufferPlan, wanted: i64) -> Option<String> {
 }
 
 pub(crate) fn padded(word: &str, width: i64) -> String {
-    let mut out = word.to_string();
+    let mut out = nikaia_std::block::Text::from(word.to_string());
     let mut n = nikaia_std::list::chars(word.chars()).len() as i64;
     while n < width {
         out.push(' ');
@@ -215,7 +215,7 @@ pub(crate) fn padded(word: &str, width: i64) -> String {
 }
 
 pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTreeSet<String>, plans: &[BufferPlan], library: &Ledger) -> String {
-    let mut lines: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut lines: Vec<String> = vec![];
     if !texts.is_empty() {
         lines.push(String::from("text (declared `String`):\n"));
         for line in texts.iter() { lines.push(format!("    {}\n", line)); }
@@ -236,11 +236,11 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         for held in contract.views.iter() {
             let state = held.state.as_str();
             let mut from = String::from("");
-            if state == "borrowed" && held.position == "<result>" && !lent.is_empty() { from = format!(" - from the caller's argument for {}", lent.join(", ")); }
+            if state == "borrowed" && held.position == "<result>" && !lent.is_empty() { from = format!(" - from the caller's argument for {}", nikaia_std::block::Text::from(lent.join(", "))); }
             lines.push(format!("    {} `{}`{}\n", padded(&state, 9), held.position, from));
         }
     }
-    let mut handed: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    let mut handed: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     for plan in plans.iter() {
         let mut names: Vec<String> = vec![];
         for (at, keep) in plan.puts.iter() {
@@ -255,7 +255,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
             let (_, callee) = id;
             if callee.contains('#') && goes_in_the_callers_keep(&keep) { names.push(an_argument(&callee)); }
         }
-        handed.insert(plan.key.to_string(), names);
+        handed.insert(nikaia_std::block::Text::from(plan.key.to_string()), names);
     }
     for plan in plans.iter() {
         let mut said: Vec<String> = vec![];
@@ -271,13 +271,13 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 said.push(format!("    {} lives {}\n", an_argument(&callee), keep_words(&keep)));
                 continue;
             }
-            let mut names: Vec<String> = vec![];
-            let found = handed.get(callee);
+            #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+            let found = handed.get(callee); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                for one in list.iter() { names.push(one.to_string()); }
+                for one in list.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }
             }
-            if lives_in_a_local_keep(&keep) && !names.is_empty() { said.push(format!("    {} lives in `{}`'s keep: handed back by `{}`\n", names.join(", "), plan.key, callee)); } else { said.push(format!("    what `{}` reads lives {}\n", callee, keep_words(&keep))); }
+            if lives_in_a_local_keep(&keep) && !names.is_empty() { said.push(format!("    {} lives in `{}`'s keep: handed back by `{}`\n", nikaia_std::block::Text::from(names.join(", ")), plan.key, callee)); } else { said.push(format!("    what `{}` reads lives {}\n", callee, keep_words(&keep))); }
         }
         for keeper in plan.element_keepers.iter() {
             if plan.struct_keepers.contains(keeper) {
@@ -289,9 +289,9 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         }
         if said.is_empty() { continue; }
         lines.push(format!("{} (keeps):\n", plan.key));
-        for line in said.iter() { lines.push(line.to_string()); }
+        for line in said.iter() { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     }
     if lines.is_empty() { return String::from("no view in a signature here, so there is no state to solve.\n"); }
-    lines.join("")
+    nikaia_std::block::Text::from(lines.join(""))
 }
 

@@ -2,6 +2,8 @@
 //! over the layer that is now Nikaia (`tools/logic_*.nika`, ADR-294, #125).
 
 #![allow(dead_code, unused_imports)]
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia_std::tools::logic_alethe::lg_alethe_write;
 use nikaia_std::tools::logic_lia::LgBudget;

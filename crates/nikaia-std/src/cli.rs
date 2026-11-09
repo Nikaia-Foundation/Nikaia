@@ -16,9 +16,9 @@ impl Args {
     /// position is negative).
     // Not `Iterator::nth`: that one counts in `usize`.
     #[allow(clippy::should_implement_trait)]
-    pub fn nth(&mut self, at: i64) -> Option<String> {
+    pub fn nth(&mut self, at: i64) -> Option<crate::block::Text> {
         let at = usize::try_from(at).ok()?;
-        self.0.nth(at)
+        self.0.nth(at).map(crate::block::Text::from)
     }
 
     /// How many arguments are left to read, the program's name among them
@@ -33,11 +33,12 @@ impl Args {
     }
 }
 
+/// Each argument a block's text (#490), taking over Rust's `String` as it is.
 impl Iterator for Args {
-    type Item = String;
+    type Item = crate::block::Text;
 
-    fn next(&mut self) -> Option<String> {
-        self.0.next()
+    fn next(&mut self) -> Option<crate::block::Text> {
+        self.0.next().map(crate::block::Text::from)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -225,8 +226,9 @@ impl Words {
         Some(self.converted(word, param.name, ty))
     }
 
-    /// Every positional word from `from` on, each converted.
-    pub fn rest<T: Word>(&self, from: usize) -> Vec<T> {
+    /// Every positional word from `from` on, each converted, as a block's
+    /// list (#490).
+    pub fn rest<T: Word>(&self, from: usize) -> crate::block::List<T> {
         let param = self.subject_param(from);
         let item = param
             .ty
@@ -457,6 +459,13 @@ impl Word for String {
     }
 }
 
+/// A word taken as a block's text (#490), the `String` of a program.
+impl Word for crate::block::Text {
+    fn from_word(word: &str) -> Option<Self> {
+        Some(crate::block::Text::from(word))
+    }
+}
+
 impl<T: Word> Word for Option<T> {
     fn from_word(word: &str) -> Option<Self> {
         T::from_word(word).map(Some)
@@ -515,12 +524,12 @@ mod tests {
         assert_eq!(w.subject::<i64>(0), 5);
         assert_eq!(w.option::<i64>(1), Some(3));
         assert_eq!(w.option::<bool>(2), Some(true));
-        assert_eq!(w.rest::<String>(1), vec!["x".to_string()]);
+        assert_eq!(w.rest::<String>(1), &["x".to_string()]);
         let w = sorted(&["--times", "7", "--", "-3", "--be-loud"]).unwrap();
         assert_eq!(w.subject::<i64>(0), -3);
         assert_eq!(w.option::<i64>(1), Some(7));
         assert_eq!(w.option::<bool>(2), None);
-        assert_eq!(w.rest::<String>(1), vec!["--be-loud".to_string()]);
+        assert_eq!(w.rest::<String>(1), &["--be-loud".to_string()]);
         assert_eq!(sorted(&["-3"]).unwrap().subject::<i64>(0), -3);
     }
 

@@ -11,6 +11,8 @@
 //! The limits today (parser and checker together): calls pass 800, lists 500,
 //! a `.abs()` chain 1,600. The test takes 500, 500, 500 and 1,000.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 fn lowers(source: &str, name: &str) {
@@ -25,7 +27,7 @@ fn lowers(source: &str, name: &str) {
         .output()
         .expect("the compiler runs");
     let _ = std::fs::remove_dir_all(&dir);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "{name} lowers on the default stack, got {:?}: {}",

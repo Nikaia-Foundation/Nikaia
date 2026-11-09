@@ -8,6 +8,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn items(source: &str) -> Vec<(String, Option<String>)> {
     let parsed = parse_to_ast(source).expect("the source parses");

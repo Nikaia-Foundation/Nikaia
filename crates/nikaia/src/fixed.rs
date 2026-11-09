@@ -17,6 +17,8 @@
 //! anywhere from eight to sixteen is within 30 % on the wrong side — which is
 //! worth saying so nobody re-measures this to move it by two.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 /// Where a scan stops being as good as a hash
 /// ([ADR-311](../../../docs/specification/adr/adr-311.md) D10).
 pub const HASHED_FROM: usize = nikaia_std::tools::fixed::HASHED_FROM as usize;

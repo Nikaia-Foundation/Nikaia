@@ -3,6 +3,8 @@
 //! the bytes `fs::read` hands out.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn run(name: &str, source: &str, files: &[(&str, &[u8])]) -> String {
     let dir = common::scratch_dir(name);
@@ -23,7 +25,7 @@ fn run(name: &str, source: &str, files: &[(&str, &[u8])]) -> String {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).into_owned()
+    String::from_utf8_lossy(&run.stdout)
 }
 
 const READS: &str = "fn reads(s: String) throws {\n\

@@ -5,7 +5,7 @@
 // this was written - see `contracts::sync`.
 pub fn several_errors_of(ty: &Ty) -> Vec<Ty> {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if name == "Error" && args.len() > 1 && !view { args.to_owned() } else { vec![] } },
+        Ty::Named { name, args, view } => { let view = *view; if name == "Error" && args.len() > 1 && !view { args.copy_owned() } else { vec![] } },
         _ => vec![],
     }
 }
@@ -106,15 +106,15 @@ impl CheckState {
         let want_text = want.text();
         let mut said: String = message(&found_text, &want_text);
         let mut help: String = way_out_of_a_mismatch(found, want);
-        if what == "catch" && help.ends_with(&format!(", or change the declaration to `{}`.", found_text)) { help = format!("Hand back a `{}`, or `null` to make the value a `{}?` (Part I 7.1).", want_text, want_text); }
+        if what == "catch" && help.ends_with(&*format!(", or change the declaration to `{}`.", found_text)) { help = format!("Hand back a `{}`, or `null` to make the value a `{}?` (Part I 7.1).", want_text, want_text); }
         if !members.is_empty() {
-            said = said.replace(&format!("`{}`", found_text), &format!("an error, one of {}", members_named(&members)));
+            said = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", found_text), &*format!("an error, one of {}", members_named(&members))));
             help = String::from("Take it apart first: `match error { … }`, and use what each arm binds.");
         }
         let finding = check_refusal(&code, span, said, vec![], Some(help));
         if waiting >= 0 {
             let held = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
-            let mut slots: Vec<CheckUnsignedSlot> = held.to_owned();
+            let mut slots: Vec<CheckUnsignedSlot> = held.copy_owned();
             slots[nikaia_std::index::at(waiting)].refusal = Some(finding);
             self.flow.unsigned_slots.insert(key, slots);
             return;
@@ -131,10 +131,10 @@ impl CheckState {
         if shown == said { return; }
         let mut at = before;
         while at < self.findings.len() as i64 {
-            let message = nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).message.replace(&shown, &said);
+            let message = nikaia_std::block::Text::from(nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).message.replace(&*shown, &*said));
             self.findings[nikaia_std::index::at(at)].message = message;
             if nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).help.is_some() {
-                let help = nikaia_std::index::or(nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).help.as_deref(), || "").replace(&shown, &said);
+                let help = nikaia_std::block::Text::from(nikaia_std::index::or(nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).help.as_deref(), || "").replace(&*shown, &*said));
                 self.findings[nikaia_std::index::at(at)].help = Some(help);
             }
             at += 1;
@@ -156,7 +156,7 @@ impl CheckState {
             Expr::Variable(symbol, _) => { let symbol = *symbol; symbol },
             _ => return true,
         };
-        let local = self.binding(&world.words.resolve(symbol).to_string());
+        let local = self.binding(&nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
         if local.is_some() {
             let bound: CheckLocal = match local { Some(__nikaia_value) => __nikaia_value, None => return true };
             if self.flow.declared_options.contains(&bound.id) { return true; }
@@ -214,15 +214,15 @@ impl CheckState {
             match given {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    named = Some(world.words.resolve(name).to_string());
+                    named = Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
                 },
                 _ => { },
             }
         }
         let kept = match self.a_view_kept(found, want, (named).as_deref(), keeper) { Some(__nikaia_value) => __nikaia_value, None => return };
         let last = self.findings.len() as i64 - 1;
-        for note in kept.notes.iter() { self.findings[nikaia_std::index::at(last)].notes.push(note.to_string()); }
-        self.findings[nikaia_std::index::at(last)].help = Some(kept.help.to_string());
+        for note in kept.notes.iter() { self.findings[nikaia_std::index::at(last)].notes.push(nikaia_std::block::Text::from(note.to_string())); }
+        self.findings[nikaia_std::index::at(last)].help = Some(nikaia_std::block::Text::from(kept.help.to_string()));
     }
 }
 

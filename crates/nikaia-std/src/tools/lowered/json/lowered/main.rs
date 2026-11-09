@@ -26,7 +26,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn message(&self) -> String { format!("{}:{}: {} at {}", self.line, self.column, self.message, self.path) }
+    pub fn message(&self) -> String { format!("{}:{}: {} at {}", self.line, self.column, self.message, self.path) }
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,7 +41,7 @@ pub struct ConvertError {
 }
 
 impl ConvertError {
-    pub(crate) fn message(&self) -> String { self.message.to_string() }
+    pub fn message(&self) -> String { nikaia_std::block::Text::from(self.message.to_string()) }
 }
 impl std::fmt::Display for ConvertError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -86,9 +86,9 @@ pub(crate) fn blanks(r: &mut Reader) {
 
 pub(crate) fn expect_word(r: &mut Reader, word: &str, path: &str) -> Result<(), nikaia_std::error::Thrown<Error>> {
     for w in word.chars() {
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word), path.to_string()), &"expect_word")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word), nikaia_std::block::Text::from(path.to_string())), &"expect_word")); }
         let c = peek(&r);
-        if c != w { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word), path.to_string()), &"expect_word")); }
+        if c != w { return Err(nikaia_std::error::throwing(fail(&r, format!("expected `{}`", word), nikaia_std::block::Text::from(path.to_string())), &"expect_word")); }
         r.pos += 1;
     }
     Ok(())
@@ -98,12 +98,12 @@ pub(crate) fn hex4(r: &mut Reader, path: &str) -> Result<i64, nikaia_std::error:
     let mut n: i64 = 0;
     let mut k = 0;
     while k < 4 {
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), path.to_string()), &"hex4")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), nikaia_std::block::Text::from(path.to_string())), &"hex4")); }
         let c = peek(&r);
         let d = c as i64;
         let mut v: i64 = -1;
         if d >= 48 && d <= 57 { v = d - 48; } else if d >= 65 && d <= 70 { v = d - 55; } else if d >= 97 && d <= 102 { v = d - 87; }
-        if v < 0 { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected four hex digits after `\\u`"), path.to_string()), &"hex4")); }
+        if v < 0 { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected four hex digits after `\\u`"), nikaia_std::block::Text::from(path.to_string())), &"hex4")); }
         n = n * 16 + v;
         r.pos += 1;
         k += 1;
@@ -115,21 +115,21 @@ pub(crate) fn hex4(r: &mut Reader, path: &str) -> Result<i64, nikaia_std::error:
 pub(crate) fn string(r: &mut Reader, path: &str) -> Result<String, nikaia_std::error::Thrown<Error>> {
     let mut out = String::new();
     loop {
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), path.to_string()), &"string")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
         let c = peek(&r);
         let code = c as i64;
         if c == '"' {
             r.pos += 1;
             return Ok(out);
         }
-        if code < 32 { return Err(nikaia_std::error::throwing(fail(&r, String::from("control character in string"), path.to_string()), &"string")); }
+        if code < 32 { return Err(nikaia_std::error::throwing(fail(&r, String::from("control character in string"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
         if c != '\\' {
             out.push(c);
             r.pos += 1;
             continue;
         }
         r.pos += 1;
-        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), path.to_string()), &"string")); }
+        if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unterminated string"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
         let e = peek(&r);
         if e == 'u' {
             let start = r.pos - 1;
@@ -139,29 +139,29 @@ pub(crate) fn string(r: &mut Reader, path: &str) -> Result<String, nikaia_std::e
                 let a = peek(&r);
                 if a != '\\' {
                     r.pos = start;
-                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), path.to_string()), &"string"));
+                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
                 }
                 r.pos += 1;
                 let b = peek(&r);
                 if b != 'u' {
                     r.pos = start;
-                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), path.to_string()), &"string"));
+                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
                 }
                 r.pos += 1;
                 let low = hex4(r, path)?;
                 if low < 56320 || low > 57343 {
                     r.pos = start;
-                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), path.to_string()), &"string"));
+                    return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
                 }
                 cp = 65536 + (cp - 55296) * 1024 + (low - 56320);
             } else if cp >= 56320 && cp <= 57343 {
                 r.pos = start;
-                return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), path.to_string()), &"string"));
+                return Err(nikaia_std::error::throwing(fail(&r, String::from("lone surrogate"), nikaia_std::block::Text::from(path.to_string())), &"string"));
             }
             out.push(nikaia_std::num::scalar_from(cp));
             continue;
         }
-        if e == 'n' { out.push('\n'); } else if e == 't' { out.push('\t'); } else if e == 'r' { out.push('\r'); } else if e == 'b' { out.push('\u{8}'); } else if e == 'f' { out.push('\u{c}'); } else if e == '"' || e == '\\' || e == '/' { out.push(e); } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("unknown escape"), path.to_string()), &"string")); }
+        if e == 'n' { out.push('\n'); } else if e == 't' { out.push('\t'); } else if e == 'r' { out.push('\r'); } else if e == 'b' { out.push('\u{8}'); } else if e == 'f' { out.push('\u{c}'); } else if e == '"' || e == '\\' || e == '/' { out.push(e); } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("unknown escape"), nikaia_std::block::Text::from(path.to_string())), &"string")); }
         r.pos += 1;
     }
     Ok(out)
@@ -175,16 +175,16 @@ pub(crate) fn is_digit(c: scalar) -> bool {
 pub(crate) fn number(r: &mut Reader, path: &str) -> Result<Value, nikaia_std::error::Thrown<Error>> {
     let start = r.pos;
     if peek(&r) == '-' { r.pos += 1; }
-    if peek(&r) == '0' { r.pos += 1; } else if is_digit(peek(&r)) { while is_digit(peek(&r)) { r.pos += 1; } } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit"), path.to_string()), &"number")); }
+    if peek(&r) == '0' { r.pos += 1; } else if is_digit(peek(&r)) { while is_digit(peek(&r)) { r.pos += 1; } } else { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit"), nikaia_std::block::Text::from(path.to_string())), &"number")); }
     if peek(&r) == '.' {
         r.pos += 1;
-        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit after `.`"), path.to_string()), &"number")); }
+        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit after `.`"), nikaia_std::block::Text::from(path.to_string())), &"number")); }
         while is_digit(peek(&r)) { r.pos += 1; }
     }
     if peek(&r) == 'e' || peek(&r) == 'E' {
         r.pos += 1;
         if peek(&r) == '+' || peek(&r) == '-' { r.pos += 1; }
-        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit in the exponent"), path.to_string()), &"number")); }
+        if !is_digit(peek(&r)) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a digit in the exponent"), nikaia_std::block::Text::from(path.to_string())), &"number")); }
         while is_digit(peek(&r)) { r.pos += 1; }
     }
     let mut text = String::new();
@@ -198,9 +198,9 @@ pub(crate) fn number(r: &mut Reader, path: &str) -> Result<Value, nikaia_std::er
 
 pub(crate) fn value(r: &mut Reader, path: &str, depth: i64) -> Result<Value, nikaia_std::error::Thrown<Error>> {
     blanks(r);
-    if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected end of text"), path.to_string()), &"value")); }
+    if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected end of text"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
     let c = peek(&r);
-    if depth > 512 { return Err(nikaia_std::error::throwing(fail(&r, String::from("nesting too deep"), path.to_string()), &"value")); }
+    if depth > 512 { return Err(nikaia_std::error::throwing(fail(&r, String::from("nesting too deep"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
     if c == 'n' {
         expect_word(r, "null", path)?;
         return Ok(Value::Null);
@@ -229,13 +229,13 @@ pub(crate) fn value(r: &mut Reader, path: &str, depth: i64) -> Result<Value, nik
             let at = items.len() as i64;
             items.push(value(r, &format!("{}[{}]", path, at), depth + 1)?);
             blanks(r);
-            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`"), path.to_string()), &"value")); }
+            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
             let d = peek(&r);
             r.pos += 1;
             if d == ']' { return Ok(Value::Array(items)); }
             if d != ',' {
                 r.pos -= 1;
-                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`"), path.to_string()), &"value"));
+                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `]`"), nikaia_std::block::Text::from(path.to_string())), &"value"));
             }
         }
     }
@@ -249,7 +249,7 @@ pub(crate) fn value(r: &mut Reader, path: &str, depth: i64) -> Result<Value, nik
         }
         loop {
             blanks(r);
-            if peek(&r) != '"' { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a member name"), path.to_string()), &"value")); }
+            if peek(&r) != '"' { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected a member name"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
             r.pos += 1;
             let key = string(r, path)?;
             blanks(r);
@@ -258,18 +258,18 @@ pub(crate) fn value(r: &mut Reader, path: &str, depth: i64) -> Result<Value, nik
             let v = value(r, &format!("{}.{}", path, key), depth + 1)?;
             members.push(Member { key, value: v });
             blanks(r);
-            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`"), path.to_string()), &"value")); }
+            if at_end(&r) { return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`"), nikaia_std::block::Text::from(path.to_string())), &"value")); }
             let d = peek(&r);
             r.pos += 1;
             if d == '}' { return Ok(Value::Object(members)); }
             if d != ',' {
                 r.pos -= 1;
-                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`"), path.to_string()), &"value"));
+                return Err(nikaia_std::error::throwing(fail(&r, String::from("expected `,` or `}`"), nikaia_std::block::Text::from(path.to_string())), &"value"));
             }
         }
     }
     if c == '-' || is_digit(c) { return Ok(number(r, path)?); }
-    return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected character"), path.to_string()), &"value"))
+    return Err(nikaia_std::error::throwing(fail(&r, String::from("unexpected character"), nikaia_std::block::Text::from(path.to_string())), &"value"))
 }
 
 pub fn parse(text: &str) -> Result<Value, nikaia_std::error::Thrown<Error>> {
@@ -293,7 +293,7 @@ pub(crate) fn kind_of(v: &Value) -> &'static str {
 
 pub(crate) fn number_text(v: &Value, asked: &str) -> Result<String, nikaia_std::error::Thrown<ConvertError>> {
     Ok(match v {
-        Value::Number(t) => t.to_string(),
+        Value::Number(t) => nikaia_std::block::Text::from(t.to_string()),
         _ => return Err(nikaia_std::error::throwing(ConvertError { message: format!("expected a number to read as {}, found {}", asked, kind_of(&v)) }, &"number_text")),
     })
 }
@@ -314,37 +314,37 @@ pub(crate) fn zero_fraction(text: &str) -> Option<String> {
 
 pub fn as_i64(v: &Value) -> Result<i64, nikaia_std::error::Thrown<ConvertError>> {
     let t = number_text(&v, "an i64")?;
-    let direct = text::parse_i64(&t.to_string());
+    let direct = text::parse_i64(&nikaia_std::block::Text::from(t.to_string()));
     if direct.is_some() { return Ok(nikaia_std::index::or(direct, || 0)); }
-    let whole = zero_fraction(&t.to_string());
+    let whole = zero_fraction(&nikaia_std::block::Text::from(t.to_string()));
     if whole.is_some() {
         let n = text::parse_i64(nikaia_std::index::or(whole.as_deref(), || ""));
         if n.is_some() { return Ok(nikaia_std::index::or(n, || 0)); }
         return Err(nikaia_std::error::throwing(ConvertError { message: format!("`{}` does not fit in an i64", t) }, &"as_i64"));
     }
-    let x = nikaia_std::index::or(text::parse_f64(&t.to_string()), || 0.0);
+    let x = nikaia_std::index::or(text::parse_f64(&nikaia_std::block::Text::from(t.to_string())), || 0.0);
     if x == x.trunc() && x.abs() < 9007199254740992.0 { return Ok(nikaia_std::num::to_i64(x)); }
     return Err(nikaia_std::error::throwing(ConvertError { message: format!("`{}` is not a whole number that fits in an i64", t) }, &"as_i64"))
 }
 
 pub fn as_u64(v: &Value) -> Result<u64, nikaia_std::error::Thrown<ConvertError>> {
     let t = number_text(&v, "a u64")?;
-    let direct = text::parse_u64(&t.to_string());
+    let direct = text::parse_u64(&nikaia_std::block::Text::from(t.to_string()));
     if direct.is_some() { return Ok(nikaia_std::index::or(direct, || 0u64)); }
-    let whole = zero_fraction(&t.to_string());
+    let whole = zero_fraction(&nikaia_std::block::Text::from(t.to_string()));
     if whole.is_some() {
         let n = text::parse_u64(nikaia_std::index::or(whole.as_deref(), || ""));
         if n.is_some() { return Ok(nikaia_std::index::or(n, || 0u64)); }
         return Err(nikaia_std::error::throwing(ConvertError { message: format!("`{}` does not fit in a u64", t) }, &"as_u64"));
     }
-    let x = nikaia_std::index::or(text::parse_f64(&t.to_string()), || 0.0);
+    let x = nikaia_std::index::or(text::parse_f64(&nikaia_std::block::Text::from(t.to_string())), || 0.0);
     if x == x.trunc() && x >= 0.0 && x < 9007199254740992.0 { return Ok(nikaia_std::num::to_u64(x)); }
     return Err(nikaia_std::error::throwing(ConvertError { message: format!("`{}` is not a whole number that fits in a u64", t) }, &"as_u64"))
 }
 
 pub fn as_f64(v: &Value) -> Result<f64, nikaia_std::error::Thrown<ConvertError>> {
     let t = number_text(&v, "an f64")?;
-    let x = nikaia_std::index::or(text::parse_f64(&t.to_string()), || 0.0);
+    let x = nikaia_std::index::or(text::parse_f64(&nikaia_std::block::Text::from(t.to_string())), || 0.0);
     if x - x != 0.0 { return Err(nikaia_std::error::throwing(ConvertError { message: format!("`{}` does not fit in an f64", t) }, &"as_f64")); }
     Ok(x)
 }

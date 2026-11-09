@@ -22,7 +22,7 @@ impl CheckState {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
                         } { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        if other == *ty { kept.insert(name.to_string(), ty.clone()); }
+                        if other == *ty { kept.insert(nikaia_std::block::Text::from(name.to_string()), ty.clone()); }
                     }
                     out = kept;
                 }
@@ -33,7 +33,7 @@ impl CheckState {
         match pattern {
             MatchPattern::Path(one) => {
                 if one.len() == 1 && !on.is_unknown() {
-                    let word = world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string();
+                    let word = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string());
                     let mut a_variant = false;
                     match on {
                         Ty::Named { name, .. } => { a_variant = self.is_variant(name, &word) || self.variant_parts.contains_key(&format!("{}::{}", name, word)); },
@@ -68,7 +68,7 @@ impl CheckState {
                     match part {
                         MatchPattern::RestNamed(name) => {
                             let name = *name;
-                            out.insert(world.words.resolve(name).to_string(), Ty::Named { name: String::from("Array"), args: vec![element.clone()], view: true });
+                            out.insert(nikaia_std::block::Text::from(world.words.resolve(name).to_string()), Ty::Named { name: String::from("Array"), args: vec![element.clone()], view: true });
                         },
                         MatchPattern::Rest => { },
                         _ => { self.bind_a_part(world, part, &element, &mut out); },
@@ -79,7 +79,7 @@ impl CheckState {
             _ => { },
         }
         let owner = match on {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return out,
         };
         match pattern {
@@ -109,7 +109,7 @@ impl CheckState {
                     None => None,
                 }, || vec![].into());
                 for each in fields.iter() {
-                    let name = world.words.resolve(each.name).to_string();
+                    let name = nikaia_std::block::Text::from(world.words.resolve(each.name).to_string());
                     for field in declared.iter() {
                         if field.name == name {
                             self.bind_a_part(world, &each.pat, &field.ty, &mut out);
@@ -143,7 +143,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn named_pattern_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], on: &Ty) -> String {
         let (owner, plain) = match on {
-            Ty::Named { name, args, .. } => (name.to_string(), args.is_empty()),
+            Ty::Named { name, args, .. } => (nikaia_std::block::Text::from(name.to_string()), args.is_empty()),
             _ => return String::from(""),
         };
         let key = self.pattern_variant(world, path, &owner);
@@ -156,19 +156,19 @@ impl CheckState {
         let mut written: Vec<String> = vec![];
         for part in path.iter() {
             let part = *part;
-            written.push(world.words.resolve(part).to_string());
+            written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
         if written.len() == 1 { return format!("{}::{}", owner, *nikaia_std::index::get(&written, 0)); }
-        written.join("::")
+        nikaia_std::block::Text::from(written.join("::"))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn bind_a_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
         match part {
-            MatchPattern::Path(one) => { if one.len() == 1 { out.insert(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string(), ty.clone()); } },
-            MatchPattern::Tuple { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_string(), entry_value.clone()); } },
-            MatchPattern::Named { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_string(), entry_value.clone()); } },
-            MatchPattern::List(_) => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(entry_name.to_string(), entry_value.clone()); } },
+            MatchPattern::Path(one) => { if one.len() == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string()), ty.clone()); } },
+            MatchPattern::Tuple { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
+            MatchPattern::Named { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
+            MatchPattern::List(_) => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
             _ => { },
         }
     }
@@ -178,10 +178,10 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
     match pattern {
-        MatchPattern::Path(segments) => if segments.len() == 1 { vec![world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string()] } else { vec![] },
+        MatchPattern::Path(segments) => if segments.len() == 1 { vec![nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string())] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
         MatchPattern::List(parts) => names_of_parts(world, parts),
-        MatchPattern::RestNamed(name) => { let name = *name; vec![world.words.resolve(name).to_string()] },
+        MatchPattern::RestNamed(name) => { let name = *name; vec![nikaia_std::block::Text::from(world.words.resolve(name).to_string())] },
         MatchPattern::Named { fields, .. } => names_of_fields(world, fields),
         MatchPattern::Or(alternatives) => if !alternatives.is_empty() { pattern_names(world, nikaia_std::index::get(&alternatives, 0)) } else { vec![] },
         _ => vec![],
@@ -229,13 +229,13 @@ impl CheckState {
         let mut inside: bool = false;
         match on {
             Ty::Tuple(parts_of) => {
-                types = parts_of.to_owned();
+                types = parts_of.copy_owned();
                 inside = true;
             },
             _ => { },
         }
         let owner = match on {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => String::from(""),
         };
         match pattern {
@@ -263,21 +263,21 @@ impl CheckState {
         match pattern {
             MatchPattern::Named { path, fields, rest } => {
                 let rest = *rest;
-                let mut written: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut written: Vec<String> = vec![];
                 for part in path.iter() {
                     let part = *part;
-                    written.push(world.words.resolve(part).to_string());
+                    written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
                 }
-                let mut key: String = self.pattern_variant(world, path, &owner);
-                if written.len() == 1 && *nikaia_std::index::get(&written, 0) == owner { key = owner.to_string(); }
+                let mut key: String = self.pattern_variant(world, path, &owner); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+                if written.len() == 1 && *nikaia_std::index::get(&written, 0) == owner { key = nikaia_std::block::Text::from(owner.to_string()); }
                 let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                let mut named: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut named: Vec<String> = vec![];
                 for each in fields.iter() {
-                    let name = world.words.resolve(each.name).to_string();
-                    named.push(name.to_string());
+                    let name = nikaia_std::block::Text::from(world.words.resolve(each.name).to_string());
+                    named.push(nikaia_std::block::Text::from(name.to_string()));
                     for field in declared.iter() {
                         if field.name == name {
                             self.a_struct_pattern_that_leaves_fields_out(world, &each.pat, &field.ty, span);
@@ -286,13 +286,13 @@ impl CheckState {
                     }
                 }
                 if rest || declared.is_empty() { return; }
-                let mut missing: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut missing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
                 for field in declared.iter() { if !nikaia_std::list::contains(&named, &field.name) { missing.push(format!("`{}`", field.name)); } }
                 if missing.is_empty() { return; }
-                let shown = written.join("::");
-                let mut one: &'static str = "field";
+                let shown = nikaia_std::block::Text::from(written.join("::")); #[allow(unused_mut, clippy::redundant_locals)] let mut missing = missing;
+                let mut one: &'static str = "field"; #[allow(unused_mut, clippy::redundant_locals)] let mut missing = missing;
                 if missing.len() > 1 { one = "fields"; }
-                self.findings.push(check_refusal("NK1234", span, format!("This `{}` pattern leaves out the {} {}.", shown, one, missing.join(", ")), vec![String::from("A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).")], Some(format!("Name them, or end the pattern with `..`: `{} {{ …, .. }}`.", shown))));
+                self.findings.push(check_refusal("NK1234", span, format!("This `{}` pattern leaves out the {} {}.", shown, one, nikaia_std::block::Text::from(missing.join(", "))), vec![String::from("A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).")], Some(format!("Name them, or end the pattern with `..`: `{} {{ …, .. }}`.", shown))));
             },
             _ => { },
         }

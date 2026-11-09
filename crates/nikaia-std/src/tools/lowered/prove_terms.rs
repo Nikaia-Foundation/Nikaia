@@ -15,7 +15,7 @@ pub fn lin_term(expr: &Expr, words: &winnow_grammar::InternerContext, var: &dyn 
                 let known = match pinned(text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(built(SolverTerm::Int(known), out));
             }
-            Some(built(SolverTerm::Var(text.to_string()), out))
+            Some(built(SolverTerm::Var(nikaia_std::block::Text::from(text.to_string())), out))
         },
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;

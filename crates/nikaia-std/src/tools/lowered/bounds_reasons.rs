@@ -14,7 +14,7 @@ pub fn blocked_index(base: &Expr, index: &Expr, args: &[FnArg], body: &Block, wo
         },
         _ => { },
     }
-    if is_element(index, words) { return element(); }
+    if is_element(index, words) { return reason_element_from(index, body, words); }
     from_binding(&names_read(index, words), args, body, words, callers)
 }
 
@@ -34,7 +34,7 @@ pub(crate) fn names_read(expr: &Expr, words: &winnow_grammar::InternerContext) -
             Expr::Variable(name, _) => {
                 let name = *name;
                 let text = words.resolve(name);
-                if !nikaia_std::list::contains(&names, &text) { names.push(text.to_string()); }
+                if !nikaia_std::list::contains(&names, &text) { names.push(nikaia_std::block::Text::from(text.to_string())); }
             },
             _ => { },
         }
@@ -44,7 +44,7 @@ pub(crate) fn names_read(expr: &Expr, words: &winnow_grammar::InternerContext) -
 
 pub(crate) fn from_binding(names: &[String], args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, callers: bool) -> String {
     for name in names.iter() {
-        let found = binding_reason(body, name, false, words);
+        let found = binding_reason(body, body, name, false, words);
         if found != "" {
             if callers && found == counter() && counter_to_parameter(body, body, name, args, words) { return not_proved_by_callers(); }
             return found;
@@ -84,9 +84,9 @@ pub(crate) fn counter_to_parameter(block: &Block, top: &Block, name: &str, args:
     false
 }
 
-pub(crate) fn binding_reason(block: &Block, name: &str, in_loop: bool, words: &winnow_grammar::InternerContext) -> String {
+pub(crate) fn binding_reason(top: &Block, block: &Block, name: &str, in_loop: bool, words: &winnow_grammar::InternerContext) -> String {
     for stmt in block.stmts.iter() {
-        let here = statement_reason(&stmt.node, name, in_loop, words);
+        let here = statement_reason(top, &stmt.node, name, in_loop, words);
         if here != "" { return here; }
         let looped = match &stmt.node {
             Stmt::For { .. } => true,
@@ -94,22 +94,22 @@ pub(crate) fn binding_reason(block: &Block, name: &str, in_loop: bool, words: &w
             _ => in_loop,
         };
         for inner in check_visit_stmt_blocks(&stmt.node) {
-            let found = binding_reason(inner, name, looped, words);
+            let found = binding_reason(top, inner, name, looped, words);
             if found != "" { return found; }
         }
     }
     String::from("")
 }
 
-pub(crate) fn statement_reason(stmt: &Stmt, name: &str, in_loop: bool, words: &winnow_grammar::InternerContext) -> String {
+pub(crate) fn statement_reason(top: &Block, stmt: &Stmt, name: &str, in_loop: bool, words: &winnow_grammar::InternerContext) -> String {
     match stmt {
         Stmt::Let { names, value, .. } => {
             if names.len() == 1 && words.resolve(*nikaia_std::index::get(&names, 0)) == name {
                 if is_choice(value) { return choice(); }
-                if is_element(value, words) { return element(); }
+                if is_element(value, words) { return reason_element_from(value, top, words); }
             }
         },
-        Stmt::For { bindings, iter, .. } => { if any_named(bindings, name, words) && !is_range(iter) { return element(); } },
+        Stmt::For { bindings, iter, .. } => { if any_named(bindings, name, words) && !is_range(iter) { return reason_element_of(iter, top, words); } },
         Stmt::Assign { target, op, value } => { if in_loop && is_name(target, name, words) && steps((op).as_ref(), value, name, words) { return counter(); } },
         _ => { },
     }
@@ -219,7 +219,64 @@ pub(crate) fn holds_site(block: &Block, site: u32) -> bool {
 
 pub(crate) fn choice() -> String { String::from("an `if` or `match` value, which the walk does not read (#1053)") }
 
-pub(crate) fn element() -> String { String::from("a value read out of a list, of which the walk knows no fact (#797, #798)") }
+pub(crate) fn element() -> &'static str { "a value read out of a list, of which the walk knows no fact (#797, #798)" }
+
+pub(crate) fn reason_element_from(value: &Expr, top: &Block, words: &winnow_grammar::InternerContext) -> String {
+    match value {
+        Expr::Coalesce { value: inner, .. } => { let inner = nikaia_std::boxed::open(inner); match inner {
+            Expr::Index { .. } => reason_map(),
+            _ => reason_element_from(inner, top, words),
+        } },
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); reason_element_of(base, top, words) },
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; reason_element_by(receiver, words.resolve(method), top, words) },
+        Expr::SafeMethod { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; reason_element_by(receiver, words.resolve(method), top, words) },
+        _ => format!("{}: another read", element()),
+    }
+}
+
+pub(crate) fn reason_map() -> String { format!("{}: a map's value (ADR-306 D24)", element()) }
+
+pub(crate) fn reason_called() -> String { format!("{}: an element of a call's result (ADR-306 D24)", element()) }
+
+pub(crate) fn reason_element_by(receiver: &Expr, method: &str, top: &Block, words: &winnow_grammar::InternerContext) -> String {
+    if method == "get" { return reason_map(); }
+    reason_element_of(receiver, top, words)
+}
+
+pub(crate) fn reason_element_of(list: &Expr, top: &Block, words: &winnow_grammar::InternerContext) -> String {
+    match list {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = words.resolve(method);
+            if !args.is_empty() { reason_called() } else if name == "keys" || name == "values" { reason_map() } else if reason_a_walk(name) { reason_element_of(receiver, top, words) } else { reason_called() }
+        },
+        Expr::SafeMethod { .. } => reason_called(),
+        Expr::Call { .. } => reason_called(),
+        Expr::Variable(name, _) => {
+            let name = *name;
+            if reason_bound_to_call(top, words.resolve(name), words) { reason_called() } else { format!("{}: an element of a named list (ADR-306 D7, D21)", element()) }
+        },
+        _ => { if a_path(list) { format!("{}: an element of a named list (ADR-306 D7, D21)", element()) } else { format!("{}: another read", element()) } },
+    }
+}
+
+pub(crate) fn reason_bound_to_call(block: &Block, name: &str, words: &winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts.iter() {
+        let here = match &stmt.node {
+            Stmt::Let { names, value, .. } => names.len() == 1 && words.resolve(*nikaia_std::index::get(&names, 0)) == name && match value {
+                Expr::Call { .. } => true,
+                Expr::MethodCall { method, .. } => { let method = *method; words.resolve(method) != "clone" },
+                _ => false,
+            },
+            _ => false,
+        };
+        if here { return true; }
+        for inner in check_visit_stmt_blocks(&stmt.node) { if reason_bound_to_call(inner, name, words) { return true; } }
+    }
+    false
+}
+
+pub(crate) fn reason_a_walk(method: &str) -> bool { method == "iter" || method == "iter_mut" || method == "into_iter" || method == "rev" || method == "enumerate" || method == "copied" || method == "cloned" || method == "chars" || method == "bytes" }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SiteReads {

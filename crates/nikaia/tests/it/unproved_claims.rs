@@ -6,6 +6,8 @@
 //! ask about, and `nikaia check --asserts`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::{Command, Output};
 

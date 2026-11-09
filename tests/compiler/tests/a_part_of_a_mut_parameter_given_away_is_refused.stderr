@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `w.xs` here: `w` is only borrowed.
+   --> tests/a_part_of_a_mut_parameter_given_away_is_refused.nika:12:2
+    |
+ 12 | 	return w.xs
+    |  ^^^^^^^^^^^
+    |
+    = note: `w` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `w.xs` is a `Vec[i64]`. Giving it away would take a piece out of something this function doesn't own.
+    = help: Write `w.xs.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.
+1 type error

@@ -367,6 +367,14 @@ impl EmitState {
         if bytes {
             out.push("        input bytes;\n")
         }
+        // On the block types a repetition collects into a block's list
+        // (winnow-grammar 0.2's `collect L;`, #490), and the grammar's module
+        // names the block's `format!` and `vec!` itself: through its
+        // `use super::*` alone they would be ambiguous with the prelude's.
+        if self.on_block_types() {
+            out.push("        collect nikaia_std::block::List;\n")
+            out.push("        use nikaia_std::block::names::{format, vec};\n")
+        }
         walk.grammar_bytes = bytes
         self.emit_grammar_body(world, walk, out, host, def, name, bytes)
         walk.grammar_bytes = false

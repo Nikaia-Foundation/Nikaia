@@ -19,6 +19,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -58,7 +60,7 @@ fn output(purpose: &str, source: &str) -> String {
         String::from_utf8_lossy(&ran.stderr)
     );
     let _ = std::fs::remove_dir_all(&dir);
-    String::from_utf8_lossy(&ran.stdout).trim().to_string()
+    String::from_utf8_lossy(&ran.stdout).trim().to_text()
 }
 
 /// **D1: an arm is `pattern = expr => { … }`**, and what it lowers to is a
@@ -155,10 +157,7 @@ fn one_arm_is_refused_with_its_reason() {
     )
     .expect("the source parses");
     let refused = emit_program(&parsed, Build::default()).expect_err("one arm races nothing");
-    assert!(
-        refused.to_string().contains("at least two arms"),
-        "{refused}"
-    );
+    assert!(refused.to_text().contains("at least two arms"), "{refused}");
 }
 
 /// **D1: `select` is a keyword now**, which is the cost

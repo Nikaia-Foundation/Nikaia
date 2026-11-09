@@ -70,17 +70,17 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn collect_copies(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         let declared = copies_declared_in(&world.here);
-        let mut package: Vec<String> = declared.to_owned();
+        #[allow(unused_mut)] let mut package: Vec<String> = declared.copy_owned();
         let mut at: i64 = 0;
         for other in world.beside.iter() {
             if at != world.here_at { for name in copies_declared_in(other) { if !nikaia_std::list::contains(&declared, &name) { package.push(name); } } }
             at = at + 1;
         }
-        let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         copies_dropped_in(&world.here, &mut dropped);
         for unit in world.beside.iter() { copies_dropped_in(unit, &mut dropped); }
-        let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new();
-        for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(name.to_string()); } }
+        let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
+        for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(nikaia_std::block::Text::from(name.to_string())); } }
         loop {
             let mut joining: Vec<String> = vec![];
             for name in package.iter() {
@@ -89,29 +89,29 @@ impl CheckState {
                 if nikaia_std::list::contains(&declared, &name) {
                     if self.enum_payloads.contains_key(name) {
                         let held = match self.enum_payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        parts = held.to_owned();
+                        parts = held.copy_owned();
                     } else {
                         let fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
                         for field in fields.iter() { parts.push(field.ty.clone()); }
                     }
                 } else {
                     let held = match world.parts_beside.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    parts = held.to_owned();
+                    parts = held.copy_owned();
                 }
-                let named = Ty::Named { name: name.to_string(), args: vec![], view: false };
+                let named = Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false };
                 if self.cleanup_of(world, &named).is_some() { continue; }
                 let mut all = true;
                 for ty in parts.iter() { if !a_copied_part(ty, &copies) { all = false; } }
-                if all { joining.push(name.to_string()); }
+                if all { joining.push(nikaia_std::block::Text::from(name.to_string())); }
             }
             if joining.is_empty() { break; }
             copies.extend(joining.iter().cloned());
         }
-        let mut in_package: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut in_package: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
+        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         for name in copies.iter() {
-            if nikaia_std::list::contains(&package, &name) { in_package.insert(name.to_string()); }
-            if nikaia_std::list::contains(&declared, &name) { own.insert(name.to_string()); }
+            if nikaia_std::list::contains(&package, &name) { in_package.insert(nikaia_std::block::Text::from(name.to_string())); }
+            if nikaia_std::list::contains(&declared, &name) { own.insert(nikaia_std::block::Text::from(name.to_string())); }
         }
         self.copies_in_the_package = in_package;
         self.facts.copies = own;

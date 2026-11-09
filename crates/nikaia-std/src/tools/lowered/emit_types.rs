@@ -2,8 +2,8 @@
 // Edit emit_types.nika in the directory above, not this file.
 
 pub fn emit_base(name: &str) -> String {
-    let mut last: String = name.to_string();
-    for part in name.split("::") { last = part.to_string(); }
+    let mut last: String = nikaia_std::block::Text::from(name.to_string());
+    for part in name.split("::") { last = nikaia_std::block::Text::from(part.to_string()); }
     last
 }
 
@@ -11,7 +11,7 @@ pub(crate) fn emit_segments(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_gr
     let mut out: Vec<String> = vec![];
     for symbol in path.iter() {
         let symbol = *symbol;
-        out.push(world.words.resolve(symbol).to_string());
+        out.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
     }
     out
 }
@@ -20,13 +20,13 @@ pub(crate) fn emit_type_contract(own: &Ledger, library: &Ledger, owner: &str) ->
     let found = own.types.get(owner);
     if found.is_some() {
         return match found {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         };
     }
     let suffix = format!("::{}", owner);
     for key in library.types.keys() {
-        if AsRef::<str>::as_ref(&(key)) == AsRef::<str>::as_ref(&(owner)) || key.ends_with(&suffix) {
+        if AsRef::<str>::as_ref(&(key)) == AsRef::<str>::as_ref(&(owner)) || key.ends_with(AsRef::<str>::as_ref(&suffix)) {
             let contract = match library.types.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             return Some(contract.clone());
         }
@@ -43,10 +43,10 @@ impl EmitState {
     pub fn is_boxed_field(&self, owner: &str, field: &str) -> bool {
         let parts: Vec<&str> = owner.split("::").collect::<Vec<_>>();
         if parts.len() >= 2 {
-            let ty = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string();
-            let variant = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
+            let ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string());
+            let variant = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
             if self.facts.boxed_members.contains_key(&ty) { return self.is_boxed(&ty, &boxed_member(&variant, -1, field)); }
-        }
+        } ::core::mem::drop(parts);
         self.is_boxed(owner, field)
     }
     pub fn boxed_ty(&self, owner: &str, member: &str, lowered: String) -> String {
@@ -56,8 +56,8 @@ impl EmitState {
     pub fn boxed_part(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let names = emit_segments(world, path);
-        let owner = (*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 2))).to_string();
-        let variant = (*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1))).to_string();
+        let owner = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 2))).to_string());
+        let variant = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1))).to_string());
         self.facts.boxed_members.contains_key(&owner) && self.is_boxed(&owner, &boxed_member(&variant, at, ""))
     }
     pub fn looks_inside_a_box(&self, world: &EmitWorld<'_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
@@ -99,11 +99,11 @@ impl EmitState {
         nikaia_std::index::or(found, || vec![].into())
     }
     pub(crate) fn handles_in(&self, ledger: &Ledger, index: &MethodIndex, callee: &str) -> Option<Vec<bool>> {
-        let mut found: String = callee.to_string();
+        let mut found: String = nikaia_std::block::Text::from(callee.to_string());
         if !ledger.functions.contains_key(callee) {
             let ends = method_keys(index, callee);
             if ends.is_empty() { return None; }
-            found = (*nikaia_std::index::get(&ends, 0)).to_string();
+            found = nikaia_std::block::Text::from((*nikaia_std::index::get(&ends, 0)).to_string());
         }
         let held = match ledger.functions.get(&found) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match match held.signature.as_ref() {
@@ -127,7 +127,7 @@ impl EmitState {
     }
     pub fn handle_named(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> Option<String> {
         if ty.is_view || ty.is_slice { return None; }
-        let name = world.words.resolve(ty.name).to_string();
+        let name = nikaia_std::block::Text::from(world.words.resolve(ty.name).to_string());
         if self.opaque_handles.contains_key(&name) || emit_base(&name) == "CStr" { return Some(name); }
         None
     }
@@ -169,14 +169,14 @@ impl EmitState {
         ""
     }
     pub fn derives(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String {
-        let text = world.words.resolve(name).to_string();
+        let text = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         let mut parts: Vec<&'static str> = vec!["Debug", "Clone"];
         if self.facts.copies.contains(&text) { parts.push("Copy"); }
         if self.facts.compares.contains(&text) {
             parts.push("PartialEq");
             if self.facts.compares_totally.contains(&text) { parts.push("Eq"); }
         }
-        format!("#[derive({})]\n", parts.join(", "))
+        format!("#[derive({})]\n", nikaia_std::block::Text::from(parts.join(", ")))
     }
     pub fn field_contract(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: &str) -> Option<FieldContract> {
         let contract = match emit_type_contract(&self.own_contracts, world.library, owner) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -187,7 +187,7 @@ impl EmitState {
     pub fn field_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str) -> Vec<(String, String, Ty)> {
         let contract = match emit_type_contract(&self.own_contracts, world.library, owner) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         let mut out: Vec<(String, String, Ty)> = vec![];
-        for field in contract.fields.iter() { if !field.default.is_empty() { out.push((field.name.to_string(), field.default.to_string(), field.ty.clone())); } }
+        for field in contract.fields.iter() { if !field.default.is_empty() { out.push((nikaia_std::block::Text::from(field.name.to_string()), nikaia_std::block::Text::from(field.default.to_string()), field.ty.clone())); } }
         out
     }
 }

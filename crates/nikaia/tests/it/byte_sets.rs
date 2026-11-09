@@ -4,6 +4,8 @@
 //! (ADR-002 D6).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -23,7 +25,7 @@ fn run(name: &str, source: &str) -> String {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).into_owned()
+    String::from_utf8_lossy(&run.stdout)
 }
 
 fn checked(name: &str, source: &str) -> String {
@@ -65,7 +67,7 @@ fn lowered_with(name: &str, source: &str, options: &[&str]) -> String {
     );
     let rust = std::fs::read_to_string(dir.join("main.rs")).expect("the lowered program");
     let _ = std::fs::remove_dir_all(&dir);
-    rust
+    String::from(rust)
 }
 
 /// Every search of D3 on one buffer: a set used again, a `'…'` for one byte, a
@@ -418,7 +420,7 @@ fn every_cpu_level_finds_the_same() {
             "{cpu}: {}",
             String::from_utf8_lossy(&out.stderr)
         );
-        printed.push(String::from_utf8_lossy(&out.stdout).into_owned());
+        printed.push(String::from_utf8_lossy(&out.stdout));
     }
     assert_eq!(printed[0], "9000 0\n");
     assert_eq!(printed[0], printed[1]);

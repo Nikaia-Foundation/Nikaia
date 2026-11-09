@@ -4,6 +4,8 @@
 use crate::common;
 use nikaia::contracts::LedgerOps;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -32,7 +34,7 @@ fn run(name: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    String::from_utf8_lossy(&ran.stdout).into_owned()
+    String::from_utf8_lossy(&ran.stdout)
 }
 
 /// D1: the `let` and the arm, both `NK1103` before, compile and run.

@@ -25,17 +25,17 @@ pub fn sv_params() -> SvParams { SvParams { version: String::from("sv-params-1")
 pub fn sv_params_set(p: &mut SvParams, name: &str, value: &str) -> bool {
     if name == "pipeline" {
         if value != "search" && value != "walk-first" { return false; }
-        p.pipeline = value.to_string();
+        p.pipeline = nikaia_std::block::Text::from(value.to_string());
         return true;
     }
     if name == "theory" {
         if value != "both" && value != "fm" && value != "simplex" { return false; }
-        p.theory = value.to_string();
+        p.theory = nikaia_std::block::Text::from(value.to_string());
         return true;
     }
     if name == "cut_kind" {
         if value != "gmi" && value != "cg" && value != "none" { return false; }
-        p.cut_kind = value.to_string();
+        p.cut_kind = nikaia_std::block::Text::from(value.to_string());
         return true;
     }
     if name == "fast" || name == "pre" || name == "walk_after" || name == "gcd_test" {
@@ -144,14 +144,14 @@ pub(crate) fn sv_strategy_simplex(names: Vec<String>, p: &SvParams) -> SvSimplex
     sx.bland_after = p.bland_after;
     sx.pivot_limit = p.pivot_limit;
     sx.gcd_test = p.gcd_test;
-    sx.cut_kind = p.cut_kind.to_string();
+    sx.cut_kind = nikaia_std::block::Text::from(p.cut_kind.to_string());
     sx.cut_rounds = p.cut_rounds;
     sx
 }
 
 pub(crate) fn sv_strategy_path(path: &str, label: &str) -> String {
-    if path == "" { return label.to_string(); }
-    if label == "" { return path.to_string(); }
+    if path == "" { return nikaia_std::block::Text::from(label.to_string()); }
+    if label == "" { return nikaia_std::block::Text::from(path.to_string()); }
     format!("{}+{}", path, label)
 }
 
@@ -159,7 +159,7 @@ pub(crate) fn sv_strategy_values(cnf: &SvCnf, values: &[i64]) -> collections::BT
     let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut col: i64 = 0;
     while ((col) as usize) < values.len() && ((col) as usize) < cnf.names.len() {
-        named.insert((*nikaia_std::index::get(&cnf.names, (col) as usize)).to_string(), *nikaia_std::index::get(&values, (col) as usize));
+        named.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&cnf.names, (col) as usize)).to_string()), *nikaia_std::index::get(&values, (col) as usize));
         col += 1;
     }
     named
@@ -189,7 +189,7 @@ pub fn sv_strategy_run(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgB
             None => { },
             Some(answer) => { return SvEngineRun { driven: SvDriven::Answer(answer), work: spent, path: String::from("walk"), carried: vec![], stats: sv_smt_stats_none() }; },
         }
-        phases = walk.phases.to_owned();
+        phases = walk.phases.copy_owned();
         first = String::from("walk");
     }
     let mut left = budget.clone();

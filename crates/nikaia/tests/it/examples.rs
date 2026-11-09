@@ -18,6 +18,8 @@
 //! two ask what an example's comment claims about a bad input.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -174,7 +176,7 @@ fn every_example_package_passes_its_own_tests() {
             .file_name()
             .expect("a name")
             .to_string_lossy()
-            .to_string();
+            .to_text();
         let lowered = |run: &str| {
             let trace = trace_dir.join(format!("{name}-{run}.log"));
             let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -266,7 +268,7 @@ fn a_malformed_line_is_reported_and_no_summary_is_printed() {
     // whole file, not in whichever piece a core was holding, and it is a line
     // and a column rather than a byte because `dsl … from …` renders the error
     // against the input it parsed.
-    let reported = String::from_utf8_lossy(&run.stderr).into_owned();
+    let reported = String::from_utf8_lossy(&run.stderr);
     assert!(
         reported.contains("line 2"),
         "the message should say where: {reported}"
@@ -318,7 +320,7 @@ fn a_missing_operand_is_reported_as_an_expression() {
         String::from_utf8_lossy(&run.stdout)
     );
 
-    let reported = String::from_utf8_lossy(&run.stderr).into_owned();
+    let reported = String::from_utf8_lossy(&run.stderr);
     assert!(
         reported.contains("expected expression"),
         "the label should be the expectation: {reported}"

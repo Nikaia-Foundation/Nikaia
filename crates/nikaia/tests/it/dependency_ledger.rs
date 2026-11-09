@@ -17,6 +17,8 @@
 //! ledger *not* being believed.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -38,7 +40,7 @@ fn a_program_and_a_package(purpose: &str, files: &[(&str, &str)]) -> PathBuf {
 /// test can put a ledger beside the package and say what happens.
 fn depends_on(root: &Path) -> Vec<Dependency> {
     vec![Dependency {
-        name: "lib".to_string(),
+        name: "lib".to_text(),
         root: root.to_path_buf(),
         reachable: BTreeSet::new(),
         renames: BTreeMap::new(),
@@ -111,11 +113,11 @@ fn a_ledger_whose_hashes_match_is_believed() {
 
     let mut shipped = Ledger::empty();
     shipped.sources = BTreeMap::from([(
-        "main.nika".to_string(),
-        orchestrator::cache::sha256_hex(LIB.as_bytes()),
+        "main.nika".to_text(),
+        String::from(orchestrator::cache::sha256_hex(LIB.as_bytes())),
     )]);
     shipped.functions.insert(
-        "hello".to_string(),
+        "hello".to_text(),
         nikaia::contracts::FnContract {
             public: true,
             sync_claim: Sync::No,
@@ -157,11 +159,11 @@ fn a_ledger_whose_sources_moved_is_derived_again() {
 
     let mut shipped = Ledger::empty();
     shipped.sources = BTreeMap::from([(
-        "main.nika".to_string(),
-        orchestrator::cache::sha256_hex(LIB.as_bytes()),
+        "main.nika".to_text(),
+        String::from(orchestrator::cache::sha256_hex(LIB.as_bytes())),
     )]);
     shipped.functions.insert(
-        "hello".to_string(),
+        "hello".to_text(),
         nikaia::contracts::FnContract {
             public: true,
             sync_claim: Sync::No,
@@ -205,7 +207,7 @@ fn a_ledger_that_records_no_sources_is_not_believed() {
 
     let mut shipped = Ledger::empty();
     shipped.functions.insert(
-        "hello".to_string(),
+        "hello".to_text(),
         nikaia::contracts::FnContract {
             public: true,
             sync_claim: Sync::No,
@@ -264,8 +266,8 @@ fn a_ledger_that_does_not_parse_is_derived_again_rather_than_refused() {
 fn the_sources_table_renders_and_parses_back() {
     let mut ledger = Ledger::empty();
     ledger.sources = BTreeMap::from([
-        ("helper.nika".to_string(), "a".repeat(64)),
-        ("main.nika".to_string(), "b".repeat(64)),
+        ("helper.nika".to_text(), String::from("a".repeat(64))),
+        ("main.nika".to_text(), String::from("b".repeat(64))),
     ]);
     assert!(!ledger.render().contains("[sources]"));
     let rendered = ledger.render_derived();
@@ -292,28 +294,28 @@ fn the_sources_table_renders_and_parses_back() {
 fn a_unit_that_moved_a_unit_that_arrived_and_a_unit_that_left() {
     let mut ledger = Ledger::empty();
     ledger.sources = BTreeMap::from([
-        ("main.nika".to_string(), "a".repeat(64)),
-        ("helper.nika".to_string(), "b".repeat(64)),
+        ("main.nika".to_text(), String::from("a".repeat(64))),
+        ("helper.nika".to_text(), String::from("b".repeat(64))),
     ]);
 
     assert!(ledger.stale_against(&ledger.sources.clone()).is_empty());
 
     let changed = BTreeMap::from([
-        ("main.nika".to_string(), "c".repeat(64)),
-        ("helper.nika".to_string(), "b".repeat(64)),
+        ("main.nika".to_text(), String::from("c".repeat(64))),
+        ("helper.nika".to_text(), String::from("b".repeat(64))),
     ]);
     assert_eq!(ledger.stale_against(&changed), ["main.nika"]);
 
     let arrived = BTreeMap::from([
-        ("main.nika".to_string(), "a".repeat(64)),
-        ("helper.nika".to_string(), "b".repeat(64)),
-        ("extra.nika".to_string(), "d".repeat(64)),
+        ("main.nika".to_text(), String::from("a".repeat(64))),
+        ("helper.nika".to_text(), String::from("b".repeat(64))),
+        ("extra.nika".to_text(), String::from("d".repeat(64))),
     ]);
     assert_eq!(ledger.stale_against(&arrived), ["extra.nika"]);
 
     // A file that left takes its entries with it, so it is as much a reason to
     // derive again as one that changed.
-    let left = BTreeMap::from([("main.nika".to_string(), "a".repeat(64))]);
+    let left = BTreeMap::from([("main.nika".to_text(), String::from("a".repeat(64)))]);
     assert_eq!(ledger.stale_against(&left), ["helper.nika"]);
 }
 
@@ -330,19 +332,18 @@ fn a_transitive_packages_entries_are_not_absorbed_with_its_parents() {
     let mut shipped = Ledger::empty();
     shipped
         .functions
-        .insert("show".to_string(), nikaia::contracts::FnContract::empty());
+        .insert("show".to_text(), nikaia::contracts::FnContract::empty());
     shipped
         .functions
-        .insert("c::two".to_string(), nikaia::contracts::FnContract::empty());
+        .insert("c::two".to_text(), nikaia::contracts::FnContract::empty());
     shipped
         .types
-        .insert("Row".to_string(), nikaia::contracts::TypeContract::empty());
-    shipped.types.insert(
-        "c::Id".to_string(),
-        nikaia::contracts::TypeContract::empty(),
-    );
+        .insert("Row".to_text(), nikaia::contracts::TypeContract::empty());
+    shipped
+        .types
+        .insert("c::Id".to_text(), nikaia::contracts::TypeContract::empty());
 
-    let published = shipped.published(&BTreeSet::from(["c".to_string()]));
+    let published = shipped.published(&BTreeSet::from(["c".to_text()]));
     assert!(published.functions.contains_key("show"));
     assert!(published.types.contains_key("Row"));
     assert!(!published.functions.contains_key("c::two"));
@@ -351,13 +352,12 @@ fn a_transitive_packages_entries_are_not_absorbed_with_its_parents() {
     // A `Type::method` key is not a package's, and losing it would take every
     // method of every type the package declares.
     let mut with_methods = Ledger::empty();
-    with_methods.functions.insert(
-        "Row::new".to_string(),
-        nikaia::contracts::FnContract::empty(),
-    );
+    with_methods
+        .functions
+        .insert("Row::new".to_text(), nikaia::contracts::FnContract::empty());
     assert!(
         with_methods
-            .published(&BTreeSet::from(["c".to_string()]))
+            .published(&BTreeSet::from(["c".to_text()]))
             .functions
             .contains_key("Row::new")
     );

@@ -21,6 +21,8 @@
 //! the value in the encoding a grammar run already uses
 //! ([`crate::grammar_run::decode`]).
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -485,7 +487,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     }
 
     fn enter_ahead(&self, bound: &str) -> bool {
-        AHEAD.with(|held| held.borrow_mut().insert(bound.to_string()))
+        AHEAD.with(|held| held.borrow_mut().insert(bound.to_text()))
     }
 
     fn is_ahead(&self, name: &str) -> bool {
@@ -686,7 +688,7 @@ impl From<&Bundle> for ComptimeBundle {
 pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
     block_on(moved::comptime_bundle_bundle(&BundleHost))
         .map(Bundle::from)
-        .map_err(|e| e.split().0.to_string())
+        .map_err(|e| e.split().0.to_text())
 }
 
 /// **The bundle `nikaia run` links a program against**
@@ -695,7 +697,7 @@ pub(crate) fn bundle(_workshop: &Path) -> Result<Bundle, String> {
 pub(crate) fn run_bundle() -> Result<Bundle, String> {
     block_on(moved::comptime_bundle_run_bundle(&BundleHost))
         .map(Bundle::from)
-        .map_err(|e| e.split().0.to_string())
+        .map_err(|e| e.split().0.to_text())
 }
 
 /// **What `tools/comptime_bundle.nika` asks of the compiler** (K3b).
@@ -707,11 +709,11 @@ impl ComptimeBundleHost for BundleHost {
     }
 
     fn compiler(&self) -> String {
-        env!("NIKAIA_COMPILER").to_string()
+        env!("NIKAIA_COMPILER").to_text()
     }
 
     fn rustc_version(&self) -> String {
-        orchestrator::project::rustc_version().to_string()
+        orchestrator::project::rustc_version().to_text()
     }
 
     fn runtime_dependencies(&self, named: &str) -> Vec<(String, String)> {
@@ -731,11 +733,11 @@ impl ComptimeBundleHost for BundleHost {
     }
 
     fn toolchain(&self) -> String {
-        toolchain().to_string()
+        toolchain().to_text()
     }
 
     fn target_libdir(&self) -> String {
-        target_libdir().to_string()
+        target_libdir().to_text()
     }
 
     fn cpu_level(&self) -> String {
@@ -754,7 +756,7 @@ impl ComptimeBundleHost for BundleHost {
 
     fn remember_not_built(&self, key: &str, detail: &str) {
         if let Ok(mut held) = NOT_BUILT.lock() {
-            held.insert(key.to_string(), detail.to_string());
+            held.insert(key.to_text(), detail.to_text());
         }
     }
 
@@ -783,9 +785,9 @@ impl ComptimeBundleHost for BundleHost {
         let ran = waited(child, name)?;
         Ok(ComptimeBundleRan {
             success: ran.status.success(),
-            stdout: String::from_utf8_lossy(&ran.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&ran.stderr).to_string(),
-            status: ran.status.to_string(),
+            stdout: String::from_utf8_lossy(&ran.stdout).to_text(),
+            stderr: String::from_utf8_lossy(&ran.stderr).to_text(),
+            status: ran.status.to_text(),
         })
     }
 }
@@ -831,14 +833,14 @@ fn waited(mut child: std::process::Child, name: &str) -> std::io::Result<std::pr
     let mut stdout = child.stdout.take();
     let mut stderr = child.stderr.take();
     let out = std::thread::spawn(move || {
-        let mut held = Vec::new();
+        let mut held = std::vec::Vec::new();
         if let Some(pipe) = stdout.as_mut() {
             let _ = pipe.read_to_end(&mut held);
         }
         held
     });
     let err = std::thread::spawn(move || {
-        let mut held = Vec::new();
+        let mut held = std::vec::Vec::new();
         if let Some(pipe) = stderr.as_mut() {
             let _ = pipe.read_to_end(&mut held);
         }
@@ -875,7 +877,7 @@ const LIBRARY_PATH: &str = "PATH";
 const LIBRARY_PATH: &str = "LD_LIBRARY_PATH";
 
 pub(crate) fn rustc() -> String {
-    std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string())
+    std::env::var("RUSTC").map_or_else(|_| String::from("rustc"), String::from)
 }
 
 /// `rustc -vV`, once: the toolchain a key is about.
@@ -886,7 +888,7 @@ pub(crate) fn toolchain() -> &'static str {
             .current_dir(orchestrator::cache::Layout::where_tools_start())
             .arg("-vV")
             .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).to_string())
+            .map(|out| String::from_utf8_lossy(&out.stdout).to_text())
             .unwrap_or_default()
     })
 }
@@ -900,7 +902,7 @@ pub(crate) fn target_libdir() -> &'static str {
             .current_dir(orchestrator::cache::Layout::where_tools_start())
             .args(["--print", "target-libdir"])
             .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_text())
             .unwrap_or_default()
     })
 }
@@ -913,7 +915,7 @@ pub(crate) fn write_if_changed(path: &Path, text: &str) -> Result<(), String> {
         text,
         &unique_beside(path),
     ))
-    .map_err(|e| e.split().0.to_string())
+    .map_err(|e| e.split().0.to_text())
 }
 
 /// A path beside `path` that no other build writes at the same time.

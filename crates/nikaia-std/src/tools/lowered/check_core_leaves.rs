@@ -4,7 +4,7 @@
 pub fn check_core_field_of_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
     match value {
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; match base {
-            Expr::Variable(subject, _) => { let subject = *subject; if world.words.resolve(subject) == "self" { Some(world.words.resolve(name).to_string()) } else { None } },
+            Expr::Variable(subject, _) => { let subject = *subject; if world.words.resolve(subject) == "self" { Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) } else { None } },
             _ => None,
         } },
         _ => None,
@@ -24,9 +24,9 @@ pub fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state: &mut 
     if ty.is_unknown() || copies_plainly(&ty) { return; }
     if read && is_text_type(&ty) { return; }
     let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
-    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field);
-    if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", ty.text(), field); }
-    let mut message: String = format!("You can't give away `self.{}` here: this method only borrows `self`.", field);
+    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field); #[allow(clippy::redundant_locals)] let notes = notes;
+    if what == "handed back" { help = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark.", field); }
+    let mut message: String = format!("You can't give away `self.{}` here: this method only borrows `self`.", field); #[allow(clippy::redundant_locals)] let notes = notes;
     if state.changing_self { message = format!("You can't give away `self.{}` here: this method takes `mut self`, which changes `self` in place but doesn't own it.", field); }
     state.findings.push(check_refusal("NK1131", span, message, notes, Some(help)));
 }
@@ -68,21 +68,21 @@ pub(crate) fn check_core_leaves_list_of_a_read(read: &str) -> Option<String> {
     let bracket = nikaia_std::search::find(&read, &"[", 0);
     if bracket.is_some() {
         let at = match bracket { Some(__nikaia_value) => __nikaia_value, None => return None };
-        return Some(nikaia_std::index::get(&read, nikaia_std::index::at(0..at)).to_string());
+        return Some(nikaia_std::block::Text::from(nikaia_std::index::get(&read, nikaia_std::index::at(0..at)).to_string()));
     }
     if !read.ends_with(')') { return None; }
     let open = match nikaia_std::search::find(&read, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let before = nikaia_std::index::get(&read, nikaia_std::index::at(0..open)).to_string();
+    let before = nikaia_std::block::Text::from(nikaia_std::index::get(&read, nikaia_std::index::at(0..open)).to_string());
     let dot = match nikaia_std::search::rfind(&before, &".") { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(nikaia_std::index::get(&before, nikaia_std::index::at(0..dot)).to_string())
+    Some(nikaia_std::block::Text::from(nikaia_std::index::get(&before, nikaia_std::index::at(0..dot)).to_string()))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_leaves_an_element_read_given_away(state: &mut CheckState, what: &str, list: &str, read: &str, copy: &str, part: bool, span: &Span) {
     let notes: Vec<String> = vec![format!("`{}` reads an element `{}` keeps, and what `{}` keeps is lent, whether `{}` is owned here or borrowed. Giving it away by value would take it out of `{}`, and Nikaia never copies behind your back.", read, list, list, list, list)];
-    let help: String = format!("Write `{}.clone()` for a copy.", copy);
-    let whose: String = if part { format!("part of an element of `{}`", list) } else { format!("an element of `{}`", list) };
+    let help: String = format!("Write `{}.clone()` for a copy.", copy); #[allow(clippy::redundant_locals)] let notes = notes;
+    let whose: String = if part { format!("part of an element of `{}`", list) } else { format!("an element of `{}`", list) }; #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is {}, which keeps it.", what, whose), notes, Some(help)));
 }
 
@@ -95,7 +95,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     match value {
         Expr::Variable(name, _) => {
             let name = *name;
-            let written = world.words.resolve(name).to_string();
+            let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
             let local = match state.binding(&written) { Some(__nikaia_value) => __nikaia_value, None => return };
             let a_let_view = local.view_of == "" && state.a_changing_view(&written);
             if local.view_of == "" && !a_let_view || !keeps { return; }
@@ -105,18 +105,18 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             if a_let_view {
                 let place = state.a_view_described(&written);
                 let notes: Vec<String> = vec![format!("`{}` is {}, and the place belongs to its owner: a change through `{}` reaches it. Giving it away whole would take it out of something this function doesn't own.", written, place, written)];
-                let help: String = format!("Write `{}.clone()` for a copy, or take the value out of its owner (`remove`).", written);
+                let help: String = format!("Write `{}.clone()` for a copy, or take the value out of its owner (`remove`).", written); #[allow(clippy::redundant_locals)] let notes = notes;
                 state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is {}, which is only borrowed.", written, place), notes, Some(help)));
                 return;
             }
-            let list = local.view_of.to_string();
+            let list = nikaia_std::block::Text::from(local.view_of.to_string());
             let of = check_core_leaves_list_of_a_read(&list);
             if of.is_some() {
                 check_core_leaves_an_element_read_given_away(state, &written, nikaia_std::index::or(of.as_deref(), || ""), &list, &format!("{}?", list), false, span);
                 return;
             }
             let notes: Vec<String> = vec![format!("`{}` is the element of `{}` itself, and `{}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own.", written, list, list)];
-            let help: String = format!("Write `{}.clone()` for a copy, or take the elements out of `{}` with `{}.drain()`.", written, list, list);
+            let help: String = format!("Write `{}.clone()` for a copy, or take the elements out of `{}` with `{}.drain()`.", written, list, list); #[allow(clippy::redundant_locals)] let notes = notes;
             state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is an element of `{}`, which is only borrowed.", written, list), notes, Some(help)));
             return;
         },
@@ -124,13 +124,13 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             let base = nikaia_std::boxed::open(base); let name = *name;
             let whole: Option<String> = state.place_path(world, value);
             if whole.is_some() {
-                path = match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
+                path = nikaia_std::block::Text::from(match whole { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
                 let at = match nikaia_std::search::find(&path, &".", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-                root = nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_string();
+                root = nikaia_std::block::Text::from(nikaia_std::index::get(&path, nikaia_std::index::at(0..at)).to_string());
                 if keeps {
                     let local = state.binding(&root);
                     if local.is_some() {
-                        let read = match local { Some(__nikaia_value) => __nikaia_value, None => return }.view_of.to_string();
+                        let read = nikaia_std::block::Text::from(match local { Some(__nikaia_value) => __nikaia_value, None => return }.view_of.to_string());
                         let of = check_core_leaves_list_of_a_read(&read);
                         if of.is_some() {
                             let ty = check_core_expr(state, world, host, value, span);
@@ -155,13 +155,13 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !handed_back || !keeps { return; }
-            let name = world.words.resolve(method).to_string();
+            let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
             if name != "first" && name != "last" && name != "get" { return; }
             let held = match dotted_path(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
             let mut shown: String = String::from("");
             if args.len() == 1 {
                 shown = match nikaia_std::index::get(&args, 0) {
-                    Expr::Variable(arg, _) => { let arg = *arg; world.words.resolve(arg).to_string() },
+                    Expr::Variable(arg, _) => { let arg = *arg; nikaia_std::block::Text::from(world.words.resolve(arg).to_string()) },
                     Expr::LitInt { value: at, negative, .. } => { let at = *at; let negative = *negative; if negative { format!("-{}", at) } else { format!("{}", at) } },
                     _ => return,
                 };
@@ -189,7 +189,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
         },
         _ => { return; },
     }
-    if root == "self" || !state.lent_here(&root) { return; }
+    if root == "self" || !(state.lent_here(&root) || handed_back && state.a_mut_parameter(world, &root)) { return; }
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_unknown() || copies_plainly(&ty) { return; }
     match ty {
@@ -215,9 +215,9 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     let nullable = matches!(ty, Ty::Nullable(_));
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
-    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
-    let mut help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
-    if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or declare the parameter `ref {}` if it only reads it.", path, ty.text()); }
+    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
+    let mut help: String = format!("Write `{}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.", path); #[allow(clippy::redundant_locals)] let notes = notes;
+    if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or take the parameter without `keep` if the function called only reads it.", path); }
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
 }
 
@@ -255,7 +255,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                 },
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    let named = world.words.resolve(name).to_string();
+                    let named = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                     if state.lookup(&named).is_none() && world.own.functions.contains_key(&named) {
                         check_core_a_kept_function(state, world, host, params, is_sync, can_throw, false, value, span);
                         return;
@@ -265,7 +265,7 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                     if !state.facts.kept_lambdas.contains_key(&node_key(&closure)) {
                         check_core_a_kept_lambda(state, world, host, want, &closure, span);
                         state.facts.let_kept_lambdas.insert(node_key(&closure));
-                        if !state.facts.lambda_params_by_use.contains_key(&node_key(&closure)) { state.facts.lambda_params_by_use.insert(node_key(&closure), params.to_owned()); }
+                        if !state.facts.lambda_params_by_use.contains_key(&node_key(&closure)) { state.facts.lambda_params_by_use.insert(node_key(&closure), params.copy_owned()); }
                     }
                     let was_run = state.run_code.remove(&named);
                 },
@@ -273,9 +273,9 @@ pub fn check_core_a_kept_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
                     let mut names: Vec<String> = vec![];
                     for segment in segments.iter() {
                         let segment = *segment;
-                        names.push(world.words.resolve(segment).to_string());
+                        names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
                     }
-                    let joined = names.join("::");
+                    let joined = nikaia_std::block::Text::from(names.join("::"));
                     if world.own.functions.contains_key(&joined) {
                         let contract = match ledger_function(world, &joined) { Some(__nikaia_value) => __nikaia_value, None => return };
                         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -303,7 +303,7 @@ pub(crate) fn check_core_a_kept_function<H: CheckHost>(state: &mut CheckState, w
             let id = state.a_new_binding();
             let changed: Option<Ty> = lent_mut(nikaia_std::index::get(&params, (at) as usize));
             let changes = changed.is_some();
-            let mut local = CheckLocal::free(world.words.resolve(n).to_string(), nikaia_std::index::or(changed, || (*nikaia_std::index::get(&params, (at) as usize)).clone().into()), id);
+            let mut local = CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(n).to_string()), nikaia_std::index::or(changed, || (*nikaia_std::index::get(&params, (at) as usize)).clone().into()), id);
             local.changing = changes;
             frame.push(local);
         }
@@ -362,7 +362,7 @@ pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
             for part in parts.iter() {
                 match part {
                     FPart::Hole { spec, .. } => { specs.push(match spec {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }); },
                     _ => { },
@@ -379,21 +379,21 @@ pub fn check_core_holes<H: CheckHost>(state: &mut CheckState, world: &CheckWorld
         let mut frame: Vec<CheckLocal> = vec![];
         for (name, collection) in bound.iter() {
             let trimmed = collection.trim();
-            let key: String = trimmed.to_string();
+            let key: String = nikaia_std::block::Text::from(trimmed.to_string());
             let held: Option<Ty> = match *nikaia_std::index::get(&seen, &key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
             let element = check_core_element_of((held).as_ref());
             let id = state.a_new_binding();
-            frame.push(CheckLocal::free(name.to_string(), element, id));
+            frame.push(CheckLocal::free(nikaia_std::block::Text::from(name.to_string()), element, id));
         }
         state.scope.push(frame);
         let held = check_core_expr(state, world, host, hole, span);
         match hole {
             Expr::Variable(name, _) => {
                 let name = *name;
-                seen.insert(world.words.resolve(name).to_string(), held.clone());
+                seen.insert(nikaia_std::block::Text::from(world.words.resolve(name).to_string()), held.clone());
             },
             _ => { },
         }
@@ -471,11 +471,11 @@ pub fn check_core_lambda_enter(state: &mut CheckState) -> Option<Ty> {
 // this was written - see `contracts::sync`.
 pub fn check_core_lambda_leave(state: &mut CheckState, outer: Option<&Ty>, tail: &Ty, body: &Block) -> Ty {
     state.expected = match outer {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     };
     let returns: Vec<CheckLambdaReturn> = nikaia_std::index::or(state.flow.lambda_returns.pop(), || vec![].into());
-    state.flow.last_lambda_returns = returns.to_owned();
+    state.flow.last_lambda_returns = returns.copy_owned();
     let mut ends_in_a_return = false;
     if !body.stmts.is_empty() { ends_in_a_return = matches!(nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node, Stmt::Return(_)); }
     let mut first: Option<Ty> = None;
@@ -580,6 +580,13 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         found = check_core_expr(state, world, host, given, span);
+        if !lending && state.a_made_element_lent(world, given, &nikaia_std::index::or(match state.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown)) {
+            lending = true;
+            state.facts.lent_returns.insert(span.start as i64);
+        }
     }
     state.flow.lambda_expected = None;
     let inside = state.flow.lambda_returns.len() as i64;
@@ -671,7 +678,7 @@ pub fn check_core_an_assert<H: CheckHost>(state: &mut CheckState, world: &CheckW
     let mut message: i64 = -1;
     let mut index: i64 = 0;
     for option in config.iter() {
-        let name = world.words.resolve(option.name).to_string();
+        let name = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
         let given = check_core_expr(state, world, host, &option.value, span);
         if name == "rule of the type" {
             index += 1;

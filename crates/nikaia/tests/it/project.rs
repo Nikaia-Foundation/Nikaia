@@ -14,6 +14,8 @@
 //! way to switch that cache off.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -195,7 +197,7 @@ fn a_program_another_compiler_lowered_is_lowered_again() {
     let switches = dir.join("target/nikaia/gen/switches");
     let written = std::fs::read_to_string(&switches).expect("the switches are written");
     let identity = env!("NIKAIA_COMPILER");
-    assert!(written.ends_with(&format!("{identity}\n")), "{written}");
+    assert!(written.ends_with(&*format!("{identity}\n")), "{written}");
     // As another compiler left it, and as old as the build it described.
     let modified = std::fs::metadata(&switches)
         .and_then(|m| m.modified())
@@ -604,7 +606,7 @@ fn the_lockfile_records_what_cargo_resolved_and_does_so_identically_twice() {
     // D8: nothing absolute, and nothing that moves with the checkout.
     for dir in &dirs {
         assert!(
-            !lock.contains(&dir.display().to_string()),
+            !lock.contains(&*dir.display().to_text()),
             "an absolute path reached the committed record:\n{lock}"
         );
     }
@@ -638,7 +640,7 @@ fn the_manifest_becomes_a_cargo_manifest() {
     let project = Project::open(&dir, Some("x86_64-linux"), None).expect("the project opens");
     let members = project.members().expect("the packages resolve");
     let workspace = project
-        .cargo_workspace(&members, &["fn main() {}".to_string()])
+        .cargo_workspace(&members, &["fn main() {}".to_text()])
         .expect("the manifest translates");
 
     // The program's own crate: the package, and what it depends on.
@@ -1925,7 +1927,7 @@ fn the_http_package_serves_its_example() {
             // comes.
             [
                 b"GET /".to_vec(),
-                vec![b'a'; 20_000],
+                std::vec![b'a'; 20_000],
                 b" HTTP/1.1\r\n\r\n".to_vec(),
             ]
             .concat(),
@@ -1964,13 +1966,13 @@ impl Drop for Stop<'_> {
 fn the_address_it_printed(server: &mut std::process::Child) -> String {
     use std::io::BufRead;
     let out = server.stdout.take().expect("the child's stdout is a pipe");
-    let mut line = String::new();
+    let mut line = std::string::String::new();
     std::io::BufReader::new(out)
         .read_line(&mut line)
         .expect("the server says which address it bound");
     line.trim()
         .rsplit_once(' ')
-        .map(|(_, address)| address.to_string())
+        .map(|(_, address)| address.to_text())
         .unwrap_or_else(|| panic!("`http: listening on <address>`, and this said {line:?}"))
 }
 
@@ -1987,17 +1989,17 @@ fn ask(address: &str, request: &[u8]) -> (String, String) {
         .expect("a read that cannot hang the suite");
     socket.write_all(request).expect("the request goes out");
     socket.flush().expect("all of it");
-    let mut answered = Vec::new();
+    let mut answered = std::vec::Vec::new();
     // A refused request whose sender is still writing gets a reset rather than
     // the answer, which is what a closing server looks like from the other end -
     // so what arrived before it counts, and only an empty answer is a failure.
     let _ = socket.read_to_end(&mut answered);
-    let answered = String::from_utf8_lossy(&answered).into_owned();
+    let answered = String::from_utf8_lossy(&answered);
     let (head, body) = answered
         .split_once("\r\n\r\n")
         .unwrap_or_else(|| panic!("a head and a body, and this said {answered:?}"));
-    let status = head.split("\r\n").next().unwrap_or_default().to_string();
-    (status, body.to_string())
+    let status = head.split("\r\n").next().unwrap_or_default().to_text();
+    (status, body.to_text())
 }
 
 /// **A trait a package publishes is implemented and then called**
@@ -3311,7 +3313,7 @@ fn nikaia_run_becomes_the_program() {
         .stderr(std::process::Stdio::null())
         .spawn()
         .expect("the nikaia binary runs");
-    let mut first = String::new();
+    let mut first = std::string::String::new();
     std::io::BufReader::new(run.stdout.take().expect("stdout"))
         .read_line(&mut first)
         .expect("a line");
@@ -3319,7 +3321,7 @@ fn nikaia_run_becomes_the_program() {
 
     // The process `nikaia run` was started as is now the program itself.
     let exe = std::fs::read_link(format!("/proc/{}/exe", run.id())).expect("its executable");
-    let named = exe.file_name().map(|n| n.to_string_lossy().into_owned());
+    let named = exe.file_name().map(|n| n.to_string_lossy().to_text());
     run.kill().expect("end it");
     run.wait().expect("it ends");
     assert_eq!(

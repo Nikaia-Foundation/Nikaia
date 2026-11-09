@@ -19,24 +19,24 @@ pub struct Reported {
 pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, boundaries: &[Boundary]) -> Option<Reported> {
     if reported.level != "error" { return None; }
     let label = written_or_nothing((reported.label).as_deref());
-    let joined = reported.notes.join(" ");
+    let joined = nikaia_std::block::Text::from(reported.notes.join(" "));
     let all_of_it = format!("{} {} {}", reported.message, label, joined);
     let the_shape = all_of_it.contains("is not a future") || all_of_it.contains("can only be applied to values that implement `Try`") || all_of_it.contains("`Result<") || all_of_it.contains("enum `Result`");
     if !the_shape { return None; }
     let at = the_boundary(on_the_line, source, boundaries);
     if at < 0 { return None; }
     let boundary = (*nikaia_std::index::get(&boundaries, nikaia_std::index::at(at))).clone();
-    let word = boundary.word.to_string();
-    let below = if !label.is_empty() { format!("{} - {}", reported.message, label) } else { reported.message.to_string() };
-    let mut notes: Vec<String> = vec![format!("The Rust compiler said: {}", below)];
+    let word = nikaia_std::block::Text::from(boundary.word.to_string());
+    let below = if !label.is_empty() { format!("{} - {}", reported.message, label) } else { nikaia_std::block::Text::from(reported.message.to_string()) };
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("The Rust compiler said: {}", below)];
     if !boundary.moved.is_empty() {
-        let moved = boundary.moved.join(", ");
+        let moved = nikaia_std::block::Text::from(boundary.moved.join(", "));
         notes.push(format!("`{}`'s {} changed since it was described.", word, moved));
     }
-    let message = if boundary.described { format!("The description of `{}` doesn't match the crate.", word) } else { format!("The ledger of `{}` doesn't match its sources.", word) };
+    let message = if boundary.described { format!("The description of `{}` doesn't match the crate.", word) } else { format!("The ledger of `{}` doesn't match its sources.", word) }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if boundary.described { notes.push(format!("help: Run `nikaia describe {}` again, and review what changed in `contracts/{}.contracts`.", word, word)); } else { notes.push(format!("help: Build `{}` again: `nikaia build` without `--locked` rebuilds its ledger from its sources.", word)); }
-    for note in reported.notes.iter() { notes.push(note.to_string()); }
-    Some(Reported { level: reported.level.to_string(), message, label: match reported.label.as_ref() {
+    for note in reported.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+    Some(Reported { level: nikaia_std::block::Text::from(reported.level.to_string()), message, label: match reported.label.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, notes })
@@ -44,7 +44,7 @@ pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, bo
 
 pub(crate) fn written_or_nothing(text: Option<&str>) -> String {
     let written = match text { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    written.to_string()
+    nikaia_std::block::Text::from(written.to_string())
 }
 
 pub(crate) fn the_boundary(on_the_line: Option<&str>, source: &str, boundaries: &[Boundary]) -> i64 {
@@ -52,8 +52,8 @@ pub(crate) fn the_boundary(on_the_line: Option<&str>, source: &str, boundaries: 
     let mut in_the_file: Vec<i64> = vec![];
     for at in 0..boundaries.len() as i64 {
         let called = format!("{}::", nikaia_std::index::get(&boundaries, nikaia_std::index::at(at)).word);
-        if on_the_line.is_some() && line.contains(&called) { return at; }
-        if source.contains(&called) { in_the_file.push(at); }
+        if on_the_line.is_some() && line.contains(AsRef::<str>::as_ref(&called)) { return at; }
+        if source.contains(AsRef::<str>::as_ref(&called)) { in_the_file.push(at); }
     }
     for at in in_the_file.iter() {
         let at = nikaia_std::num::value(at);

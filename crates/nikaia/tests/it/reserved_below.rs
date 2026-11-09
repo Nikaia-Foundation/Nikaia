@@ -22,6 +22,8 @@ use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The words the emitter escapes, as its own list writes them.
 ///
@@ -151,7 +153,7 @@ fn rejected(purpose: &str, rust: &str) -> Option<String> {
             dir.join("lowered.rmeta").to_str().expect("utf-8 path"),
         ],
     );
-    let complaint = String::from_utf8_lossy(&out.stderr).into_owned();
+    let complaint = String::from_utf8_lossy(&out.stderr);
     let _ = std::fs::remove_dir_all(&dir);
     (!out.status.success()).then_some(complaint)
 }
@@ -168,7 +170,7 @@ fn a_name_the_language_below_reserves_compiles_in_every_position() {
                 .lines()
                 .find(|l| l.starts_with("error"))
                 .unwrap_or("(no error line)")
-                .to_string();
+                .to_text();
             leaked.push(format!("  {word}: {line}"));
         }
     }
@@ -187,7 +189,7 @@ fn a_word_the_language_below_allows_is_not_escaped() {
         let purpose = format!("allowed-below-{word}");
         let rust = lowered(&purpose, &every_position(word));
         assert!(
-            !rust.contains(&format!("r#{word}")),
+            !rust.contains(&*format!("r#{word}")),
             "`{word}` is a legal Rust identifier and must not be escaped:\n{rust}"
         );
         if let Some(complaint) = rejected(&purpose, &rust) {
@@ -323,7 +325,7 @@ fn a_word_reserved_in_both_languages_is_escaped_after_a_dot() {
     for word in RESERVED_HERE_TOO {
         assert_eq!(
             nikaia::emit::escaped(word),
-            format!("r#{word}"),
+            std::format!("r#{word}"),
             "`{word}` is reserved below and can follow a `.` or a `::`"
         );
     }

@@ -1,0 +1,17 @@
+// A list of views into a text, read, and then the text handed back: the
+// list ends at its last use (#490), not at the end of the function.
+fn first_part(path: String) -> (String, String) throws {
+    let parts: Vec[ref String] = path.split(".").collect()
+    let head = parts[0].clone()
+    println(f"{parts.len()} parts")
+    return (head, path)
+}
+
+fn main() throws {
+    let mut made = "one"
+    for word in ["two", "three"] {
+        made = f"{made}.{word}"
+    }
+    let (head, whole) = first_part(made)
+    println(f"{head} of {whole}")
+}

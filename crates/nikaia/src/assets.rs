@@ -33,6 +33,8 @@
 //! consumer write a line for it — which is where the consumer finds out. That
 //! friction is the feature.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -182,16 +184,16 @@ impl Reads {
         };
         if !list.allowed.contains(path) {
             return Err(Denied::NotListed {
-                list: list.path.display().to_string(),
+                list: list.path.display().to_text(),
             });
         }
         let whole = self.under_the_root(path).ok_or(Denied::OutsideTheRoot)?;
         let bytes = std::fs::read(&whole).map_err(|error| Denied::Unreadable {
-            because: error.to_string(),
+            because: error.to_text(),
         })?;
-        let text = String::from_utf8(bytes).map_err(|_| Denied::NotText)?;
+        let text = String::from_utf8(bytes.into()).map_err(|_| Denied::NotText)?;
         if let Ok(mut taken) = self.taken.lock() {
-            taken.insert(path.to_string(), digest(text.as_bytes()));
+            taken.insert(path.to_text(), digest(text.as_bytes()));
         }
         Ok(text)
     }
@@ -243,5 +245,5 @@ impl Reads {
 /// two spellings of one digest is the shape that lets a build agree with itself
 /// and disagree with the file it wrote.
 pub fn digest(bytes: &[u8]) -> String {
-    orchestrator::cache::sha256_hex(bytes)
+    String::from(orchestrator::cache::sha256_hex(bytes))
 }

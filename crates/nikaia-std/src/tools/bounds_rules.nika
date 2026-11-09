@@ -56,6 +56,8 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
     // a field out builds.
     let mut lists: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     let mut whole: collections::BTreeSet[String] = collections::BTreeSet()
+    // Lists of lists of whole numbers (`T.f`, ADR-306 D28).
+    let mut nested: collections::BTreeSet[String] = collections::BTreeSet()
     let mut defaults: collections::BTreeMap[String, String] = collections::BTreeMap()
     for item in program.items {
         match item.node {
@@ -75,8 +77,13 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                     if element.generics.is_empty() && is_whole_number(words.resolve(element.name)) {
                         whole.insert(f"{owner}.{f}")
                     }
+                    let inner_ty = words.resolve(element.name)
+                    if element.generics.len() == 1 && (inner_ty == "Vec" || inner_ty == "List") && element.generics[0].generics.is_empty() && is_whole_number(words.resolve(element.generics[0].name)) {
+                        nested.insert(f"{owner}.{f}")
+                    }
                     if field.default != null {
                         defaults.insert(f"{owner}.{f}", rules_shape(field.default?.value))
+                        defaults.insert(f"{owner}.{f}[]", rules_inner_shape(field.default?.value))
                     }
                     found.push(f)
                 }
@@ -189,8 +196,11 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                     continue
                 }
                 let shapes_b = built.get(f"{owner}.{b}")?.clone() ?? []
-                // `length`, once for each pair, in the order of the names.
-                if a < b && rules_together(methods, a, b) && rules_built_equal(shapes_a, shapes_b) {
+                // `length`, once for each pair, in the order of the names;
+                // not of a list whose length a body outside the type's
+                // methods changes.
+                let outside = dropped.contains(f"{owner}.{a}#len") || dropped.contains(f"{owner}.{b}#len")
+                if a < b && !outside && rules_together(methods, a, b) && rules_built_equal(shapes_a, shapes_b) {
                     out.push(BoundsRule { owner: owner.clone(), kind: "length", a: a.clone(), b: b.clone() })
                 }
                 if whole.contains(f"{owner}.{a}") && !dropped.contains(f"{owner}.{a}[]") && shapes_a.iter().all(fn(s) { s == "n:0" }) {
@@ -200,6 +210,13 @@ pub fn rules_candidates(program: ref Program, context: ref BoundsContext, words:
                             out.push(BoundsRule { owner: owner.clone(), kind: "result", a: m.clone(), b: b.clone() })
                         }
                     }
+                }
+                // `inner`: every value of every inner list of `a` lies in
+                // `0..b.len()`, where every literal builds `a` of empty
+                // inner lists (ADR-306 D28).
+                let inner_shapes = built.get(f"{owner}.{a}[]")?.clone() ?? []
+                if a != b && nested.contains(f"{owner}.{a}") && !dropped.contains(f"{owner}.{a}[]") && inner_shapes.iter().all(fn(s) { s == "empty" }) {
+                    out.push(BoundsRule { owner: owner.clone(), kind: "inner", a: a.clone(), b: b.clone() })
                 }
             }
         }
@@ -241,6 +258,28 @@ fn rules_built_equal(a: ref Vec[String], b: ref Vec[String]) -> bool {
 
 /// **What a literal builds a list field as**: `n:k` for a list literal of
 /// `k` items, `other` for anything else.
+/// What a literal builds a list of lists as, inside: `empty` where each
+/// inner list it holds is `[]` (ADR-306 D28), else `other`.
+fn rules_inner_shape(value: ref Expr?) -> String {
+    let given = value ?? return "other"
+    match given {
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                match item {
+                    Expr::ListLit { items: inside, .. } => {
+                        if !inside.is_empty() {
+                            return "other"
+                        }
+                    },
+                    else => return "other",
+                }
+            }
+            return "empty"
+        },
+        else => return "other",
+    }
+}
+
 fn rules_shape(value: ref Expr?) -> String {
     let given = value ?? return "other"
     return match given {
@@ -271,13 +310,38 @@ fn rules_outside(changed: ref BoundsChanged, types: ref collections::BTreeMap[St
         paths.push(p.clone())
     }
     for p in changed.lengths {
+        // **A length a body changes of a value whose type it knows**: a
+        // push, a pop or one into an inner list is checked where it stands
+        // (`rules_at_call`, ADR-306 D22, D28); only a `length` rule of the
+        // list, which no exit of such a body is asked for, goes.
+        let of = types.get(path_root(p))?.clone() ?? ""
+        let fields = rules_fields_of(p)
+        if !of.is_empty() && fields.len() == 1 && (lists.get(of)?.contains(fields[0]) ?? false) && !p.contains("].") {
+            dropped.insert(f"{of}.{fields[0]}#len")
+            continue
+        }
         paths.push(p.clone())
     }
     for p in changed.parts {
+        // Its paths of fields, by a method on such a list: checked at the
+        // call (`rules_at_call`).
+        let of = types.get(path_root(p))?.clone() ?? ""
+        let fields = rules_fields_of(p)
+        if !of.is_empty() && fields.len() == 1 && (lists.get(of)?.contains(fields[0]) ?? false) && !p.contains("].") {
+            continue
+        }
         paths.push(p.clone())
     }
     for place in changed.elements {
-        paths.push(frame_list(place))
+        // One element written of such a value's list, or of one of its
+        // inner lists: checked where it stands (`rules_element_write`).
+        let list = frame_list(place)
+        let of = types.get(path_root(list))?.clone() ?? ""
+        let fields = rules_fields_of(list)
+        if !of.is_empty() && fields.len() == 1 && (lists.get(of)?.contains(fields[0]) ?? false) && place.ends_with("|") {
+            continue
+        }
+        paths.push(list)
     }
     for path in paths {
         // The first field is of the root's type where that is known.
@@ -315,6 +379,18 @@ fn rules_typed(args: ref Vec[FnArg], body: ref Block, owner: ref String, context
         }
     }
     rules_typed_lets(body, shape.twice, out, words)
+    // `Self` within an `impl` is its type.
+    if !owner.is_empty() {
+        let mut named: Vec[String] = []
+        for (name, of) in out {
+            if of == "Self" {
+                named.push(name.clone())
+            }
+        }
+        for name in named {
+            out.insert(name.clone(), owner.clone())
+        }
+    }
     return out
 }
 
@@ -491,15 +567,21 @@ fn rules_literal(name: ref String, fields: ref Vec[FieldInit], lists: ref collec
     let own = lists.get(name) ?? return
     for f in own {
         let key = f"{name}.{f}"
+        let inner_key = f"{key}[]"
         let mut shape = defaults.get(key)?.clone() ?? "other"
+        let mut inside = defaults.get(inner_key)?.clone() ?? "other"
         for field in fields {
             if words.resolve(field.name) == f {
                 shape = rules_shape(field.value)
+                inside = rules_inner_shape(field.value)
             }
         }
         let mut known = built.get(key)?.clone() ?? []
         known.push(shape)
         built.insert(key, known)
+        let mut known_inside = built.get(inner_key)?.clone() ?? []
+        known_inside.push(inside)
+        built.insert(inner_key, known_inside)
     }
 }
 
@@ -710,18 +792,32 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
         let mut failed: collections::BTreeSet[i64] = collections::BTreeSet()
         for item in program.items {
             match item.node {
-                Item::Impl { target, methods, .. } => {
-                    if words.resolve(target.name) != owner {
-                        continue
+                // **A body outside the type's methods that holds a value of
+                // it by a name whose type it knows**: each write it makes is
+                // checked where it stands (ADR-306 D22, D28).
+                Item::Fn { args, body, .. } => {
+                    let locals = rules_locals(owner, args, body, "", context, words)
+                    if !locals.is_empty() {
+                        rules_check(held, owner, "", args, body, locals, context, program, words, ask, failed)
                     }
+                },
+                Item::Impl { target, methods, .. } => {
+                    let impl_of = words.resolve(target.name)
+                    let own = impl_of == owner
                     for method in methods {
                         match method.node {
                             Item::Fn { name, receiver, args, body, .. } => {
                                 let written = name ?? continue
                                 let m = words.resolve(written)
-                                let changing = receiver?.is_mut ?? continue
-                                if changing || rules_has_result(held, m) {
-                                    rules_check(held, owner, m, args, body, context, program, words, ask, failed)
+                                let changing = receiver?.is_mut ?? false
+                                if own && receiver != null && (changing || rules_has_result(held, m)) {
+                                    let locals = rules_locals(owner, args, body, impl_of, context, words)
+                                    rules_check(held, owner, m, args, body, locals, context, program, words, ask, failed)
+                                    continue
+                                }
+                                let locals = rules_locals(owner, args, body, impl_of, context, words)
+                                if !locals.is_empty() {
+                                    rules_check(held, owner, "", args, body, locals, context, program, words, ask, failed)
                                 }
                             },
                             else => {},
@@ -749,6 +845,19 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
     return held
 }
 
+/// **The values of `owner` a body names by one name of known type**, `self`
+/// aside: its parameters and the names it binds once to a literal of the
+/// type or with the type written (`rules_typed`).
+fn rules_locals(owner: ref String, args: ref Vec[FnArg], body: ref Block, self_of: ref String, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, String] {
+    let mut out: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for (name, of) in rules_typed(args, body, self_of, context, words) {
+        if of == owner && name != "self" {
+            out.insert(name.clone(), of.clone())
+        }
+    }
+    return out
+}
+
 fn rules_has_result(rules: ref Vec[BoundsRule], method: ref String) -> bool {
     for rule in rules {
         if rule.kind == "result" && rule.a == method {
@@ -760,9 +869,13 @@ fn rules_has_result(rules: ref Vec[BoundsRule], method: ref String) -> bool {
 
 /// **One method walked to check `held`**: the indexes of those it does not
 /// keep go into `failed`.
-fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) {
+fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) {
     let mut walk = bounding_new(args, body, collections::BTreeSet(), context, program, words)
-    walk.rule_roots = rules_roots(owner, args, walk.shape, held, words)
+    let self_owner = if method.is_empty() { "" } else { owner }
+    walk.rule_roots = rules_roots(self_owner, args, walk.shape, held, words)
+    for (name, of) in locals {
+        walk.rule_roots.insert(name.clone(), of.clone())
+    }
     walk.rules = held.clone()
     walk.checking = true
     for (at, rule) in held.iter().enumerate() {
@@ -782,7 +895,7 @@ fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String,
 /// a type with rules, `len(a) == len(b)` and every element of a list of
 /// positions inside the other list. A body checked with a lambda or a task
 /// that changes `self` keeps none.
-fn rules_given(mut walk: BoundsWalk, mut facts: BoundsFacts) {
+fn rules_given(mut walk: BoundsWalk, mut facts: BoundsFacts, args: ref Vec[FnArg], words: ref winnow_grammar::InternerContext) {
     if walk.checking && walk.pinned.contains("self") {
         for at in 0..<walk.rules.len() {
             walk.rule_failed.insert(at)
@@ -790,12 +903,19 @@ fn rules_given(mut walk: BoundsWalk, mut facts: BoundsFacts) {
         return
     }
     for (root, owner) in walk.rule_roots.clone() {
-        rules_give(walk, facts, root, owner)
+        // A value the body binds itself has no lengths before it is built;
+        // what holds of its elements holds from its literal on, each write
+        // checked where it stands (ADR-306 D22).
+        if walk.shape.bound.contains(root) && !args.iter().any(fn(arg) { words.resolve(arg.name) == root }) {
+            rules_give(walk, BoundsFacts { ints: collections::BTreeSet(), facts: [] }, root, owner, true)
+            continue
+        }
+        rules_give(walk, facts, root, owner, true)
     }
 }
 
 /// The rules of `owner`, given of the value `root`.
-fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, owner: ref String) {
+fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, owner: ref String, elements: bool) {
     for rule in walk.rules.clone() {
         if rule.owner != owner {
             continue
@@ -810,16 +930,61 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
             bounding_push(walk, facts, same)
             bounding_push(walk, facts, a_floor)
             bounding_push(walk, facts, b_floor)
-        } else if rule.kind == "index" {
-            let each = walk.arena.var(bounding_element_of(f"{root}.{rule.a}"))
-            let low = walk.arena.ge(each, zero)
-            let high = walk.arena.lt(each, b)
-            bounding_push(walk, facts, low)
-            bounding_push(walk, facts, high)
+        } else if rule.kind == "index" || rule.kind == "inner" {
+            // Of every value of `a`, or of every inner list of it (`a[]`,
+            // ADR-306 D28): nothing where it is empty (#1483). They stand
+            // beside the facts (`rule_facts`), made once.
+            let name = bounding_element_of(rules_values_of(f"{root}.{rule.a}", rule.kind))
+            if elements && !walk.pinned.contains(root) {
+                let each = walk.arena.var(name)
+                let low_each = walk.arena.ge(each, zero)
+                let high_each = walk.arena.lt(each, b)
+                let low = bounding_each_guarded(walk, low_each)
+                let high = bounding_each_guarded(walk, high_each)
+                walk.rule_facts.push((name.clone(), low))
+                walk.rule_facts.push((name, high))
+            }
             bounding_push(walk, facts, b_floor)
         } else {
             bounding_push(walk, facts, b_floor)
         }
+    }
+}
+
+/// The list whose element names every value a rule of `kind` bounds:
+/// `list` itself, or `list[]` for the values of its inner lists.
+fn rules_values_of(list: ref String, kind: ref String) -> String {
+    if kind == "inner" {
+        return f"{list}[]"
+    }
+    return list.clone()
+}
+
+/// **The list an element is read out of**, as the facts of every element
+/// name it: `xs` of `xs[i]`, `t.col[]` of `t.col[c][i]` (ADR-306 D28).
+fn rules_list_named(base: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    let named = path_of(base, words)
+    if named != null {
+        return named
+    }
+    let outer = rules_inner_of(base, words) ?? return null
+    return f"{outer}[]"
+}
+
+/// `t.col` of an inner list `t.col[c]`, or of its `.clone()`.
+fn rules_inner_of(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match expr {
+        Expr::Index { base, index, .. } => match index {
+            Expr::Range { .. } => null,
+            else => path_of(base, words),
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.is_empty() && words.resolve(method) == "clone" {
+                return rules_inner_of(receiver, words)
+            }
+            return null
+        },
+        else => null,
     }
 }
 
@@ -862,10 +1027,14 @@ fn rules_called(walk: ref BoundsWalk, call: ref Expr, context: ref BoundsContext
 /// (ADR-375 D5, #1330): they hold of `name`.
 fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext) {
     let base = match value {
-        Expr::Index { base, .. } => base,
+        Expr::Index { base, index, .. } => match index {
+            // A cut is no element, and an empty one reads none.
+            Expr::Range { .. } => return,
+            else => base,
+        },
         else => return,
     }
-    let list = path_of(base, words) ?? return
+    let list = rules_list_named(base, words) ?? return
     let element = bounding_element_of(list)
     let n = walk.arena.var(name)
     let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
@@ -876,10 +1045,19 @@ fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref S
             stated.push(walk.arena.substitute(fact, given))
         }
     }
+    for (each, fact) in walk.rule_facts.clone() {
+        if each == element {
+            stated.push(walk.arena.substitute(fact, given))
+        }
+    }
     if stated.is_empty() {
         return
     }
     facts.ints.insert(name.clone())
+    // The read stopped the program where `list` is empty, so the facts of
+    // every element, guarded by its emptiness, hold of `name` (#1483).
+    let present = bounding_each_present(walk, list)
+    bounding_push(walk, facts, present)
     for fact in stated {
         bounding_push(walk, facts, fact)
     }
@@ -892,16 +1070,19 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
         Expr::Index { base, .. } => base,
         else => return false,
     }
-    let list = path_of(base, words) ?? return false
+    let list = rules_list_named(base, words) ?? return false
     let element = bounding_element_of(list)
-    if !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, element) }) {
+    if !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, element) }) && !walk.rule_facts.iter().any(fn(r) { r.0 == element }) {
         return false
     }
     let each = walk.arena.var(element)
     let zero = walk.arena.int(0)
     let low = walk.arena.ge(each, zero)
     let high = walk.arena.lt(each, len)
-    let goal = walk.arena.and([low, high])
+    let inside = walk.arena.and([low, high])
+    // The inner read stops the program where `list` is empty, so the outer
+    // one needs its position only where it is not (#1483).
+    let goal = bounding_each_guarded(walk, inside)
     return bounding_proves(walk, facts, goal, ask)
 }
 
@@ -910,6 +1091,8 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
 /// again; a `result` rule of the method checked must hold of what a
 /// `return` hands back.
 fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?, throwing: bool, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    // What the function is found to return (ADR-306 D23).
+    bounding_returned(walk, facts, returned, throwing, context, program, words, ask)
     if !walk.checking || !walk.rule_roots.contains_key("self") {
         return
     }
@@ -924,7 +1107,7 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
                 walk.rule_failed.insert(at)
                 continue
             }
-            if !rules_position(walk, facts, returned ?? continue, rule.b, context, program, words, ask) {
+            if !rules_position(walk, facts, returned ?? continue, "self", rule.b, context, program, words, ask) {
                 walk.rule_failed.insert(at)
             }
         }
@@ -940,11 +1123,11 @@ fn rules_same_length(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref Bou
 
 /// Whether `value` is a position of `self.b`: `0 <= value < len(self.b)`,
 /// or the result of a method a `result` rule of `b` holds of.
-fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let called = rules_called(walk, value, context, words)
     if called != null {
         let (root, owner, method) = called ?? return false
-        if root == "self" && rules_has(walk.rules, owner, "result", method, b) {
+        if root == of && rules_has(walk.rules, owner, "result", method, b) {
             return true
         }
     }
@@ -953,10 +1136,12 @@ fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr,
     let read = rules_element_read(walk, value, facts, words)
     let v = read ?? bounding_lin(walk, value, facts, context, program, words) ?? return false
     let zero = walk.arena.int(0)
-    let len = walk.arena.var(length_of(f"self.{b}"))
+    let len = walk.arena.var(length_of(f"{of}.{b}"))
     let low = walk.arena.ge(v, zero)
     let high = walk.arena.lt(v, len)
-    let goal = walk.arena.and([low, high])
+    let inside = walk.arena.and([low, high])
+    // An element read stops the program where its list is empty (#1483).
+    let goal = if read != null { bounding_each_guarded(walk, inside) } else { inside }
     return bounding_proves(walk, facts, goal, ask)
 }
 
@@ -967,9 +1152,9 @@ fn rules_element_read(mut walk: BoundsWalk, value: ref Expr, facts: ref BoundsFa
         Expr::Index { base, .. } => base,
         else => return null,
     }
-    let list = path_of(base, words) ?? return null
+    let list = rules_list_named(base, words) ?? return null
     let element = bounding_element_of(list)
-    if !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, element) }) {
+    if !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, element) }) && !walk.rule_facts.iter().any(fn(r) { r.0 == element }) {
         return null
     }
     return walk.arena.var(element)
@@ -977,10 +1162,10 @@ fn rules_element_read(mut walk: BoundsWalk, value: ref Expr, facts: ref BoundsFa
 
 /// Whether `value` is at most `len(self.b)`: what a push onto `b` itself
 /// may put, the list one longer after it (ADR-306 D22).
-fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
     let v = bounding_lin(walk, value, facts, context, program, words) ?? return false
     let zero = walk.arena.int(0)
-    let len = walk.arena.var(length_of(f"self.{b}"))
+    let len = walk.arena.var(length_of(f"{of}.{b}"))
     let low = walk.arena.ge(v, zero)
     let high = walk.arena.le(v, len)
     let goal = walk.arena.and([low, high])
@@ -991,21 +1176,51 @@ fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, b:
 /// (`self.a[i] = value`, ADR-306 D22): an `index` rule of `a` holds on
 /// where the value is a position of its `b`; a compound write drops it.
 fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref Expr, op: ref BinaryOp?, value: ref Expr, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
-    if !walk.checking || !walk.rule_roots.contains_key("self") {
+    if !walk.checking {
         return
     }
-    let list = match target {
-        Expr::Index { base, .. } => path_of(base, words) ?? return,
+    let base = match target {
+        Expr::Index { base, .. } => base,
         else => return,
     }
-    for (at, rule) in walk.rules.clone().iter().enumerate() {
-        if rule.kind != "index" || list != f"self.{rule.a}" {
-            continue
-        }
-        if op != null || !rules_position(walk, facts, value, rule.b, context, program, words, ask) {
-            walk.rule_failed.insert(at)
+    // `r.a[i] = v` writes an element of `r.a`; `r.a[c][i] = v` one of an
+    // inner list of `r.a` (ADR-306 D28).
+    let list = path_of(base, words)
+    let inner = if list == null { rules_inner_of(base, words) } else { null }
+    for (root, owner) in walk.rule_roots.clone() {
+        for (at, rule) in walk.rules.clone().iter().enumerate() {
+            let a = f"{root}.{rule.a}"
+            if rule.owner != owner {
+                continue
+            }
+            // A value of `a`, or of an inner list of it (ADR-306 D28).
+            if (rule.kind == "index" && (list ?? "") == a) || (rule.kind == "inner" && (inner ?? "") == a) {
+                if op != null || !rules_position(walk, facts, value, root, rule.b, context, program, words, ask) {
+                    walk.rule_failed.insert(at)
+                }
+            } else if rule.kind == "inner" && (list ?? "") == a {
+                // A whole inner list: each value it holds must be one.
+                if op != null || !rules_positions(walk, facts, value, root, rule.b, context, program, words, ask) {
+                    walk.rule_failed.insert(at)
+                }
+            }
         }
     }
+}
+
+/// Whether `value` is a list literal each item of which is a position of
+/// `of.b`: what an inner list of an `inner` rule may take (ADR-306 D28).
+fn rules_positions(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of: ref String, b: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> bool {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        else => return false,
+    }
+    for item in items {
+        if !rules_position(walk, facts, item, of, b, context, program, words, ask) {
+            return false
+        }
+    }
+    return true
 }
 
 /// **Past a read of a list**: the read stops the program where its
@@ -1047,40 +1262,6 @@ fn rules_read_inside(mut walk: BoundsWalk, base: ref Expr, index: ref Expr, mut 
     bounding_push(walk, facts, high)
 }
 
-/// **After a write of one element of a list an `index` rule holds of**:
-/// the write kept the rule or a checked body found it fails
-/// (`rules_element_write`), so what holds of every element holds again.
-fn rules_element_kept(mut walk: BoundsWalk, mut facts: BoundsFacts, target: ref Expr, words: ref winnow_grammar::InternerContext) {
-    let list = match target {
-        Expr::Index { base, .. } => path_of(base, words) ?? return,
-        else => return,
-    }
-    rules_elements_kept(walk, facts, list)
-}
-
-/// **What holds of every element of a list an `index` rule holds of**,
-/// given again after a change forgot it (`list` one list, or `""` every
-/// one): each write that could break it is checked where it stands
-/// (`rules_element_write`, `rules_at_call`), and one that does fails the
-/// rule for the whole program (ADR-306 D22).
-fn rules_elements_kept(mut walk: BoundsWalk, mut facts: BoundsFacts, list: ref String) {
-    for (root, owner) in walk.rule_roots.clone() {
-        for rule in walk.rules.clone() {
-            let of = f"{root}.{rule.a}"
-            if rule.owner != owner || rule.kind != "index" || (list != "" && list != of) {
-                continue
-            }
-            let zero = walk.arena.int(0)
-            let b = walk.arena.var(length_of(f"{root}.{rule.b}"))
-            let each = walk.arena.var(bounding_element_of(of))
-            let low = walk.arena.ge(each, zero)
-            let high = walk.arena.lt(each, b)
-            bounding_push(walk, facts, low)
-            bounding_push(walk, facts, high)
-        }
-    }
-}
-
 /// **A call in a checked body** (`receiver` a path, or nothing for a free
 /// function), before it runs: a method of the type on `self` must find
 /// every `length` rule holding; a `std` method on a field must keep the
@@ -1088,12 +1269,12 @@ fn rules_elements_kept(mut walk: BoundsWalk, mut facts: BoundsFacts, list: ref S
 /// its frame, or what it is handed where it has none) drops the rules of
 /// that field.
 fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, method: ref String, args: ref Vec[Expr], changed: ref BoundsChanged, facts: ref BoundsFacts, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
-    if !walk.checking || !walk.rule_roots.contains_key("self") {
+    if !walk.checking {
         return
     }
     let on = receiver ?? ""
-    let owner = walk.rule_roots.get("self")?.clone() ?? ""
-    if on == "self" && (context.std_receivers.get(node_key(call)) ?? "") == owner {
+    let typed = context.std_receivers.get(node_key(call))?.clone() ?? ""
+    if on == "self" && walk.rule_roots.contains_key("self") && typed == (walk.rule_roots.get("self")?.clone() ?? "") {
         for (at, rule) in walk.rules.clone().iter().enumerate() {
             if rule.kind == "length" && !rules_same_length(walk, facts, rule, ask) {
                 walk.rule_failed.insert(at)
@@ -1101,48 +1282,87 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
         }
         return
     }
-    for (at, rule) in walk.rules.clone().iter().enumerate() {
-        let a = f"self.{rule.a}"
-        let b = f"self.{rule.b}"
-        if rule.kind == "index" && on == a && rule.a == rule.b {
-            // A list of its own positions: a push puts at most the length
-            // before it, and nothing may take from it.
-            let kept = if method == "push" && args.len() == 1 {
-                rules_up_to(walk, facts, args[0], rule.b, context, program, words, ask)
-            } else {
-                keeps_length(method) && method != "fill"
+    // A method of the type on another value of it keeps its rules: it is
+    // checked itself.
+    if !on.is_empty() && on != "self" && walk.rule_roots.contains_key(on) && typed == (walk.rule_roots.get(on)?.clone() ?? "") {
+        return
+    }
+    // A method on an inner list (`r.a[c].push(x)`, ADR-306 D28).
+    let inner = match call {
+        Expr::MethodCall { receiver: called_on, .. } => if receiver == null { rules_inner_of(called_on, words) } else { null },
+        else => null,
+    }
+    for (root, owner) in walk.rule_roots.clone() {
+        for (at, rule) in walk.rules.clone().iter().enumerate() {
+            if rule.owner != owner {
+                continue
             }
-            if !kept {
+            let a = f"{root}.{rule.a}"
+            let b = f"{root}.{rule.b}"
+            if rule.kind == "index" && on == a && rule.a == rule.b {
+                // A list of its own positions: a push puts at most the length
+                // before it, and nothing may take from it.
+                let kept = if method == "push" && args.len() == 1 {
+                    rules_up_to(walk, facts, args[0], root, rule.b, context, program, words, ask)
+                } else {
+                    keeps_length(method) && method != "fill"
+                }
+                if !kept {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
+            if rule.kind == "index" && on == a {
+                let kept = if method == "push" && args.len() == 1 {
+                    rules_position(walk, facts, args[0], root, rule.b, context, program, words, ask)
+                } else {
+                    rules_takes_away(method) || (keeps_length(method) && method != "fill")
+                }
+                if !kept {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
+            if rule.kind == "inner" && (inner ?? "") == a {
+                let kept = if method == "push" && args.len() == 1 {
+                    rules_position(walk, facts, args[0], root, rule.b, context, program, words, ask)
+                } else {
+                    rules_takes_away(method) || (keeps_length(method) && method != "fill")
+                }
+                if !kept {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
+            if rule.kind == "inner" && on == a {
+                // A whole inner list pushed: each value it holds a position.
+                let kept = if method == "push" && args.len() == 1 {
+                    rules_positions(walk, facts, args[0], root, rule.b, context, program, words, ask)
+                } else {
+                    rules_takes_away(method) || (keeps_length(method) && method != "fill")
+                }
+                if !kept {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
+            if (rule.kind == "index" || rule.kind == "inner") && on == b {
+                if !rules_adds(method) && !keeps_length(method) {
+                    walk.rule_failed.insert(at)
+                }
+                continue
+            }
+            if rule.kind == "length" && (on == a || on == b) {
+                // The walk follows the length; the exits ask for it.
+                continue
+            }
+            if rule.kind == "result" {
+                continue
+            }
+            // A write of the root as a whole lies around `a` and `b` both.
+            if rules_writes(changed, a) || rules_writes(changed, b) {
                 walk.rule_failed.insert(at)
             }
-            continue
-        }
-        if rule.kind == "index" && on == a {
-            let kept = if method == "push" && args.len() == 1 {
-                rules_position(walk, facts, args[0], rule.b, context, program, words, ask)
-            } else {
-                rules_takes_away(method) || (keeps_length(method) && method != "fill")
-            }
-            if !kept {
-                walk.rule_failed.insert(at)
-            }
-            continue
-        }
-        if rule.kind == "index" && on == b {
-            if !rules_adds(method) && !keeps_length(method) {
-                walk.rule_failed.insert(at)
-            }
-            continue
-        }
-        if rule.kind == "length" && (on == a || on == b) {
-            // The walk follows the length; the exits ask for it.
-            continue
-        }
-        if rule.kind == "result" {
-            continue
-        }
-        if rules_writes(changed, a) || rules_writes(changed, b) || rules_writes(changed, "self") {
-            walk.rule_failed.insert(at)
         }
     }
 }
@@ -1212,5 +1432,5 @@ fn rules_after_call(mut walk: BoundsWalk, mut facts: BoundsFacts, call: ref Expr
     if (context.std_receivers.get(node_key(call)) ?? "") != owner {
         return
     }
-    rules_give(walk, facts, on, owner)
+    rules_give(walk, facts, on, owner, false)
 }

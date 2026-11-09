@@ -103,10 +103,10 @@ pub fn project_lower_published(ledger: Ledger, published: &collections::BTreeMap
         let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut kept: Vec<(String, String)> = vec![];
         if found.ensures.is_empty() { kept = project_lower_pairs(std::mem::take(&mut contract.ensures), std::mem::take(&mut contract.from)); }
-        contract.requires = found.requires.to_owned();
-        contract.ensures = found.ensures.to_owned();
-        contract.from = found.from.to_owned();
-        contract.inferred = found.inferred.to_owned();
+        contract.requires = found.requires.copy_owned();
+        contract.ensures = found.ensures.copy_owned();
+        contract.from = found.from.copy_owned();
+        contract.inferred = found.inferred.copy_owned();
         for (ensures, from) in kept.into_iter() {
             contract.ensures.push(ensures);
             contract.from.push(from);

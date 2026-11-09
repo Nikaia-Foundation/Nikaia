@@ -1,0 +1,24 @@
+// An element of a list the function made, bound by a `let` and handed back,
+// in a field or bare: the `let` carries the list as its source (#1368,
+// ADR-283 D23).
+struct Word {
+	name: String,
+	rank: i64,
+}
+
+fn in_a_field(a: String) -> Word {
+	let xs: Vec[String] = [a + " field"]
+	let e = xs[0]
+	return Word { name: e, rank: 1 }
+}
+
+fn bare(a: String) -> String {
+	let xs: Vec[String] = [a + " bare"]
+	let e = xs[0]
+	return e
+}
+
+fn main() throws {
+	println(in_a_field("a").name)
+	println(bare("b"))
+}

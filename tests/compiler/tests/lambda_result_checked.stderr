@@ -1,0 +1,15 @@
+error[NK1104]: This lambda returns `String`, but `fn() -> i64` returns `i64`.
+  --> tests/lambda_result_checked.nika:9:19
+   |
+ 9 | 	println(run(fn { "x" }))
+   |                   ^^^
+   |
+   = help: Make it an `i64`, or change the declaration to `String`.
+error[NK1104]: This lambda returns `bool`, but `fn() -> i64` returns `i64`.
+   --> tests/lambda_result_checked.nika:10:28
+    |
+ 10 | 	let g: fn() -> i64 = fn { true }
+    |                            ^^^^
+    |
+    = help: Make it an `i64`, or change the declaration to `bool`.
+2 type errors

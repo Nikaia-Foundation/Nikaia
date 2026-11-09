@@ -51,7 +51,7 @@ pub fn dump(shapes: &Shapes, ty: &Ty, expr: &str, depth: i64, out: &mut String) 
 }
 
 pub(crate) fn dump_nullable(shapes: &Shapes, inner: &Ty, expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     let held = format!("__nikaia_o{}", depth);
     out.push_str(&format!("{}match &{} {{\n", pad, expr));
     out.push_str(&format!("{}    None => out.push_str(\"(v Option None)\"),\n", pad));
@@ -66,7 +66,7 @@ pub(crate) fn dump_nullable(shapes: &Shapes, inner: &Ty, expr: &str, depth: i64,
 }
 
 pub(crate) fn dump_tuple(shapes: &Shapes, parts: &[Ty], expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     out.push_str(&format!("{}out.push_str(\"(p\");\n", pad));
     let mut at: i64 = 0;
     while ((at) as usize) < parts.len() {
@@ -82,13 +82,13 @@ pub(crate) fn dump_tuple(shapes: &Shapes, parts: &[Ty], expr: &str, depth: i64, 
 pub(crate) const NO_FORM: &str = "a `const` holds an integer, a `bool`, text, a list of those, a tuple of those and a `struct` whose fields are those";
 
 pub(crate) fn text_view(expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     out.push_str(&format!("{}__nikaia_text(&mut out, {});\n", pad, expr));
     None
 }
 
 pub(crate) fn dump_named(shapes: &Shapes, ty: &Ty, name: &str, args: &[Ty], expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     if name == "String" {
         out.push_str(&format!("{}__nikaia_text(&mut out, &{});\n", pad, expr));
         return None;
@@ -122,7 +122,7 @@ pub(crate) fn dump_named(shapes: &Shapes, ty: &Ty, name: &str, args: &[Ty], expr
 }
 
 pub(crate) fn dump_run(shapes: &Shapes, item: &Ty, expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     let held = format!("__nikaia_{}", depth);
     out.push_str(&format!("{}out.push_str(\"(l\");\n", pad));
     out.push_str(&format!("{}for {} in {}.iter() {{\n", pad, held, expr));
@@ -136,24 +136,24 @@ pub(crate) fn dump_run(shapes: &Shapes, item: &Ty, expr: &str, depth: i64, out: 
 
 pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
     let variants = match *nikaia_std::index::get(&shapes.enums, name) { Some(__nikaia_value) => __nikaia_value, None => return uncrossable(ty, NO_FORM) };
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     out.push_str(&format!("{}match {} {{\n", pad, expr));
     for variant in variants.iter() {
         if variant.named { return uncrossable(ty, &format!("`{}::{}` has named fields, and variants with named fields can't be computed at build time yet", name, variant.name)); }
-        let mut bound: Vec<String> = vec![];
-        let mut at: i64 = 0;
+        #[allow(unused_mut)] let mut bound: Vec<String> = vec![];
+        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((at) as usize) < variant.carried.len() {
             bound.push(format!("__nikaia_p{}", at));
             at += 1;
         }
-        let mut pattern = format!("{}::{}", name, variant.name);
+        let mut pattern = format!("{}::{}", name, variant.name); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         if !bound.is_empty() {
-            let joined = bound.join(", ");
+            let joined = nikaia_std::block::Text::from(bound.join(", "));
             pattern = format!("{}::{}({})", name, variant.name, joined);
         }
         out.push_str(&format!("{}    {} => {{\n", pad, pattern));
         out.push_str(&format!("{}        out.push_str(\"(v {} {}\");\n", pad, name, variant.name));
-        let mut i: i64 = 0;
+        let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((i) as usize) < bound.len() {
             out.push_str(&format!("{}        out.push(' ');\n", pad));
             let refused = dump(shapes, nikaia_std::index::get(&variant.carried, (i) as usize), nikaia_std::index::get(&bound, (i) as usize), depth + 2, out);
@@ -170,7 +170,7 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
 pub(crate) fn dump_fields(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, depth: i64, out: &mut String) -> Option<Uncrossable> {
     let fields = match *nikaia_std::index::get(&shapes.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return uncrossable(ty, &format!("`{}` isn't declared in this program with fields, and the value is built into the program field by field", name)) };
     if fields.is_empty() { return uncrossable(ty, &format!("`{}` declares no fields", name)); }
-    let pad = "    ".repeat(nikaia_std::count::of(depth));
+    let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
     out.push_str(&format!("{}out.push_str(\"(t {}\");\n", pad, name));
     for field in fields.iter() {
         out.push_str(&format!("{}out.push_str(\" ({} \");\n", pad, field.name));
@@ -184,5 +184,5 @@ pub(crate) fn dump_fields(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, dept
 
 pub fn is_whole(name: &str) -> bool { name == "i8" || name == "i16" || name == "i32" || name == "i64" || name == "isize" || name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "usize" }
 
-pub(crate) fn uncrossable(ty: &Ty, because: &str) -> Option<Uncrossable> { Some(Uncrossable { ty: ty.text(), because: because.to_string() }) }
+pub(crate) fn uncrossable(ty: &Ty, because: &str) -> Option<Uncrossable> { Some(Uncrossable { ty: ty.text(), because: nikaia_std::block::Text::from(because.to_string()) }) }
 

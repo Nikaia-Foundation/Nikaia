@@ -15,6 +15,8 @@
 //! run at both settings of `user_parallelism`; every refusal is asked of the
 //! checker here.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::LedgerOps;
 
@@ -335,7 +337,7 @@ fn a_slice_handed_to_a_list_says_what_to_declare() {
         found[0]
             .help
             .as_deref()
-            .is_some_and(|h| h.contains("ref Array[i64]")),
+            .is_some_and(|h| h.contains("`Array[i64]`") && !h.contains("ref ")),
         "{:?}",
         found[0].help
     );

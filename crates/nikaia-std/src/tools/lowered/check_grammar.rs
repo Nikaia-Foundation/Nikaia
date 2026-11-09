@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn pattern_named(name: &str, view: bool) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view } }
+pub(crate) fn pattern_named(name: &str, view: bool) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -24,7 +24,7 @@ pub(crate) fn list_of_known(item: Ty) -> Ty {
 // this was written - see `contracts::sync`.
 pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> String {
     match pattern {
-        Pattern::Ref { name, generics, args } => { let name = *name; if generics.is_empty() && args.is_empty() { world.words.resolve(name).to_string() } else { String::from("") } },
+        Pattern::Ref { name, generics, args } => { let name = *name; if generics.is_empty() && args.is_empty() { nikaia_std::block::Text::from(world.words.resolve(name).to_string()) } else { String::from("") } },
         _ => String::from(""),
     }
 }
@@ -65,7 +65,7 @@ pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
 pub fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> Option<CheckFinding> {
-    let entry = world.words.resolve(rule.name).to_string();
+    let entry = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
     let wanted: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -109,7 +109,7 @@ pub(crate) fn grammar_stream_paths(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
         },
         Pattern::Ref { name, generics, args } => {
             let name = *name;
-            let called = world.words.resolve(name).to_string();
+            let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
             if called == "list" && !rules.contains(&called) && generics.is_empty() && args.len() == 2 && grammar_stream_item(world, &nikaia_std::index::get(&args, 0).node, wanted, results, rules) { return 1; }
             return 0;
         },
@@ -125,11 +125,11 @@ pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
         Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); return grammar_stream_item(world, &inner.node, wanted, results, rules); },
         Pattern::Ref { name, generics, .. } => {
             let name = *name;
-            if generics.is_empty() { called = world.words.resolve(name).to_string(); }
+            if generics.is_empty() { called = nikaia_std::block::Text::from(world.words.resolve(name).to_string()); }
         },
         Pattern::Call { name, .. } => {
             let name = *name;
-            called = world.words.resolve(name).to_string();
+            called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         },
         _ => { },
     }
@@ -150,7 +150,7 @@ impl CheckState {
             Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); self.pattern_type(world, &pat.node, rules) },
             Pattern::Choice(alternatives) => self.choice_type(world, alternatives, rules),
             Pattern::Ref { name, generics, args } => { let name = *name; self.reference_type(world, name, generics, args, rules) },
-            Pattern::Call { name, .. } => { let name = *name; nikaia_std::index::or(match *nikaia_std::index::get(&self.rule_results, &(world.words.resolve(name).to_string())) {
+            Pattern::Call { name, .. } => { let name = *name; nikaia_std::index::or(match *nikaia_std::index::get(&self.rule_results, &(nikaia_std::block::Text::from(world.words.resolve(name).to_string()))) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || Ty::Unknown) },
@@ -192,7 +192,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn reference_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
-        let called = world.words.resolve(name).to_string();
+        let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         if rules.contains(&called) {
             return nikaia_std::index::or(match *nikaia_std::index::get(&self.rule_results, &called) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -200,7 +200,7 @@ impl CheckState {
             }, || Ty::Unknown);
         }
         if called == "dec" && generics.len() == 1 {
-            let written = world.words.resolve(nikaia_std::index::get(&generics, 0).name).to_string();
+            let written = nikaia_std::block::Text::from(world.words.resolve(nikaia_std::index::get(&generics, 0).name).to_string());
             if nikaia_std::index::get(&generics, 0).generics.is_empty() && an_offered_number_name(&written) { return pattern_named(&written, false); }
             return Ty::Unknown;
         }
@@ -230,7 +230,7 @@ impl CheckState {
                 let pat = nikaia_std::boxed::open(pat); let name = *name;
                 let ty = self.pattern_type(world, &pat.node, rules);
                 self.next_binding = self.next_binding + 1;
-                out.push(CheckLocal::free(world.words.resolve(name).to_string(), ty, self.next_binding));
+                out.push(CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(name).to_string()), ty, self.next_binding));
                 let inner = grammar_ungrouped(&pat.node);
                 match inner {
                     Pattern::Ref { args, .. } if grammar_a_span_call(world, inner, rules) => { for bound in self.bindings_of(world, &nikaia_std::index::get(&args, 0).node, rules) { out.push(bound); } },
@@ -255,7 +255,7 @@ pub(crate) fn grammar_position_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     match pattern {
         Pattern::Ref { name, generics, args } => {
             let name = *name;
-            let called = world.words.resolve(name).to_string();
+            let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
             let built_in = !rules.contains(&called) && generics.is_empty();
             if built_in && (called == "span" && args.len() == 1 || called == "here" && args.is_empty()) { return called; }
             grammar_position_in_any(world, args, rules)
@@ -328,11 +328,11 @@ impl CheckState {
         let mut out: Vec<CheckLocal> = vec![];
         for arg in rule.args.iter() {
             self.next_binding = self.next_binding + 1;
-            out.push(CheckLocal::free(world.words.resolve(arg.name).to_string(), host.type_of(&arg.ty), self.next_binding));
+            out.push(CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string()), host.type_of(&arg.ty), self.next_binding));
         }
         for option in rule.config.iter() {
             self.next_binding = self.next_binding + 1;
-            out.push(CheckLocal::free(world.words.resolve(option.name).to_string(), host.type_of(&option.ty), self.next_binding));
+            out.push(CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(option.name).to_string()), host.type_of(&option.ty), self.next_binding));
         }
         out
     }
@@ -347,28 +347,28 @@ impl CheckState {
             },
             Pattern::Bind { name, pat } => {
                 let pat = nikaia_std::boxed::open(pat); let name = *name;
-                let mut out = scope.to_owned();
+                let mut out = scope.copy_owned();
                 match &pat.node {
                     Pattern::Ref { args, .. } if grammar_a_text_call(world, &pat.node, rules) => { for arg in args.iter() { out = self.grammar_values(world, host, gram, arg, rules, out); } },
-                    _ => { self.grammar_values(world, host, gram, pat, rules, scope.to_owned()); },
+                    _ => { self.grammar_values(world, host, gram, pat, rules, scope.copy_owned()); },
                 }
                 let ty = self.pattern_type(world, &pat.node, rules);
                 self.next_binding = self.next_binding + 1;
-                out.push(CheckLocal::free(world.words.resolve(name).to_string(), ty, self.next_binding));
+                out.push(CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(name).to_string()), ty, self.next_binding));
                 return out;
             },
             Pattern::Choice(parts) => {
-                for part in parts.iter() { self.grammar_values(world, host, gram, part, rules, scope.to_owned()); }
+                for part in parts.iter() { self.grammar_values(world, host, gram, part, rules, scope.copy_owned()); }
                 return scope;
             },
             Pattern::Group(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
-                self.grammar_values(world, host, gram, inner, rules, scope.to_owned());
+                self.grammar_values(world, host, gram, inner, rules, scope.copy_owned());
                 return scope;
             },
             Pattern::Repeat { pat, .. } => {
                 let pat = nikaia_std::boxed::open(pat);
-                self.grammar_values(world, host, gram, pat, rules, scope.to_owned());
+                self.grammar_values(world, host, gram, pat, rules, scope.copy_owned());
                 return scope;
             },
             Pattern::Ref { args, .. } if grammar_a_text_call(world, &pattern.node, rules) => {
@@ -378,14 +378,14 @@ impl CheckState {
             },
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
-                for arg in args.iter() { self.grammar_values(world, host, gram, arg, rules, scope.to_owned()); }
-                let called = world.words.resolve(name).to_string();
+                for arg in args.iter() { self.grammar_values(world, host, gram, arg, rules, scope.copy_owned()); }
+                let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 if args.is_empty() && rules.contains(&called) { for rule in gram.rules.iter() { if rule.name == name && !rule.args.is_empty() { self.findings.push(check_refusal("NK1101", &pattern.span, format!("`{}` takes {} before the `;`, but none is given.", called, counted(rule.args.len() as i64, "value")), vec![String::from("A rule declared with values is called with them, as a function is (ADR-grammar-1 D2).")], Some(format!("Write `{}(…)` with a value for each.", called)))); } } }
                 return scope;
             },
             Pattern::Counted { pat, low, high, .. } => {
                 let pat = nikaia_std::boxed::open(pat);
-                self.grammar_values(world, host, gram, pat, rules, scope.to_owned());
+                self.grammar_values(world, host, gram, pat, rules, scope.copy_owned());
                 let whole = pattern_named("i64", false);
                 self.grammar_fixed(world, host, low, &whole.clone(), &scope, &pattern.span, "A bound", String::from("A bound counts repetitions: write an `i64`, such as `n` or `n - 1`."));
                 match high {
@@ -397,8 +397,8 @@ impl CheckState {
             Pattern::Choose { .. } => { return scope; },
             Pattern::Members { key, sep, .. } => {
                 let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep);
-                self.grammar_values(world, host, gram, key, rules, scope.to_owned());
-                self.grammar_values(world, host, gram, sep, rules, scope.to_owned());
+                self.grammar_values(world, host, gram, key, rules, scope.copy_owned());
+                self.grammar_values(world, host, gram, sep, rules, scope.copy_owned());
                 return scope;
             },
             Pattern::Guard { cond, .. } => {
@@ -417,7 +417,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: String) {
-        self.scope.push(scope.to_owned());
+        self.scope.push(scope.copy_owned());
         let mut word: String = String::from("bound");
         if what == "A guard" { word = String::from("guard"); }
         self.repeats.push(CheckRepeats { frame: self.scope.len() as i64, what: word, revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened: -1, held: vec![] });
@@ -431,7 +431,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str) {
-        self.scope.push(scope.to_owned());
+        self.scope.push(scope.copy_owned());
         let found = check_core_expr(&mut *self, world, host, value, span);
         self.scope.pop();
         self.expect_type(world, &found, &want, span, "argument", &|was, wanted| { format!("{} here is `{}`, but it has to be `{}`.", what, was, wanted) });
@@ -440,8 +440,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn grammar_call<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, name: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], scope: &[CheckLocal], span: &Span) {
-        let called = world.words.resolve(name).to_string();
-        let grammar_name = world.words.resolve(gram.name).to_string();
+        let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
+        let grammar_name = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
         for rule in gram.rules.iter() {
             if rule.name != name { continue; }
             if (args.len() as i64) != rule.args.len() as i64 { self.findings.push(check_refusal("NK1101", span, format!("`{}` takes {} before the `;`, but you passed {}.", called, counted(rule.args.len() as i64, "value"), args.len() as i64), vec![String::from("A rule takes its values as a function takes its arguments (ADR-grammar-1 D2).")], Some(String::from("Give one value for each, by position; an option goes after the `;` by name.")))); }
@@ -453,7 +453,7 @@ impl CheckState {
                 }
             }
             for given in config.iter() {
-                let option = world.words.resolve(given.name).to_string();
+                let option = nikaia_std::block::Text::from(world.words.resolve(given.name).to_string());
                 let mut found = false;
                 for declared in rule.config.iter() {
                     if declared.name == given.name {

@@ -42,7 +42,7 @@ pub fn bm_matched(words: &winnow_grammar::InternerContext, rules: &collections::
     match pattern {
         Pattern::Seq(parts) => { for part in parts.iter() { bm_matched(words, rules, &part.node, found); } },
         Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); bm_matched(words, rules, &inner.node, found); },
-        Pattern::Bind { name, pat } => { let pat = nikaia_std::boxed::open(pat); let name = *name; bm_bound(words, rules, &words.resolve(name).to_string(), &pat.node, found); },
+        Pattern::Bind { name, pat } => { let pat = nikaia_std::boxed::open(pat); let name = *name; bm_bound(words, rules, &nikaia_std::block::Text::from(words.resolve(name).to_string()), &pat.node, found); },
         _ => { },
     }
 }
@@ -50,7 +50,7 @@ pub fn bm_matched(words: &winnow_grammar::InternerContext, rules: &collections::
 pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collections::BTreeSet<String>, bound_name: &str, what: &Pattern, found: &mut BmMatched) {
     let class = bm_class(words, rules, what);
     if class.is_some() {
-        found.classes.insert(bound_name.to_string(), nikaia_std::index::or(class, || bm_range(0, 0).into()));
+        found.classes.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::index::or(class, || bm_range(0, 0).into()));
         return;
     }
     match what {
@@ -60,8 +60,8 @@ pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collecti
             if each.is_some() {
                 let counted = bm_counted(rep);
                 if counted.lo < 0 { return; }
-                found.text_lengths.insert(bound_name.to_string(), Range { lo: Some(counted.lo), hi: counted.hi });
-                found.text_classes.insert(bound_name.to_string(), nikaia_std::index::or(each, || bm_range(0, 0).into()));
+                found.text_lengths.insert(nikaia_std::block::Text::from(bound_name.to_string()), Range { lo: Some(counted.lo), hi: counted.hi });
+                found.text_classes.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::index::or(each, || bm_range(0, 0).into()));
                 return;
             }
         },
@@ -89,7 +89,7 @@ pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collecti
                 top = top * 10;
                 times += 1;
             }
-            found.given.insert(bound_name.to_string(), bm_range(0, top - 1));
+            found.given.insert(nikaia_std::block::Text::from(bound_name.to_string()), bm_range(0, top - 1));
         },
         _ => { },
     }
@@ -127,15 +127,15 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
         for (key, contract) in ledger.functions.iter() {
             if contract.ensures.is_empty() || out.contains_key(key) { continue; }
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
-                    params.push(name.to_string());
+                    params.push(nikaia_std::block::Text::from(name.to_string()));
                     chars.push(bm_char(ty));
                 }
             }
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             names.extend(params.iter().cloned());
             names.insert(String::from("result"));
             let mut conditions: Vec<Vec<SolverTerm>> = vec![];
@@ -144,7 +144,7 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
                 if !nodes.is_empty() { conditions.push(nodes); }
             }
             if conditions.is_empty() { continue; }
-            out.insert(key.to_string(), Ensured { params, chars, options: vec![], conditions });
+            out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params, chars, options: vec![], conditions });
         }
     }
     out
@@ -157,19 +157,19 @@ pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTree
         let ledger = *ledger;
         for (key, contract) in ledger.functions.iter() {
             if contract.requires.is_empty() || seen.contains(key) { continue; }
-            seen.insert(key.to_string());
+            seen.insert(nikaia_std::block::Text::from(key.to_string()));
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
-                    params.push(name.to_string());
+                    params.push(nikaia_std::block::Text::from(name.to_string()));
                     chars.push(bm_char(ty));
                 }
             }
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             for name in params.iter() {
-                names.insert(name.to_string());
+                names.insert(nikaia_std::block::Text::from(name.to_string()));
                 names.insert(length_of(name));
             }
             let mut conditions: Vec<Vec<SolverTerm>> = vec![];
@@ -179,7 +179,7 @@ pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTree
                 if nodes.is_empty() { whole = false; }
                 conditions.push(nodes);
             }
-            if whole { out.insert(key.to_string(), Ensured { params, chars, options: vec![], conditions }); }
+            if whole { out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params, chars, options: vec![], conditions }); }
         }
     }
     out
@@ -192,20 +192,20 @@ pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<
         for (key, contract) in ledger.functions.iter() {
             if contract.ensures_each.is_empty() || out.contains_key(key) { continue; }
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
-                    params.push(name.to_string());
+                    params.push(nikaia_std::block::Text::from(name.to_string()));
                     chars.push(bm_char(ty));
-                    names.insert(name.to_string());
+                    names.insert(nikaia_std::block::Text::from(name.to_string()));
                 }
             }
-            let mut options: Vec<(String, String)> = vec![];
+            let mut options: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             for option in signature.config.iter() {
-                options.push((option.name.to_string(), option.default.to_string()));
-                names.insert(option.name.to_string());
+                options.push((nikaia_std::block::Text::from(option.name.to_string()), nikaia_std::block::Text::from(option.default.to_string())));
+                names.insert(nikaia_std::block::Text::from(option.name.to_string()));
             }
             names.insert(String::from("item"));
             names.insert(String::from("self.len()"));
@@ -215,7 +215,7 @@ pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<
                 if !nodes.is_empty() { conditions.push(nodes); }
             }
             if conditions.is_empty() { continue; }
-            out.insert(key.to_string(), Ensured { params, chars, options, conditions });
+            out.insert(nikaia_std::block::Text::from(key.to_string()), Ensured { params, chars, options, conditions });
         }
     }
     out
@@ -230,7 +230,7 @@ pub fn bm_changing_methods(ledgers: &[&Ledger]) -> collections::BTreeSet<String>
             let mut method = false;
             for (name, _) in signature.params.iter() { if name == "self" { method = true; } }
             if !method { continue; }
-            for name in signature.mutable.iter() { if name != "self" { out.insert(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()); } }
+            for name in signature.mutable.iter() { if name != "self" { out.insert(nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string())); } }
         }
     }
     out

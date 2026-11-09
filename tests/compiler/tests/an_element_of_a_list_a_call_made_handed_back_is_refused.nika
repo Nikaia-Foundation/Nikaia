@@ -1,0 +1,16 @@
+// An element of a list a call made, without a type, handed back as text:
+// the tether cannot lower it, and says so with NK2304 rather than leave it
+// to rustc (#1368).
+fn words(a: String) -> Vec[String] {
+	let xs: Vec[String] = [a + " word"]
+	return xs
+}
+
+fn first(a: String) -> String {
+	let xs = words(a)
+	return xs[0]
+}
+
+fn main() throws {
+	println(first("a"))
+}

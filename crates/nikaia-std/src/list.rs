@@ -3,13 +3,24 @@
 /// `xs.map fn { … }` (Kap 5.3) is a method on the list itself, not a step in an
 /// iterator pipeline, so it is one here too.
 pub trait ListExt<T> {
+    /// The list the map builds: a list of the same kind (#490).
+    type Mapped<U>;
     /// Every element, transformed. Takes the list, because a mapped list
     /// replaces the one it was built from.
-    fn map<U>(self, f: impl FnMut(T) -> U) -> Vec<U>;
+    fn map<U>(self, f: impl FnMut(T) -> U) -> Self::Mapped<U>;
 }
 
 impl<T> ListExt<T> for Vec<T> {
+    type Mapped<U> = Vec<U>;
     fn map<U>(self, f: impl FnMut(T) -> U) -> Vec<U> {
+        self.into_iter().map(f).collect()
+    }
+}
+
+/// A block's list is mapped into another, outside every block (D9, #490).
+impl<T> ListExt<T> for crate::block::List<T> {
+    type Mapped<U> = crate::block::List<U>;
+    fn map<U>(self, f: impl FnMut(T) -> U) -> crate::block::List<U> {
         self.into_iter().map(f).collect()
     }
 }
@@ -30,8 +41,8 @@ pub fn contains<T: AsRef<str>>(items: &[T], value: &str) -> bool {
 /// characters. `collect` over `Chars` asks for a quarter of that and grows,
 /// which was the largest single cost of reading a ledger in Nikaia (ADR-294
 /// step (c)).
-pub fn chars(text: std::str::Chars<'_>) -> Vec<char> {
-    let mut all = Vec::with_capacity(text.as_str().len());
+pub fn chars(text: std::str::Chars<'_>) -> crate::block::List<char> {
+    let mut all = crate::block::List::with_capacity(text.as_str().len());
     all.extend(text);
     all
 }

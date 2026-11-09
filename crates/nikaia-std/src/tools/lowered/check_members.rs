@@ -4,8 +4,8 @@
 pub(crate) fn mem_offered(head: &str) -> bool { head == "i32" || head == "i64" || head == "u8" || head == "u32" || head == "u64" || head == "f32" || head == "f64" || head == "bool" || head == "char" || head == "scalar" || head == "String" || head == "str" || head == "Vec" || head == "HashMap" || head == "HashSet" || head == "Array" || head == "Seq" || head == "Par" }
 
 pub(crate) fn mem_member_under(key: &str, prefix: &str) -> String {
-    if !key.starts_with(prefix) { return String::from(""); }
-    let rest = nikaia_std::index::or(key.strip_prefix(prefix), || "").to_string();
+    if !key.starts_with(AsRef::<str>::as_ref(prefix)) { return String::from(""); }
+    let rest = nikaia_std::block::Text::from(nikaia_std::index::or(key.strip_prefix(AsRef::<str>::as_ref(prefix)), || "").to_string());
     if rest.contains("::") { return String::from(""); }
     rest
 }
@@ -79,7 +79,7 @@ pub(crate) fn mem_a_unit_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 pub(crate) fn mem_listed(names: &[String], before: &str) -> String {
     let mut shown: Vec<String> = vec![];
     for name in names.iter() { shown.push(format!("`{}{}`", before, name)); }
-    shown.join(", ")
+    nikaia_std::block::Text::from(shown.join(", "))
 }
 
 impl CheckState {
@@ -101,7 +101,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_member_is_refused(&mut self, head: &str, member: &str, method: bool, members: &[String], span: &Span) {
-        let mut shown: String = head.to_string();
+        let mut shown: String = nikaia_std::block::Text::from(head.to_string());
         if head == "str" { shown = String::from("String"); }
         let mut written: String = format!("{}::{}", head, member);
         if method { written = format!(".{}()", member); }
@@ -134,7 +134,7 @@ impl CheckState {
             return;
         }
         let mut named: Vec<String> = vec![];
-        for field in nikaia_std::index::or(fields, || vec![].into()) { named.push(field.name.to_string()); }
+        for field in nikaia_std::index::or(fields, || vec![].into()) { named.push(nikaia_std::block::Text::from(field.name.to_string())); }
         let listed = mem_listed(&named, "");
         let mut help: String = format!("If `{}` should be a method, add it in `impl {} {{ … }}`.", member, ty);
         let near = nearest_name(member, &named);
@@ -144,9 +144,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_variant_nothing_declares(&mut self, ty: &str, member: &str, span: &Span) {
-        let mut variants: Vec<String> = vec![];
-        let held = match *nikaia_std::index::get(&self.enums, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for variant in held.iter() { variants.push(variant.to_string()); }
+        #[allow(unused_mut)] let mut variants: Vec<String> = vec![];
+        let held = match *nikaia_std::index::get(&self.enums, ty) { Some(__nikaia_value) => __nikaia_value, None => return }; #[allow(unused_mut, clippy::redundant_locals)] let mut variants = variants;
+        for variant in held.iter() { variants.push(nikaia_std::block::Text::from(variant.to_string())); }
         let listed = mem_listed(&variants, &format!("{}::", ty));
         let near = nearest_name(member, &variants);
         let mut help: String = format!("Write one of {}.", listed);
@@ -157,8 +157,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         if path.len() != 2 { return; }
-        let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string();
-        let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string();
+        let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
+        let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string());
         if self.is_variant(&ty, &member) { return; }
         self.a_member_this_type_does_not_have(world, &ty, &member, span);
     }
@@ -166,8 +166,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
         if path.len() != 2 { return; }
-        let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string();
-        let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string();
+        let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
+        let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string());
         let key = format!("{}::{}", ty, member);
         if !self.variant_parts.contains_key(&key) { return; }
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {
@@ -177,18 +177,18 @@ impl CheckState {
         if declared == written { return; }
         let mut blanks: Vec<&'static str> = vec![];
         while (blanks.len() as i64) < declared { blanks.push("_"); }
-        let shape = blanks.join(", ");
-        self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s), but the variant carries {}.", key, written, declared), vec!["A pattern names every part of a positional variant, in order; `_` ignores one.".to_string()], Some(format!("Write `{}({})` and bind the parts you need.", key, shape))));
+        let shape = nikaia_std::block::Text::from(blanks.join(", "));
+        self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s), but the variant carries {}.", key, written, declared), vec![nikaia_std::block::Text::from("A pattern names every part of a positional variant, in order; `_` ignores one.")], Some(format!("Write `{}({})` and bind the parts you need.", key, shape))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_rest_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
         if !self.one_rest_at_most(parts, span) || path.len() != 2 { return; }
-        let ty = world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string();
-        let member = world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string();
+        let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
+        let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string());
         let key = format!("{}::{}", ty, member);
         if self.is_variant(&ty, &member) && !self.variant_parts.contains_key(&key) && !self.structs.contains_key(&key) {
-            self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `..` in `{}(..)` has nothing to stand for.", key, key), vec![String::from("`..` matches the values of a variant that has some.")], Some(format!("Write `{}`.", key).to_string())));
+            self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `..` in `{}(..)` has nothing to stand for.", key, key), vec![String::from("`..` matches the values of a variant that has some.")], Some(nikaia_std::block::Text::from(format!("Write `{}`.", key).to_string()))));
             return;
         }
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {

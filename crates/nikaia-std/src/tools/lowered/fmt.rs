@@ -348,17 +348,17 @@ pub(crate) struct FmtShape {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
-    let mut stack: Vec<String> = vec![];
-    let mut under: i64 = 0;
-    let mut bars = 0;
+    #[allow(unused_mut)] let mut stack: Vec<String> = vec![];
+    let mut under: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
+    let mut bars = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
     let mut depth: Vec<i64> = vec![];
     let mut barred: Vec<bool> = vec![];
     for k in 0..toks.len() as i64 {
         let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
         let bar = t.kind == FmtKind::Punct && t.text == "|";
-        let top = nikaia_std::index::or(stack.last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()).to_string();
+        let top = nikaia_std::block::Text::from(nikaia_std::index::or(stack.last().map(|__nikaia_found| nikaia_std::block::Text::from(__nikaia_found.to_string())), || "".into()).to_string());
         if t.kind == FmtKind::Close {
-            while !stack.is_empty() && nikaia_std::index::or(stack.last().map(|__nikaia_found| __nikaia_found.to_string()), || "".into()) == "|" {
+            while !stack.is_empty() && nikaia_std::index::or(stack.last().map(|__nikaia_found| nikaia_std::block::Text::from(__nikaia_found.to_string())), || "".into()) == "|" {
                 stack.pop();
                 bars -= 1;
             }
@@ -373,7 +373,7 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
         } else {
             depth.push(stack.len() as i64 - under);
             if t.kind == FmtKind::Open {
-                stack.push(t.text.to_string());
+                stack.push(nikaia_std::block::Text::from(t.text.to_string()));
                 barred.push(bars > 0);
             } else if bar && fmt_bar_opens(toks, k) {
                 stack.push(String::from("|"));
@@ -535,7 +535,7 @@ impl FmtPrinter {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn flush(&mut self, indent: i64) {
-        let held = self.held.to_owned();
+        let held = self.held.copy_owned();
         self.held = vec![];
         for line in held.iter() { self.write(line, indent); }
     }
@@ -563,7 +563,7 @@ impl FmtPrinter {
         }
         let last = fmt_last_code(&line.toks);
         let end = (*nikaia_std::index::get(&line.toks, nikaia_std::index::at(last))).clone();
-        let mut toks = line.toks.to_owned();
+        let mut toks = line.toks.copy_owned();
         let n = self.frames.len() as i64;
         if n > 0 && nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).commas > 0 && self.next_closes() {
             let open = end.kind == FmtKind::Open || end.text == "," || end.text == ";";
@@ -574,8 +574,8 @@ impl FmtPrinter {
             }
         }
         let glob = end.text == "*" && last > 0 && nikaia_std::index::get(&line.toks, nikaia_std::index::at(last - 1)).text == "::";
-        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(&end.text.to_string()) && !glob;
-        self.tail = end.text.to_string();
+        self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(&nikaia_std::block::Text::from(end.text.to_string())) && !glob;
+        self.tail = nikaia_std::block::Text::from(end.text.to_string());
         self.tail_kind = end.kind;
         self.write(&FmtLine { toks, blank: line.blank }, indent);
     }
@@ -592,20 +592,20 @@ impl FmtPrinter {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn reshape(&self, line: &FmtLine, indent: i64) -> Vec<FmtLine> {
-        let toks = line.toks.to_owned();
+        let toks = line.toks.copy_owned();
         let n = toks.len() as i64;
         let last = fmt_last_code(&toks);
         let mut opens: Vec<i64> = vec![];
         let mut kinds: Vec<String> = vec![];
         for f in self.frames.iter() {
             opens.push(-1);
-            kinds.push(f.open.to_string());
+            kinds.push(nikaia_std::block::Text::from(f.open.to_string()));
         }
         for k in 0..n {
             let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
             if t.kind == FmtKind::Open {
                 opens.push(k);
-                kinds.push(t.text.to_string());
+                kinds.push(nikaia_std::block::Text::from(t.text.to_string()));
             } else if t.kind == FmtKind::Close {
                 if !opens.is_empty() {
                     opens.pop();
@@ -734,7 +734,7 @@ pub(crate) fn fmt_cut(line: &FmtLine, cuts: &[i64]) -> Vec<FmtLine> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> {
-    let toks = line.toks.to_owned();
+    let toks = line.toks.copy_owned();
     let shape = fmt_shape(&toks);
     let inside = *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(open)) + 1;
     let block = nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "{";
@@ -757,7 +757,7 @@ pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> 
     }
     if !item.is_empty() { items.push(item); }
     for each in items.iter() {
-        let mut toks_of = each.to_owned();
+        let mut toks_of = each.copy_owned();
         let end = (*nikaia_std::index::get(&toks_of, nikaia_std::index::at(toks_of.len() as i64 - 1))).clone();
         if listed && end.text != "," && nikaia_std::index::get(&toks_of, 0).text != ".." { toks_of.push(fmt_comma()); }
         pieces.push(FmtLine { toks: toks_of, blank: false });

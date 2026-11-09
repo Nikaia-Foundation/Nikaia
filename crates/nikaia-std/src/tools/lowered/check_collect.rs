@@ -37,7 +37,7 @@ impl CheckState {
                         VariantFields::Named(fields) => {
                             let mut held: Vec<FieldContract> = vec![];
                             for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty), public: true, default: String::from(""), attributes: vec![] }); }
-                            self.variant_owner.insert(key.to_string(), owner.to_string());
+                            self.variant_owner.insert(nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(owner.to_string()));
                             self.structs.insert(key, held);
                         },
                         VariantFields::Tuple(types) => {
@@ -52,16 +52,16 @@ impl CheckState {
             Item::Struct { name, generics, fields, .. } => {
                 let name = *name;
                 if generics.is_empty() { return; }
-                let mut order: Vec<String> = vec![];
-                let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+                #[allow(unused_mut)] let mut order: Vec<String> = vec![];
+                let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
                 for generic in generics.iter() {
                     order.push(other.text(generic.name));
                     parameters.insert(other.text(generic.name));
                 }
                 let mut held: Vec<FieldContract> = vec![];
                 for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty).parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] }); }
-                let named = other.text(name);
-                self.struct_parameters.insert(named.to_string(), order);
+                let named = other.text(name); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
+                self.struct_parameters.insert(nikaia_std::block::Text::from(named.to_string()), order);
                 self.structs.insert(named, held);
             },
             _ => { },
@@ -70,8 +70,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
-        let mut order: Vec<String> = vec![];
-        let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+        #[allow(unused_mut)] let mut order: Vec<String> = vec![];
+        let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
         for generic in generics.iter() {
             order.push(world.here.text(generic.name));
             parameters.insert(world.here.text(generic.name));
@@ -82,9 +82,9 @@ impl CheckState {
             let ty = self.collect_declared(world, beside, &field.ty, &field.span);
             held.push(FieldContract { name: world.here.text(field.name), ty: ty.parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] });
         }
-        let own = world.here.text(name);
+        let own = world.here.text(name); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
         self.nameable(&own, span, "a struct");
-        if !order.is_empty() { self.struct_parameters.insert(own.to_string(), order); }
+        if !order.is_empty() { self.struct_parameters.insert(nikaia_std::block::Text::from(own.to_string()), order); }
         self.structs.insert(own, held);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -102,7 +102,7 @@ impl CheckState {
                         held.push(FieldContract { name: world.here.text(field.name), ty, public: true, default: String::from(""), attributes: vec![] });
                     }
                     let key = format!("{}::{}", own, world.here.text(variant.name));
-                    self.variant_owner.insert(key.to_string(), own.to_string());
+                    self.variant_owner.insert(nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(own.to_string()));
                     self.structs.insert(key, held);
                 },
                 _ => { },
@@ -125,7 +125,7 @@ impl CheckState {
                 VariantFields::Named(fields) => { for field in fields.iter() { payloads.push(written_ty(world.here.words, world.here.aliases, &field.ty)); } },
             }
         }
-        self.enum_payloads.insert(own.to_string(), payloads);
+        self.enum_payloads.insert(nikaia_std::block::Text::from(own.to_string()), payloads);
         self.enums.insert(own, names);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -140,7 +140,7 @@ impl CheckState {
             }
         }
         self.collect_library_enums(world);
-        self.parts_beside = world.parts_beside.to_owned();
+        self.parts_beside = world.parts_beside.copy_owned();
         for item in world.here.items.iter() {
             match &item.node {
                 Item::Fn { .. } => { self.bounds_declared_by(world, &item.node, None); },

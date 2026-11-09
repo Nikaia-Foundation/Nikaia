@@ -20,15 +20,15 @@ impl CheckState {
         match part {
             Expr::Variable(written, _) => {
                 let written = *written;
-                name = world.words.resolve(written).to_string();
+                name = nikaia_std::block::Text::from(world.words.resolve(written).to_string());
             },
             Expr::Path(parts, _) => {
                 let mut texts: Vec<String> = vec![];
                 for one in parts.iter() {
                     let one = *one;
-                    texts.push(world.words.resolve(one).to_string());
+                    texts.push(nikaia_std::block::Text::from(world.words.resolve(one).to_string()));
                 }
-                name = texts.join("::");
+                name = nikaia_std::block::Text::from(texts.join("::"));
             },
             _ => { return None; },
         }
@@ -44,10 +44,10 @@ impl CheckState {
     pub fn a_field_that_is_code(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol) -> Option<Ty> {
         let mut name: String = String::from("");
         match on {
-            Ty::Named { name: written, .. } => { name = written.to_string(); },
+            Ty::Named { name: written, .. } => { name = nikaia_std::block::Text::from(written.to_string()); },
             _ => { return None; },
         }
-        let method = world.words.resolve(method).to_string();
+        let method = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if resolve_call(world, &format!("{}::{}", name, method)).is_some() { return None; }
         let fields = match self.fields_of(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for field in fields.iter() {
@@ -72,9 +72,9 @@ impl CheckState {
             _ => { },
         }
         let ty = match integer_named(&wanted) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let keys = self.flow.literal_receivers.to_owned();
+        let keys = self.flow.literal_receivers.copy_owned();
         self.flow.literal_receivers = vec![];
-        for key in keys.iter() { if integer_fits(&key.1, &ty) { self.facts.unsigned_literals.insert(key.0, ty.to_string()); } }
+        for key in keys.iter() { if integer_fits(&key.1, &ty) { self.facts.unsigned_literals.insert(key.0, nikaia_std::block::Text::from(ty.to_string())); } }
     }
 }
 

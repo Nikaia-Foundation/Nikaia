@@ -24,6 +24,8 @@
 //!
 //! The finding is in [`docs/mutex-floor.md`](../../../docs/mutex-floor.md).
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 
 use nikaia::check::MethodCalls;
@@ -98,9 +100,9 @@ fn sync_of(source: &str, library: &Ledger, resolved: bool) -> BTreeMap<String, S
         for name in ["tally", "outer"] {
             let mut calls = MethodCalls::empty();
             if name == "tally" {
-                calls.resolved.insert("SharedMut::access".to_string());
+                calls.resolved.insert("SharedMut::access".to_text());
             }
-            methods.insert(name.to_string(), calls);
+            methods.insert(name.to_text(), calls);
         }
     }
     sync::infer(&mut ledger, &[&parsed], library, &methods);

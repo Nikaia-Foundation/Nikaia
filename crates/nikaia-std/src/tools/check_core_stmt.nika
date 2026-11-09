@@ -300,6 +300,17 @@ fn check_core_stmt_a_name_or_field(value: ref Expr) -> bool sync {
     }
 }
 
+/// A list or an array of its own under a view of a run of its elements.
+fn check_core_stmt_a_whole_run_viewed(found: ref Ty, want: ref Ty) -> bool sync {
+    return match want {
+        Ty::Pointed { item, slice, mutable } => slice && !mutable && !found.is_a_view() && match found {
+            Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && args.len() >= 1 && args[0].fits(item),
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// A call of a function or a method.
 fn check_core_stmt_a_call(value: ref Expr) -> bool sync {
     return match value {
@@ -878,6 +889,10 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         let t: ref Type = ty ?? return check_core_stmt_unit()
         let want = written_ty(world.words, world.here.aliases, t)
         seen_through = !found.fits(want) && state.fits_through_deref(world, found, want)
+        // **A whole list or array under a `let` declared a view of a run is
+        // lent** (ADR-views-3 D11, #1362): `let c: Array[T] = v` cannot own,
+        // having no length, so it looks at what `v` holds and `v` stays.
+        seen_through = seen_through || check_core_stmt_a_whole_run_viewed(found, want)
     }
     // **An element or a field read off a place under a `ref T` is a view of
     // it** (ADR-views-3 D5, #613).
@@ -1009,7 +1024,16 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             bound = met ?? found.clone()
         } else if found == a_string_type() {
             let lent = state.lent_arms_bound(world, value)
+            let none_lent = lent == null
             bound = lent ?? found.clone()
+            // **A plain `let` over a `String` place of a local is a view of
+            // it** (ADR-views-3 D5, #1404), as one read through a `ref`
+            // parameter is (#839): the emitter lends it (`lent_lets`), so a
+            // keeper handed it is refused here with a `.clone()` help instead
+            // of by the language below.
+            if none_lent && !mutable && !moved_out && names.len() == 1 && shape.len() == 0 && check_core_stmt_a_place(state, value) && state.facts.lent_lets.contains(span.start as i64) {
+                bound = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+            }
         } else {
             bound = found.clone()
         }
@@ -1241,7 +1265,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **And typed as one**: a `V?` read out of a map is an option of a view.
-    if of_a_map {
+    // **Unless a word by its kind is copied out of it** (ADR-279 D8, #1460):
+    // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
+    let word_copied = match bound {
+        Ty::Nullable(inner) => !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
+        else => false,
+    }
+    if of_a_map && !word_copied {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
@@ -1330,6 +1360,9 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // mut` element is, never copied behind the reader's back.
     if !mutable && element_read != null && (state.does_not_copy(world, local.ty) || viewed_past_a_jump) {
         local.view_of = (element_read ?? "").clone()
+    }
+    if !mutable && ty == null && names.len() == 1 && shape.len() == 0 && state.an_element_of_a_made_list(world, value) {
+        state.flow.made_elements.insert(local.id)
     }
     local.constant = constant
     local.lent = read_through_a_jump
@@ -2004,6 +2037,37 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     if shape.len() > 0 {
         elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
     }
+    // **A `for` over whole numbers binds a number of the bounds walk**
+    // (ADR-306 D7): `for k in ks` is bounded by every test of `k` in the
+    // body, as a name bound to a call's whole result is (#781).
+    if bindings.len() == 1 && elements.len() == 1 {
+        match elements[0] {
+            Ty::Named { name, args, .. } => {
+                if args.is_empty() && is_whole_number(name) {
+                    state.facts.whole_loops.insert(id_of(iter) as i64)
+                }
+            },
+            else => {}
+        }
+    }
+    // **And each name of several a `for` binds to a whole number**: a
+    // tuple's part, an `enumerate()`'s position.
+    if bindings.len() > 1 && elements.len() == bindings.len() {
+        let mut parts: collections::BTreeSet[i64] = collections::BTreeSet()
+        for (at, element) in elements.iter().enumerate() {
+            match element {
+                Ty::Named { name, args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        parts.insert(at as i64)
+                    }
+                },
+                else => {}
+            }
+        }
+        if !parts.is_empty() {
+            state.facts.whole_parts.insert(id_of(iter) as i64, parts)
+        }
+    }
     // **An element of a list of code is given what the list was** (ADR-351
     // D1, D4).
     if bindings.len() == 1 && state.current != null && check_core_stmt_holds_code(over) {
@@ -2480,8 +2544,308 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if ends_group != null {
         state.tasks_meet_on_nothing(world, block, ends_group ?? 0)
     }
+    check_core_view_lists_end(state, world, block)
     state.scope.pop()
     return tail
+}
+
+/// **A list of views ends before what it views** (#490, supervisor
+/// 2026-11-09): a block's `List` has no `#[may_dangle]` drop on stable Rust,
+/// so a list of views keeps what it views borrowed until it is dropped, where
+/// Rust's `Vec` ended the borrow at the last use. For a `let` of this block
+/// that binds such a list:
+/// - where a later statement than its last use reads what its value was made
+///   of (moves, returns or writes it), the statement of the last use is
+///   recorded in `facts.view_list_drops`, and the emitter drops the list
+///   right after it;
+/// - where a later `let` binds what it may view (a name read by a statement
+///   that also reads the list), that `let` is recorded in
+///   `facts.view_list_rebinds`, and the emitter binds the list again right
+///   after it, so the list is declared after what it views and dropped
+///   first, on every way out of the scope. A drop at the last use would not
+///   do: a panic before it drops the list after what it views. So is a
+///   value that holds a list of text (`check_core_holds_a_list_of_text`),
+///   whose text the lowering may make views.
+///
+/// Asked before the block's names go, while the bindings' types are still in
+/// scope; a name bound twice in the block is left alone. An assignment over a
+/// text that collects views of it in its own value is
+/// `check_core_view_list_assigned`'s.
+fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    let count = block.stmts.len() as i64
+    let mut at = 0
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                if names.len() == 1 {
+                    let name = f"{world.words.resolve(names[0])}"
+                    let views = check_core_a_list_of_views(state, name)
+                    if check_core_view_list_bound_once(world, block, name) && (views || check_core_holds_a_list_of_text(state, name)) {
+                        let mut last = at
+                        let mut sources: collections::BTreeSet[String] = collections::BTreeSet()
+                        names_in(value, world.words, sources)
+                        let mut later = at + 1
+                        while later < count {
+                            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                            names_in_statement(block.stmts[later].node, world.words, read)
+                            if read.contains(name) {
+                                last = later
+                            }
+                            later += 1
+                        }
+                        let mut needed = false
+                        later = last + 1
+                        while later < count {
+                            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                            names_in_statement(block.stmts[later].node, world.words, read)
+                            for source in sources {
+                                if read.contains(source) {
+                                    needed = true
+                                }
+                            }
+                            later += 1
+                        }
+                        if views && needed && !check_core_stmt_is_a_jump(block.stmts[last].node) {
+                            let key = block.stmts[last].span.start as i64
+                            let mut ended = state.facts.view_list_drops.get(key)?.clone() ?? []
+                            ended.push(name.clone())
+                            state.facts.view_list_drops.insert(key, ended)
+                        }
+                        let viewed_ty = if views { check_core_viewed_name(state, name) } else { "String" }
+                        check_core_view_list_rebound(state, world, block, name, at, last, stmt.span.start as i64, viewed_ty)
+                    }
+                }
+            },
+            Stmt::Assign { target, op, value } => check_core_view_list_assigned(state, world, target, op, value, stmt.span.start as i64),
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// **The `let`s after the list `name`'s** (at `at`), before its last use
+/// `last`, **that bind what it may view**: a name a statement up to `last`
+/// reads together with the list, which is not a number, a `bool` or a `char`.
+/// Each is recorded in `facts.view_list_rebinds`, with whether the list's
+/// `let` said `mut`, and the list's `let` (at `start`) in
+/// `facts.view_list_rebound`. What it may view is a binding whose type names
+/// the type its elements view.
+///
+/// **Not past a `let` that reads the list** into anything but a number, a
+/// `bool` or a `char`: a view of it, or a lambda over it, may still be read,
+/// and the list cannot move while it is.
+fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, block: ref Block, name: ref String, at: i64, last: i64, start: i64, viewed_ty: ref String) sync {
+    if viewed_ty == "" {
+        return
+    }
+    let mut together: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut later = at + 1
+    while later <= last {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in_statement(block.stmts[later].node, world.words, read)
+        if read.contains(name) {
+            for one in read {
+                together.insert(one.clone())
+            }
+        }
+        later += 1
+    }
+    let changing = state.binding(name)?.written_mut ?? false
+    later = at + 1
+    while later < last {
+        match block.stmts[later].node {
+            Stmt::Let { names, value, .. } => {
+                let mut reads: collections::BTreeSet[String] = collections::BTreeSet()
+                names_in(value, world.words, reads)
+                if reads.contains(name) {
+                    for one in names {
+                        if !check_core_a_plain_binding(state, f"{world.words.resolve(one)}") {
+                            return
+                        }
+                    }
+                }
+                let mut viewed = false
+                for one in names {
+                    let named = f"{world.words.resolve(one)}"
+                    if together.contains(named) && check_core_a_binding_naming(state, named, viewed_ty) {
+                        viewed = true
+                    }
+                }
+                if viewed {
+                    let key = block.stmts[later].span.start as i64
+                    let mut rebound = state.facts.view_list_rebinds.get(key)?.clone() ?? []
+                    rebound.push((name.clone(), changing))
+                    state.facts.view_list_rebinds.insert(key, rebound)
+                    state.facts.view_list_rebound.insert(start)
+                }
+            },
+            else => {},
+        }
+        later += 1
+    }
+}
+
+/// **An assignment whose own value collects views of what it assigns over**
+/// (#490): `s = s.split("{").collect()[0].trim().clone()`. The list the value
+/// collected is a temporary, dropped at the statement's end, after the new
+/// text is in place; a block's `List` holds what it views until then. The
+/// statement is recorded in `facts.view_list_assigns`, and the emitter binds
+/// the value before the assignment, so the list ends first.
+fn check_core_view_list_assigned(mut state: CheckState, world: ref CheckWorld, target: ref Expr, op: ref BinaryOp?, value: ref Expr, at: i64) sync {
+    if op != null {
+        return
+    }
+    let assigned = match target {
+        Expr::Variable(name, _) => f"{world.words.resolve(name)}",
+        else => return,
+    }
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(value, world.words, read)
+    if !read.contains(assigned) {
+        return
+    }
+    for inner in visited_in_expr(value) {
+        let listed = match inner {
+            Expr::MethodCall { method, .. } => world.words.resolve(method) == "collect",
+            Expr::ListLit { .. } => true,
+            else => false,
+        }
+        if listed {
+            state.facts.view_list_assigns.insert(at)
+            return
+        }
+    }
+}
+
+/// Whether `name` is bound, in this scope, to a number, a `bool` or a `char`.
+fn check_core_a_plain_binding(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return a_copy_by_value(found.ty)
+}
+
+/// **Whether `name` is bound to a value that holds a list of text**: a
+/// `Vec[String]`, or a struct of this program with such a field, whose text
+/// the lowering may make views (ADR-282) that the list holds until it is
+/// dropped.
+fn check_core_holds_a_list_of_text(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return check_core_ty_holds_a_list_of_text(state, found.ty, 3)
+}
+
+fn check_core_ty_holds_a_list_of_text(state: ref CheckState, ty: ref Ty, depth: i64) -> bool sync {
+    if depth == 0 {
+        return false
+    }
+    match ty {
+        Ty::Named { name, args, view } => {
+            if view {
+                return false
+            }
+            if name == "Vec" && args.len() == 1 && check_core_ty_last_name(args[0]) == "String" {
+                return true
+            }
+            for field in state.structs.get(name)?.clone() ?? [] {
+                if check_core_ty_holds_a_list_of_text(state, field.ty, depth - 1) {
+                    return true
+                }
+            }
+            return false
+        },
+        Ty::Nullable(inner) => return check_core_ty_holds_a_list_of_text(state, inner, depth),
+        else => return false,
+    }
+}
+
+/// The type the elements of the list `name` view, by its last name, text's
+/// two forms as one: `String` for `Vec[ref String]`, `Expr` for `Vec[ref
+/// Expr]`; empty where it is none of these.
+fn check_core_viewed_name(state: ref CheckState, name: ref String) -> String sync {
+    let found = state.binding(name) ?? return ""
+    return match found.ty {
+        Ty::Named { args, .. } => if args.len() == 1 { check_core_ty_last_name(args[0]) } else { "" },
+        else => "",
+    }
+}
+
+/// A named type's last name, text's two forms as one; empty for any other.
+fn check_core_ty_last_name(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { name, .. } => check_core_text_as_one(name),
+        else => "",
+    }
+}
+
+fn check_core_text_as_one(name: ref String) -> String {
+    let last = type_last_segment(name)
+    if last == "str" {
+        return "String"
+    }
+    return f"{last}"
+}
+
+/// Whether `name` is bound, in this scope, to a type that names `viewed`
+/// anywhere in it, or to one the checker does not know.
+fn check_core_a_binding_naming(state: ref CheckState, name: ref String, viewed: ref String) -> bool sync {
+    let found = state.binding(name) ?? return true
+    return check_core_ty_names(found.ty, viewed)
+}
+
+fn check_core_ty_names(ty: ref Ty, viewed: ref String) -> bool sync {
+    return match ty {
+        Ty::Unknown => true,
+        Ty::Named { name, args, .. } => {
+            if check_core_text_as_one(name) == viewed {
+                return true
+            }
+            for arg in args {
+                if check_core_ty_names(arg, viewed) {
+                    return true
+                }
+            }
+            false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if check_core_ty_names(part, viewed) {
+                    return true
+                }
+            }
+            false
+        },
+        Ty::Nullable(inner) => check_core_ty_names(inner, viewed),
+        else => true,
+    }
+}
+
+/// Whether one `let` of `block` binds `name`.
+fn check_core_view_list_bound_once(world: ref CheckWorld, block: ref Block, name: ref String) -> bool sync {
+    let mut seen = 0
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, .. } => {
+                for one in names {
+                    if world.words.resolve(one) == name {
+                        seen += 1
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return seen == 1
+}
+
+/// Whether `name` is bound, in this scope, to a list whose elements are
+/// views: `Vec[ref T]`.
+fn check_core_a_list_of_views(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return match found.ty {
+        Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1 && match args[0] {
+            Ty::Named { view, .. } => view,
+            else => false,
+        },
+        else => false,
+    }
 }
 
 /// The group a block is, read before `check_async_block` takes the mark:

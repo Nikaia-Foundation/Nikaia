@@ -17,6 +17,8 @@
 //! that road, and a new construct a compiler needs goes in there first. Here
 //! stay the pieces of the compiler that are Nikaia, called from Rust.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 /// **The first piece of the compiler written in Nikaia** (0.0.238):
 /// `std/tools/spelling.nika`, lowered ahead of time and called from the
 /// checker's and `dsl`'s *did you mean* as ordinary Rust. The Rust it

@@ -151,13 +151,13 @@ pub struct CheckPendingConcat {
 
 pub fn a_path_overlaps(read: &str, taken: &str) -> bool {
     if read == taken { return true; }
-    if read.starts_with(taken) && nikaia_std::index::or(read.strip_prefix(taken), || "").starts_with('.') { return true; }
-    taken.starts_with(read) && nikaia_std::index::or(taken.strip_prefix(read), || "").starts_with('.')
+    if read.starts_with(AsRef::<str>::as_ref(taken)) && nikaia_std::index::or(read.strip_prefix(AsRef::<str>::as_ref(taken)), || "").starts_with('.') { return true; }
+    taken.starts_with(AsRef::<str>::as_ref(read)) && nikaia_std::index::or(taken.strip_prefix(AsRef::<str>::as_ref(read)), || "").starts_with('.')
 }
 
 pub fn a_path_revives(written: &str, taken: &str) -> bool {
     if written == taken { return true; }
-    taken.starts_with(written) && nikaia_std::index::or(taken.strip_prefix(written), || "").starts_with('.')
+    taken.starts_with(AsRef::<str>::as_ref(written)) && nikaia_std::index::or(taken.strip_prefix(AsRef::<str>::as_ref(written)), || "").starts_with('.')
 }
 
 pub fn choices_apart(a: &[(i64, i64)], b: &[(i64, i64)]) -> bool {
@@ -197,8 +197,8 @@ impl CheckRepeats {
     pub fn a_lambda(frame: i64) -> CheckRepeats { CheckRepeats { frame, what: String::from("lambda"), revived: collections::BTreeSet::new(), revived_parts: collections::BTreeSet::new(), leaves: false, opened: -1, held: vec![] } }
     pub fn takes_again(&self, path: &str) -> bool { !(self.leaves || self.revives(path)) }
     pub fn revives(&self, path: &str) -> bool {
-        let root: String = nikaia_std::index::or(path.split('.').next(), || "").to_string();
-        self.revived.contains(&root) || self.revived_parts.iter().any(|part| { AsRef::<str>::as_ref(&(path)) == AsRef::<str>::as_ref(&(part)) || path.starts_with(&format!("{}.", part)) })
+        let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(path.split('.').next(), || "").to_string());
+        self.revived.contains(&root) || self.revived_parts.iter().any(|part| { AsRef::<str>::as_ref(&(path)) == AsRef::<str>::as_ref(&(part)) || path.starts_with(&*format!("{}.", part)) })
     }
 }
 
@@ -211,7 +211,7 @@ pub(crate) fn what_a_loop_does(words: &winnow_grammar::InternerContext, block: &
                 match target {
                     Expr::Variable(name, _) => {
                         let name = *name;
-                        found.revived.insert(words.resolve(name).to_string());
+                        found.revived.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
                     },
                     Expr::Field { .. } => {
                         let part = nikaia_std::index::or(a_part_assigned(words, target), || "".into());
@@ -228,7 +228,7 @@ pub(crate) fn what_a_loop_does(words: &winnow_grammar::InternerContext, block: &
 
 pub(crate) fn a_part_assigned(words: &winnow_grammar::InternerContext, target: &Expr) -> Option<String> {
     match target {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
             let held = match a_part_assigned(words, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -291,7 +291,7 @@ pub struct CheckFinding {
     pub labels: Vec<CheckLabel>,
 }
 
-pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: code.to_string(), message, notes, help, labels: vec![] } }
+pub fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![] } }
 
 #[derive(Debug, Clone)]
 pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {

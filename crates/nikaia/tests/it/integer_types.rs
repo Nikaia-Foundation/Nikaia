@@ -10,6 +10,8 @@
 //! C reads the bits.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::Command;
 
@@ -66,8 +68,8 @@ fn run(purpose: &str, source: &str) -> (bool, String, String) {
     let _ = std::fs::remove_dir_all(&dir);
     (
         ran.status.success(),
-        String::from_utf8_lossy(&ran.stdout).into_owned(),
-        String::from_utf8_lossy(&ran.stderr).into_owned(),
+        String::from_utf8_lossy(&ran.stdout),
+        String::from_utf8_lossy(&ran.stderr),
     )
 }
 
@@ -299,7 +301,7 @@ fn the_prover_reads_an_int() {
         .args(["lower", "claims.nika", "--output", "claims.rs", "--asserts"])
         .output()
         .expect("the nikaia binary runs");
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_text();
     assert!(
         out.status.success(),
         "{}",

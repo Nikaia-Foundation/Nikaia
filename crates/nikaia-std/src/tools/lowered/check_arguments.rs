@@ -90,7 +90,7 @@ pub(crate) fn check_arguments_a_byte_set(ty: &Ty) -> bool {
 pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>) -> Option<String> {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match given {
-        Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         _ => None,
     }
 }
@@ -106,7 +106,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if !wanted.is_empty() {
             let mut takes: Vec<String> = vec![];
             for (n, t) in wanted.iter() { takes.push(format!("`{}: {}`", n, t.text())); }
-            help = format!("It takes {}{}.", takes.join(", "), a_root_is_one_of_two(&wanted));
+            help = format!("It takes {}{}.", nikaia_std::block::Text::from(takes.join(", ")), a_root_is_one_of_two(&wanted));
         }
         state.findings.push(check_refusal("NK1101", span, format!("`{}` takes {}, but you passed {}.", key, counted(wanted.len() as i64, "argument"), found.len() as i64), vec![format!("It's declared as `{}{}`.", key, signature.text())], Some(help)));
         return signature.result_or_unit();
@@ -176,7 +176,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     for argument in expanded.iter() {
         let at = argument.at;
         let given_here: Option<&Expr> = argument.given;
-        let name = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).0.to_string();
+        let name = nikaia_std::block::Text::from(nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).0.to_string());
         let declared = nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1.clone();
         let mut want = declared.clone();
         let mut found_here = argument.found.clone();
@@ -189,7 +189,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             if receiver.is_some() {
                 let number = match receiver { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let node = check_arguments_receiver_node(value);
-                let pending = state.flow.literal_receivers.to_owned();
+                let pending = state.flow.literal_receivers.copy_owned();
                 let found_at = pending.iter().position(|p| { p.0 == node && p.1 == number }).map(|at| at as i64);
                 if found_at.is_some() {
                     let hit = match found_at { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -212,7 +212,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let mut lent = if own { lends_in_own(contract, at + offset, &vec![world.library]) } else { lends_in(contract, at + offset, &vec![world.library]) };
         lent = lent || at == 0 && is_a_lookup(key) || check_arguments_a_print(key);
-        let text_method: String = nikaia_std::index::or(key.strip_prefix("str::"), || "").to_string();
+        let text_method: String = nikaia_std::block::Text::from(nikaia_std::index::or(key.strip_prefix("str::"), || "").to_string());
         lent = lent || text_method != "" && check_core_method_pattern_at(&text_method) == at;
         let kept = !lent;
         if own && lent && check_arguments_plain_option(&want) { want = view_of_type(&want); }
@@ -226,7 +226,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             let array = state.array_literal(world, &found_here, &want, value, span);
-            if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || nikaia_std::index::or(state.tuple_literal(world, &found_here, &literal_wants, value), || found_here.clone().into()).into()); }
+            if array.is_some() { found_here = nikaia_std::index::or(array, || found_here.clone().into()); } else { found_here = nikaia_std::index::or(state.text_literal(world, &literal_wants, value, kept), || nikaia_std::index::or(state.tuple_literal(world, &found_here, &literal_wants, value), || nikaia_std::index::or(state.tuple_list_literal(world, &found_here, &literal_wants, value), || found_here.clone().into()).into()).into()); }
             if lent && a_text_literal_expr(value) { state.facts.owned_texts.remove(&(id_of(value) as i64)); }
             if found_here.is_unknown() && an_integer_literal(value) && state.no_integer_is(world, &want) { found_here = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
         }
@@ -323,11 +323,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let mut message: String = format!("`{}` takes a shared value, but this isn't one.", key);
             let mut help: String = format!("Make it {} `{}`.", an_or_a(&want.text()), want.text());
             let hull: String = match want {
-                Ty::Named { ref name, .. } => name.to_string(),
+                Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
                 _ => String::from(""),
             };
             if value.is_some() {
-                let shown = nikaia_std::index::or(value.as_deref(), || "").to_string();
+                let shown = nikaia_std::block::Text::from(nikaia_std::index::or(value.as_deref(), || "").to_string());
                 message = format!("`{}` takes a shared value, but `{}` isn't one.", key, shown);
                 if !hull.is_empty() { help = format!("Wrap it: `{}({})`.", hull, shown); }
             } else if !hull.is_empty() { help = format!("Wrap it: `{}(…)`.", hull); }
@@ -344,13 +344,13 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let named = check_arguments_named(world, given_here);
         let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-        let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
-        let mut help: String = way_out_of_a_mismatch(&found_here, &want);
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
+        let mut help: String = way_out_of_a_mismatch(&found_here, &want); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {
             let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };
-            for note in kept_why.notes.iter() { notes.push(note.to_string()); }
-            help = kept_why.help.to_string();
+            for note in kept_why.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
+            help = nikaia_std::block::Text::from(kept_why.help.to_string());
         } else if found_here.is_a_view() && unviewed_type(&found_here).fits(&want) {
             notes.push(format!("This is a view: it points into a `{}` that something else owns.", want.text()));
             notes.push(format!("{}, so it needs one of its own.", capitalised(&keeper)));
@@ -389,11 +389,11 @@ pub(crate) fn check_arguments_plain_option(ty: &Ty) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
     let had: Vec<Ty> = match found {
-        Ty::Fn { params, .. } => params.to_owned(),
+        Ty::Fn { params, .. } => params.copy_owned(),
         _ => vec![],
     };
     let wanted: Vec<Ty> = match want {
-        Ty::Fn { params, .. } => params.to_owned(),
+        Ty::Fn { params, .. } => params.copy_owned(),
         _ => vec![],
     };
     if (had.len() as i64) != wanted.len() as i64 { return 0; }
@@ -413,20 +413,20 @@ impl CheckState {
     pub fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
         let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
         let name = match value {
-            Expr::Variable(ident, _) => { let ident = *ident; world.words.resolve(ident).to_string() },
+            Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::block::Text::from(world.words.resolve(ident).to_string()) },
             _ => return false,
         };
         if self.binding(&name).is_some() { return false; }
         let contract = match world.own.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let (params, result, is_sync, can_throw) = match found {
-            Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; (params.to_owned(), match result {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; (params.copy_owned(), match result {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }, is_sync, can_throw) },
             _ => return false,
         };
         let wanted = match want {
-            Ty::Fn { params, .. } => params.to_owned(),
+            Ty::Fn { params, .. } => params.copy_owned(),
             _ => return false,
         };
         if (params.len() as i64) != wanted.len() as i64 { return false; }

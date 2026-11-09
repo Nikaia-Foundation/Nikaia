@@ -8,6 +8,8 @@
 //! have.
 
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// What the source lowers to, or the refusal.
 fn lowered(source: &str) -> Result<String, String> {

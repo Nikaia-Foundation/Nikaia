@@ -3,7 +3,9 @@
 A task's memory block ([ADR-327](../../../docs/specification/adr/adr-327.md)
 D4, D5, D10, D12; #490 step 3): 16 pages of 4 KiB, each counting what it
 holds, and the lists and text whose growth the block may refuse. One
-dependency, `allocator-api2` (`Vec<T, A>` on stable Rust).
+dependency, `allocator-api2` (`Vec<T, A>` on stable Rust); the features
+`collect`, `tether` and `rayon` add the traits of `winnow-grammar`, `tether`
+and `rayon` that `nikaia-std` asks of a list or a text.
 
 ```rust
 use task_block::{enter, list, push, Block, List, Place};
@@ -26,6 +28,18 @@ push(&mut xs, 7);                   // a full block ends the task, here
   `allocator-api2`'s `extend_from_slice` clones one element at a time.
 * **`Text` is valid UTF-8 in a `List<u8>`**, handed out as a `str` without
   being checked again: it only grows by whole `str`s.
+* **`List` and `Text` are the ground of Nikaia's `List` and `String`** (D4):
+  a newtype, since the orphan rule allows no `FromIterator` on
+  `allocator-api2`'s `Vec`; `.collect()`, `Clone` and `Default` build
+  outside (D9), `from_iter_in`, `clone_in` and `new_in` where told; hashes,
+  order and printing are the slice's and the `str`'s, so a map keyed by them
+  keeps `Vec`'s and `String`'s order. `text::{to_uppercase, to_lowercase,
+  replace, replacen, repeat, join, format}` build the allocating text
+  methods' result where the handle says, with no `String` between.
+* **Toward Rust they cross as they are** (D8): `From`/`Into` between `List`
+  and `Vec`, `Text` and `String` hand over the same memory where it is
+  outside the running task's block; only a value in the block is copied
+  out.
 * **A block value never leaves its task** (D9): the caller places in the
   block only what cannot outlive the task, and frees it while the task is
   polled. The caller is `nikaia-std` (`src/task.rs` puts a task's block in
@@ -44,8 +58,12 @@ push(&mut xs, 7);                   // a full block ends the task, here
 | `answered` | `NonNull::new_unchecked` | a block's cut is `start.add(at)` of a non-null `start` |
 | `impl Allocator for Place` | the allocator's contract | a block cut stays valid until it is given back or the task ends, and no block cut outlives its task (D9); a pointer not inside the running block is the global allocator's, which answers for it |
 | `Place::deallocate`, `grow` | `Global.deallocate`, `Global.grow` | reached only for a pointer not in the running task's block, so one `Global` allocated; the caller keeps the contract's layout |
-| `extend` | `copy_nonoverlapping` into spare capacity, `set_len` | `reserve` left room for the run, `T: Copy` has nothing to drop, and a list and the run it is extended from are two values |
-| `Text::as_str` | `str::from_utf8_unchecked` | every append is a whole `str` (or a `char` encoded as one), and `make_ascii_lowercase` changes only ASCII bytes |
+| `List::extend_copied` (`extend`) | `copy_nonoverlapping` into spare capacity, `set_len` | `reserve` left room for the run, `T: Copy` has nothing to drop, and a list and the run it is extended from are two values |
+| `List::set_len` | `Vec::set_len` | an `unsafe fn` with `Vec::set_len`'s contract, handed to its caller |
+| `From<Vec<T>> for List<T>` | `Vec::from_raw_parts_in(.., Place::Outside)` | `std`'s `Vec` allocated with the global allocator (or not at all, for no room or a zero-sized `T`, which both `Vec`s treat alike); `Place::Outside` frees with the same allocator, and the `std` `Vec` is never dropped |
+| `From<List<T>> for Vec<T>` | `Vec::from_raw_parts`, or a move out of the block | outside the running block (`is_outside`) the memory is the global allocator's, which `std`'s `Vec` frees; a block list's elements are moved with `copy_nonoverlapping` into a new `Vec` with room for them, and the block list is rebuilt with length 0, so it frees only its memory |
+| `Text::as_str`, `as_mut_str` | `str::from_utf8_unchecked` | every append is a whole `str` (or a `char` encoded as one), and `make_ascii_lowercase` changes only ASCII bytes; a `&mut str` can only be changed into UTF-8, and `insert_str`, `remove`, `truncate`, `pop` and `split_off` cut only at character boundaries |
+| `From<Text> for String` | `String::from_utf8_unchecked` | the bytes are the text's, UTF-8 |
 
 ## How it is checked
 

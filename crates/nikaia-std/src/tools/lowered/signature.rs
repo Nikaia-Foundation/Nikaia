@@ -32,11 +32,11 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
         let inner = translate(nikaia_std::index::or(listed.as_deref(), || ""), crate_word, parameters, types, mentioned);
         return Translated { ty: Ty::Named { name: String::from("Vec"), args: vec![inner.ty], view: false }, kept: true };
     }
-    for parameter in parameters.iter() { if text == parameter { return Translated { ty: Ty::Var { name: text.to_string(), view: false }, kept: true }; } }
-    if is_plain(text) { return Translated { ty: Ty::Named { name: text.to_string(), args: vec![], view: false }, kept: false }; }
+    for parameter in parameters.iter() { if text == parameter { return Translated { ty: Ty::Var { name: nikaia_std::block::Text::from(text.to_string()), view: false }, kept: true }; } }
+    if is_plain(text) { return Translated { ty: Ty::Named { name: nikaia_std::block::Text::from(text.to_string()), args: vec![], view: false }, kept: false }; }
     if text == "String" { return Translated { ty: Ty::Named { name: String::from("String"), args: vec![], view: false }, kept: true }; }
     if types.contains(text) {
-        mentioned.insert(text.to_string());
+        mentioned.insert(nikaia_std::block::Text::from(text.to_string()));
         return Translated { ty: Ty::Named { name: format!("{}::{}", crate_word, text), args: vec![], view: false }, kept: true };
     }
     Translated { ty: Ty::Unknown, kept: true }
@@ -49,10 +49,10 @@ pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: 
         return Resulted { ty: plain.ty, fails: None };
     }
     let parts = split_top_level(nikaia_std::index::or(resulted.as_deref(), || ""));
-    let mut ok: String = String::from("");
-    if !parts.is_empty() { ok = (*nikaia_std::index::get(&parts, 0)).to_string(); }
+    let mut ok: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
+    if !parts.is_empty() { ok = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); }
     let fine = translate(&ok, crate_word, parameters, types, mentioned);
-    let mut fails: String = String::from("?");
+    let mut fails: String = String::from("?"); #[allow(clippy::redundant_locals)] let parts = parts;
     if parts.len() > 1 {
         let error = (*nikaia_std::index::get(&parts, 1)).trim();
         if types.contains(error) { fails = format!("{}::{}", crate_word, error); }
@@ -70,13 +70,13 @@ pub fn view_of(ty: Ty) -> Ty {
 
 pub fn sent_across(names: &[String], types: &[String], bounds: &str) -> Vec<String> {
     let sent = sends(bounds);
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let sent = sent;
     for at in 0..names.len() as i64 {
         let ty = (*nikaia_std::index::get(&types, (at) as usize)).trim();
         let named = unreferenced(ty);
         let mut reached = bounds_send(ty);
         for one in sent.iter() { if *one == named { reached = true; } }
-        if reached { out.push((*nikaia_std::index::get(&names, (at) as usize)).to_string()); }
+        if reached { out.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (at) as usize)).to_string())); }
     }
     out
 }
@@ -91,7 +91,7 @@ pub fn sends(bounds: &str) -> Vec<String> {
         let head = __keep_frame.put(slice(&c, 0, colon));
         let name = head.trim();
         let bound = slice(&c, colon + 1, c.len() as i64);
-        if bounds_send(&bound) && !name.is_empty() && !name.starts_with('\'') && !nikaia_std::list::contains(&out, &name.to_string()) { out.push(name.to_string()); }
+        if bounds_send(&bound) && !name.is_empty() && !name.starts_with('\'') && !nikaia_std::list::contains(&out, &nikaia_std::block::Text::from(name.to_string())) { out.push(nikaia_std::block::Text::from(name.to_string())); }
     }
     out.sort();
     out
@@ -106,9 +106,9 @@ pub(crate) fn unreferenced(ty: &str) -> String {
     if trimmed.starts_with("mut ") {
         let t: Vec<scalar> = nikaia_std::list::chars(trimmed.chars());
         let after = slice(&t, 4, t.len() as i64);
-        return after.to_string();
+        return nikaia_std::block::Text::from(after.to_string());
     }
-    trimmed.to_string()
+    nikaia_std::block::Text::from(trimmed.to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,12 +121,12 @@ pub struct WrittenFn {
 }
 
 pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> FnContract {
-    let mut keeps: Vec<String> = vec![];
-    let mut params: Vec<(String, Ty)> = vec![];
+    #[allow(unused_mut)] let mut keeps: Vec<String> = vec![];
+    let mut params: Vec<(String, Ty)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keeps = keeps;
     for at in 0..written.names.len() as i64 {
         let translated = translate(nikaia_std::index::get(&written.types, (at) as usize), crate_word, &written.parameters, types, mentioned);
-        if translated.kept { keeps.push((*nikaia_std::index::get(&written.names, (at) as usize)).to_string()); }
-        params.push(((*nikaia_std::index::get(&written.names, (at) as usize)).to_string(), translated.ty));
+        if translated.kept { keeps.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&written.names, (at) as usize)).to_string())); }
+        params.push((nikaia_std::block::Text::from((*nikaia_std::index::get(&written.names, (at) as usize)).to_string()), translated.ty));
     }
     let mut fails: Vec<String> = vec![];
     let mut answer: Option<Ty> = None;

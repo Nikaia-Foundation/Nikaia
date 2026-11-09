@@ -7,6 +7,8 @@
 use crate::common;
 use nikaia::contracts::LedgerOps;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -58,7 +60,9 @@ fn owned_text_handed_to_a_pattern_is_refused() {
         if let Some(refusal) = refusal {
             assert_eq!(
                 refusal.help.as_deref(),
-                Some("Write `ref` in front of it to pass a view of it."),
+                Some(
+                    "Write `String` without `ref` in the declaration: text of its own is lent wherever a view suffices."
+                ),
                 "{argument}"
             );
         }
@@ -232,7 +236,7 @@ fn run_735(name: &str, source: &str) -> (String, String) {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    (String::from_utf8_lossy(&run.stdout).into_owned(), lowered)
+    (String::from_utf8_lossy(&run.stdout), String::from(lowered))
 }
 
 /// #735 (1): a parameter only used as a map's key is no source of the result,

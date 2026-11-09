@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/emit/mod.rs
 //
 // Stage 0 of the bootstrap compiler: Nikaia in, Rust out.
@@ -535,7 +537,7 @@ fn std_ledger() -> &'static crate::contracts::Ledger {
 /// today.
 pub fn escaped(name: &str) -> std::borrow::Cow<'_, str> {
     match nikaia_std::tools::emit_misc::is_reserved(name) {
-        true => std::borrow::Cow::Owned(format!("r#{name}")),
+        true => std::borrow::Cow::Owned(std::format!("r#{name}")),
         false => std::borrow::Cow::Borrowed(name),
     }
 }
@@ -652,7 +654,7 @@ impl<'p> Emitter<'p> {
         graphs: Option<nikaia_std::tools::emit_contracts::EmitReachGraphs>,
     ) -> Self {
         let seeds_of = {
-            let mut all: Vec<&Parsed> = beside.to_vec();
+            let mut all: Vec<&Parsed> = Vec::from(beside);
             if !all.iter().any(|p| std::ptr::eq(*p, parsed)) {
                 all.push(parsed);
             }
@@ -704,7 +706,7 @@ impl<'p> Emitter<'p> {
                 bounds_removed: build.bounds == crate::bounds::BoundsChecks::Removed,
                 overflow_removed: build.overflow == crate::bounds::OverflowChecks::Removed,
                 trusted: provenance == crate::contracts::Provenance::Trusted,
-                crate_root: build.crate_root.to_string(),
+                crate_root: build.crate_root.to_text(),
                 offered_to_rust: build.offered_to_rust,
             },
             graphs,
@@ -929,7 +931,7 @@ impl nikaia_std::tools::emit_contracts::EmitContractsHost for ContractsHost<'_> 
                     at as i64,
                     symbols
                         .into_iter()
-                        .map(|s| self.parsed.text(s).to_string())
+                        .map(|s| self.parsed.text(s).to_text())
                         .collect(),
                 )
             })
@@ -1052,7 +1054,7 @@ impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
     fn hole(&self, site: u32, text: String) -> nikaia_std::tools::emit_holes::EmitHole {
         match Parsed::hole(self, site, &text) {
             Ok(expr) => nikaia_std::tools::emit_holes::EmitHole::Parsed(expr),
-            Err(error) => nikaia_std::tools::emit_holes::EmitHole::Refused(error.to_string()),
+            Err(error) => nikaia_std::tools::emit_holes::EmitHole::Refused(error.to_text()),
         }
     }
 

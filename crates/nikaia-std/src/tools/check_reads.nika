@@ -123,7 +123,8 @@ impl CheckState {
             else => {}
         }
         let node = id_of(value) as i64
-        if !self.flow.map_read_sites.contains(node) {
+        // **A word by its kind is copied by its read already** (#1460).
+        if !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) {
             return
         }
         let inner = match want {
@@ -156,7 +157,7 @@ impl CheckState {
     pub fn a_map_read_handed_back(ref mut self, world: ref CheckWorld, found: ref Ty, body: ref Block) sync {
         for value in block_tail(body) {
             let node = id_of(value) as i64
-            if !self.flow.map_read_sites.contains(node) {
+            if !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) {
                 return
             }
             let read = match found {
@@ -179,7 +180,7 @@ impl CheckState {
         match value {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let node = id_of(read) as i64
-                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(node) || into.is_a_view() || into.is_unknown() {
+                if !self.jumps(world, fallback) || !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) || into.is_a_view() || into.is_unknown() {
                     return
                 }
                 if self.copied(world, into) || !self.takes_away(world, into) {

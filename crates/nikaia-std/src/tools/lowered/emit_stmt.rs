@@ -21,10 +21,10 @@ pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 { nikaia_
 
 pub(crate) fn emit_stmt_tuple_pattern(names: &[String], shape: &[i64]) -> String {
     if shape.is_empty() {
-        if names.len() == 1 { return (*nikaia_std::index::get(&names, 0)).to_string(); }
-        return format!("({})", names.join(", "));
+        if names.len() == 1 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string()); }
+        return format!("({})", nikaia_std::block::Text::from(names.join(", ")));
     }
-    if *nikaia_std::index::get(&shape, 0) == -1 { return format!("({})", names.join(", ")); }
+    if *nikaia_std::index::get(&shape, 0) == -1 { return format!("({})", nikaia_std::block::Text::from(names.join(", "))); }
     let mut at: i64 = 0;
     let mut next: i64 = 0;
     emit_stmt_tuple_part(names, shape, &mut at, &mut next)
@@ -36,13 +36,13 @@ pub(crate) fn emit_stmt_tuple_part(names: &[String], shape: &[i64], at: &mut i64
     *at += 1;
     if width <= 0 {
         let mut name: String = String::from("_");
-        if *next < names.len() as i64 { name = (*nikaia_std::index::get(&names, nikaia_std::index::at(*next))).to_string(); }
+        if *next < names.len() as i64 { name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(*next))).to_string()); }
         *next += 1;
         return name;
     }
     let mut parts: Vec<String> = vec![];
     for _ in 0..width { parts.push(emit_stmt_tuple_part(names, shape, at, next)); }
-    format!("({})", parts.join(", "))
+    format!("({})", nikaia_std::block::Text::from(parts.join(", ")))
 }
 
 pub(crate) fn emit_stmt_put_call(keep: &KeepAt, opaque: bool) -> String {
@@ -114,6 +114,18 @@ impl EmitState {
         self.emit_stmt_block_plain(world, walk, out, host, block, depth, flow, scope, &tail, opening)?;
         Ok(())
     }
+    pub fn emit_view_list_drops(&self, out: &mut EmitOut, start: i64) {
+        for ended in nikaia_std::index::or(match self.facts.view_list_drops.get(&start) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) { out.push(&format!(" ::core::mem::drop({});", ended)); }
+    }
+    pub fn emit_view_list_rebinds(&self, out: &mut EmitOut, start: i64) {
+        for (name, changing) in nikaia_std::index::or(match self.facts.view_list_rebinds.get(&start) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) { if changing { out.push(&format!(" #[allow(unused_mut, clippy::redundant_locals)] let mut {} = {};", name, name)); } else { out.push(&format!(" #[allow(clippy::redundant_locals)] let {} = {};", name, name)); } }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -123,8 +135,8 @@ impl EmitState {
             return Ok(());
         }
         if block.stmts.len() == 1 && opening.is_none() {
-            let declared = walk.preluded.to_owned();
-            let bound = walk.async_bound.to_string();
+            let declared = walk.preluded.copy_owned();
+            let bound = nikaia_std::block::Text::from(walk.async_bound.to_string());
             let mut rendered = EmitOut::empty();
             let st = rendered.mark();
             let keeps = walk.async_keeps;
@@ -143,8 +155,8 @@ impl EmitState {
             walk.preluded = declared;
             walk.async_bound = bound;
         }
-        let pad = "    ".repeat(nikaia_std::count::of(depth));
-        let inner_pad = "    ".repeat(nikaia_std::count::of(depth + 1));
+        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
+        let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
         out.push("{\n");
         if opening.is_some() {
             out.push(&inner_pad);
@@ -199,7 +211,7 @@ impl EmitState {
             if ending && here.is_value() {
                 let mut at = st;
                 if (walk.async_rests.len() as i64) > before {
-                    let cell = (*nikaia_std::index::get(&walk.async_rests, nikaia_std::index::at(walk.async_rests.len() as i64 - 1))).to_string();
+                    let cell = nikaia_std::block::Text::from((*nikaia_std::index::get(&walk.async_rests, nikaia_std::index::at(walk.async_rests.len() as i64 - 1))).to_string());
                     let declared = format!("let {} = nikaia_std::task::Rest::new(); ", cell);
                     let found = nikaia_std::index::or(nikaia_std::search::find(&out.buf, &declared, 0), || -1);
                     if found >= st { at = found + declared.len() as i64; }
@@ -208,6 +220,8 @@ impl EmitState {
                 out.push(" };");
             }
             out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
+            self.emit_view_list_drops(out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64);
+            self.emit_view_list_rebinds(out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64);
             out.push("\n");
             pos += 1;
         }
@@ -294,11 +308,11 @@ impl EmitState {
                 let mut found = self.facts.comptime_values.get(&at);
                 if found.is_none() && walk.specialising.is_some() && walk.at_field.is_some() {
                     let on = nikaia_std::index::or(match walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()) {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }, || "".into());
                     let field = nikaia_std::index::or(match walk.at_field.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()) {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }, || "".into());
                     found = self.facts.turn_comptime_values.get(&format!("{}:{}:{}", at, on, field));
@@ -376,7 +390,7 @@ impl EmitState {
             let keep = match plan.puts.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let put = emit_stmt_put_call(&keep, plan.opaque_puts.contains(&at));
             let local = self.emit_stmt_local(&late.name);
-            walk.kept_names.insert(late.name.to_string());
+            walk.kept_names.insert(nikaia_std::block::Text::from(late.name.to_string()));
             let mut_word = if late.reassigned { "mut " } else { "" };
             written = format!("{} let {}{} = {}{});", written, mut_word, local, put, local);
         }
@@ -438,7 +452,7 @@ impl EmitState {
         }
         let bound = emit_text(world, *nikaia_std::index::get(&names, 0));
         let count = self.count_at(host.crossings_are_possible(), &scope.function, &bound);
-        let inner = EmitScope { bound: bound.to_string(), ..scope.clone() };
+        let inner = EmitScope { bound: nikaia_std::block::Text::from(bound.to_string()), ..scope.clone() };
         let kept = self.emit_stmt_kept(&walk, &scope.function, at, &bound);
         walk.holding = kept.holding;
         let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, &count, kept.put.is_some() || kept.packed);
@@ -454,13 +468,14 @@ impl EmitState {
             return Ok(());
         }
         if kept.put.is_some() {
-            walk.kept_names.insert(bound.to_string());
+            walk.kept_names.insert(nikaia_std::block::Text::from(bound.to_string()));
             out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || "")));
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(");");
             return Ok(());
         }
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
+        if mut_word != "" && self.facts.view_list_rebound.contains(&at) { out.push("#[allow(unused_mut)] "); }
         out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
         out.push(&before);
         match value {
@@ -539,6 +554,8 @@ impl EmitState {
         if rebound.is_some() { if nikaia_std::index::or(rebound, || false) { out.push("let mut "); } else { out.push("let "); } }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
         if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(std::convert::identity(op)))); }
+        let bound_first = op.is_none() && self.facts.view_list_assigns.contains(&at);
+        if bound_first { out.push("{ let __nikaia_value = "); }
         let reput = self.emit_stmt_reput(&walk, &scope.function, at);
         let reputted = reput.is_some();
         if reputted { out.push(nikaia_std::index::or(reput.as_deref(), || "")); }
@@ -583,6 +600,7 @@ impl EmitState {
         if appended { out.push(")"); }
         out.push(&after);
         if reputted { out.push(")"); }
+        if bound_first { out.push("; __nikaia_value }"); }
         out.push(";");
         Ok(())
     }
@@ -746,8 +764,8 @@ impl EmitState {
     pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
         if walk.specialising.is_some() {
-            let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
-            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string();
+            let parameter = nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string());
+            let on = nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string());
             let fields = self.unrolls_here(world, &walk, &parameter, &on, iter);
             if fields.is_some() {
                 let mut first: String = String::from("");
@@ -766,49 +784,49 @@ impl EmitState {
                     None => None,
                 };
                 let owner = self.unrolled_owner(world, &walk, &on, iter);
-                walk.field_owners.insert(first.to_string(), owner);
+                walk.field_owners.insert(nikaia_std::block::Text::from(first.to_string()), owner);
                 for field in list.iter() {
                     let outer = match walk.at_field.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     };
-                    walk.at_field = Some(EmitPair { first: first.to_string(), second: field.name.to_string() });
-                    walk.field_names.insert(first.to_string(), field.name.to_string());
-                    walk.field_types.insert(first.to_string(), check_reflect_written(&field.ty));
+                    walk.at_field = Some(EmitPair { first: nikaia_std::block::Text::from(first.to_string()), second: nikaia_std::block::Text::from(field.name.to_string()) });
+                    walk.field_names.insert(nikaia_std::block::Text::from(first.to_string()), nikaia_std::block::Text::from(field.name.to_string()));
+                    walk.field_types.insert(nikaia_std::block::Text::from(first.to_string()), check_reflect_written(&field.ty));
                     self.emit_core_block(world, walk, out, host, body, depth, flow, scope, &EmitTail::Statement)?;
                     walk.at_field = outer;
                 }
                 walk.field_names.remove(&first);
                 walk.field_types.remove(&first);
                 walk.field_owners.remove(&first);
-                if outer_owner.is_some() { walk.field_owners.insert(first.to_string(), nikaia_std::index::or(outer_owner.as_deref(), || "").to_string()); }
+                if outer_owner.is_some() { walk.field_owners.insert(nikaia_std::block::Text::from(first.to_string()), nikaia_std::block::Text::from(nikaia_std::index::or(outer_owner.as_deref(), || "").to_string())); }
                 if outer_name.is_some() {
-                    walk.field_names.insert(first.to_string(), nikaia_std::index::or(outer_name.as_deref(), || "").to_string());
-                    walk.field_types.insert(first.to_string(), nikaia_std::index::or(outer_type.as_deref(), || "").to_string());
+                    walk.field_names.insert(nikaia_std::block::Text::from(first.to_string()), nikaia_std::block::Text::from(nikaia_std::index::or(outer_name.as_deref(), || "").to_string()));
+                    walk.field_types.insert(nikaia_std::block::Text::from(first.to_string()), nikaia_std::block::Text::from(nikaia_std::index::or(outer_type.as_deref(), || "").to_string()));
                 }
                 return Ok(());
             }
         }
         let fallible = self.facts.fallible_loops.contains(&at);
-        let mut each: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut each: Vec<String> = vec![];
         for one in bindings.iter() {
             let one = *one;
             let local = self.emit_stmt_local(&emit_text(world, one));
             if fallible && local == "_" { each.push(format!("__nikaia_step_{}", each.len() as i64)); } else { each.push(local); }
         }
         let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(&node_key(iter));
-        let mut written: Vec<String> = vec![];
-        for one in each.iter() { if mutable && !viewed && one != "_" { written.push(format!("mut {}", one)); } else { written.push(one.to_string()); } }
-        let names = written.join(", ");
+        let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
+        for one in each.iter() { if mutable && !viewed && one != "_" { written.push(format!("mut {}", one)); } else { written.push(nikaia_std::block::Text::from(one.to_string())); } }
+        let names = nikaia_std::block::Text::from(written.join(", ")); #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
         let bound = emit_stmt_tuple_pattern(&written, shape);
-        let mut allowed = "";
+        let mut allowed = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
         if mutable && !viewed && each.len() > 1 { allowed = "#[allow(unused_mut)] "; }
         let plain = emit_stmt_tuple_pattern(&each, shape);
         if self.facts.pausing_loops.contains(&at) {
             let mut unwrap: Option<String> = None;
             if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", bound, plain)); }
-            let pad = "    ".repeat(nikaia_std::count::of(depth));
-            let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
+            let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
+            let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
             out.push("{\n");
             out.push(&inner);
             out.push("let mut __nikaia_sequence = ");
@@ -834,7 +852,7 @@ impl EmitState {
         }
         out.push(" ");
         let mut unwrap: Option<String> = None;
-        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, each.join(", "))); }
+        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, nikaia_std::block::Text::from(each.join(", ")))); }
         let mut copied: String = String::from("");
         for one in bindings.iter() {
             let one = *one;
@@ -851,13 +869,13 @@ impl EmitState {
             }
         }
         let mut opening: Option<String> = None;
-        if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(copied.to_string()); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
+        if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(nikaia_std::block::Text::from(copied.to_string())); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
         let mut inside = scope.clone();
         if viewed {
-            let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.to_owned();
+            let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.copy_owned();
             for one in bindings.iter() {
                 let one = *one;
-                if emit_text(world, one) != "_" { changed.push(one.to_owned()); }
+                if emit_text(world, one) != "_" { changed.push(one.copy_owned()); }
             }
             inside = EmitScope { changed: changed, ..scope.clone() };
         }

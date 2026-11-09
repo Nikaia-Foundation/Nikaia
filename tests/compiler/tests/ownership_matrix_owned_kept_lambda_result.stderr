@@ -1,0 +1,9 @@
+error[NK1104]: This lambda returns `s`, which it captures, but `fn() -> String` returns text of its own.
+   --> tests/ownership_matrix_owned_kept_lambda_result.nika:12:34
+    |
+ 12 |     let f: fn() -> String = fn { s }
+    |                                  ^
+    |
+    = note: A lambda may run more than once, so what it captures stays with it and is not given away.
+    = help: Hand back a copy with `s.clone()`.
+1 type error

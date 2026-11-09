@@ -7,28 +7,28 @@ pub fn cx_converted(part: &CxPart, records: &[CxRecord], plains: &[CxPlain], of:
         CxPart::Choice(at) => { let at = *at; cx_converted_choice(nikaia_std::index::get(&plains, nikaia_std::index::at(at)), of) },
         CxPart::Record(at) => {
             let at = *at;
-            let inner = nikaia_std::index::get(&records, nikaia_std::index::at(at)).name.to_string();
+            let inner = nikaia_std::block::Text::from(nikaia_std::index::get(&records, nikaia_std::index::at(at)).name.to_string());
             (format!("__nikaia_c_{}", inner), format!("{}.into_nikaia()", of), format!("__nikaia_c_{}::from_nikaia({})", inner, of))
         },
-        CxPart::Array(_, _) => ("".to_string(), "".to_string(), "".to_string()),
+        CxPart::Array(_, _) => (nikaia_std::block::Text::from(""), nikaia_std::block::Text::from(""), nikaia_std::block::Text::from("")),
     }
 }
 
 pub(crate) fn cx_converted_value(shape: &CxByValue, of: &str) -> (String, String, String) {
-    if shape.scalar { return ("u32".to_string(), format!("char::from_u32({})", of), format!("{} as u32", of)); }
-    (shape.rust.to_string(), format!("Some({})", of), of.to_string())
+    if shape.scalar { return (nikaia_std::block::Text::from("u32"), format!("char::from_u32({})", of), format!("{} as u32", of)); }
+    (nikaia_std::block::Text::from(shape.rust.to_string()), format!("Some({})", of), nikaia_std::block::Text::from(of.to_string()))
 }
 
 pub(crate) fn cx_converted_choice(plain: &CxPlain, of: &str) -> (String, String, String) {
-    let mut inward: Vec<String> = vec![];
-    let mut outward: Vec<String> = vec![];
-    let mut number = 0;
+    #[allow(unused_mut)] let mut inward: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut outward: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut inward = inward;
+    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut inward = inward; #[allow(unused_mut, clippy::redundant_locals)] let mut outward = outward;
     for variant in plain.variants.iter() {
         inward.push(format!("{} => Some({}::{}),", number, plain.name, variant));
         outward.push(format!("{}::{} => {},", plain.name, variant, number));
         number += 1;
     }
-    ("std::ffi::c_int".to_string(), format!("match {} {{ {} _ => None }}", of, inward.join(" ")), format!("match {} {{ {} }}", of, outward.join(" ")))
+    (nikaia_std::block::Text::from("std::ffi::c_int"), format!("match {} {{ {} _ => None }}", of, nikaia_std::block::Text::from(inward.join(" "))), format!("match {} {{ {} }}", of, nikaia_std::block::Text::from(outward.join(" "))))
 }
 
 pub(crate) fn cx_field_mirror(part: &CxPart, records: &[CxRecord], plains: &[CxPlain], read: &str, made_from: &str) -> (String, String, String) {
@@ -47,10 +47,10 @@ pub(crate) fn cx_field_mirror(part: &CxPart, records: &[CxRecord], plains: &[CxP
 }
 
 pub fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) -> String {
-    let ty = record.name.to_string();
+    let ty = nikaia_std::block::Text::from(record.name.to_string());
     let mut fields: String = String::from("");
-    let mut into: Vec<String> = vec![];
-    let mut from: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut into: Vec<String> = vec![];
+    let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into;
     for (field, part) in record.fields.iter() {
         let local = cx_escaped(field);
         let (lowered, inward, outward) = cx_field_mirror(part, records, plains, &format!("self.{}", local), &format!("value.{}", local));
@@ -58,16 +58,16 @@ pub fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) ->
         into.push(format!("{}: {}", local, inward));
         from.push(format!("{}: {}", local, outward));
     }
-    format!("\n/// `{}` as C lays it out and hands it over (ADR-284 D14).\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub struct __nikaia_c_{} {{\n{}}}\n\n#[allow(dead_code)]\nimpl __nikaia_c_{} {{\n    fn into_nikaia(self) -> Option<{}> {{\n        Some({} {{ {} }})\n    }}\n    fn from_nikaia(value: {}) -> Self {{\n        Self {{ {} }}\n    }}\n}}\n", ty, ty, fields, ty, ty, ty, into.join(", "), ty, from.join(", "))
+    format!("\n/// `{}` as C lays it out and hands it over (ADR-284 D14).\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub struct __nikaia_c_{} {{\n{}}}\n\n#[allow(dead_code)]\nimpl __nikaia_c_{} {{\n    fn into_nikaia(self) -> Option<{}> {{\n        Some({} {{ {} }})\n    }}\n    fn from_nikaia(value: {}) -> Self {{\n        Self {{ {} }}\n    }}\n}}\n", ty, ty, fields, ty, ty, ty, nikaia_std::block::Text::from(into.join(", ")), ty, nikaia_std::block::Text::from(from.join(", ")))
 }
 
 pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) -> String {
-    let ty = record.name.to_string();
+    let ty = nikaia_std::block::Text::from(record.name.to_string());
     let mut out: String = String::from("");
-    let mut members: Vec<String> = vec![];
-    let mut into: Vec<String> = vec![];
-    let mut from: Vec<String> = vec![];
-    let mut tag = 0;
+    #[allow(unused_mut)] let mut members: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut into: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
+    #[allow(unused_mut)] let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into;
+    let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into; #[allow(unused_mut, clippy::redundant_locals)] let mut from = from;
     for variant in record.variants.iter() {
         let path = format!("{}::{}", ty, cx_escaped(&variant.name));
         if variant.fields.is_empty() {
@@ -80,12 +80,12 @@ pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPla
         let member = cx_escaped(&variant.member);
         members.push(format!("{}: {}", member, shape));
         let mut fields: String = String::from("");
-        let mut taken: Vec<String> = vec![];
-        let mut made: Vec<String> = vec![];
-        let mut bound: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut taken: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut made: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut taken = taken;
+        #[allow(unused_mut)] let mut bound: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut taken = taken; #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
         for (field, part) in variant.fields.iter() {
             let local = cx_escaped(field);
-            let mut named = local.to_string();
+            let mut named = nikaia_std::block::Text::from(local.to_string());
             if variant.positional { named = format!("__nikaia{}", local); }
             let (lowered, inward, outward) = cx_field_mirror(part, records, plains, &format!("v.{}", local), &named);
             fields.push_str(&format!("    {}: {},\n", local, lowered));
@@ -94,24 +94,24 @@ pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPla
             bound.push(named);
         }
         out.push_str(&format!("\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub struct {} {{\n{}}}\n", shape, fields));
-        let mut built = format!("{} {{ {} }}", path, taken.join(", "));
-        let mut pattern = format!("{} {{ {} }}", path, bound.join(", "));
+        let mut built = format!("{} {{ {} }}", path, nikaia_std::block::Text::from(taken.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+        let mut pattern = format!("{} {{ {} }}", path, nikaia_std::block::Text::from(bound.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
         if variant.positional {
-            built = format!("{}({})", path, taken.join(", "));
-            pattern = format!("{}({})", path, bound.join(", "));
+            built = format!("{}({})", path, nikaia_std::block::Text::from(taken.join(", ")));
+            pattern = format!("{}({})", path, nikaia_std::block::Text::from(bound.join(", ")));
         }
         into.push(format!("{} => {{\n            // SAFETY: the tag names this variant, so C wrote this member (ADR-284 D32).\n            let v = unsafe {{ self.u.{} }};\n            Some({})\n        }}", tag, member, built));
-        from.push(format!("{} => {{\n            let mut made = Self {{ tag: {}, ..Self::zeroed() }};\n            made.u.{} = {} {{ {} }};\n            made\n        }}", pattern, tag, member, shape, made.join(", ")));
+        from.push(format!("{} => {{\n            let mut made = Self {{ tag: {}, ..Self::zeroed() }};\n            made.u.{} = {} {{ {} }};\n            made\n        }}", pattern, tag, member, shape, nikaia_std::block::Text::from(made.join(", "))));
         tag += 1;
     }
-    let mut union: String = String::from("");
-    let mut held: String = String::from("");
+    let mut union: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
+    let mut held: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
     if !members.is_empty() {
-        union = format!("\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub union __nikaia_cu_{} {{ {} }}\n", ty, members.join(", "));
+        union = format!("\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub union __nikaia_cu_{} {{ {} }}\n", ty, nikaia_std::block::Text::from(members.join(", ")));
         held = format!("    u: __nikaia_cu_{},\n", ty);
     }
-    let into_text = into.join("\n        ");
-    let from_text = from.join("\n        ");
+    let into_text = nikaia_std::block::Text::from(into.join("\n        "));
+    let from_text = nikaia_std::block::Text::from(from.join("\n        "));
     format!("{}{}\n/// `{}` as C lays it out and hands it over: a tag and a union (ADR-284 D32).\n#[repr(C)]\n#[derive(Clone, Copy)]\n#[allow(non_camel_case_types)]\npub struct __nikaia_c_{} {{\n    tag: std::ffi::c_int,\n{}}}\n\n#[allow(dead_code, unreachable_patterns)]\nimpl __nikaia_c_{} {{\n    /// All zero: every member of the union is numbers, for which zero is a value.\n    fn zeroed() -> Self {{\n        // SAFETY: a C int and a union of `#[repr(C)]` structs of numbers and `bool`; all-zero bytes are a value of each.\n        unsafe {{ std::mem::zeroed() }}\n    }}\n    fn into_nikaia(self) -> Option<{}> {{\n        match self.tag {{\n        {}\n        _ => None,\n        }}\n    }}\n    fn from_nikaia(value: {}) -> Self {{\n        match value {{\n        {}\n        }}\n    }}\n}}\n", out, union, ty, ty, held, ty, ty, into_text, ty, from_text)
 }
 

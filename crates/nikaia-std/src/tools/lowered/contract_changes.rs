@@ -27,8 +27,8 @@ pub(crate) fn column_moved(key: &str, old: &FnContract, new: &FnContract, by_par
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        let mut who = String::from("an impl in this package keeps it");
-        if !impls.is_empty() { who = format!("{} keeps it", impls.join(", ")); }
+        let mut who = String::from("an impl in this package keeps it"); #[allow(clippy::redundant_locals)] let impls = impls;
+        if !impls.is_empty() { who = format!("{} keeps it", nikaia_std::block::Text::from(impls.join(", "))); }
         out.push_str(&format!("warning[NK1265]: the trait method `{}` keeps `{}` now, and the committed ledger says it runs it.\n   = note: {}.\n   = note: a caller that lends into `{}` through the trait is refused now.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, parameter, who, parameter));
     }
     for parameter in old.keeps.iter() {
@@ -44,14 +44,14 @@ pub(crate) fn condition_names(contract: &FnContract) -> collections::BTreeSet<St
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return names };
     for (name, ty) in signature.params.iter() {
         if has_a_length(&type_name_of(ty)) { names.insert(format!("{}.len()", name)); }
-        names.insert(name.to_string());
+        names.insert(nikaia_std::block::Text::from(name.to_string()));
     }
     names
 }
 
 pub(crate) fn type_name_of(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, .. } => name.to_string(),
+        Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => String::from(""),
     }
 }
@@ -60,6 +60,6 @@ pub(crate) fn conditions_said(list: &[String]) -> String {
     if list.is_empty() { return String::from("nothing"); }
     let mut said: Vec<String> = vec![];
     for condition in list.iter() { said.push(format!("`{}`", condition)); }
-    said.join(" and ")
+    nikaia_std::block::Text::from(said.join(" and "))
 }
 

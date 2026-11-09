@@ -8,6 +8,84 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1369] — 2026-11-09
+
+**Memory budget: a block's list is 32 bytes again; a list of views is bound again after each text it may view (Part of #490)**
+- A task block's list holds its `Vec` directly again and is 32 bytes, as a block's text is (ADR-306, #490).
+- Lowering: a list that may hold views of a text declared after it (a `Vec[ref T]`, a `Vec[String]` the text tiers make views, or a struct with such a field) is bound again right after that text, so it is dropped before the text on every way out, a panic's unwind path included. rustc refused the program with E0597 before.
+- Lowering: an assignment whose value collects views of the text it replaces binds that value first; rustc refused it with E0506 before.
+- Left open: placement in the block (step 5), `OverBudget` (D13), the remaining steps of #490.
+
+## [0.0.1368] — 2026-11-09
+
+**Builders' changes (#1209, #1210, #1218, #1225, #1228, #1250, #1251, #1261, #1264, #1268, #1270, #1271, #1272, #1273, #1274, #1275, #1276, #1279, #1280, #1286, #1287, #1289, #1290, #1291, #1292, #1293, #1294, #1295, #1297, #1310, #1316, #1321, #1322, #1324, #1325, #1327, #1334, #1335, #1341, #1342, #1343, #1344, #1345, #1348, #1362, #1363, #1368, #1373, #1386, #1395, #1403)**
+- A call that hands a list or a part of it to a `mut` parameter and reads it in a later argument (`put(v[1..<3], v[0])`, or a lambda that reads `v`) is refused with NK2305 at the call. It was a rustc error. A later argument made in the call, such as `first(v)`, is still evaluated before the call (ADR-views-3 D11, #1209).
+- The text form of a field of an element of a list literal bound without a type (`let sites = [Site { line: 7 }]`, then `sites[1].line.to_string()`) is new text, as one of a declared list is, so it no longer lends a temporary rustc refused
+- Views-3: a struct field filled from an element of a local, from a field of a lent parameter or from a lent parameter is a tethered view; when the struct is handed back, the local moves whole into the caller's keep, with no copy and no NK2304 (#1218).
+- Without a body, `from` alone makes a trait method's result a view (ADR-views-3 D14): an implementation is held to its trait's `from` without writing one itself, and one whose trait result writes no `from` may not hand back a view (NK2302). `nikaia migrate views-3` writes a trait method's `-> ref String` as `-> String from self` (or `from` its one `ref` parameter), and names the choices where it cannot tell.
+- Keeps: a struct literal lends a parameter of any type, or a part of it, into a field it holds as a view while the struct stays in the function; stored, given to a task or to a `keep` parameter, the struct keeps it (ADR-views-3 D5, #1225).
+- Lowering: a view of a `ref` parameter pushed into a `mut` list parameter shares that parameter's lifetime (ADR-283 D27), as text already did.
+- An impl of a trait method whose result says `from a` and hands back `a` itself now lowers `a` as the trait does (a view with the shared lifetime), so rustc no longer refuses the impl.
+- Views cut from a text joined with `+` in the same `let` (`let words = ("a " + tail).split(" ").collect()`) keep the joined text alive (was rustc E0716)
+- A function field is lent its text; a type variable's method reaches its bound; a pub fn hands back a lent element; `p.parse(t)` on a field and `return n ?? "none"` keep nothing (ADR-views-3 D2, D7, D8, D14; ADR-282 D29)
+- A call through a function field lends what its parameters take as a view or mut (ADR-views-3 D2, D14): an owned String handed to fn(String) went below by value, a rustc error (NK1343).
+- The keeps ledger reads c.count() of c: C with [C: Count] as Count::count, which lends c; the bare name matched std's count, which takes its receiver, and counted kept c (NK2302).
+- pub fn first(v: Vec[String]) -> String { return v[0] } and a result written from v hand back a view of the element where every way out is one (ADR-views-3 D2, D7, D8); the element moved out of a borrow, a rustc error (NK1343).
+- p.parse(text) on a function field of a parameter keeps only what the field's type keeps, not p or text (ADR-views-3 D2, D14); return name ?? "none" hands back a view, the literal is static text (ADR-282 D29); both were refused with NK2302 in a file that writes keep.
+- A text field taken from a struct that a call hands back (`let out = process::run(…).stdout`) is the function's own text: a view of it handed back is tethered instead of failing in rustc (#1261).
+- A lambda handed where a function type's result is `String` without `from` that hands back a view of text (`s.trim().to_string()`) or a `String` it captures is now refused with NK1104 and the help `.clone()`, instead of a rustc error (#1264, #1263).
+- A text `+` with a `for` element of a `Vec[String]` on either side compiles (it failed at rustc: `String: Plus<&String>`)
+- A `let` declared `Array[T]` holds a view where it is given a piece of a place or a call whose result views its argument: `let r: Array[i64] = rest(v)` (ADR-views-3 D8, D11)
+- A `Bytes` field that every literal fills with a cut or a lent `Bytes` parameter holds a view, and a `let` declared `Bytes` over `s.bytes`, a cut or a call whose result views its argument holds the view (ADR-views-3 D15); both reached rustc as `&[u8]` into `Bytes`
+- An Array[T] or Bytes field is a view when every struct literal in the package fills it with a piece, whichever file the literal is in (#1272)
+- none (the behaviour shipped with #1218; spec text only)
+- An element or field read given to a `ref T` field of a struct literal is a view of it (ADR-views-3 D5), as under a typed `let` (#1274).
+- An element of a list the function made, handed back in a String field, now runs: the list moves into the caller's keep (#1275, ADR-283 D23).
+- A buffer changed after its let (xs.push(..), text.push_str(..), text += ..) and then handed back through the keep is put into the keep after its last change, not at its let, so rustc no longer refuses the change (#1276).
+- lower-std after an edit about 3.5x faster: the ledger's unit checks and the tools' parse run on every core, and the views result-source rounds stop rescanning the package for each unit (ledger 56 s -> 11 s, a body edit 54 s -> 15 s, output unchanged).
+- lower-std draws the package's pausing and code-cycle call graphs once per package instead of once per file: a cold run's emit falls from 240 s to 45 s of CPU (files 69 s to 20 s wall), output unchanged.
+- NK2302 in an `impl` of a trait whose result writes `from` names the trait's `from` and the way out, instead of the pre-views-3 "take it as `ref`".
+- A `String` that both a view and owned text flow into is accepted by `fs::write`, the `fs` path calls and every other bytes or path sink (before: rustc refused it after the checker accepted it)
+- A view of a call's result kept past its statement (`for line in read(p).lines() { v.push(line.to_string()) }`, `v.push(text().trim())`) is refused with NK1102 (write `.clone()`) instead of failing in rustc (#1287).
+- A call in the last expression of an `if` or `match` arm whose text is the statement's value no longer fails in rustc (`__keep_N` does not live long enough): its keep is declared before the statement (#1289).
+- An operator expression handed to a parameter that only reads it (`v.contains(l ^ 1)`, `m.get(e.first + 1)`) is lent whole and no longer fails in rustc.
+- Fixed: a map's `get` bound by a `let` and returned after a `!= null` test is the value, not a borrowed option rustc refuses (#1291).
+- A fallback of `??` is handed over: `maybe() ?? r` used twice with the same `r` is refused with NK2105 instead of failing in rustc.
+- Fixed: a comparison of parenthesised comparisons (`(a > 0) != (b > 0)`) is lowered with its parentheses and compiles.
+- `i64::MIN`, `u8::MAX` and the other integer limits type-check — `T::MIN` and `T::MAX` of each fixed-width integer type are values of type `T` (#1294).
+- `nikaia migrate views-3` now reports each trait `ref` result it could not write in a Markdown file's nika/nikaia blocks, as FILE:LINE (line in the file), and exits 1.
+- A `??` fallback literal takes the u32/u64 the optional holds: `m.get(k) ?? 4294967295` of a u32 map compiles, and a fallback that does not fit is NK1116 (#1297).
+- An EitherText name is lent to a String parameter: a let of a match or if mixing owned text and a view (a sliced .to_string()) handed to a read-only String parameter no longer fails in rustc (#1310).
+- check: a text element of `Vec[String].iter()` that is handed to `push`/`insert` (of a list, set or map) wanting `String`, alone or through `.to_string()`, is now refused with NK1102 and a `.clone()` hint. Before, the checker accepted it and rustc failed with "mismatched types" (#1316)
+- Code that hands back nothing drops its value: a lambda handed to s.spawn, to a fn() parameter of the program's own, or kept as fn(), may end with a value; it is dropped as a named function's is, instead of a rustc error (#1321).
+- What is not known is not written: a value whose type the compiler cannot tell is refused with NK1342 (into a T?, as the left side of ??, as a map key) instead of being left to rustc; a valid program keying an untyped map with String keys is now NK1342 and names the map's type to write down.
+- Text: `m[k] ?? k` with a name of text is a view of the map or the name, and a name beside `+` that is read again is read, not moved (#1324).
+- `int::MIN` and `int::MAX` type-check as `i64` values, in expressions and in `match` patterns (#1325).
+- Views: a trait method whose result says `from a` now lends `a` whatever its type. A struct or list handed to it stays usable after the call, as with a free function (#1327).
+- Views: text handed to a call while a view of it from an earlier call in the same statement is still used is lent, not moved (ADR-views-3 D8, ADR-282 D7)
+- Lowering: a free function no longer changes the calls of a method with the same name in another file (#1335)
+- A field of a plain struct parameter handed back as text (alone, beside owned text, or in an f-string elsewhere) lends the parameter instead of keeping it (NK2105 before); a parameter also stored whole stays kept.
+- A field both kinds of text flow into, handed back out of a lent struct parameter, lowers to a borrow of the struct (was an internal compiler error, E0621).
+- A generic parameter is lent: `fn twice[C: Named](c: C)` reads `c`, so the caller's value stays usable after the call (ADR-views-3 D2).
+- An element of a plain `Vec[String]` parameter handed back as the `String` result (alone, beside owned text, nested, through a struct field, with the list measured besides) lends the list instead of lowering to a move out of the borrow (internal compiler error before).
+- A piece of a lent text (`split`, `split_once(..).0`) pushed into a field of `self` or into a `mut` parameter is kept as a view at the caller's lifetime (ADR-283 D27) instead of failing in rustc or with NK1102
+- Bytes cuts as map keys: `m[b[0..<1]] = 1`, `m.get(b[0..<1])` and `v.push(b[0..<1])` on a map or list of `Bytes` now compile (a read looks the cut up as it is, a kept cut is copied), and `s.bytes` handed to a `ref Bytes` map or list stays a view.
+- A text option parameter (`String?`) read through `??` is lent: a caller can pass the same text twice (#1346)
+- Driver: the badges step measures the committed tree (git archive HEAD), so an unstaged file in the shared checkout no longer makes the committed self-hosted badge disagree with CI's check (#1348).
+- A let declared Array[T] (or ref Array[T]) over a whole list or a field holding one is a view of it: the list stays usable and is not changed while the view is used (ADR-views-3 D11)
+- A change to a list or text while a cut of it (`v[0..]`, `s[0..<i]`) is still used is refused with NK2305 instead of failing in rustc (#1363).
+- An element of a list a function made can be handed back bare, through a let alias, or out of an untyped list literal of text; the list moves into the caller's keep. A shape the tether cannot lower is refused with NK2304.
+- Internal compiler errors are named: when rustc refuses what an accepted program became, build, run, test and the new check --rustc report error[NK1343] at the .nika line, with rustc's text and a request for a bug report; nikaia test never blesses it.
+- An `if` or `match` whose every end is of no known type is refused with NK1342 going into a `T?` (at a `return`, a tail or a typed `let`), instead of reaching rustc as an internal error.
+- An `impl` of a trait whose result writes `from` that hands back a parameter it owns is refused once, by NK2302, no longer also by an NK1104 asking for `ref`.
+- std code that hands back nothing drops a lambda's value (for_each), and a lambda whose last value is not its function type's result is NK1104 instead of a rustc error (#1395).
+- Diagnostic helps speak views-3: NK1131, NK1104, NK1102 and the `&` note no longer tell you to write `ref T`, which NK1261 then called redundant; they offer `.clone()`, `keep`, `Array[T]` or `String` without `ref`.
+- A list element of a local list, or a `let` view of a local's `String` field, handed to a `keep` parameter, a `push` or a struct field, is refused with NK1131/NK1102/NK1106 and a `.clone()` help instead of failing in rustc (NK1343).
+- An element of a list owned in the function, handed to a `keep` parameter or a `push`, is refused with NK1131 and a `.clone()` help instead of failing in rustc (NK1343).
+- A plain `let` over a `String` field of a local value is a view of it (ADR-views-3 D5): handed where a value of its own is kept it is refused with a `.clone()` help instead of failing in rustc (NK1343).
+- Official packages without a manifest entry: `use json` in a project that neither declares `json` nor holds `src/json/` takes the shipped `packages/json` in at the version std lists (0.1.0), offline, and records it in `nikaia.lock`; a `[dependencies]` entry of the name wins (ADR-338 D2, D3).
+- A caller's `throws` now takes an error a dependency declares by `?` (`let v = json::parse(t)` in a `throws` function): the generated union held it unwrapped and rustc refused the program.
+
 ## [0.0.1367] — 2026-11-09
 
 **Builders' changes (#1378, #1380, #1381, #1400, #1401, #1405, #1406, #1416, #1418, #1419, #1421, #1422, #1438, #1447, #1468, #1471, #1439, #1479, #929, #948, #1013, #1015, #1056, #1063, #1070, #1071, #1072, #1085, #1089, #1094, #1026)**

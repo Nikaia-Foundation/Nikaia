@@ -226,6 +226,23 @@ where
     }
 }
 
+/// **A block's list is indexed as a `Vec` is** (ADR-327 D4, #490): a
+/// number or a range, through the run it derefs to.
+impl<V, I> Get<I> for crate::block::List<V>
+where
+    I: std::slice::SliceIndex<[V]> + 'static,
+{
+    type Out<'a>
+        = &'a I::Output
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get(&self, key: I) -> &I::Output {
+        &self.as_slice()[key]
+    }
+}
+
 impl<V, I, const N: usize> Get<I> for [V; N]
 where
     // **`'static` on the index**, which costs nothing and is what lets the
@@ -392,6 +409,23 @@ where
     }
 }
 
+/// **A block's text is sliced as a `String` is** (ADR-327 D4, #490).
+impl<I> Get<I> for crate::block::Text
+where
+    I: std::slice::SliceIndex<str> + TextCut + 'static,
+{
+    type Out<'a>
+        = &'a I::Output
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get(&self, key: I) -> &I::Output {
+        text_cut(self, &key);
+        &self.as_str()[key]
+    }
+}
+
 /// **A view of a container reads like the container**, because this emitter
 /// writes `get(&x, …)` whether `x` is owned or already a view
 /// ([ADR-296](../../../docs/specification/adr/adr-296.md) D17) — so a `&&str`
@@ -520,18 +554,34 @@ impl<V> Get<&crate::either_text::EitherText<'_>> for std::collections::BTreeMap<
     }
 }
 
-/// **A key read out of a map whose key type the checker could not pin**
-/// (0.0.235): what `index::key(k)` wraps.
-///
-/// A map's read wants `&Q` where the map's key borrows as `Q`, and the key in
-/// the brackets may be a number (lent here) or already a view (passed
-/// through) - which one, the emitter cannot say, because nothing in the source
-/// pinned the map's key type. [`AsKey`] answers it by the key's own type.
-pub struct Key<T>(T);
+/// The same in a map keyed by a block's text (#490), which borrows as the
+/// `str` it holds.
+impl<V, S> Get<&crate::either_text::EitherText<'_>>
+    for crate::hash::HashMap<crate::block::Text, V, S>
+where
+    S: std::hash::BuildHasher,
+{
+    type Out<'a>
+        = Found<'a, V>
+    where
+        Self: 'a;
 
-/// Wrap a key for [`Key`]'s read.
-pub fn key<T: AsKey>(key: T) -> Key<T> {
-    Key(key)
+    fn get(&self, key: &crate::either_text::EitherText<'_>) -> Found<'_, V> {
+        Found(crate::hash::HashMap::get(self, key.as_str()))
+    }
+}
+
+impl<V> Get<&crate::either_text::EitherText<'_>>
+    for std::collections::BTreeMap<crate::block::Text, V>
+{
+    type Out<'a>
+        = Found<'a, V>
+    where
+        Self: 'a;
+
+    fn get(&self, key: &crate::either_text::EitherText<'_>) -> Found<'_, V> {
+        Found(std::collections::BTreeMap::get(self, key.as_str()))
+    }
 }
 
 /// What a key is looked up as.
@@ -561,39 +611,6 @@ impl<T: ?Sized> AsKey for &T {
     type Q = T;
     fn as_key(&self) -> &T {
         self
-    }
-}
-
-impl<K, T, V, S> Get<Key<T>> for crate::hash::HashMap<K, V, S>
-where
-    T: AsKey,
-    K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<T::Q>,
-    T::Q: std::cmp::Eq + std::hash::Hash,
-    S: std::hash::BuildHasher,
-{
-    type Out<'a>
-        = Found<'a, V>
-    where
-        Self: 'a;
-
-    fn get(&self, key: Key<T>) -> Found<'_, V> {
-        Found(crate::hash::HashMap::get(self, key.0.as_key()))
-    }
-}
-
-impl<K, T, V> Get<Key<T>> for std::collections::BTreeMap<K, V>
-where
-    T: AsKey,
-    K: Ord + std::borrow::Borrow<T::Q>,
-    T::Q: Ord,
-{
-    type Out<'a>
-        = Found<'a, V>
-    where
-        Self: 'a;
-
-    fn get(&self, key: Key<T>) -> Found<'_, V> {
-        Found(std::collections::BTreeMap::get(self, key.0.as_key()))
     }
 }
 
@@ -656,40 +673,20 @@ where
     }
 }
 
-impl<K, T, V, S> GetMut<Key<T>> for crate::hash::HashMap<K, V, S>
-where
-    T: AsKey,
-    K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<T::Q>,
-    T::Q: std::cmp::Eq + std::hash::Hash,
-    S: std::hash::BuildHasher,
-{
-    type Out<'a>
-        = Option<&'a mut V>
-    where
-        Self: 'a;
-
-    fn get_mut(&mut self, key: Key<T>) -> Option<&mut V> {
-        crate::hash::HashMap::get_mut(self, key.0.as_key())
-    }
-}
-
-impl<K, T, V> GetMut<Key<T>> for std::collections::BTreeMap<K, V>
-where
-    T: AsKey,
-    K: Ord + std::borrow::Borrow<T::Q>,
-    T::Q: Ord,
-{
-    type Out<'a>
-        = Option<&'a mut V>
-    where
-        Self: 'a;
-
-    fn get_mut(&mut self, key: Key<T>) -> Option<&mut V> {
-        std::collections::BTreeMap::get_mut(self, key.0.as_key())
-    }
-}
-
 impl<V> GetMut<usize> for Vec<Option<V>> {
+    type Out<'a>
+        = Option<&'a mut V>
+    where
+        Self: 'a;
+
+    #[track_caller]
+    fn get_mut(&mut self, key: usize) -> Option<&mut V> {
+        self[key].as_mut()
+    }
+}
+
+/// A block's list of optional values, as a `Vec`'s (#490).
+impl<V> GetMut<usize> for crate::block::List<Option<V>> {
     type Out<'a>
         = Option<&'a mut V>
     where
@@ -788,6 +785,33 @@ impl<'a> Or<&'a str> for &'a Option<String> {
     }
 }
 
+/// **A block's text, read, with a literal after `??`**, as a `String`'s
+/// (#490): a view of text, nothing copied.
+impl<'a> Or<&'a str> for Option<&'a crate::block::Text> {
+    fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.map(crate::block::Text::as_str)
+            .unwrap_or_else(fallback)
+    }
+}
+
+impl<'a> Or<&'a str> for &'a Option<crate::block::Text> {
+    fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.as_deref().unwrap_or_else(fallback)
+    }
+}
+
+impl<'a, T> Or<&'a [T]> for Option<&'a crate::block::List<T>> {
+    fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
+        self.map(|list| &list[..]).unwrap_or_else(fallback)
+    }
+}
+
+impl<'a, T> Or<&'a [T]> for &'a Option<crate::block::List<T>> {
+    fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
+        self.as_deref().unwrap_or_else(fallback)
+    }
+}
+
 /// **A map's tuple that holds text, with a tuple of literals after `??`**
 /// (#846, #848): `let (s, n) = m.get(k) ?? ("", 0)` over a map of
 /// `(String, i64)`. The map keeps the tuple, so the read is lent, and what the
@@ -816,6 +840,17 @@ or_tuple! {
     [B] (a: String => &'a str = a.as_str(), b: B => B = *b, c: String => &'a str = c.as_str());
     [A] (a: A => A = *a, b: String => &'a str = b.as_str(), c: String => &'a str = c.as_str());
     [] (a: String => &'a str = a.as_str(), b: String => &'a str = b.as_str(), c: String => &'a str = c.as_str());
+    // The same over a block's text (#490), the `String` of a program.
+    [B] (a: crate::block::Text => &'a str = a.as_str(), b: B => B = *b);
+    [A] (a: A => A = *a, b: crate::block::Text => &'a str = b.as_str());
+    [] (a: crate::block::Text => &'a str = a.as_str(), b: crate::block::Text => &'a str = b.as_str());
+    [B, C] (a: crate::block::Text => &'a str = a.as_str(), b: B => B = *b, c: C => C = *c);
+    [A, C] (a: A => A = *a, b: crate::block::Text => &'a str = b.as_str(), c: C => C = *c);
+    [A, B] (a: A => A = *a, b: B => B = *b, c: crate::block::Text => &'a str = c.as_str());
+    [C] (a: crate::block::Text => &'a str = a.as_str(), b: crate::block::Text => &'a str = b.as_str(), c: C => C = *c);
+    [B] (a: crate::block::Text => &'a str = a.as_str(), b: B => B = *b, c: crate::block::Text => &'a str = c.as_str());
+    [A] (a: A => A = *a, b: crate::block::Text => &'a str = b.as_str(), c: crate::block::Text => &'a str = c.as_str());
+    [] (a: crate::block::Text => &'a str = a.as_str(), b: crate::block::Text => &'a str = b.as_str(), c: crate::block::Text => &'a str = c.as_str());
 }
 
 /// The emitted spelling: `nikaia_std::index::or(value, || fallback)`.
@@ -891,6 +926,14 @@ pub trait Set<K, V> {
 }
 
 impl<V> Set<usize, V> for Vec<V> {
+    #[track_caller]
+    fn set(&mut self, key: usize, value: V) {
+        self[key] = value;
+    }
+}
+
+/// A block's list is written in place as a `Vec` is (#490).
+impl<V> Set<usize, V> for crate::block::List<V> {
     #[track_caller]
     fn set(&mut self, key: usize, value: V) {
         self[key] = value;

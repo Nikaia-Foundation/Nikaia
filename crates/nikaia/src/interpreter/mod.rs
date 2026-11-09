@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/interpreter/mod.rs
 //
 // **The Stage 0 interpreter is Nikaia** (ADR-294, #125):

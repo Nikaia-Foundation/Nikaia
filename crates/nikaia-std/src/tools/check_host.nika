@@ -802,10 +802,15 @@ impl CheckState {
 
     /// **A lent part is a reference already**: no `&` is written in front of
     /// it, as an argument (#456) or as the pattern of a text method (#1178,
-    /// D28's `owned_patterns`), where `&tag` would be a `&&String`.
+    /// D28's `owned_patterns`), where `&tag` would be a `&&String`. As a
+    /// pattern it is a view, lent as the `str` it holds (`view_patterns`):
+    /// a block's `&Text` is no pattern of Rust's (#490).
     fn a_lent_part_is_a_reference_already(ref mut self, named: ref collections::BTreeSet[i64]) sync {
         for node in named {
-            self.facts.owned_patterns.remove(node)
+            if self.facts.owned_patterns.contains(node) {
+                self.facts.owned_patterns.remove(node)
+                self.facts.view_patterns.insert(node)
+            }
         }
         self.facts.views_handed_on.extend(named)
     }

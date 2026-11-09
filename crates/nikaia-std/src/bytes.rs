@@ -97,8 +97,8 @@ impl Bytes {
     /// The bytes as text, each run that is not UTF-8 replaced by U+FFFD
     /// (#1182): an owned copy, never a refusal, for output a program only
     /// shows, such as a child process's.
-    pub fn text_lossy(&self) -> String {
-        String::from_utf8_lossy(self.as_slice()).into_owned()
+    pub fn text_lossy(&self) -> crate::block::Text {
+        crate::block::Text::from_utf8_lossy(self.as_slice())
     }
 
     /// The first `byte` at or after the position `from`, or `None`
@@ -173,7 +173,7 @@ pub trait ByteReads {
     fn text(&self) -> Result<&str, crate::io::IoError>;
     /// The bytes as text, each run that is not UTF-8 U+FFFD:
     /// [`Bytes::text_lossy`].
-    fn text_lossy(&self) -> String;
+    fn text_lossy(&self) -> crate::block::Text;
     /// The first `byte`, or byte of a set, at or after `from`, or `None`:
     /// [`Bytes::find`].
     fn find<N: Needle>(&self, byte: N, from: i64) -> Option<i64>;
@@ -191,8 +191,8 @@ pub trait ByteReads {
 }
 
 impl ByteReads for [u8] {
-    fn text_lossy(&self) -> String {
-        String::from_utf8_lossy(self).into_owned()
+    fn text_lossy(&self) -> crate::block::Text {
+        crate::block::Text::from_utf8_lossy(self)
     }
 
     fn text(&self) -> Result<&str, crate::io::IoError> {
@@ -364,8 +364,10 @@ impl std::borrow::Borrow<[u8]> for Bytes {
 /// the program does; it is the `From` below, which copies nothing.
 #[allow(non_snake_case)]
 #[inline]
-pub fn Bytes(bytes: Vec<u8>) -> Bytes {
-    Bytes::from(bytes)
+pub fn Bytes(bytes: impl Into<Vec<u8>>) -> Bytes {
+    // A `Vec` as it is, or a block's list of bytes by its `From`, the same
+    // memory where it is outside (ADR-327 D8, #490).
+    Bytes::from(bytes.into())
 }
 
 /// **`Bytes(v)`: the vector is handed over and nothing is copied**

@@ -9,6 +9,8 @@ use nikaia::bounds::{BoundsChecks, OverflowChecks};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn report(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -31,7 +33,7 @@ fn line(out: &str, text: &str) -> String {
     out.lines()
         .find(|l| l.contains(text))
         .unwrap_or_else(|| panic!("no line for `{text}`:\n{out}"))
-        .to_string()
+        .to_text()
 }
 
 const SOURCE: &str = "\

@@ -4,6 +4,8 @@
 //! (#676), as `insert`'s is.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The standard output of `nikaia run`, which must succeed.
 fn run(name: &str, source: &str) -> String {
@@ -16,8 +18,8 @@ fn run(name: &str, source: &str) -> String {
         .output()
         .expect("the nikaia binary runs");
     let _ = std::fs::remove_dir_all(&dir);
-    let out = String::from_utf8_lossy(&run.stdout).into_owned();
-    let err = String::from_utf8_lossy(&run.stderr).into_owned();
+    let out = String::from_utf8_lossy(&run.stdout);
+    let err = String::from_utf8_lossy(&run.stderr);
     assert!(run.status.success(), "{out}{err}");
     out
 }

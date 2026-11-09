@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/type_rules.rs
 //
 // **A type's rule, an `assert` after a struct's fields**
@@ -40,10 +42,10 @@ fn refused(span: Span, head: String, help: &str) -> anyhow::Error {
     let finding = crate::check::Finding {
         severity: crate::check::Severity::Error,
         span,
-        code: "NK1288".to_string(),
+        code: "NK1288".to_text(),
         message: head.clone(),
         notes: Vec::new(),
-        help: Some(help.to_string()),
+        help: Some(help.to_text()),
         labels: vec![crate::check::Label {
             span,
             word: String::new(),
@@ -84,7 +86,7 @@ pub(crate) fn across_files(files: &mut [(&mut Parsed, &str)]) {
                 source
                     .get(span.start as usize..span.end as usize)
                     .unwrap_or_default()
-                    .to_string()
+                    .to_text()
             })
         })
         .collect();

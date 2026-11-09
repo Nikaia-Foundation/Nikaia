@@ -1,0 +1,9 @@
+error[NK1104]: This lambda returns `ref String`, a view, but `fn() -> String` returns text of its own.
+   --> tests/ownership_matrix_view_given_lambda_result.nika:17:34
+    |
+ 17 |     let f: fn() -> String = fn { s }
+    |                                  ^
+    |
+    = note: `.to_string()` of text is a view of it, not a copy, and a function type whose result is `String` without `from` hands back text it owns.
+    = help: Hand back a copy with `.clone()`.
+1 type error

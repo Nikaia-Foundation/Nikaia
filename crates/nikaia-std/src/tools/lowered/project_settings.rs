@@ -7,9 +7,9 @@ pub enum ProjectSettingsRefusal {
 }
 
 impl ProjectSettingsRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
-            ProjectSettingsRefusal::Refused(why) => why.to_string(),
+            ProjectSettingsRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
         }
     }
 }
@@ -123,21 +123,21 @@ pub fn panic_strategy(target: &Target) -> String {
 
 pub fn encoded_with_cpu(encoded: Option<&str>, plain: Option<&str>, cpu: &str) -> Option<String> {
     let mut flags: Vec<String> = match match encoded {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     } {
-        Some(ref e) => e.split("\x1f").filter(|&f| { !f.is_empty() }).map(|f| { f.to_string() }).collect::<Vec<_>>(),
+        Some(ref e) => e.split("\x1f").filter(|&f| { !f.is_empty() }).map(|f| { nikaia_std::block::Text::from(f.to_string()) }).collect::<Vec<_>>(),
         None => match match plain {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
         } {
-            Some(ref p) => p.split_whitespace().map(|f| { f.to_string() }).collect::<Vec<_>>(),
+            Some(ref p) => p.split_whitespace().map(|f| { nikaia_std::block::Text::from(f.to_string()) }).collect::<Vec<_>>(),
             None => return None,
         },
     };
     flags.push(String::from("-C"));
     flags.push(format!("target-cpu={}", cpu));
-    Some(flags.join("\x1f"))
+    Some(nikaia_std::block::Text::from(flags.join("\x1f")))
 }
 
 pub(crate) const PROJECT_SETTINGS_TARGET_VAR: &str = "NIKAIA_BUILD_TARGET";
@@ -188,7 +188,7 @@ pub fn project_settings_resolve(manifest: &impl Fn(&str, &str) -> String, packag
     let refuted = manifest("refuted-claims", "error");
     let unproved = manifest("unproved-claims", "error");
     let made = manifest("artifact", "program");
-    let named = nikaia_std::index::or(package, || "program").replace('-', "_");
+    let named = nikaia_std::block::Text::from(nikaia_std::index::or(package, || "program").replace('-', "_"));
     let symbol_prefix = manifest("symbol-prefix", &named);
     Ok(project_settings_checked(target, user_parallelism, reentrancy_check, optimization, refuted, unproved, made, symbol_prefix, false, None)?)
 }
@@ -210,25 +210,25 @@ pub fn project_settings_from_env<H: ProjectSettingsHost>(default_target: &str, h
 
 pub fn project_settings_refutations(words: &ProjectWords, refuted: Option<&str>, unproved: Option<&str>) -> Result<(String, String), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     let refuted_word = match match refuted {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     } {
         Some(word) => refuted_claims(word)?,
-        None => words.refuted_claims.to_string(),
+        None => nikaia_std::block::Text::from(words.refuted_claims.to_string()),
     };
     let unproved_word = match match unproved {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     } {
         Some(word) => unproved_claims(word)?,
-        None => words.unproved_claims.to_string(),
+        None => nikaia_std::block::Text::from(words.unproved_claims.to_string()),
     };
     Ok((refuted_word, unproved_word))
 }
 
 pub fn project_settings_chosen_cpu(level: String, levels: &[String], target_name: &str) -> Result<Option<String>, nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
     if !levels.iter().any(|known| { AsRef::<str>::as_ref(&(known)) == AsRef::<str>::as_ref(&(level)) }) {
-        let named = levels.iter().map(|known| { format!("`{}`", known) }).collect::<Vec<_>>().join(", ");
+        let named = nikaia_std::block::Text::from(levels.iter().map(|known| { format!("`{}`", known) }).collect::<Vec<_>>().join(", "));
         return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--cpu={}` is not a CPU level of `{}`. Its levels are: {}.", level, target_name, named)), &"project_settings_chosen_cpu"));
     }
     Ok(if level != *nikaia_std::index::get(&levels, 0) { Some(level) } else { None })
@@ -253,13 +253,13 @@ pub fn project_settings_cpu_rustflags<H: ProjectSettingsHost>(words: &ProjectWor
 }
 
 pub fn project_settings_as_env(words: &ProjectWords) -> Vec<(String, String)> {
-    let mut env: Vec<(String, String)> = vec![(PROJECT_SETTINGS_TARGET_VAR.to_string(), words.target.to_string()), (PROJECT_SETTINGS_PARALLELISM_VAR.to_string(), words.user_parallelism.to_string()), (PROJECT_SETTINGS_REENTRANCY_VAR.to_string(), words.reentrancy_check.to_string()), (PROJECT_SETTINGS_OPTIMIZATION_VAR.to_string(), words.optimization.to_string()), (PROJECT_SETTINGS_REFUTED_VAR.to_string(), words.refuted_claims.to_string()), (PROJECT_SETTINGS_UNPROVED_VAR.to_string(), words.unproved_claims.to_string()), (PROJECT_SETTINGS_ARTIFACT_VAR.to_string(), words.artifact.to_string()), (PROJECT_SETTINGS_PREFIX_VAR.to_string(), words.symbol_prefix.to_string())];
-    if words.tests { env.push((PROJECT_SETTINGS_TESTS_VAR.to_string(), String::from("1"))); }
+    let mut env: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(PROJECT_SETTINGS_TARGET_VAR.to_string()), nikaia_std::block::Text::from(words.target.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_PARALLELISM_VAR.to_string()), nikaia_std::block::Text::from(words.user_parallelism.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_REENTRANCY_VAR.to_string()), nikaia_std::block::Text::from(words.reentrancy_check.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_OPTIMIZATION_VAR.to_string()), nikaia_std::block::Text::from(words.optimization.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_REFUTED_VAR.to_string()), nikaia_std::block::Text::from(words.refuted_claims.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_UNPROVED_VAR.to_string()), nikaia_std::block::Text::from(words.unproved_claims.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_ARTIFACT_VAR.to_string()), nikaia_std::block::Text::from(words.artifact.to_string())), (nikaia_std::block::Text::from(PROJECT_SETTINGS_PREFIX_VAR.to_string()), nikaia_std::block::Text::from(words.symbol_prefix.to_string()))];
+    if words.tests { env.push((nikaia_std::block::Text::from(PROJECT_SETTINGS_TESTS_VAR.to_string()), String::from("1"))); }
     match match words.cpu.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } {
-        Some(level) => { env.push((PROJECT_SETTINGS_CPU_VAR.to_string(), level)); },
+        Some(level) => { env.push((nikaia_std::block::Text::from(PROJECT_SETTINGS_CPU_VAR.to_string()), level)); },
         None => { },
     }
     env
@@ -275,7 +275,7 @@ pub fn project_settings_unbuildable(triple: &str, missing: &str) -> String { for
 pub fn project_settings_own_dir(root: &std::path::Path, variant: Option<&str>) -> fs::Path {
     let dir = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")));
     match match variant {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     } {
         Some(ref named) => nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("variants")))), std::path::Path::new(&(named))),
@@ -309,7 +309,7 @@ pub fn project_settings_program_name<H: ProjectSettingsHost>(root: &std::path::P
 
 pub fn project_settings_root_tag<H: ProjectSettingsHost>(root: &std::path::Path, variant: Option<&str>, host: &H) -> String {
     let named = match match variant {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
     } {
         Some(ref named) => format!("{}\x1f{}", nikaia_std::fs::path::display(&(root)), named),

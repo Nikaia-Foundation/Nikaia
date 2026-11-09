@@ -91,17 +91,17 @@ pub(crate) fn lg_constant(c: i64) -> LgLin { LgLin { terms: collections::BTreeMa
 
 pub(crate) fn lg_variable(name: &str) -> LgLin {
     let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    terms.insert(name.to_string(), 1);
+    terms.insert(nikaia_std::block::Text::from(name.to_string()), 1);
     LgLin { terms, constant: 0 }
 }
 
 pub fn lg_add(a: &LgLin, b: &LgLin) -> Option<LgLin> {
-    let mut terms = a.terms.to_owned();
+    let mut terms = a.terms.copy_owned();
     for (name, k) in b.terms.iter() {
         let k = nikaia_std::num::value(k);
         let before = nikaia_std::index::or(terms.get(name), || 0);
         let sum = match before.checked_add(k) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if sum == 0 { terms.remove(name); } else { terms.insert(name.to_string(), sum); }
+        if sum == 0 { terms.remove(name); } else { terms.insert(nikaia_std::block::Text::from(name.to_string()), sum); }
     }
     let constant = match a.constant.checked_add(b.constant) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(LgLin { terms, constant })
@@ -112,7 +112,7 @@ pub fn lg_scale(a: &LgLin, k: i64) -> Option<LgLin> {
     let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (name, c) in a.terms.iter() {
         let c = nikaia_std::num::value(c);
-        terms.insert(name.to_string(), match c.checked_mul(k) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        terms.insert(nikaia_std::block::Text::from(name.to_string()), match c.checked_mul(k) { Some(__nikaia_value) => __nikaia_value, None => return None });
     }
     let constant = match a.constant.checked_mul(k) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(LgLin { terms, constant })
@@ -123,7 +123,7 @@ pub(crate) fn lg_sub(a: &LgLin, b: &LgLin) -> Option<LgLin> {
     lg_add(a, &negated)
 }
 
-pub(crate) fn lg_add_constant(a: &LgLin, c: i64) -> LgLin { LgLin { terms: a.terms.to_owned(), constant: a.constant.saturating_add(c) } }
+pub(crate) fn lg_add_constant(a: &LgLin, c: i64) -> LgLin { LgLin { terms: a.terms.copy_owned(), constant: a.constant.saturating_add(c) } }
 
 pub(crate) fn lg_gcd(a: i64, b: i64) -> i64 {
     if b == 0 { return a; }
@@ -136,11 +136,11 @@ pub fn lg_tightened(a: &LgLin) -> LgLin {
         let k = nikaia_std::num::value(k);
         g = lg_gcd(g, k.abs());
     }
-    if g <= 1 { return LgLin { terms: a.terms.to_owned(), constant: a.constant }; }
+    if g <= 1 { return LgLin { terms: a.terms.copy_owned(), constant: a.constant }; }
     let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (name, k) in a.terms.iter() {
         let k = nikaia_std::num::value(k);
-        terms.insert(name.to_string(), k / g);
+        terms.insert(nikaia_std::block::Text::from(name.to_string()), k / g);
     }
     let mut constant = a.constant.div_euclid(g);
     if a.constant.rem_euclid(g) != 0 { constant += 1; }
@@ -148,21 +148,21 @@ pub fn lg_tightened(a: &LgLin) -> LgLin {
 }
 
 pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTreeMap<String, i64>) -> i64 {
-    let mut left_names: Vec<&str> = vec![];
+    #[allow(unused_mut)] let mut left_names: Vec<&str> = vec![];
     let mut left_ks: Vec<i64> = vec![];
     for (name, k) in a.iter() {
         let k = nikaia_std::num::value(k);
         left_names.push(name);
         left_ks.push(k);
     }
-    let mut right_names: Vec<&str> = vec![];
+    #[allow(unused_mut)] let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names;
     let mut right_ks: Vec<i64> = vec![];
     for (name, k) in b.iter() {
         let k = nikaia_std::num::value(k);
         right_names.push(name);
         right_ks.push(k);
     }
-    let mut at: i64 = 0;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names; #[allow(unused_mut, clippy::redundant_locals)] let mut right_names = right_names;
     while ((at) as usize) < left_ks.len() && ((at) as usize) < right_ks.len() {
         if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) { return -1; }
         if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) { return 1; }
@@ -327,7 +327,7 @@ impl LgIndexed {
                 if order < 0 { break; }
                 at += 1;
             }
-            if !placed { by_form.insert(nikaia_std::count::of(at), LgForm { terms: atom.terms.to_owned(), constant: atom.constant }); }
+            if !placed { by_form.insert(nikaia_std::count::of(at), LgForm { terms: atom.terms.copy_owned(), constant: atom.constant }); }
         }
         by_form
     }
@@ -347,7 +347,7 @@ impl LgIndexed {
                     if lg_terms_cmp(&form.terms, &other.terms) == 0 {
                         let mut c = form.constant;
                         if other.constant < c { c = other.constant; }
-                        kept.push(LgForm { terms: form.terms.to_owned(), constant: c });
+                        kept.push(LgForm { terms: form.terms.copy_owned(), constant: c });
                         break;
                     }
                 }
@@ -355,7 +355,7 @@ impl LgIndexed {
             common = kept;
         }
         let mut out: Vec<LgLin> = vec![];
-        for form in common.iter() { if !form.terms.is_empty() { out.push(LgLin { terms: form.terms.to_owned(), constant: form.constant }); } }
+        for form in common.iter() { if !form.terms.is_empty() { out.push(LgLin { terms: form.terms.copy_owned(), constant: form.constant }); } }
         out
     }
     pub(crate) fn items(&mut self, formula: &LgFormula) -> Vec<LgItem> {
@@ -378,11 +378,11 @@ impl LgIndexed {
         let mut alternatives: Vec<Vec<LgItem>> = vec![];
         for part in parts.iter() { alternatives.push(self.items(part)); }
         if alternatives.is_empty() { return self.atom(lg_constant(1)); }
-        if alternatives.len() == 1 { return (*nikaia_std::index::get(&alternatives, 0)).to_owned(); }
+        if alternatives.len() == 1 { return (*nikaia_std::index::get(&alternatives, 0)).copy_owned(); }
         for alternative in alternatives.iter() { if alternative.is_empty() { return vec![]; } }
         let mut items: Vec<LgItem> = vec![LgItem { atom: false, n: at }];
         for hull in self.hull(&alternatives) { items.extend(self.atom(hull)); }
-        { let __nikaia_stored = alternatives.to_owned(); nikaia_std::index::set(&mut self.ors, nikaia_std::index::at(at), __nikaia_stored); }
+        { let __nikaia_stored = alternatives.copy_owned(); nikaia_std::index::set(&mut self.ors, nikaia_std::index::at(at), __nikaia_stored); }
         items
     }
 }
@@ -430,7 +430,7 @@ pub(crate) fn lg_quotient_of(arena: &TermArena, id: i64, a: i64, k: i64, why: &m
 
 pub(crate) fn lg_add_constant_checked(a: &LgLin, c: i64) -> Option<LgLin> {
     let sum = match a.constant.checked_add(c) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(LgLin { terms: a.terms.to_owned(), constant: sum })
+    Some(LgLin { terms: a.terms.copy_owned(), constant: sum })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -490,7 +490,7 @@ pub(crate) fn lg_place_before(held: &[LgHeld], b: i64, a: i64) -> bool {
 }
 
 pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
-    let mut out = places.to_owned();
+    let mut out = places.copy_owned();
     let mut i: i64 = 1;
     while ((i) as usize) < out.len() {
         let x = *nikaia_std::index::get(&out, (i) as usize);
@@ -507,18 +507,18 @@ pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
 
 pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut steps: Vec<LgStep> = vec![];
-    let mut round_names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut round_names: Vec<String> = vec![];
     let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = vec![];
     let mut alive: Vec<i64> = vec![];
     let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(name.to_string()); } }
-    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut rank_names: Vec<String> = vec![];
+    for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
+    let mut rank_names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
     let mut quotients: Vec<bool> = vec![];
     for name in every.iter() {
-        ranks.insert(name.to_string(), ranks.len() as i64);
-        rank_names.push(name.to_string());
+        ranks.insert(nikaia_std::block::Text::from(name.to_string()), ranks.len() as i64);
+        rank_names.push(nikaia_std::block::Text::from(name.to_string()));
         quotients.push(name.starts_with("quot#"));
     }
     let mut present: Vec<bool> = vec![];
@@ -630,7 +630,7 @@ pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], name: &str, budg
         with_places.push(place);
         if nikaia_std::index::or(k, || 0) > 0 { up.push(place); } else { down.push(place); }
     }
-    round_names.push(name.to_string());
+    round_names.push(nikaia_std::block::Text::from(name.to_string()));
     round_places.push(with_places);
     let mut made: Vec<LgHeld> = vec![];
     for up_at in up.iter() {
@@ -669,7 +669,7 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
     let mut round = names.len() as i64;
     while round > 0 {
         round -= 1;
-        let name = (*nikaia_std::index::get(&names, nikaia_std::index::at(round))).to_string();
+        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(round))).to_string());
         let mut low: Option<i64> = None;
         let mut high: Option<i64> = None;
         for bound in (*nikaia_std::index::get(&bounds, nikaia_std::index::at(round))).iter() {
@@ -704,7 +704,7 @@ pub(crate) fn lg_consistent(names: &[String], bounds: &[Vec<LgLin>]) -> LgClosed
         let mut value: i64 = 0;
         if low.is_some() && high.is_some() && nikaia_std::index::or(low, || 0) > nikaia_std::index::or(high, || 0) { return LgClosed::Consistent { found: false, values: collections::BTreeMap::new() }; }
         if low.is_some() && nikaia_std::index::or(low, || 0) > 0 { value = nikaia_std::index::or(low, || 0); } else if high.is_some() && nikaia_std::index::or(high, || 0) < 0 { value = nikaia_std::index::or(high, || 0); }
-        values.insert(name.to_string(), value);
+        values.insert(nikaia_std::block::Text::from(name.to_string()), value);
     }
     LgClosed::Consistent { found: true, values }
 }

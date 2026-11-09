@@ -2,6 +2,8 @@
 //! element is lent, so the part is matched by reference and nothing moves out
 //! of the shared reference (no `E0507` reaches the user).
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 fn run(purpose: &str, call: &str, extra: &str) -> String {
@@ -22,7 +24,7 @@ fn run(purpose: &str, call: &str, extra: &str) -> String {
         "{purpose}: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    String::from_utf8_lossy(&out.stdout).to_string()
+    String::from_utf8_lossy(&out.stdout).to_text()
 }
 
 #[test]

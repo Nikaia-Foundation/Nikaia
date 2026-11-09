@@ -21,7 +21,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
   (several `--filter`s allowed, #1238). Without `--filter` it runs everything:
   write the output to a file and grep it, never `| tail` (b933).
 * **`--bless` creates a missing `.stdout`**, never a `.stderr`; `--bless-stderr`
-  does both. With `--filter` it blesses only that test. A new test is run
+  does both. Exception: a program the compiler refuses (a refusal test) is
+  blessed by plain `--bless` into its `.stderr` only, no `.stdout`; so a test
+  meant to run that `--bless` turns into a `.stderr` is a refusal to fix, not
+  a missing flag (`project_tests_bless_program`, #1238; issue-1431). With `--filter` it blesses only that test. A new test is run
   through `nikaia test`, not only `nikaia run`: `print` writes no newline and
   the `.stdout` holds the bytes exactly (7c1643d).
 * **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
@@ -116,6 +119,11 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A by-value parameter handed back is marked `=x` (owned text, no refusal, ADR-282 D12) in a free function, but `!x` (NK2302) in an `impl` of a trait whose result writes `from`, because the contract follows the trait. (issue-1280)
 * In that `impl` case the checker also gives NK1104 with the help "write `ref`"; following it leaves only NK2302, and `it` test `views_handed_back::following_nk1104s_help_is_a_program` checks that help word for word. (issue-1280)
 * `unviewed_type` of the text view must give owned `String`, not `str`, or `.cloned().collect()` comes out as `Vec[str]`. (issue-1388)
+* The views pass marks a by-value parameter `!` (NK2302) only when its type is not textless (`rsrc_textless`); a struct of only numbers gets no NK2302, so a checker refusal of it must stay. (issue-1386)
+* NK1104 for a `return` and for a function's last value both go through `expect_kept_asked` (`check_arm_leaves.nika`) with `what == "returns"`, so one guard there covers both. (issue-1386)
+* NK1104's help still says "write `ref`" (`way_out_of_a_mismatch`, `check_types.nika`), and `return ref s` of a local in a trait impl with a `from` result is an NK1343 internal error. (issue-1386)
+* Under views-3, NK1131 fires only on bodies that mix a view path with an owned path, on `for`-binding roots and on `mut`-parameter roots; `from` gives NK1104 on all three, so a help must not offer it. (issue-1403)
+* A nullable result written `from self` is still NK1131, and `-> ref U?` on a method is NK1343. (issue-1403)
 
 ### Lowering and lower-std
 
@@ -179,9 +187,15 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * The emitter's `world.library` is std only; to know a dependency's errors, ask `name_of_error` (it checks `own_contracts.types`), not `error_kind`. (issue-539)
 * Whether an argument to an `EitherText` parameter is lent or moved is decided by the late-read walk in `text_tiers.nika` (`late_argument`, `late_args`), not by the emitter. (issue-1334)
 * A list of string literals is tiered to `Vec<&'static str>`, so `ref $T` binds `T` to a view and a walk gives `&&str`; `AsRef::<str>::as_ref` treats `&str`, `&&str` and `&String` alike. (issue-1388)
+* The emitter knows a call borrows its root mutably through `emit_lends_mut` (facts `mut_receivers`/`mut_args`); use it rather than a new checker fact. (issue-1445)
+* An index *write* already hoists a position that names the target's root (#570); an index *read* is `emit_core_index_read`, and it hoists inside a `*{ let ..; get(..) }` block. (issue-1445)
 * Rust generics get no deref coercion, so an argument at a lent type-variable parameter gets exactly one `&` (`&&C` does not satisfy `C: Bound`). (issue-1342)
 * In the checker state a type parameter is `Ty::Named` (listed in `state.type_parameters`), not `Ty::Var`; `Ty::Var` appears only in contracts and signatures from `parameterise`. (issue-1342)
 * Under `impl<'a>` (`EmitLifetimes::Inner`), `EmitLifetimes::Named` means the impl's `'a`, so a store into self ties the source to it without declaring a new lifetime. (issue-1344)
+* `ref Array[T]` is `Ty::Pointed { slice: true, mutable: false }` in the checker, not `Named { view: true }`, and a `Vec` fits it, so `!found.fits(want)` guards never fire for it. (issue-1362)
+* In the checker, a text view's base name is "str" (shown as "ref String"), so a test on `name == "String"` misses it. (issue-1368)
+* `check_core_returns` decides `lending` before `check_core_expr` runs, so a fact recorded while checking the value must be read after `found`. (issue-1368)
+* A plain `let` over a local's field is lent by the emitter (`lent_lets`); its binding type must be a view too, or a later keeper becomes NK1343. (issue-1404)
 
 ### Grammar
 
@@ -246,19 +260,37 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Prover
 
+* **An index read out of an inner list of a field** (`a = self.col[c][i]`, then `self.atoms[a]`) stays checked whatever length relation the lists have, until ADR-306 D28 is built; a local list of lists is proved already (D7). Sort such a site under D28, not under #385 (that is values computed from the same table). (issue-1470)
+* **A field rule holds only if every `ref mut self` method of the type keeps it** (checked at each `return`; `most_facts()` is 48, `rules_rounds()` is 8). One method that loses it (as `score` did for `sv_walk`) drops it for the whole type. So a probe for a field rule is reduced from the real type: the target function plus every `ref mut self` method, with stub types. A synthetic probe can pass while the real code stays checked. (issue-1470)
+* **A rule's fact over every element of a list is guarded by the list's emptiness**: `bounding_each_guarded` turns it into `len(xs) <= 0 || fact`, and `bounding_each_present` gives `len(xs) >= 1` where an element is actually read. A new kind of rule (as D28's `inner`) states its element facts through these, or it proves anything under an empty list. (issue-1483)
+* **A list field that a free function such as `main` writes is dropped from the rule candidates**, so a rule test fills its lists only through `ref mut self` methods. (issue-1483)
+* **Derived entry claims (ADR-391) key on the first non-`self` parameter**, so a method that takes only `self` gets none. (issue-1483)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
   measured with `lower-std --bounds --asserts [--optimization
   prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
   before and after on the same tree. Where the walk stops:
   `docs/formal-verification.md` §2.
+  The two can differ: `check --bounds FILE` proved a site D23 reaches that
+  `lower-std --bounds` did not (#1465); a figure is claimed only from
+  `lower-std`. (issue-1414)
+* **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
+  check it before blaming the prover when a guard on `for k in ks` is lost.
+  (issue-1414)
 * **A test's `.bounds` keys sites by line**: an edited comment keeps its line
   count, or bless again. A precondition on a parameter's length is carried to
   the function's start (ADR-269 D20); a call is carried back only from the top
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
-* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist; `touch` them first. (issue-1397)
+* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist, a new test's included: create an empty `NAME.bounds` first. (issue-1397, issue-1414)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
+* **A length in a solver fact goes through `bounding_length_named`** (typed `i64`, capped at 2^60 when its elements take space, ADR-385 D1); a bare variable as a length proves nothing past `+ 1`. (issue-1465)
+* **`Expr::Call` covers constructor paths** (`collections::BTreeMap()`): a walk arm on
+  `Call` names its callee, or it poisons map roots; only the `prove_` tests showed it. (issue-1453)
+* **D21 takes a list as an end only when its `.len()` already appears in a fact**: a change
+  that forgets lengths restates one. Roots come only from `read_let` (`bounds_shape.nika`);
+  `whole_loops` is filled by the checker (`check_core_stmt.nika`), not by the walk. (issue-1453)
+* **A proof that holds under `check` but not in `lower-std`**: first suspect ADR-391 D1 (a callee also called from another file of the package takes no bound from its callers). Rebuild it as a two-file package, the callee called from the second file, before suspecting the solver budget or the toolchain; a whole-package scratch run takes minutes, the two-file one under a second. (issue-1465)
 * **`f.rank[f.find(c)]` (a `ref mut` method call in an index of the same value) passes the checker and fails rustc (E0502)**: a defect, #1445; until it lands, a test probe binds the call to a `let`, and no code under `tools/` relies on the form. (issue-1414)
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
 * The tools package is a library the Rust crate imports and writes (`emit/host.rs`), so under ADR-306 D22 its `pub` fields of `pub` types are never seen-only-by-Nikaia. Element-bound machinery: `fields_seen`, `fields_declared`, `bounds_fields`. (issue-1414)
@@ -291,6 +323,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Syntax gaps of tools/*.nika
 
+* `grammar` is a reserved word: a binding named `grammar` in `tools/*.nika` is refused by `lower-std`. (issue-1431)
+
 Classes (CLAUDE.md, *A missing form stops the work*): **[design]** holds,
 build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * `tools/*.nika` has no `loop`; write `while true`. (issue-1266)
@@ -303,6 +337,7 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * `i64` has no `checked_div_euclid`/`checked_rem_euclid`; guard `MIN / -1` and use `div_euclid`/`rem_euclid`. (issue-1339)
 * A trailing `;` does not drop a value and `let _ = x` is NK1144, so a value can't be discarded explicitly; a body's last value is dropped only where the function type hands back nothing. (issue-1321)
 * `let mut s = ""` and then assigning an owned `String` is NK1105; start it as `String()`. (issue-539)
+* A `for` over a list literal of strings binds views, so pushing the loop variable into a struct field needs `.clone()` (NK1106). (issue-1404)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`

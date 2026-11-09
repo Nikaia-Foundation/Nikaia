@@ -104,17 +104,17 @@ pub fn first_sentence(text: &str) -> Vec<String> {
     let mut quoted = false;
     for at in 0..c.len() as i64 {
         if *nikaia_std::index::get(&c, (at) as usize) == '`' { quoted = !quoted; } else if *nikaia_std::index::get(&c, (at) as usize) == '.' && !quoted && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == ' ' {
-            let rest = slice(&c, at + 1, c.len() as i64).trim().to_string();
+            let rest = nikaia_std::block::Text::from(slice(&c, at + 1, c.len() as i64).trim().to_string());
             if rest.is_empty() { return vec![slice(&c, 0, at + 1)]; }
             return vec![slice(&c, 0, at + 1), rest];
         }
     }
-    vec![text.to_string()]
+    vec![nikaia_std::block::Text::from(text.to_string())]
 }
 
 pub fn the_spelling_ref_replaced_note(found: &str) -> Option<String> {
     if found != "&" { return None; }
-    Some(String::from("A view is written `ref T`: `ref String` for text, `ref Array[T]` for elements something else keeps, and `ref value` to borrow a value. (`&&` still means *and*.)"))
+    Some(String::from("Nikaia writes no `&`: a parameter is lent and a result is a view wherever a view suffices, so the type is written as it is, `String` or `Array[T]` (ADR-views-3 D4). (`&&` still means *and*.)"))
 }
 
 pub fn an_effect_on_a_lambda_note(found: &str, before: &str) -> Option<String> {

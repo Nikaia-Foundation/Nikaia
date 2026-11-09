@@ -1,0 +1,38 @@
+// A list of views declared before the texts its views are cut from (#490):
+// the list is bound again after each, so it is dropped before them, on a
+// panic's way out too. An assignment whose value collects views of the text
+// it replaces ends that list before the text is replaced.
+
+fn read(p: String) -> String {
+	return p + " b  c"
+}
+
+fn shown(words: Vec[ref String]) -> String {
+	return words.join(",")
+}
+
+fn both(dir: String) -> String {
+	let mut words: Vec[String] = []
+	let first = read(f"{dir}/1").split(" ").collect()
+	for w in first {
+		if w != "" { words.push(w) }
+	}
+	let second = read(f"{dir}/2").split(" ").collect()
+	for w in second {
+		if w != "" { words.push(w) }
+	}
+	return shown(words)
+}
+
+fn cut(line: String) -> String {
+	let mut s = line.clone()
+	if s.contains("|") {
+		s = s.split("|").collect()[1].trim().clone()
+	}
+	return s
+}
+
+fn main() throws {
+	println(both("a"))
+	println(cut("x | y "))
+}

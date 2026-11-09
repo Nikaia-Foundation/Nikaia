@@ -1,0 +1,46 @@
+// ADR-306 D21, ADR-369 D4 (#1483): what a rule says of every element of a
+// list says nothing where the list is empty. `index slots other` holds, and
+// claimed `0 <= slots[..] < other.len()` unguarded, which with `slots` empty
+// demands `other.len() >= 1`: inside `other.len() == 0` that contradiction
+// proved `self.other[100]`. Guarded by `slots`'s length, the read is checked,
+// and a position read out of a `slots` that holds one is still proved.
+
+struct S {
+	slots: Vec[i64],
+	other: Vec[i64],
+}
+
+impl S {
+	pub fn put(ref mut self, x: i64) {
+		if x < 0 || x >= self.other.len() {
+			return
+		}
+		self.slots.push(x)
+	}
+
+	pub fn grow(ref mut self, x: i64) {
+		self.other.push(x)
+	}
+
+	pub fn peek(ref self) -> i64 {
+		if self.other.len() == 0 {
+			return self.other[100]
+		}
+		0
+	}
+
+	pub fn first(ref self) -> i64 {
+		if self.slots.len() > 0 {
+			return self.other[self.slots[0]]
+		}
+		0
+	}
+}
+
+fn main() throws {
+	let mut s = S { slots: [], other: [] }
+	s.put(0)
+	s.grow(7)
+	s.put(0)
+	println(f"{s.peek()} {s.first()}")
+}

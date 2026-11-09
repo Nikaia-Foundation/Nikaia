@@ -1,0 +1,13 @@
+// A lambda's last value and its `return`s are what its function type hands
+// back (#1395), as a named function's are against its declared result: text
+// where `fn() -> i64` is wanted is refused here, not by `rustc`.
+fn run(f: fn() -> i64) -> i64 {
+	f()
+}
+
+fn main() throws {
+	println(run(fn { "x" }))
+	let g: fn() -> i64 = fn { true }
+	println(g())
+	println(run(fn { 7 }))
+}

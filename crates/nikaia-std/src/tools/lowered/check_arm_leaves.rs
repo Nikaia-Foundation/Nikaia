@@ -172,7 +172,8 @@ impl CheckState {
         for leaf in self.value_leaves(world, value) {
             if ends_in_null(check_peeled(leaf)) { continue; }
             let ty = nikaia_std::index::or(self.arm_type_of(leaf), || Ty::Unknown);
-            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) || world.here.viewed_arms.contains(&node_key(check_peeled(leaf))) { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
+            let made = view && ty == text && self.flow.made_element_reads.contains(&node_key(check_peeled(leaf)));
+            if ty == text && self.a_place_of_a_lent_parameter(world, leaf) || world.here.viewed_arms.contains(&node_key(check_peeled(leaf))) || made { lent.push(node_key(leaf)); } else if arm_leaves_a_text_literal(leaf) { literals.push(node_key(check_peeled(leaf))); } else if !views_into_text(&ty, &text) { others_view = false; }
         }
         if lent.is_empty() || !either && !others_view { return false; }
         if !either {
@@ -198,7 +199,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn lent_arms_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<Ty> {
-        if self.a_lent_text_place(world, value, &a_string_type()) { return Some(Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true }); }
+        if self.a_lent_text_place(world, value, &a_string_type()) { return Some(Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }); }
         self.choice_of_views_and_text(world, value, true, false)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -248,7 +249,7 @@ impl CheckState {
                 let built = self.facts.owned_texts.remove(&at);
             }
         } else { self.note_mixed(world, value, absent); }
-        let view = Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true };
+        let view = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true };
         if absent { return Some(Ty::Nullable(Box::new(view))); }
         Some(view)
     }
@@ -356,10 +357,10 @@ impl CheckState {
             _ => { },
         }
         self.a_narrowed_read_given_up(value);
-        if self.an_element_taken_out(world, value, ty, to, span) { return; }
+        if self.an_element_taken_out(world, value, ty, to, span) || self.an_element_given_away(world, value, ty, to, span) { return; }
         let at = match self.flow.read_index.get(&(node_key(value), read_at)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
         if !a_name_or_a_field(value) { return; }
-        let path = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_string();
+        let path = nikaia_std::block::Text::from(nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).path.to_string());
         let seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at)).seq;
         self.hands_over_path_of(world, node_key(value), &path, ty, seq, to, span);
     }
@@ -436,7 +437,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_key_an_arm_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, index: &Expr) {
         let name = match index {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
         };
         let bound = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -462,7 +463,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn an_either_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
         };
         let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -484,15 +485,15 @@ impl CheckState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn a_view_kept_in_a_tuple_part(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, name: &str, value: &Expr, found: &Ty, want: &Ty, span: &Span) -> bool {
         let given: Vec<Expr> = match value {
-            Expr::Tuple(parts, _) => parts.to_owned(),
+            Expr::Tuple(parts, _) => parts.copy_owned(),
             _ => return false,
         };
         let found_parts: Vec<Ty> = match found {
-            Ty::Tuple(parts) => parts.to_owned(),
+            Ty::Tuple(parts) => parts.copy_owned(),
             _ => return false,
         };
         let wanted: Vec<Ty> = match want {
-            Ty::Tuple(parts) => parts.to_owned(),
+            Ty::Tuple(parts) => parts.copy_owned(),
             _ => return false,
         };
         if (given.len() as i64) != found_parts.len() as i64 || (given.len() as i64) != wanted.len() as i64 { return false; }
@@ -522,7 +523,7 @@ impl CheckState {
         while at + offset < signature.params.len() as i64 && ((at) as usize) < expected.len() {
             let i: i64 = at;
             at += 1;
-            let name = nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).0.to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).0.to_string());
             let generic = a_type_variable(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).1);
             let want = (*nikaia_std::index::get(&expected, nikaia_std::index::at(i))).clone();
             let position: i64 = i + offset;
@@ -549,7 +550,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_arm_leaves_a_text_view(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && type_last_segment(name) == "String" { Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true } } else { ty.clone() } },
+        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && type_last_segment(name) == "String" { Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true } } else { ty.clone() } },
         _ => ty.clone(),
     }
 }
@@ -574,7 +575,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_settle_in_this_function(&mut self, fails: bool, pauses: bool) -> Option<String> {
-        let current = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string();
+        let current = nikaia_std::block::Text::from(match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string());
         let failing = fails && self.flow.throwing;
         let before = nikaia_std::index::or(self.facts.settle_fns.get(&current), || false);
         self.facts.settle_fns.insert(current, before || failing);
@@ -606,6 +607,7 @@ impl CheckState {
         let mut at = Span { start: span.start, end: span.end };
         if value.is_some() {
             let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            if what == "returns" && self.an_owned_parameter_handed_back(world, found, want, whole) { return; }
             at = check_span_at(world, whole, span);
             if found.is_unknown() { arms = self.arms_to_ask(world, whole); }
         }

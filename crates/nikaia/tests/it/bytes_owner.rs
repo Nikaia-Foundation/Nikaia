@@ -7,6 +7,8 @@
 //! text's bytes alike (D4).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 /// Runs `source` as `main.nika` beside a file `in.txt` of three lines.
@@ -25,7 +27,7 @@ fn printed(name: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).trim().to_string()
+    String::from_utf8_lossy(&run.stdout).trim().to_text()
 }
 
 /// The issue's probe: a mapping handed to a function that reads a `ref Bytes`.

@@ -12,6 +12,8 @@
 //! and nothing caught it.
 
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 fn errors_dir() -> PathBuf {
@@ -42,7 +44,7 @@ fn render_corpus(dir: &Path) -> String {
         match parse_to_ast(&source) {
             Ok(_) => out.push_str("(parses)\n"),
             Err(e) => {
-                out.push_str(&e.to_string());
+                out.push_str(&e.to_text());
                 out.push('\n');
             }
         }

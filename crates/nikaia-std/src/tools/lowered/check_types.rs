@@ -18,11 +18,11 @@ pub fn an_integer_literal(expr: &Expr) -> bool {
     }
 }
 
-pub fn type_last_segment(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(name)).to_string() }
+pub fn type_last_segment(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(name.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(name)).to_string()) }
 
 pub fn view_of_type(inner: &Ty) -> Ty {
     match inner {
-        Ty::Named { name, args, view } => { let view = *view; if view { inner.clone() } else if args.is_empty() && name == "String" { Ty::Named { name: String::from("str"), args: vec![], view: true } } else { Ty::Named { name: name.to_string(), args: args.to_owned(), view: true } } },
+        Ty::Named { name, args, view } => { let view = *view; if view { inner.clone() } else if args.is_empty() && name == "String" { Ty::Named { name: String::from("str"), args: vec![], view: true } } else { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.copy_owned(), view: true } } },
         Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(Box::new(view_of_type(held))) },
         _ => Ty::Unknown,
     }
@@ -30,14 +30,14 @@ pub fn view_of_type(inner: &Ty) -> Ty {
 
 pub fn viewed_from_type(view: &Ty) -> Vec<Ty> {
     match view {
-        Ty::Named { name, args, view } => { let view = *view; if !view { vec![] } else if args.is_empty() && name == "str" { vec![Ty::Named { name: String::from("String"), args: vec![], view: false }] } else { vec![Ty::Named { name: name.to_string(), args: args.to_owned(), view: false }] } },
+        Ty::Named { name, args, view } => { let view = *view; if !view { vec![] } else if args.is_empty() && name == "str" { vec![Ty::Named { name: String::from("String"), args: vec![], view: false }] } else { vec![Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.copy_owned(), view: false }] } },
         _ => vec![],
     }
 }
 
 pub fn unviewed_type(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && name == TEXT_VIEW { Ty::Named { name: TEXT.to_string(), args: vec![], view: false } } else { Ty::Named { name: name.to_string(), args: args.to_owned(), view: false } } },
+        Ty::Named { name, args, view } => { let view = *view; if view && args.is_empty() && name == TEXT_VIEW { Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: false } } else { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.copy_owned(), view: false } } },
         _ => ty.clone(),
     }
 }
@@ -195,7 +195,7 @@ pub fn becomes_shared(found: &Ty, want: &Ty) -> bool {
 pub fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
     if becomes_shared(found, want) {
         let hull = match want {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => String::from(""),
         };
         return format!("Wrap it: `{}(…)`.", hull);
@@ -203,16 +203,21 @@ pub fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
     let element = part_of_a_list(found, want);
     if element.is_some() {
         let written = nikaia_std::index::or(element, || "?".into());
-        return format!("This is part of a list. Declare the parameter `ref Array[{}]` to take a part or a whole list alike.", written);
+        return format!("This is part of a list. Declare the parameter `Array[{}]` to take a part or a whole list alike.", written);
     }
     let found_text = found.text();
     let want_text = want.text();
     if found_text == "ref String" && want_text == "String" { return String::from("Write `.clone()` to turn this view into text of its own."); }
-    if found_text == "String" && want_text == "ref String" { return String::from("Write `ref` in front of it to pass a view of it."); }
+    if found_text == "String" && want_text == "ref String" { return String::from("Write `String` without `ref` in the declaration: text of its own is lent wherever a view suffices."); }
+    if found.is_a_view() && !want.is_a_view() && found.owned().text() == want_text { return String::from("Write `.clone()` to turn this view into a value of its own."); }
     if want_text == "time::Duration" && a_number_name(&found_text) { return String::from("Make the number a span: `20.seconds()` or `20.millis()`."); }
     if a_number_name(&found_text) && a_number_name(&want_text) { return format!("Convert it with `as {}`. A number goes into another type on its own only where every value it can hold fits.", want_text); }
-    let article = if want_text.starts_with('i') || want_text.starts_with('a') || want_text.starts_with('e') || want_text.starts_with('o') || want_text.starts_with('I') || want_text.starts_with('A') || want_text.starts_with('E') || want_text.starts_with('O') { "an" } else { "a" };
-    format!("Make it {} `{}`, or change the declaration to `{}`.", article, want_text, found_text)
+    let shown = want.owned().text();
+    let article = if shown.starts_with('i') || shown.starts_with('a') || shown.starts_with('e') || shown.starts_with('o') || shown.starts_with('I') || shown.starts_with('A') || shown.starts_with('E') || shown.starts_with('O') { "an" } else { "a" };
+    let mut wanted: String = format!("Make it {} `{}`", article, shown);
+    if want.is_a_view() && shown != want_text { wanted = format!("Make it a view of {} `{}` that something else keeps", article, shown); }
+    if found.is_a_view() { return format!("{}.", wanted); }
+    format!("{}, or change the declaration to `{}`.", wanted, found_text)
 }
 
 pub(crate) fn part_of_a_list(found: &Ty, want: &Ty) -> Option<String> {
@@ -273,7 +278,7 @@ pub(crate) fn parts_walked(over: &Ty, bindings: i64) -> Vec<Ty> {
 
 pub(crate) fn tuple_parts(ty: &Ty) -> Vec<Ty> {
     match ty {
-        Ty::Tuple(parts) => parts.to_owned(),
+        Ty::Tuple(parts) => parts.copy_owned(),
         _ => vec![],
     }
 }

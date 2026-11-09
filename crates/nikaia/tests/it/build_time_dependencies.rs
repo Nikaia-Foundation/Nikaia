@@ -5,6 +5,8 @@
 //! names the package by; a path to C is refused, and nothing runs.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -192,7 +194,7 @@ fn the_build_time_program_links_no_c_library() {
         .flat_map(|out| {
             String::from_utf8_lossy(&out.stdout)
                 .lines()
-                .map(|line| line.trim().to_string())
+                .map(|line| line.trim().to_text())
                 .collect::<Vec<_>>()
         })
         .collect();

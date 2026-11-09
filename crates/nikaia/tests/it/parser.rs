@@ -1,5 +1,7 @@
 use nikaia::ast::{Expr, Item, Stmt};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 #[test]
 fn test_advanced_hello_world_compilation() {
@@ -194,9 +196,9 @@ fn every_reserved_word_is_refused_as_a_name() {
             .unwrap_or_else(|| panic!("a parse error carries its finding: {err:#}"));
         let said = nikaia::diagnostics::render_finding(finding, "app.nika", &source);
         assert!(
-            said.contains(&format!(
+            said.contains(&*format!(
                 "error: `{word}` is a reserved word, so it can't be used as a name here."
-            )) && said.contains(&format!("Choose another name, such as `{word}_`.")),
+            )) && said.contains(&*format!("Choose another name, such as `{word}_`.")),
             "the parse error has to say why, not just that it failed: {said}"
         );
     }

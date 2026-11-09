@@ -1,0 +1,13 @@
+bounds in tests/prove_a_test_of_a_tuple_part_bounds_its_read.nika: 4 indexes, 3 proved; 8 operations, 0 proved
+    14  sum += xs[u] + name.len()                 checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    14  xs[u] + name.len()                        checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    14  xs[u]                                     proved
+    23  sum += xs[unit]                           checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    23  xs[unit]                                  proved
+    26  sum += xs[key]                            checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    26  xs[key]                                   proved
+    28  sum += line                               checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    37  sum += xs[u]                              checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    37  xs[u]                                     checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    46  rows([("ab", 1)], [5, 6]) + entries(at, [5, 6]) + untested([(0, 1)], [5, 6])  checked: a call's result, which the walk knows nothing of (#382)
+    46  rows([("ab", 1)], [5, 6]) + entries(at, [5, 6])  checked: a call's result, which the walk knows nothing of (#382)

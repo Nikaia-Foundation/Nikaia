@@ -3,6 +3,8 @@
 
 use nikaia::ast::{Item, LONGEST_SOURCE, Span};
 use nikaia::parser::{fits, parse_to_ast};
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// Every node carries one, so its size is the tree's: two `u32`, where a
 /// `Range<usize>` was two `usize`.

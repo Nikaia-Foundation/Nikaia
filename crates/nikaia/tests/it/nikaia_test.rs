@@ -5,6 +5,8 @@
 //! the command, the build and the runner are the thing under test.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -110,8 +112,8 @@ fn each_test_runs_by_itself_and_says_how_it_went() {
         &[("main.nika", MAIN), ("helpers.nika", HELPERS)],
     );
     let out = nikaia(&["test", "--both-settings"], &dir);
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_text();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_text();
     assert_eq!(out.status.code(), Some(1), "{}", said(&out));
     for line in [
         "running 5 tests",
@@ -203,7 +205,7 @@ fn an_output_test_is_what_the_program_prints() {
         std::fs::write(tests.join(name), text).expect("an output test");
     }
     let out = nikaia(&["test"], &dir);
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_text();
     assert_eq!(out.status.code(), Some(1), "{}", said(&out));
     for line in [
         "running 4 tests",
@@ -263,7 +265,7 @@ fn a_file_the_program_writes_is_an_expectation_and_is_blessed() {
     std::fs::write(tests.join("loud.out/out.txt"), "").expect("out");
 
     let first = nikaia(&["test"], &dir);
-    let said_first = String::from_utf8_lossy(&first.stdout).to_string();
+    let said_first = String::from_utf8_lossy(&first.stdout).to_text();
     assert_eq!(first.status.code(), Some(1), "{}", said(&first));
     for words in [
         "output \"loud\" (tests/loud.stdout) ... FAILED",
@@ -434,7 +436,7 @@ fn a_dependency_with_a_main_raises_no_dead_code_warning() {
         dir.join("nikaia.toml"),
         format!(
             "[package]\nname = \"user\"\nversion = \"0.1.0\"\n\n[dependencies]\ntally = {{ path = {:?} }}\n",
-            lib.display().to_string()
+            lib.display().to_text()
         ),
     )
     .expect("manifest");

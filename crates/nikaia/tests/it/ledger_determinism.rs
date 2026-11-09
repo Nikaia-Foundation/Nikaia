@@ -15,6 +15,8 @@
 //! that does it rather than a puzzle a year later.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -47,7 +49,9 @@ fn ledger(source: &Path, scratch: &Path, threads: &str) -> Vec<u8> {
         source.display(),
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read(output.with_file_name("nikaia.contracts")).expect("the ledger was written")
+    std::fs::read(output.with_file_name("nikaia.contracts"))
+        .expect("the ledger was written")
+        .into()
 }
 
 /// Every example the bootstrap compiler can lower, twice, in two processes,

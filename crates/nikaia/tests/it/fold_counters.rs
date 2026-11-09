@@ -10,16 +10,18 @@ use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::fold_bound::{Extent, LENGTH_BOUND, least_width, most_steps};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn brc() -> String {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/1brc.nika");
-    std::fs::read_to_string(path).expect("examples/1brc.nika")
+    String::from(std::fs::read_to_string(path).expect("examples/1brc.nika"))
 }
 
 /// `source` with `from` replaced once, which must be there.
 fn changed(source: &str, from: &str, to: &str) -> String {
     assert_eq!(source.matches(from).count(), 1, "`{from}` once");
-    source.replace(from, to)
+    String::from(source.replace(from, to))
 }
 
 fn report(source: &str) -> String {
@@ -43,7 +45,7 @@ fn line(out: &str, text: &str) -> String {
     out.lines()
         .find(|l| l.contains(text))
         .unwrap_or_else(|| panic!("no line for `{text}`:\n{out}"))
-        .to_string()
+        .to_text()
 }
 
 fn proved(out: &str, text: &str) -> bool {

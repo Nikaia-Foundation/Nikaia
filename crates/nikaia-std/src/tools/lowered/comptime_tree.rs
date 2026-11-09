@@ -40,10 +40,10 @@ pub const TURN_MARK: &str = "__nikaia_comptime_turn";
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn comptime_turn_marked(on: &str, field: &str, local: &str, value: &Expr) -> Expr {
-    let texts: Vec<Expr> = vec![on, field, local].iter().map(|text| { Expr::LitStr { text: text.to_string(), id: fresh_id() } }).collect::<Vec<_>>();
+    let texts: Vec<Expr> = vec![on, field, local].iter().map(|text| { Expr::LitStr { text: nikaia_std::block::Text::from(text.to_string()), id: fresh_id() } }).collect::<Vec<_>>();
     let mut args = texts;
     args.push(value.clone());
-    Expr::Call { func: Box::new(Expr::LitStr { text: TURN_MARK.to_string(), id: fresh_id() }), args, config: vec![], id: fresh_id() }
+    Expr::Call { func: Box::new(Expr::LitStr { text: nikaia_std::block::Text::from(TURN_MARK.to_string()), id: fresh_id() }), args, config: vec![], id: fresh_id() }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,11 +66,11 @@ pub(crate) fn comptime_turn_of(value: &Expr) -> Option<ComptimeTurn> {
             let mut texts: Vec<String> = vec![];
             for arg in args.iter().take(3) {
                 match arg {
-                    Expr::LitStr { text: one, .. } => { texts.push(one.to_string()); },
+                    Expr::LitStr { text: one, .. } => { texts.push(nikaia_std::block::Text::from(one.to_string())); },
                     _ => { return None; },
                 }
             }
-            Some(ComptimeTurn { on: (*nikaia_std::index::get(&texts, 0)).to_string(), field: (*nikaia_std::index::get(&texts, 1)).to_string(), local: (*nikaia_std::index::get(&texts, 2)).to_string(), value: (*nikaia_std::index::get(&args, 3)).clone() })
+            Some(ComptimeTurn { on: nikaia_std::block::Text::from((*nikaia_std::index::get(&texts, 0)).to_string()), field: nikaia_std::block::Text::from((*nikaia_std::index::get(&texts, 1)).to_string()), local: nikaia_std::block::Text::from((*nikaia_std::index::get(&texts, 2)).to_string()), value: (*nikaia_std::index::get(&args, 3)).clone() })
         },
         _ => None,
     }
@@ -88,7 +88,7 @@ pub(crate) fn comptime_turn_function(turn: &ComptimeTurn, returns: &Type, intern
     let t = intern("T");
     let nowhere: nikaia_std::func::Kept<dyn Fn(Stmt) -> Spanned<Stmt> + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |node| { Spanned { node, span: Span::nowhere(), doc: None, attributes: vec![] } }));
     let push = Expr::MethodCall { receiver: Box::new(Expr::Variable(kept, fresh_id())), method: intern("push"), args: vec![turn.value.clone()], config: vec![], id: fresh_id() };
-    let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Box::new(Expr::Field { base: Box::new(Expr::Variable(local, fresh_id())), name: intern("name"), id: fresh_id() }), rhs: Box::new(Expr::LitStr { text: turn.field.to_string(), id: fresh_id() }), span: Span::nowhere(), grouped: false, id: fresh_id() };
+    let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Box::new(Expr::Field { base: Box::new(Expr::Variable(local, fresh_id())), name: intern("name"), id: fresh_id() }), rhs: Box::new(Expr::LitStr { text: nikaia_std::block::Text::from(turn.field.to_string()), id: fresh_id() }), span: Span::nowhere(), grouped: false, id: fresh_id() };
     let pick = Expr::If { cond: Box::new(at_field), then_branch: Block { stmts: vec![nowhere(Stmt::Expr(push))] }, else_branch: None, id: fresh_id() };
     let each = Stmt::For { bindings: vec![local], shape: vec![], mutable: false, iter: Expr::Path(vec![t, intern("fields")], fresh_id()), body: Block { stmts: vec![nowhere(Stmt::Expr(pick))] } };
     let start = Stmt::Let { names: vec![kept], shape: vec![], mutable: true, deep: false, ty: Some(list.clone()), value: Expr::ListLit { items: vec![], id: fresh_id() } };
@@ -126,7 +126,7 @@ pub(crate) fn comptime_constants_as_lets(source: &[Spanned<Item>], words: &winno
 }
 
 pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, bound_here: winnow_grammar::Symbol, ty: Option<&Type>, bound: &str, known: &impl Fn(&str) -> Option<BuildValue>, intern: &impl Fn(&str) -> winnow_grammar::Symbol) -> Option<Spanned<Stmt>> {
-    let named = words.resolve(bound_here).to_string();
+    let named = nikaia_std::block::Text::from(words.resolve(bound_here).to_string());
     if named == bound { return None; }
     let held = match known(&named) { Some(__nikaia_value) => __nikaia_value, None => return None };
     match held {
@@ -137,7 +137,7 @@ pub(crate) fn comptime_constant_as_let(words: &winnow_grammar::InternerContext, 
             let path: Vec<winnow_grammar::Symbol> = constructor.split("::").map(|segment| { intern(segment) }).collect::<Vec<_>>();
             let call = Expr::Call { func: Box::new(Expr::Path(path, fresh_id())), args, config: vec![], id: fresh_id() };
             let node = Stmt::Let { names, shape: vec![], mutable: false, deep: false, ty: match ty {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }, value: call };
             Some(Spanned { node, span: Span::nowhere(), doc: None, attributes: vec![] })
@@ -151,7 +151,7 @@ pub fn comptime_unit_without_its_constants(items: &mut Vec<Spanned<Item>>, sourc
         match &item.node {
             Item::Comptime { name, ty: declared, public, .. } => {
                 let name = *name; let public = *public;
-                let named = words.resolve(name).to_string();
+                let named = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 if named == bound { continue; }
                 let held = match known(&named) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if matches!(held, BuildValue::Constant { .. }) { continue; }
@@ -226,7 +226,7 @@ pub fn comptime_constants_of(items: &[Spanned<Item>], words: &winnow_grammar::In
         match &item.node {
             Item::Comptime { name, .. } => {
                 let name = *name;
-                out.insert(words.resolve(name).to_string());
+                out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             },
             _ => { },
         }
@@ -264,8 +264,8 @@ pub fn comptime_value_fn_names(items: &[Spanned<Item>], words: &winnow_grammar::
 pub fn comptime_declared_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext) -> Vec<ComptimeDeclared> {
     items.iter().filter_map(|item| {
         match &item.node {
-            Item::Comptime { name, ty, value, .. } => { let name = *name; Some(ComptimeDeclared { name: words.resolve(name).to_string(), ty: match ty {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Item::Comptime { name, ty, value, .. } => { let name = *name; Some(ComptimeDeclared { name: nikaia_std::block::Text::from(words.resolve(name).to_string()), ty: match ty {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }, value: value.clone() }) },
             _ => None,
@@ -287,7 +287,7 @@ pub fn comptime_undeclared_callee(words: &winnow_grammar::InternerContext, value
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    let name = words.resolve(name).to_string();
+                    let name = nikaia_std::block::Text::from(words.resolve(name).to_string());
                     if !library.functions.contains_key(&name) && !declared_in_files(&name) { return Some(name); }
                 },
                 _ => { },
@@ -303,8 +303,8 @@ pub fn comptime_declares(items: &[Spanned<Item>], words: &winnow_grammar::Intern
 pub(crate) fn comptime_declared_as(item: &Item, words: &winnow_grammar::InternerContext) -> String {
     match item {
         Item::Fn { name, .. } => { let name = *name; a_symbols_text(words, name) },
-        Item::Struct { name, .. } => { let name = *name; words.resolve(name).to_string() },
-        Item::Enum { name, .. } => { let name = *name; words.resolve(name).to_string() },
+        Item::Struct { name, .. } => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
+        Item::Enum { name, .. } => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
         _ => String::from(""),
     }
 }
@@ -320,10 +320,10 @@ pub fn comptime_culprit(words: &winnow_grammar::InternerContext, value: &Expr, d
 pub(crate) fn comptime_key_of(words: &winnow_grammar::InternerContext, expr: &Expr, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
     match expr {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
-            Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+            Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
             Expr::Path(path, _) => {
-                let segments: Vec<String> = path.iter().map(|segment| { words.resolve(*segment).to_string() }).collect::<Vec<_>>();
-                Some(segments.join("::"))
+                let segments: Vec<String> = path.iter().map(|segment| { nikaia_std::block::Text::from(words.resolve(*segment).to_string()) }).collect::<Vec<_>>();
+                Some(nikaia_std::block::Text::from(segments.join("::")))
             },
             _ => None,
         } },
@@ -335,7 +335,7 @@ pub(crate) fn comptime_key_of(words: &winnow_grammar::InternerContext, expr: &Ex
 
 pub(crate) fn comptime_method_key(words: &winnow_grammar::InternerContext, method: winnow_grammar::Symbol, derived: &Ledger, forbidden: &impl Fn(&str) -> bool) -> Option<String> {
     let method = format!("::{}", words.resolve(method));
-    for (key, _) in derived.functions.iter() { if key.ends_with(&method) && forbidden(key) { return Some(key.to_string()); } }
+    for (key, _) in derived.functions.iter() { if key.ends_with(&*method) && forbidden(key) { return Some(nikaia_std::block::Text::from(key.to_string())); } }
     None
 }
 
@@ -419,7 +419,7 @@ pub(crate) fn comptime_written_type(ty: &Ty, intern: &dyn Fn(&str) -> winnow_gra
     match ty {
         Ty::Named { name, args, view } => {
             let view = *view;
-            let mut out = comptime_plain(&name.to_string(), &intern);
+            let mut out = comptime_plain(&nikaia_std::block::Text::from(name.to_string()), &intern);
             out.is_view = view;
             out.generics = match comptime_written_types(args, &intern) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(out)
@@ -511,9 +511,10 @@ pub(crate) fn comptime_runs(item: &Item, words: &winnow_grammar::InternerContext
 pub fn comptime_dependency_modules<H: ComptimeLowerHost>(host: &H, packages: &collections::BTreeMap<String, Ledger>) -> Option<String> {
     let mut rust: String = String::from("");
     for (name, own) in packages.iter() {
-        let wanted: Option<String> = Some(name.to_string());
+        let wanted: Option<String> = Some(nikaia_std::block::Text::from(name.to_string()));
         let theirs: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == wanted }).collect::<Vec<_>>();
         rust.push_str(&format!("pub mod {} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n", name));
+        rust.push_str(&block_types_import(true));
         for at in theirs.iter() {
             let at = nikaia_std::num::value(at);
             let body = match host.emit_unit(at, &theirs, own, false, None) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -529,9 +530,9 @@ pub fn comptime_by_package<H: ComptimeLowerHost>(host: &H) -> collections::BTree
     let names: collections::BTreeSet<String> = (nikaia_std::range::span(0, host.unit_count())).filter_map(|u| { host.package_of(u) }).collect();
     let mut out: collections::BTreeMap<String, Ledger> = collections::BTreeMap::new();
     for name in names.iter() {
-        let wanted: Option<String> = Some(name.to_string());
+        let wanted: Option<String> = Some(nikaia_std::block::Text::from(name.to_string()));
         let theirs: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == wanted }).collect::<Vec<_>>();
-        out.insert(name.to_string(), host.infer_package(&theirs));
+        out.insert(nikaia_std::block::Text::from(name.to_string()), host.infer_package(&theirs));
     }
     out
 }
@@ -598,7 +599,7 @@ pub trait ComptimeComputeHost {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &dyn Fn(&str) -> Option<BuildValue>, typed: &dyn Fn(&str) -> Option<Ty>) -> CheckComputed {
-    let not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(why.to_string()) }));
+    let not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(nikaia_std::block::Text::from(why.to_string())) }));
     let sub = match host.sub_program(here, bound, value, ty, &known, &typed) {
         None => {
             match comptime_callee_nothing_declares(host, here, value) {
@@ -625,9 +626,9 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     }
     let carried = host.constants_of_units(&units);
     let declared = host.constants_of_files();
-    let absent: collections::BTreeSet<String> = declared.difference(&carried).map(|s| { s.to_string() }).collect();
-    let gone = comptime_readers_dropped(units.len() as i64, absent.to_owned(), &|at, gone| { host.drop_readers(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone) });
-    let left_out: collections::BTreeSet<String> = gone.difference(&absent).map(|s| { s.to_string() }).collect();
+    let absent: collections::BTreeSet<String> = declared.difference(&carried).map(|s| { nikaia_std::block::Text::from(s.to_string()) }).collect();
+    let gone = comptime_readers_dropped(units.len() as i64, absent.copy_owned(), &|at, gone| { host.drop_readers(*nikaia_std::index::get(&units, nikaia_std::index::at(at)), gone) });
+    let left_out: collections::BTreeSet<String> = gone.difference(&absent).map(|s| { nikaia_std::block::Text::from(s.to_string()) }).collect();
     let named = host.value_fn_names(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     if named.iter().any(|name| { left_out.contains(name) || absent.contains(name) && known(name).is_none() }) {
         let ahead = comptime_worked_out_ahead(host, bound, &absent, &known, &typed);
@@ -664,7 +665,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
         Some(computed) => CheckComputed::Value(computed),
     } };
     match wall {
-        CheckWall::Refused { ref detail } if detail.contains(NOT_COMPUTED_YET) => not_here("It leaves out an option whose default isn't computed"),
+        CheckWall::Refused { ref detail } if detail.contains(AsRef::<str>::as_ref(NOT_COMPUTED_YET)) => not_here("It leaves out an option whose default isn't computed"),
         CheckWall::Refused { detail } => CheckComputed::Stopped(detail),
         CheckWall::NowhereToBuild => not_here(NOWHERE),
         CheckWall::InsideAnother { .. } => not_here("It is met while another build-time program is built, and one isn't built inside another"),
@@ -707,7 +708,7 @@ pub(crate) fn comptime_driven<H: ComptimeComputeHost>(host: &H, units: &[i64], h
     match wall {
         None => { },
         Some(ref refused) => { return match *refused {
-            CheckWall::NoCrossedForm { ref ty, ref because } => ComptimeDriven::Uncrossed { ty: ty.to_string(), because: because.to_string() },
+            CheckWall::NoCrossedForm { ref ty, ref because } => ComptimeDriven::Uncrossed { ty: nikaia_std::block::Text::from(ty.to_string()), because: nikaia_std::block::Text::from(because.to_string()) },
             _ => ComptimeDriven::NoHandBack,
         }; },
     }
@@ -725,14 +726,14 @@ pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound:
     for at in 0..host.file_count() {
         for item in host.comptimes_of(at) {
             let named = &item.name;
-            if !absent.contains(named) || host.is_ahead(&named) { continue; }
+            if !absent.contains(named) || host.is_ahead(named) { continue; }
             let folded = host.folded(at, &item.value, &known);
             let worked: Option<BuildValue> = match folded {
                 None => match item.ty {
                     None => None,
                     Some(ref written) => {
                         let ty = host.ty_of(at, written);
-                        match comptime_computed(host, at, &named, &item.value, &ty, &known, &typed) {
+                        match comptime_computed(host, at, named, &item.value, &ty, &known, &typed) {
                             CheckComputed::Value(value) => Some(value),
                             _ => None,
                         }
@@ -741,7 +742,7 @@ pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound:
                 Some(value) => Some(value),
             };
             let value = match worked { Some(__nikaia_value) => __nikaia_value, None => continue };
-            ahead.insert(named.to_string(), value);
+            ahead.insert(nikaia_std::block::Text::from(named.to_string()), value);
         }
     }
     host.leave_ahead(bound);

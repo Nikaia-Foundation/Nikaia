@@ -94,14 +94,19 @@ pub fn bounds_proven(
 		text_classes: collections::BTreeMap(),
 		around: around,
 		whole_fields: facts.whole_fields.clone(),
+		whole_loops: facts.whole_loops.clone(),
+		whole_parts: facts.whole_parts.clone(),
 		array_lengths: facts.array_lengths.clone(),
 		through_loops: through_loops,
 		decided: bp_decided(program, words, facts.comptime_values),
 		list_indices: facts.list_indices.clone(),
+		returns: collections::BTreeMap(),
 	}
 	// **The list fields' bounds, found program-wide** (ADR-306 D21):
 	// `tools/bounds_walk.nika`.
 	bounds_fields(context, program, words, ask)
+	// **What each function returns, found** (ADR-306 D23).
+	bounds_returns(context, program, words, ask)
 	let mut bodies: Vec[ref Spanned[Item]] = []
 	for item in program.items {
 		match item.node {

@@ -17,6 +17,8 @@
 //! the package is still unresolved.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -97,7 +99,7 @@ fn run(entry: &Path, build: Build) -> String {
         "the program failed:\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    String::from_utf8_lossy(&ran.stdout).to_string()
+    String::from_utf8_lossy(&ran.stdout).to_text()
 }
 
 /// The shorter of issue #228's two reproductions, and the one that needs no
@@ -310,7 +312,7 @@ fn what_a_neighbour_reaches_is_what_the_caller_reaches() {
         .iter()
         .map(|t| format!("{} {}", t.kind, if t.write { "write" } else { "read" }))
         .collect();
-    assert_eq!(reached, vec!["stdout write".to_string()]);
+    assert_eq!(reached, vec!["stdout write".to_text()]);
 }
 
 /// **The answer does not depend on the order the units arrive in**, which

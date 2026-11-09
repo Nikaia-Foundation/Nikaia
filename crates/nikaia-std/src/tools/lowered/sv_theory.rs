@@ -47,7 +47,7 @@ pub(crate) fn sv_lin(row: &SvRow, names: &[String]) -> LgLin {
 
 pub(crate) fn sv_column_name(c: u32, names: &[String]) -> String {
     let at = c as i64;
-    if at < names.len() as i64 { return (*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string(); }
+    if at < names.len() as i64 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string()); }
     format!("sv#{}", c)
 }
 
@@ -103,7 +103,7 @@ pub(crate) fn sv_written(refutation: &LgRefutation, held: &[SvHeld], book: &mut 
         let made = match step {
             LgStep::Hypothesis(i) => SvSpelled { sources: vec![nikaia_std::index::get(&held, nikaia_std::index::at(i)).src.clone()], multipliers: vec![1] },
             LgStep::Tighten(from) => {
-                let at = match book.combine(nikaia_std::index::get(&spelled, nikaia_std::index::at(from)).sources.to_owned(), nikaia_std::index::get(&spelled, nikaia_std::index::at(from)).multipliers.to_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let at = match book.combine(nikaia_std::index::get(&spelled, nikaia_std::index::at(from)).sources.copy_owned(), nikaia_std::index::get(&spelled, nikaia_std::index::at(from)).multipliers.copy_owned()) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 let rounded = match book.round(at) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 SvSpelled { sources: vec![SvSrc::Fact(rounded)], multipliers: vec![1] }
             },
@@ -113,14 +113,14 @@ pub(crate) fn sv_written(refutation: &LgRefutation, held: &[SvHeld], book: &mut 
     }
     let last = spelled.len() as i64 - 1;
     if last < 0 { return None; }
-    book.farkas(nikaia_std::index::get(&spelled, nikaia_std::index::at(last)).sources.to_owned(), nikaia_std::index::get(&spelled, nikaia_std::index::at(last)).multipliers.to_owned())
+    book.farkas(nikaia_std::index::get(&spelled, nikaia_std::index::at(last)).sources.copy_owned(), nikaia_std::index::get(&spelled, nikaia_std::index::at(last)).multipliers.copy_owned())
 }
 
 pub(crate) fn sv_rat_values(values: &collections::BTreeMap<String, i64>) -> collections::BTreeMap<String, SvRat> {
     let mut out: collections::BTreeMap<String, SvRat> = collections::BTreeMap::new();
     for (name, v) in values.iter() {
         let v = nikaia_std::num::value(v);
-        out.insert(name.to_string(), sv_int(v));
+        out.insert(nikaia_std::block::Text::from(name.to_string()), sv_int(v));
     }
     out
 }
@@ -246,13 +246,13 @@ impl SvTh for SvTheory {
             LgClosed::Unknown(why) => SvChecked::Unknown(why.clone()),
         }
     }
-    fn model(&self) -> collections::BTreeMap<String, i64> { self.values.to_owned() }
+    fn model(&self) -> collections::BTreeMap<String, i64> { self.values.copy_owned() }
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { sv_rat_values(&self.values) }
     fn shared(&self) -> Vec<u32> { vec![] }
 }
 
 pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, solved: &[SvSolved], names: &[String]) -> Option<collections::BTreeMap<String, i64>> {
-    let mut out = values.to_owned();
+    let mut out = values.copy_owned();
     let mut i = solved.len() as i64;
     while i > 0 {
         i -= 1;

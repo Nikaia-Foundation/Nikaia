@@ -42,11 +42,11 @@ pub enum BtRefusal {
 }
 
 impl BtRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             BtRefusal::Unevaluable => String::from("a build-time expression this does not read"),
             BtRefusal::NotHere { what, .. } => format!("`{}` is not here", what),
-            BtRefusal::Circular { ring } => format!("a constant built from itself: {}", ring.join(" -> ")),
+            BtRefusal::Circular { ring } => format!("a constant built from itself: {}", nikaia_std::block::Text::from(ring.join(" -> "))),
             BtRefusal::MayNotRead { path, .. } => format!("`{}` may not be read", path),
             BtRefusal::PathIsComputed => String::from("a path that is not a literal"),
             BtRefusal::OutOfBounds { len, .. } => { let len = *len; format!("an index outside {}", len) },
@@ -67,7 +67,7 @@ pub(crate) struct BtState {
     pub(crate) resolving: Vec<String>,
 }
 
-pub(crate) fn bt_not_folded(what: String) -> BtRefusal { BtRefusal::NotHere { what, why: BT_NOT_FOLDED.to_string(), way_out: BT_FOLD_WAY_OUT.to_string() } }
+pub(crate) fn bt_not_folded(what: String) -> BtRefusal { BtRefusal::NotHere { what, why: nikaia_std::block::Text::from(BT_NOT_FOLDED.to_string()), way_out: nikaia_std::block::Text::from(BT_FOLD_WAY_OUT.to_string()) } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -225,7 +225,7 @@ pub(crate) fn bt_field<H: BtHost>(base: &Expr, name: winnow_grammar::Symbol, hos
             let found = fields.get(&field);
             if found.is_none() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_field")); }
             nikaia_std::index::or(match found {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }, || BuildValue::Bool(false))
         },
@@ -345,18 +345,18 @@ pub(crate) fn bt_interpolated<H: BtHost>(parts: &[FPart], host: &H, state: &mut 
         } else if c == '{' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '{' {
             at += 1;
             bt_flush(&chunk, &mut out, host)?;
-            chunk = "".to_string();
+            chunk = nikaia_std::block::Text::from("");
             out.push('{');
         } else if c == '}' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '}' {
             at += 1;
             bt_flush(&chunk, &mut out, host)?;
-            chunk = "".to_string();
+            chunk = nikaia_std::block::Text::from("");
             out.push('}');
         } else if c == '{' {
             if ((at) as usize) >= chars.len() || *nikaia_std::index::get(&chars, (at) as usize) != '}' { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
             at += 1;
             bt_flush(&chunk, &mut out, host)?;
-            chunk = "".to_string();
+            chunk = nikaia_std::block::Text::from("");
             if ((taken) as usize) >= values.len() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
             match (*nikaia_std::index::get(&values, (taken) as usize)).clone() {
                 BuildValue::Int(n) => { out.push_str(&integer_text(&n)); },
@@ -386,13 +386,13 @@ pub(crate) fn bt_flush<H: BtHost>(chunk: &str, out: &mut String, host: &H) -> Re
 pub(crate) fn bt_constant_item<H: BtHost>(name: &str, host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     for held in state.resolving.iter() {
         if held == name {
-            let mut ring = state.resolving.to_owned();
-            ring.push(name.to_string());
+            let mut ring = state.resolving.copy_owned();
+            ring.push(nikaia_std::block::Text::from(name.to_string()));
             return Err(nikaia_std::error::throwing(BtRefusal::Circular { ring }, &"bt_constant_item"));
         }
     }
     let value = match host.constant(state.unit, name) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_constant_item")) };
-    state.resolving.push(name.to_string());
+    state.resolving.push(nikaia_std::block::Text::from(name.to_string()));
     let out = bt_expr(&value, host, state)?;
     state.resolving.pop();
     Ok(out)
@@ -403,7 +403,7 @@ pub(crate) fn bt_constant_item<H: BtHost>(name: &str, host: &H, state: &mut BtSt
 pub(crate) fn bt_asset<H: BtHost>(args: &[Expr], host: &H) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     if args.len() != 1 { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")); }
     let written = match nikaia_std::index::get(&args, 0) {
-        Expr::LitStr { text, .. } => text.to_string(),
+        Expr::LitStr { text, .. } => nikaia_std::block::Text::from(text.to_string()),
         _ => { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")) },
     };
     let path = decoded(&written, &|n| { host.char_of(n) });
@@ -436,11 +436,11 @@ pub fn bt_may_not_run(contract: &FnContract) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub fn bt_known_default(ledger: &Ledger, package: Option<&str>, key: &str, at: i64) -> Option<String> {
     let k = match package {
-        None => key.to_string(),
+        None => nikaia_std::block::Text::from(key.to_string()),
         Some(package) => format!("{}::{}", package, key),
     };
     let text = &match match match ledger.functions.get(&k) { Some(__nikaia_value) => __nikaia_value, None => return None }.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None }.config.get(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => return None }.default;
-    if !text.is_empty() { Some(text.to_string()) } else { None }
+    if !text.is_empty() { Some(nikaia_std::block::Text::from(text.to_string())) } else { None }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

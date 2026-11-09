@@ -79,9 +79,12 @@ impl CStr {
     /// ([ADR-302](../../../docs/specification/adr/adr-302.md) D13): a declaration
     /// says `-> CStr?` where the library may find nothing, and the program
     /// writes `?? ""`.
-    pub fn to_string(self) -> Result<String, crate::io::IoError> {
-        self.0.to_string().map_err(|_| {
-            crate::io::IoError::NotText("a C string this program was handed".to_string())
-        })
+    pub fn to_string(self) -> Result<crate::block::Text, crate::io::IoError> {
+        self.0
+            .to_string()
+            .map(crate::block::Text::from)
+            .map_err(|_| {
+                crate::io::IoError::NotText("a C string this program was handed".to_string())
+            })
     }
 }

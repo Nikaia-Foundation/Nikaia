@@ -99,7 +99,7 @@ pub struct Uses {
 
 pub fn kept_by(graph: &collections::BTreeMap<String, Uses>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut kept: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
-    for (name, uses) in graph.iter() { kept.insert(name.to_string(), uses.kept.to_owned()); }
+    for (name, uses) in graph.iter() { kept.insert(nikaia_std::block::Text::from(name.to_string()), uses.kept.copy_owned()); }
     let mut changed = true;
     while changed {
         changed = false;
@@ -127,8 +127,8 @@ pub(crate) fn add_kept(kept: &mut collections::BTreeMap<String, collections::BTr
         let held = match *nikaia_std::index::get(&kept, name) { Some(__nikaia_value) => __nikaia_value, None => return };
         parameters.extend(held.iter().cloned());
     }
-    parameters.insert(parameter.to_string());
-    kept.insert(name.to_string(), parameters);
+    parameters.insert(nikaia_std::block::Text::from(parameter.to_string()));
+    kept.insert(nikaia_std::block::Text::from(name.to_string()), parameters);
 }
 
 pub fn keeps_its(callee: &str, at: i64, settling: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> bool {
@@ -154,11 +154,11 @@ pub(crate) fn parameter_at(contract: &FnContract, at: i64) -> Option<String> {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut position: i64 = 0;
     for (name, _) in signature.params.iter() {
-        if position == at { return Some(name.to_string()); }
+        if position == at { return Some(nikaia_std::block::Text::from(name.to_string())); }
         position += 1;
     }
     for option in signature.config.iter() {
-        if position == at { return Some(option.name.to_string()); }
+        if position == at { return Some(nikaia_std::block::Text::from(option.name.to_string())); }
         position += 1;
     }
     None
@@ -186,7 +186,7 @@ pub fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
 pub fn lowered_options(contract: &FnContract) -> Vec<ConfigContract> {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<ConfigContract> = vec![];
-    for option in signature.config.iter() { if lends_option(contract, option) { out.push(ConfigContract { name: option.name.to_string(), ty: Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true }, default: option.default.to_string() }); } else { out.push(option.clone()); } }
+    for option in signature.config.iter() { if lends_option(contract, option) { out.push(ConfigContract { name: nikaia_std::block::Text::from(option.name.to_string()), ty: Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }, default: nikaia_std::block::Text::from(option.default.to_string()) }); } else { out.push(option.clone()); } }
     out
 }
 

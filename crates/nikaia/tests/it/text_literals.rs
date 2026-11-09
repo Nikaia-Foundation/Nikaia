@@ -2,7 +2,7 @@
 //! ([ADR-282](../../../docs/specification/adr/adr-282.md)).
 //!
 //! `"x"` is a view of static text, and until this record a view put where a
-//! `String` was declared was refused until the program wrote `.to_string()` -
+//! `String` was declared was refused until the program wrote `.to_text()` -
 //! the refusal every newcomer met first, protecting nothing: the text is a
 //! constant, so making a `String` of it is constructing a value, as `[1, 2]`
 //! constructs the `Vec` it stands in.
@@ -20,6 +20,8 @@
 
 use crate::common;
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::emit::{Build, emit_program};
@@ -60,7 +62,7 @@ fn ran(purpose: &str, source: &str) -> String {
         "{purpose} failed:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let printed = String::from_utf8_lossy(&out.stdout).to_string();
+    let printed = String::from_utf8_lossy(&out.stdout).to_text();
     std::fs::remove_dir_all(&dir).ok();
     printed
 }

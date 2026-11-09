@@ -1,0 +1,31 @@
+// #1445: an index whose position calls a `ref mut` method on the value
+// indexed (rustc's E0502 before: the list borrowed while the method
+// borrowed the struct mutably).
+struct F { rank: Vec[i64], parent: Vec[i64], name: Vec[String] }
+
+impl F {
+    fn find(ref mut self, x: i64) -> i64 {
+        self.parent[x] = x
+        return x
+    }
+
+    fn rank_of(ref mut self, x: i64) -> i64 {
+        return self.rank[self.find(x)]
+    }
+}
+
+fn main() throws {
+    let mut f = F { rank: [0, 0], parent: [0, 1], name: ["a", "b"] }
+    let c = 1
+    f.rank[f.find(c)] = 1
+    f.rank[f.find(c)] += 1
+    let v = f.rank[f.find(c)]
+    println(v)
+    println(f.rank[f.find(c)] + f.rank[f.find(0)])
+    if f.rank[f.find(c)] == 2 {
+        println("two")
+    }
+    println(f.name[f.find(c)].clone())
+    println(f.rank_of(1))
+    println(f.rank[f.find(f.find(c))])
+}

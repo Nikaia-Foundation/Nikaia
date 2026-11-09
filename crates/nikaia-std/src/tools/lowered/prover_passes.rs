@@ -21,13 +21,13 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         walk.state.preconditions = collections::BTreeMap::new();
         walk.state.candidates = collections::BTreeMap::new();
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
-        preconditions = walk.state.preconditions.to_owned();
+        preconditions = walk.state.preconditions.copy_owned();
         if same_preconditions(&walk.arena, &preconditions, &walk.state.known) { break; }
     }
     walk.state.known = collections::BTreeMap::new();
     walk.state.collecting = false;
     walk.state.preconditions = preconditions;
-    walk.state.postconditions = walk.state.candidates.to_owned();
+    walk.state.postconditions = walk.state.candidates.copy_owned();
     walk.state.candidates = collections::BTreeMap::new();
     let mut settled = false;
     while !settled {
@@ -55,7 +55,7 @@ pub(crate) fn strike_broken(state: &mut ProverState) {
         let (function, index) = nikaia_std::index::get(&broken, nikaia_std::index::at(k)); let index = nikaia_std::num::value(index);
         let mut posts = match state.postconditions.remove(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
         posts.remove(nikaia_std::count::of(index));
-        state.postconditions.insert(function.to_string(), posts);
+        state.postconditions.insert(nikaia_std::block::Text::from(function.to_string()), posts);
     }
     state.broken = collections::BTreeSet::new();
 }
@@ -67,7 +67,7 @@ pub(crate) fn precondition_texts(arena: &TermArena, m: &collections::BTreeMap<St
     for (function, pre) in m.iter() {
         let mut claims: Vec<String> = vec![];
         for claim in pre.claims.iter() { claims.push(arena.text(claim.term)); }
-        out.push((function.to_string(), claims));
+        out.push((nikaia_std::block::Text::from(function.to_string()), claims));
     }
     out
 }
@@ -80,10 +80,10 @@ pub(crate) fn checked_entries(walk: &ProverWalk, escape: &impl Fn(&str) -> Strin
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
             walk.arena.variables(claim.term, &mut read);
             let mut operands: Vec<(String, String)> = vec![];
-            for name in read.iter() { operands.push((name.to_string(), rust_of_name(name, escape))); }
+            for name in read.iter() { operands.push((nikaia_std::block::Text::from(name.to_string()), rust_of_name(name, escape))); }
             checks.push(PreconditionCheck { rust: rust_text(&walk.arena, claim.term, escape), written: claim.failure(function), message: claim_text_of((claim.message).as_deref()), operands });
         }
-        entries.insert(function.to_string(), checks);
+        entries.insert(nikaia_std::block::Text::from(function.to_string()), checks);
     }
     entries
 }
@@ -96,15 +96,15 @@ pub(crate) fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<St
             entry.requires.push(ledger_term_text(&walk.arena, claim.term));
             entry.from.push(format!("assert({})", claim.written));
         }
-        published.insert(function.to_string(), entry);
+        published.insert(nikaia_std::block::Text::from(function.to_string()), entry);
     }
     for (function, posts) in walk.state.postconditions.iter() {
         if posts.is_empty() { continue; }
         let mut entry = nikaia_std::index::or(published.remove(function), || Published::nothing());
         for post in posts.iter() { entry.ensures.push(ledger_term_text(&walk.arena, post.term)); }
-        published.insert(function.to_string(), entry);
+        published.insert(nikaia_std::block::Text::from(function.to_string()), entry);
     }
-    for (function, _) in walk.state.summaries.iter() { if !published.contains_key(function) { published.insert(function.to_string(), Published::nothing()); } }
+    for (function, _) in walk.state.summaries.iter() { if !published.contains_key(function) { published.insert(nikaia_std::block::Text::from(function.to_string()), Published::nothing()); } }
     let mut out: collections::BTreeMap<String, Published> = collections::BTreeMap::new();
     for (function, entry) in published.iter() {
         let mut full = entry.clone();
@@ -115,7 +115,7 @@ pub(crate) fn published_contracts(walk: &ProverWalk) -> collections::BTreeMap<St
             None => None,
         }, || vec![].into());
         for exit in exits.iter() { full.inferred.push(ledger_term_text(&walk.arena, exit.term)); }
-        out.insert(function.to_string(), full);
+        out.insert(nikaia_std::block::Text::from(function.to_string()), full);
     }
     out
 }
@@ -133,14 +133,14 @@ pub(crate) fn count_checked_calls(walk: &mut ProverWalk) {
         if unproved {
             let (callee, _) = key;
             let so_far = nikaia_std::index::or(*nikaia_std::index::get(&checked, callee), || 0);
-            checked.insert(callee.to_string(), so_far + 1);
+            checked.insert(nikaia_std::block::Text::from(callee.to_string()), so_far + 1);
         }
     }
     let carried = carried_to(&walk.state);
     let mut counted: collections::BTreeMap<(i64, i64), ClaimHeld> = collections::BTreeMap::new();
     for (key, held) in walk.held.iter() {
         let now = match held {
-            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(function.to_string(), checked_through(&checked, &carried, &walk.findings, function)),
+            ClaimHeld::Precondition(function, _) => ClaimHeld::Precondition(nikaia_std::block::Text::from(function.to_string()), checked_through(&checked, &carried, &walk.findings, function)),
             _ => held.clone(),
         };
         counted.insert(key.clone(), now);
@@ -154,8 +154,8 @@ pub(crate) fn carried_to(state: &ProverState) -> collections::BTreeMap<String, c
         for claim in pre.claims.iter() {
             let site = match claim.site.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut callers = nikaia_std::index::or(out.remove(&site.callee), || collections::BTreeSet::new().into());
-            callers.insert(owner.to_string());
-            out.insert(site.callee.to_string(), callers);
+            callers.insert(nikaia_std::block::Text::from(owner.to_string()));
+            out.insert(nikaia_std::block::Text::from(site.callee.to_string()), callers);
         }
     }
     out
@@ -163,19 +163,19 @@ pub(crate) fn carried_to(state: &ProverState) -> collections::BTreeMap<String, c
 
 pub(crate) fn checked_through(checked: &collections::BTreeMap<String, i64>, carried: &collections::BTreeMap<String, collections::BTreeSet<String>>, findings: &[Finding], function: &str) -> i64 {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut todo: Vec<String> = vec![function.to_string()];
-    let mut total: i64 = 0;
+    #[allow(unused_mut)] let mut todo: Vec<String> = vec![nikaia_std::block::Text::from(function.to_string())];
+    let mut total: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut todo = todo;
     while !todo.is_empty() {
         let next = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if seen.contains(&next) { continue; }
         let mut calls = nikaia_std::index::or(*nikaia_std::index::get(&checked, &next), || 0);
-        if next != function { for found in findings.iter() { if found.code == "NK1207" && found.message.contains(&format!("`{}`'s precondition", next)) { calls -= 1; } } }
+        if next != function { for found in findings.iter() { if found.code == "NK1207" && found.message.contains(&*format!("`{}`'s precondition", next)) { calls -= 1; } } }
         if calls > 0 { total += calls; }
         let callers = match *nikaia_std::index::get(&carried, &next) { Some(__nikaia_value) => __nikaia_value, None => {
             seen.insert(next);
             continue;
         } };
-        for caller in callers.iter() { todo.push(caller.to_string()); }
+        for caller in callers.iter() { todo.push(nikaia_std::block::Text::from(caller.to_string())); }
         seen.insert(next);
     }
     total

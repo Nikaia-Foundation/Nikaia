@@ -18,7 +18,7 @@ pub fn nearest_name(name: &str, among: &[String]) -> Option<String> {
         let d = distance(name, candidate);
         if d * 3 > longest { continue; }
         if best_distance < 0 || d < best_distance {
-            best = Some(candidate.to_string());
+            best = Some(nikaia_std::block::Text::from(candidate.to_string()));
             best_distance = d;
         }
     }
@@ -66,19 +66,19 @@ pub fn names_listed(names: &[String]) -> String {
     if names.len() == 1 { return format!("`{}`", *nikaia_std::index::get(&names, 0)); }
     let mut rest: Vec<String> = vec![];
     for k in 0..names.len() as i64 - 1 { rest.push(format!("`{}`", *nikaia_std::index::get(&names, (k) as usize))); }
-    format!("{} and `{}`", rest.join(", "), *nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1)))
+    format!("{} and `{}`", nikaia_std::block::Text::from(rest.join(", ")), *nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1)))
 }
 
 pub fn indented_text(text: &str) -> String {
     let mut lines: Vec<String> = vec![];
     for line in text.trim_end().lines() { lines.push(format!("       {}", line)); }
-    lines.join("\n")
+    nikaia_std::block::Text::from(lines.join("\n"))
 }
 
 pub fn brace_groups(text: &str) -> Vec<String> {
     let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
-    let mut found: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut found: Vec<String> = vec![];
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while ((at) as usize) < c.len() {
         if *nikaia_std::index::get(&c, (at) as usize) == '\\' {
             at += 1;
@@ -149,20 +149,20 @@ pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
 
 pub fn not_promised_note(callee: &str) -> String {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
-    let mut package: String = String::from("its package");
-    let mut function = callee.to_string();
+    let mut package: String = String::from("its package"); #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut function = nikaia_std::block::Text::from(callee.to_string()); #[allow(clippy::redundant_locals)] let parts = parts;
     if parts.len() == 2 {
-        package = (*nikaia_std::index::get(&parts, 0)).to_string();
-        function = (*nikaia_std::index::get(&parts, 1)).to_string();
-    }
+        package = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
+        function = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
+    } ::core::mem::drop(parts);
     format!("`{}` is `{}`'s, and its source doesn't say `sync`. That its body doesn't pause today is not a promise another package can rely on: write `sync` after the result of `{}` in `{}` to make it.", callee, package, function, package)
 }
 
 pub fn is_a_lookup(key: &str) -> bool {
-    let mut bare = key.to_string();
+    let mut bare = nikaia_std::block::Text::from(key.to_string());
     if key.starts_with("collections::") {
         let parts: Vec<&str> = key.splitn(2, "::").collect::<Vec<_>>();
-        bare = (*nikaia_std::index::get(&parts, 1)).to_string();
+        bare = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
     }
     bare == "HashMap::get" || bare == "HashMap::contains_key" || bare == "HashSet::contains" || bare == "HashSet::remove" || bare == "HashMap::remove" || bare == "BTreeMap::remove" || bare == "BTreeSet::remove" || bare == "BTreeMap::get" || bare == "BTreeMap::contains_key" || bare == "BTreeSet::contains" || bare == "Vec::contains" || bare == "Array::contains"
 }
@@ -170,7 +170,7 @@ pub fn is_a_lookup(key: &str) -> bool {
 pub fn boxed_member(owner: &str, at: i64, field: &str) -> String {
     if at >= 0 { return format!("{}#{}", owner, at); }
     if !field.is_empty() { return format!("{}.{}", owner, field); }
-    owner.to_string()
+    nikaia_std::block::Text::from(owner.to_string())
 }
 
 pub fn articles(text: &str) -> String {

@@ -146,6 +146,7 @@ impl EmitState {
         // uses.
         if !self.is_std {
             out.push("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n")
+            out.push(block_types_import(self.on_block_types()))
         }
         if self.fails {
             // Kap 7.1: `error.full()` is a method on whatever a `catch` bound, so

@@ -5,6 +5,8 @@
 use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -14,7 +16,7 @@ fn codes(source: &str) -> Vec<String> {
         .findings
         .into_iter()
         .filter(|f| f.severity == nikaia::check::Severity::Error)
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -156,7 +158,7 @@ fn run_file(purpose: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).to_string()
+    String::from_utf8_lossy(&run.stdout).to_text()
 }
 
 /// **D6: `field.attribute(X)` and `.attributes(X)`**, a constant per
@@ -324,8 +326,8 @@ fn attributes_cross_into_another_package() {
         .arg("run")
         .output()
         .expect("the nikaia binary runs");
-    let stdout = String::from_utf8_lossy(&run.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&run.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&run.stdout).to_text();
+    let stderr = String::from_utf8_lossy(&run.stderr).to_text();
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(stdout, "itemId\ncreatedAt\nname\n", "{stderr}");
 }

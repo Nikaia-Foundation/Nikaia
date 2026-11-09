@@ -9,6 +9,8 @@
 //! `proven-index`'s debug assertion rather than read past the end.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::bounds::BoundsChecks;
@@ -58,8 +60,8 @@ fn run(purpose: &str, source: &str, level: BoundsChecks) -> (bool, String, Strin
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
     )
 }
 
@@ -276,14 +278,14 @@ fn the_option_is_read_and_a_wrong_word_is_refused() {
         BoundsChecks::Kept
     );
     let level = optimizations("remove-bounds-checks:all").unwrap_err();
-    assert!(level.to_string().contains("`on` or `off`"), "{level}");
+    assert!(level.to_text().contains("`on` or `off`"), "{level}");
     let old = optimizations("remove-bounds-checks:aggressive").unwrap_err();
-    assert!(old.to_string().contains("are `on`"), "{old}");
+    assert!(old.to_text().contains("are `on`"), "{old}");
     let name = optimizations("inline:aggressive").unwrap_err();
-    assert!(name.to_string().contains("remove-bounds-checks"));
-    assert!(name.to_string().contains("remove-overflow-checks"));
+    assert!(name.to_text().contains("remove-bounds-checks"));
+    assert!(name.to_text().contains("remove-overflow-checks"));
     let bare = optimizations("remove-bounds-checks").unwrap_err();
-    assert!(bare.to_string().contains("needs `on` or `off`"));
+    assert!(bare.to_text().contains("needs `on` or `off`"));
 }
 
 /// D1 on the command line: `--optimization` reaches the lowering, and a word

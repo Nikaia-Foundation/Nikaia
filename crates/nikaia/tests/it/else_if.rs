@@ -13,6 +13,8 @@
 //! What a chain answers when it runs is `tests/language/src/else_if.nika`.
 
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 
 use nikaia::emit::{Build, emit_program};

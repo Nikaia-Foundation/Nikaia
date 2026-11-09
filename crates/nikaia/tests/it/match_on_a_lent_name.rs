@@ -3,6 +3,8 @@
 //! their output compared.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};

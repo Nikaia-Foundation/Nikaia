@@ -74,7 +74,7 @@ pub fn float_end(text: &str) -> Option<String> {
         return Some(format!("a scale like `{}` stands on a whole number, not on a float", slice(&c, 0, found.len)));
     }
     let len = upper_exponent(&c, 0);
-    if len > 0 { return Some(format!("an exponent is written with a lower-case `e`: `{}`", slice(&c, 0, len).replace('E', "e"))); }
+    if len > 0 { return Some(format!("an exponent is written with a lower-case `e`: `{}`", nikaia_std::block::Text::from(slice(&c, 0, len).replace('E', "e")))); }
     None
 }
 
@@ -188,7 +188,7 @@ pub fn number_at(text: &str, signed: bool) -> Number {
             let len = upper_exponent(&c, at);
             let mut sign = "";
             if signed { sign = "-"; }
-            wrong = format!("an exponent is written with a lower-case `e`: `{}{}{}`", sign, slice(&c, 0, at), slice(&c, at, at + len).replace('E', "e"));
+            wrong = format!("an exponent is written with a lower-case `e`: `{}{}{}`", sign, slice(&c, 0, at), nikaia_std::block::Text::from(slice(&c, at, at + len).replace('E', "e")));
         }
     }
     let mut magnitude: u64 = 0u64;
@@ -209,8 +209,8 @@ pub fn number_at(text: &str, signed: bool) -> Number {
             if past(&digits, widest) { wrong = too_big(); } else {
                 let product = without_leading_zeros(&times(&digits, scale_by));
                 if !past(&product, limit) { magnitude = magnitude_of(&product); } else if scale.is_some() {
-                    let mut said = product.to_string();
-                    if past(&product, widest) { said = widest.to_string(); }
+                    let mut said = nikaia_std::block::Text::from(product.to_string());
+                    if past(&product, widest) { said = nikaia_std::block::Text::from(widest.to_string()); }
                     let mut sign = "";
                     if signed { sign = "-"; }
                     wrong = format!("`{}{}{}` is {}{}, which is too big: the largest integer types are `u64` and `i64`", sign, value, slice(&c, at, at + scale_len), sign, said);

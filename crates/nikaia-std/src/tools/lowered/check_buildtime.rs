@@ -20,8 +20,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_constant_that_owns_memory(&mut self, bound: &str, held: &Ty, computed: &BuildValue, holder: &str, span: &Span) {
         let mut owns: String = String::from("a `String`");
-        let mut fixed: &'static str = "`ref String`";
-        let mut way_out: String = String::from("Declare it as `ref String`: the text is built into the program, and the program holds a view of it.");
+        let mut fixed: &'static str = "a `String`, as a view";
+        let mut way_out: String = String::from("Declare it as `String`: the text is built into the program, and a `comptime` `String` is a view of it.");
         match computed {
             BuildValue::List(items) => {
                 let mut element: String = String::from("T");
@@ -40,10 +40,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_list_whose_elements_disagree(&mut self, first_kind: &str, first: &str, other_kind: &str, other: &Ty, span: &Span) {
-        let mut one = first_kind.to_string();
+        let mut one = nikaia_std::block::Text::from(first_kind.to_string());
         if first != "?" && !first.is_empty() { one = format!("`{}`", first); }
         let other_text = other.text();
-        let mut two = other_kind.to_string();
+        let mut two = nikaia_std::block::Text::from(other_kind.to_string());
         if other_text != "?" && !other_text.is_empty() { two = format!("`{}`", other_text); }
         self.findings.push(check_refusal("NK1154", span, format!("This list mixes {} and {}, but a list holds one type.", one, two), vec![String::from("The first element with a known type sets the type for the rest.")], Some(String::from("Convert the element that doesn't fit, or use two lists."))));
     }
@@ -103,9 +103,9 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_path_after_a_value(&mut self, written: &str, span: &Span) {
         let head: String = nikaia_std::index::or(match written.split("::").next() {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
-        }, || written.to_string().into());
+        }, || nikaia_std::block::Text::from(written.to_string()).into());
         self.findings.push(check_refusal("NK1181", span, format!("`.{}` is written under `.{}`, but `.{}` is a value, not a type.", written, head, head), vec![String::from("A name in front of `::` has to be a type; after a `.`, only a field's `.ty` from `T::fields` is one.")], Some(format!("Read the field with `.{}`, or ask a reflected field's type with `field.ty::…`.", head))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

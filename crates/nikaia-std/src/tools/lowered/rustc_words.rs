@@ -30,7 +30,7 @@ pub fn in_this_language(message: &str) -> String {
 }
 
 pub fn is_rust_internal(note: &str) -> bool {
-    for internal in ["#[deny(", "#[warn(", "#[allow(", "#[forbid(", "Cargo.toml", "cargo add", "RUST_BACKTRACE", "rustc --explain", "consider using the type `u32`", "consider using the type `u64`", "consider using the type `usize`", "consider calling `.as_ref()`", "consider calling `.as_mut()`", "you can `clone` the value and consume it"] { if note.contains(internal) { return true; } }
+    for internal in ["#[deny(", "#[warn(", "#[allow(", "#[forbid(", "Cargo.toml", "cargo add", "RUST_BACKTRACE", "rustc --explain", "consider using the type `u32`", "consider using the type `u64`", "consider using the type `usize`", "consider calling `.as_ref()`", "consider calling `.as_mut()`", "you can `clone` the value and consume it"] { if note.contains(AsRef::<str>::as_ref(internal)) { return true; } }
     false
 }
 
@@ -123,7 +123,7 @@ pub fn said(text: &str) -> String {
     if c.is_empty() { return String::from(""); }
     let mut first: String = String::from("");
     first.push(*nikaia_std::index::get(&c, 0));
-    let mut out = first.to_uppercase();
+    let mut out = nikaia_std::block::Text::from(first.to_uppercase());
     for k in 1..c.len() as i64 { out.push(*nikaia_std::index::get(&c, (k) as usize)); }
     let last = *nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - 1));
     let mut closed = last == '.' || last == '?' || last == '!' || last == ':';
@@ -135,7 +135,7 @@ pub fn said(text: &str) -> String {
 }
 
 pub fn headed(level: &str, code: &str) -> String {
-    if code.is_empty() { return level.to_string(); }
+    if code.is_empty() { return nikaia_std::block::Text::from(level.to_string()); }
     format!("{}[{}]", level, code)
 }
 

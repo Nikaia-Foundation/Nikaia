@@ -62,11 +62,11 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
             return nikaia_std::list::contains(&own, &"Clone");
         }
         if nikaia_std::list::contains(&COMPARE_UNCOPIED, &name) { return false; }
-        let mut key = name.to_string();
+        let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
             let mut written: Vec<String> = vec![];
             for arg in args.iter() { written.push(arg.text()); }
-            key = format!("{}[{}]", name, written.join(", "));
+            key = format!("{}[{}]", name, nikaia_std::block::Text::from(written.join(", ")));
         }
         if seen.contains(&key) { return true; }
         seen.insert(key);
@@ -79,7 +79,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
                 let mut at: i64 = 0;
                 for param in names.iter() {
-                    if at < args.len() as i64 { bound.insert(param.to_string(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    if at < args.len() as i64 { bound.insert(nikaia_std::block::Text::from(param.to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
                     at = at + 1;
                 }
             }
@@ -126,11 +126,11 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         if name == "f32" || name == "f64" { return *how == CompareStrength::Compares; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
         if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, &how, seen); }
-        let mut key = name.to_string();
+        let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
             let mut written: Vec<String> = vec![];
             for arg in args.iter() { written.push(arg.text()); }
-            key = format!("{}[{}]", name, written.join(", "));
+            key = format!("{}[{}]", name, nikaia_std::block::Text::from(written.join(", ")));
         }
         if seen.contains(&key) { return true; }
         seen.insert(key);
@@ -147,7 +147,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
                 let mut at: i64 = 0;
                 for param in names.iter() {
-                    if at < args.len() as i64 { bound.insert(param.to_string(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    if at < args.len() as i64 { bound.insert(nikaia_std::block::Text::from(param.to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
                     at = at + 1;
                 }
             }
@@ -181,7 +181,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     }
     pub(crate) fn payloads_of(&self, name: &str) -> Vec<Ty> {
         let held = self.payloads.get(name);
-        if held.is_some() { return match held { Some(__nikaia_value) => __nikaia_value, None => return vec![] }.to_owned(); }
+        if held.is_some() { return match held { Some(__nikaia_value) => __nikaia_value, None => return vec![] }.copy_owned(); }
         let mut all: Vec<Ty> = vec![];
         for ledger in [self.own, self.library] {
             let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -218,7 +218,7 @@ pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, he
     for name in declared.iter() {
         if asking.implements("Eq", name) { continue; }
         let mut parts: Vec<Ty> = vec![];
-        if asking.payloads.contains_key(name) { parts = match asking.payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue }.to_owned(); } else if asking.structs.contains_key(name) {
+        if asking.payloads.contains_key(name) { parts = match asking.payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue }.copy_owned(); } else if asking.structs.contains_key(name) {
             let fields = match asking.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             for field in fields.iter() { parts.push(field.ty.clone()); }
         }
@@ -226,8 +226,8 @@ pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, he
         let mut totally = true;
         for part in parts.iter() { if !asking.of(part) { compares = false; } else if !asking.totally(part) { totally = false; } }
         if !compares { continue; }
-        found.compares.push(name.to_string());
-        if totally { found.totally.push(name.to_string()); }
+        found.compares.push(nikaia_std::block::Text::from(name.to_string()));
+        if totally { found.totally.push(nikaia_std::block::Text::from(name.to_string())); }
     }
     found
 }
@@ -240,7 +240,7 @@ impl CheckState {
         };
         if !hull { return; }
         let bound = match target {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return,
         };
         let note: String = String::from("Changing shared state goes through a method that takes the lock.");
@@ -277,7 +277,7 @@ impl CheckState {
                 at = at + 1;
             }
             if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) { continue; }
-            lent.insert(name.to_string());
+            lent.insert(nikaia_std::block::Text::from(name.to_string()));
         }
         lent
     }
@@ -287,7 +287,7 @@ impl CheckState {
             let mut known = true;
             for field in path.iter() {
                 let owner = match at {
-                    Ty::Named { name: ref written, .. } => written.to_string(),
+                    Ty::Named { name: ref written, .. } => nikaia_std::block::Text::from(written.to_string()),
                     _ => String::from(""),
                 };
                 let fields = nikaia_std::index::or(self.fields_of(world, &owner), || vec![].into());
@@ -307,12 +307,12 @@ impl CheckState {
 
 pub(crate) fn compare_base(name: &str) -> String {
     let parts = name.split("::");
-    let mut last: String = name.to_string();
-    for part in parts { last = part.to_string(); }
+    let mut last: String = nikaia_std::block::Text::from(name.to_string());
+    for part in parts { last = nikaia_std::block::Text::from(part.to_string()); }
     last
 }
 
-pub(crate) fn compare_path_within(path: &str, name: &str, inside: &str) -> bool { path == name || path.starts_with(inside) }
+pub(crate) fn compare_path_within(path: &str, name: &str, inside: &str) -> bool { path == name || path.starts_with(AsRef::<str>::as_ref(inside)) }
 
 pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
@@ -367,11 +367,11 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
 
 pub(crate) fn compare_parameter_bounds(ty: &Ty, parameters: &collections::BTreeMap<String, Vec<String>>) -> Vec<String> {
     let name = match ty {
-        Ty::Named { name, args, .. } => if args.is_empty() { name.to_string() } else { String::from("") },
+        Ty::Named { name, args, .. } => if args.is_empty() { nikaia_std::block::Text::from(name.to_string()) } else { String::from("") },
         _ => String::from(""),
     };
     let bounds = match parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return vec![String::from("?")] };
-    bounds.to_owned()
+    bounds.copy_owned()
 }
 
 pub fn compare_language_impls(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
@@ -396,7 +396,7 @@ pub(crate) fn compare_language_impl(asking: &CheckComparable<'_, '_, '_, '_, '_,
     let name = here.text(target.name);
     let declared = asking.structs.contains_key(&name) || asking.enums.contains_key(&name) || asking.beside.contains_key(&name);
     if !declared { return Some(check_refusal("NK1249", span, format!("You can't write `impl {} for {}`: your program doesn't declare it.", trait_text, name), vec![format!("`{}` for a type another package declares is that package's to say, and its ledger does.", trait_text)], Some(format!("Write it for a type you declare, or hold `{}` in a `struct` of your own.", name)))); }
-    let named = Ty::Named { name: name.to_string(), args: vec![], view: false };
+    let named = Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false };
     if trait_text == "Ord" && !asking.totally(&named) {
         let note: String = String::from("An order that disagrees with equality gives an ordered map no meaning, and a type holding a float is not `Eq`.");
         return Some(check_refusal("NK1249", span, format!("`impl Ord for {}` needs `{}` to be `Eq`.", name, name), vec![note], Some(format!("Write `impl Eq for {}`, or take out the part that has no equality.", name))));

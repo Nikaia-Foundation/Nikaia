@@ -4,6 +4,8 @@
 use nikaia::ast::{Expr, Item, Stmt};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -43,7 +45,7 @@ fn a_range_is_an_expression() {
     let refused =
         parse_to_ast("fn main() { for i in 0..=5 { } }").expect_err("`..=` does not parse");
     assert!(
-        refused.to_string().contains("Nikaia has no `..=`"),
+        refused.to_text().contains("Nikaia has no `..=`"),
         "{refused}"
     );
     let help = nikaia::diagnostics::refused_finding(&refused)
@@ -127,7 +129,7 @@ fn a_float_may_carry_an_exponent() {
     for literal in ["1.5e5", "1.5e-4", "1.5e+4", "2e3", "2e-3"] {
         let emitted = emit(&format!("fn main() {{ let a = {literal} }}"));
         assert!(
-            emitted.contains(&format!("let a = {literal};")),
+            emitted.contains(&*format!("let a = {literal};")),
             "{literal}: {emitted}"
         );
     }
@@ -626,7 +628,7 @@ fn text_made_in_place_is_lent_to_a_pattern() {
              return rest.len() + head.len() + line.split(f\"{n};\").count()\n\
          }\n",
     );
-    assert!(emitted.contains("strip_prefix(&format!("), "{emitted}");
-    assert!(emitted.contains("strip_suffix(&format!("), "{emitted}");
-    assert!(emitted.contains("split(&format!("), "{emitted}");
+    assert!(emitted.contains("strip_prefix(&*format!("), "{emitted}");
+    assert!(emitted.contains("strip_suffix(&*format!("), "{emitted}");
+    assert!(emitted.contains("split(&*format!("), "{emitted}");
 }

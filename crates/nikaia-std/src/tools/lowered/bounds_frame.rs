@@ -6,7 +6,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
 pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
-    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new() };
+    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new(), returning: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, .. } => {
@@ -15,8 +15,8 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
                         Item::Fn { name, args, receiver, .. } => {
                             let name = *name;
                             let written = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            if args.iter().any(|a| { a.mutable }) { around.changing_methods.insert(words.resolve(written).to_string()); }
-                            if nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false) { around.changing_receivers.insert(words.resolve(written).to_string()); }
+                            if args.iter().any(|a| { a.mutable }) { around.changing_methods.insert(nikaia_std::block::Text::from(words.resolve(written).to_string())); }
+                            if nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false) { around.changing_receivers.insert(nikaia_std::block::Text::from(words.resolve(written).to_string())); }
                         },
                         _ => { },
                     }
@@ -25,13 +25,13 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
             Item::Fn { name, receiver, args, .. } => {
                 let name = *name;
                 let written = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if receiver.is_none() { around.functions.insert(words.resolve(written).to_string(), args.iter().map(|a| { a.mutable }).collect::<Vec<_>>()); }
+                if receiver.is_none() { around.functions.insert(nikaia_std::block::Text::from(words.resolve(written).to_string()), args.iter().map(|a| { a.mutable }).collect::<Vec<_>>()); }
             },
             _ => { },
         }
     }
     let mut context = frame_context(around, std_receivers, simd_loads);
-    for (key, _) in frames_round(program, &context, words) { context.around.frames.insert(key.to_string(), nothing_changed()); }
+    for (key, _) in frames_round(program, &context, words) { context.around.frames.insert(nikaia_std::block::Text::from(key.to_string()), nothing_changed()); }
     let mut round: i64 = 0;
     let mut settled = false;
     while round < frame_rounds() {
@@ -53,7 +53,7 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
     context.around
 }
 
-pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.to_owned(), simd_loads: simd_loads.to_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new() } }
+pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.copy_owned(), simd_loads: simd_loads.copy_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), whole_loops: collections::BTreeSet::new(), whole_parts: collections::BTreeMap::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new(), returns: collections::BTreeMap::new() } }
 
 pub(crate) fn frames_round(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, BoundsChanged> {
     let mut out: collections::BTreeMap<String, BoundsChanged> = collections::BTreeMap::new();
@@ -62,10 +62,10 @@ pub(crate) fn frames_round(program: &Program, context: &BoundsContext, words: &w
             Item::Fn { name, receiver, args, body, .. } => {
                 let name = *name;
                 let written = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                frame_join(&mut out, words.resolve(written).to_string(), &frame_of_body((receiver).as_ref(), args, body, context, words));
+                frame_join(&mut out, nikaia_std::block::Text::from(words.resolve(written).to_string()), &frame_of_body((receiver).as_ref(), args, body, context, words));
             },
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, receiver, args, body, .. } => {
@@ -96,7 +96,7 @@ pub(crate) fn frame_of_body(receiver: Option<&Receiver>, args: &[FnArg], body: &
     let mut out = nothing_changed();
     let mut roots: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     if nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false) { roots.insert(String::from("self"), String::from("#self")); }
-    for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if arg.mutable { roots.insert(words.resolve(arg.name).to_string(), format!("#{}", at)); } }
+    for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if arg.mutable { roots.insert(nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), format!("#{}", at)); } }
     if roots.is_empty() { return out; }
     let changed = bounding_changed(body, context, words);
     let mut aliases: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -119,16 +119,16 @@ pub(crate) fn frame_of_body(receiver: Option<&Receiver>, args: &[FnArg], body: &
 }
 
 pub(crate) fn frame_put(out: &mut BoundsChanged, path: &str, kind: i64, roots: &collections::BTreeMap<String, String>, aliases: &collections::BTreeMap<String, String>) {
-    let mut at = path.to_string();
+    let mut at = nikaia_std::block::Text::from(path.to_string());
     let mut whole = false;
     let mut steps: i64 = 0;
     while !roots.contains_key(&path_root(&at)) {
         let source = match aliases.get(&path_root(&at)) { Some(__nikaia_value) => __nikaia_value, None => return };
-        at = source.to_string();
+        at = nikaia_std::block::Text::from(source.to_string());
         whole = true;
         steps += 1;
         if ((steps) as usize) > aliases.len() {
-            for (_, root) in roots.iter() { out.values.insert(root.to_string()); }
+            for (_, root) in roots.iter() { out.values.insert(nikaia_std::block::Text::from(root.to_string())); }
             return;
         }
     }
@@ -138,8 +138,8 @@ pub(crate) fn frame_put(out: &mut BoundsChanged, path: &str, kind: i64, roots: &
 
 pub(crate) fn frame_rooted(path: &str, roots: &collections::BTreeMap<String, String>) -> String {
     let root = path_root(path);
-    let mapped = match roots.get(&root) { Some(__nikaia_value) => __nikaia_value, None => return path.to_string() };
-    let rest = nikaia_std::index::or(path.strip_prefix(&root), || "");
+    let mapped = match roots.get(&root) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(path.to_string()) };
+    let rest = nikaia_std::index::or(path.strip_prefix(&*root), || "");
     format!("{}{}", mapped, rest)
 }
 
@@ -147,7 +147,7 @@ pub(crate) fn frame_deep(path: &str) -> bool { (path.split('.').count() as i64) 
 
 pub(crate) fn frame_cut(path: &str) -> String {
     let kept: Vec<&str> = path.split('.').take(nikaia_std::count::of(frame_depth() + 1)).collect::<Vec<_>>();
-    kept.join(".")
+    nikaia_std::block::Text::from(kept.join("."))
 }
 
 pub(crate) fn frame_aliases_block(block: &Block, roots: &collections::BTreeMap<String, String>, aliases: &mut collections::BTreeMap<String, String>, words: &winnow_grammar::InternerContext) {
@@ -158,7 +158,7 @@ pub(crate) fn frame_aliases_block(block: &Block, roots: &collections::BTreeMap<S
                 if source.is_some() {
                     for name in bindings.iter() {
                         let name = *name;
-                        aliases.insert(words.resolve(name).to_string(), nikaia_std::index::or(source.as_deref(), || "").to_string());
+                        aliases.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), nikaia_std::block::Text::from(nikaia_std::index::or(source.as_deref(), || "").to_string()));
                     }
                 }
             },
@@ -171,7 +171,7 @@ pub(crate) fn frame_aliases_block(block: &Block, roots: &collections::BTreeMap<S
                     let source = match frame_source(value, roots, &aliases, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     let mut names: Vec<String> = vec![];
                     for arm in arms.iter() { frame_pattern_names(&arm.pattern, words, &mut names); }
-                    for name in names.iter() { aliases.insert(name.to_string(), source.to_string()); }
+                    for name in names.iter() { aliases.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(source.to_string())); }
                 },
                 Expr::MethodCall { receiver, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); frame_lambda_aliases(receiver, args, roots, aliases, words); },
                 Expr::SafeMethod { receiver, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); frame_lambda_aliases(receiver, args, roots, aliases, words); },
@@ -189,7 +189,7 @@ pub(crate) fn frame_lambda_aliases(receiver: &Expr, args: &[Expr], roots: &colle
             Expr::Closure { params, .. } => {
                 for name in params.iter() {
                     let name = *name;
-                    aliases.insert(words.resolve(name).to_string(), source.to_string());
+                    aliases.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), nikaia_std::block::Text::from(source.to_string()));
                 }
             },
             _ => { },
@@ -202,7 +202,7 @@ pub(crate) fn frame_source(expr: &Expr, roots: &collections::BTreeMap<String, St
     if path.is_some() {
         let found = nikaia_std::index::or(path, || "".into());
         let root = path_root(&found);
-        if roots.contains_key(&root) || aliases.contains_key(&root) { return Some(found.to_string()); }
+        if roots.contains_key(&root) || aliases.contains_key(&root) { return Some(nikaia_std::block::Text::from(found.to_string())); }
         return None;
     }
     match expr {
@@ -224,12 +224,12 @@ pub(crate) fn frame_pattern_names(pattern: &MatchPattern, words: &winnow_grammar
         MatchPattern::Path(segments) => {
             for s in segments.iter() {
                 let s = *s;
-                out.push(words.resolve(s).to_string());
+                out.push(nikaia_std::block::Text::from(words.resolve(s).to_string()));
             }
         },
         MatchPattern::Tuple { parts, .. } => { for p in parts.iter() { frame_pattern_names(p, words, out); } },
         MatchPattern::List(parts) => { for p in parts.iter() { frame_pattern_names(p, words, out); } },
-        MatchPattern::RestNamed(name) => { let name = *name; out.push(words.resolve(name).to_string()); },
+        MatchPattern::RestNamed(name) => { let name = *name; out.push(nikaia_std::block::Text::from(words.resolve(name).to_string())); },
         MatchPattern::Named { fields, .. } => { for field in fields.iter() { frame_pattern_names(&field.pat, words, out); } },
         MatchPattern::Or(alternatives) => { for p in alternatives.iter() { frame_pattern_names(p, words, out); } },
         _ => { },
@@ -240,10 +240,10 @@ pub fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Op
     let mut out = nothing_changed();
     for path in frame.values.iter() {
         let on = match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        out.values.insert(on.to_string());
-        out.jumps.insert(on.to_string());
-        out.drops.insert(on.to_string());
-        out.falls.insert(on.to_string());
+        out.values.insert(nikaia_std::block::Text::from(on.to_string()));
+        out.jumps.insert(nikaia_std::block::Text::from(on.to_string()));
+        out.drops.insert(nikaia_std::block::Text::from(on.to_string()));
+        out.falls.insert(nikaia_std::block::Text::from(on.to_string()));
         out.lengths.insert(on);
     }
     for path in frame.lengths.iter() { out.lengths.insert(match frame_onto(path, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
@@ -260,7 +260,7 @@ pub fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Op
 
 pub(crate) fn frame_onto(path: &str, receiver: Option<&str>, handed: &[Option<String>]) -> Option<String> {
     let root = path_root(&frame_list(path));
-    let rest = nikaia_std::index::or(path.strip_prefix(&root), || "");
+    let rest = nikaia_std::index::or(path.strip_prefix(&*root), || "");
     if root == "#self" {
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(format!("{}{}", on, rest));
@@ -276,7 +276,7 @@ pub(crate) fn frame_onto(path: &str, receiver: Option<&str>, handed: &[Option<St
 
 pub(crate) fn frame_list(entry: &str) -> String {
     let pieces: Vec<&str> = entry.split('|').collect::<Vec<_>>();
-    (*nikaia_std::index::get(&pieces, 0)).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string())
 }
 
 pub fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.iter().any(|e| { frame_from(e, root) }) || frame.lengths.iter().any(|e| { frame_from(e, root) }) || frame.parts.iter().any(|e| { frame_from(e, root) }) || frame.elements.iter().any(|e| { frame_from(e, root) }) }
@@ -330,14 +330,16 @@ pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::Interne
             Item::Struct { generics, fields, is_extern, is_public, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public;
                 for field in fields.iter() {
-                    let name = words.resolve(field.name).to_string();
+                    let name = nikaia_std::block::Text::from(words.resolve(field.name).to_string());
                     let ty = &field.ty;
-                    if field.is_public && is_public { reached.insert(name.to_string()); }
+                    if field.is_public && is_public { reached.insert(nikaia_std::block::Text::from(name.to_string())); }
                     let mut fits = here && generics.is_empty() && !is_extern && field.default.is_none() && field.attributes.is_empty();
                     let list = words.resolve(ty.name);
-                    fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1;
+                    let map_name: String = nikaia_std::block::Text::from(nikaia_std::index::or(list.split("::").last(), || "").to_string());
+                    let map = (map_name == "BTreeMap" || map_name == "HashMap") && ty.generics.len() == 2;
+                    fits = fits && ((list == "Vec" || list == "List") && ty.generics.len() == 1 || map);
                     if fits {
-                        let inner = nikaia_std::index::get(&ty.generics, 0);
+                        let inner = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(ty.generics.len() as i64 - 1));
                         fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name));
                     }
                     let was = nikaia_std::index::or(scan.live.get(&name), || true);
@@ -381,10 +383,10 @@ pub(crate) fn fields_item(item: &Spanned<Item>, words: &winnow_grammar::Interner
 
 pub(crate) fn fields_write(name: &str, scan: &mut FieldsScan) {
     if !nikaia_std::index::or(scan.live.get(name), || false) { return; }
-    if scan.walked && scan.here { scan.wrote = true; } else { scan.live.insert(name.to_string(), false); }
+    if scan.walked && scan.here { scan.wrote = true; } else { scan.live.insert(nikaia_std::block::Text::from(name.to_string()), false); }
 }
 
-pub(crate) fn fields_lose(name: &str, scan: &mut FieldsScan) { if nikaia_std::index::or(scan.live.get(name), || false) { scan.live.insert(name.to_string(), false); } }
+pub(crate) fn fields_lose(name: &str, scan: &mut FieldsScan) { if nikaia_std::index::or(scan.live.get(name), || false) { scan.live.insert(nikaia_std::block::Text::from(name.to_string()), false); } }
 
 pub(crate) fn fields_block(block: &Block, words: &winnow_grammar::InternerContext, scan: &mut FieldsScan) { for stmt in block.stmts.iter() { fields_stmt(&stmt.node, words, scan); } }
 

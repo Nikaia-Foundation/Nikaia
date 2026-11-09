@@ -7,6 +7,8 @@
 use nikaia::emit::template::{self, Position, Segment};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -140,7 +142,7 @@ fn a_doubled_brace_is_a_literal_one() {
     let segments = template::split("<style>a {{ color: red }}</style>").expect("splits");
     assert_eq!(
         segments,
-        vec![Segment::Text("<style>a { color: red }</style>".to_string())]
+        vec![Segment::Text("<style>a { color: red }</style>".to_text())]
     );
 }
 

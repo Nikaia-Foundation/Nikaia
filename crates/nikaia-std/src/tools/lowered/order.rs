@@ -84,16 +84,16 @@ pub(crate) fn same_resource(kind: &str, named: Option<&str>, unnameable: bool) -
 
 pub fn verdict(earlier: &Operation, later: &Operation) -> Verdict {
     let bound = written_or_nothing((earlier.binds).as_deref());
-    if earlier.binds.is_some() && later.mentions.contains(&bound) { return Verdict::DataDependency(bound.to_string()); }
-    if earlier.binds.is_some() && later.binds.is_some() && earlier.binds.as_deref().unwrap() == later.binds.as_deref().unwrap() { return Verdict::Shadowed(bound.to_string()); }
+    if earlier.binds.is_some() && later.mentions.contains(&bound) { return Verdict::DataDependency(nikaia_std::block::Text::from(bound.to_string())); }
+    if earlier.binds.is_some() && later.binds.is_some() && earlier.binds.as_deref().unwrap() == later.binds.as_deref().unwrap() { return Verdict::Shadowed(nikaia_std::block::Text::from(bound.to_string())); }
     for a in earlier.reaches.iter() { for b in later.reaches.iter() { if a.conflicts_with(b) { return conflict(a, b); } } }
     Verdict::Overlap
 }
 
 pub(crate) fn conflict(a: &Reached, b: &Reached) -> Verdict {
-    if a.kind != b.kind { return Verdict::SameDestination { one: a.kind.to_string(), other: b.kind.to_string() }; }
-    let named = match readable_name(a) { Some(__nikaia_value) => __nikaia_value, None => match readable_name(b) { Some(__nikaia_value) => __nikaia_value, None => return Verdict::SameResource { kind: a.kind.to_string(), named: None, unnameable: a.unknown || b.unknown } } };
-    Verdict::SameResource { kind: a.kind.to_string(), named: Some(named), unnameable: false }
+    if a.kind != b.kind { return Verdict::SameDestination { one: nikaia_std::block::Text::from(a.kind.to_string()), other: nikaia_std::block::Text::from(b.kind.to_string()) }; }
+    let named = match readable_name(a) { Some(__nikaia_value) => __nikaia_value, None => match readable_name(b) { Some(__nikaia_value) => __nikaia_value, None => return Verdict::SameResource { kind: nikaia_std::block::Text::from(a.kind.to_string()), named: None, unnameable: a.unknown || b.unknown } } };
+    Verdict::SameResource { kind: nikaia_std::block::Text::from(a.kind.to_string()), named: Some(named), unnameable: false }
 }
 
 pub(crate) fn readable_name(reached: &Reached) -> Option<String> {
@@ -140,7 +140,7 @@ pub(crate) fn accounted_as(stmt: &Stmt, words: &winnow_grammar::InternerContext,
         Stmt::Let { names, value, ty, .. } => {
             if ty.is_some() { return Accounted::Opaque(String::from("a written type, which would have to be carried onto one half of a pattern")); }
             if names.len() != 1 { return Accounted::Opaque(String::from("several names bound at once")); }
-            let binds: Option<String> = Some(words.resolve(*nikaia_std::index::get(&names, 0)).to_string());
+            let binds: Option<String> = Some(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()));
             accounted_value(binds, value, words, walking, beside)
         },
         Stmt::Expr(value) => accounted_value(None, value, words, walking, beside),
@@ -153,18 +153,18 @@ pub(crate) fn accounted_value(binds: Option<String>, value: &Expr, names: &winno
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             if !beside && diverts_within(&handler.stmts, false) { return Accounted::DivertingHandler; }
-            let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
+            #[allow(unused_mut)] let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
             reduce(expr, names, &mut reduced);
             reduce_handler(handler, names, &mut reduced);
-            let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut reduced = reduced;
             names_in(expr, names, &mut mentions);
             names_in_block(handler, names, &mut mentions);
             accounted_reduced(binds, mentions, &reduced, true, walking)
         },
         _ => {
-            let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
+            #[allow(unused_mut)] let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
             reduce(value, names, &mut reduced);
-            let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut reduced = reduced;
             names_in(value, names, &mut mentions);
             accounted_reduced(binds, mentions, &reduced, beside, walking)
         },
@@ -179,34 +179,34 @@ pub(crate) fn accounted_reduced(binds: Option<String>, mentions: collections::BT
         let refused = a_call_reaches(call, caught, walking, &mut reaches, &mut named_by);
         if refused.is_some() { return nikaia_std::index::or(refused, || Accounted::NotAnOperation); }
     }
-    for method in reduced.methods.iter() { if !reaches_nothing(method, walking) { return Accounted::NoTouches(method.to_string()); } }
+    for method in reduced.methods.iter() { if !reaches_nothing(method, walking) { return Accounted::NoTouches(nikaia_std::block::Text::from(method.to_string())); } }
     if reduced.refused.is_some() {
         return nikaia_std::index::or(match reduced.refused.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Accounted::NotAnOperation);
     }
-    Accounted::Operation(Operation { binds, mentions, reaches, callee: named_by.join(" + ") })
+    Accounted::Operation(Operation { binds, mentions, reaches, callee: nikaia_std::block::Text::from(named_by.join(" + ")) })
 }
 
 pub(crate) fn a_call_reaches(call: &OneCall, caught: bool, walking: &Walking<'_, '_>, reaches: &mut Vec<Reached>, named_by: &mut Vec<String>) -> Option<Accounted> {
-    let key = call.key.to_string();
+    let key = nikaia_std::block::Text::from(call.key.to_string());
     let contract = match touches_described(&key, walking) { Some(__nikaia_value) => __nikaia_value, None => return Some(Accounted::NoTouches(key)) };
     if !caught && !contract.fails_with.is_empty() { return Some(Accounted::UncaughtFailure(key)); }
-    for touch in contract.touches.iter() { if !known_kind(&touch.kind) { return Some(Accounted::UnknownResource { callee: key.to_string(), kind: touch.kind.to_string() }); } }
+    for touch in contract.touches.iter() { if !known_kind(&touch.kind) { return Some(Accounted::UnknownResource { callee: nikaia_std::block::Text::from(key.to_string()), kind: nikaia_std::block::Text::from(touch.kind.to_string()) }); } }
     let signature = match match contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return Some(Accounted::NoTouches(key)) };
     let crossed = crossing(&signature.result_or_unit(), walking);
-    if !crossed.may() { return Some(Accounted::MayNotCross { callee: key.to_string(), crossing: crossed }); }
+    if !crossed.may() { return Some(Accounted::MayNotCross { callee: nikaia_std::block::Text::from(key.to_string()), crossing: crossed }); }
     let parameters = call_parameters(&signature);
     for touch in contract.touches.iter() {
         let named = nikaia_std::index::or_maybe(match touch.named.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || argument_named((touch.parameter).as_deref(), &parameters, &call.arguments));
-        reaches.push(Reached { kind: touch.kind.to_string(), unknown: touch.parameter.is_some() && named.is_none(), named, write: touch.write });
+        reaches.push(Reached { kind: nikaia_std::block::Text::from(touch.kind.to_string()), unknown: touch.parameter.is_some() && named.is_none(), named, write: touch.write });
     }
     named_by.push(key);
     None
@@ -235,7 +235,7 @@ pub(crate) fn known_kind(kind: &str) -> bool {
 
 pub(crate) fn call_parameters(signature: &Signature) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for i in 0..signature.params.len() as i64 { if i > 0 || nikaia_std::index::get(&signature.params, (i) as usize).0 != "self" { out.push(nikaia_std::index::get(&signature.params, (i) as usize).0.to_string()); } }
+    for i in 0..signature.params.len() as i64 { if i > 0 || nikaia_std::index::get(&signature.params, (i) as usize).0 != "self" { out.push(nikaia_std::block::Text::from(nikaia_std::index::get(&signature.params, (i) as usize).0.to_string())); } }
     out
 }
 
@@ -252,7 +252,7 @@ pub(crate) fn argument_named(parameter: Option<&str>, parameters: &[String], arg
 
 pub(crate) fn literal_text(expr: &Expr) -> Option<String> {
     match expr {
-        Expr::LitStr { text, .. } => Some(text.to_string()),
+        Expr::LitStr { text, .. } => Some(nikaia_std::block::Text::from(text.to_string())),
         _ => None,
     }
 }
@@ -268,7 +268,7 @@ pub(crate) fn reaches_nothing(method: &str, walking: &Walking<'_, '_>) -> bool {
 pub(crate) fn method_entries(method: &str, ledger: &Ledger) -> Vec<FnContract> {
     let suffix = format!("::{}", method);
     let mut out: Vec<FnContract> = vec![];
-    for (key, contract) in ledger.functions.iter() { if key.ends_with(&suffix) && takes_a_subject((contract.signature).as_ref()) { out.push(contract.clone()); } }
+    for (key, contract) in ledger.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) && takes_a_subject((contract.signature).as_ref()) { out.push(contract.clone()); } }
     out
 }
 
@@ -324,7 +324,7 @@ pub(crate) fn reduce(node: &Expr, names: &winnow_grammar::InternerContext, reduc
             }
             let key = match called_key(func, names) { Some(__nikaia_value) => __nikaia_value, None => return stopped(reduced, Accounted::Opaque(String::from("a call through something that is not a name"))) };
             for arg in args.iter() { reduce(arg, names, reduced); }
-            reduced.calls.push(OneCall { key, arguments: args.to_owned() });
+            reduced.calls.push(OneCall { key, arguments: args.copy_owned() });
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); reduce(expr, names, reduced); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); reduce(expr, names, reduced); },
@@ -342,7 +342,7 @@ pub(crate) fn reduce(node: &Expr, names: &winnow_grammar::InternerContext, reduc
         Expr::Return(_, _) => { stopped(reduced, Accounted::Opaque(String::from("a `return`, a `break` or a `continue`"))); },
         Expr::Break(_) => { stopped(reduced, Accounted::Opaque(String::from("a `return`, a `break` or a `continue`"))); },
         Expr::Continue(_) => { stopped(reduced, Accounted::Opaque(String::from("a `return`, a `break` or a `continue`"))); },
-        Expr::Variable(name, _) => { let name = *name; noted(reduced, Accounted::NonLiteralArgument(names.resolve(name).to_string())); },
+        Expr::Variable(name, _) => { let name = *name; noted(reduced, Accounted::NonLiteralArgument(nikaia_std::block::Text::from(names.resolve(name).to_string()))); },
         Expr::Field { base, .. } => {
             let base = nikaia_std::boxed::open(base);
             noted(reduced, Accounted::Opaque(String::from("a value read from somewhere else")));
@@ -388,7 +388,7 @@ pub(crate) fn reduce_method(receiver: &Expr, method: winnow_grammar::Symbol, arg
     reduce(receiver, names, reduced);
     for arg in args.iter() { reduce(arg, names, reduced); }
     for option in config.iter() { reduce(&option.value, names, reduced); }
-    reduced.methods.push(names.resolve(method).to_string());
+    reduced.methods.push(nikaia_std::block::Text::from(names.resolve(method).to_string()));
 }
 
 pub(crate) fn reduce_maybe(expr: Option<&Expr>, names: &winnow_grammar::InternerContext, reduced: &mut Reduced) { reduce(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, names, reduced); }
@@ -397,7 +397,7 @@ pub(crate) fn a_short_circuit(op: &BinaryOp) -> bool { matches!(op, BinaryOp::An
 
 pub(crate) fn called_key(func: &Expr, names: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(names.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(names.resolve(name).to_string())) },
         Expr::Path(segments, _) => Some(joined_segments(segments, names)),
         _ => None,
     }
@@ -407,9 +407,9 @@ pub(crate) fn joined_segments(segments: &[winnow_grammar::Symbol], names: &winno
     let mut parts: Vec<String> = vec![];
     for segment in segments.iter() {
         let segment = *segment;
-        parts.push(names.resolve(segment).to_string());
+        parts.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
     }
-    parts.join("::")
+    nikaia_std::block::Text::from(parts.join("::"))
 }
 
 pub fn diverts_within(stmts: &[Spanned<Stmt>], bound: bool) -> bool {
@@ -458,7 +458,7 @@ pub fn overlap_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerC
         match &item.node {
             Item::Fn { .. } => { block_report(&item.node, None, names, walking, overlaps_in, pauses, &mut out); },
             Item::Impl { target, methods, .. } => {
-                let owner: Option<String> = Some(names.resolve(target.name).to_string());
+                let owner: Option<String> = Some(nikaia_std::block::Text::from(names.resolve(target.name).to_string()));
                 for method in methods.iter() { block_report(&method.node, (owner).as_deref(), names, walking, overlaps_in, pauses, &mut out); }
             },
             _ => { },
@@ -481,7 +481,7 @@ pub(crate) fn block_report(item: &Item, target: Option<&str>, names: &winnow_gra
 }
 
 pub(crate) fn keyed(target: Option<&str>, own_name: &str) -> String {
-    let owner = match target { Some(__nikaia_value) => __nikaia_value, None => return own_name.to_string() };
+    let owner = match target { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(own_name.to_string()) };
     format!("{}::{}", owner, own_name)
 }
 
@@ -493,7 +493,7 @@ pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar:
     for stmt in block.stmts.iter() {
         let answer = accounted_beside(&stmt.node, names, walking);
         let named = match answer {
-            Accounted::Operation(ref operation) => operation.callee.to_string(),
+            Accounted::Operation(ref operation) => nikaia_std::block::Text::from(operation.callee.to_string()),
             _ => String::from("…"),
         };
         match answer {
@@ -531,7 +531,7 @@ pub(crate) fn refused_header(key: &str, count: i64, operations: &[Operation], pa
 }
 
 pub(crate) fn padded_right(text: &str, width: i64) -> String {
-    let mut out = text.to_string();
+    let mut out = nikaia_std::block::Text::from(text.to_string());
     let mut have = text.chars().count() as i64;
     while have < width {
         out.push(' ');

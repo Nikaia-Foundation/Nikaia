@@ -34,6 +34,12 @@ together with the specification section and an example test.
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
   to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
   views syntax and cannot serve.
+  The copy may predate HEAD (another session built it from another tree,
+  and its mtime is when you copied it): when a fails-before result surprises,
+  build the before binary from HEAD's own sources first; a stale copy cost
+  a run 30 turns chasing a regression HEAD never had. (issue-1483)
+* A rebuild while `nikaia test` runs fails tests at random: rerun the failed
+  ones alone before calling them failures. (issue-1414)
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is
@@ -138,13 +144,32 @@ together with the specification section and an example test.
 * the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
 * pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
 * A brief that needs a new NK code without naming a reserved one is blocked at once; search `docs/supervisor.md` and the brief for an NK block before planning. (issue-1318)
-* `scripts/probe.nika` snippets that print need `fn main() throws`, or every `print` is NK2605. (issue-1318)
+* A probe or test program whose `main` calls `print`/`println` needs `fn main() throws` (ADR-392): a probe otherwise stops at NK2605 before the defect shows, and `nikaia test --bless` writes an empty `.stdout` and a stray `.stderr`. (issue-1318, issue-1445, issue-1449, issue-1453)
+* `docs/briefs/` is untracked: `Fixes #N` goes on the last code commit, not on a brief or report. (issue-1453)
+* A debrief or report an issue cites may be missing from `docs/briefs/`; read `git log --grep='#N'` instead. (issue-1470)
 * "file NNN" in a `Found:` of the #1254 runs means `tests/accepted/NNN_*.nika` migrated by dropping `ref` from its parameters; reproduce on that file, not only on the reduced probe. (issue-1334)
 * Running two `nikaia test` processes on `tests/compiler` at the same time can make `migrate_views3_reads_package_tests_with_the_package` fail with "cannot read TMP/json/tests"; it also fails alone on develop, so it is not your change. (issue-1334)
 * A checker change that makes a tools file fail to check must be lowered with the old binary first (`$OLD lower-std`), or the change never reaches `lowered/`. (issue-1388)
+* `container_of` in `tiers.nika` returns null for `ref` types, so the tiers pass does not follow a `ref Vec[...]` parameter, and its `String`s stay `String` below (`lent_whole`). (issue-1449)
 * Run the issue's probe on develop first: a probe made only of Copy fields can pass there and hide the defect. (issue-1342)
 * The first `lower-std` with the old binary resets lowered files a broken build left behind; after a failed build, restart the cycle from the old binary, not the new one. (issue-1344)
 * The checker types `b[a..<c]` on a `Bytes` as an owned `Bytes` (ADR-320 D7), but the emitter writes a `&[u8]`; the fact `bytes_cuts` marks such a cut. (issue-1345)
 * `check_crossings_arguments` gets the unbound contract, so `want` there is the type variable `K`; the substituted types are `expected`/`bound` in `check_core_call_on`, and `entry`'s key is `?` (use `bound["K"]`). (issue-1345)
 * `nikaia check` accepts `HashMap[String, i64]`'s `insert(5, 7)` (std method arguments are not checked against bound types), so a probe that passes `check` can still fail in rustc; always `run` it. (issue-1345)
+* A driver step is tested by running `{repo}/scripts/drive.nika -- --SUBCOMMAND` with `dir:` set to a temp git repo, as in `tests/compiler/tests/drive_relower.nika`; a step with no subcommand gets one added. (issue-1348)
+* `badges.py`'s self-hosted share reads `crates/nikaia/src/**/*.rs` plus the `COMPILER_NIKA` tools files, so a temp repo for it needs those paths from `git archive HEAD`, without `lowered/`. (issue-1348)
+* An owned `String` in a probe is `let mut g = String()` plus `g.push_str("…")` or a `fn` returning `String`; `.to_string()`/`.clone()` on a literal is NK1301 and `String::new()` is NK1149. (issue-1356)
+* Before planning, check whether the issue is closed or marked duplicate, and run its probe on `develop`; a fix under another issue's `Part of` may already have landed. (issue-1356)
+* No binary from before the views syntax exists (`target/release/nikaia` is absent); a fails-before run for a fix already on `develop` needs a build of the fixing commit's parent, so report it as not done. (issue-1356)
+* Turning a move into a lend in the checker also needs `vc_view_of` (`view_changes.nika`) to see the `let` as a view, or a later write to the source passes the checker and becomes a rustc NK1343 internal error. (issue-1362)
+* A `let` bound to a cut (`v[0..]`) or a `std` method result (`s.trim()`) is a view only if `vc_view_of` in `view_changes.nika` sees it; otherwise a later change becomes a rustc NK1343 instead of NK2305. (issue-1363)
+* The library ledger has no `borrows` entries for `std` methods (`String::trim` is missing from `described.contracts`), so the view-change walk cannot tell that a method result points into its receiver. (issue-1363)
+* The tier pass runs without checker types, so a rule there must not mark lists whose items are already views (split/map) as owned. (issue-1368)
+* Changing a help's wording re-records many `.stderr` files and the `lsp_diagnostics*.stdout` files; grep `tests/compiler` for the old phrase before building. (issue-1403)
+* A probe of ownership needs a `String` made by a call (`fn make()` with `push_str`), because a literal-filled `String` is tiered to `&str` and hides NK1343. (issue-1404)
+* `nikaia test` run with a scratch copy of the binary fails `migrate_views3_reads_package_tests_with_the_package` (No such file); rerun it with `target/fast/nikaia` before calling it a failure. (issue-1460)
+* "Copied at a read" is `a_word_by_its_kind` (numbers, bool, char, scalar, payloadless enums, ledger `copies`); `a_copy_by_value` covers only the first four, and a copy-out keyed on it misses `Symbol` and enums. (issue-1460)
+* A `let x: V? = m.get(k)` or `m[k]` is typed `ref V?` by #297's `of_a_map` block in `check_core_stmt.nika`; a value-typed read must be exempted there. (issue-1460)
+* New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
+* A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
 

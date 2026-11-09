@@ -589,6 +589,16 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
             state.hands_over(world, v, given, to, span)
         }
     }
+    // **A handle on a shared value stored by value is duplicated**
+    // (ADR-312 D1, #1411), so the name can be read again.
+    if check_core_places_a_handle(given) {
+        if value == null {
+            state.facts.stored_handle_fields.insert((id_of(expr) as i64, field.clone()))
+        } else {
+            let v: ref Expr = value ?? return true
+            check_core_places_store_handle(state, v, given)
+        }
+    }
     state.field_is_reachable(name, found_field, span)
     // **A declared field is a use** (ADR-152 D4).
     let mut found: Ty = given.clone()
@@ -732,6 +742,32 @@ fn check_core_places_a_kept_fn(state: ref CheckState, name: ref String, given: r
     return match given {
         Ty::Fn { .. } => state.lookup(name) != null && !state.run_code.contains(name),
         else => false,
+    }
+}
+
+/// Whether a type is a handle on a shared value: `Shared` or `SharedMut`,
+/// not a view of one (ADR-312 D1; `Locked` is a field, not a handle).
+fn check_core_places_a_handle(ty: ref Ty) -> bool sync {
+    return match ty {
+        Ty::Named { name, view, .. } => !view && (name == "Shared" || name == "SharedMut"),
+        else => false,
+    }
+}
+
+/// **A handle read from a place and stored by value** (ADR-312 D1, #1411):
+/// a name or a field path of a handle's type put into a field or a list,
+/// which the lowering clones.
+pub fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty: ref Ty) sync {
+    if !check_core_places_a_handle(ty) {
+        return
+    }
+    let place = match value {
+        Expr::Variable(_, _) => true,
+        Expr::Field { .. } => true,
+        else => false,
+    }
+    if place {
+        state.facts.stored_handles.insert(id_of(value) as i64)
     }
 }
 

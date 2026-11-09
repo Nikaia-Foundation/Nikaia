@@ -9,8 +9,8 @@ pub(crate) fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
 impl CheckState {
     pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
         let named = fatal_named(handler, world.words);
-        let mut passing: Vec<String> = vec![];
-        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(error.to_string()); } }
+        #[allow(unused_mut)] let mut passing: Vec<String> = vec![];
+        for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(nikaia_std::block::Text::from(error.to_string())); } }
         if passing.is_empty() { return; }
         if self.flow.guarded.is_some() {
             let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
@@ -23,9 +23,9 @@ impl CheckState {
             self.flow.guarded = Some(outer);
         }
         if self.flow.throwing || self.flow.caught { return; }
-        let mut quoted: Vec<String> = vec![];
+        let mut quoted: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut passing = passing;
         for error in passing.iter() { quoted.push(format!("`{}`", error)); }
-        let list = quoted.join(", ");
+        let list = nikaia_std::block::Text::from(quoted.join(", "));
         self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because {} passes this `catch`.", list), vec![format!("{} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not.", list)], Some(String::from("Add `throws` to the function, or name the type in a `match error` arm of the handler."))));
     }
 }
@@ -75,9 +75,9 @@ impl CheckState {
         } { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut errors: Vec<String> = vec![];
         for error in contract.fails_with.iter() { errors.push(format!("`{}`", error)); }
-        let list = errors.join(", ");
+        let list = nikaia_std::block::Text::from(errors.join(", "));
         let mut help: String = format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function);
-        if self.inside_a_drop && function.ends_with("::drop") { help = drop_help(&nikaia_std::index::or(function.strip_suffix("::drop"), || "").to_string()); }
+        if self.inside_a_drop && function.ends_with("::drop") { help = drop_help(&nikaia_std::block::Text::from(nikaia_std::index::or(function.strip_suffix("::drop"), || "").to_string())); }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2605"), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), String::from("A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.")], help: Some(help), labels: vec![] });
     }
 }

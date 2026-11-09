@@ -8,10 +8,10 @@ pub enum ProjectWriteRefusal {
 }
 
 impl ProjectWriteRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
-            ProjectWriteRefusal::Refused(why) => why.to_string(),
-            ProjectWriteRefusal::Failed(why) => why.to_string(),
+            ProjectWriteRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
+            ProjectWriteRefusal::Failed(why) => nikaia_std::block::Text::from(why.to_string()),
         }
     }
 }
@@ -31,7 +31,7 @@ pub async fn project_write_ledger(path: &std::path::Path, ledger: &str, locked: 
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::raise(ProjectWriteRefusal::Failed(format!("{}: {}", project_check_locked_ledger_missing(&nikaia_std::fs::path::display(&(path))), error)), &"project_write_ledger")) },
     };
-    if committed != ledger { return Err(nikaia_std::error::raise(ProjectWriteRefusal::Refused(project_check_locked_ledger_changed(&nikaia_std::fs::path::display(&(path)), &changed_lines(ledger, &committed).join("\n"))), &"project_write_ledger")); }
+    if committed != ledger { return Err(nikaia_std::error::raise(ProjectWriteRefusal::Refused(project_check_locked_ledger_changed(&nikaia_std::fs::path::display(&(path)), &nikaia_std::block::Text::from(changed_lines(ledger, &committed).join("\n")))), &"project_write_ledger")); }
     Ok(())
 }
 

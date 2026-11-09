@@ -1,0 +1,17 @@
+// `std`'s code that hands back nothing drops a lambda's value, as the
+// program's own `fn(T)` does (#1395): `for_each`'s function type has no
+// result, so `m.insert(x, 1)`'s `i64?` is dropped. A result the
+// ledger writes, `filter`'s `bool` and `Locked::access`'s open one, still comes
+// back.
+use std::collections
+
+fn main() throws {
+	let mut m: collections::HashMap[i64, i64] = collections::HashMap()
+	let v = [1, 2, 3]
+	v.iter().for_each(fn(x) { m.insert(x, 1) })
+	println(m.len())
+	println(v.iter().filter(fn(x) { x > 1 }).count())
+	let n = Locked(4)
+	n.update(fn(mut k) { k += 1 })
+	println(n.access(fn(k) { k * 2 }))
+}

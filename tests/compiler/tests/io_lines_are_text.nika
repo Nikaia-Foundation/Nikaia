@@ -1,0 +1,24 @@
+use std::io
+
+// What standard input hands out is a program's `String` (#490): a line read
+// with `read_line`, each line of `lines()` and what `join` makes go into
+// `String` places as they are.
+
+fn main() throws {
+    let first: String = io::read_line() ?? ""
+    let mut longest: String = ""
+    let mut seen = 0
+    for line in io::lines() {
+        seen += 1
+        if line.len() > longest.len() {
+            longest = line
+        }
+        if seen == 3 {
+            break
+        }
+    }
+    let rest: String = io::lines().join("|")
+    println(f"first: {first}")
+    println(f"longest of {seen}: {longest}")
+    println(f"rest: {rest}")
+}

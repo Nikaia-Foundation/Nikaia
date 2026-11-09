@@ -15,6 +15,8 @@
 //! the others.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
@@ -43,7 +45,7 @@ fn cases() -> Vec<Case> {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .expect("utf-8 name")
-                .to_string();
+                .to_text();
             let module = format!("case_{}", name.replace(|c: char| !c.is_alphanumeric(), "_"));
             Case { name, module, path }
         })
@@ -67,6 +69,7 @@ fn expected(name: &str) -> String {
     let path = accepted_dir().join(format!("{name}.out"));
     std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("{name}: no expected output {}: {e}", path.display()))
+        .into()
 }
 
 /// Run `work` over `items` on as many threads as the machine has.
@@ -125,7 +128,7 @@ fn first_error(stderr: &str) -> String {
         }
         out.push(line);
     }
-    out.join("\n")
+    String::from(out.join("\n"))
 }
 
 /// The lowered program as a module of the one crate: its `main` is called by
@@ -175,7 +178,7 @@ fn ran(binary: &Path, args: &[&str]) -> Result<String, String> {
             String::from_utf8_lossy(&out.stderr)
         ));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    Ok(String::from_utf8_lossy(&out.stdout))
 }
 
 #[test]
@@ -286,7 +289,7 @@ fn every_accepted_program_compiles_and_prints_what_it_should() {
             .file_name()
             .and_then(|s| s.to_str())
             .expect("utf-8 name")
-            .to_string();
+            .to_text();
         let copy = common::scratch_dir(&format!("accepted-{name}"));
         copy_tree(&project, &copy);
         let out = Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -296,7 +299,7 @@ fn every_accepted_program_compiles_and_prints_what_it_should() {
             .env_remove("CARGO_TARGET_DIR")
             .output()
             .expect("the nikaia binary runs");
-        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let stdout = String::from_utf8_lossy(&out.stdout);
         if !out.status.success() {
             failures.push(format!(
                 "{name}: does not build or run:\n{}",

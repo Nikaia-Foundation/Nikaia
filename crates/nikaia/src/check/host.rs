@@ -4,6 +4,8 @@
 //! it holds borrows and nothing else - and hands it to the Nikaia method.
 
 use super::*;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::tools::build_eval::BtRead;
 use nikaia_std::tools::check_host::{CheckBuilt, CheckComputed, CheckHost};
 use nikaia_std::tools::check_walked::{CheckWalkedPasses, CheckWalkedProved};
@@ -21,7 +23,7 @@ impl Host<'_> {
     /// **Every file of the program** (Part I 9.1), this one among them, and
     /// where this one stands; a check handed none is this file alone.
     fn files(&self) -> (Vec<&Parsed>, usize) {
-        let mut files: Vec<&Parsed> = self.beside.to_vec();
+        let mut files: Vec<&Parsed> = Vec::from(self.beside);
         let here = match self.here {
             Some(here) => here,
             None => {
@@ -57,7 +59,7 @@ impl Host<'_> {
     ) -> crate::prove::ClaimRun {
         use crate::prove::ClaimRun;
         use nikaia_std::tools::integers::{integer_as_count, integer_of_count};
-        let not_run = |why: &str| ClaimRun::NotRun(why.to_string());
+        let not_run = |why: &str| ClaimRun::NotRun(why.to_text());
         if !self.somewhere() {
             return not_run("This build has no place to compile build-time code in.");
         }
@@ -156,7 +158,7 @@ fn stopped_as_said(detail: &str) -> crate::prove::ClaimRun {
         .split_once("the program stopped: ")
         .map(|(_, said)| said)
         .unwrap_or(line);
-    ClaimRun::Stopped(said.trim().trim_end_matches('.').to_string())
+    ClaimRun::Stopped(said.trim().trim_end_matches('.').to_text())
 }
 
 impl CheckHost for Host<'_> {
@@ -262,7 +264,7 @@ impl CheckHost for Host<'_> {
             crate::comptime_run::Computed::Forbidden { callee, because } => {
                 CheckComputed::Forbidden {
                     callee,
-                    because: because.to_string(),
+                    because: because.to_text(),
                 }
             }
             crate::comptime_run::Computed::Stopped(detail) => CheckComputed::Stopped(detail),
@@ -322,7 +324,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn value_fn(&self) -> String {
-        crate::comptime_run::VALUE_FN.to_string()
+        crate::comptime_run::VALUE_FN.to_text()
     }
 
     fn holes_read(&self, literal: &Expr) -> Vec<(Expr, Vec<(String, String)>)> {
@@ -355,7 +357,7 @@ impl CheckHost for Host<'_> {
                     .as_ref()
                     .map(|ty| Ty::from_ast(other, ty))
                     .unwrap_or(Ty::Unknown);
-                found.push((other.text(*name).to_string(), declared));
+                found.push((other.text(*name).to_text(), declared));
             }
         }
         found

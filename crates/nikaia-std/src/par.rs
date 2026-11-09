@@ -586,13 +586,13 @@ impl<I: ParallelIterator> Par<I> {
     }
 
     /// Every element written one after another with this text between them.
-    pub fn join(self, separator: &str) -> String
+    pub fn join(self, separator: &str) -> crate::block::Text
     where
         I::Item: std::fmt::Display,
     {
         let Par(walk, run) = self;
         let texts: Vec<String> = run.end(move || walk.map(|item| item.to_string()).collect());
-        texts.join(separator)
+        crate::block::Text::from(texts.join(separator))
     }
 
     /// The same elements, from the last to the first.

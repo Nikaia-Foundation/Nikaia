@@ -9,6 +9,8 @@
 //! * the lowering happens at **one** setting of the build switches, which is
 //!   only sound while nothing in those files is switch-sensitive.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -184,7 +186,7 @@ fn a_different_codegen_table_is_a_different_compiled_std() {
     let sysroot = Sysroot::resolve();
     let plain = sysroot::Codegen::new(&BTreeMap::new(), "unwind");
     let tuned = sysroot::Codegen::new(
-        &BTreeMap::from([("opt-level".to_string(), toml::Value::Integer(3))]),
+        &BTreeMap::from([("opt-level".to_text(), toml::Value::Integer(3))]),
         "unwind",
     );
     let a = sysroot.rlib_cache("x86_64-linux", &plain, "yes", "");
@@ -329,7 +331,7 @@ fn a_tool_reads_the_names_of_the_tree_as_described() {
         std::fs::write(&module, source).expect("write the module");
         match dir {
             // **The tools are lowered as their package** (ADR-294).
-            "tools" => sysroot::lower_tools(&at).map(|package| package.to_string()),
+            "tools" => sysroot::lower_tools(&at).map(|package| package.to_text()),
             _ => sysroot::lower_std_module(&module),
         }
     };
@@ -500,7 +502,7 @@ fn lower_std_caches_each_file_of_a_package() {
             .env("NIKAIA_CACHE_DIR", root.join(dir))
             .output()
             .expect("nikaia runs");
-        let said = String::from_utf8_lossy(&out.stderr).to_string();
+        let said = String::from_utf8_lossy(&out.stderr).to_text();
         assert!(out.status.success(), "{said}");
         let reused = said
             .lines()

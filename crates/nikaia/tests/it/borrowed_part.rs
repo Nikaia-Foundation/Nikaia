@@ -7,6 +7,8 @@
 //! passed the check and reached `rustc`, whose *cannot move out of `l.ty`
 //! which is behind a shared reference* is about a file nobody wrote.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check::{Finding, Severity};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -51,12 +53,12 @@ fn refused(function: &str, field: &str) {
     let codes: Vec<_> = found.iter().map(|f| f.code_str()).collect();
     assert_eq!(codes, ["NK1131"], "{function}\n{found:#?}");
     assert!(
-        found[0].message.contains(&format!("`{field}`")),
+        found[0].message.contains(&*format!("`{field}`")),
         "{}",
         found[0].message
     );
     let help = found[0].help.clone().unwrap_or_default();
-    assert!(help.contains(&format!("{field}.clone()")), "{help}");
+    assert!(help.contains(&*format!("{field}.clone()")), "{help}");
 }
 
 fn accepted(function: &str) {

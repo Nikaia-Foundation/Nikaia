@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/mod.rs
 //
 // The Borrow Contract Ledger (Part III, 13.5; ADR-005 D3; ADR-020).
@@ -385,7 +387,7 @@ impl LedgerOps for Ledger {
     fn lookup(&self, name: &str) -> Option<(String, &FnContract)> {
         self.functions
             .get(name)
-            .map(|contract| (name.to_string(), contract))
+            .map(|contract| (name.to_text(), contract))
     }
 
     /// The file, as it is written out: `tools/ledger_text.nika` (ADR-294,
@@ -411,7 +413,10 @@ impl LedgerOps for Ledger {
         // The files are read here; what they say is `tools/contracts_core.nika`'s.
         let written = std::fs::read_to_string(path).ok()?;
         let derived = std::fs::read_to_string(derived_path(path)).ok();
-        nikaia_std::tools::contracts_core::contracts_read_beside(&written, derived)
+        nikaia_std::tools::contracts_core::contracts_read_beside(
+            &written,
+            derived.map(String::from),
+        )
     }
 
     /// The same file under a **description's** header
@@ -647,7 +652,7 @@ fn infer_package_with(
         .map(|parsed| {
             borrowing_structs_beside(parsed, &package_borrowing)
                 .iter()
-                .map(|s| parsed.text(*s).to_string())
+                .map(|s| parsed.text(*s).to_text())
                 .collect()
         })
         .collect();

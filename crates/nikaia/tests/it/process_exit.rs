@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/tests/process_exit.rs
 //
 // `process::exit(code)` throws the fatal error `process::Exit`
@@ -41,8 +43,8 @@ fn ran(purpose: &str, source: &str, how: Build) -> (String, String, Option<i32>)
         .expect("run it");
     std::fs::remove_dir_all(&dir).ok();
     (
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
         out.status.code(),
     )
 }
@@ -122,7 +124,7 @@ fn exit_two_levels_deep_runs_the_cleanups() {
 fn exit_needs_throws() {
     let source = "use std::process\n\nfn main() {\n    process::exit(1)\n}\n";
     assert!(
-        codes(source).contains(&"NK2605".to_string()),
+        codes(source).contains(&"NK2605".to_text()),
         "{:?}",
         codes(source)
     );
@@ -149,7 +151,7 @@ fn a_plain_catch_lets_exit_through() {
     assert_eq!(out, "");
     let unthrowing = PASSES.replace("fn main() throws", "fn main()");
     assert!(
-        codes(&unthrowing).contains(&"NK2605".to_string()),
+        codes(&unthrowing).contains(&"NK2605".to_text()),
         "{:?}",
         codes(&unthrowing)
     );
@@ -218,12 +220,12 @@ fn an_else_arm_lets_exit_through() {
 fn exit_in_a_spawn_is_an_ordinary_error() {
     let source = "use std::process\n\nfn stop() throws {\n    process::exit(1)\n}\n\nfn main() throws {\n    spawn fn { stop() }\n}\n";
     let found = codes(source);
-    assert!(!found.contains(&"NK2607".to_string()), "{found:?}");
+    assert!(!found.contains(&"NK2607".to_text()), "{found:?}");
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     assert_eq!(
         own.functions["stop"].fails_with,
-        vec!["process::Exit".to_string()]
+        vec!["process::Exit".to_text()]
     );
 }
 
@@ -384,7 +386,7 @@ fn an_own_fatal_type_passes_a_plain_catch() {
 fn a_constant_code_out_of_range_is_refused() {
     let source = "use std::process\n\nfn main() throws {\n    process::exit(300)\n}\n";
     assert!(
-        codes(source).contains(&"NK1116".to_string()),
+        codes(source).contains(&"NK1116".to_text()),
         "{:?}",
         codes(source)
     );
@@ -471,7 +473,7 @@ fn several_variants_refuse_the_short_form() {
     ] {
         let refused = match parse_to_ast(source) {
             Ok(_) => panic!("the short form of two variants parses"),
-            Err(e) => e.to_string(),
+            Err(e) => e.to_text(),
         };
         assert!(refused.contains("NK1252"), "{refused}");
         assert!(refused.contains("`Shape::Circle`"), "{refused}");
