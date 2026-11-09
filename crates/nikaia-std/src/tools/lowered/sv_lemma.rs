@@ -14,15 +14,15 @@ pub struct SvLemma {
 
 pub(crate) fn sv_lemma(schema: String, def: i64) -> SvLemma { SvLemma { schema, def, other: -1, a: sv_int(0), b: sv_int(0), sa: 0, sb: 0 } }
 
-pub(crate) fn sv_lm(k: &SvRat, name: &str) -> Option<SvLin> { sv_lin_scale(&sv_lin_var(&name), k) }
+pub(crate) fn sv_lm(k: &SvRat, name: &str) -> Option<SvLin> { sv_lin_scale(&sv_lin_var(name), k) }
 
-pub(crate) fn sv_lm_c(k: &SvRat, name: &str, c: &SvRat) -> Option<SvLin> { sv_lin_add(&match sv_lm(k, &name) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sv_lin_constant(c.clone())) }
+pub(crate) fn sv_lm_c(k: &SvRat, name: &str, c: &SvRat) -> Option<SvLin> { sv_lin_add(&match sv_lm(k, name) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sv_lin_constant(c.clone())) }
 
 pub(crate) fn sv_la(arena: &mut TermArena, rel: &str, d: &SvLin) -> Option<i64> { sv_lin_atom(arena, rel, d) }
 
 pub(crate) fn sv_lv(arena: &mut TermArena, rel: &str, name: &str, a: &SvRat) -> Option<i64> {
     let minus = match sv_rat_neg(a) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    sv_la(arena, rel, &match sv_lm_c(&sv_int(1), &name, &minus) { Some(__nikaia_value) => __nikaia_value, None => return None })
+    sv_la(arena, rel, &match sv_lm_c(&sv_int(1), name, &minus) { Some(__nikaia_value) => __nikaia_value, None => return None })
 }
 
 pub(crate) fn sv_lvv(arena: &mut TermArena, rel: &str, x: &str, y: &str) -> Option<i64> {

@@ -835,7 +835,7 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
 pub(crate) fn emit_split_index(sources: &[String], name: &str) -> i64 {
     let mut at: i64 = 0;
     for source in sources.iter() {
-        if *source == name { return at; }
+        if source == name { return at; }
         at += 1;
     }
     -1
