@@ -1,0 +1,274 @@
+// `write` (#1515): every input of the package's tests that `load` reads is
+// written and read again, and the tree read back is the same, anchors and
+// tags included. A difference prints the input, what was written and both
+// trees; the last line counts.
+use yaml
+
+fn props(n: ref yaml::Node) -> String {
+	let a = match n.anchor {
+		null => ""
+		x => f"&{x} "
+	}
+	let t = match n.tag {
+		null => ""
+		x => f"{x} "
+	}
+	return f"{a}{t}"
+}
+
+fn show(n: ref yaml::Node) -> String {
+	let p = props(n)
+	return match n.value {
+		yaml::Value::Null => f"{p}null"
+		yaml::Value::Bool(b) => f"{p}bool({b})"
+		yaml::Value::Int(t) => f"{p}int({t})"
+		yaml::Value::Float(t) => f"{p}float({t})"
+		yaml::Value::Str(s) => { let t = yaml::text(s)
+			f"{p}str({t:?})" }
+		yaml::Value::Alias(a) => f"{p}alias({a})"
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { show(x) }).collect()
+			f"{p}[{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{show(e.key)}: {show(e.value)}"
+			}).collect()
+			f"{p}{{{parts.join(", ")}}}"
+		}
+	}
+}
+
+fn shown(docs: ref Vec[yaml::Node]) -> String {
+	let parts: Vec[String] = docs.iter().map(fn(d) { show(d) }).collect()
+	return parts.join(" | ")
+}
+
+fn main() throws {
+	let inputs = [
+		"\n",
+		"\\n",
+		"hr:\n  - Mark McGwire\n  # Following node labeled SS\n  - &SS Sammy Sosa\nrbi:\n  - *SS # Subsequent occurrence\n  - Ken Griffey\n",
+		"First occurrence: &anchor Foo\nSecond occurrence: *anchor\nOverride anchor: &anchor Bar\nReuse anchor: *anchor\n",
+		"!!str &a1 \"foo\":\n  !!str bar\n&a2 baz : *a1\n",
+		"!<tag:yaml.org,2002:str> foo :\n  !<!bar> baz\n",
+		"# Assuming conventional resolution:\n- \"12\"\n- 12\n- ! 12\n",
+		"- !!str 12\n- !!int \"12\"\n- !!float '1.5'\n- !!bool true\n- !!null ''\n- !!str true\n- !!str null\n",
+		"%TAG !e! tag:example.com,2000:app/\n---\n- !local x\n- !e!tag%21 7\n- !foo \"bar\"\n",
+		"{\n  foo : !!str,\n  !!str : bar,\n}\n",
+		"a: &x\nb: !!str\nc: !!null\n",
+		"--- !shape\n- !circle\n  center: &ORIGIN {x: 73, y: 129}\n  radius: 7\n- !line\n  start: *ORIGIN\n",
+		"a: !!map\n  b: c\nd: &s !!seq\n- e\n",
+		"&top\n- x\n- y\n",
+		"[&a x, !!int 3, *a, &b !!str ]\n",
+		"a: !!str |\n  12\nb: &l >-\n  x\n  y\n",
+		"a: !!int \"x\"\n",
+		"a: !!int x\n",
+		"a: !!bool yes\n",
+		"a: !!int \"1.5\"\n",
+		"a: !!seq x\n",
+		"a: !!map\n  - x\n",
+		"a: !!int |\n  12\n",
+		"[!!float x]\n",
+		"a: &x *y\n",
+		"name: winnow\ntags:\n  - parser\n  - grammar\nowner:\n  login: keywan\n",
+		"- a\n- b\n",
+		"- - a\n  - b\n- c\n",
+		"- k: v\n  l: w\n- x\n",
+		"a:\n- x\n- y\nb: z\n",
+		"k:\nl: 2\n",
+		"-\n- x\n",
+		"'single key': 1\n\"double key\": 2\n",
+		"a: 1 # one\n# own line\nb: 2\n",
+		"a:   # nothing here yet\n  # indented comment\n  b: 1\n",
+		"a: - x\n",
+		"a:\n    - x\n    - y\n",
+		"a:\n  b: 1\n   c: 2\n",
+		"a:\n    - x\n   - y\n",
+		"a:\nb: c\n",
+		"a: 1\nb: 2",
+		"\"foo\": !!int |-\n    7200\n",
+		"- !!int |-\n  -12\n- !!float >-\n  1.5\n- !!bool |-\n  true\n- !!null |-\n  ~\n",
+		"--- !!int |-\n  7\n",
+		"a: !!str >\n  12\n  34\n",
+		"a: !!str |-\n  true\n",
+		"a: !!int |\n  abc\n",
+		"a: !!seq |\n  abc\n",
+		"a: |\n  x\n  y\nb: |-\n  x\n  y\nc: |+\n  x\n  y\n",
+		"a: |\n  x\n\n\nb: |-\n  x\n\n\nc: |+\n  x\n\n\n# c\nd: e\n",
+		"a: >\n  x\n  y\n\nb: >-\n  x\n  y\n\nc: >+\n  x\n  y\n\n",
+		"a: >-\n\nb: >\n\nc: |+\n\nd: |\n",
+		"a: |\n  x",
+		"a: |+\n  x",
+		"a: | # c\n\n  x\n",
+		">\n\n folded\n line\n\n next\n line\n   * bullet\n\n   * list\n   * lines\n\n last\n line\n\n# Comment\n",
+		"a: >\n  x\n    y\n  z\n",
+		"a: |\n  x\n   y\n\n  z\n",
+		"a: |2\n   \n  x\n",
+		"a: |1\n  x\n",
+		"a: |-2\n   x\nb: >2+\n   y\n\n",
+		"- |\n a\n- >-\n b\n c\n",
+		"|\n x\n",
+		"--- |\nfoo\n--- >\n bar\n",
+		"a: |\n  x\ty\n",
+		"a: |0\n  x\n",
+		"a: |x\n  x\n",
+		"a: |#c\n  x\n",
+		"a: |\n    \n  x\n",
+		"\u{feff}- 0\n",
+		"\u{feff}a: b\n...\n\u{feff}c\n",
+		"a\n\u{feff}--- b\n",
+		"%FOO  bar baz # Should be ignored\n              # with a warning.\n--- \"foo\"\n",
+		"%YAML 1.3 # Attempt parsing\n           # with a warning\n---\n\"foo\"\n",
+		"%YAML 1.1\n--- yes\n",
+		"%YAML 2.0\n--- foo\n",
+		"%YAML 1.2\n%YAML 1.1\n--- foo\n",
+		"%TAG !yaml! tag:yaml.org,2002:\n---\n!yaml!str \"foo\"\n",
+		"%TAG !yaml! tag:yaml.org,2002:\n---\n!yaml!int x\n",
+		"%TAG !! tag:example.com,2000:app/\n---\n!!int 1 - 3 # Interval, not integer\n",
+		"%TAG ! !foo\n%TAG ! !foo\n--- bar\n",
+		"%TAG !e! tag:example.com,2000:\n---\n!e!foo \"bar\"\n",
+		"%TAG !e! tag:example.com,2000:app/\n---\n- !e!foo \"bar\"\n",
+		"--- !e!foo bar\n",
+		"k: !e!foo x\n",
+		"%TAG !e! tag:a:\n--- !e!x 1\n...\n--- !e!y 2\n",
+		"%TAG !e! tag:a:\n--- !e!x 1\n...\n%TAG !e! tag:b:\n--- !e!y 2\n",
+		"%TAG !e! tag:a:\n--- !e!x 1\n--- !e!y 2\n",
+		"%YAML 1.2\nfoo\n",
+		"a\n%YAML 1.2\n--- b\n",
+		"%TAG !e! tag:example.com,2000:\n%TAG !! tag:example.com,2000:app/\n---\n- !e!foo \"bar\"\n- !!str x\n- !local y\n- !<tag:v> z\n- ! w\n",
+		"%TAG ! tag:example.com,2000:local/\n--- !local [!!str x]\n--- !local [!!str x]\n",
+		"%TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 a\n- !!x%2Fy b\n- !l%C3%A9 c\n",
+		"...\n",
+		"a\n",
+		"a\n...\n",
+		"---\na\n",
+		"--- [a]\n...\n",
+		"a\n---\nb\n",
+		"---\na\n...\n---\nb\n",
+		"a\n...\nb\n...\n...\n",
+		"%YAML 1.2\n---\n{a: b}\n...\n",
+		"- [a: b]\n",
+		"--- a\n--- b\n",
+		"---\n",
+		"---\n---\n",
+		"--- # comment\n",
+		"a\n...\nb\n",
+		"--- # comment\nk: v\n...\n# trailing\n",
+		"---a\n",
+		"a: 1\n---\nb: 2\n",
+		"key: value\n: empty key\n",
+		":\n",
+		"# empty key and value\n:\n",
+		"\n\n",
+		"# a comment\n",
+		"  # indented\n\n# two\n",
+		"# before\na # after\n",
+		"a:\n\t- x\n",
+		"k: [a, b\n",
+		"a:\n  b: 1\n c: 2\n",
+		"k:\n  - x\n - y\n",
+		"a: 1\nk: \"\\uD800\"\n",
+		"a: 1\nk: !e!foo x\n",
+		"%TAG !e! tag:a:\n--- !e!x 1\n--- [b, !e!y 2]\n",
+		"--- a\n...\n",
+		"k: v\nl:\n  - x\n  - y: z\n",
+		"[a, [b, c], {d: e}]\n",
+		"{a: 1, b: [x]}\n",
+		"- plain\n- 'single'\n- \"double\\tq\"\n- |\n  lit\\x\n  line\n- >\n  fold\n  ed\n",
+		"- ~\n- null\n- True\n- !!int \"1\"\n- 1.5\n- \n- \"a\\\\b\\rc\\bd\"\n",
+		"- &a x\n- *a\n- &m !!map {k: v}\n- !local [1]\n- !<tag:yaml.org,2002:str> s\n",
+		"? a\n: b\n? c\n",
+		"a: {b: [c, {d: e}]}\n...\n--- !!seq\n- &s f\n",
+		"k: [a, b]\n--- x\n...\n",
+		"? explicit key # Empty value\n? |\n  block key\n: - one # Explicit compact\n  - two # block value\n",
+		"? - Detroit Tigers\n  - Chicago cubs\n: - 2001-07-23\n\n? [ New York Yankees,\n    Atlanta Braves ]\n: [ 2001-07-02, 2001-08-12,\n    2001-08-14 ]\n",
+		"--- !!set\n? Mark McGwire\n? Sammy Sosa\n? Ken Griff\n",
+		"- sun: yellow\n- ? earth: blue\n  : moon: white\n",
+		"{\n? explicit: entry,\nimplicit: entry,\n?\n}\n",
+		"[\n? foo\n bar : baz\n]\n",
+		"a: 1\n? &k [x, y]\n: !!str 2\nb: *k\n",
+		"?x: 1\n",
+		"? a\n: b\n: c\n",
+		": a\n: b\n",
+		"[\n  a,\n  b, # second\n  c,\n]\n",
+		"k: [x, y]\nl: {m: n}\n",
+		"[a, b]: c\n",
+		"- - - x\n",
+		"a:\n  b: {c: x}\n",
+		"a:\n  b:\n    c: x\n",
+		"- a: [x]\n",
+		"a: 1\nb: 2\n",
+		"a: &a [lol, lol, lol, lol, lol, lol, lol, lol, lol]\n",
+		"- &x [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]\n",
+		"a: &x {k: v}\nb: *x\nc: *x\n",
+		"- &n one\n- [x, {y: [*n]}]\n- &n two\n- *n\n",
+		"a: &a 1\n--- \nb: *a\n",
+		"a: *nowhere\n",
+		"&a [*a]\n",
+		"- &a x\n- &a [y, *a]\n",
+		"&a [&a b, *a]\n",
+		"a: 1\n\"a\": 2\n",
+		"16: x\n0x10: y\n",
+		"{[1, 2]: a, [1, 2]: b}\n",
+		"{&k a: 1, *k : 2}\n",
+		"x: 1\ny:\n  1.0: a\n  1.00: b\n",
+		"1: a\n\"1\": b\n",
+		".nan: a\n.nan: b\n",
+		"base: &base {x: 1}\nm:\n  <<: *base\n  y: 2\n",
+		"base: &base\n  a: 1\n  b: 2\nx:\n  <<: *base\n  b: 3\n  c: 4\n",
+		"a: &a {k: 1, p: 2}\nb: &b {k: 9, q: 3}\nm:\n  <<: [*a, *b]\n",
+		"base: &b {x: 1}\nmid: &m {<<: *b, y: 2}\ntop: {<<: *m, z: 3}\n",
+		"- &a {k: 1}\n- {<<: *a, j: 2}\n",
+		"\"<<\": {k: 1}\na: 2\n",
+		"a: 1\nb:\n  <<: 1\n",
+		"a: &a {k: 1}\nb: {<<: [*a, 2]}\n",
+		"a: [1, {b: 2}]\nc: &c d\n",
+		"a\n  b\n  c\n",
+		"  a\n b\n",
+		"k: a\n  b\n\n  c\nl: d\n",
+		"a:\n  x\n  y\n",
+		"- a\n  b\n- c\n",
+		"[a\n b, c\n  d]",
+		"a\n  #b\n",
+		"k: a # c\n  b\n",
+		"- a\nb\n",
+		"a   \n  b   \n",
+		"- yes\n- no\n- on\n- off\n- y\n",
+		"- ~\n- null\n- Null\n- NULL\n-\n- nULL\n",
+		"- true\n- True\n- TRUE\n- false\n- False\n- FALSE\n- tRUE\n",
+		"- 0\n- -12\n- +3\n- 012\n- 0o17\n- 0x1F\n- 1_000\n- 0x\n- 0o8\n- 1 2\n",
+		"- 1e3\n- 1.5\n- -1.5E-2\n- .5\n- 1.\n- .inf\n- -.Inf\n- +.INF\n- .nan\n- .NaN\n- .NAN\n- 1e\n- .\n- -.nan\n",
+		"\"a\\tb\\\\c\\\"d\\/e\\nf\"",
+		"\"a \\\n\n  b\"",
+		"'a\n  b'",
+		"\"a  \n\n  b\"",
+		"' one\n  two \n\n\n  three '",
+		"\"a \\\n   b\"",
+		"'k': \"v\"\n\"x y\": 'z'\n",
+		"- |\n  lit\n  eral\n- >-\n  fold\n  ed\n- \n- !!null\n- &b k: v\n",
+		"é: [ab, \"c d\"]\nk:\nl:\n  - x  # c\n  - 'y '\n",
+		"--- a\n  b   \n",
+	]
+	let mut read = 0
+	let mut same = 0
+	for text in inputs.iter() {
+		let input = Bytes(text.bytes().collect())
+		let docs = yaml::load(input) catch {
+			continue
+		}
+		read += 1
+		let written = yaml::write(docs)
+		let output = Bytes(written.bytes().collect())
+		let again = yaml::load(output) catch {
+			println(f"refused {text:?}\n  wrote {written:?}\n  {error.line}:{error.column}: {error.message}")
+			continue
+		}
+		if shown(docs) == shown(again) {
+			same += 1
+		} else {
+			println(f"differs {text:?}\n  wrote {written:?}\n  read  {shown(docs)}\n  again {shown(again)}")
+		}
+	}
+	println(f"{inputs.len()} inputs, {read} read, {same} read back the same")
+}
