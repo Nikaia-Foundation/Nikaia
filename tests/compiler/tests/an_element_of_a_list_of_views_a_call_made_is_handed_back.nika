@@ -1,0 +1,33 @@
+// An element of a list a call handed back, a list of views of the argument
+// (ADR-views-3 D16), handed back: the element is a view of that argument,
+// which the caller still uses afterwards (#1481).
+fn words(t: String) -> Vec[String] {
+	t.split(" ").map(fn(w) { w.to_string() }).collect()
+}
+
+fn names(n: String) -> Vec[String] {
+	["a", n]
+}
+
+fn first(a: String) -> String {
+	let xs = words(a)
+	return xs[0]
+}
+
+fn second(a: String) -> String {
+	let xs = names(a)
+	xs[1]
+}
+
+fn made() -> String {
+	let mut g = String()
+	g.push_str("big world")
+	return g
+}
+
+fn main() throws {
+	let g = made()
+	println(first(g))
+	println(second(g))
+	println(g)
+}

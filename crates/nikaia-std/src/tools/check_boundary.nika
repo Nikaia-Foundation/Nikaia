@@ -287,9 +287,14 @@ impl CheckState {
             else => return false,
         }
         let found = self.binding(name) ?? return false
-        let held = found.without_mut ?? return false
-        if held.kind != CheckKind::Let {
-            return false
+        // A `let mut` list is one too (#1481): a change to it before the
+        // element is handed back changes no view yet.
+        let a_mut_let = found.without_mut == null && found.written_mut && found.view_of == "" && !found.lent
+        if !a_mut_let {
+            let held = found.without_mut ?? return false
+            if held.kind != CheckKind::Let {
+                return false
+            }
         }
         let (list, args, view) = match found.ty {
             Ty::Named { name, args, view } => (a_type_base(name), args, view),
