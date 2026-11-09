@@ -725,14 +725,14 @@ pub(crate) fn comptime_worked_out_ahead<H: ComptimeComputeHost>(host: &H, bound:
     for at in 0..host.file_count() {
         for item in host.comptimes_of(at) {
             let named = &item.name;
-            if !absent.contains(named) || host.is_ahead(&named) { continue; }
+            if !absent.contains(named) || host.is_ahead(named) { continue; }
             let folded = host.folded(at, &item.value, &known);
             let worked: Option<BuildValue> = match folded {
                 None => match item.ty {
                     None => None,
                     Some(ref written) => {
                         let ty = host.ty_of(at, written);
-                        match comptime_computed(host, at, &named, &item.value, &ty, &known, &typed) {
+                        match comptime_computed(host, at, named, &item.value, &ty, &known, &typed) {
                             CheckComputed::Value(value) => Some(value),
                             _ => None,
                         }

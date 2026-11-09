@@ -1024,7 +1024,16 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
             bound = met ?? found.clone()
         } else if found == a_string_type() {
             let lent = state.lent_arms_bound(world, value)
+            let none_lent = lent == null
             bound = lent ?? found.clone()
+            // **A plain `let` over a `String` place of a local is a view of
+            // it** (ADR-views-3 D5, #1404), as one read through a `ref`
+            // parameter is (#839): the emitter lends it (`lent_lets`), so a
+            // keeper handed it is refused here with a `.clone()` help instead
+            // of by the language below.
+            if none_lent && !mutable && !moved_out && names.len() == 1 && shape.len() == 0 && check_core_stmt_a_place(state, value) && state.facts.lent_lets.contains(span.start as i64) {
+                bound = Ty::Named { name: TEXT_VIEW.clone(), args: [], view: true }
+            }
         } else {
             bound = found.clone()
         }

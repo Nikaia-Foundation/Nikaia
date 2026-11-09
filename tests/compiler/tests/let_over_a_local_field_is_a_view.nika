@@ -1,0 +1,31 @@
+// A plain `let` over a `String` field of a local is a view of it
+// (ADR-views-3 D5, #1404): read and lent it works, handed to a keeper it is
+// refused with a `.clone()` help (NK1102), never by the language below
+// (NK1343).
+
+struct Holder {
+    name: String,
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn measure(a: String) -> i64 {
+    return a.len()
+}
+
+fn store(keep a: String, mut into: Vec[String]) {
+    into.push(a)
+}
+
+fn main() throws {
+    let h = Holder { name: make() }
+    let s = h.name
+    println(measure(s))
+    let mut all: Vec[String] = []
+    store(s, all)
+    println(all.len())
+}
