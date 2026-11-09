@@ -491,6 +491,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     if walk_item.is_some() {
         state.flow.open_items.insert(id_of(expr) as i64, nikaia_std::index::or(walk_item, || 0));
         let typed = state.open_number_typed(world, expr);
+        if name == "sum" && args.is_empty() { state.flow.open_sums.insert(id_of(receiver) as i64, nikaia_std::index::or(walk_item, || 0)); }
     }
     if state.flow.walk_lent { let lent = state.flow.lent_walks.insert(id_of(expr) as i64); }
     state.flow.walk_lent = false;

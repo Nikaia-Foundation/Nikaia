@@ -1242,7 +1242,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         }
     }
     // **The items of a walk of an open number are that number** (ADR-285
-    // D34, #594): handed to a lambda, and handed on.
+    // D34, #594): handed to a lambda, and handed on. So are a list
+    // literal's walked in place (#1485).
+    state.open_literal_receiver(world, receiver, span)
     let items: i64? = state.open_items_of(world, receiver)
     let outer_params = state.flow.open_params.clone()
     state.flow.open_params = state.open_walk_params(world, contract, args, items)

@@ -1,0 +1,23 @@
+// A list written in numbers and walked in place has one open number for its
+// elements, as `let v = [1, 2]` has (ADR-285 D34, #1485): `[1, 2].iter()`
+// copies its items into a lambda, a `for`, `filter` and `sum`, and the uses
+// type them (`u8`, `i32`).
+use std::collections
+
+fn main() throws {
+	let mut m: collections::HashMap[i64, i64] = collections::HashMap()
+	[1, 2].iter().for_each(fn(x) { m.insert(x, 1) })
+	println(m.len())
+	let mut b: collections::HashMap[u8, i64] = collections::HashMap()
+	for x in [3, 4, 5].iter() { b.insert(x, 1) }
+	println(b.len())
+	let k = 6
+	let mut w: collections::HashMap[i32, i64] = collections::HashMap()
+	[k, 7].iter().for_each(fn(x) { w.insert(x, 1) })
+	println(w.len())
+	println([1, 2, 3].iter().filter(fn(x) { x > 1 }).count())
+	println([1, 2].iter().map(fn(x) { x + 1 }).sum())
+	// A `sum` handed straight to a call names its type, of a `let` too.
+	let v = [4, 5]
+	println(v.iter().sum())
+}
