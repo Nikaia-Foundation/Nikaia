@@ -90,6 +90,29 @@ impl EmitState {
         return f"None::<{plain_rust_spelling(contract.ty)}>"
     }
 
+    /// **A value into a field both kinds of text flow into** (ADR-282 D14),
+    /// made either kind: `either(value)`; a `??` of two options side by side
+    /// (#1515), since `p.tag ?? v.tag` of a view and text of either kind is
+    /// one `Option<EitherText>` only once each side is.
+    fn emit_place_either[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match value {
+            Expr::Coalesce { value: left, fallback, .. } => {
+                if self.facts.optional_fallbacks.contains(node_key(value)) {
+                    out.push("nikaia_std::index::or_maybe(nikaia_std::either_text::either(")
+                    self.emit_expr(world, walk, out, host, left, depth, flow, scope)
+                    out.push("), || nikaia_std::either_text::either(")
+                    self.emit_expr(world, walk, out, host, fallback, depth, flow, scope)
+                    out.push("))")
+                    return
+                }
+            },
+            else => {}
+        }
+        out.push("nikaia_std::either_text::either(")
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        out.push(")")
+    }
+
     /// What a plain value in a field the struct declares nullable is put
     /// between (Part I 2.3), by the value's id.
     fn emit_place_around(ref self, node: ref Expr, field: ref String) -> (String, String) sync throws {
@@ -660,14 +683,12 @@ impl EmitState {
             if either {
                 out.push(": ")
                 out.push(before)
-                out.push("nikaia_std::either_text::either(")
                 if field.value != null {
                     let value = field.value ?? return
-                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+                    self.emit_place_either(world, walk, out, host, value, depth, flow, scope)
                 } else {
-                    out.push(written)
+                    out.push(f"nikaia_std::either_text::either({written})")
                 }
-                out.push(")")
                 out.push(after)
             } else if field.value != null {
                 let value = field.value ?? return
@@ -815,9 +836,8 @@ impl EmitState {
             if field.value != null {
                 let value = field.value ?? return
                 if either {
-                    out.push(": nikaia_std::either_text::either(")
-                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)
-                    out.push(")")
+                    out.push(": ")
+                    self.emit_place_either(world, walk, out, host, value, depth, flow, scope)
                 } else {
                     out.push(": ")
                     self.emit_expr(world, walk, out, host, value, depth, flow, scope)
