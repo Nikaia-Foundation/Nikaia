@@ -152,4 +152,13 @@ together with the specification section and an example test.
 * The checker types `b[a..<c]` on a `Bytes` as an owned `Bytes` (ADR-320 D7), but the emitter writes a `&[u8]`; the fact `bytes_cuts` marks such a cut. (issue-1345)
 * `check_crossings_arguments` gets the unbound contract, so `want` there is the type variable `K`; the substituted types are `expected`/`bound` in `check_core_call_on`, and `entry`'s key is `?` (use `bound["K"]`). (issue-1345)
 * `nikaia check` accepts `HashMap[String, i64]`'s `insert(5, 7)` (std method arguments are not checked against bound types), so a probe that passes `check` can still fail in rustc; always `run` it. (issue-1345)
+* A driver step is tested by running `{repo}/scripts/drive.nika -- --SUBCOMMAND` with `dir:` set to a temp git repo, as in `tests/compiler/tests/drive_relower.nika`; a step with no subcommand gets one added. (issue-1348)
+* `badges.py`'s self-hosted share reads `crates/nikaia/src/**/*.rs` plus the `COMPILER_NIKA` tools files, so a temp repo for it needs those paths from `git archive HEAD`, without `lowered/`. (issue-1348)
+* An owned `String` in a probe is `let mut g = String()` plus `g.push_str("…")` or a `fn` returning `String`; `.to_string()`/`.clone()` on a literal is NK1301 and `String::new()` is NK1149. (issue-1356)
+* Before planning, check whether the issue is closed or marked duplicate, and run its probe on `develop`; a fix under another issue's `Part of` may already have landed. (issue-1356)
+* No binary from before the views syntax exists (`target/release/nikaia` is absent); a fails-before run for a fix already on `develop` needs a build of the fixing commit's parent, so report it as not done. (issue-1356)
+* Turning a move into a lend in the checker also needs `vc_view_of` (`view_changes.nika`) to see the `let` as a view, or a later write to the source passes the checker and becomes a rustc NK1343 internal error. (issue-1362)
+* A `let` bound to a cut (`v[0..]`) or a `std` method result (`s.trim()`) is a view only if `vc_view_of` in `view_changes.nika` sees it; otherwise a later change becomes a rustc NK1343 instead of NK2305. (issue-1363)
+* The library ledger has no `borrows` entries for `std` methods (`String::trim` is missing from `described.contracts`), so the view-change walk cannot tell that a method result points into its receiver. (issue-1363)
+* The tier pass runs without checker types, so a rule there must not mark lists whose items are already views (split/map) as owned. (issue-1368)
 

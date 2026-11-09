@@ -580,6 +580,13 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
         found = check_core_expr(state, world, host, given, span);
+        if !lending && state.a_made_element_lent(world, given, &nikaia_std::index::or(match state.expected.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || Ty::Unknown)) {
+            lending = true;
+            state.facts.lent_returns.insert(span.start as i64);
+        }
     }
     state.flow.lambda_expected = None;
     let inside = state.flow.lambda_returns.len() as i64;

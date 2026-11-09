@@ -710,6 +710,11 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
         Expr::Variable(other, _) => {
             let held = vc_last_named(outer, ask.names.resolve(other))
             if held < 0 {
+                // **A whole variable the `let` lends is viewed** (#1362):
+                // `let c: Array[T] = v` looks at what `v` holds.
+                if ask.lent.contains(at.start as i64) {
+                    return vc_place_view(at, name, value, outer, ask)
+                }
                 return null
             }
             let mut view = outer[held].clone()
@@ -717,11 +722,18 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
             view.made = at.clone()
             return view
         }
-        Expr::Index { .. } => {
+        Expr::Index { index, .. } => {
             if ask.mut_viewed.contains(id_of(value) as i64) {
                 return vc_mut_view(at, name, value, outer, ask)
             }
-            if !ask.lent.contains(at.start as i64) {
+            // **A cut is a view of what it cuts** (ADR-293 D23, #1363):
+            // `let w = v[0..]` and `let c = s[0..<i]` point into `v` and `s`
+            // whether or not the `let` was found to lend a place.
+            let cut = match index {
+                Expr::Range { .. } => true,
+                else => false,
+            }
+            if !cut && !ask.lent.contains(at.start as i64) {
                 return null
             }
             return vc_place_view(at, name, value, outer, ask)

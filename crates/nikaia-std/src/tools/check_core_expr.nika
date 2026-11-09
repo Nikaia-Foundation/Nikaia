@@ -243,6 +243,10 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::Variable(name, _) => {
             let read = check_core_expr_variable(state, world, host, expr, name, span)
             check_core_expr_kept_copy(state, world, expr, read)
+            let bound = state.binding(world.words.resolve(name).clone())
+            if bound != null && state.flow.made_elements.contains((bound ?? return read).id) {
+                state.flow.made_element_reads.insert(node_key(expr))
+            }
             read
         },
         Expr::Path(segments, _) => {
@@ -414,6 +418,9 @@ pub fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref Check
         Expr::Coalesce { value, fallback, .. } => check_core_ops_coalesce(state, world, host, expr, value, fallback, span),
         Expr::Index { base, index, .. } => {
             let read = check_core_index(state, world, host, expr, base, index, span)
+            if state.an_element_of_a_made_list(world, expr) {
+                state.flow.made_element_reads.insert(node_key(expr))
+            }
             // **A function value read by index is a copy** (Part I, #1018):
             // the one closure is shared, the handle cloned.
             match read {

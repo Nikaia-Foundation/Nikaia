@@ -256,6 +256,54 @@ impl CheckState {
         return self.a_place_of_a_lent_parameter(world, value)
     }
 
+    /// **An element of a list this body made, handed back as a view**
+    /// (#1368, ADR-283 D23): `return xs[0]`, or `return e` after `let e =
+    /// xs[0]`, where the text pass made the result a view. The list goes into
+    /// the caller's keep (`untethered_returns` in `buffers.nika`), so the
+    /// element is lent, as a place of a `ref` parameter is.
+    pub fn a_made_element_lent(ref self, world: ref CheckWorld, value: ref Expr, expected: ref Ty) -> bool sync {
+        let viewed = match expected {
+            Ty::Named { name, args, view } => view && args.len() == 0 && (a_type_base(name) == "str" || a_type_base(name) == "String"),
+            else => false,
+        }
+        if !viewed {
+            return false
+        }
+        return self.flow.made_element_reads.contains(node_key(value))
+    }
+
+    /// An element of a list of text a `let` of this body holds, read whole:
+    /// `xs[0]`, not `xs[1..]`, nor an element of a parameter's list.
+    pub fn an_element_of_a_made_list(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let (base, index) = match value {
+            Expr::Index { base, index, .. } => (base, index),
+            else => return false,
+        }
+        if a_range(index) {
+            return false
+        }
+        let name = match base {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return false,
+        }
+        let found = self.binding(name) ?? return false
+        let held = found.without_mut ?? return false
+        if held.kind != CheckKind::Let {
+            return false
+        }
+        let (list, args, view) = match found.ty {
+            Ty::Named { name, args, view } => (a_type_base(name), args, view),
+            else => return false,
+        }
+        if view || args.len() != 1 || (list != "Vec" && list != "Array") {
+            return false
+        }
+        return match args[0] {
+            Ty::Named { name, args: inner, view: element_view } => !element_view && inner.len() == 0 && a_type_base(name) == "String",
+            else => false,
+        }
+    }
+
     /// **An element a `get` reads off a `ref` parameter** (#1107): `return
     /// m.get(k)` hands back what `return m[k]` does, a view of the element,
     /// which `get` already is below. Asked by the parameter's own type.

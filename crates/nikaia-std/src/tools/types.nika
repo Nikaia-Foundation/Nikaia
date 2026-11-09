@@ -601,7 +601,7 @@ fn written_at_the_boundary(names: ref winnow_grammar::InternerContext, ty: ref T
     simd_written(names, name, ty, span, out)
     if !a_parameter && !ty.is_view && !ty.is_slice && ty.count == null && ty.generics.len() == 1 && name == "Array" {
         let element = names.resolve(ty.generics[0].name).clone()
-        out.push(refusal("NK1182", span.clone(), f"`Array[{element}]` needs a length here.", [f"`Array[{element}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from."], f"Use `Vec[{element}]` for a list that can grow, `ref Array[{element}]` to look at elements something else keeps, or `Array[{element}, N]` to write the length down."))
+        out.push(refusal("NK1182", span.clone(), f"`Array[{element}]` needs a length here.", [f"`Array[{element}]` without a length only works for a parameter, where each call supplies the length. A field or a result has no call to take it from."], f"Use `Vec[{element}]` for a list that can grow, or `Array[{element}, N]` to write the length down."))
         return
     }
     if ty.count != null {

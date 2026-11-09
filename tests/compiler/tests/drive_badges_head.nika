@@ -1,0 +1,57 @@
+// scripts/drive.nika --badges (#1348): the driver's badges step measures the
+// committed tree, not the working tree. In a temp repository holding the
+// badges' inputs, an unstaged deletion of the largest `.rs` (another lane's
+// unfinished work) leaves the badges as committed; the same deletion
+// committed regenerates them. Either way HEAD's badges pass
+// `badges.py --check` on HEAD's own tree, as CI runs it.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// Runs the badges step, then says what it committed and whether HEAD's
+// badges match HEAD's tree.
+fn step(nikaia: String, repo: String, work: String, name: String) throws {
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--badges"]; dir: work.clone())
+    println(f"== {name}")
+    println(out.stdout.trim())
+    let check = "rm -rf ../head; git checkout-index -a --prefix=../head/; cd ../head; python3 scripts/badges.py --check >/dev/null 2>&1 && echo HEAD badges match HEAD || echo HEAD badges out of date"
+    println(sh(work.clone(), f"git log --format=%s -1; git status --porcelain --untracked-files=no; {check}").replace(big(work.clone()), "BIG"))
+}
+
+fn big(work: String) -> String throws {
+    return sh(work, "cat ../big")
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain()
+    let work = f"{tmp}/work"
+    let inputs = "scripts/badges.py scripts/self_hosting.py docs/specification/10-nikaia-light.md assets/badges crates/nikaia/src crates/nikaia-std/src/tools ':(exclude)crates/nikaia-std/src/tools/lowered'"
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    sh(tmp.clone(), f"git init -q -b develop work; cd work; {id}; git -C '{repo}' archive HEAD {inputs} | tar -x; python3 scripts/badges.py >/dev/null; git add -A; git commit -q -m base")
+    sh(work.clone(), "ls -S crates/nikaia/src/*.rs | head -1 > ../big; rm $(cat ../big)")
+    step(nikaia.clone(), repo.clone(), work.clone(), "unstaged deletion")
+    sh(work.clone(), "git add -A crates/nikaia/src; git commit -q -m 'delete the largest'")
+    step(nikaia.clone(), repo.clone(), work.clone(), "committed deletion")
+    process::run("rm", ["-rf", tmp])
+}

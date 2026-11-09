@@ -354,6 +354,12 @@ pub struct CheckFlow {
     /// The leaves of a function's last value that are a place of a borrowed
     /// parameter, found while its scope stands (#738), by their nodes.
     pub lent_tail_leaves: collections::BTreeSet[i64],
+    /// The bindings a `let` bound to an element of a list this body made,
+    /// read whole (`let e = xs[0]`), by their ids (#1368).
+    pub made_elements: collections::BTreeSet[i64],
+    /// The reads of such an element, `xs[0]` or `e`, by their nodes, found
+    /// while the scope stands: a function's last value is asked after it.
+    pub made_element_reads: collections::BTreeSet[i64],
     /// A generic call that hands back the number it was given (#497), by the
     /// call's first argument.
     pub open_calls: collections::BTreeMap[i64, Vec[i64]],
@@ -491,6 +497,8 @@ impl CheckFlow {
             lambda_tail: null,
             let_lambda_use: null,
             lent_tail_leaves: collections::BTreeSet(),
+            made_elements: collections::BTreeSet(),
+            made_element_reads: collections::BTreeSet(),
             open_calls: collections::BTreeMap(),
             unknown_bound: collections::BTreeSet(),
             unknown_lambda_params: collections::BTreeSet(),

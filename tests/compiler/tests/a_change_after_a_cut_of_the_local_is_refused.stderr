@@ -1,0 +1,23 @@
+error[NK2305]: `v` is changed here, but `w` may point into its data and is used later.
+   --> tests/a_change_after_a_cut_of_the_local_is_refused.nika:9:5
+    |
+  8 |     let w = v[0..]
+    |         - `w` is a view into `v`
+  9 |     v.push(5)
+    |     ^ `v` changes here
+ 10 |     return w
+    |            - `w` is used here, after the change
+    |
+    = help: Use `w` before this change, or take a copy of it with `w.clone()` before the change.
+error[NK2305]: `s` is changed here, but `c` may point into its data and is used later.
+   --> tests/a_change_after_a_cut_of_the_local_is_refused.nika:18:5
+    |
+ 17 |     let c = s[0..<i]
+    |         - `c` is a view into `s`
+ 18 |     s.push_str("!")
+    |     ^ `s` changes here
+ 19 |     return c
+    |            - `c` is used here, after the change
+    |
+    = help: Use `c` before this change, or take a copy of it with `c.clone()` before the change.
+2 changes to data a view still to be used may point into

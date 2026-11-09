@@ -226,6 +226,18 @@ pub(crate) fn check_core_stmt_a_name_or_field(value: &Expr) -> bool { matches!(v
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_whole_run_viewed(found: &Ty, want: &Ty) -> bool {
+    match want {
+        Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; slice && !mutable && !found.is_a_view() && match found {
+            Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).fits(item),
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_call(value: &Expr) -> bool { matches!(value, Expr::Call { .. } | Expr::MethodCall { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -683,6 +695,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
         seen_through = !found.fits(&want) && state.fits_through_deref(world, &found, &want);
+        seen_through = seen_through || check_core_stmt_a_whole_run_viewed(&found, &want);
     }
     let mut element_view: i64 = 0;
     if names.len() == 1 && ty.is_some() {
@@ -966,6 +979,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
     state.declared_binding(id, span, &name);
     let mut local = CheckLocal::free(name, bound, id);
     if !mutable && element_read.is_some() && (state.does_not_copy(world, &local.ty) || viewed_past_a_jump) { local.view_of = nikaia_std::index::or(element_read.as_deref(), || "").to_string(); }
+    if !mutable && ty.is_none() && names.len() == 1 && shape.is_empty() && state.an_element_of_a_made_list(world, value) { state.flow.made_elements.insert(local.id); }
     local.constant = constant;
     local.lent = read_through_a_jump;
     local.empty_list = pending;
