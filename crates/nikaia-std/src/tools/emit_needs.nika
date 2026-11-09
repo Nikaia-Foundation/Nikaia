@@ -8,6 +8,80 @@
 
 use std::collections
 
+impl EmitState {
+    /// **Whether this file lowers to the block types** (ADR-327 D4, #490):
+    /// `Vec`, `String`, `vec![…]` and `format!(…)` are `nikaia_std::block`'s
+    /// `List`, `Text` and the two built in place, for programs and the tools
+    /// alike, one rule for every file. A grammar's file too: winnow-grammar
+    /// 0.2 writes the standard library by full path in what it expands, and
+    /// the grammar says `collect nikaia_std::block::List;`, so its
+    /// repetitions collect into a block's list (`emit_grammar_over`).
+    pub fn on_block_types(ref self) -> bool {
+        return true
+    }
+}
+
+/// The import that lowers a program to the block types where it does
+/// (`on_block_types`); nothing otherwise. Explicit, not a glob: a glob's
+/// `vec` would be ambiguous with the standard library's macro.
+pub fn block_types_import(on: bool) -> String {
+    if on {
+        return "#[allow(unused_imports)]\npub use nikaia_std::block::names::{CopyOwned, String, Vec, format, vec};\n"
+    }
+    return ""
+}
+
+/// **Rust's `String`, made a block's text** where a program lowers to the
+/// block types: `nikaia_std::block::Text::from(…)` around a value the
+/// language below builds as a `String` (`to_string`, `to_uppercase`,
+/// `replace`, a joined list, a literal made owned), the same memory (ADR-327
+/// D8); nothing where the setting is off. `Text::from` of a `Text` is the
+/// value, so a sum that is already one passes.
+pub fn block_text_open(on: bool) -> String {
+    if on {
+        return "nikaia_std::block::Text::from("
+    }
+    return ""
+}
+
+/// The other half of `block_text_open`.
+pub fn block_text_close(on: bool) -> String {
+    if on {
+        return ")"
+    }
+    return ""
+}
+
+/// **The method a call resolves to is `std`'s on text or a list**, or
+/// unresolved: only such a call answers Rust's `String`; a `join` of the
+/// program's own type answers what it declares (#490).
+pub fn emit_callee_is_std_text(callee: ref String?) -> bool {
+    let key = callee ?? return true
+    if key.starts_with("str::") || key.starts_with("String::") || key.starts_with("Vec::") {
+        return true
+    }
+    // A number's, a `bool`'s or a `char`'s `to_string` is Rust's too.
+    for scalar in ["i64::", "i32::", "u8::", "u32::", "u64::", "int::", "f64::", "f32::", "bool::", "char::"] {
+        if key.starts_with(scalar) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **A method whose Rust answers a `String`**, which a program on the block
+/// types makes a block's text around the call: each of these, on text, is
+/// text of its own in Nikaia (`join` with its separator, on a list of text).
+pub fn answers_rust_text(written: ref String, args: i64) -> bool {
+    if args == 0 {
+        return written == "to_string" || written == "to_uppercase" || written == "to_lowercase"
+    }
+    if args == 1 {
+        return written == "repeat" || written == "join"
+    }
+    return (written == "replace" && args == 2) || (written == "replacen" && args == 3)
+}
+
 /// What a program's preamble has to say, over all of its files.
 ///
 /// `uses_std` and the rest are per-file facts, and the preamble is written
@@ -110,6 +184,7 @@ impl EmitNeeds {
         // the backend generates reaches these names through a glob of its
         // own, and a private import is not re-exported into one.
         out.push_str("#[allow(unused_imports)]\npub use nikaia_std::prelude::*;\n")
+        out.push_str(block_types_import(true))
         if self.fails {
             // Kap 7.1: `error.full()` is a method on whatever a `catch` bound,
             // so the trait has to be in scope even in a program that imports

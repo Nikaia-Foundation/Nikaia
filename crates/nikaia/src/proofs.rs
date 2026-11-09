@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/proofs.rs
 //
 // **`nikaia.proofs`: what a build uses is the recorded answer**
@@ -131,7 +133,7 @@ pub fn for_unit<R>(path: &Path, source: &str, dependency: bool, run: impl FnOnce
 pub fn in_function<R>(name: &str, at: usize, run: impl FnOnce() -> R) -> R {
     let outer = THREAD.with(|t| {
         let mut t = t.borrow_mut();
-        let name = t.function.replace(name.to_string());
+        let name = t.function.replace(name.to_text());
         (name, std::mem::replace(&mut t.function_at, at as i64))
     });
     let out = run();
@@ -193,6 +195,8 @@ pub fn ask_again_from(before: &AskedSoFar) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{format, vec};
 
     /// `0 <= i < n <= len` ⊢ `i < len`, and `x >= 3` ⊢ `x > 10`.
     fn ask_two() {

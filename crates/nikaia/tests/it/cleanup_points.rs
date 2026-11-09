@@ -8,6 +8,8 @@
 //! at both settings of `user_parallelism`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::check::{self, Finding};
@@ -63,8 +65,8 @@ fn ran_with(
     let out = command.output().expect("run it");
     std::fs::remove_dir_all(&dir).ok();
     (
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
         out.status.code(),
     )
 }

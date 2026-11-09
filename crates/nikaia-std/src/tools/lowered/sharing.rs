@@ -73,19 +73,19 @@ pub fn every_count_plain(sharing: &mut Sharing) {
         (*decision).why = None;
         (*decision).fallback = None;
     }
-    let mut keys: Vec<String> = vec![];
-    for key in sharing.counts.keys() { keys.push(key.to_string()); }
-    for key in keys.iter() { sharing.counts.insert(key.to_string(), Count::Plain); }
-    let mut functions: Vec<String> = vec![];
-    for key in sharing.summaries.keys() { functions.push(key.to_string()); }
+    #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for key in sharing.counts.keys() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
+    for key in keys.iter() { sharing.counts.insert(nikaia_std::block::Text::from(key.to_string()), Count::Plain); }
+    let mut functions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
+    for key in sharing.summaries.keys() { functions.push(nikaia_std::block::Text::from(key.to_string())); }
     for function in functions.iter() {
         let classes = nikaia_std::index::or(match *nikaia_std::index::get(&sharing.summaries, function) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
         let mut plain: Vec<Class> = vec![];
-        for class in classes.iter() { plain.push(Class { members: class.members.to_owned(), count: Count::Plain }); }
-        sharing.summaries.insert(function.to_string(), plain);
+        for class in classes.iter() { plain.push(Class { members: class.members.copy_owned(), count: Count::Plain }); }
+        sharing.summaries.insert(nikaia_std::block::Text::from(function.to_string()), plain);
     }
 }
 
@@ -95,11 +95,11 @@ pub fn sharing_report(sharing: &Sharing) -> String {
     let mut at: String = String::from("");
     let mut atomic: i64 = 0;
     let mut undecided = 0;
-    let mut caught: Vec<String> = vec![];
+    let mut caught: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for decision in sharing.decisions.iter() {
         if at != decision.function {
             out.push_str(&format!("{}:\n", decision.function));
-            at = decision.function.to_string();
+            at = nikaia_std::block::Text::from(decision.function.to_string());
         }
         let count = decision.count.as_str();
         out.push_str(&format!("    {} `{}` ({})\n", padded_right(&count, 7), decision.value, decision.ty));
@@ -151,11 +151,11 @@ pub fn slot(function: &str, name: &str) -> String { format!("{}::{}", function, 
 
 pub fn split_slot(key: &str) -> (String, String) {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-    if parts.len() < 2 { return (String::from(""), key.to_string()); }
-    let name = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
-    let mut function: Vec<String> = vec![];
-    for i in 0..parts.len() as i64 - 1 { function.push((*nikaia_std::index::get(&parts, (i) as usize)).to_string()); }
-    (function.join("::"), name)
+    if parts.len() < 2 { return (String::from(""), nikaia_std::block::Text::from(key.to_string())); }
+    let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
+    let mut function: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for i in 0..parts.len() as i64 - 1 { function.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); }
+    (nikaia_std::block::Text::from(function.join("::")), name)
 }
 
 pub fn holds_a_word(ty: &Ty) -> bool {
@@ -311,7 +311,7 @@ impl Slots {
         if found.is_some() { return nikaia_std::index::or(found, || 0); }
         let fresh = self.parent.len() as i64;
         self.parent.push(fresh);
-        self.index.insert(key.to_string(), fresh);
+        self.index.insert(nikaia_std::block::Text::from(key.to_string()), fresh);
         fresh
     }
     pub fn root(&mut self, start: i64) -> i64 {
@@ -335,7 +335,7 @@ impl Slots {
     pub fn note(&mut self, function: &str, value: &str, ty: Ty, internal: bool, position: bool) {
         let key = slot(function, value);
         self.id(&key);
-        if !self.handles.contains_key(&key) { self.handles.insert(key.to_string(), Handle { function: function.to_string(), value: value.to_string(), ty, internal, position }); }
+        if !self.handles.contains_key(&key) { self.handles.insert(nikaia_std::block::Text::from(key.to_string()), Handle { function: nikaia_std::block::Text::from(function.to_string()), value: nikaia_std::block::Text::from(value.to_string()), ty, internal, position }); }
     }
     pub fn force(&mut self, function: &str, value: &str, why: String, fallback: Option<Fallback>) {
         let key = slot(function, value);
@@ -349,31 +349,31 @@ impl Slots {
     }
     pub(crate) fn foreign_slots_hold_the_floor(&mut self) {
         let field_prefix = format!("{}::", FIELDS);
-        let mut foreign: Vec<(String, String)> = vec![];
+        let mut foreign: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for key in self.index.keys() {
             if !key.contains("::") { continue; }
             let mut owner = before_last(key, "::");
-            let mut named = key.to_string();
-            if key.starts_with(&field_prefix) {
+            let mut named = nikaia_std::block::Text::from(key.to_string());
+            if key.starts_with(AsRef::<str>::as_ref(&field_prefix)) {
                 let parts: Vec<&str> = key.splitn(2, "::").collect::<Vec<_>>();
-                named = (*nikaia_std::index::get(&parts, 1)).to_string();
+                named = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
                 owner = before_last(&named, ".");
             }
-            if !self.declared_here.contains(&owner) { foreign.push((key.to_string(), named)); }
+            if !self.declared_here.contains(&owner) { foreign.push((nikaia_std::block::Text::from(key.to_string()), named)); }
         }
         for (key, named) in foreign.iter() {
             let why = format!("`{}` belongs to another file of this package, and that file's own pass decides its count - this one reads only one of the two", named);
-            self.forced.push(Forced { key: key.to_string(), why, fallback: Some(Fallback::ForeignFile) });
+            self.forced.push(Forced { key: nikaia_std::block::Text::from(key.to_string()), why, fallback: Some(Fallback::ForeignFile) });
         }
     }
 }
 
 pub(crate) fn before_last(text: &str, separator: &str) -> String {
-    let parts: Vec<&str> = text.split(separator).collect::<Vec<_>>();
-    if parts.len() < 2 { return text.to_string(); }
-    let mut kept: Vec<String> = vec![];
-    for i in 0..parts.len() as i64 - 1 { kept.push((*nikaia_std::index::get(&parts, (i) as usize)).to_string()); }
-    kept.join(separator)
+    let parts: Vec<&str> = text.split(AsRef::<str>::as_ref(separator)).collect::<Vec<_>>();
+    if parts.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
+    let mut kept: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
+    for i in 0..parts.len() as i64 - 1 { kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); } ::core::mem::drop(parts);
+    nikaia_std::block::Text::from(kept.join(separator))
 }
 
 pub fn decided(slots: &mut Slots) -> Sharing {
@@ -381,17 +381,17 @@ pub fn decided(slots: &mut Slots) -> Sharing {
     let mut why_of: collections::BTreeMap<i64, String> = collections::BTreeMap::new();
     let mut fallback_of: collections::BTreeMap<i64, Fallback> = collections::BTreeMap::new();
     let mut floor: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    let forced = slots.forced.to_owned();
+    let forced = slots.forced.copy_owned();
     for one in forced.iter() {
         let root = slots.class_of(&one.key);
         if one.fallback.is_some() { floor.insert(root); }
         if !why_of.contains_key(&root) || fallback_of.contains_key(&root) && one.fallback.is_none() {
-            why_of.insert(root, one.why.to_string());
+            why_of.insert(root, nikaia_std::block::Text::from(one.why.to_string()));
             set_fallback(&mut fallback_of, root, one.fallback);
         }
     }
     let mut held: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    let together = slots.held_together.to_owned();
+    let together = slots.held_together.copy_owned();
     for key in together.iter() { held.insert(slots.class_of(key)); }
     let keys: Vec<String> = handle_keys(&slots);
     let mut not_a_word: collections::BTreeSet<i64> = collections::BTreeSet::new();
@@ -399,11 +399,11 @@ pub fn decided(slots: &mut Slots) -> Sharing {
         let root = slots.class_of(key);
         if !holds_a_word(&handle_type(&slots, key)) { not_a_word.insert(root); }
     }
-    let duplicated = sites_by_slot(&slots.duplicated);
-    let copied_out = sites_by_slot(&slots.copies);
+    let duplicated = sites_by_slot(&slots.duplicated); #[allow(clippy::redundant_locals)] let keys = keys;
+    let copied_out = sites_by_slot(&slots.copies); #[allow(clippy::redundant_locals)] let keys = keys;
     let mut decisions: Vec<Decision> = vec![];
-    let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new();
-    let mut classes: collections::BTreeMap<String, collections::BTreeMap<i64, Class>> = collections::BTreeMap::new();
+    let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
+    let mut classes: collections::BTreeMap<String, collections::BTreeMap<i64, Class>> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
     for key in keys.iter() {
         let root = slots.class_of(key);
         let handle = match match *nikaia_std::index::get(&slots.handles, key) {
@@ -424,9 +424,9 @@ pub fn decided(slots: &mut Slots) -> Sharing {
             if fallback.is_none() && a_word && !floor.contains(&root) && !held.contains(&root) { count = Count::Word; }
         }
         if handle.position { put_in_class(&mut classes, &handle.function, root, &handle.value, count); }
-        counts.insert(key.to_string(), count);
+        counts.insert(nikaia_std::block::Text::from(key.to_string()), count);
         if !handle.internal {
-            decisions.push(Decision { function: handle.function.to_string(), value: handle.value.to_string(), ty: handle.ty.text(), count, why, fallback, duplications: nikaia_std::index::or(match *nikaia_std::index::get(&duplicated, key) {
+            decisions.push(Decision { function: nikaia_std::block::Text::from(handle.function.to_string()), value: nikaia_std::block::Text::from(handle.value.to_string()), ty: handle.ty.text(), count, why, fallback, duplications: nikaia_std::index::or(match *nikaia_std::index::get(&duplicated, key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || vec![].into()), copied_out: nikaia_std::index::or(match *nikaia_std::index::get(&copied_out, key) {
@@ -439,7 +439,7 @@ pub fn decided(slots: &mut Slots) -> Sharing {
     for (function, roots) in classes.iter() {
         let mut found: Vec<Class> = vec![];
         for (_, class) in roots.iter() { found.push(Class { members: sorted_once(&class.members), count: class.count }); }
-        summaries.insert(function.to_string(), in_class_order(&found));
+        summaries.insert(nikaia_std::block::Text::from(function.to_string()), in_class_order(&found));
     }
     Sharing { decisions, summaries, counts }
 }
@@ -452,7 +452,7 @@ pub(crate) fn set_fallback(fallback_of: &mut collections::BTreeMap<i64, Fallback
 
 pub(crate) fn handle_keys(slots: &Slots) -> Vec<String> {
     let mut keys: Vec<String> = vec![];
-    for key in slots.handles.keys() { keys.push(key.to_string()); }
+    for key in slots.handles.keys() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
     keys
 }
 
@@ -464,15 +464,15 @@ pub(crate) fn handle_type(slots: &Slots, key: &str) -> Ty {
 pub(crate) fn sites_by_slot(pairs: &[(String, String)]) -> collections::BTreeMap<String, Vec<String>> {
     let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (key, site) in pairs.iter() {
-        let sites = out.entry(key.to_string()).or_insert(vec![]);
-        if !nikaia_std::list::contains(&sites, &site) { sites.push(site.to_string()); }
+        let sites = out.entry(nikaia_std::block::Text::from(key.to_string())).or_insert(vec![]);
+        if !nikaia_std::list::contains(&sites, &site) { sites.push(nikaia_std::block::Text::from(site.to_string())); }
     }
     out
 }
 
 pub(crate) fn put_in_class(classes: &mut collections::BTreeMap<String, collections::BTreeMap<i64, Class>>, function: &str, root: i64, member: &str, count: Count) {
-    let class = classes.entry(function.to_string()).or_insert(collections::BTreeMap::new()).entry(root).or_insert(Class { members: vec![], count });
-    class.members.push(member.to_string());
+    let class = classes.entry(nikaia_std::block::Text::from(function.to_string())).or_insert(collections::BTreeMap::new()).entry(root).or_insert(Class { members: vec![], count });
+    class.members.push(nikaia_std::block::Text::from(member.to_string()));
     class.count = class.count.join(&count);
 }
 
@@ -483,10 +483,10 @@ pub(crate) fn lock_kept(count: &Count, a_word: bool, held_together: bool) -> Opt
 }
 
 pub(crate) fn sorted_once(members: &[String]) -> Vec<String> {
-    let mut sorted = members.to_owned();
+    #[allow(unused_mut)] let mut sorted = members.copy_owned();
     sorted.sort();
-    let mut out: Vec<String> = vec![];
-    for one in sorted.iter() { if out.is_empty() || *nikaia_std::index::get(&out, nikaia_std::index::at(out.len() as i64 - 1)) != *one { out.push(one.to_string()); } }
+    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
+    for one in sorted.iter() { if out.is_empty() || *nikaia_std::index::get(&out, nikaia_std::index::at(out.len() as i64 - 1)) != *one { out.push(nikaia_std::block::Text::from(one.to_string())); } }
     out
 }
 
@@ -514,11 +514,11 @@ pub fn declared_here(names: &winnow_grammar::InternerContext, items: &[Spanned<I
         match &item.node {
             Item::Struct { name, .. } => {
                 let name = *name;
-                out.insert(names.resolve(name).to_string());
+                out.insert(nikaia_std::block::Text::from(names.resolve(name).to_string()));
             },
             Item::Enum { name, .. } => {
                 let name = *name;
-                out.insert(names.resolve(name).to_string());
+                out.insert(nikaia_std::block::Text::from(names.resolve(name).to_string()));
             },
             Item::Fn { name, .. } => {
                 let name = *name;
@@ -526,7 +526,7 @@ pub fn declared_here(names: &winnow_grammar::InternerContext, items: &[Spanned<I
                 if !own.is_empty() { out.insert(own); }
             },
             Item::Impl { target, methods, .. } => {
-                let owner = names.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                 for method in methods.iter() {
                     let own = method_name(names, &method.node);
                     if !own.is_empty() { out.insert(format!("{}::{}", owner, own)); }
@@ -576,14 +576,14 @@ pub fn hands_back_a_plain_value(callee: &str, asked: &Asked<'_, '_, '_>) -> bool
 
 pub(crate) fn has_an_entry(ledger: &Ledger, callee: &str, suffix: &str) -> bool {
     if ledger.functions.contains_key(callee) { return true; }
-    for key in ledger.functions.keys() { if key.ends_with(&suffix) { return true; } }
+    for key in ledger.functions.keys() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { return true; } }
     false
 }
 
 pub(crate) fn plain_in(ledger: &Ledger, callee: &str, suffix: &str) -> bool {
     let exact = *nikaia_std::index::get(&ledger.functions, callee);
     if exact.is_some() { return a_plain_result(exact); }
-    for (key, contract) in ledger.functions.iter() { if key.ends_with(&suffix) { return a_plain_result(Some(contract)); } }
+    for (key, contract) in ledger.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { return a_plain_result(Some(contract)); } }
     false
 }
 
@@ -626,7 +626,7 @@ pub fn named_handle(expr: &Expr, names: &winnow_grammar::InternerContext, scope:
 
 pub(crate) fn a_handle_in_scope(name: &str, scope: &collections::BTreeMap<String, Ty>) -> Option<String> {
     let ty = match *nikaia_std::index::get(&scope, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if holds_shared(ty) { return Some(name.to_string()); }
+    if holds_shared(ty) { return Some(nikaia_std::block::Text::from(name.to_string())); }
     None
 }
 
@@ -668,7 +668,7 @@ pub fn a_parallel_method(method: &str) -> bool {
 
 pub fn call_path(func: &Expr, names: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(names.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(names.resolve(name).to_string())) },
         Expr::Path(segments, _) => Some(joined_segments(segments, names)),
         _ => None,
     }
@@ -692,7 +692,7 @@ pub fn sharing_of(program: &Program, asked: &Asked<'_, '_, '_>, holes_of: &impl 
         match &item.node {
             Item::Fn { .. } => { sharing_function(&item.node, "", asked, holes_of, ty_of, &mut walk); },
             Item::Impl { target, methods, .. } => {
-                let owner = asked.names.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(asked.names.resolve(target.name).to_string());
                 for method in methods.iter() { sharing_function(&method.node, &owner, asked, holes_of, ty_of, &mut walk); }
             },
             Item::Struct { name, fields, is_public, .. } => {
@@ -726,7 +726,7 @@ pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '
             walk.scope = collections::BTreeMap::new();
             for arg in args.iter() {
                 let ty = ty_of(&arg.ty);
-                let named = asked.names.resolve(arg.name).to_string();
+                let named = nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string());
                 position(&named, &ty, is_public, asked, walk);
                 walk.scope.insert(named, ty);
             }
@@ -741,7 +741,7 @@ pub(crate) fn sharing_function(item: &Item, owner: &str, asked: &Asked<'_, '_, '
 }
 
 pub(crate) fn position(named: &str, ty: &Ty, is_public: bool, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
-    let function = walk.function.to_string();
+    let function = nikaia_std::block::Text::from(walk.function.to_string());
     if holds_shared(ty) {
         walk.slots.note(&function, named, ty.clone(), named == RESULT, true);
         if is_public { walk.slots.force(&function, named, published_reason(&function, named), Some(Fallback::PublicSignature)); }
@@ -754,7 +754,7 @@ pub(crate) fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of
     match stmt {
         Stmt::Let { names, ty, value, .. } => {
             if names.len() != 1 { return; }
-            let_binding(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), (ty).as_ref(), value, asked, &ty_of, walk);
+            let_binding(nikaia_std::block::Text::from(asked.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), (ty).as_ref(), value, asked, &ty_of, walk);
             sharing_expression(value, asked, &holes_of, &ty_of, walk);
         },
         Stmt::Comptime { .. } => { },
@@ -793,11 +793,11 @@ pub(crate) fn sharing_statement(stmt: &Stmt, asked: &Asked<'_, '_, '_>, holes_of
 }
 
 pub(crate) fn let_binding(named: String, written: Option<&Type>, value: &Expr, asked: &Asked<'_, '_, '_>, ty_of: &impl Fn(&Type) -> Ty, walk: &mut SharingWalk) {
-    if walks_in_parallel(value, asked.names, &walk.parallel) { walk.parallel.insert(named.to_string()); }
+    if walks_in_parallel(value, asked.names, &walk.parallel) { walk.parallel.insert(nikaia_std::block::Text::from(named.to_string())); }
     let aliased = named_handle(value, asked.names, &walk.scope);
     let ty = match binding_type(written, (aliased).as_deref(), value, asked, ty_of, &walk.scope) { Some(__nikaia_value) => __nikaia_value, None => return };
     if holds_shared(&ty) {
-        let function = walk.function.to_string();
+        let function = nikaia_std::block::Text::from(walk.function.to_string());
         walk.slots.note(&function, &named, ty.clone(), false, false);
         if aliased.is_some() { walk.slots.join(&slot(&function, &named), &slot(&function, nikaia_std::index::or(aliased.as_deref(), || ""))); } else {
             let source = slot_of(value, asked, walk);
@@ -823,7 +823,7 @@ pub(crate) fn binding_type(written: Option<&Type>, aliased: Option<&str>, value:
 
 pub(crate) fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>) -> Option<Ty> {
     let named = match func {
-        Expr::Variable(name, _) => { let name = *name; asked.names.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(asked.names.resolve(name).to_string()) },
         _ => return None,
     };
     if !is_hull(&named) { return None; }
@@ -834,7 +834,7 @@ pub(crate) fn hull_written(func: &Expr, args: &[Expr], asked: &Asked<'_, '_, '_>
     Some(plain_type(&named))
 }
 
-pub(crate) fn plain_type(name: &str) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view: false } }
+pub(crate) fn plain_type(name: &str) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false } }
 
 pub(crate) fn hands_back(value: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) {
     let source = match slot_of(value, asked, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -849,10 +849,10 @@ pub(crate) fn a_crossing_reaches(named: &str, why: &str, fallback: Option<Fallba
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     if holds_shared(&ty) {
-        walk.slots.force(&walk.function, named, why.to_string(), fallback);
+        walk.slots.force(&walk.function, named, nikaia_std::block::Text::from(why.to_string()), fallback);
         return;
     }
-    for field in shared_fields(&ty.text(), asked) { walk.slots.force(FIELDS, &field, why.to_string(), fallback); }
+    for field in shared_fields(&ty.text(), asked) { walk.slots.force(FIELDS, &field, nikaia_std::block::Text::from(why.to_string()), fallback); }
 }
 
 pub(crate) fn slot_of(expr: &Expr, asked: &Asked<'_, '_, '_>, walk: &mut SharingWalk) -> Option<String> {
@@ -903,7 +903,7 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
         Expr::SafeMethod { .. } => { sharing_method(expr, asked, &holes_of, &ty_of, walk); },
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
-            let owner = asked.names.resolve(name).to_string();
+            let owner = nikaia_std::block::Text::from(asked.names.resolve(name).to_string());
             for field in fields.iter() { struct_field(&owner, field, asked, &holes_of, &ty_of, walk); }
         },
         Expr::LitInterpolated { .. } => { for hole in holes_of(expr) { sharing_expression(&hole, asked, holes_of, ty_of, walk); } },
@@ -987,7 +987,7 @@ pub(crate) fn a_handle_by_value(named: &str, walk: &SharingWalk) -> bool {
 }
 
 pub(crate) fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
-    let field_name = asked.names.resolve(field.name).to_string();
+    let field_name = nikaia_std::block::Text::from(asked.names.resolve(field.name).to_string());
     let value = nikaia_std::index::or(match field.value.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -1015,8 +1015,8 @@ pub(crate) fn struct_field(owner: &str, field: &FieldInit, asked: &Asked<'_, '_,
 
 pub(crate) fn sharing_method(call: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, ty_of: &dyn Fn(&Type) -> Ty, walk: &mut SharingWalk) {
     let (receiver, method, args, config) = match call {
-        Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, asked.names.resolve(method).to_string(), args, config) },
-        Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, asked.names.resolve(method).to_string(), args, config) },
+        Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, nikaia_std::block::Text::from(asked.names.resolve(method).to_string()), args, config) },
+        Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, nikaia_std::block::Text::from(asked.names.resolve(method).to_string()), args, config) },
         _ => return,
     };
     if method == "get" && args.is_empty() { a_copy_out_of_the_lock(receiver, asked, walk); }
@@ -1083,7 +1083,7 @@ pub(crate) fn an_argument_that_is_not_a_handle(called: &SharingCall, described: 
     }
     let known = match described { Some(__nikaia_value) => __nikaia_value, None => return };
     if at >= known.params.len() as i64 { return; }
-    let param = nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string();
+    let param = nikaia_std::block::Text::from(nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string());
     if !by_value_shared(&nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).1) { return; }
     let source = match slot_of(arg, asked, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let (owner, named) = split_slot(&source);
@@ -1092,7 +1092,7 @@ pub(crate) fn an_argument_that_is_not_a_handle(called: &SharingCall, described: 
 }
 
 pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Described>, at: i64, handle: &str, walk: &mut SharingWalk) {
-    let function = walk.function.to_string();
+    let function = nikaia_std::block::Text::from(walk.function.to_string());
     if described.is_none() {
         walk.slots.force(&function, handle, unseen((called.callee).as_deref()), Some(unseen_kind(called)));
         return;
@@ -1106,7 +1106,7 @@ pub(crate) fn a_handle_handed_on(called: &SharingCall, described: Option<&Descri
         walk.slots.force(&function, handle, format!("`{}` takes it in a position no contract describes", callee), Some(Fallback::UncoveredArgument));
         return;
     }
-    let param = nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string();
+    let param = nikaia_std::block::Text::from(nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).0.to_string());
     if by_value_shared(&nikaia_std::index::get(&known.params, nikaia_std::index::at(at)).1) { walk.slots.duplicates(&function, handle, handed_on_to(&known.key, &param)); }
     walk.slots.join(&slot(&function, handle), &slot(&known.key, &param));
 }
@@ -1125,19 +1125,19 @@ pub(crate) struct Described {
 
 pub(crate) fn parameters_of(callee: Option<&str>, asked: &Asked<'_, '_, '_>, own_keys: &mut collections::BTreeMap<String, String>, library_keys: &mut collections::BTreeMap<String, String>) -> Option<Described> {
     let named = match callee { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if !own_keys.contains_key(named) { own_keys.insert(named.to_string(), nikaia_std::index::or(described_key(named, asked.own), || "".into())); }
+    if !own_keys.contains_key(named) { own_keys.insert(nikaia_std::block::Text::from(named.to_string()), nikaia_std::index::or(described_key(named, asked.own), || "".into())); }
     let in_own = match *nikaia_std::index::get(&own_keys, named) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if in_own != "" { return described_by(in_own, asked.own); }
-    if !library_keys.contains_key(named) { library_keys.insert(named.to_string(), nikaia_std::index::or(described_key(named, asked.library), || "".into())); }
+    if !library_keys.contains_key(named) { library_keys.insert(nikaia_std::block::Text::from(named.to_string()), nikaia_std::index::or(described_key(named, asked.library), || "".into())); }
     let in_library = match *nikaia_std::index::get(&library_keys, named) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if in_library == "" { return None; }
     described_by(in_library, asked.library)
 }
 
 pub(crate) fn described_key(callee: &str, ledger: &Ledger) -> Option<String> {
-    if ledger.functions.contains_key(callee) { return Some(callee.to_string()); }
+    if ledger.functions.contains_key(callee) { return Some(nikaia_std::block::Text::from(callee.to_string())); }
     let suffix = format!("::{}", callee);
-    for (one, _) in ledger.functions.iter() { if one.ends_with(&suffix) { return Some(one.to_string()); } }
+    for (one, _) in ledger.functions.iter() { if one.ends_with(AsRef::<str>::as_ref(&suffix)) { return Some(nikaia_std::block::Text::from(one.to_string())); } }
     None
 }
 
@@ -1147,9 +1147,9 @@ pub(crate) fn described_by(key: &str, ledger: &Ledger) -> Option<Described> {
     let mut params: Vec<(String, Ty)> = vec![];
     let mut first = true;
     for (name, ty) in signature.params.iter() {
-        if !(first && name == "self") { params.push((name.to_string(), ty.clone())); }
+        if !(first && name == "self") { params.push((nikaia_std::block::Text::from(name.to_string()), ty.clone())); }
         first = false;
     }
-    Some(Described { key: key.to_string(), params, keeps: contract.keeps.to_owned() })
+    Some(Described { key: nikaia_std::block::Text::from(key.to_string()), params, keeps: contract.keeps.copy_owned() })
 }
 

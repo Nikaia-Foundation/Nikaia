@@ -5,9 +5,9 @@ pub(crate) fn mp_result() -> String { String::from("<result>") }
 
 pub(crate) fn mp_self() -> String { String::from("self") }
 
-pub(crate) fn mp_text(words: &winnow_grammar::InternerContext, s: winnow_grammar::Symbol) -> String { words.resolve(s).to_string() }
+pub(crate) fn mp_text(words: &winnow_grammar::InternerContext, s: winnow_grammar::Symbol) -> String { nikaia_std::block::Text::from(words.resolve(s).to_string()) }
 
-pub(crate) fn mp_short(name: &str) -> String { nikaia_std::index::or(name.rsplit("::").next(), || "").to_string() }
+pub(crate) fn mp_short(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(name.rsplit("::").next(), || "").to_string()) }
 
 pub(crate) fn mp_reads(name: &str) -> bool { matches!(name, "len" | "is_empty" | "contains_key" | "contains" | "capacity" | "get" | "get_or" | "remove" | "clear" | "iter" | "keys" | "values") }
 
@@ -52,8 +52,8 @@ pub(crate) fn mp_structs(held: &MpHeld<'_, '_>) -> collections::BTreeMap<String,
                 Item::Struct { name, fields, .. } => {
                     let name = *name;
                     let mut own: Vec<MpField> = vec![];
-                    for f in fields.iter() { own.push(MpField { name: (*nikaia_std::index::get(&held.words, (u) as usize)).resolve(f.name).to_string(), ty: f.ty.clone() }); }
-                    by_name.insert((*nikaia_std::index::get(&held.words, (u) as usize)).resolve(name).to_string(), MpStruct { unit: u, fields: own });
+                    for f in fields.iter() { own.push(MpField { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, (u) as usize)).resolve(f.name).to_string()), ty: f.ty.clone() }); }
+                    by_name.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, (u) as usize)).resolve(name).to_string()), MpStruct { unit: u, fields: own });
                 },
                 _ => { },
             }
@@ -88,11 +88,11 @@ pub(crate) fn mp_ordinal(g: &mut MpGather, at: &MpAt) -> Option<i64> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<String, MpStruct>, key: &dyn Fn(i64, &Type) -> String, arity: &dyn Fn(&str) -> i64, unit: i64, ty: &Type, at: &MpAt, out: &mut Vec<MpPosition>, depth: i64) {
     if (*ty.code).is_some() || depth > 6 { return; }
-    let name = (*nikaia_std::index::get(&held.words, nikaia_std::index::at(unit))).resolve(ty.name).to_string();
+    let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(unit))).resolve(ty.name).to_string());
     if !ty.is_tuple && mp_is_map(&name) {
         let seed = key(unit, ty);
         let within = mp_ordinal(g, at);
-        out.push(MpPosition { label: at.label.to_string(), owner: at.owner.to_string(), path: at.path.to_string(), group: format!("{}|{}|{}", at.scope, seed, at.path), within });
+        out.push(MpPosition { label: nikaia_std::block::Text::from(at.label.to_string()), owner: nikaia_std::block::Text::from(at.owner.to_string()), path: nikaia_std::block::Text::from(at.path.to_string()), group: format!("{}|{}|{}", at.scope, seed, at.path), within });
         let before = out.len() as i64;
         for generic in ty.generics.iter() { mp_of(g, held, structs, key, arity, unit, generic, at, out, depth + 1); }
         if (out.len() as i64) > before { g.nested = true; }
@@ -103,7 +103,7 @@ pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collectio
         let found = *nikaia_std::index::get(&structs, &short);
         if found.is_some() {
             let st = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-            let scope_here = if at.scope.is_empty() { key(unit, ty) } else { at.scope.to_string() };
+            let scope_here = if at.scope.is_empty() { key(unit, ty) } else { nikaia_std::block::Text::from(at.scope.to_string()) };
             let enters = g.target == short && at.within < 0;
             let mut within = at.within;
             if enters {
@@ -111,7 +111,7 @@ pub(crate) fn mp_of(g: &mut MpGather, held: &MpHeld<'_, '_>, structs: &collectio
                 within = g.counters.len() as i64 - 1;
             }
             for field in st.fields.iter() {
-                let inner = MpAt { owner: at.owner.to_string(), label: format!("{}.{}", at.label, field.name), scope: scope_here.to_string(), path: format!("{}.{}", at.path, field.name), within };
+                let inner = MpAt { owner: nikaia_std::block::Text::from(at.owner.to_string()), label: format!("{}.{}", at.label, field.name), scope: nikaia_std::block::Text::from(scope_here.to_string()), path: format!("{}.{}", at.path, field.name), within };
                 mp_of(g, held, structs, key, arity, st.unit, &field.ty, &inner, out, depth + 1);
             }
         }
@@ -222,7 +222,7 @@ impl<'a> MpBody<'a> {
         }
         let below = format!("{}.", path);
         let mut under = path.is_empty();
-        for (p, _) in held.iter() { if p.starts_with(&below) { under = true; } }
+        for (p, _) in held.iter() { if p.starts_with(&*below) { under = true; } }
         if under { return MpRes::Part; }
         MpRes::Not
     }
@@ -257,7 +257,7 @@ impl<'a> MpBody<'a> {
         let mut found: Vec<i64> = vec![];
         for (p, id) in held.iter() {
             let id = nikaia_std::num::value(id);
-            if *p == path || p.starts_with(&below) { found.push(id); }
+            if *p == path || p.starts_with(&*below) { found.push(id); }
         }
         if found.is_empty() { return None; }
         Some(found)
@@ -421,7 +421,7 @@ impl<'a> MpBody<'a> {
         }
         if walked.is_some() {
             let root = nikaia_std::index::or(walked, || 0);
-            let name = (*nikaia_std::index::get(&self.root_name, nikaia_std::index::at(root))).to_string();
+            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&self.root_name, nikaia_std::index::at(root))).to_string());
             if !name.is_empty() { return mp_named(name); }
             return mp_unknown();
         }
@@ -441,13 +441,13 @@ impl<'a> MpBody<'a> {
         let mut targets: Vec<i64> = vec![];
         for (p, id) in self.result.iter() {
             let id = nikaia_std::num::value(id);
-            if p == under || p.starts_with(&below) { targets.push(id); }
+            if p == under || p.starts_with(&*below) { targets.push(id); }
         }
         targets
     }
     pub(crate) fn join_all(&mut self, from: &[i64], targets: &[i64]) { if (from.len() as i64) == targets.len() as i64 { for i in 0..from.len() as i64 { self.union(*nikaia_std::index::get(&from, (i) as usize), *nikaia_std::index::get(&targets, (i) as usize)); } } else { self.doubt(); } }
     pub(crate) fn flows(&mut self, e: &Expr, under: &str) {
-        let targets = self.targets_of(&under.to_string());
+        let targets = self.targets_of(&nikaia_std::block::Text::from(under.to_string()));
         if targets.is_empty() {
             self.expr(e);
             return;
@@ -473,7 +473,7 @@ impl<'a> MpBody<'a> {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
                         };
-                        let ours = self.targets_of(&part.to_string());
+                        let ours = self.targets_of(&nikaia_std::block::Text::from(part.to_string()));
                         if ours.is_empty() { continue; }
                         if held.is_none() { self.doubt(); } else {
                             let h = nikaia_std::index::or(held, || vec![].into());
@@ -644,13 +644,13 @@ impl<'a> MpBody<'a> {
         if dep.unknown { return None; }
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut todo: Vec<String> = vec![];
-        for n in dep.names.iter() { todo.push(n.to_string()); }
+        let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for n in dep.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
         while !todo.is_empty() {
-            let name = (*nikaia_std::index::get(&todo, nikaia_std::index::at(todo.len() as i64 - 1))).to_string();
+            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&todo, nikaia_std::index::at(todo.len() as i64 - 1))).to_string());
             todo.pop();
             if seen.contains(&name) { continue; }
-            seen.insert(name.to_string());
+            seen.insert(nikaia_std::block::Text::from(name.to_string()));
             let local = match *nikaia_std::index::get(&self.locals, &name) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -658,7 +658,7 @@ impl<'a> MpBody<'a> {
             if local.is_some() {
                 let l = nikaia_std::index::or(local, || mp_unknown().into());
                 if l.unknown { return None; }
-                for n in l.names.iter() { todo.push(n.to_string()); }
+                for n in l.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
             } else if self.params.contains(&name) { out.insert(name); } else { return None; }
         }
         Some(out)
@@ -712,13 +712,13 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         let t = match target { Some(__nikaia_value) => __nikaia_value, None => return None };
         target_name = mp_short((*nikaia_std::index::get(&held.words, nikaia_std::index::at(unit))).resolve(t.name));
     }
-    let mut g = MpGather { target: target_name.to_string(), nested: false, counters: vec![] };
+    let mut g = MpGather { target: nikaia_std::block::Text::from(target_name.to_string()), nested: false, counters: vec![] };
     let mut positions: Vec<MpPosition> = vec![];
     let mut start: i64 = 0;
     let mut of_params: i64 = 0;
     for p in params.iter() {
         let before = positions.len() as i64;
-        let at = MpAt { owner: p.name.to_string(), label: p.name.to_string(), scope: String::from(""), path: String::from(""), within: -1 };
+        let at = MpAt { owner: nikaia_std::block::Text::from(p.name.to_string()), label: nikaia_std::block::Text::from(p.name.to_string()), scope: String::from(""), path: String::from(""), within: -1 };
         mp_of(&mut g, held, structs, key, arity, unit, &p.ty, &at, &mut positions, 0);
         if p.name == mp_self() { start = positions.len() as i64 - before; } else { of_params = of_params + positions.len() as i64 - before; }
     }
@@ -728,20 +728,20 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
     }
     if positions.is_empty() { return None; }
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for p in params.iter() { names.insert(p.name.to_string()); }
-    let mut b = MpBody { words: *nikaia_std::index::get(&held.words, nikaia_std::index::at(unit)), params: names, roots: collections::BTreeMap::new(), root_name: vec![], parent: vec![], adds: vec![], all_keyed: g.nested, locals: collections::BTreeMap::new(), result: vec![] };
+    for p in params.iter() { names.insert(nikaia_std::block::Text::from(p.name.to_string())); }
+    #[allow(unused_mut)] let mut b = MpBody { words: *nikaia_std::index::get(&held.words, nikaia_std::index::at(unit)), params: names, roots: collections::BTreeMap::new(), root_name: vec![], parent: vec![], adds: vec![], all_keyed: g.nested, locals: collections::BTreeMap::new(), result: vec![] };
     for p in positions.iter() {
         if p.owner == mp_result() {
             let id = b.new_root(String::from(""));
-            b.result.push((p.path.to_string(), id));
+            b.result.push((nikaia_std::block::Text::from(p.path.to_string()), id));
         } else {
-            let id = b.new_root(p.owner.to_string());
+            let id = b.new_root(nikaia_std::block::Text::from(p.owner.to_string()));
             let mut held = nikaia_std::index::or(match *nikaia_std::index::get(&b.roots, &p.owner) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || vec![].into());
-            held.push((p.path.to_string(), id));
-            b.roots.insert(p.owner.to_string(), held);
+            held.push((nikaia_std::block::Text::from(p.path.to_string()), id));
+            b.roots.insert(nikaia_std::block::Text::from(p.owner.to_string()), held);
         }
     }
     if read_body { b.block(body, ret.is_some()); } else { b.doubt(); }
@@ -760,24 +760,24 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         if seen.is_none() { known = false; } else { merged.extend(nikaia_std::index::or(seen, || collections::BTreeSet::new().into())); }
         how.insert(class, MpHow { known, names: merged });
     }
-    let mut classes: collections::BTreeMap<i64, Vec<String>> = collections::BTreeMap::new();
+    let mut classes: collections::BTreeMap<i64, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
     for at in 0..positions.len() as i64 {
         let class = b.find(at);
         let mut labels = nikaia_std::index::or(match *nikaia_std::index::get(&classes, &class) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        labels.push(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).label.to_string());
+        labels.push(nikaia_std::block::Text::from(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).label.to_string()));
         classes.insert(class, labels);
     }
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
     for (class, found) in classes.iter() {
         let class = nikaia_std::num::value(class);
-        let mut labels = found.to_owned();
+        #[allow(unused_mut)] let mut labels = found.copy_owned();
         labels.sort();
-        let mut distinct: Vec<String> = vec![];
-        for l in labels.iter() { if distinct.is_empty() || *nikaia_std::index::get(&distinct, nikaia_std::index::at(distinct.len() as i64 - 1)) != *l { distinct.push(l.to_string()); } }
-        let mut said: String = String::from("keyed");
+        #[allow(unused_mut)] let mut distinct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut labels = labels;
+        for l in labels.iter() { if distinct.is_empty() || *nikaia_std::index::get(&distinct, nikaia_std::index::at(distinct.len() as i64 - 1)) != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
+        let mut said: String = String::from("keyed"); #[allow(unused_mut, clippy::redundant_locals)] let mut distinct = distinct;
         let entry = match *nikaia_std::index::get(&how, &class) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -785,20 +785,20 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         if !b.all_keyed && entry.is_some() {
             let h = nikaia_std::index::or(entry, || MpHow { known: false, names: collections::BTreeSet::new() });
             if h.known {
-                let mut from: Vec<String> = vec![];
-                for n in h.names.iter() { from.push(n.to_string()); }
-                said = format!("from({})", from.join(", "));
+                let mut from: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                for n in h.names.iter() { from.push(nikaia_std::block::Text::from(n.to_string())); }
+                said = format!("from({})", nikaia_std::block::Text::from(from.join(", ")));
             }
         }
-        out.push(format!("{}: {}", distinct.join(" | "), said));
+        out.push(format!("{}: {}", nikaia_std::block::Text::from(distinct.join(" | ")), said));
     }
     out.sort();
-    let mut keys: Vec<String> = vec![];
-    for at in 0..positions.len() as i64 { if exact { keys.push(format!("{}", b.find(at))); } else { keys.push(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).group.to_string()); } }
-    let mut first: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
+    for at in 0..positions.len() as i64 { if exact { keys.push(format!("{}", b.find(at))); } else { keys.push(nikaia_std::block::Text::from(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).group.to_string())); } }
+    let mut first: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     let mut conflict = false;
     for at in 0..keys.len() as i64 {
-        let k = (*nikaia_std::index::get(&keys, nikaia_std::index::at(at))).to_string();
+        let k = nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, nikaia_std::index::at(at))).to_string());
         let canon = *nikaia_std::index::get(&first, &k);
         if canon.is_none() { first.insert(k, at); } else {
             let c = nikaia_std::index::or(canon, || 0);
@@ -825,15 +825,15 @@ pub fn mp_analyse(held: &MpHeld<'_, '_>, key: &impl Fn(i64, &Type) -> String, ar
                 Item::Fn { name, args, ret_type, body, is_public, receiver, .. } => {
                     let is_public = *is_public; let name = *name;
                     if !is_public || receiver.is_some() || name.is_none() { continue; }
-                    let fname = (*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string();
+                    let fname = nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }).to_string());
                     let mut params: Vec<MpParam> = vec![];
-                    for a in args.iter() { params.push(MpParam { name: (*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(a.name).to_string(), ty: a.ty.clone() }); }
+                    for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(a.name).to_string()), ty: a.ty.clone() }); }
                     let found = mp_lines(held, &structs, key, arity, u, fname, None, &params, (ret_type).as_ref(), body, true);
                     if found.is_some() { out.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                 },
                 Item::Impl { target, methods, trait_name } => {
                     let trait_name = *trait_name;
-                    let target_name = (*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(target.name).to_string();
+                    let target_name = nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(target.name).to_string());
                     for method in methods.iter() {
                         match &method.node {
                             Item::Fn { name, args, ret_type, body, is_public, receiver, .. } => {
@@ -842,7 +842,7 @@ pub fn mp_analyse(held: &MpHeld<'_, '_>, key: &impl Fn(i64, &Type) -> String, ar
                                 let fname = format!("{}::{}", target_name, (*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }));
                                 let mut params: Vec<MpParam> = vec![];
                                 if receiver.is_some() { params.push(MpParam { name: mp_self(), ty: target.clone() }); }
-                                for a in args.iter() { params.push(MpParam { name: (*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(a.name).to_string(), ty: a.ty.clone() }); }
+                                for a in args.iter() { params.push(MpParam { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&held.words, nikaia_std::index::at(u))).resolve(a.name).to_string()), ty: a.ty.clone() }); }
                                 let found = mp_lines(held, &structs, key, arity, u, fname, Some(target), &params, (ret_type).as_ref(), body, trait_name.is_none());
                                 if found.is_some() { out.push(match found { Some(__nikaia_value) => __nikaia_value, None => continue }); }
                             },

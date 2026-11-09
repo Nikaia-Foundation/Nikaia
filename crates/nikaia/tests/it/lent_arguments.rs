@@ -28,6 +28,8 @@
 use nikaia::contracts::LedgerOps;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The Rust this source lowers to.
 fn lowered(source: &str) -> String {

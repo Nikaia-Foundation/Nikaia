@@ -51,7 +51,7 @@ impl nikaia_std::error::Joined for __NikaiaThrows_LspRefusal__io_IoError {
 }
 impl __NikaiaThrows_LspRefusal__io_IoError {
     #[allow(dead_code)]
-    pub(crate) fn message(&self) -> String { self.to_string() }
+    pub(crate) fn message(&self) -> String { self.to_string().into() }
 }
 impl nikaia_std::error::Full for __NikaiaThrows_LspRefusal__io_IoError {
     fn full(&self) -> String {
@@ -81,7 +81,7 @@ pub enum LspRefusal {
 impl LspRefusal {
     pub fn message(&self) -> String {
         match self {
-            LspRefusal::Framing(why) => why.to_string(),
+            LspRefusal::Framing(why) => nikaia_std::block::Text::from(why.to_string()),
         }
     }
 }
@@ -106,7 +106,7 @@ pub async fn lsp_read_message() -> Result<Option<String>, __NikaiaThrows_LspRefu
         Ok(value) => value,
         Err(_error) => { return Err(nikaia_std::error::throwing(LspRefusal::Framing(String::from("a message body that is not UTF-8")), &"lsp_read_message").into()) },
     };
-    Ok(Some(read.to_string()))
+    Ok(Some(nikaia_std::block::Text::from(read.to_string())))
 }
 
 pub fn lsp_write_message(body: &json::Value) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -115,9 +115,9 @@ pub fn lsp_write_message(body: &json::Value) -> Result<(), nikaia_std::error::Th
     Ok(())
 }
 
-pub fn lsp_object(members: &[(&str, json::Value)]) -> json::Value { json::Value::Object(members.iter().map(|member| { json::Member { key: member.0.to_string(), value: member.1.clone() } }).collect::<Vec<_>>()) }
+pub fn lsp_object(members: &[(&str, json::Value)]) -> json::Value { json::Value::Object(members.iter().map(|member| { json::Member { key: nikaia_std::block::Text::from(member.0.to_string()), value: member.1.clone() } }).collect::<Vec<_>>()) }
 
-pub fn lsp_string(text: &str) -> json::Value { json::Value::Str(text.to_string()) }
+pub fn lsp_string(text: &str) -> json::Value { json::Value::Str(nikaia_std::block::Text::from(text.to_string())) }
 
 pub fn lsp_number(n: i64) -> json::Value { json::Value::Number(format!("{}", n)) }
 
@@ -158,17 +158,17 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
                 let document = cargo_json_member((params).as_ref(), "textDocument");
                 let uri = match cargo_json_text((cargo_json_member((document).as_ref(), "uri")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let alone = !uri.starts_with("file://");
-                let path = if alone { uri.to_string() } else { match lsp_uri_path(&uri) { Some(__nikaia_value) => __nikaia_value, None => continue } };
+                let path = if alone { nikaia_std::block::Text::from(uri.to_string()) } else { match lsp_uri_path(&uri) { Some(__nikaia_value) => __nikaia_value, None => continue } };
                 if method == "textDocument/didOpen" {
-                    open.insert(path.to_string(), nikaia_std::index::or(cargo_json_text((cargo_json_member((document).as_ref(), "text")).as_ref()), || "".into()));
-                    uris.insert(path.to_string(), uri.to_string());
+                    open.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::index::or(cargo_json_text((cargo_json_member((document).as_ref(), "text")).as_ref()), || "".into()));
+                    uris.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::block::Text::from(uri.to_string()));
                     marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?;
                 } else if method == "textDocument/didChange" {
                     let changes = cargo_json_items((cargo_json_member((params).as_ref(), "contentChanges")).as_ref());
                     if !changes.is_empty() {
                         let last = changes.len() as i64 - 1;
                         let changed: Option<json::Value> = Some((*nikaia_std::index::get(&changes, nikaia_std::index::at(last))).clone());
-                        open.insert(path.to_string(), nikaia_std::index::or(cargo_json_text((cargo_json_member((changed).as_ref(), "text")).as_ref()), || "".into()));
+                        open.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::index::or(cargo_json_text((cargo_json_member((changed).as_ref(), "text")).as_ref()), || "".into()));
                     }
                     marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?;
                 } else if method == "textDocument/didSave" { marked = lsp_publish(host, &path, &open, &uris, &marked, alone).await?; } else if method == "textDocument/didClose" {
@@ -219,7 +219,7 @@ pub fn lsp_uri_path(uri: &str) -> Option<String> {
         Ok(value) => value,
         Err(_error) => { return None; },
     };
-    Some(path.to_string())
+    Some(nikaia_std::block::Text::from(path.to_string()))
 }
 
 pub(crate) fn lsp_hex(b: u8) -> i64 {
@@ -253,7 +253,7 @@ pub(crate) async fn lsp_definition<H: LspHost>(host: &H, params: Option<&json::V
     let line = match cargo_json_number((cargo_json_member((position).as_ref(), "line")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
     let character = match cargo_json_number((cargo_json_member((position).as_ref(), "character")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
     let alone = !uri.starts_with("file://");
-    let path = if alone { uri.to_string() } else { match lsp_uri_path(&uri) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null } };
+    let path = if alone { nikaia_std::block::Text::from(uri.to_string()) } else { match lsp_uri_path(&uri) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null } };
     let offset = lsp_offset(&lsp_text_of(&path, open).await, line, character);
     let (file, span, name) = match host.definition(&path, open, alone, offset) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
     lsp_object(&vec![("uri", lsp_string(&lsp_uri_of(&file, uris))), ("range", lsp_range(&lsp_text_of(&file, open).await, &span, &name))])
@@ -265,7 +265,7 @@ pub(crate) async fn lsp_text_of(path: &str, open: &collections::BTreeMap<String,
             Ok(value) => value,
             Err(_error) => { String::from("") },
         },
-        Some(held) => held.to_string(),
+        Some(held) => nikaia_std::block::Text::from(held.to_string()),
     }
 }
 
@@ -288,12 +288,12 @@ pub fn lsp_offset(source: &str, line: i64, character: i64) -> i64 {
 pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collections::BTreeMap<String, String>, uris: &collections::BTreeMap<String, String>, marked: &collections::BTreeMap<String, String>, alone: bool) -> Result<collections::BTreeMap<String, String>, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     let checked: fs::Path = std::path::PathBuf::from(path);
     let package = match nikaia_std::fs::path::parent(&(checked)) {
-        None => path.to_string(),
-        Some(ref dir) => if alone { path.to_string() } else { nikaia_std::fs::path::text_of(&(dir)).to_string() },
+        None => nikaia_std::block::Text::from(path.to_string()),
+        Some(ref dir) => if alone { nikaia_std::block::Text::from(path.to_string()) } else { nikaia_std::block::Text::from(nikaia_std::fs::path::text_of(&(dir)).to_string()) },
     };
     let found = host.diagnose(path, open, alone);
     let mut by_file: collections::BTreeMap<String, Vec<json::Value>> = collections::BTreeMap::new();
-    by_file.insert(path.to_string(), vec![]);
+    by_file.insert(nikaia_std::block::Text::from(path.to_string()), vec![]);
     let mut sources: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for (file, shown) in found.iter() {
         if !sources.contains_key(file) {
@@ -302,24 +302,24 @@ pub(crate) async fn lsp_publish<H: LspHost>(host: &H, path: &str, open: &collect
                     Ok(value) => value,
                     Err(_error) => { String::from("") },
                 },
-                Some(held) => held.to_string(),
+                Some(held) => nikaia_std::block::Text::from(held.to_string()),
             };
-            sources.insert(file.to_string(), text);
+            sources.insert(nikaia_std::block::Text::from(file.to_string()), text);
         }
         let source = match sources.get(file) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let uri = lsp_uri_of(file, uris);
         let diagnostic = lsp_diagnostic(shown, &source, &uri);
-        by_file.entry(file.to_string()).or_insert(vec![]).push(diagnostic);
+        by_file.entry(nikaia_std::block::Text::from(file.to_string())).or_insert(vec![]).push(diagnostic);
     }
     let mut now: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for (file, list) in by_file.iter() {
         let uri = lsp_uri_of(file, uris);
-        if !list.is_empty() { now.insert(uri.to_string(), package.to_string()); }
-        lsp_notify_diagnostics(&uri, list.to_owned())?;
+        if !list.is_empty() { now.insert(nikaia_std::block::Text::from(uri.to_string()), nikaia_std::block::Text::from(package.to_string())); }
+        lsp_notify_diagnostics(&uri, list.copy_owned())?;
     }
     for (uri, of) in marked.iter() {
         if now.contains_key(uri) || by_file.keys().any(|file| { lsp_uri_of(file, uris) == *uri }) { continue; }
-        if *of == package { lsp_notify_diagnostics(uri, vec![])?; } else { now.insert(uri.to_string(), of.to_string()); }
+        if *of == package { lsp_notify_diagnostics(uri, vec![])?; } else { now.insert(nikaia_std::block::Text::from(uri.to_string()), nikaia_std::block::Text::from(of.to_string())); }
     }
     Ok(now)
 }
@@ -330,7 +330,7 @@ pub(crate) fn lsp_open_beside(path: &str, open: &collections::BTreeMap<String, S
     for key in open.keys() {
         let held: fs::Path = std::path::PathBuf::from(key);
         let parent = match nikaia_std::fs::path::parent(&(held)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if nikaia_std::fs::path::text_of(&(parent)) == nikaia_std::fs::path::text_of(&(dir)) { return Some(key.to_string()); }
+        if nikaia_std::fs::path::text_of(&(parent)) == nikaia_std::fs::path::text_of(&(dir)) { return Some(nikaia_std::block::Text::from(key.to_string())); }
     }
     None
 }
@@ -344,7 +344,7 @@ pub(crate) fn lsp_notify_diagnostics(uri: &str, diagnostics: Vec<json::Value>) -
 pub(crate) fn lsp_uri_of(path: &str, uris: &collections::BTreeMap<String, String>) -> String {
     match uris.get(path) {
         None => lsp_path_uri(path),
-        Some(uri) => uri.to_string(),
+        Some(uri) => nikaia_std::block::Text::from(uri.to_string()),
     }
 }
 
@@ -380,7 +380,7 @@ pub fn lsp_diagnostic(shown: &Shown, source: &str, uri: &str) -> json::Value {
             placed = true;
         } else if !label.main {
             let location = lsp_object(&vec![("uri", lsp_string(uri)), ("range", marks)]);
-            let text = if label.text.is_empty() { String::from("here") } else { label.text.to_string() };
+            let text = if label.text.is_empty() { String::from("here") } else { nikaia_std::block::Text::from(label.text.to_string()) };
             related.push(lsp_object(&vec![("location", location), ("message", lsp_string(&text))]));
         }
     }
@@ -396,8 +396,8 @@ pub fn lsp_range(source: &str, span: &Span, word: &str) -> json::Value {
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
     let at = span.start as i64;
     let end = span.end as i64;
-    let mut line: i64 = 0;
-    let mut start: i64 = 0;
+    let mut line: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
+    let mut start: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
     while line + 1 < lines.len() as i64 && (start + (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).len() as i64) < at {
         start += (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).len() as i64 + 1;
         line += 1;

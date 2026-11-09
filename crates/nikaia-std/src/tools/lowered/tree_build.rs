@@ -25,7 +25,7 @@ pub fn split_mut(params: &[(bool, winnow_grammar::Symbol)]) -> (Vec<winnow_gramm
 pub fn unpacked(body: &mut Block, unpacks: &[(winnow_grammar::Symbol, Vec<winnow_grammar::Symbol>, Vec<i64>, Span)]) {
     let mut at: i64 = 0;
     for u in unpacks.iter() {
-        let open = Stmt::Let { names: u.1.to_owned(), shape: u.2.to_owned(), mutable: false, deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
+        let open = Stmt::Let { names: u.1.copy_owned(), shape: u.2.copy_owned(), mutable: false, deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
         body.stmts.insert(nikaia_std::count::of(at), Spanned { node: open, span: u.3, doc: None, attributes: vec![] });
         at += 1;
     }
@@ -87,7 +87,7 @@ pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
     let mut recv = base;
     for step in tail.into_iter() {
         let id = node_id::NodeId::parsed();
-        recv = match step {
+        recv = { let __nikaia_value = match step {
             Postfix::Field(name) => Expr::Field { base: Box::new(recv), name, id },
             Postfix::SafeField(name) => Expr::SafeField { base: Box::new(recv), name, id },
             Postfix::SafeMethod(method, args, config) => Expr::SafeMethod { receiver: Box::new(recv), method, args, config, id },
@@ -95,7 +95,7 @@ pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
             Postfix::Index(index) => Expr::Index { base: Box::new(recv), index: Box::new(index), id },
             Postfix::IndexFrom(start, len) => Expr::Index { base: Box::new(recv.clone()), index: Box::new(Expr::Range { start: Box::new(start), end: Box::new(Expr::MethodCall { receiver: Box::new(recv), method: len, args: vec![], config: vec![], id: node_id::NodeId::parsed() }), inclusive: false, id: node_id::NodeId::parsed() }), id },
             Postfix::With(fields, at) => Expr::With { base: Box::new(recv), fields, at, id },
-        };
+        }; __nikaia_value };
     }
     recv
 }

@@ -27,23 +27,23 @@ pub fn lg_symbol(name: &str) -> String {
         first = false;
         let letter = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9';
         let one = format!("{}", c);
-        if !letter && !"~!@$%^&*_-+=<>.?/".contains(&one) { simple = false; }
+        if !letter && !"~!@$%^&*_-+=<>.?/".contains(AsRef::<str>::as_ref(&one)) { simple = false; }
     }
-    if simple { return name.to_string(); }
+    if simple { return nikaia_std::block::Text::from(name.to_string()); }
     format!("|{}|", name)
 }
 
 pub(crate) fn lg_smt_binary(op: &str, arena: &TermArena, a: i64, b: i64) -> String { format!("({} {} {})", op, lg_term(arena, a), lg_term(arena, b)) }
 
 pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &str) -> String {
-    if parts.is_empty() { return empty.to_string(); }
+    if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
     if parts.len() == 1 { return lg_term(arena, *nikaia_std::index::get(&parts, 0)); }
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(lg_term(arena, part));
     }
-    format!("({} {})", op, written.join(" "))
+    format!("({} {})", op, nikaia_std::block::Text::from(written.join(" ")))
 }
 
 pub fn lg_term(arena: &TermArena, id: i64) -> String {
@@ -106,21 +106,21 @@ pub(crate) enum LgSexp {
 
 pub(crate) fn lg_show(sexp: &LgSexp) -> String {
     match sexp {
-        LgSexp::Atom(a) => a.to_string(),
+        LgSexp::Atom(a) => nikaia_std::block::Text::from(a.to_string()),
         LgSexp::List(items) => {
-            let mut shown: Vec<String> = vec![];
+            let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() { shown.push(lg_show(item)); }
-            format!("({})", shown.join(" "))
+            format!("({})", nikaia_std::block::Text::from(shown.join(" ")))
         },
     }
 }
 
 pub(crate) fn lg_unquoted(name: &str) -> String {
     if name.len() >= 2 && name.starts_with('|') && name.ends_with('|') {
-        let opened: String = nikaia_std::index::or(name.strip_prefix('|'), || "").to_string();
-        return nikaia_std::index::or(opened.strip_suffix('|'), || "").to_string();
+        let opened: String = nikaia_std::block::Text::from(nikaia_std::index::or(name.strip_prefix('|'), || "").to_string());
+        return nikaia_std::block::Text::from(nikaia_std::index::or(opened.strip_suffix('|'), || "").to_string());
     }
-    name.to_string()
+    nikaia_std::block::Text::from(name.to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,7 +131,7 @@ pub(crate) enum LgParsedSexps {
 
 pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
     let chars: Vec<scalar> = nikaia_std::list::chars(source.chars());
-    let mut stack: Vec<Vec<LgSexp>> = vec![vec![]];
+    let mut stack: Vec<Vec<LgSexp>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
         let c = *nikaia_std::index::get(&chars, (at) as usize);
@@ -144,7 +144,7 @@ pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
             }
         } else if c == '(' { stack.push(vec![]); } else if c == ')' {
             if stack.len() < 2 { return LgParsedSexps::Failed(LgReadError::Syntax(String::from("a `)` with no `(`"))); }
-            let list = (*nikaia_std::index::get(&stack, nikaia_std::index::at(stack.len() as i64 - 1))).to_owned();
+            let list = (*nikaia_std::index::get(&stack, nikaia_std::index::at(stack.len() as i64 - 1))).copy_owned();
             stack.pop();
             let last = stack.len() as i64 - 1;
             stack[nikaia_std::index::at(last)].push(LgSexp::List(list));
@@ -198,7 +198,7 @@ pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
         }
     }
     if stack.len() != 1 { return LgParsedSexps::Failed(LgReadError::Syntax(String::from("a `(` with no `)`"))); }
-    LgParsedSexps::Done((*nikaia_std::index::get(&stack, 0)).to_owned())
+    LgParsedSexps::Done((*nikaia_std::index::get(&stack, 0)).copy_owned())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,7 +288,7 @@ pub fn lg_smtlib_read(source: &str) -> LgRead {
     let mut reader = LgReader { arena: TermArena::empty(), declared: collections::BTreeSet::new() };
     let mut assertions: Vec<i64> = vec![];
     let commands = match lg_parse(source) {
-        LgParsedSexps::Done(ref read) => read.to_owned(),
+        LgParsedSexps::Done(ref read) => read.copy_owned(),
         LgParsedSexps::Failed(ref why) => { return LgRead::Failed(why.clone()); },
     };
     for command in commands.iter() {

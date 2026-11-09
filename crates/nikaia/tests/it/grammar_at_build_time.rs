@@ -22,6 +22,8 @@
 //! and it is paid once per grammar rather than once per build.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::assets::Reads;
 use nikaia::check::{self, Finding};
@@ -296,7 +298,7 @@ fn the_decoder_reads_every_shape_the_dumper_writes() {
     assert_eq!(decode("(b true)").expect("a bool"), Value::Bool(true));
     assert_eq!(
         decode("(s \"a\\nb\")").expect("text"),
-        Value::Text("a\nb".to_string())
+        Value::Text("a\nb".to_text())
     );
     assert_eq!(
         decode("(l (i 1) (i 2))").expect("a list"),
@@ -313,19 +315,19 @@ fn the_decoder_reads_every_shape_the_dumper_writes() {
     assert_eq!(
         decode("(v Shade Odd)").expect("a unit variant"),
         Value::Variant {
-            ty: "Shade".to_string(),
-            variant: "Odd".to_string(),
+            ty: "Shade".to_text(),
+            variant: "Odd".to_text(),
             payload: Vec::new(),
         }
     );
     assert_eq!(
         decode("(v Shape Pair (i 7) (s \"x\"))").expect("a variant with a payload"),
         Value::Variant {
-            ty: "Shape".to_string(),
-            variant: "Pair".to_string(),
+            ty: "Shape".to_text(),
+            variant: "Pair".to_text(),
             payload: vec![
                 Value::Int(nikaia_std::tools::integers::integer(7, false)),
-                Value::Text("x".to_string())
+                Value::Text("x".to_text())
             ],
         }
     );
@@ -335,7 +337,7 @@ fn the_decoder_reads_every_shape_the_dumper_writes() {
         panic!("a struct");
     };
     assert_eq!(name, "Setting");
-    assert_eq!(fields["key"], Value::Text("a".to_string()));
+    assert_eq!(fields["key"], Value::Text("a".to_text()));
     assert_eq!(
         fields["value"],
         Value::Int(nikaia_std::tools::integers::integer(1, false))

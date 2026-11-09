@@ -9,6 +9,8 @@
 //! `tests/language/src/coalescing.nika`; here stays the refusal.
 
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The refusal as a reader sees it: the headline, and the help under it.
 fn refused(source: &str, what: &str) -> String {

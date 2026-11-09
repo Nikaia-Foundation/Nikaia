@@ -19,6 +19,8 @@
 
 use nikaia::manifest::Manifest;
 use nikaia::project::Settings;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn settings(manifest: &str) -> Settings {
     let manifest = Manifest::parse(manifest).expect("the manifest parses");
@@ -53,7 +55,7 @@ fn a_third_spelling_is_refused() {
     let manifest = Manifest::parse("[build]\nreentrancy-check = \"on\"\n").expect("parses");
     let refused = Settings::resolve(&manifest, None, None).expect_err("`on` is not a value");
     assert!(
-        refused.to_string().contains("is `yes` or `no`, not `on`"),
+        refused.to_text().contains("is `yes` or `no`, not `on`"),
         "{refused}"
     );
 }
@@ -64,10 +66,7 @@ fn a_third_spelling_is_refused() {
 fn the_key_is_spelled_one_way() {
     let refused = Manifest::parse("[build]\nreentrancy_check = \"no\"\n")
         .expect_err("an underscore is the mistake this catches");
-    assert!(
-        refused.to_string().contains("reentrancy-check"),
-        "{refused}"
-    );
+    assert!(refused.to_text().contains("reentrancy-check"), "{refused}");
 }
 
 /// **It is a cache-key dimension** ([ADR-037](../../../docs/specification/adr/adr-037.md)

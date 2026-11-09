@@ -12,6 +12,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -68,7 +70,7 @@ fn an_operator_without_a_bound_is_refused_in_this_languages_words() {
             .collect();
         assert_eq!(found.len(), 1, "{op}: {:#?}", findings(&source));
         assert!(
-            found[0].message.contains(&format!("T: {needs}")),
+            found[0].message.contains(&*format!("T: {needs}")),
             "{}",
             found[0].message
         );
@@ -76,7 +78,7 @@ fn an_operator_without_a_bound_is_refused_in_this_languages_words() {
     // `Eq` does not give an order.
     let source = "fn f[T: Eq](a: ref T, b: ref T) -> bool { return a < b }\n\
                   fn main() throws { println(1) }\n";
-    assert!(codes(source).contains(&"NK1248".to_string()));
+    assert!(codes(source).contains(&"NK1248".to_text()));
 }
 
 #[test]
@@ -110,7 +112,7 @@ fn an_impl_for_a_type_the_program_does_not_declare_is_nk1249() {
          }\n\
          fn main() throws { println(1) }\n";
     assert!(
-        codes(source).contains(&"NK1249".to_string()),
+        codes(source).contains(&"NK1249".to_text()),
         "{:#?}",
         findings(source)
     );
@@ -135,7 +137,7 @@ fn an_order_for_a_type_that_is_not_eq_is_nk1249() {
 fn an_impl_owes_its_one_method_and_no_other() {
     let missing = "struct P { x: i64 }\nimpl Ord for P {}\nfn main() throws { println(1) }\n";
     assert!(
-        codes(missing).contains(&"NK1130".to_string()),
+        codes(missing).contains(&"NK1130".to_text()),
         "{:#?}",
         findings(missing)
     );
@@ -146,7 +148,7 @@ fn an_impl_owes_its_one_method_and_no_other() {
          }\n\
          fn main() throws { println(1) }\n";
     assert!(
-        codes(extra).contains(&"NK1130".to_string()),
+        codes(extra).contains(&"NK1130".to_text()),
         "{:#?}",
         findings(extra)
     );
@@ -163,7 +165,7 @@ fn a_declared_type_with_impl_ord_is_a_key() {
          }}\n"
     );
     assert!(
-        !codes(&source).contains(&"NK1247".to_string()),
+        !codes(&source).contains(&"NK1247".to_text()),
         "{:#?}",
         findings(&source)
     );

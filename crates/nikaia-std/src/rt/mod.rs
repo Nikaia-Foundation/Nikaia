@@ -209,7 +209,7 @@ pub(crate) fn ring_the_bell() {
 pub fn start(user_code: UserCode) -> Started {
     let _ =
         RUNTIME.get_or_init(|| Runtime::build(user_code, Config::load().unwrap_or_else(report)));
-    Started { _private: () }
+    Started::new()
 }
 
 /// The runtime, starting it if `main` was not one this compiler emitted.
@@ -242,7 +242,7 @@ static ON_DEMAND: OnceLock<UserCode> = OnceLock::new();
 /// asked, which such a program normally never does.
 pub fn on_demand(user_code: UserCode) -> Started {
     let _ = ON_DEMAND.set(user_code);
-    Started { _private: () }
+    Started::new()
 }
 
 /// **How many threads run user code** (ADR-372 D1): the pool's, where the
@@ -282,10 +282,32 @@ fn report(why: String) -> Config {
 /// place for something that reports.
 #[must_use = "the runtime is drained by calling `finish`"]
 pub struct Started {
-    _private: (),
+    /// **`main`'s block** ([ADR-327](../../../docs/specification/adr/adr-327.md)
+    /// D14): `main` is the root task and allocates from a block of its own.
+    /// Here it is created, empty: a block takes its memory only when
+    /// something is first placed in it. It is not put in place yet: its budget
+    /// is the strategy's, normally the memory the program may use (D7), and a
+    /// block is 64 KiB until the strategy sizes it (#490 step 8), which puts
+    /// it in place around `__nikaia_main` with [`Started::root`]; until then
+    /// what `main` places in a block lives outside. What `main` hands back is built outside (D9), so
+    /// the block may go with this value.
+    root: crate::block::Block,
 }
 
 impl Started {
+    /// The runtime's handle, with `main`'s block not yet taken.
+    fn new() -> Started {
+        Started {
+            root: crate::block::Block::default(),
+        }
+    }
+
+    /// **`main`'s block** (D14), for [`crate::block::enter`] once the
+    /// strategy sizes it (#490 step 8).
+    pub fn root(&self) -> &crate::block::Block {
+        &self.root
+    }
+
     /// Drain, bounded by the configured deadline, and warn about what did not
     /// finish (ADR-297 D6).
     ///

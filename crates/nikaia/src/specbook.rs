@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/specbook.rs
 //
 // Every `nika` block in the specification, and how far this compiler gets with
@@ -103,7 +105,7 @@ pub fn blocks(dir: &Path) -> Vec<Block> {
             .file_name()
             .and_then(|n| n.to_str())
             .expect("utf-8 file name")
-            .to_string();
+            .to_text();
         let text = std::fs::read_to_string(&page).expect("read a page");
         // **The scan is Nikaia** (`tools/specbook.nika`, #125).
         for block in nikaia_std::tools::specbook::blocks_in(&text) {
@@ -222,7 +224,7 @@ fn reach(source: &str, reads: &crate::assets::Reads) -> (Stage, BTreeSet<String>
         &crate::check::Newly::new(),
         reads,
     );
-    let codes: BTreeSet<String> = found.findings.iter().map(|f| f.code.to_string()).collect();
+    let codes: BTreeSet<String> = found.findings.iter().map(|f| f.code.to_text()).collect();
     // A warning is not a refusal, but it is worth recording: `NK1111` on a page
     // is a plain string holding what looks like a hole, which is exactly the
     // kind of staleness this walk exists to find.
@@ -249,8 +251,8 @@ pub fn report(dir: &Path, workshop: &Path) -> String {
         .into_iter()
         .map(|v| nikaia_std::tools::specbook::SpecLine {
             file: v.block.file,
-            stage: v.stage.word().to_string(),
-            reading: v.reading.to_string(),
+            stage: v.stage.word().to_text(),
+            reading: v.reading.to_text(),
             discusses_a_refusal: v.block.discusses_a_refusal,
             sketch: v.block.sketch,
             codes: v.codes.into_iter().collect(),

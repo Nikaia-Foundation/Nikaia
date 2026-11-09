@@ -21,12 +21,12 @@ pub(crate) struct SvPreSide {
 pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
     let mut out = sv_pre_none();
     if !book.reals.is_empty() { return out; }
-    let mut unit_lits: Vec<u32> = vec![];
-    let mut unit_ids: Vec<u32> = vec![];
+    let mut unit_lits: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut unit_ids: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut held: Vec<SvHeld> = vec![];
     let mut c: i64 = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).to_owned();
+        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).copy_owned();
         if clause.len() == 1 && sv_pre_theory_atom(cnf, (*nikaia_std::index::get(&clause, 0) / 2u32) as i64) {
             match book.lit_bound(*nikaia_std::index::get(&clause, 0)) {
                 None => { },
@@ -39,7 +39,7 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
         }
         c += 1;
     }
-    let given = held.to_owned();
+    let given = held.copy_owned();
     let mut solved: Vec<SvSolved> = vec![];
     match sv_eliminate(&mut held, &mut solved, book) {
         SvChecked::Consistent => { },

@@ -54,7 +54,7 @@ pub async fn grammar_run_compile_and_run<H: GrammarRunHost>(host: &H, at: &std::
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running {}: {}", nikaia_std::fs::path::display(&(binary)), error) }, &"grammar_run_compile_and_run")) },
     };
     if !ran.ok { return Err(nikaia_std::error::throwing(CheckWall::Refused { detail: ran.stderr }, &"grammar_run_compile_and_run")); }
-    Ok(ran.stdout.trim().to_string())
+    Ok(nikaia_std::block::Text::from(ran.stdout.trim().to_string()))
 }
 
 pub(crate) async fn grammar_run_write_if_changed(path: &std::path::Path, text: &str) -> Result<(), nikaia_std::error::Thrown<CheckWall>> {
@@ -91,9 +91,9 @@ pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar
         Err(error) => { return Err(nikaia_std::error::raise(CheckWall::DidNotBuild { detail: format!("lowering the grammar: {}", error) }, &"grammar_run_driver")) },
     };
     let mut out: String = nikaia_std::index::or(match lowered.split("\nfn main() {").next() {
-        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
         None => None,
-    }, || lowered.to_string().into());
+    }, || nikaia_std::block::Text::from(lowered.to_string()).into());
     for index in 0..host.beside() {
         let body = match host.lowered_beside(index) {
             Ok(value) => value,
@@ -130,12 +130,12 @@ pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliase
             Item::Enum { name, variants, .. } => {
                 let name = *name;
                 let shaped: Vec<VariantShape> = variants.iter().map(|held| { grammar_run_variant(names, aliases, held) }).collect::<Vec<_>>();
-                shapes.enums.entry(names.resolve(name).to_string()).or_insert(shaped);
+                shapes.enums.entry(nikaia_std::block::Text::from(names.resolve(name).to_string())).or_insert(shaped);
             },
             Item::Struct { name, fields, .. } => {
                 let name = *name;
                 let shaped: Vec<FieldShape> = fields.iter().map(|field| { grammar_run_field(names, aliases, field) }).collect::<Vec<_>>();
-                shapes.structs.entry(names.resolve(name).to_string()).or_insert(shaped);
+                shapes.structs.entry(nikaia_std::block::Text::from(names.resolve(name).to_string())).or_insert(shaped);
             },
             _ => { },
         }
@@ -146,11 +146,11 @@ pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliase
 pub(crate) fn grammar_run_constant(name: &str, constant: &str) -> Option<(String, String)> {
     let constructor = match constant.split('(').next() { Some(__nikaia_value) => __nikaia_value, None => return None }.trim();
     if constructor.is_empty() { return None; }
-    Some((name.to_string(), constructor.to_string()))
+    Some((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(constructor.to_string())))
 }
 
 pub(crate) fn grammar_run_variant(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, held: &EnumVariant) -> VariantShape {
-    let name = names.resolve(held.name).to_string();
+    let name = nikaia_std::block::Text::from(names.resolve(held.name).to_string());
     match &held.fields {
         VariantFields::Unit => VariantShape { name, carried: vec![], named: false },
         VariantFields::Tuple(types) => VariantShape { name, carried: types.iter().map(|t| { written_ty(names, aliases, t) }).collect::<Vec<_>>(), named: false },
@@ -160,7 +160,7 @@ pub(crate) fn grammar_run_variant(names: &winnow_grammar::InternerContext, alias
 
 pub(crate) fn grammar_run_field(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, field: &FieldDef) -> FieldShape {
     let name = names.resolve(field.name);
-    let spelled = if is_reserved(name) { format!("r#{}", name) } else { name.to_string() };
-    FieldShape { name: name.to_string(), spelled, ty: written_ty(names, aliases, &field.ty) }
+    let spelled = if is_reserved(name) { format!("r#{}", name) } else { nikaia_std::block::Text::from(name.to_string()) };
+    FieldShape { name: nikaia_std::block::Text::from(name.to_string()), spelled, ty: written_ty(names, aliases, &field.ty) }
 }
 

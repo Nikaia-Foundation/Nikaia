@@ -130,9 +130,9 @@ fn load(input: &[u8]) -> Result<(Document<'_>, bool)> {
                 }
             },
             native::EventKind::Scalar => Event::Scalar(scalar(&event)),
-            native::EventKind::SequenceStart => Event::SequenceStart(event.tag.clone()),
+            native::EventKind::SequenceStart => Event::SequenceStart(event.tag.as_deref().map(String::from)),
             native::EventKind::SequenceEnd => Event::SequenceEnd,
-            native::EventKind::MappingStart => Event::MappingStart(event.tag.clone()),
+            native::EventKind::MappingStart => Event::MappingStart(event.tag.as_deref().map(String::from)),
             native::EventKind::MappingEnd => Event::MappingEnd,
         };
         if let Some(anchor) = event.anchor {
@@ -161,17 +161,17 @@ fn scalar<'de>(event: &native::Event<'de, 'de>) -> Scalar<'de> {
     let value = match &event.text {
         // A block scalar's text is folded and chomped; one a core tag reads
         // as a number, a `bool` or null has no text, and is its trimmed raw.
-        Some(text) if style == Style::Block => Cow::Owned(text.clone()),
+        Some(text) if style == Style::Block => Cow::Owned(text.as_str().to_owned()),
         None if style == Style::Block => Cow::Borrowed(raw.trim()),
         None => Cow::Borrowed(raw),
         Some(text) if text == raw => Cow::Borrowed(raw),
         Some(text) => match borrowed_inside(raw, text, style) {
             Some(borrowed) => Cow::Borrowed(borrowed),
-            None => Cow::Owned(text.clone()),
+            None => Cow::Owned(text.as_str().to_owned()),
         },
     };
     Scalar {
-        tag: event.tag.clone(),
+        tag: event.tag.as_deref().map(String::from),
         value,
         style,
         literal,

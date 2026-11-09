@@ -5,6 +5,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -17,7 +19,7 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
 fn codes(source: &str) -> Vec<String> {
     findings(source)
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -57,7 +59,7 @@ fn a_call_through_a_field_fails_with_what_was_stored() {
 fn storing_a_failing_function_is_not_a_call() {
     let source = format!("{JOB}fn main() {{\n    let job = Job {{ run: fail }}\n}}\n");
     let found = codes(&source);
-    assert!(!found.contains(&"NK2605".to_string()), "{found:?}");
+    assert!(!found.contains(&"NK2605".to_text()), "{found:?}");
 }
 
 /// **A call through the field without a `catch` makes the function fail**.
@@ -66,7 +68,7 @@ fn an_uncaught_call_through_the_field_needs_throws() {
     let source =
         format!("{JOB}fn main() {{\n    let job = Job {{ run: fail }}\n    job.run()\n}}\n");
     let found = codes(&source);
-    assert_eq!(found, vec!["NK2605".to_string()], "{:?}", findings(&source));
+    assert_eq!(found, vec!["NK2605".to_text()], "{:?}", findings(&source));
 }
 
 /// **The handler opens the box by the type its arm names** (D2), and needs
@@ -102,7 +104,7 @@ fn a_catch_over_a_field_nothing_failing_reaches_is_nk1134() {
          }}\n"
     );
     let found = codes(&source);
-    assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
+    assert_eq!(found, vec!["NK1134".to_text()], "{:?}", findings(&source));
 }
 
 /// **A name bound to a function value is a place too** (D1): a call through
@@ -183,7 +185,7 @@ fn a_list_of_quiet_functions_is_nk1134() {
          }}\n"
     );
     let found = codes(&source);
-    assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
+    assert_eq!(found, vec!["NK1134".to_text()], "{:?}", findings(&source));
 }
 
 /// **A variable given a function that cannot fail carries the empty set**.
@@ -196,7 +198,7 @@ fn a_catch_over_a_variable_nothing_failing_reaches_is_nk1134() {
          }}\n"
     );
     let found = codes(&source);
-    assert_eq!(found, vec!["NK1134".to_string()], "{:?}", findings(&source));
+    assert_eq!(found, vec!["NK1134".to_text()], "{:?}", findings(&source));
 }
 
 const WORSE: &str = "enum Boom { Bang }\n\
@@ -414,8 +416,5 @@ fn the_ledger_says_from_the_parameter() {
     let text = Ledger::infer(&parsed).render();
     assert!(text.contains("throws = [\"from(f)\"]"), "{text}");
     let back = Ledger::parse(&text).expect("it reads back");
-    assert_eq!(
-        back.functions["now"].fails_with,
-        vec!["from(f)".to_string()]
-    );
+    assert_eq!(back.functions["now"].fails_with, vec!["from(f)".to_text()]);
 }

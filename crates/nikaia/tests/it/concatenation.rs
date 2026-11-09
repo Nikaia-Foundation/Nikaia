@@ -26,6 +26,8 @@ use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -59,7 +61,9 @@ fn main() throws {
 "#,
     );
     assert!(
-        rust.contains("nikaia_std::concat::plus(nikaia_std::concat::plus(\"p\", \"q\"), \"r\")"),
+        rust.contains(
+            "nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(\"p\", \"q\")), \"r\")"
+        ),
         "two operators, two calls, nested the way they were written:\n{rust}"
     );
 }

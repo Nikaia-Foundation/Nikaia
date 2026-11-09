@@ -3,6 +3,8 @@
 //! printer that puts them back.
 
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The text of every comment the parser recorded, in order.
 fn comments(source: &str) -> Vec<String> {
@@ -10,7 +12,7 @@ fn comments(source: &str) -> Vec<String> {
     parsed
         .comments
         .iter()
-        .map(|span| source[span.start as usize..span.end as usize].to_string())
+        .map(|span| source[span.start as usize..span.end as usize].to_text())
         .collect()
 }
 
@@ -252,8 +254,8 @@ fn fmt_in(dir: &std::path::Path, args: &[&str]) -> (i32, String, String) {
         .expect("runs nikaia");
     (
         out.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
     )
 }
 

@@ -74,7 +74,7 @@ pub fn sysroot_cpu_levels<H: SysrootHost>(triple: &str, host: &H) -> Result<Vec<
         false => {
             let cpus = host.rustc_cpus(triple, &vec![])?;
             let line = nikaia_std::index::or(cpus.lines().find(|&line| { line.contains("default target CPU") }), || "");
-            vec![nikaia_std::index::or(line.split_whitespace().next(), || "generic").to_string()]
+            vec![nikaia_std::block::Text::from(nikaia_std::index::or(line.split_whitespace().next(), || "generic").to_string())]
         },
     };
     levels.push(String::from("native"));
@@ -85,13 +85,13 @@ pub fn sysroot_cpu_levels<H: SysrootHost>(triple: &str, host: &H) -> Result<Vec<
 // this was written - see `contracts::sync`.
 pub fn sysroot_native_cpu(said: &str) -> String {
     let line = nikaia_std::index::or(said.lines().find(|&line| { line.trim_start().starts_with("native ") }), || "");
-    let mut cpu: String = nikaia_std::index::or(line.split("currently ").nth(1), || "").to_string();
+    let mut cpu: String = nikaia_std::block::Text::from(nikaia_std::index::or(line.split("currently ").nth(1), || "").to_string());
     while cpu.ends_with(')') || cpu.ends_with('.') {
-        let cut: String = cpu.trim_end_matches(')').trim_end_matches('.').to_string();
+        let cut: String = nikaia_std::block::Text::from(cpu.trim_end_matches(')').trim_end_matches('.').to_string());
         cpu = cut;
     }
     let features: Vec<&str> = said.lines().filter(|&line| { line.starts_with("target_feature=") }).collect::<Vec<_>>();
-    format!("native={};{}", cpu, features.join(","))
+    format!("native={};{}", cpu, nikaia_std::block::Text::from(features.join(",")))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -139,15 +139,15 @@ pub fn sysroot_file_key<H: SysrootHost>(interface: &str, name: &str, text: &str,
 }
 
 pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
-    let mut names: Vec<String> = vec![SYSROOT_TOOLS_PACKAGE.to_string()];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_TOOLS_PACKAGE.to_string())], nikaia_std::block::Place::Block);
     names.extend(sysroot_stale(dir, &vec![]));
-    let mut files: Vec<(String, String)> = vec![];
+    let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for name in names.iter() {
         let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))), &fs::Root::Anywhere).await {
             Ok(value) => value,
             Err(_error) => { String::from("") },
         };
-        files.push((name.to_string(), text));
+        files.push((nikaia_std::block::Text::from(name.to_string()), text));
     }
     files
 }
@@ -156,9 +156,9 @@ pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
 // this was written - see `contracts::sync`.
 pub fn sysroot_inlined(files: &[(String, String)]) -> String {
     if files.is_empty() { return String::from(""); }
-    let mut text: String = nikaia_std::index::get(&files, 0).1.to_string();
+    let mut text: String = nikaia_std::block::Text::from(nikaia_std::index::get(&files, 0).1.to_string());
     for at in 1..files.len() as i64 {
-        let replaced = text.replace(&format!("include!(\"{}\");", nikaia_std::index::get(&files, (at) as usize).0), &nikaia_std::index::get(&files, (at) as usize).1);
+        let replaced = nikaia_std::block::Text::from(text.replace(&*format!("include!(\"{}\");", nikaia_std::index::get(&files, (at) as usize).0), &*nikaia_std::index::get(&files, (at) as usize).1));
         text = replaced;
     }
     text
@@ -166,7 +166,7 @@ pub fn sysroot_inlined(files: &[(String, String)]) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_contains(files: &[(String, String)], needle: &str) -> bool { files.iter().any(|file| { file.1.contains(needle) }) }
+pub fn sysroot_contains(files: &[(String, String)], needle: &str) -> bool { files.iter().any(|file| { file.1.contains(AsRef::<str>::as_ref(needle)) }) }
 
 pub(crate) async fn sysroot_holds(path: &std::path::Path, text: &str) -> bool {
     let now = match fs::read_to_string(path, &fs::Root::Anywhere).await {
@@ -177,9 +177,9 @@ pub(crate) async fn sysroot_holds(path: &std::path::Path, text: &str) -> bool {
 }
 
 pub async fn sysroot_drift(files: &[(String, String)], dir: &std::path::Path) -> Vec<String> {
-    let mut drifted: Vec<String> = vec![];
-    for file in files.iter() { if !sysroot_holds(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(file.0))), &file.1).await { drifted.push(file.0.to_string()); } }
-    let kept: Vec<String> = files.iter().map(|file| { file.0.to_string() }).collect::<Vec<_>>();
+    #[allow(unused_mut)] let mut drifted: Vec<String> = vec![];
+    for file in files.iter() { if !sysroot_holds(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(file.0))), &file.1).await { drifted.push(nikaia_std::block::Text::from(file.0.to_string())); } }
+    let kept: Vec<String> = files.iter().map(|file| { nikaia_std::block::Text::from(file.0.to_string()) }).collect::<Vec<_>>(); #[allow(unused_mut, clippy::redundant_locals)] let mut drifted = drifted;
     drifted.extend(sysroot_stale(dir, &kept));
     drifted
 }
@@ -187,7 +187,7 @@ pub async fn sysroot_drift(files: &[(String, String)], dir: &std::path::Path) ->
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn sysroot_stale(dir: &std::path::Path, kept: &[String]) -> Vec<String> {
-    let mut stale: Vec<String> = sysroot_generated(dir).iter().filter(|&name| { !nikaia_std::list::contains(&kept, &name) }).map(|name| { name.to_string() }).collect::<Vec<_>>();
+    let mut stale: Vec<String> = sysroot_generated(dir).iter().filter(|&name| { !nikaia_std::list::contains(&kept, &name) }).map(|name| { nikaia_std::block::Text::from(name.to_string()) }).collect::<Vec<_>>();
     stale.sort();
     stale
 }
@@ -232,10 +232,10 @@ pub fn sysroot_unpack(packed: &str) -> Option<Vec<(String, String)>> {
     for at in 0..pieces.len() as i64 {
         let line: String = match ((at + 1) as usize) < pieces.len() {
             true => format!("{}\n", *nikaia_std::index::get(&pieces, (at) as usize)),
-            false => (*nikaia_std::index::get(&pieces, (at) as usize)).to_string(),
+            false => nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, (at) as usize)).to_string()),
         };
         if line.is_empty() { continue; }
-        if line.starts_with(SYSROOT_PACKED) { files.push((nikaia_std::index::or(line.strip_prefix(SYSROOT_PACKED), || "").trim_end().to_string(), String::from(""))); } else {
+        if line.starts_with(AsRef::<str>::as_ref(SYSROOT_PACKED)) { files.push((nikaia_std::block::Text::from(nikaia_std::index::or(line.strip_prefix(AsRef::<str>::as_ref(SYSROOT_PACKED)), || "").trim_end().to_string()), String::from(""))); } else {
             if files.is_empty() { return None; }
             let last = files.len() as i64 - 1;
             files[nikaia_std::index::at(last)].1.push_str(&line);

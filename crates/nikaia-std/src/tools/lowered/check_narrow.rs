@@ -82,9 +82,9 @@ pub fn check_narrow_proved_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
             let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
             if *op == BinaryOp::Ne && holds || *op == BinaryOp::Eq && !holds {
                 let left: Option<String> = check_narrow_tested(world, lhs, rhs);
-                if left.is_some() { names.push(nikaia_std::index::or(left.as_deref(), || "").to_string()); } else {
+                if left.is_some() { names.push(nikaia_std::block::Text::from(nikaia_std::index::or(left.as_deref(), || "").to_string())); } else {
                     let right: Option<String> = check_narrow_tested(world, rhs, lhs);
-                    if right.is_some() { names.push(nikaia_std::index::or(right.as_deref(), || "").to_string()); }
+                    if right.is_some() { names.push(nikaia_std::block::Text::from(nikaia_std::index::or(right.as_deref(), || "").to_string())); }
                 }
             } else if *op == BinaryOp::And && holds || *op == BinaryOp::Or && !holds {
                 names.extend(check_narrow_proved_names(world, lhs, holds));
@@ -122,7 +122,7 @@ pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: 
     let mut markers: Vec<CheckLocal> = vec![];
     for name in names.iter() {
         let path = name.contains('.');
-        let root_name: String = nikaia_std::index::or(name.split('.').next(), || "").to_string();
+        let root_name: String = nikaia_std::block::Text::from(nikaia_std::index::or(name.split('.').next(), || "").to_string());
         let found: Option<CheckLocal> = state.binding(&root_name);
         if found.is_none() { continue; }
         let mut local: CheckLocal = match found { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -133,7 +133,7 @@ pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: 
         };
         if path {
             root = local.id;
-            local = CheckLocal::free(name.to_string(), Ty::Unknown, state.a_new_binding());
+            local = CheckLocal::free(nikaia_std::block::Text::from(name.to_string()), Ty::Unknown, state.a_new_binding());
             inner = Ty::Unknown;
         }
         let unknown = matches!(inner, Ty::Unknown);
@@ -166,7 +166,7 @@ pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<
     for marker in markers.iter() { state.scope[nikaia_std::index::at(frame)].push(marker.clone()); }
 }
 
-pub fn check_narrow_ends(path: &str, written: &str) -> bool { path == written || path.starts_with(&format!("{}.", written)) }
+pub fn check_narrow_ends(path: &str, written: &str) -> bool { path == written || path.starts_with(&*format!("{}.", written)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -177,7 +177,7 @@ pub(crate) fn check_narrow_found(state: &CheckState, name: &str) -> Option<Check
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     if narrow.root >= 0 {
-        let root_name: String = nikaia_std::index::or(name.split('.').next(), || "").to_string();
+        let root_name: String = nikaia_std::block::Text::from(nikaia_std::index::or(name.split('.').next(), || "").to_string());
         let root: CheckLocal = match state.binding(&root_name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if root.id != narrow.root { return None; }
     }
@@ -192,7 +192,7 @@ pub(crate) fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> 
     if from > state.written_at.len() as i64 { from = state.written_at.len() as i64; }
     while from < state.written_at.len() as i64 {
         let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(from));
-        if check_narrow_ends(name, &written.0) && written.1 != here { return CheckProved::Lost(CheckLost { name: name.to_string(), at: written.1, written: written.0.to_string(), handed: false }); }
+        if check_narrow_ends(name, &written.0) && written.1 != here { return CheckProved::Lost(CheckLost { name: nikaia_std::block::Text::from(name.to_string()), at: written.1, written: nikaia_std::block::Text::from(written.0.to_string()), handed: false }); }
         from = from + 1;
     }
     if narrow.root >= 0 {
@@ -202,11 +202,11 @@ pub(crate) fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> 
         if handed_from > state.narrowing.handed_at.len() as i64 { handed_from = state.narrowing.handed_at.len() as i64; }
         while handed_from < state.narrowing.handed_at.len() as i64 {
             let handed = nikaia_std::index::get(&state.narrowing.handed_at, nikaia_std::index::at(handed_from));
-            if check_narrow_ends(name, &handed.0) && handed.1 != here { return CheckProved::Lost(CheckLost { name: name.to_string(), at: handed.1, written: handed.0.to_string(), handed: true }); }
+            if check_narrow_ends(name, &handed.0) && handed.1 != here { return CheckProved::Lost(CheckLost { name: nikaia_std::block::Text::from(name.to_string()), at: handed.1, written: nikaia_std::block::Text::from(handed.0.to_string()), handed: true }); }
             handed_from = handed_from + 1;
         }
     }
-    for repeats in state.repeats.iter() { if repeats.what == "loop" && repeats.frame > narrow.frame { for revived in repeats.revived.iter() { if check_narrow_ends(name, revived) { return CheckProved::Lost(CheckLost { name: name.to_string(), at: -1, written: revived.to_string(), handed: false }); } } } }
+    for repeats in state.repeats.iter() { if repeats.what == "loop" && repeats.frame > narrow.frame { for revived in repeats.revived.iter() { if check_narrow_ends(name, revived) { return CheckProved::Lost(CheckLost { name: nikaia_std::block::Text::from(name.to_string()), at: -1, written: nikaia_std::block::Text::from(revived.to_string()), handed: false }); } } } }
     CheckProved::Yes(narrow.inner.clone())
 }
 
@@ -328,7 +328,7 @@ pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_,
         CheckProved::Yes(_) => {
             let narrow: CheckNarrow = match check_narrow_found(&state, &path) { Some(__nikaia_value) => __nikaia_value, None => return ty.clone() };
             let proved = check_narrow_as_proved(state, node, ty, &inner, false, 0);
-            if !state.narrowing.turns.is_empty() && state.facts.narrowed_reads.contains_key(&node) { state.narrowing.path_reads.push(CheckPathRead { node, path: path.to_string(), frame: narrow.frame, span: Span { start: span.start, end: span.end } }); }
+            if !state.narrowing.turns.is_empty() && state.facts.narrowed_reads.contains_key(&node) { state.narrowing.path_reads.push(CheckPathRead { node, path: nikaia_std::block::Text::from(path.to_string()), frame: narrow.frame, span: Span { start: span.start, end: span.end } }); }
             return proved;
         },
         CheckProved::Lost(lost) => {
@@ -386,20 +386,20 @@ pub fn check_narrow_turn_ends(state: &mut CheckState) {
         let mut w = turn.written;
         while w < state.written_at.len() as i64 && lost.is_none() {
             let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(w));
-            if written.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &written.0) { lost = Some(CheckLost { name: read.path.to_string(), at: written.1, written: written.0.to_string(), handed: false }); }
+            if written.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &written.0) { lost = Some(CheckLost { name: nikaia_std::block::Text::from(read.path.to_string()), at: written.1, written: nikaia_std::block::Text::from(written.0.to_string()), handed: false }); }
             w = w + 1;
         }
         let mut h = turn.handed;
         while h < state.narrowing.handed_at.len() as i64 && lost.is_none() {
             let handed = nikaia_std::index::get(&state.narrowing.handed_at, nikaia_std::index::at(h));
-            if handed.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &handed.0) { lost = Some(CheckLost { name: read.path.to_string(), at: handed.1, written: handed.0.to_string(), handed: true }); }
+            if handed.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &handed.0) { lost = Some(CheckLost { name: nikaia_std::block::Text::from(read.path.to_string()), at: handed.1, written: nikaia_std::block::Text::from(handed.0.to_string()), handed: true }); }
             h = h + 1;
         }
         let found: CheckLost = match lost { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let path = read.path.to_string();
+        let path = nikaia_std::block::Text::from(read.path.to_string());
         let what = if found.handed { format!("hands `{}` over `mut`", found.written) } else { format!("assigns `{}`", found.written) };
         let mut finding = check_refusal("NK1102", &read.span, format!("`{}` may be `null` here: the loop around this read {} after it.", path, what), vec![format!("A test before proved `{}` is not `null`, but the next turn reaches this read after that write, and from there on `{}` is a `T?` again.", path, path)], Some(format!("Test `{}` inside the loop, or copy it into a local before it: `let x = {}`.", path, path)));
-        finding.labels.push(CheckLabel { span: Span { start: read.span.start, end: read.span.end }, word: path.to_string(), text: String::from("read here, on the next turn too"), main: true });
+        finding.labels.push(CheckLabel { span: Span { start: read.span.start, end: read.span.end }, word: nikaia_std::block::Text::from(path.to_string()), text: String::from("read here, on the next turn too"), main: true });
         finding.labels.push(check_narrow_label(&found));
         state.findings.push(finding);
         state.facts.narrowed_reads.remove(&read.node);
@@ -409,7 +409,7 @@ pub fn check_narrow_turn_ends(state: &mut CheckState) {
 
 pub(crate) fn check_narrow_label(lost: &CheckLost) -> CheckLabel {
     let text: String = if lost.handed { String::from("handed over `mut` here, after the test") } else { String::from("assigned here, after the test") };
-    CheckLabel { span: Span { start: u32::try_from(lost.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(lost.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(lost.written.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: lost.written.to_string(), text, main: false }
+    CheckLabel { span: Span { start: u32::try_from(lost.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(lost.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + u32::try_from(lost.written.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, word: nikaia_std::block::Text::from(lost.written.to_string()), text, main: false }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -439,7 +439,7 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
         None => None,
     };
     let lost: CheckLost = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-    let name = lost.name.to_string();
+    let name = nikaia_std::block::Text::from(lost.name.to_string());
     let last = state.findings.len() as i64 - 1;
     if lost.at == -1 {
         state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name));
@@ -447,7 +447,7 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
     }
     if lost.handed { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is handed over `mut` after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); } else if lost.written == name { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); } else { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); }
     let read = nikaia_std::index::get(&state.findings, nikaia_std::index::at(last)).span.clone();
-    state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: read, word: name.to_string(), text: String::from("read here, where it may be `null`"), main: true });
+    state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: read, word: nikaia_std::block::Text::from(name.to_string()), text: String::from("read here, where it may be `null`"), main: true });
     state.findings[nikaia_std::index::at(last)].labels.push(check_narrow_label(&lost));
 }
 

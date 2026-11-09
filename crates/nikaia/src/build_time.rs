@@ -10,6 +10,8 @@
 //! program (`crate::comptime_run`), so the build-time answer is the run-time
 //! one, and a check with no place to compile it refuses the value (D19).
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::tools::build_eval::{BtHost, BtRan, BtRead, bt_evaluate};
 
 use crate::assets::Reads;
@@ -69,11 +71,14 @@ impl<'a> BuildTime<'a> {
         }
     }
 
-    /// What an initialiser comes to.
+    /// What an initialiser comes to. A refusal is the tools' `BuildRefusal`
+    /// held in place, as the lowered tools allow it (`result_large_err`).
+    #[allow(clippy::result_large_err)]
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, Refusal> {
         self.run(expr)
     }
 
+    #[allow(clippy::result_large_err)]
     fn run(&self, expr: &Expr) -> Result<Value, Refusal> {
         let mut units: Vec<&Parsed> = vec![self.parsed];
         units.extend(self.beside.iter().copied());
@@ -106,7 +111,7 @@ impl Host<'_> {
 
 impl BtHost for Host<'_> {
     fn text(&self, unit: i64, symbol: winnow_grammar::Symbol) -> String {
-        self.units[unit as usize].text(symbol).to_string()
+        self.units[unit as usize].text(symbol).to_text()
     }
 
     fn char_of(&self, n: i64) -> Option<char> {
@@ -152,7 +157,7 @@ impl BtHost for Host<'_> {
                 wall: None,
             };
         };
-        let beside: Vec<&Parsed> = self.units[1..].to_vec();
+        let beside: Vec<&Parsed> = Vec::from(&self.units[1..]);
         let ask = crate::grammar_run::Ask {
             grammar: which,
             rule,

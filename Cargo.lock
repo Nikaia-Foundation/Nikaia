@@ -838,6 +838,9 @@ name = "task-block"
 version = "0.1.0"
 dependencies = [
  "allocator-api2",
+ "rayon",
+ "tether",
+ "winnow-grammar",
 ]
 
 [[package]]
@@ -1079,8 +1082,8 @@ dependencies = [
 
 [[package]]
 name = "winnow-grammar"
-version = "0.1.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=75724911#75724911b124626c05eb07efecf43b3f168de53e"
+version = "0.2.0"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=b8626fe5#b8626fe5a30324752bf3c9ef0466e9b35dcc269c"
 dependencies = [
  "ahash",
  "lasso",
@@ -1095,8 +1098,8 @@ dependencies = [
 
 [[package]]
 name = "winnow-grammar-macros"
-version = "0.1.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=75724911#75724911b124626c05eb07efecf43b3f168de53e"
+version = "0.2.0"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=b8626fe5#b8626fe5a30324752bf3c9ef0466e9b35dcc269c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1106,8 +1109,8 @@ dependencies = [
 
 [[package]]
 name = "winnow-grammar-model"
-version = "0.1.0"
-source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=75724911#75724911b124626c05eb07efecf43b3f168de53e"
+version = "0.2.0"
+source = "git+https://github.com/keywan-ghadami/winnow-grammar?rev=b8626fe5#b8626fe5a30324752bf3c9ef0466e9b35dcc269c"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -37,6 +37,8 @@ pub struct Read<'a, 'a1, 'a2, 'a3> {
 
 grammar! {
     grammar Http1 {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
 
         rule WS =
             ""
@@ -107,7 +109,7 @@ pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
     let mut keep_alive = false;
     let mut headers: Vec<Header<'_>> = vec![];
     for field in written.fields.iter() {
-        let name = field.name.trim().to_lowercase();
+        let name = nikaia_std::block::Text::from(field.name.trim().to_lowercase());
         let value = field.value.trim();
         if name == "content-length" {
             let n = nikaia_std::index::or(text::parse_i64(value), || -1);

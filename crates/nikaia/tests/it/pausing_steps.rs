@@ -17,6 +17,8 @@
 //! thread that could have been given up costs a thread.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 
 use nikaia::contracts::ty::Ty;
@@ -49,7 +51,7 @@ fn a_sequence_says_whether_its_step_pauses() {
         ),
         "{pausing:?}"
     );
-    assert_eq!(pausing.to_string(), "Seq[String] pauses throws");
+    assert_eq!(pausing.to_text(), "Seq[String] pauses throws");
 
     // The two states it is told apart from.
     assert!(matches!(
@@ -285,7 +287,7 @@ fn the_eager_walks_compile() {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -320,7 +322,7 @@ fn ran_with(purpose: &str, rust: &str, input: &[u8]) -> (String, bool) {
     let done = child.wait_with_output().expect("the program ends");
     let _ = std::fs::remove_dir_all(&dir);
     (
-        String::from_utf8_lossy(&done.stdout).trim().to_string(),
+        String::from_utf8_lossy(&done.stdout).trim().to_text(),
         done.status.success(),
     )
 }
@@ -342,7 +344,7 @@ fn a_lazy_walk_of_the_lines_hands_the_failure_to_the_walk() {
     assert!(walked.contains("io::lines().await.map("), "{walked}");
     assert_eq!(
         ran_with("lazy-lines", &walked, b"a\nbb\nccc\ndddd\n"),
-        ("2".to_string(), true)
+        ("2".to_text(), true)
     );
     // A line that is not text is a failing step: the walk ends there, and the
     // failure leaves `main` rather than shortening the list.
@@ -362,7 +364,7 @@ fn a_lazy_walk_of_the_lines_hands_the_failure_to_the_walk() {
     );
     assert_eq!(
         ran_with("lazy-lines-for", &looped, b"a\nbb\n\xFF\nccc\n"),
-        ("2".to_string(), false)
+        ("2".to_text(), false)
     );
 }
 

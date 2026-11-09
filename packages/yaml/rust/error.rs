@@ -105,7 +105,7 @@ pub(crate) fn parse(e: &native::Error) -> Error {
         line: (e.line - 1).max(0) as usize,
         column: (e.column - 1).max(0) as usize,
     };
-    new(ErrorImpl::Parse(e.message.clone(), mark))
+    new(ErrorImpl::Parse(e.message.as_str().to_owned(), mark))
 }
 
 /// Gives a message without a place the place and the path of the node it is

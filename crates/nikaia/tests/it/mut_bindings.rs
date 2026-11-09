@@ -28,6 +28,8 @@
 //! `tests/language/src/mut_bindings.nika`, run by `nikaia test`.
 
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::ty::TyOps;
 use nikaia::emit::{Build, emit_program};
@@ -104,7 +106,7 @@ fn the_word_is_in_the_signature_and_parses_back() {
     assert_eq!(
         signature.params[0],
         (
-            "out".to_string(),
+            "out".to_text(),
             nikaia::contracts::ty::Ty::parse("Vec[i64]")
         ),
         "the word is the parameter's and not part of its type"

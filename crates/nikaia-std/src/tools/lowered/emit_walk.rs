@@ -137,10 +137,10 @@ pub(crate) fn walk_template_holes(segments: &[Segment], bound: &mut Vec<(String,
     for segment in segments.iter() {
         match segment {
             Segment::Text(_) => { },
-            Segment::Hole { expr, .. } => { out.push((expr.to_string(), bound.to_owned())); },
+            Segment::Hole { expr, .. } => { out.push((nikaia_std::block::Text::from(expr.to_string()), bound.copy_owned())); },
             Segment::For { binding, collection, body } => {
-                out.push((collection.to_string(), bound.to_owned()));
-                bound.push((binding.to_string(), collection.to_string()));
+                out.push((nikaia_std::block::Text::from(collection.to_string()), bound.copy_owned()));
+                bound.push((nikaia_std::block::Text::from(binding.to_string()), nikaia_std::block::Text::from(collection.to_string())));
                 walk_template_holes(body, bound, out);
                 bound.pop();
             },

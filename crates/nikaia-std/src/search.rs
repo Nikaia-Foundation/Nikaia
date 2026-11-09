@@ -57,6 +57,22 @@ impl TextNeedle for String {
     }
 }
 
+/// A block's text is searched for as a `String` is (#490).
+impl TextNeedle for crate::block::Text {
+    #[inline]
+    fn first_in(&self, text: &str) -> Option<usize> {
+        self.as_str().first_in(text)
+    }
+    #[inline]
+    fn last_in(&self, text: &str) -> Option<usize> {
+        self.as_str().last_in(text)
+    }
+    #[inline]
+    fn replaced_in(&self, text: &str, to: &str, count: usize) -> String {
+        self.as_str().replaced_in(text, to, count)
+    }
+}
+
 impl TextNeedle for char {
     #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
@@ -136,8 +152,13 @@ pub fn rfind<N: TextNeedle + ?Sized>(text: &str, needle: &N) -> Option<i64> {
 /// `text` with the first `count` matches of `from` replaced by `to`; a `count`
 /// of 0 or less replaces nothing.
 #[inline]
-pub fn replacen<N: TextNeedle + ?Sized>(text: &str, from: &N, to: &str, count: i64) -> String {
-    from.replaced_in(text, to, usize::try_from(count).unwrap_or(0))
+pub fn replacen<N: TextNeedle + ?Sized>(
+    text: &str,
+    from: &N,
+    to: &str,
+    count: i64,
+) -> crate::block::Text {
+    crate::block::Text::from(from.replaced_in(text, to, usize::try_from(count).unwrap_or(0)))
 }
 
 #[cfg(test)]

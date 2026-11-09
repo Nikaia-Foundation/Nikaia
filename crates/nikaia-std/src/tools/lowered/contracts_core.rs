@@ -6,8 +6,8 @@
 pub fn contracts_headed(version: u32, toolchain: &str, inference: &str) -> Ledger {
     let mut ledger = Ledger::blank();
     ledger.version = version;
-    ledger.toolchain = toolchain.to_string();
-    ledger.inference = inference.to_string();
+    ledger.toolchain = nikaia_std::block::Text::from(toolchain.to_string());
+    ledger.inference = nikaia_std::block::Text::from(inference.to_string());
     ledger
 }
 

@@ -6,6 +6,8 @@
 //! `~/.cache/nikaia/run/`, which no editor of the author's has open.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 /// A program whose lowering `rustc` still refuses: a shift past the width of
@@ -30,7 +32,7 @@ fn a_backend_refusal_names_the_file_that_was_run() {
         .env_remove("CARGO_TARGET_DIR")
         .output()
         .expect("the nikaia binary runs");
-    let said = String::from_utf8_lossy(&ran.stderr).to_string();
+    let said = String::from_utf8_lossy(&ran.stderr).to_text();
     std::fs::remove_dir_all(&dir).ok();
     assert!(
         !ran.status.success(),
@@ -64,7 +66,7 @@ fn a_panic_names_the_file_that_was_run() {
         .env_remove("CARGO_TARGET_DIR")
         .output()
         .expect("the nikaia binary runs");
-    let said = String::from_utf8_lossy(&ran.stderr).to_string();
+    let said = String::from_utf8_lossy(&ran.stderr).to_text();
     std::fs::remove_dir_all(&dir).ok();
     assert!(!ran.status.success(), "it was meant to stop:\n{said}");
     let line = said

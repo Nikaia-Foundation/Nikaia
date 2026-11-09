@@ -3,6 +3,8 @@
 //! adapter: it parses the file for its comments (D2), hands the printer their
 //! places in characters, and guards what comes back (D3).
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -78,6 +80,7 @@ fn placeless(tree: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+        .into()
 }
 
 /// `nikaia fmt [FILE...] [--check]` (D5): the exit code.

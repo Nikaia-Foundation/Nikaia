@@ -30,15 +30,15 @@
 /// under no name, so it is in scope and names nothing.
 pub trait Join {
     /// The items, written with `separator` between them.
-    fn join(self, separator: &str) -> String;
+    fn join(self, separator: &str) -> crate::block::Text;
 }
 
 impl<I: Iterator> Join for I
 where
     I::Item: std::fmt::Display,
 {
-    fn join(self, separator: &str) -> String {
-        let mut out = String::new();
+    fn join(self, separator: &str) -> crate::block::Text {
+        let mut out = crate::block::Text::new();
         for (at, item) in self.enumerate() {
             if at > 0 {
                 out.push_str(separator);
@@ -210,8 +210,8 @@ impl<S: Step> Paused<S> {
     }
 
     /// Everything the sequence produces, as a list.
-    pub async fn collect(mut self) -> Vec<S::Item> {
-        let mut out = Vec::new();
+    pub async fn collect(mut self) -> crate::block::List<S::Item> {
+        let mut out = crate::block::List::new();
         while let Some(item) = self.next().await {
             out.push(item);
         }
@@ -243,11 +243,11 @@ impl<S: Step> Paused<S> {
     }
 
     /// Every item written one after another with this text between them.
-    pub async fn join(mut self, separator: &str) -> String
+    pub async fn join(mut self, separator: &str) -> crate::block::Text
     where
         S::Item: std::fmt::Display,
     {
-        let mut out = String::new();
+        let mut out = crate::block::Text::new();
         let mut first = true;
         while let Some(item) = self.next().await {
             if !first {
@@ -426,8 +426,8 @@ impl<S: Step<Item = Result<T, E>>, T, E> Failing<S> {
     }
 
     /// Everything the sequence produces, as a list, or the first failure.
-    pub async fn collect(mut self) -> Result<Vec<T>, E> {
-        let mut out = Vec::new();
+    pub async fn collect(mut self) -> Result<crate::block::List<T>, E> {
+        let mut out = crate::block::List::new();
         while let Some(item) = self.next().await {
             out.push(item?);
         }
@@ -463,11 +463,11 @@ impl<S: Step<Item = Result<T, E>>, T, E> Failing<S> {
 
     /// Every item written one after another with this text between them, or
     /// the first failure.
-    pub async fn join(mut self, separator: &str) -> Result<String, E>
+    pub async fn join(mut self, separator: &str) -> Result<crate::block::Text, E>
     where
         T: std::fmt::Display,
     {
-        let mut out = String::new();
+        let mut out = crate::block::Text::new();
         let mut first = true;
         while let Some(item) = self.next().await {
             let item = item?;
@@ -573,8 +573,11 @@ pub fn then_filter<I: IntoIterator, F: AsyncFnMut(&I::Item) -> bool>(
 
 /// **A list's own `map` with a lambda that pauses** (ADR-233 D2): the list,
 /// each item awaited in turn.
-pub async fn map_list<T, U>(items: Vec<T>, mut f: impl AsyncFnMut(T) -> U) -> Vec<U> {
-    let mut out = Vec::with_capacity(items.len());
+pub async fn map_list<T, U>(
+    items: crate::block::List<T>,
+    mut f: impl AsyncFnMut(T) -> U,
+) -> crate::block::List<U> {
+    let mut out = crate::block::List::with_capacity(items.len());
     for item in items {
         out.push(f(item).await);
     }
@@ -584,7 +587,10 @@ pub async fn map_list<T, U>(items: Vec<T>, mut f: impl AsyncFnMut(T) -> U) -> Ve
 /// **`sort_by_key` with a key that pauses** (ADR-233 D2): each key is worked
 /// out once, in order, and the list is sorted by them - stably, as the
 /// synchronous entry sorts.
-pub async fn sort_by_key<T, K: Ord>(items: &mut Vec<T>, mut key: impl AsyncFnMut(&T) -> K) {
+pub async fn sort_by_key<T, K: Ord>(
+    items: &mut crate::block::List<T>,
+    mut key: impl AsyncFnMut(&T) -> K,
+) {
     let mut keyed = Vec::with_capacity(items.len());
     for item in items.drain(..) {
         let k = key(&item).await;
@@ -678,6 +684,7 @@ pub async fn and_modify<'a, E: Slot<'a>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::names::vec;
 
     fn run<T>(future: impl Future<Output = T>) -> T {
         crate::rt::exec::block_on(future)

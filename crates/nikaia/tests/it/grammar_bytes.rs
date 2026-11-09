@@ -9,6 +9,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const GRAMMAR: &str = "grammar Num {\n    entry rule num -> i64 = n:dec[i64](digit+) -> { n }\n}\n";
 
@@ -91,7 +93,7 @@ fn run(name: &str, source: &str, files: &[(&str, &[u8])]) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).trim().to_string()
+    String::from_utf8_lossy(&run.stdout).trim().to_text()
 }
 
 const PAIR: &str = "grammar Pair {\n    entry rule pair -> i64 = name:until(\";\") sep:\";\" rest:any* -> { name.len() * 100 + sep.len() * 10 + rest.len() }\n}\n";
@@ -144,7 +146,7 @@ fn codes(source: &str) -> Vec<String> {
     nikaia::check::check(&parsed, &own, &library)
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -213,7 +215,7 @@ fn a_bad_byte_in_a_name_is_named_where_it_stands() {
     ] {
         let out = run("grammar-bytes-bad-name", ROW, &[("d", input)]);
         assert!(
-            first_line(&out).starts_with(&format!("invalid UTF-8 at byte {at}: 0xff")),
+            first_line(&out).starts_with(&*format!("invalid UTF-8 at byte {at}: 0xff")),
             "{out}"
         );
     }
@@ -258,7 +260,7 @@ fn a_bad_byte_in_a_later_piece_counts_from_the_start() {
     assert!(
         lines
             .next()
-            .is_some_and(|l| l.starts_with(&format!("invalid UTF-8 at byte {at}: 0xff"))),
+            .is_some_and(|l| l.starts_with(&*format!("invalid UTF-8 at byte {at}: 0xff"))),
         "{out}"
     );
 }
@@ -278,7 +280,7 @@ fn a_lone_any_is_a_checked_character_over_bytes() {
     for (input, byte) in [(&b"<\xff;"[..], "0xff"), (&b"<\xe2\x82"[..], "0xe2")] {
         let out = run("grammar-bytes-any-bad", FIRST, &[("d", input)]);
         assert!(
-            first_line(&out).starts_with(&format!("invalid UTF-8 at byte 1: {byte}")),
+            first_line(&out).starts_with(&*format!("invalid UTF-8 at byte 1: {byte}")),
             "{out}"
         );
     }

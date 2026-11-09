@@ -5,6 +5,8 @@
 //! refused for a value that does not copy (`NK1280`).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::ast::{Expr, Item, Stmt};

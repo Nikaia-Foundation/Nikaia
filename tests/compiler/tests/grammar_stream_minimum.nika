@@ -1,0 +1,30 @@
+// An `@stream` entry over `item+` checks its minimum at the end of the
+// stream (ADR-grammar-2 D7, #1459): an empty input fails where the first
+// item should start, with that item's error.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item+
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+fn count(text: String) -> i64 throws {
+	let mut seen = 0
+	for it in Words::items(text) {
+		println(it.word)
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	println(f"{count("x;y;")} words")
+	let none = count("") catch {
+		println(f"empty: {error}")
+		-1
+	}
+	println(none)
+}

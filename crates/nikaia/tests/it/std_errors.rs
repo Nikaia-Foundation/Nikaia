@@ -17,6 +17,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn std_ledger() -> Ledger {
     Ledger::parse(STD).expect("std ships a ledger")
@@ -57,11 +59,7 @@ fn the_reading_and_writing_entries_name_one_type() {
         "foreign::CStr::to_string",
     ] {
         let (_, contract) = library.lookup(key).unwrap_or_else(|| panic!("{key}"));
-        assert_eq!(
-            contract.fails_with,
-            vec!["io::IoError".to_string()],
-            "{key}"
-        );
+        assert_eq!(contract.fails_with, vec!["io::IoError".to_text()], "{key}");
     }
 }
 
@@ -73,7 +71,7 @@ fn the_locks_two_keep_overtaken() {
     let library = std_ledger();
     for key in ["Locked::set(after)", "SharedMut::set(after)"] {
         let (_, contract) = library.lookup(key).unwrap_or_else(|| panic!("{key}"));
-        assert_eq!(contract.fails_with, vec!["Overtaken".to_string()], "{key}");
+        assert_eq!(contract.fails_with, vec!["Overtaken".to_text()], "{key}");
     }
 }
 
@@ -107,7 +105,7 @@ fn a_program_that_reads_a_file_names_what_it_throws() {
                   \x20   return fs::read_to_string(ref path, fs::Root::Anywhere)\n\
                   }\n\
                   fn main() { }\n";
-    assert_eq!(throws_of(source, "load"), vec!["io::IoError".to_string()]);
+    assert_eq!(throws_of(source, "load"), vec!["io::IoError".to_text()]);
 }
 
 /// **And a program that reads a file *and* throws its own has both**, which is
@@ -128,6 +126,6 @@ fn a_program_with_its_own_error_too_has_both() {
                   fn main() { }\n";
     assert_eq!(
         throws_of(source, "load"),
-        vec!["ConfigError".to_string(), "io::IoError".to_string()]
+        vec!["ConfigError".to_text(), "io::IoError".to_text()]
     );
 }

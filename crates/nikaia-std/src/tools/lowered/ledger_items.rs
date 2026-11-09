@@ -11,13 +11,13 @@ pub fn types_declared_in(items: &[Spanned<Item>], words: &winnow_grammar::Intern
         match &item.node {
             Item::Struct { name, .. } => {
                 let name = *name;
-                declared.insert(words.resolve(name).to_string());
+                declared.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             },
             Item::Enum { name, .. } => {
                 let name = *name;
-                declared.insert(words.resolve(name).to_string());
+                declared.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             },
-            Item::Extern { opaque, .. } => { for handle in opaque.iter() { declared.insert(words.resolve(handle.node.name).to_string()); } },
+            Item::Extern { opaque, .. } => { for handle in opaque.iter() { declared.insert(nikaia_std::block::Text::from(words.resolve(handle.node.name).to_string())); } },
             _ => { },
         }
     }
@@ -29,7 +29,7 @@ pub fn impl_parameters(words: &winnow_grammar::InternerContext, target: &Type, d
     for slot in target.generics.iter() {
         if !slot.generics.is_empty() || slot.is_tuple || slot.is_view || slot.is_nullable { continue; }
         let name = words.resolve(slot.name);
-        if !is_offered(name) && !declared.contains(name) { out.push(name.to_string()); }
+        if !is_offered(name) && !declared.contains(name) { out.push(nikaia_std::block::Text::from(name.to_string())); }
     }
     out
 }
@@ -59,13 +59,13 @@ pub fn declared_extern(words: &winnow_grammar::InternerContext, aliases: &collec
         let mut declared = declared_trait_method(words, aliases, "", &declaration.node, false);
         declared.contract.sync_claim = Sync::Asserted;
         declared.contract.fails_with = vec![];
-        out.push(DeclaredFn { key: words.resolve(declaration.node.name).to_string(), contract: declared.contract });
+        out.push(DeclaredFn { key: nikaia_std::block::Text::from(words.resolve(declaration.node.name).to_string()), contract: declared.contract });
     }
     out
 }
 
 pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, definition: &GrammarDef) -> Vec<DeclaredFn> {
-    let owner = words.resolve(definition.name).to_string();
+    let owner = nikaia_std::block::Text::from(words.resolve(definition.name).to_string());
     let mut out: Vec<DeclaredFn> = vec![];
     for rule in definition.rules.iter() {
         if !rule.is_entry { continue; }
@@ -86,9 +86,9 @@ pub fn declared_grammar(words: &winnow_grammar::InternerContext, aliases: &colle
             result = Some(Ty::Seq { item: Box::new(item), is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() });
         }
         let mut params: Vec<(String, Ty)> = vec![(String::from("input"), Ty::Unknown)];
-        for arg in rule.args.iter() { params.push((words.resolve(arg.name).to_string(), written_ty(words, aliases, &arg.ty))); }
+        for arg in rule.args.iter() { params.push((nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), written_ty(words, aliases, &arg.ty))); }
         let mut options: Vec<ConfigContract> = vec![];
-        for option in rule.config.iter() { options.push(ConfigContract { name: words.resolve(option.name).to_string(), ty: written_ty(words, aliases, &option.ty), default: default_text(&option.default) }); }
+        for option in rule.config.iter() { options.push(ConfigContract { name: nikaia_std::block::Text::from(words.resolve(option.name).to_string()), ty: written_ty(words, aliases, &option.ty), default: default_text(&option.default) }); }
         contract.signature = Some(Signature { bounds: vec![], mutable: vec![], params, config: options, result });
         out.push(DeclaredFn { key: format!("{}::{}", owner, words.resolve(rule.name)), contract });
     }
@@ -121,38 +121,38 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         },
         BuildValue::Text(text) => return Some(format!("\"{}\"", as_a_literal(text))),
         BuildValue::Struct { name, fields } => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
                 let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
             }
-            return Some(format!("{} {{ {} }}", name, written.join(", ")));
+            return Some(format!("{} {{ {} }}", name, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::List(items) => {
             for item in items.iter() { if !is_a_scalar_value(item) { return None; } }
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() {
                 let text = match literal_of(item, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
-            return Some(format!("[{}]", written.join(", ")));
+            return Some(format!("[{}]", nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in payload.iter() {
                 let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
-            return Some(format!("{}::{}({})", ty, variant, written.join(", ")));
+            return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Constant { constructor, parts } => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in parts.iter() {
                 let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
             }
-            return Some(format!("{}({})", constructor, written.join(", ")));
+            return Some(format!("{}({})", constructor, nikaia_std::block::Text::from(written.join(", "))));
         },
         _ => return None,
     }
@@ -180,16 +180,16 @@ pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, 
         Stmt::Return(returned) => match returned { Some(__nikaia_value) => __nikaia_value, None => return None },
         _ => return None,
     };
-    let key = words.resolve(symbol).to_string();
+    let key = nikaia_std::block::Text::from(words.resolve(symbol).to_string());
     let contract = match *nikaia_std::index::get(&ledger.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !contract.sync_claim.is_sync() || !contract.ensures.is_empty() { return None; }
     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for arg in args.iter() { names.insert(words.resolve(arg.name).to_string()); }
+    for arg in args.iter() { names.insert(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
     let mut nodes: Vec<SolverTerm> = vec![];
     let term = match lin_term(value, words, &|candidate| { names.contains(candidate) }, &|name| { nothing_pinned(name) }, &mut nodes) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let text = term_ledger_text(term, &|at| { (*nikaia_std::index::get(&nodes, nikaia_std::index::at(at))).clone() });
     let condition = format!("result == {}", text);
-    let mut readable = names.to_owned();
+    let mut readable = names.copy_owned();
     readable.insert(String::from("result"));
     if !reads_back(&condition, &readable) { return None; }
     Some(PublishedEnsures { key, condition })
@@ -225,7 +225,7 @@ pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[
                     let target = view.text(target.name);
                     match trait_name {
                         None => { },
-                        Some(name) => { ledger.implementations.entry(String::from(view.text(name))).or_default().insert(target.to_string()); },
+                        Some(name) => { ledger.implementations.entry(String::from(view.text(name))).or_default().insert(nikaia_std::block::Text::from(target.to_string())); },
                     }
                     for (m, method) in methods.iter().enumerate().map(|(at, item)| (at as i64, item)) {
                         let entry = match declared_function(view.words, view.aliases, &method.node, Some(&target), &outer, Some(&itself)) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -257,7 +257,7 @@ pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[
                     contract.fields = declared_fields(view.words, view.aliases, generics, fields, is_extern);
                     for (at, f) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) {
                         let d = match f.default.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        if a_literal(&d.value) { contract.fields[nikaia_std::index::at(at)].default = default_text(&d.value); } else { defaults.push(ComputedAt { key: key.to_string(), at, unit: u, item: i, method: None, option: view.text(f.name), field: true }); }
+                        if a_literal(&d.value) { contract.fields[nikaia_std::index::at(at)].default = default_text(&d.value); } else { defaults.push(ComputedAt { key: nikaia_std::block::Text::from(key.to_string()), at, unit: u, item: i, method: None, option: view.text(f.name), field: true }); }
                     }
                     let mark = item.attributes.iter().find(|&a| { view.unaliased(&view.text(a.name)) == check_attributes_mark_name() });
                     contract.mark = match mark {
@@ -279,7 +279,7 @@ pub(crate) fn computed_defaults(into: &mut Vec<ComputedAt>, key: &str, unit: i64
         Item::Fn { config, .. } => config,
         _ => return,
     };
-    for at in computed_options(function) { into.push(ComputedAt { key: key.to_string(), at, unit, item, method, option: view.text(nikaia_std::index::get(&config, nikaia_std::index::at(at)).name), field: false }); }
+    for at in computed_options(function) { into.push(ComputedAt { key: nikaia_std::block::Text::from(key.to_string()), at, unit, item, method, option: view.text(nikaia_std::index::get(&config, nikaia_std::index::at(at)).name), field: false }); }
 }
 
 pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], library: &Ledger, computed: &impl Fn(i64, &Ty, &Expr) -> Option<String>) {
@@ -291,10 +291,10 @@ pub fn attribute_values(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_,
                 Item::Enum { name, .. } => { let name = *name; view.text(name) },
                 _ => continue,
             };
-            for text in attribute_texts(&ledger, library, view, u, &item.attributes, computed) { found.push((owner.to_string(), 0, 0, text)); }
+            for text in attribute_texts(&ledger, library, view, u, &item.attributes, computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 0, 0, text)); }
             match &item.node {
-                Item::Struct { fields, .. } => { for (at, field) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &field.attributes, computed) { found.push((owner.to_string(), 1, at, text)); } } },
-                Item::Enum { variants, .. } => { for (at, variant) in variants.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &variant.attributes, computed) { found.push((owner.to_string(), 2, at, text)); } } },
+                Item::Struct { fields, .. } => { for (at, field) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &field.attributes, computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 1, at, text)); } } },
+                Item::Enum { variants, .. } => { for (at, variant) in variants.iter().enumerate().map(|(at, item)| (at as i64, item)) { for text in attribute_texts(&ledger, library, view, u, &variant.attributes, computed) { found.push((nikaia_std::block::Text::from(owner.to_string()), 2, at, text)); } } },
                 _ => { },
             }
         }
@@ -314,7 +314,7 @@ pub fn ledger_items_stored(codes: &mut Vec<collections::BTreeMap<String, CheckSt
     let mut all: collections::BTreeMap<String, CheckStoredCode> = collections::BTreeMap::new();
     for unit in codes.drain(..) {
         for (key, code) in unit.into_iter() {
-            let entry = all.entry(key.to_string()).or_insert_with(CheckStoredCode::empty);
+            let entry = all.entry(nikaia_std::block::Text::from(key.to_string())).or_insert_with(CheckStoredCode::empty);
             entry.resolved.extend(code.resolved);
             entry.unresolved |= code.unresolved;
             entry.free.extend(code.free);
@@ -353,10 +353,10 @@ pub fn ledger_infer_package<H: LedgerInferHost>(ledger: &mut Ledger, units: &[Pa
     ledger_result_sources(ledger, units.len() as i64, host);
     host.infer_keeps(ledger);
     for _round in 0..8 {
-        let before: Vec<Vec<String>> = ledger.functions.values().map(|c| { c.keeps.to_owned() }).collect::<Vec<_>>();
+        let before: Vec<Vec<String>> = ledger.functions.values().map(|c| { c.keeps.copy_owned() }).collect::<Vec<_>>();
         ledger_result_sources(ledger, units.len() as i64, host);
         host.infer_keeps(ledger);
-        let after: Vec<Vec<String>> = ledger.functions.values().map(|c| { c.keeps.to_owned() }).collect::<Vec<_>>();
+        let after: Vec<Vec<String>> = ledger.functions.values().map(|c| { c.keeps.copy_owned() }).collect::<Vec<_>>();
         if after == before { break; }
     }
     for unit in 0..units.len() as i64 { host.infer_sharing(ledger, unit); }

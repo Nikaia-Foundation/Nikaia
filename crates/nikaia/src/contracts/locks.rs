@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/locks.rs
 //
 // Whether a function **touches a lock** ([ADR-281](../../../../docs/specification/adr/adr-281.md)

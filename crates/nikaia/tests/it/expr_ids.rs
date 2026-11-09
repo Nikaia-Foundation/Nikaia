@@ -7,6 +7,8 @@
 
 use nikaia::ast::{Expr, Item, Stmt};
 use nikaia::parser::{parse_expression, parse_expression_from, parse_to_ast};
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 
 /// Every id in the printed form of a tree, in the order printed.

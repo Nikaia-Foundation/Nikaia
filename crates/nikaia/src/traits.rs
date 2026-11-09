@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/traits.rs
 //
 // Kap 4.7: what an `impl` owes the `trait` it names.

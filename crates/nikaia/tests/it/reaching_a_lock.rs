@@ -23,6 +23,8 @@
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn crossings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");

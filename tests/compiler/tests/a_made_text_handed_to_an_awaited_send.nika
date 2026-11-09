@@ -1,0 +1,15 @@
+use std::channel
+
+// Text made with `f"..."` and handed straight to a `send` that pauses, in a
+// task that may run on another thread (#490): what the text was made from
+// is not held across the pause, so the task can cross threads.
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[String](100)
+    spawn fn {
+        let state = "complete"
+        tx.send(f"Calculation {state}")
+    }
+    let heard: String? = rx.recv()
+    println(heard ?? "nobody sent anything")
+}

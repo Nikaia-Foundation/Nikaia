@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/trust.rs
 //
 // Where a program's bytes came from (ADR-010).
@@ -261,7 +263,7 @@ fn join(
     }
     if unresolved {
         reasons.push(Reason {
-            source: UNRESOLVED.to_string(),
+            source: UNRESOLVED.to_text(),
             provenance: Provenance::Untrusted,
             marked: None,
         });
@@ -303,7 +305,7 @@ pub fn render(trust: &Trust, path: &str, source: &str) -> String {
             untrusted: r.provenance == Provenance::Untrusted,
             marked_at: match &r.marked {
                 None => String::new(),
-                Some(None) => "a call in another file of this package".to_string(),
+                Some(None) => "a call in another file of this package".to_text(),
                 Some(Some(span)) => format!(
                     "{path}:{}",
                     winnow_grammar::span::line_column(source, span.at()).0

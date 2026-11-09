@@ -26,10 +26,10 @@ pub(crate) fn check_walks_clash(earlier: &Accounted, later: &Accounted) -> Optio
 
 pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], mentioned: &[collections::BTreeSet<String>], i: i64, j: i64) -> Option<(String, bool)> {
     for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(i))).iter() {
-        if (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).contains(name) { return Some((name.to_string(), true)); }
-        if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(j))).contains(name) { return Some((name.to_string(), false)); }
+        if (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), true)); }
+        if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(j))).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), false)); }
     }
-    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(i))).contains(name) { return Some((name.to_string(), false)); } }
+    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(i))).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), false)); } }
     None
 }
 
@@ -118,7 +118,7 @@ pub(crate) fn check_walks_lock_door(state: &CheckState, value: &Expr, words: &wi
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if !config.is_empty() { return CheckWalksDoor::NotADoor; }
-            check_walks_door_on(state, value, receiver, &words.resolve(method).to_string(), args, words, walking)
+            check_walks_door_on(state, value, receiver, &nikaia_std::block::Text::from(words.resolve(method).to_string()), args, words, walking)
         },
         _ => CheckWalksDoor::NotADoor,
     }
@@ -128,18 +128,18 @@ pub(crate) fn check_walks_door_on(state: &CheckState, value: &Expr, receiver: &E
     let write = door == "set" || door == "update";
     if !write && door != "get" && door != "access" { return CheckWalksDoor::NotADoor; }
     let name = match receiver {
-        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
         _ => return CheckWalksDoor::NotADoor,
     };
     let held = match state.lookup(&name) { Some(__nikaia_value) => __nikaia_value, None => return CheckWalksDoor::NotADoor };
     let lock = match held {
-        Ty::Named { ref name, .. } => name.to_string(),
+        Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => return CheckWalksDoor::NotADoor,
     };
     if lock != "SharedMut" && lock != "Locked" { return CheckWalksDoor::NotADoor; }
     let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new();
     names_in(value, words, &mut mentions);
-    let mut reaches: Vec<Reached> = vec![Reached { kind: String::from("lock"), named: Some(name.to_string()), unknown: false, write }];
+    let mut reaches: Vec<Reached> = vec![Reached { kind: String::from("lock"), named: Some(nikaia_std::block::Text::from(name.to_string())), unknown: false, write }];
     for arg in args.iter() {
         let inside = match check_walks_task_operations(state, arg, words, walking) { Some(__nikaia_value) => __nikaia_value, None => return CheckWalksDoor::Unaccounted };
         for operation in inside.iter() { reaches.extend(operation.reaches.iter().cloned()); }
@@ -222,18 +222,18 @@ impl CheckState {
         for stmt in block.stmts.iter() {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
-                    let mut bound: Vec<String> = vec![];
+                    let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for name in names.iter() {
                         let name = *name;
-                        bound.push(world.words.resolve(name).to_string());
+                        bound.push(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
                     }
-                    let name = bound.join("`, `");
+                    let name = nikaia_std::block::Text::from(bound.join("`, `"));
                     self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: stmt.span.clone(), code: String::from("NK2104"), message: format!("A branch of an `overlap` can't declare `{}`.", name), notes: vec![String::from("Each statement in the block runs as its own branch, and the block's value is their results in the order they're written.")], help: Some(format!("Take the value from the block instead: `let ({}, …) = overlap {{ … }}`.", name)), labels: vec![] });
                 },
                 _ => { },
             }
         }
-        let mut operations: Vec<Accounted> = vec![];
+        let mut operations: Vec<Accounted> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for stmt in block.stmts.iter() { operations.push(accounted_beside(&stmt.node, world.words, &Walking { own: world.own, library: world.library, into: Going::Ours })); }
         let mut mentioned: Vec<collections::BTreeSet<String>> = vec![];
         for stmt in block.stmts.iter() {
@@ -314,10 +314,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
-        let mut inside: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut inside: Vec<String> = vec![];
         self.names_inside_boxes(world, pattern, &mut inside);
         if inside.is_empty() { return; }
-        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut inside = inside;
         for each in check_visit_preorder(guard) { check_walks_reads(world, host, each, &inside, &mut read); }
         if read.is_empty() { return; }
         let mut typed: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
@@ -328,7 +328,7 @@ impl CheckState {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if (a_copy_by_value(&ty) || ty.is_a_view()) && !check_core_flow_a_slice(&ty) { copied.insert(name.to_string()); }
+            if (a_copy_by_value(&ty) || ty.is_a_view()) && !check_core_flow_a_slice(&ty) { copied.insert(nikaia_std::block::Text::from(name.to_string())); }
         }
         self.facts.guards_inside_boxes.insert(id_of(body) as i64, copied);
     }
@@ -362,15 +362,15 @@ impl CheckState {
         match func {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
-                name = world.words.resolve(symbol).to_string();
+                name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
             },
             Expr::Path(segments, _) => {
-                let mut parts: Vec<String> = vec![];
+                let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for segment in segments.iter() {
                     let segment = *segment;
-                    parts.push(world.words.resolve(segment).to_string());
+                    parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
                 }
-                let joined = parts.join("::");
+                let joined = nikaia_std::block::Text::from(parts.join("::"));
                 name = world.here.unaliased(&joined);
             },
             _ => {
@@ -383,8 +383,8 @@ impl CheckState {
             let at = nikaia_std::search::find(&name, &"::", 0);
             if at.is_some() {
                 let cut = nikaia_std::index::or(at, || 0);
-                let ty = nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_string();
-                let variant = nikaia_std::index::get(&name, nikaia_std::index::at(cut + "::".len() as i64..)).to_string();
+                let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_string());
+                let variant = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(cut + "::".len() as i64..)).to_string());
                 constructs = self.is_variant(&ty, &variant);
             }
         }
@@ -431,8 +431,8 @@ pub(crate) fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_,
     match expr {
         Expr::Variable(symbol, _) => {
             let symbol = *symbol;
-            let name = world.words.resolve(symbol).to_string();
-            for bound in inside.iter() { if *bound == name { read.insert(name.to_string()); } }
+            let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
+            for bound in inside.iter() { if *bound == name { read.insert(nikaia_std::block::Text::from(name.to_string())); } }
         },
         _ => { },
     }

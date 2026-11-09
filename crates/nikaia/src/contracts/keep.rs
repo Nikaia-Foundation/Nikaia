@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/keep.rs
 //
 // Where a buffer lives once views of it outlive the scope that made it
@@ -262,7 +264,7 @@ fn keeping_positions(plan: &Plan) -> BTreeSet<String> {
     plan.escapes
         .iter()
         .filter_map(|(_, escape)| match escape {
-            Escape::Result => Some(RESULT.to_string()),
+            Escape::Result => Some(RESULT.to_text()),
             Escape::Param(name) => Some(name.clone()),
             _ => None,
         })

@@ -9,6 +9,8 @@
 
 use crate::common;
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::emit::{Build, emit_program};
@@ -60,7 +62,7 @@ fn ran(purpose: &str, source: &str, how: Build) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     std::fs::remove_dir_all(&dir).ok();
-    String::from_utf8_lossy(&out.stdout).to_string()
+    String::from_utf8_lossy(&out.stdout).to_text()
 }
 
 fn runs(purpose: &str, source: &str, expected: &str) {

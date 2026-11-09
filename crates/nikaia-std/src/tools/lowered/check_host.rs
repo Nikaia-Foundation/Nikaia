@@ -69,8 +69,8 @@ pub(crate) fn host_known(local: &CheckLocal) -> Option<BuildValue> {
 }
 
 pub(crate) fn host_stopped_line(said: &str) -> String {
-    for line in said.lines() { if line.contains("the program stopped") { return line.to_string(); } }
-    said.to_string()
+    for line in said.lines() { if line.contains("the program stopped") { return nikaia_std::block::Text::from(line.to_string()); } }
+    nikaia_std::block::Text::from(said.to_string())
 }
 
 pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, enums: &collections::BTreeSet<String>) -> bool {
@@ -113,7 +113,7 @@ pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: 
             let mut all = host_folds(world, cond, enums) && host_branch_folds(world, then_branch, enums);
             if else_branch.is_some() {
                 let other = nikaia_std::index::or(match else_branch {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }, || Block { stmts: vec![] });
                 all = all && host_branch_folds(world, &other, enums);
@@ -286,7 +286,7 @@ pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptim
                 let mut out: Vec<String> = vec![];
                 for expr in visited_in_expr(value) { host_ring_edge(view, expr, comptimes, options, &mut out); }
                 graph.insert(format!("c:{}", named), out);
-                labels.insert(format!("c:{}", named), named.to_string());
+                labels.insert(format!("c:{}", named), nikaia_std::block::Text::from(named.to_string()));
             },
             Item::Fn { name, receiver, config, body, .. } => {
                 let name = *name;
@@ -295,13 +295,13 @@ pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptim
                     let mut out: Vec<String> = vec![];
                     for expr in visited_in_block(body) { host_ring_edge(view, expr, comptimes, options, &mut out); }
                     graph.insert(format!("f:{}", named), out);
-                    labels.insert(format!("f:{}", named), named.to_string());
+                    labels.insert(format!("f:{}", named), nikaia_std::block::Text::from(named.to_string()));
                     for option in config.iter() {
-                        let mut read: Vec<String> = vec![];
+                        #[allow(unused_mut)] let mut read: Vec<String> = vec![];
                         for expr in visited_in_expr(&option.default) { host_ring_edge(view, expr, comptimes, options, &mut read); }
-                        let key = format!("d:{}:{}", named, view.text(option.name));
-                        graph.insert(key.to_string(), read);
-                        labels.insert(key, named.to_string());
+                        let key = format!("d:{}:{}", named, view.text(option.name)); #[allow(unused_mut, clippy::redundant_locals)] let mut read = read;
+                        graph.insert(nikaia_std::block::Text::from(key.to_string()), read);
+                        labels.insert(key, nikaia_std::block::Text::from(named.to_string()));
                     }
                 }
             },
@@ -341,13 +341,13 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || vec![].into());
-    path.push(at.to_string());
+    path.push(nikaia_std::block::Text::from(at.to_string()));
     for step in next.iter() {
         let ring = host_ring_reach(graph, labels, step, path, done);
         if !ring.is_empty() { return ring; }
     }
     path.pop();
-    done.insert(at.to_string());
+    done.insert(nikaia_std::block::Text::from(at.to_string()));
     vec![]
 }
 
@@ -356,15 +356,15 @@ pub(crate) fn host_ring(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &
     let mut options: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     if world.here_at < 0 { host_ring_names(&world.here, &mut comptimes, &mut options); }
     for file in world.beside.iter() { host_ring_names(file, &mut comptimes, &mut options); }
-    let mut start: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut start: Vec<String> = vec![];
     for expr in visited_in_expr(value) { host_ring_edge(&world.here, expr, &comptimes, &options, &mut start); }
     if start.is_empty() { return vec![]; }
-    let mut graph: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    let mut labels: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut graph: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut start = start;
+    let mut labels: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut start = start;
     if world.here_at < 0 { host_ring_graph(&world.here, &comptimes, &options, &mut graph, &mut labels); }
     for file in world.beside.iter() { host_ring_graph(file, &comptimes, &options, &mut graph, &mut labels); }
-    let mut path: Vec<String> = vec![];
-    let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut path: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut start = start;
+    let mut done: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut start = start; #[allow(unused_mut, clippy::redundant_locals)] let mut path = path;
     for step in start.iter() {
         let ring = host_ring_reach(&graph, &labels, step, &mut path, &mut done);
         if !ring.is_empty() { return ring; }
@@ -405,7 +405,7 @@ impl CheckState {
         for frame in self.scope.iter() {
             for local in frame.iter() {
                 let one = host_known(local);
-                if one.is_none() { held.remove(&local.name); } else { held.insert(local.name.to_string(), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+                if one.is_none() { held.remove(&local.name); } else { held.insert(nikaia_std::block::Text::from(local.name.to_string()), match one { Some(__nikaia_value) => __nikaia_value, None => continue }); }
             }
         }
         match host.evaluate(value, &held) {
@@ -430,8 +430,8 @@ impl CheckState {
         let nothing = CheckCompiled { answered: false, value: None, said: false };
         let ring = host_ring(world, value);
         if !ring.is_empty() {
-            let mut subject = (*nikaia_std::index::get(&ring, 0)).to_string();
-            if !self.computing_default { for name in ring.iter() { if name == bound { subject = bound.to_string(); } } }
+            let mut subject = nikaia_std::block::Text::from((*nikaia_std::index::get(&ring, 0)).to_string());
+            if !self.computing_default { for name in ring.iter() { if name == bound { subject = nikaia_std::block::Text::from(bound.to_string()); } } }
             self.a_constant_built_from_itself(&subject, &ring, span);
             return CheckCompiled { answered: true, value: None, said: true };
         }
@@ -464,7 +464,7 @@ impl CheckState {
                 self.a_file_this_build_may_not_read(&path, &match got.denied { Some(__nikaia_value) => __nikaia_value, None => continue }, span);
                 return CheckCompiled { answered: true, value: None, said: true };
             }
-            read.insert(path.to_string(), nikaia_std::index::or(got.text, || "".into()));
+            read.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::index::or(got.text, || "".into()));
         }
         let rewritten = host.assets_read_in(value, &read);
         let mut outermost: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
@@ -473,8 +473,8 @@ impl CheckState {
             for local in (*nikaia_std::index::get(&self.scope, 0)).iter() {
                 let one = host_known(local);
                 if one.is_some() {
-                    outermost.insert(local.name.to_string(), match one { Some(__nikaia_value) => __nikaia_value, None => continue });
-                    typed.insert(local.name.to_string(), local.ty.clone());
+                    outermost.insert(nikaia_std::block::Text::from(local.name.to_string()), match one { Some(__nikaia_value) => __nikaia_value, None => continue });
+                    typed.insert(nikaia_std::block::Text::from(local.name.to_string()), local.ty.clone());
                 }
             }
         }
@@ -513,12 +513,12 @@ impl CheckState {
         }
         let line = host_stopped_line(said);
         let mut place: String = String::from("");
-        let mut why: String = line.to_string();
+        let mut why: String = nikaia_std::block::Text::from(line.to_string());
         let cut = nikaia_std::search::find(&line, &": the program stopped: ", 0);
         if cut.is_some() {
             let at = nikaia_std::index::or(cut, || 0);
-            place = nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_string();
-            why = nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_string();
+            place = nikaia_std::block::Text::from(nikaia_std::index::get(&line, nikaia_std::index::at(0..at)).to_string());
+            why = nikaia_std::block::Text::from(nikaia_std::index::get(&line, nikaia_std::index::at(at + ": the program stopped: ".len() as i64..)).to_string());
         }
         let found = check_walked_place_of(world, &place, here);
         self.a_build_time_run_that_stopped_at(bound, &why, found.at, (found.function).as_deref(), span);
@@ -546,7 +546,7 @@ impl CheckState {
         if empty { return; }
         let mut named: collections::BTreeSet<i64> = collections::BTreeSet::new();
         let mut bound_again = false;
-        let mut pending: Vec<Expr> = vec![];
+        let mut pending: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for expr in visited_in_expr(body) {
             match expr {
                 Expr::Variable(name, _) => {
@@ -584,7 +584,10 @@ impl CheckState {
     pub(crate) fn a_lent_part_is_a_reference_already(&mut self, named: &collections::BTreeSet<i64>) {
         for node in named.iter() {
             let node = nikaia_std::num::value(node);
-            self.facts.owned_patterns.remove(&node);
+            if self.facts.owned_patterns.contains(&node) {
+                self.facts.owned_patterns.remove(&node);
+                self.facts.view_patterns.insert(node);
+            }
         }
         self.facts.views_handed_on.extend(named);
     }

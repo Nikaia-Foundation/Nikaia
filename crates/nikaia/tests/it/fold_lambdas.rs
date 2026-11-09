@@ -18,6 +18,8 @@ use crate::common;
 use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -60,7 +62,7 @@ fn program(rule: &str) -> String {
 fn codes(rule: &str) -> Vec<String> {
     findings(&program(rule))
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 

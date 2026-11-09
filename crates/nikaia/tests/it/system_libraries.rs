@@ -6,6 +6,8 @@
 //! (`NK1225`).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::{Command, Output};
 

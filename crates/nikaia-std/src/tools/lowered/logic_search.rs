@@ -16,11 +16,11 @@ impl LgBranch {
             if item.atom {
                 if !self.held_atoms.contains(&item.n) {
                     self.held_atoms.push(item.n);
-                    self.held_why.push(why.to_owned());
+                    self.held_why.push(why.copy_owned());
                 }
             } else {
                 self.open_ors.push(item.n);
-                self.open_why.push(why.to_owned());
+                self.open_why.push(why.copy_owned());
             }
         }
     }
@@ -63,7 +63,7 @@ pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget
             }
             return LgSearched::Done { certificate: LgCertificate::Refuted(LgRefutation { steps }), relies };
         },
-        LgClosed::Consistent { found, ref values } => { if state.open_ors.is_empty() { return LgSearched::Consistent { found, values: values.to_owned() }; } },
+        LgClosed::Consistent { found, ref values } => { if state.open_ors.is_empty() { return LgSearched::Consistent { found, values: values.copy_owned() }; } },
         LgClosed::Unknown(why) => { return LgSearched::Unknown(why.clone()); },
     }
     let mut at: i64 = 0;
@@ -76,38 +76,38 @@ pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget
         if fewer || same && here < best { at = index; }
         index += 1;
     }
-    let mut rest = LgBranch { held_atoms: state.held_atoms.to_owned(), held_why: state.held_why.to_owned(), open_ors: vec![], open_why: vec![] };
+    let mut rest = LgBranch { held_atoms: state.held_atoms.copy_owned(), held_why: state.held_why.copy_owned(), open_ors: vec![], open_why: vec![] };
     let mut position: i64 = 0;
     let mut disjunction: i64 = 0;
     let mut brought: collections::BTreeSet<i64> = collections::BTreeSet::new();
     while ((position) as usize) < state.open_ors.len() {
         if position == at {
             disjunction = *nikaia_std::index::get(&state.open_ors, (position) as usize);
-            brought = (*nikaia_std::index::get(&state.open_why, (position) as usize)).to_owned();
+            brought = (*nikaia_std::index::get(&state.open_why, (position) as usize)).copy_owned();
         } else {
             rest.open_ors.push(*nikaia_std::index::get(&state.open_ors, (position) as usize));
-            rest.open_why.push((*nikaia_std::index::get(&state.open_why, (position) as usize)).to_owned());
+            rest.open_why.push((*nikaia_std::index::get(&state.open_why, (position) as usize)).copy_owned());
         }
         position += 1;
     }
-    let mut why = brought.to_owned();
+    let mut why = brought.copy_owned();
     why.insert(disjunction);
     let mut cases: Vec<LgCertificate> = vec![];
-    let mut reliance = brought.to_owned();
+    let mut reliance = brought.copy_owned();
     for alternative in (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(disjunction))).iter() {
-        let mut branch = LgBranch { held_atoms: rest.held_atoms.to_owned(), held_why: rest.held_why.to_owned(), open_ors: rest.open_ors.to_owned(), open_why: rest.open_why.to_owned() };
+        let mut branch = LgBranch { held_atoms: rest.held_atoms.copy_owned(), held_why: rest.held_why.copy_owned(), open_ors: rest.open_ors.copy_owned(), open_why: rest.open_why.copy_owned() };
         branch.absorb(alternative, &why);
         let found = lg_search(indexed, &branch, budget, work);
         match found {
             LgSearched::Done { ref certificate, ref relies } => {
-                if !relies.contains(&disjunction) { return LgSearched::Done { certificate: certificate.clone(), relies: relies.to_owned() }; }
+                if !relies.contains(&disjunction) { return LgSearched::Done { certificate: certificate.clone(), relies: relies.copy_owned() }; }
                 for one in relies.iter() {
                     let one = nikaia_std::num::value(one);
                     if one != disjunction { reliance.insert(one); }
                 }
                 cases.push(certificate.clone());
             },
-            LgSearched::Consistent { found, ref values } => { return LgSearched::Consistent { found, values: values.to_owned() }; },
+            LgSearched::Consistent { found, ref values } => { return LgSearched::Consistent { found, values: values.copy_owned() }; },
             LgSearched::Unknown(why_not) => { return LgSearched::Unknown(why_not.clone()); },
         }
     }
@@ -121,8 +121,8 @@ pub(crate) fn lg_refuted(arena: &TermArena, facts: &[i64], goal: i64, values: &c
         arena.variables(fact, &mut names);
     }
     arena.variables(goal, &mut names);
-    let mut given = values.to_owned();
-    for name in names.iter() { if given.get(name).is_none() { given.insert(name.to_string(), 0); } }
+    let mut given = values.copy_owned();
+    for name in names.iter() { if given.get(name).is_none() { given.insert(nikaia_std::block::Text::from(name.to_string()), 0); } }
     let model = LgModel { values: given };
     if lg_verify_model(arena, facts, goal, &model) { return Some(model); }
     None
@@ -260,14 +260,14 @@ pub(crate) fn lg_follow(indexed: &LgIndexed, branch: &LgChecking, certificate: &
                 verdict.rejected = Some(LgRejected::NotOpen { disjunction: which });
                 return;
             }
-            let alternatives = (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(which))).to_owned();
+            let alternatives = (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(which))).copy_owned();
             if (alternatives.len() as i64) != cases.len() as i64 {
                 verdict.rejected = Some(LgRejected::Cases { expected: alternatives.len() as i64, found: cases.len() as i64 });
                 return;
             }
             let mut at: i64 = 0;
             while at < alternatives.len() as i64 {
-                let mut next = LgChecking { held: branch.held.to_owned(), open: branch.open.to_owned() };
+                let mut next = LgChecking { held: branch.held.copy_owned(), open: branch.open.copy_owned() };
                 next.open.remove(&which);
                 next.absorb(nikaia_std::index::get(&alternatives, nikaia_std::index::at(at)));
                 lg_follow(indexed, &next, nikaia_std::index::get(&cases, nikaia_std::index::at(at)), verdict);

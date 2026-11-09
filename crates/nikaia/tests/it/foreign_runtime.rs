@@ -19,6 +19,8 @@
 //! cargo test --profile fast -p nikaia --test it -- foreign_runtime:: --ignored --nocapture
 //! ```
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -106,7 +108,7 @@ fn a_call_into_a_foreign_crate_orders_against_everything() {
                 {
                     let named = match other {
                         order::Accounted::Operation(operation) => operation.callee.clone(),
-                        _ => "…".to_string(),
+                        _ => "…".to_text(),
                     };
                     format!("in order  {named} - {}", refused.why())
                 }

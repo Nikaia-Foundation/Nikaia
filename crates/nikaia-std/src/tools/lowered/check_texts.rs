@@ -130,7 +130,7 @@ pub(crate) fn a_string_type() -> Ty { Ty::Named { name: String::from("String"), 
 // this was written - see `contracts::sync`.
 pub(crate) fn method_word(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> String {
     match expr {
-        Expr::MethodCall { method, args, .. } => { let method = *method; if args.is_empty() { world.words.resolve(method).to_string() } else { String::from("") } },
+        Expr::MethodCall { method, args, .. } => { let method = *method; if args.is_empty() { nikaia_std::block::Text::from(world.words.resolve(method).to_string()) } else { String::from("") } },
         _ => String::from(""),
     }
 }
@@ -153,7 +153,7 @@ pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
             let first = block_tail(then_branch);
-            let second = block_tail(otherwise);
+            let second = block_tail(otherwise); #[allow(clippy::redundant_locals)] let first = first;
             return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), text) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), text);
         },
         Expr::Match { arms, .. } => {
@@ -209,7 +209,7 @@ impl CheckState {
                         }, || (2, Span { start: 0, end: 0 }.into()));
                         let length = wide.0;
                         let note = "A `'…'` is a `u8` only where it is one ASCII character or a `'\\xNN'` (Part I 2.6); in UTF-8 any other scalar is two to four bytes.";
-                        self.findings.push(check_refusal("NK1212", &wide.1, format!("`'{}'` is a scalar of {} bytes, and a `u8` is one.", written, length), vec![note.to_string()], Some(format!("Its bytes are a text literal's: `\"{}\".bytes`; where one character is meant, ask for a `scalar`.", written))));
+                        self.findings.push(check_refusal("NK1212", &wide.1, format!("`'{}'` is a scalar of {} bytes, and a `u8` is one.", written, length), vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Its bytes are a text literal's: `\"{}\".bytes`; where one character is meant, ask for a `scalar`.", written))));
                     }
                     return Some(Ty::Named { name: String::from("u8"), args: vec![], view: false });
                 }
@@ -221,7 +221,7 @@ impl CheckState {
                     _ => false,
                 };
                 if u8_wanted {
-                    let name = world.words.resolve(symbol).to_string();
+                    let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
                     let local = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let found = match *nikaia_std::index::get(&self.flow.open_chars, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let mut open = found.clone();
@@ -240,7 +240,7 @@ impl CheckState {
                 if else_branch.is_some() {
                     let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let first = block_tail(then_branch);
-                    let second = block_tail(otherwise);
+                    let second = block_tail(otherwise); #[allow(clippy::redundant_locals)] let first = first;
                     if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), true) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), true) {
                         self.text_literal(world, want, *nikaia_std::index::get(&first, 0), owned);
                         return self.text_literal(world, want, *nikaia_std::index::get(&second, 0), owned);
@@ -280,7 +280,7 @@ impl CheckState {
             },
             Expr::Tuple(parts, _) => {
                 let wanted: Vec<Ty> = match want {
-                    Ty::Tuple(each) => each.to_owned(),
+                    Ty::Tuple(each) => each.copy_owned(),
                     _ => vec![],
                 };
                 if !parts.is_empty() && (wanted.len() as i64) == parts.len() as i64 && check_texts_tuple_all_text(&wanted, parts) {
@@ -358,9 +358,9 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let wants: Vec<Ty> = match want {
-            Ty::Tuple(parts) => parts.to_owned(),
+            Ty::Tuple(parts) => parts.copy_owned(),
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
-                Ty::Tuple(parts) => parts.to_owned(),
+                Ty::Tuple(parts) => parts.copy_owned(),
                 _ => return None,
             } },
             _ => return None,
@@ -387,14 +387,14 @@ impl CheckState {
             },
         }
         let founds: Vec<Ty> = match found {
-            Ty::Tuple(parts) => parts.to_owned(),
+            Ty::Tuple(parts) => parts.copy_owned(),
             _ => return None,
         };
         let parts = literal_tuple_parts(value);
         if (wants.len() as i64) != parts.len() as i64 || (founds.len() as i64) != parts.len() as i64 { return None; }
         let mut built = false;
         let mut answered: Vec<Ty> = vec![];
-        let mut at: i64 = 0;
+        let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts;
         while at < parts.len() as i64 {
             let mut got = self.text_literal(world, nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at)), true);
             if got.is_none() { got = self.tuple_literal(world, nikaia_std::index::get(&founds, nikaia_std::index::at(at)), nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at))); }
@@ -425,7 +425,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let name = match want {
-            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { name.to_string() } },
+            Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { nikaia_std::block::Text::from(name.to_string()) } },
             _ => return None,
         };
         let wanted_args = named_arguments(want);
@@ -450,7 +450,7 @@ impl CheckState {
 pub fn ends_in_tuple(expr: &Expr) -> bool {
     let ends = tuple_ends(expr);
     if ends.is_empty() { return false; }
-    let mut tuples = 0;
+    let mut tuples = 0; #[allow(clippy::redundant_locals)] let ends = ends;
     for end in ends.iter() {
         let end = *end;
         match end {
@@ -513,7 +513,7 @@ pub(crate) fn list_items(value: &Expr) -> Vec<&Expr> {
 // this was written - see `contracts::sync`.
 pub(crate) fn named_arguments(ty: &Ty) -> Vec<Ty> {
     match ty {
-        Ty::Named { args, .. } => args.to_owned(),
+        Ty::Named { args, .. } => args.copy_owned(),
         _ => vec![],
     }
 }
@@ -534,7 +534,7 @@ pub(crate) fn check_texts_a_byte_as_a_scalar(written: &str, name: Option<String>
     let note = "Above `\\x7F` a `'\\xNN'` names a byte, which is a `u8` and no `scalar`: the scalar of that number is another character, two bytes in UTF-8 (Part I 2.6).";
     let mut annotated = format!("`let b: u8 = '{}'`", written);
     if name.is_some() { annotated = format!("`let {}: u8 = '{}'`", nikaia_std::index::or(name.as_deref(), || ""), written); }
-    check_refusal("NK1212", span, format!("`'{}'` is the byte {}, and it is used as a `scalar`.", written, value), vec![note.to_string()], Some(format!("For the scalar U+00{}, write `'\\u{{{}}}'`; for the byte, declare it a `u8`: {}.", hex.to_uppercase(), hex, annotated)))
+    check_refusal("NK1212", span, format!("`'{}'` is the byte {}, and it is used as a `scalar`.", written, value), vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("For the scalar U+00{}, write `'\\u{{{}}}'`; for the byte, declare it a `u8`: {}.", nikaia_std::block::Text::from(hex.to_uppercase()), hex, annotated)))
 }
 
 impl CheckState {
@@ -560,8 +560,8 @@ impl CheckState {
                     later = scalar_at.clone();
                 }
                 let note = "A `'…'` takes its type from how it's used, `u8` or `scalar`, and these uses want both.";
-                self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![note.to_string()], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
-            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(open.name.to_string()), &open.at)); }
+                self.findings.push(check_refusal("NK1200", &later, format!("You're using `{}` as {} `{}` and here as {} `{}`.", open.name, an_or_a(first), first, an_or_a(second), second), vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Declare its type, `let {}: u8 = '{}'`, and convert with `as` where the other one is needed.", open.name, open.written))));
+            } else if first_byte.is_some() { self.facts.byte_literals.insert(open.literal); } else if a_high_byte(&open.written).is_some() { self.findings.push(check_texts_a_byte_as_a_scalar(&open.written, Some(nikaia_std::block::Text::from(open.name.to_string())), &open.at)); }
         }
         self.flow.open_chars = collections::BTreeMap::new();
         for (literal, held) in self.flow.high_bytes.iter() {
@@ -606,7 +606,7 @@ pub(crate) fn check_texts_text_for(element: &Ty, item: &Expr) -> bool {
     }
     if a_plain_string(element) { return a_text_literal_expr(item); }
     let each: Vec<Ty> = match element {
-        Ty::Tuple(each) => each.to_owned(),
+        Ty::Tuple(each) => each.copy_owned(),
         _ => vec![],
     };
     if each.is_empty() { return false; }

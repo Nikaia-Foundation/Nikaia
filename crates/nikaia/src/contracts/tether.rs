@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/tether.rs
 //
 // Which of Part I 6.6's three states each view in a signature is in
@@ -101,7 +103,7 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
         // By **name**: a `Symbol` belongs to the parse that interned it.
         let borrowing = crate::emit::borrowing_structs_beside(parsed, &package_borrowing)
             .into_iter()
-            .map(|s| parsed.text(s).to_string())
+            .map(|s| parsed.text(s).to_text())
             .collect();
         let mut keep = |key: String, held: Vec<Held>| {
             if !held.is_empty() {
@@ -124,7 +126,7 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
                 Item::Impl {
                     target, methods, ..
                 } => {
-                    let target = parsed.text(target.name).to_string();
+                    let target = parsed.text(target.name).to_text();
                     for method in methods {
                         let Item::Fn { name, .. } = &method.node else {
                             continue;
@@ -141,18 +143,18 @@ pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
                     }
                 }
                 Item::Grammar(def) => {
-                    let named = parsed.text(def.name).to_string();
+                    let named = parsed.text(def.name).to_text();
                     for rule in def.rules.iter().filter(|r| r.is_entry) {
                         if a_parse_that_views(parsed, rule.ret_type.as_ref(), &package) {
                             keep(
                                 format!("{named}::{}", parsed.text(rule.name)),
                                 vec![
                                     Held {
-                                        position: INPUT.to_string(),
+                                        position: INPUT.to_text(),
                                         state: State::Borrowed,
                                     },
                                     Held {
-                                        position: RESULT.to_string(),
+                                        position: RESULT.to_text(),
                                         state: State::Borrowed,
                                     },
                                 ],
@@ -191,7 +193,7 @@ fn lent_text(
     let Some(contract) = ledger.functions.get(key) else {
         return held;
     };
-    let named = |at: usize| parsed.text(args[at].name).to_string();
+    let named = |at: usize| parsed.text(args[at].name).to_text();
     let lent: Vec<String> = (0..args.len())
         .filter(|at| {
             let ty = &args[*at].ty;
@@ -244,8 +246,8 @@ fn function_key(
     target: Option<&str>,
 ) -> String {
     let own = match name {
-        Some(name) => parsed.text(name).to_string(),
-        None => "new".to_string(),
+        Some(name) => parsed.text(name).to_text(),
+        None => "new".to_text(),
     };
     match target {
         Some(target) => format!("{target}::{own}"),

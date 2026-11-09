@@ -35,8 +35,8 @@ pub(crate) fn emit_tables_any_holds(words: &winnow_grammar::InternerContext, typ
 }
 
 pub fn emit_tables_borrowing_structs_beside(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], outside: &collections::BTreeSet<String>) -> Vec<winnow_grammar::Symbol> {
-    let mut names: Vec<winnow_grammar::Symbol> = vec![];
-    let mut fields_of: Vec<Vec<Type>> = vec![];
+    let mut names: Vec<winnow_grammar::Symbol> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut fields_of: Vec<Vec<Type>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut borrowing: Vec<winnow_grammar::Symbol> = vec![];
     for item in items.iter() {
         let mut types: Vec<Type> = vec![];
@@ -94,10 +94,10 @@ pub fn emit_tables_view_slots(words: &winnow_grammar::InternerContext, items: &[
             Item::Struct { name, fields, is_extern, .. } => {
                 let is_extern = *is_extern; let name = *name;
                 if is_extern { continue; }
-                let text = words.resolve(name).to_string();
+                let text = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 if errors.contains(&text) { continue; }
                 let mut held: Vec<String> = vec![];
-                for field in fields.iter() { if holds_view(&field.ty) || emit_tables_names_outside(words, &field.ty, borrowing) { held.push(words.resolve(field.name).to_string()); } }
+                for field in fields.iter() { if holds_view(&field.ty) || emit_tables_names_outside(words, &field.ty, borrowing) { held.push(nikaia_std::block::Text::from(words.resolve(field.name).to_string())); } }
                 if held.len() >= 2 { slots.push((text, held)); }
             },
             _ => { },
@@ -121,10 +121,10 @@ pub fn emit_tables_items(words: &winnow_grammar::InternerContext, items: &[Spann
     let mut twice: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in items.iter() {
         match &item.node {
-            Item::Grammar(def) => { tables.grammars.insert(words.resolve(def.name).to_string(), def.clone()); },
+            Item::Grammar(def) => { tables.grammars.insert(nikaia_std::block::Text::from(words.resolve(def.name).to_string()), def.clone()); },
             Item::Struct { name, .. } => {
                 let name = *name;
-                tables.structs.insert(words.resolve(name).to_string());
+                tables.structs.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             },
             Item::Import { .. } => { tables.uses_std = true; },
             Item::Fn { can_throw, .. } => {
@@ -132,7 +132,7 @@ pub fn emit_tables_items(words: &winnow_grammar::InternerContext, items: &[Spann
                 if can_throw { tables.fails = true; }
             },
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 for method in methods.iter() { emit_tables_method_into(words, &owner, method, &mut tables, &mut twice); }
             },
             _ => { },
@@ -146,11 +146,11 @@ pub(crate) fn emit_tables_method_into(words: &winnow_grammar::InternerContext, o
         Item::Fn { name, receiver, args, ret_type, .. } => {
             let name = *name;
             let named = match name { Some(__nikaia_value) => __nikaia_value, None => return };
-            let text = words.resolve(named).to_string();
+            let text = nikaia_std::block::Text::from(words.resolve(named).to_string());
             let info = EmitMethod { receiver: match receiver {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }, returns_value: ret_type.is_some(), args: args.to_owned() };
+            }, returns_value: ret_type.is_some(), args: args.copy_owned() };
             tables.methods.insert(format!("{}::{}", owner, text), info.clone());
             if twice.contains(&text) { return; }
             if tables.by_name.contains_key(&text) {
@@ -188,7 +188,7 @@ pub fn emit_tables_declared_errors(units: &[ParsedView<'_, '_, '_, '_, '_, '_>])
 
 pub fn emit_tables_tethered(own: &Ledger, beside: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for (name, contract) in own.types.iter() { if !contract.tethered.is_empty() { out.insert(name.to_string()); } }
+    for (name, contract) in own.types.iter() { if !contract.tethered.is_empty() { out.insert(nikaia_std::block::Text::from(name.to_string())); } }
     let none: collections::BTreeSet<String> = collections::BTreeSet::new();
     for other in beside.iter() { for held in emit_tables_borrowing_structs_beside(other.words, other.items, &none) { out.insert(other.text(held)); } }
     out
@@ -198,7 +198,7 @@ pub fn emit_tables_read_view_slots(ledger: &Ledger) -> collections::BTreeMap<Str
     let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (_, function) in ledger.functions.iter() { thrown.extend(function.fails_with.iter().cloned()); }
     let mut out: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    for (name, contract) in ledger.types.iter() { if contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name) { out.insert(name.to_string(), contract.tethered.to_owned()); } }
+    for (name, contract) in ledger.types.iter() { if contract.tethered.len() >= 2 && contract.variants.is_empty() && !thrown.contains(name) { out.insert(nikaia_std::block::Text::from(name.to_string()), contract.tethered.copy_owned()); } }
     out
 }
 
@@ -207,7 +207,7 @@ pub fn emit_tables_described_maps(described: &Ledger) -> Vec<String> {
     for (key, contract) in described.functions.iter() {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let text = signature.text();
-        if text.contains("HashMap") || text.contains("HashSet") { out.push(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()); }
+        if text.contains("HashMap") || text.contains("HashSet") { out.push(nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string())); }
     }
     out
 }

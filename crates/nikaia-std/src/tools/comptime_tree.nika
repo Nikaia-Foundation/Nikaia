@@ -698,6 +698,8 @@ pub fn comptime_dependency_modules[H: ComptimeLowerHost](host: ref H, packages: 
         let wanted: String? = name.clone()
         let theirs: Vec[i64] = (0..<host.unit_count()).filter(fn(u) { host.package_of(u) == wanted }).collect()
         rust.push_str(f"pub mod {name} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n")
+        // The block types the package's files are lowered to (#490).
+        rust.push_str(block_types_import(true))
         for at in theirs {
             let body = host.emit_unit(at, theirs, own, false, null) ?? return null
             rust.push_str(body)

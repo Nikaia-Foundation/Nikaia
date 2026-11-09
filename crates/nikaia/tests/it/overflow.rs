@@ -33,6 +33,8 @@
 //! lowering and the manifest say, and the shipping build.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::Command;
 
@@ -70,7 +72,7 @@ fn lower(dir: &Path, source: &str) -> String {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read_to_string(&output).expect("the emitted Rust")
+    String::from(std::fs::read_to_string(&output).expect("the emitted Rust"))
 }
 
 /// **1. The semantics.** With the check on, the emitted program aborts.
@@ -327,7 +329,7 @@ fn run_optimized(dir: &Path, source: &str) -> (bool, String) {
     let ran = Command::new(&binary).output().expect("run the program");
     (
         ran.status.success(),
-        String::from_utf8_lossy(&ran.stderr).to_string(),
+        String::from_utf8_lossy(&ran.stderr).to_text(),
     )
 }
 

@@ -16,6 +16,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -156,7 +158,7 @@ fn the_claim_lives_in_the_ledger() {
         .types
         .get("fs::Mapped")
         .expect("`fs::Mapped` is described");
-    assert_eq!(mapped.touches, vec!["file read".to_string()]);
+    assert_eq!(mapped.touches, vec!["file read".to_text()]);
 
     // And it is the only one, which is the measurement this record rests on.
     let touching: Vec<_> = library

@@ -19,6 +19,8 @@
 use crate::common;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -54,7 +56,7 @@ fn output_of(purpose: &str, source: &str, files: &[(&str, &str)]) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    let printed = String::from_utf8_lossy(&run.stdout).to_string();
+    let printed = String::from_utf8_lossy(&run.stdout).to_text();
     // The scratch directory holds a linked binary, and the corpus runs often.
     // Removed here and not before the assertions above: a failing test's
     // artefacts are what diagnoses it.

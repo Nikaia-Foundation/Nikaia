@@ -9,7 +9,7 @@ pub(crate) fn lambda_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body:
         match e {
             Expr::Variable(name, _) => {
                 let name = *name;
-                named.insert(world.words.resolve(name).to_string());
+                named.insert(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
             },
             _ => { },
         }
@@ -23,7 +23,7 @@ pub(crate) fn lambda_own(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params:
     let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
     for p in params.iter() {
         let p = *p;
-        own.insert(world.words.resolve(p).to_string());
+        own.insert(nikaia_std::block::Text::from(world.words.resolve(p).to_string()));
     }
     own
 }
@@ -73,7 +73,7 @@ impl CheckState {
     pub fn a_kept_lambdas_result(&mut self, id: i64, result: Option<&Ty>, pauses: bool, fails: bool) {
         if !pauses || fails { return; }
         let declared: Ty = nikaia_std::index::or(match result {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         }, || Ty::Unknown);
         let spelled = match kept_result_spelling(&declared) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -104,7 +104,7 @@ impl CheckState {
         let mut hulls: Vec<String> = vec![];
         for name in named.iter() {
             if own.contains(name) { continue; }
-            if self.a_name_of_a_hull(name) { hulls.push(name.to_string()); }
+            if self.a_name_of_a_hull(name) { hulls.push(nikaia_std::block::Text::from(name.to_string())); }
         }
         if !hulls.is_empty() { self.facts.kept_hulls.insert(id_of(value) as i64, hulls); }
     }
@@ -130,8 +130,8 @@ impl CheckState {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
                 let ty = if a_lent_parameter(&local) { local.ty.owned() } else { local.ty.clone() };
                 if is_a_handle(&ty) || !self.takes_away(world, &ty) { continue; }
-                owned.push(name.to_string());
-                self.moved_into_a_task.push((name.to_string(), ty, span.end as i64, who.to_string()));
+                owned.push(nikaia_std::block::Text::from(name.to_string()));
+                self.moved_into_a_task.push((nikaia_std::block::Text::from(name.to_string()), ty, span.end as i64, nikaia_std::block::Text::from(who.to_string())));
             }
         }
         if pauses && !owned.is_empty() { self.facts.kept_owned.insert(id_of(value) as i64, owned); }
@@ -145,9 +145,9 @@ impl CheckState {
             let found = self.binding(name);
             if found.is_some() {
                 let local = match found { Some(__nikaia_value) => __nikaia_value, None => return };
-                if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, name.to_string())); }
+                if is_a_handle(&local.ty) { self.facts.task_handles.insert((task, nikaia_std::block::Text::from(name.to_string()))); }
                 if !self.takes_away(world, &local.ty) { continue; }
-                self.moved_into_a_task.push((name.to_string(), local.ty.clone(), span.end as i64, who.to_string()));
+                self.moved_into_a_task.push((nikaia_std::block::Text::from(name.to_string()), local.ty.clone(), span.end as i64, nikaia_std::block::Text::from(who.to_string())));
             }
         }
     }
@@ -185,7 +185,7 @@ impl CheckState {
     pub fn a_lambda_hands_back_text_it_does_not_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, params: &[winnow_grammar::Symbol], body: &Block, tail: &Ty, span: &Span) {
         let result: Ty = match code {
             Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => return } },
             _ => return,
@@ -198,7 +198,7 @@ impl CheckState {
             let value = match last { Some(__nikaia_value) => __nikaia_value, None => return };
             self.a_lambda_result_of_its_own(world, &wanted, &own, body, value, tail, &check_span_at(world, value, span));
         }
-        let returned: Vec<CheckLambdaReturn> = self.flow.last_lambda_returns.to_owned();
+        let returned: Vec<CheckLambdaReturn> = self.flow.last_lambda_returns.copy_owned();
         for one in returned.iter() { for value in one.value.iter() { self.a_lambda_result_of_its_own(world, &wanted, &own, body, value, &one.ty, &one.at); } }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -211,7 +211,7 @@ impl CheckState {
             return;
         }
         let name: String = match value {
-            Expr::Variable(written, _) => { let written = *written; world.words.resolve(written).to_string() },
+            Expr::Variable(written, _) => { let written = *written; nikaia_std::block::Text::from(world.words.resolve(written).to_string()) },
             _ => return,
         };
         if own.contains(&name) || lambda_binds(world, body, &name) { return; }
@@ -224,7 +224,7 @@ impl CheckState {
     pub fn a_lambdas_result_is_its_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, body: &Block, tail: &Ty, span: &Span) {
         let result: Ty = match code {
             Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => return } },
             _ => return,
@@ -236,7 +236,7 @@ impl CheckState {
             let value = match last { Some(__nikaia_value) => __nikaia_value, None => return };
             self.a_lambda_value_is_its_types(world, &result, &wanted, value, tail, &check_span_at(world, value, span));
         }
-        let returned: Vec<CheckLambdaReturn> = self.flow.last_lambda_returns.to_owned();
+        let returned: Vec<CheckLambdaReturn> = self.flow.last_lambda_returns.copy_owned();
         for one in returned.iter() { for value in one.value.iter() { self.a_lambda_value_is_its_types(world, &result, &wanted, value, &one.ty, &one.at); } }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

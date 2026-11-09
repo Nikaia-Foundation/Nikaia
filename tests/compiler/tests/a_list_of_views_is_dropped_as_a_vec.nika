@@ -1,0 +1,33 @@
+// A list of views may be dropped after the text its views are cut from
+// (#490): a list declared before that text, and a list a statement collects
+// only to read one element, which the statement assigns over the text it
+// viewed. Rust's `Vec` allows both (`#[may_dangle]`), and Nikaia's list
+// below is dropped the same way.
+
+fn read(p: String) -> String {
+	return p + "\nb\n\nc"
+}
+
+fn shown(costs: Vec[ref String]) -> String {
+	return costs.join(",")
+}
+
+fn kept(dir: String) -> String {
+	let mut costs: Vec[String] = []
+	let lines = read(f"{dir}/x").trim_end().split("\n").collect()
+	for i in 0..<lines.len() {
+		if lines[i].trim() != "" { costs.push(lines[i]) }
+	}
+	return shown(costs)
+}
+
+fn head(line: String) -> String {
+	let mut s = line.clone()
+	s = s.split("{").collect()[0].split(" where").collect()[0].trim().clone()
+	return s
+}
+
+fn main() throws {
+	println(kept("a"))
+	println(head("fn f[T] where T: Eq { x }"))
+}

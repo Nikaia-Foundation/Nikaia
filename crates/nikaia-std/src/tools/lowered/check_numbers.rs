@@ -28,13 +28,13 @@ pub fn a_number_that_does_not_fit(value: &Integer, beyond: bool, bare: bool, ty:
     if !beyond && integer_fits(value, ty) { return None; }
     let article = an_or_a(ty);
     let written = integer_text(value);
-    let mut comes_to = written.to_string();
+    let mut comes_to = nikaia_std::block::Text::from(written.to_string());
     if beyond && value.negative { comes_to = format!("less than -{}", U64_HIGHEST); } else if beyond { comes_to = format!("more than {}", U64_HIGHEST); }
     let mut message = format!("This comes to {}, which doesn't fit in {} `{}`.", comes_to, article, ty);
     if bare { message = format!("`{}` doesn't fit in {} `{}`.", written, article, ty); }
     let low = the_low_end_of(ty);
     let high = the_high_end_of(ty);
-    let mut notes: Vec<String> = vec![format!("{} `{}` holds {} to {}.", article, ty, low, high)];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("{} `{}` holds {} to {}.", article, ty, low, high)];
     if why.is_some() { notes.push(nikaia_std::index::or(why, || "".into())); }
     let help: String = match ty {
         "i32" => String::from("Use `i64` where the number needs more room."),
@@ -42,7 +42,7 @@ pub fn a_number_that_does_not_fit(value: &Integer, beyond: bool, bare: bool, ty:
         "u32" => String::from("Use `u64` where the number needs more room."),
         "u64" => String::from("A `u64` is the widest number Nikaia has, so the computation has to stay inside it."),
         _ => if !beyond && !value.negative && value.magnitude > 0u64 { String::from("A number this big only fits a `u64`. Write the type: `let x: u64 = …`.") } else { String::from("An `i64` is the widest signed number Nikaia has, so the computation has to stay inside it.") },
-    };
+    }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     Some(refusal("NK1116", span, message, notes, help))
 }
 

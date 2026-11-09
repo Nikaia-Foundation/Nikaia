@@ -1,0 +1,29 @@
+// The items of a list literal take the list's element type (0.0.1369): a
+// `Vec[fn() throws]` of two functions was refused by rustc, which met two
+// closure types where one `dyn Fn` was meant.
+
+enum Bad { Oops }
+impl Error for Bad {
+    fn message(ref self) -> String { "oops" }
+}
+enum Worse { Boom }
+impl Error for Worse {
+    fn message(ref self) -> String { "boom" }
+}
+fn fail() throws {
+    throw Bad::Oops
+}
+fn worse() throws {
+    throw Worse::Boom
+}
+fn main() throws {
+    let all: Vec[fn() throws] = [fail, worse]
+    for run in all {
+        run() catch {
+            match error {
+                Bad::Oops => println("oops")
+                Worse::Boom => println("boom")
+            }
+        }
+    }
+}

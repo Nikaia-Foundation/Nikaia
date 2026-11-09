@@ -6,6 +6,8 @@
 use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -14,7 +16,7 @@ fn codes(source: &str) -> Vec<String> {
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 

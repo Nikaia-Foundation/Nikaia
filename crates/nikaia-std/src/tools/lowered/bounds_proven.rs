@@ -15,7 +15,7 @@ pub struct BoundsAllProven {
 pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], facts: &CheckFacts, ledgers: &[&Ledger], nonnegative: &collections::BTreeSet<i64>, through_loops: bool, read: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>, ask: &impl Fn(&TermArena, &[i64], i64) -> bool, ask_in: &impl Fn(&str, i64, &TermArena, &[i64], i64) -> bool, record: &impl Fn(&collections::BTreeMap<i64, String>), counted: &impl Fn(&Block, &[winnow_grammar::Symbol]), folded: &impl Fn() -> collections::BTreeSet<i64>) -> BoundsAllProven {
     let mut out = BoundsAllProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), derived: vec![] };
     let around = bounds_around(program, beside, beside_words, ledgers, &facts.std_receivers, &facts.simd_loads, words);
-    let mut context = BoundsContext { lengths: facts.std_lengths.to_owned(), sized: facts.sized_lengths.to_owned(), char_codes: facts.char_codes.to_owned(), ensured: bm_ensured(ledgers, read), required: bm_required(ledgers, read), each: bm_each(ledgers, read), std_receivers: facts.std_receivers.to_owned(), simd_loads: facts.simd_loads.to_owned(), shifts: facts.shifts.to_owned(), arithmetic: facts.arithmetic.to_owned(), nonnegative: nonnegative.to_owned(), given: collections::BTreeMap::new(), negations: facts.negations.to_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.to_owned(), whole_loops: facts.whole_loops.to_owned(), whole_parts: facts.whole_parts.to_owned(), array_lengths: facts.array_lengths.to_owned(), through_loops, decided: bp_decided(program, words, &facts.comptime_values), list_indices: facts.list_indices.to_owned(), returns: collections::BTreeMap::new() };
+    let mut context = BoundsContext { lengths: facts.std_lengths.copy_owned(), sized: facts.sized_lengths.copy_owned(), char_codes: facts.char_codes.copy_owned(), ensured: bm_ensured(ledgers, read), required: bm_required(ledgers, read), each: bm_each(ledgers, read), std_receivers: facts.std_receivers.copy_owned(), simd_loads: facts.simd_loads.copy_owned(), shifts: facts.shifts.copy_owned(), arithmetic: facts.arithmetic.copy_owned(), nonnegative: nonnegative.copy_owned(), given: collections::BTreeMap::new(), negations: facts.negations.copy_owned(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: facts.whole_fields.copy_owned(), whole_loops: facts.whole_loops.copy_owned(), whole_parts: facts.whole_parts.copy_owned(), array_lengths: facts.array_lengths.copy_owned(), through_loops, decided: bp_decided(program, words, &facts.comptime_values), list_indices: facts.list_indices.copy_owned(), returns: collections::BTreeMap::new() };
     bounds_fields(&mut context, program, words, ask);
     bounds_returns(&mut context, program, words, ask);
     let mut bodies: Vec<&Spanned<Item>> = vec![];
@@ -57,9 +57,9 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
         match &item.node {
             Item::Grammar(def) => {
                 let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
-                for rule in def.rules.iter() { rules.insert(words.resolve(rule.name).to_string()); }
+                for rule in def.rules.iter() { rules.insert(nikaia_std::block::Text::from(words.resolve(rule.name).to_string())); }
                 for rule in def.rules.iter() {
-                    let function = words.resolve(rule.name).to_string();
+                    let function = nikaia_std::block::Text::from(words.resolve(rule.name).to_string());
                     let at = rule.span.start as i64;
                     for alt in rule.alts.iter() {
                         let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -102,20 +102,20 @@ pub(crate) fn bp_add(out: &mut BoundsAllProven, walked: &BoundsProven) {
     }
     for (at, key) in walked.calls.iter() {
         let at = nikaia_std::num::value(at);
-        out.calls.insert(at, key.to_string());
+        out.calls.insert(at, nikaia_std::block::Text::from(key.to_string()));
     }
 }
 
 pub(crate) fn bp_name(name: Option<winnow_grammar::Symbol>, words: &winnow_grammar::InternerContext) -> String {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-    words.resolve(symbol).to_string()
+    nikaia_std::block::Text::from(words.resolve(symbol).to_string())
 }
 
 pub(crate) fn bp_names(symbols: &[winnow_grammar::Symbol], words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for symbol in symbols.iter() {
         let symbol = *symbol;
-        out.insert(words.resolve(symbol).to_string());
+        out.insert(nikaia_std::block::Text::from(words.resolve(symbol).to_string()));
     }
     out
 }
@@ -129,7 +129,7 @@ pub(crate) fn bp_decided(program: &Program, words: &winnow_grammar::InternerCont
                 let value = match values.get(&(item.span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if value.0 != "bool" { continue; }
                 let written = value.1.trim();
-                if written == "true" { out.insert(words.resolve(name).to_string(), true); } else if written == "false" { out.insert(words.resolve(name).to_string(), false); }
+                if written == "true" { out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), true); } else if written == "false" { out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), false); }
             },
             _ => { },
         }

@@ -3,9 +3,9 @@
 
 pub(crate) const CHECK_CORE_EXPR_ESCAPES: &str = "\\n \\r \\t \\0 \\\\ \\' \\\" \\xNN \\u{…}";
 
-pub(crate) fn check_core_expr_named(name: &str) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view: false } }
+pub(crate) fn check_core_expr_named(name: &str) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false } }
 
-pub(crate) fn check_core_expr_view(name: &str) -> Ty { Ty::Named { name: name.to_string(), args: vec![], view: true } }
+pub(crate) fn check_core_expr_view(name: &str) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: true } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -121,7 +121,7 @@ pub(crate) fn check_core_expr_open_receiver(state: &mut CheckState, expr: &Expr,
                 Expr::LitInt { value, negative, .. } => {
                     let negative = *negative; let value = *value;
                     let key = id_of(receiver) as i64;
-                    let own: String = nikaia_std::index::or(state.facts.unsigned_literals.get(&key), || "").to_string();
+                    let own: String = nikaia_std::block::Text::from(nikaia_std::index::or(state.facts.unsigned_literals.get(&key), || "").to_string());
                     if own != "" && check_core_expr_its_own(&ty, &own) {
                         state.flow.literal_receivers.push((key, integer(value, negative)));
                         return Ty::Unknown;
@@ -175,7 +175,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         Expr::LitInterpolated { parts, .. } => check_core_expr_interpolated(state, world, host, expr, parts, span),
         Expr::LitChar(text, _) => {
             if a_high_byte(text).is_some() {
-                state.flow.high_bytes.insert(id_of(expr) as i64, (text.to_string(), span.clone()));
+                state.flow.high_bytes.insert(id_of(expr) as i64, (nikaia_std::block::Text::from(text.to_string()), span.clone()));
                 return check_core_expr_named("scalar");
             }
             check_core_expr_escapes(state, host, text, span);
@@ -190,7 +190,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             let name = *name;
             let read = check_core_expr_variable(state, world, host, expr, name, span);
             check_core_expr_kept_copy(state, world, expr, &read);
-            let bound = state.binding(&world.words.resolve(name).to_string());
+            let bound = state.binding(&nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
             if bound.is_some() && state.flow.made_elements.contains(&match bound { Some(__nikaia_value) => __nikaia_value, None => return read }.id) { state.flow.made_element_reads.insert(node_key(expr)); }
             read
         },
@@ -288,7 +288,7 @@ pub fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             check_core_async_crash(state, world, host, inner, span);
             let mut at = changed_from;
             while at < state.changed.len() as i64 {
-                let name = (*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string();
+                let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string());
                 if state.binding(&name).is_some() {
                     state.a_task_changes_an_outer_name(&name, span);
                     break;
@@ -384,7 +384,7 @@ pub(crate) fn check_core_expr_kept_copy(state: &mut CheckState, world: &CheckWor
     let place = match expr {
         Expr::Variable(name, _) => {
             let name = *name;
-            let written = world.words.resolve(name).to_string();
+            let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
             state.lookup(&written).is_some() && !state.run_code.contains(&written)
         },
         Expr::Field { .. } => true,
@@ -438,8 +438,8 @@ pub(crate) fn check_core_expr_declared_method(state: &mut CheckState, expr: &Exp
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, symbol: winnow_grammar::Symbol, span: &Span) -> Ty {
-    let name = world.words.resolve(symbol).to_string();
-    state.read_at.push((name.to_string(), span.start as i64));
+    let name = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
+    state.read_at.push((nikaia_std::block::Text::from(name.to_string()), span.start as i64));
     let at = check_core_expr_empty_list(&state, &name);
     if at >= 0 { state.flow.empty_lists.remove(&at); }
     let found: Option<Ty> = state.lookup(&name);
@@ -454,7 +454,7 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
         if world.here.viewed_arms.contains(&node_key(expr)) && ty == a_string_type() {
             let already_lent = nikaia_std::index::or(state.binding(&name).as_ref().map(|__nikaia_it| __nikaia_it.lent), || false);
             if !already_lent { state.facts.lent_reads.insert(node_key(expr)); }
-            return Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true };
+            return Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true };
         }
         let nullable = matches!(ty, Ty::Nullable(_));
         if !nullable || state.reading_only { return ty; }
@@ -472,8 +472,8 @@ pub(crate) fn check_core_expr_variable<H: CheckHost>(state: &mut CheckState, wor
     if as_value.is_some() {
         state.declared_path(world, expr, &name);
         let mut entry: CheckStoredCode = nikaia_std::index::or(state.stored_code.remove(AS_VALUE), || CheckStoredCode::empty());
-        entry.free.insert(name.to_string());
-        state.stored_code.insert(AS_VALUE.to_string(), entry);
+        entry.free.insert(nikaia_std::block::Text::from(name.to_string()));
+        state.stored_code.insert(nikaia_std::block::Text::from(AS_VALUE.to_string()), entry);
         return nikaia_std::index::or(as_value, || Ty::Unknown);
     }
     if state.structs.contains_key(&name) || state.enums.contains_key(&name) {
@@ -504,15 +504,15 @@ pub(crate) fn check_core_expr_a_bare_case(ledger: &Ledger, owner: &str, variant:
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], span: &Span) -> Ty {
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
-        names.push(world.words.resolve(segment).to_string());
+        names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
     }
-    state.a_constructor_written_as_new(world, &names.join("::"), span);
+    state.a_constructor_written_as_new(world, &nikaia_std::block::Text::from(names.join("::")), span);
     if names.len() == 2 {
-        let ty = (*nikaia_std::index::get(&names, 0)).to_string();
-        let member = (*nikaia_std::index::get(&names, 1)).to_string();
+        let ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string());
+        let member = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 1)).to_string());
         if state.is_variant(&ty, &member) { return check_core_expr_named(&ty); }
         let as_value: Option<Ty> = state.function_as_a_value(world, &format!("{}::{}", ty, member));
         if as_value.is_some() { return nikaia_std::index::or(as_value, || Ty::Unknown); }
@@ -565,7 +565,7 @@ pub(crate) fn check_core_expr_unary<H: CheckHost>(state: &mut CheckState, world:
         UnaryOp::Neg => {
             let literal = matches!(inner, Expr::LitInt { .. });
             match value_of_a_copy(&found.unseen()) {
-                Ty::Named { ref name, ref args, view } => { if !view && args.is_empty() && (name == "i32" || name == "i64") && !literal { state.facts.negations.insert(id_of(whole) as i64, name.to_string()); } },
+                Ty::Named { ref name, ref args, view } => { if !view && args.is_empty() && (name == "i32" || name == "i64") && !literal { state.facts.negations.insert(id_of(whole) as i64, nikaia_std::block::Text::from(name.to_string())); } },
                 _ => { },
             }
             if !literal { state.a_negation_that_overflows(world, inner, span); }
@@ -613,7 +613,7 @@ pub(crate) fn check_core_expr_dsl<H: CheckHost>(state: &mut CheckState, world: &
         check_core_expr_unanswered(state);
         return Ty::Unknown;
     }
-    let name = world.words.resolve(target).to_string();
+    let name = nikaia_std::block::Text::from(world.words.resolve(target).to_string());
     let plain = bare && context.is_none();
     let deferred = is_deferred(&name, content);
     if plain && !deferred && check_core_expr_one_entry(&state, &name) { return check_core_a_block_over_a_grammar(state, world, host, expr, target, content, span); }
@@ -656,7 +656,7 @@ pub(crate) fn check_core_async_admission<H: CheckHost>(state: &mut CheckState, w
     let s = match admission { Some(__nikaia_value) => __nikaia_value, None => return };
     let walked = check_core_expr(state, world, host, s, span);
     let named = match walked {
-        Ty::Named { ref name, .. } => name.to_string(),
+        Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => return,
     };
     if named == "task::Adaptive" { return; }
@@ -679,7 +679,7 @@ pub(crate) fn check_core_async_one_at_a_time(limit: Option<&Expr>) -> bool {
 }
 
 pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: &Expr, span: &Span) {
-    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.to_owned(), negations: state.facts.negations.to_owned(), shifts: state.facts.shifts.to_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new() };
+    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.copy_owned(), negations: state.facts.negations.copy_owned(), shifts: state.facts.shifts.copy_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new() };
     if !panics_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
     let function = nikaia_std::index::or(match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -701,7 +701,7 @@ pub fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_async_fails(state: &mut CheckState, span: &Span, error: &str, message: &str, note: &str, help: &str) {
-    let fails: Vec<String> = vec![error.to_string()];
+    let fails: Vec<String> = vec![nikaia_std::block::Text::from(error.to_string())];
     if state.flow.guarded.is_some() {
         let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -727,6 +727,6 @@ pub(crate) fn check_core_async_fails(state: &mut CheckState, span: &Span, error:
     }
     if state.flow.throwing || state.flow.caught || state.inside_an_action.is_some() { return; }
     if state.current.is_none() { return; }
-    state.findings.push(check_refusal("NK2605", span, message.to_string(), vec![note.to_string()], Some(help.to_string())));
+    state.findings.push(check_refusal("NK2605", span, nikaia_std::block::Text::from(message.to_string()), vec![nikaia_std::block::Text::from(note.to_string())], Some(nikaia_std::block::Text::from(help.to_string()))));
 }
 

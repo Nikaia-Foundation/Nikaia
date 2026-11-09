@@ -1,0 +1,10 @@
+x
+y
+2 words
+empty: unexpected end of input, expected `;` at line 1, column 1
+   1 | 
+       ^
+in item
+in item 1
+in items
+-1

@@ -8,6 +8,8 @@
 //! and on macOS `-framework` and `-F`, reach the linker from what it says
 //! (`NK1225`). There is no build script: nothing of a package runs.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -131,6 +133,8 @@ pub fn as_rustc_args(flags: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{format, vec};
 
     #[test]
     fn the_listed_flags_pass_and_nothing_else() {

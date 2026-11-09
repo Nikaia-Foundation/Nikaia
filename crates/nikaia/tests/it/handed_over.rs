@@ -13,6 +13,8 @@
 //! the lowering writes.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::LedgerOps;
 use std::process::Command;
@@ -350,7 +352,7 @@ fn insert_keeps_its_key() {
 
 // --- ADR-282: one word for a copy ------------------------------------------------
 
-/// **`.to_owned()` is refused, naming `.clone()`**: the language below needs
+/// **`.to_text()` is refused, naming `.clone()`**: the language below needs
 /// the second word because its `.clone()` of a reference copies the
 /// reference; this one has no reference to copy.
 #[test]
@@ -371,7 +373,7 @@ fn a_copy_has_one_word() {
         "{:?}",
         found[0].help
     );
-    // `.to_string()` is the text form of a value, for every type, and stays.
+    // `.to_text()` is the text form of a value, for every type, and stays.
     assert_eq!(
         codes_of(&findings(
             "fn main() throws {\n\

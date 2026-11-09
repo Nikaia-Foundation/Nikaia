@@ -6,6 +6,8 @@
 //! ([ADR-380](../../../docs/specification/adr/adr-380.md)), as `ran` does.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
@@ -84,7 +86,7 @@ fn ran(purpose: &str, source: &str) -> (String, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     std::fs::remove_dir_all(&dir).ok();
-    (String::from_utf8_lossy(&out.stdout).to_string(), rust)
+    (String::from_utf8_lossy(&out.stdout).to_text(), rust)
 }
 
 /// **D4, D9: a guard proves what follows it, and the proof costs nothing.**
@@ -156,7 +158,7 @@ fn a_claim_nothing_shows_is_checked_when_the_program_runs() {
     assert_eq!(
         held(source),
         [nikaia::prove::Held::AtRunTime(
-            "nothing before it shows it".to_string()
+            "nothing before it shows it".to_text()
         )]
     );
     // Refused unless the build says `warn` (ADR-380 D1).
@@ -180,7 +182,7 @@ fn a_claim_outside_what_the_prover_reads_is_checked() {
     assert_eq!(
         held(source),
         [nikaia::prove::Held::AtRunTime(
-            "it is not a comparison of whole numbers the prover reads".to_string()
+            "it is not a comparison of whole numbers the prover reads".to_text()
         )]
     );
     let (_, rust) = ran("prove-unread", source);
@@ -272,8 +274,8 @@ fn a_caller_the_prover_does_not_see_reaches_the_checked_entry() {
     assert_eq!(
         held(source),
         [
-            nikaia::prove::Held::Precondition("Counter::add".to_string(), 0),
-            nikaia::prove::Held::Precondition("half".to_string(), 0),
+            nikaia::prove::Held::Precondition("Counter::add".to_text(), 0),
+            nikaia::prove::Held::Precondition("half".to_text(), 0),
         ]
     );
     let (out, rust) = ran("prove-entries", source);
@@ -646,10 +648,10 @@ fn a_callee_precondition_is_carried_back_through_the_call() {
     assert_eq!(
         found[0].notes[..2],
         [
-            "Here `y` is 1.".to_string(),
+            "Here `y` is 1.".to_text(),
             "The precondition is `assert(whole > 0)` in `percent`, carried back to `twice`'s \
              entry."
-                .to_string()
+                .to_text()
         ]
     );
 
@@ -691,7 +693,7 @@ fn a_recursive_call_is_not_carried_back() {
     assert!(shown_false(source).is_empty());
     assert_eq!(
         held(source),
-        [nikaia::prove::Held::Precondition("down".to_string(), 0)]
+        [nikaia::prove::Held::Precondition("down".to_text(), 0)]
     );
 }
 
@@ -850,13 +852,13 @@ fn a_computed_precondition_names_both_ends() {
     assert_eq!(
         found[0].notes[..2],
         [
-            "Here `mode` is 1, `x` is 0.".to_string(),
-            "The precondition is `assert(y > 0)` in `f`, carried back to its entry.".to_string()
+            "Here `mode` is 1, `x` is 0.".to_text(),
+            "The precondition is `assert(y > 0)` in `f`, carried back to its entry.".to_text()
         ]
     );
     assert_eq!(
         held(source),
-        [nikaia::prove::Held::Precondition("f".to_string(), 1)]
+        [nikaia::prove::Held::Precondition("f".to_text(), 1)]
     );
 }
 
@@ -993,7 +995,7 @@ fn a_claim_over_a_name_the_prover_does_not_read_names_it() {
     assert_eq!(
         held(source),
         [nikaia::prove::Held::AtRunTime(
-            "`b` is not a whole number the prover reads".to_string()
+            "`b` is not a whole number the prover reads".to_text()
         )]
     );
 }

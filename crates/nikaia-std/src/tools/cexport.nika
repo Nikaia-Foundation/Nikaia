@@ -432,10 +432,10 @@ fn __nikaia_failed(said: String) {
 /// A handle the call could not hold, said for `<prefix>_last_error` (ADR-284 D7, D11).
 #[allow(dead_code)]
 fn __nikaia_refused(status: std::ffi::c_int) -> std::ffi::c_int {
-    __nikaia_failed(match status {
+    __nikaia_failed(String::from(match status {
         -5 => \"a call on a handle this thread holds already, from a callback of a call on it\",
         _ => \"no handle where one is needed, or one that is closed\",
-    }.to_string());
+    }));
     status
 }
 "
@@ -682,9 +682,9 @@ fn cx_wrapper(words: ref winnow_grammar::InternerContext, ctx: ref CxCtx, contra
     // pause point instead, which is `E_CANCELLED` (D19).
     let mut ran = f"match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {call}))"
     if pauses {
-        ran = f"let __nikaia_ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {call}));\n    let __nikaia_ran = match __nikaia_ran {{\n        Ok(Some(value)) => Ok(value),\n        Ok(None) => {{\n            __nikaia_failed(\"the call was cancelled\".to_string());\n            return -7;\n        }}\n        Err(panic) => Err(panic),\n    }};\n    match __nikaia_ran"
+        ran = f"let __nikaia_ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {call}));\n    let __nikaia_ran = match __nikaia_ran {{\n        Ok(Some(value)) => Ok(value),\n        Ok(None) => {{\n            __nikaia_failed(String::from(\"the call was cancelled\"));\n            return -7;\n        }}\n        Err(panic) => Err(panic),\n    }};\n    match __nikaia_ran"
     }
-    build.rust.push_str(f"\n#[unsafe(no_mangle)]\npub extern \"C\" fn {symbol}({rust_params.join(", ")}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n{checks}    {ran} {{\n        {handed_back}{failed}\n        Err(_) => {{\n            __NIKAIA_POISONED.store(true, std::sync::atomic::Ordering::SeqCst);\n            __nikaia_failed(\"the library panicked; it answers E_PANICKED until shutdown and init have run\".to_string());\n            -4\n        }}\n    }}\n}}\n")
+    build.rust.push_str(f"\n#[unsafe(no_mangle)]\npub extern \"C\" fn {symbol}({rust_params.join(", ")}) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n{checks}    {ran} {{\n        {handed_back}{failed}\n        Err(_) => {{\n            __NIKAIA_POISONED.store(true, std::sync::atomic::Ordering::SeqCst);\n            __nikaia_failed(String::from(\"the library panicked; it answers E_PANICKED until shutdown and init have run\"));\n            -4\n        }}\n    }}\n}}\n")
     let c_text = if c_params.len() == 0 { "void" } else { c_params.join(", ") }
     build.declarations.push_str(f"int {symbol}({c_text});\n")
     let mut text_out = false

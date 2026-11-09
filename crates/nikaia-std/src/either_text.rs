@@ -148,6 +148,22 @@ impl IntoEither for String {
     }
 }
 
+/// **A block's text goes in as `String`'s does** (ADR-327 D4, #490): lent,
+/// or moved in as a `String` (the same memory where it is outside, D8).
+impl<'a> IntoEither for &'a crate::block::Text {
+    type Either = EitherText<'a>;
+    fn into_either(self) -> EitherText<'a> {
+        EitherText::from(self.as_str())
+    }
+}
+
+impl IntoEither for crate::block::Text {
+    type Either = EitherText<'static>;
+    fn into_either(self) -> EitherText<'static> {
+        EitherText::from(String::from(self))
+    }
+}
+
 impl<'a> IntoEither for EitherText<'a> {
     type Either = EitherText<'a>;
     fn into_either(self) -> EitherText<'a> {
@@ -189,7 +205,14 @@ macro_rules! present {
     )*};
 }
 
-present!(&'a str, &'a String, String, EitherText<'a>);
+present!(
+    &'a str,
+    &'a String,
+    String,
+    EitherText<'a>,
+    &'a crate::block::Text,
+    crate::block::Text
+);
 
 impl<'a, 'b> IntoEitherMaybe for &'a EitherText<'b> {
     type Either = EitherText<'a>;
@@ -307,6 +330,14 @@ impl PartialEq<EitherText<'_>> for String {
 
 /// Text of its own from either: an owned answer moves, a view is copied
 /// (`text = either_fn()` into a `String` variable, #911).
+/// Text of both kinds made a block's text (#490): owned text moved in, a
+/// view copied, as into a `String`.
+impl From<EitherText<'_>> for crate::block::Text {
+    fn from(text: EitherText<'_>) -> crate::block::Text {
+        crate::block::Text::from(String::from(text))
+    }
+}
+
 impl From<EitherText<'_>> for String {
     fn from(text: EitherText<'_>) -> String {
         text.0.into_owned()

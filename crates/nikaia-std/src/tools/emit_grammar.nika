@@ -367,6 +367,14 @@ impl EmitState {
         if bytes {
             out.push("        input bytes;\n")
         }
+        // On the block types a repetition collects into a block's list
+        // (winnow-grammar 0.2's `collect L;`, #490), and the grammar's module
+        // names the block's `format!` and `vec!` itself: through its
+        // `use super::*` alone they would be ambiguous with the prelude's.
+        if self.on_block_types() {
+            out.push("        collect nikaia_std::block::List;\n")
+            out.push("        use nikaia_std::block::names::{format, vec};\n")
+        }
         walk.grammar_bytes = bytes
         self.emit_grammar_body(world, walk, out, host, def, name, bytes)
         walk.grammar_bytes = false
@@ -644,12 +652,12 @@ impl EmitState {
         }
         let mut folds = 0
         for part in parts {
-            if stream_item(part.node) != null {
+            if stream_fold(world, part.node) != null {
                 folds += 1
             }
         }
         if folds != 1 {
-            throw EmitRefused { message: "The compiler can't translate this `@stream` entry yet: its body holds one `item*`, a call of a rule repeated, and the engine reads only that form one item at a time (`list(item, sep)`, `item+` and counted repeats wait for a fold of their own in winnow-grammar).", at: rule.span.start as i64 }
+            throw EmitRefused { message: "The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`.", at: rule.span.start as i64 }
         }
         out.push("        #[stream(each)]\n")
         out.push(f"        pub rule {rule_name}{taken} -> usize{label} =\n          ")
@@ -657,11 +665,43 @@ impl EmitState {
             if i > 0 {
                 out.push(" ")
             }
-            match stream_item(parts[i].node) {
-                inner => {
+            match stream_fold(world, parts[i].node) {
+                fold => {
+                    // A bound that is a value has no form in the engine's
+                    // fold yet, which counts only by integers written out.
+                    if fold.counted {
+                        throw EmitRefused { message: "The compiler can't translate a `@stream` entry whose repetition is counted by a value (`item{n}`) yet: write the bounds as integers, `item{2,5}`.", at: rule.span.start as i64 }
+                    }
+                    match fold.max {
+                        most => {
+                            if most < 1 || most < fold.min {
+                                throw EmitRefused { message: "This `@stream` entry's repetition matches no item: its upper bound is 0 or below its lower one.", at: rule.span.start as i64 }
+                            }
+                        },
+                        null => {},
+                    }
                     out.push("__wg_n:fold(")
-                    self.emit_pattern(world, walk, out, host, inner)
-                    out.push(f", || 0usize, |n: usize, _item: {item}| n + 1)")
+                    self.emit_pattern(world, walk, out, host, fold.item)
+                    out.push(f", || 0usize, |n: usize, _item: {item}| n + 1")
+                    // The separator and the counts are the engine's named
+                    // arguments of a fold (winnow-grammar#28): a separator
+                    // is taken only with the item after it, and a short
+                    // stream fails where the next item should start.
+                    match fold.sep {
+                        sep => {
+                            out.push(", sep = ")
+                            self.emit_pattern(world, walk, out, host, sep)
+                        },
+                        null => {},
+                    }
+                    if fold.min > 0 {
+                        out.push(f", min = {fold.min}")
+                    }
+                    match fold.max {
+                        most => out.push(f", max = {most}"),
+                        null => {},
+                    }
+                    out.push(")")
                 },
                 null => self.emit_pattern(world, walk, out, host, parts[i]),
             }
@@ -699,17 +739,57 @@ fn emit_stream_grammar_module(book: ref String) -> String {
     return f"__nikaia_grammar_{book}"
 }
 
-/// The rule a `@stream` entry repeats: `item*`, the pattern under the `*`.
-fn stream_item(pattern: ref Pattern) -> Spanned[Pattern]? {
-    return match pattern {
-        Pattern::Repeat { pat, rep } => match rep {
-            Repeat::Star => match pat.node {
-                Pattern::Ref { .. } => pat.clone(),
-                else => null,
-            },
-            else => null,
+/// **The repetition a `@stream` entry walks** (ADR-grammar-2 D7, #1459):
+/// the rule repeated, the separator between two items, and the counts.
+struct StreamFold {
+    item: Spanned[Pattern],
+    sep: Spanned[Pattern]?,
+    min: i64,
+    max: i64?,
+    /// `item{n}`: a bound that is a value (ADR-grammar-1 D3).
+    counted: bool,
+}
+
+/// The repetition of a `@stream` entry's body element: `item*`, `item+`,
+/// `item{n}`, `item{n,}`, `item{n,m}`, a repetition counted by a value, or
+/// `list(item, sep)`, where `item` is a call of a rule (as the checker's
+/// `grammar_stream_paths` reads it).
+fn stream_fold(world: ref EmitWorld, pattern: ref Pattern) -> StreamFold? {
+    match pattern {
+        Pattern::Repeat { pat, rep } => {
+            if stream_item(pat.node) {
+                match rep {
+                    Repeat::Star => return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, counted: false },
+                    Repeat::Plus => return StreamFold { item: pat.clone(), sep: null, min: 1, max: null, counted: false },
+                    Repeat::Exactly(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: n as i64, counted: false },
+                    Repeat::AtLeast(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: null, counted: false },
+                    Repeat::Between(low, high) => return StreamFold { item: pat.clone(), sep: null, min: low as i64, max: high as i64, counted: false },
+                    Repeat::Optional => {},
+                }
+            }
         },
-        else => null,
+        Pattern::Counted { pat, .. } => {
+            if stream_item(pat.node) {
+                return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, counted: true }
+            }
+        },
+        Pattern::Ref { name, generics, args } => {
+            if emit_text(world, name) == "list" && generics.len() == 0 && args.len() == 2 && stream_item(args[0].node) {
+                return StreamFold { item: args[0].clone(), sep: args[1].clone(), min: 0, max: null, counted: false }
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+/// Whether a pattern is one item of a `@stream` entry: a call of a rule.
+fn stream_item(pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { .. } => true,
+        Pattern::Call { .. } => true,
+        Pattern::Group(inner) => stream_item(inner.node),
+        else => false,
     }
 }
 

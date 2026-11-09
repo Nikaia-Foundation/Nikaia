@@ -8,6 +8,8 @@ use crate::common;
 use nikaia::contracts::Provenance;
 use nikaia::emit::{Build, emit_program_with_trust};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The entry chain on a new and on a found key, with a lambda that captures,
 /// `insert` over a key that is there, an index read and write, iteration whose
@@ -85,7 +87,7 @@ fn compiled_and_run(provenance: Provenance, purpose: &str) -> (String, String) {
         "{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    (String::from_utf8_lossy(&ran.stdout).into_owned(), rust)
+    (String::from_utf8_lossy(&ran.stdout), rust)
 }
 
 #[test]

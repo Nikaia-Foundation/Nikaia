@@ -24,6 +24,8 @@ use nikaia_std::text;
 mod http1_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/http1.rs");
 }
 #[allow(unused_imports)]
@@ -32,6 +34,8 @@ pub use http1_lowered::*;
 mod line_breaks_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/line_breaks.rs");
 }
 #[allow(unused_imports)]

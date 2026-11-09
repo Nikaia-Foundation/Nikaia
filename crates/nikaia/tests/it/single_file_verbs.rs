@@ -8,6 +8,8 @@
 //! file becomes Rust source text, and compiling that is `rustc`'s.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
@@ -59,7 +61,7 @@ fn lower_writes_rust_and_compiles_nothing() {
                 .expect("an entry")
                 .file_name()
                 .to_string_lossy()
-                .into_owned()
+                .to_text()
         })
         .collect();
     written.sort();

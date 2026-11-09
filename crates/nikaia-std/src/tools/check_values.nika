@@ -115,12 +115,19 @@ impl CheckState {
             Ty::Named { name, args, view } => !view && args.len() == 0 && name == "String",
             else => false,
         }
+        let viewed = match found[0] {
+            Ty::Named { name, args, view } => view && args.len() == 0 && (name == "String" || name == "str"),
+            else => false,
+        }
         let mut literal = false
         if given.len() > 0 {
             literal = match given[0] {
                 Expr::LitStr { .. } => true,
                 else => false,
             }
+        }
+        if viewed && !literal && given.len() > 0 {
+            self.facts.view_patterns.insert(node_key(given[0]))
         }
         if !owned || literal {
             return

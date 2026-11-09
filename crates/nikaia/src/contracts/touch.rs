@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/touch.rs
 //
 // What an operation reaches, and whether it changes it (ADR-292).
@@ -240,6 +242,8 @@ pub fn infer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{format, vec};
 
     // The other tests of this module moved to `tools/touch.nika` (ADR-294,
     // #125); this one reads `KINDS`, which only Rust holds.

@@ -14,20 +14,20 @@ pub trait SysrootPackageHost {
 }
 
 pub fn sysroot_package_every_refusal<H: SysrootPackageHost>(path: &str, source: &str, refusals: &[&CheckFinding], host: &H) -> String {
-    let mut ordered: Vec<&CheckFinding> = refusals.to_owned();
+    let mut ordered: Vec<&CheckFinding> = refusals.copy_owned();
     ordered.sort_by_key(|f| { f.span.start });
-    let shown: Vec<String> = ordered.iter().map(|f| { host.render_finding(f, path, source) }).collect::<Vec<_>>();
+    let shown: Vec<String> = ordered.iter().map(|f| { host.render_finding(f, path, source) }).collect::<Vec<_>>(); ::core::mem::drop(ordered);
     let n = refusals.len() as i64;
     let s = match n == 1 {
         true => "",
         false => "s",
-    };
-    format!("{}\n{} refusal{} in {}", shown.join("\n"), n, s, path)
+    }; #[allow(clippy::redundant_locals)] let shown = shown;
+    format!("{}\n{} refusal{} in {}", nikaia_std::block::Text::from(shown.join("\n")), n, s, path)
 }
 
 pub fn sysroot_package_render(table: &collections::BTreeMap<String, String>) -> String {
     let lines: Vec<String> = table.iter().map(|entry| { format!("{}={}\n", entry.0, entry.1) }).collect::<Vec<_>>();
-    lines.join("")
+    nikaia_std::block::Text::from(lines.join(""))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -41,19 +41,19 @@ pub fn sysroot_package_without_bodies(source: &str, items: &[Spanned<Item>]) -> 
     let n = source.as_bytes().len() as i64;
     for (start, end) in cut.iter() {
         let start = nikaia_std::num::value(start);let end = nikaia_std::num::value(end);
-        if start < at || end > n { return source.to_string(); }
+        if start < at || end > n { return nikaia_std::block::Text::from(source.to_string()); }
         kept.push_str(match nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).text() {
             Ok(value) => value,
-            Err(_error) => { return source.to_string(); },
+            Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
         });
         at = end;
     }
     kept.push_str(match nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..n)).text() {
         Ok(value) => value,
-        Err(_error) => { return source.to_string(); },
+        Err(_error) => { return nikaia_std::block::Text::from(source.to_string()); },
     });
     let lines: Vec<String> = kept.lines().filter(|&line| { !line.trim_start().starts_with("//") || line.trim_start().starts_with("///") }).map(|line| { format!("{}\n", line) }).collect::<Vec<_>>();
-    lines.join("")
+    nikaia_std::block::Text::from(lines.join(""))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -103,15 +103,15 @@ pub(crate) fn sysroot_package_has_for(text: &str, at: i64) -> bool {
 
 pub fn sysroot_package_shared(text: &str) -> String {
     let keywords: Vec<&'static str> = vec!["fn ", "const ", "static ", "struct ", "enum ", "type ", "trait ", "unsafe fn ", "async fn "];
-    let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "];
+    let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "]; #[allow(clippy::redundant_locals)] let keywords = keywords;
     let n = text.as_bytes().len() as i64;
-    let mut out: String = String::from("");
-    let mut at: i64 = 0;
-    let mut depth = 0;
+    let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
+    let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
+    let mut depth = 0; #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
     let mut start = true;
     let mut inherent = false;
     let mut in_struct = false;
-    let mut copied: i64 = 0;
+    let mut copied: i64 = 0; #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
     while at < n {
         if start && depth == 0 {
             in_struct = sysroot_package_at(text, at, "struct ") || sysroot_package_at(text, at, "pub struct ");
@@ -214,7 +214,7 @@ pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
 }
 
 pub fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
-    let mut names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in unit.items.iter() {
         let name: String = match &item.node {
             Item::Fn { name, is_public: true, receiver: None, .. } => { let name = *name; unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }) },
@@ -234,31 +234,31 @@ pub fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, 
         if hand.file == file {
             for word in hand.names.iter() {
                 let word = *word;
-                names.push(word.to_string());
+                names.push(nikaia_std::block::Text::from(word.to_string()));
             }
         }
     }
-    let module = file.trim_end_matches(".nika");
+    let module = file.trim_end_matches(".nika"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     match names.is_empty() {
         true => format!("pub mod {} {{}}\n", module),
-        false => format!("pub mod {} {{\n    #[allow(unused_imports)]\n    pub use super::{{{}}};\n}}\n", module, names.join(", ")),
+        false => format!("pub mod {} {{\n    #[allow(unused_imports)]\n    pub use super::{{{}}};\n}}\n", module, nikaia_std::block::Text::from(names.join(", "))),
     }
 }
 
 pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<(String, String)> {
-    let mut imports: Vec<String> = vec![];
-    let mut modules: Vec<(String, String)> = vec![];
-    let mut facades: Vec<(String, String)> = vec![];
-    let mut files: Vec<(String, String)> = vec![];
+    #[allow(unused_mut)] let mut imports: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut modules: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
+    let mut facades: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
+    let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
     let mut has_grammar = false;
     for at in 0..names.len() as i64 {
-        let name = (*nikaia_std::index::get(&names, (at) as usize)).to_string();
+        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (at) as usize)).to_string());
         let mut body: String = String::from("");
-        let all: Vec<String> = (*nikaia_std::index::get(&lowered, (at) as usize)).lines().map(|line| { line.to_string() }).collect::<Vec<_>>();
-        let mut i: i64 = 0;
+        let all: Vec<String> = (*nikaia_std::index::get(&lowered, (at) as usize)).lines().map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
+        let mut i: i64 = 0; #[allow(clippy::redundant_locals)] let all = all;
         while ((i) as usize) < all.len() {
             if *nikaia_std::index::get(&all, (i) as usize) == "#[allow(unused_imports)]" && ((i + 1) as usize) < all.len() && (*nikaia_std::index::get(&all, (i + 1) as usize)).starts_with("use nikaia_std::") {
-                let import = (*nikaia_std::index::get(&all, (i + 1) as usize)).to_string();
+                let import = nikaia_std::block::Text::from((*nikaia_std::index::get(&all, (i + 1) as usize)).to_string());
                 i += 2;
                 if !nikaia_std::list::contains(&imports, &import) { imports.push(import); }
                 continue;
@@ -267,18 +267,23 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
             body.push_str("\n");
             i += 1;
         }
-        if nikaia_std::index::get(&views, (at) as usize).items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) }) { has_grammar = true; }
+        let file_grammar = nikaia_std::index::get(&views, (at) as usize).items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) });
+        if file_grammar { has_grammar = true; }
+        let block_names = match false {
+            true => "",
+            false => "    #[allow(unused_imports)]\n    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};\n",
+        };
         let stem = name.trim_end_matches(".nika");
-        modules.push((stem.to_string(), format!("mod {}_lowered {{\n    #[allow(unused_imports)]\n    use super::*;\n    include!(\"{}/{}.rs\");\n}}\n#[allow(unused_imports)]\npub use {}_lowered::*;\n\n", stem, SYSROOT_TOOLS_FILES, stem, stem)));
+        modules.push((nikaia_std::block::Text::from(stem.to_string()), format!("mod {}_lowered {{\n    #[allow(unused_imports)]\n    use super::*;\n{}    include!(\"{}/{}.rs\");\n}}\n#[allow(unused_imports)]\npub use {}_lowered::*;\n\n", stem, block_names, SYSROOT_TOOLS_FILES, stem, stem)));
         let shown = sysroot_package_shared(body.trim_start_matches("\n"));
         let text = format!("// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit {} in the directory above, not this file.\n\n{}", name, shown);
         files.push((format!("{}/{}.rs", SYSROOT_TOOLS_FILES, stem), text));
-        facades.push((stem.to_string(), sysroot_package_facade(&name, nikaia_std::index::get(&views, (at) as usize))));
+        facades.push((nikaia_std::block::Text::from(stem.to_string()), sysroot_package_facade(&name, nikaia_std::index::get(&views, (at) as usize))));
     }
     modules.sort();
     facades.sort();
     files.sort();
-    let mut rust: String = String::from("// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit the .nika sources in this directory, not this file.\n\n");
+    let mut rust: String = String::from("// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit the .nika sources in this directory, not this file.\n\n"); #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
     if has_grammar { rust.push_str("use winnow_grammar::grammar;\n"); }
     rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::error::Full;\n");
     rust.push_str("#[allow(unused_imports)]\npub use nikaia_std::abort::panic;\n");
@@ -297,7 +302,7 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
     rust.push_str("\n");
     for (_, one) in modules.iter() { rust.push_str(one); }
     for (_, one) in facades.iter() { rust.push_str(one); }
-    let mut package: Vec<(String, String)> = vec![(SYSROOT_TOOLS_PACKAGE.to_string(), rust)];
+    let mut package: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(SYSROOT_TOOLS_PACKAGE.to_string()), rust)];
     for entry in files.into_iter() { package.push(entry); }
     package
 }
@@ -305,16 +310,16 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
 pub(crate) const SYSROOT_PACKAGE_HANDED: &[&str] = &["scalar", "IntoEither", "IntoEitherMaybe", "TextQuoted"];
 
 pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> {
-    let mut index = nikaia_std::index::get(&package, 0).1.to_string();
+    let mut index = nikaia_std::block::Text::from(nikaia_std::index::get(&package, 0).1.to_string());
     let mut files: Vec<(String, String)> = vec![];
     for at in 1..package.len() as i64 { files.push((*nikaia_std::index::get(&package, (at) as usize)).clone()); }
     let handed = SYSROOT_PACKAGE_HANDED.iter().join(", ");
     for (name, theirs) in dependencies.iter() {
         index.push_str(&format!("pub mod {} {{\n    #[allow(unused_imports)]\n    use super::{{{}}};\n    include!(\"{}/{}/{}\");\n}}\n", name, handed, SYSROOT_TOOLS_FILES, name, SYSROOT_TOOLS_PACKAGE));
-        for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_TOOLS_FILES, name, file), text.to_string())); }
+        for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_TOOLS_FILES, name, file), nikaia_std::block::Text::from(text.to_string()))); }
     }
     files.sort();
-    let mut all: Vec<(String, String)> = vec![(nikaia_std::index::get(&package, 0).0.to_string(), index)];
+    let mut all: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(nikaia_std::index::get(&package, 0).0.to_string()), index)];
     all.extend(files);
     all
 }

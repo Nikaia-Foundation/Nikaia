@@ -108,9 +108,10 @@ pub enum IoError {
 
 impl IoError {
     /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
-    /// what the failure prints as.
-    pub fn message(&self) -> String {
-        self.to_string()
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
     }
 
     /// One of the language below's failures, told apart and given what it was
@@ -221,14 +222,16 @@ pub(crate) fn print_error(error: std::io::Error, what: &str) -> IoError {
 ///
 /// Reading it a second time yields what the operating system says, which is
 /// nothing.
-pub async fn read_to_string() -> Result<String, IoError> {
+pub async fn read_to_string() -> Result<crate::block::Text, IoError> {
     let bytes = crate::rt::io::stdin_whole()
         .await
         .map_err(|e| IoError::of(e, STDIN))?;
     // The same failure `std`'s own `read_to_string` reports, under the name
     // this library gives it: a stream that is not text is `NotText` and not a
-    // lossy string.
-    String::from_utf8(bytes).map_err(|_| IoError::NotText(STDIN.to_string()))
+    // lossy string. The checked text is a block's, the same memory (#490).
+    String::from_utf8(bytes)
+        .map(crate::block::Text::from)
+        .map_err(|_| IoError::NotText(STDIN.to_string()))
 }
 
 /// All of standard input, as bytes.
@@ -294,7 +297,7 @@ pub async fn lines() -> Lines {
 ///
 /// It pauses while the stream has nothing to give, and fails where the line is
 /// not UTF-8 or the input cannot be read.
-pub async fn read_line() -> Result<Option<String>, IoError> {
+pub async fn read_line() -> Result<Option<crate::block::Text>, IoError> {
     loop {
         if let Some(line) = with_held(Held::take_a_line) {
             return line.map(Some);
@@ -447,7 +450,7 @@ impl Lines {
     /// either, and a final line without one is still a line — which is
     /// `BufRead::lines`' own rule, kept because programs were written against
     /// it.
-    pub async fn next(&mut self) -> Option<Result<String, IoError>> {
+    pub async fn next(&mut self) -> Option<Result<crate::block::Text, IoError>> {
         loop {
             if let Some(line) = with_held(Held::take_a_line) {
                 return Some(line);
@@ -476,8 +479,8 @@ impl Lines {
     /// class Part I 6.4 refuses by name — and is what this entry did until
     /// D5, when `Lines` was an `Iterator` over `Result` and the ledger said
     /// the result was a list of strings.
-    pub async fn collect(mut self) -> Result<Vec<String>, IoError> {
-        let mut out = Vec::new();
+    pub async fn collect(mut self) -> Result<crate::block::List<crate::block::Text>, IoError> {
+        let mut out = crate::block::List::new();
         while let Some(line) = self.next().await {
             out.push(line?);
         }
@@ -499,7 +502,7 @@ impl Lines {
 
     /// The line at a position, or nothing where the stream is shorter than that
     /// — `Seq::nth`. It walks up to that position to answer.
-    pub async fn nth(mut self, at: i64) -> Result<Option<String>, IoError> {
+    pub async fn nth(mut self, at: i64) -> Result<Option<crate::block::Text>, IoError> {
         if at < 0 {
             return Ok(None);
         }
@@ -516,8 +519,8 @@ impl Lines {
 
     /// Every line written one after another with this text between them —
     /// `Seq::join`.
-    pub async fn join(mut self, separator: &str) -> Result<String, IoError> {
-        let mut out = String::new();
+    pub async fn join(mut self, separator: &str) -> Result<crate::block::Text, IoError> {
+        let mut out = crate::block::Text::new();
         let mut first = true;
         while let Some(line) = self.next().await {
             if !first {
@@ -533,7 +536,7 @@ impl Lines {
     /// something walks the result
     /// ([ADR-234](../../../docs/specification/adr/adr-234.md) D1). A failure
     /// passes through to that walk, which is where the program's `?` is.
-    pub fn map<U, F: FnMut(String) -> U>(
+    pub fn map<U, F: FnMut(crate::block::Text) -> U>(
         self,
         f: F,
     ) -> crate::seq::Failing<crate::seq::OkMap<Self, F>> {
@@ -541,7 +544,7 @@ impl Lines {
     }
 
     /// Only the lines a lambda says yes to — `Seq::filter`, lazy.
-    pub fn filter<F: FnMut(&String) -> bool>(
+    pub fn filter<F: FnMut(&crate::block::Text) -> bool>(
         self,
         f: F,
     ) -> crate::seq::Failing<crate::seq::OkFilter<Self, F>> {
@@ -550,7 +553,7 @@ impl Lines {
 
     /// Each line through a lambda that pauses
     /// ([ADR-233](../../../docs/specification/adr/adr-233.md) D1).
-    pub fn then<U, F: AsyncFnMut(String) -> U>(
+    pub fn then<U, F: AsyncFnMut(crate::block::Text) -> U>(
         self,
         f: F,
     ) -> crate::seq::Failing<crate::seq::OkThen<Self, F>> {
@@ -558,7 +561,7 @@ impl Lines {
     }
 
     /// Only the lines a lambda that pauses says yes to.
-    pub fn then_filter<F: AsyncFnMut(&String) -> bool>(
+    pub fn then_filter<F: AsyncFnMut(&crate::block::Text) -> bool>(
         self,
         f: F,
     ) -> crate::seq::Failing<crate::seq::OkThenFilter<Self, F>> {
@@ -622,7 +625,7 @@ impl Held {
     /// A whole line is one with its newline in hand; at the end of the stream
     /// the remainder is a line too, and `None` there means there is nothing
     /// left at all.
-    fn take_a_line(&mut self) -> Option<Result<String, IoError>> {
+    fn take_a_line(&mut self) -> Option<Result<crate::block::Text, IoError>> {
         let rest = &self.held[self.at..];
         let (line, step) = match rest.iter().position(|b| *b == b'\n') {
             Some(at) => (&rest[..at], at + 1),
@@ -633,7 +636,7 @@ impl Held {
             Some(shorter) => shorter,
             None => line,
         };
-        let line = String::from_utf8(line.to_vec());
+        let line = crate::block::Text::from_utf8(crate::block::List::from(line));
         self.at += step;
         Some(line.map_err(|e| {
             IoError::of(
@@ -667,7 +670,7 @@ mod lines_tests {
         }
     }
 
-    fn drain(lines: &mut Held) -> Vec<String> {
+    fn drain(lines: &mut Held) -> Vec<crate::block::Text> {
         let mut out = Vec::new();
         while let Some(line) = lines.take_a_line() {
             out.push(line.expect("the bytes are text"));
@@ -742,7 +745,7 @@ mod lines_tests {
         assert_eq!(drain_one(&mut held), "next");
     }
 
-    fn drain_one(held: &mut Held) -> String {
+    fn drain_one(held: &mut Held) -> crate::block::Text {
         held.take_a_line().expect("a line").expect("text")
     }
 }
@@ -852,8 +855,8 @@ mod tests {
 }
 
 impl crate::seq::Step for Lines {
-    type Item = Result<String, IoError>;
-    async fn step(&mut self) -> Option<Result<String, IoError>> {
+    type Item = Result<crate::block::Text, IoError>;
+    async fn step(&mut self) -> Option<Result<crate::block::Text, IoError>> {
         self.next().await
     }
 }

@@ -5,6 +5,8 @@
 //! and an index past the end still stops.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
@@ -44,8 +46,8 @@ fn run(purpose: &str, source: &str) -> (bool, String, String) {
     let _ = std::fs::remove_dir_all(&dir);
     (
         ran.status.success(),
-        String::from_utf8_lossy(&ran.stdout).to_string(),
-        String::from_utf8_lossy(&ran.stderr).to_string(),
+        String::from_utf8_lossy(&ran.stdout).to_text(),
+        String::from_utf8_lossy(&ran.stderr).to_text(),
     )
 }
 

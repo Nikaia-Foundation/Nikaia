@@ -33,7 +33,7 @@ pub fn diagnostics_read_json(json: &str) -> Vec<DiagnosticsRead> {
             Some(ref said) => if said == "compiler-message" { nikaia_std::index::or(cargo_json_member(Some(&line), "message"), || json::Value::Null.into()) } else { continue; },
         };
         let primary = match cargo_json_items((cargo_json_member(Some(&value), "spans")).as_ref()).iter().find(|&span| { nikaia_std::index::or(cargo_json_bool((cargo_json_member(Some(&span.clone()), "is_primary")).as_ref()), || false) }) {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         };
         read.push(DiagnosticsRead { level: nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(&value), "level")).as_ref()), || "".into()), message: nikaia_std::index::or(cargo_json_text((cargo_json_member(Some(&value), "message")).as_ref()), || "".into()), code: cargo_json_text((cargo_json_member((cargo_json_member(Some(&value), "code")).as_ref(), "code")).as_ref()), generated_line: cargo_json_number((cargo_json_member((primary).as_ref(), "line_start")).as_ref()), label: cargo_json_text((cargo_json_member((primary).as_ref(), "label")).as_ref()), byte_start: cargo_json_number((cargo_json_member((primary).as_ref(), "byte_start")).as_ref()), located: false, unit: 0, span: Span { start: 0, end: 0 }, children: cargo_json_items((cargo_json_member(Some(&value), "children")).as_ref()).iter().map(|child| { DiagnosticsChild { level: cargo_json_text((cargo_json_member(Some(&child.clone()), "level")).as_ref()), message: cargo_json_text((cargo_json_member(Some(&child.clone()), "message")).as_ref()) } }).collect::<Vec<_>>() });
@@ -76,13 +76,13 @@ pub fn diagnostics_placed(read: &[DiagnosticsRead], sources: &[&str]) -> Vec<Dia
         if one.message.starts_with("aborting due to") { continue; }
         let message = in_this_language(&one.message);
         let mut internal: Option<String> = None;
-        if both_sides_the_same(&message).is_some() && both_sides_the_same(&one.message).is_none() { internal = Some(one.message.to_string()); }
+        if both_sides_the_same(&message).is_some() && both_sides_the_same(&one.message).is_none() { internal = Some(nikaia_std::block::Text::from(one.message.to_string())); }
         let label: Option<String> = match &one.label {
             None => None,
             Some(written) => Some(in_this_language(written)),
         };
         let notes: Vec<String> = one.children.iter().filter(|&c| { diagnostics_a_note(c) }).map(|c| { in_this_language(nikaia_std::index::or(c.message.as_deref(), || "")) }).collect::<Vec<_>>();
-        let mut placed = DiagnosticsPlaced { level: one.level.to_string(), message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes, internal, label, about_the_program: false };
+        let mut placed = DiagnosticsPlaced { level: nikaia_std::block::Text::from(one.level.to_string()), message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes, internal, label, about_the_program: false };
         if one.located && one.unit >= 0 && one.unit < starts.len() as i64 {
             let at = one.span.start as i64;
             let line = diagnostics_line_of(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), at);
@@ -110,7 +110,7 @@ pub(crate) fn diagnostics_in_a_grammar(starts: &[i64], source: &str, at: i64) ->
 }
 
 pub(crate) fn diagnostics_a_note(child: &DiagnosticsChild) -> bool {
-    let level = nikaia_std::index::or(child.level.as_deref(), || "").to_string();
+    let level = nikaia_std::block::Text::from(nikaia_std::index::or(child.level.as_deref(), || "").to_string());
     if level != "note" && level != "help" { return false; }
     let message = match child.message.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     !is_rust_internal(message)

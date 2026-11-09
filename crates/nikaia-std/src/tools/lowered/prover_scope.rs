@@ -39,7 +39,7 @@ impl ProverScope {
         let under = format!("{}.", name);
         let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
         let own = length_of(name);
-        for n in self.ints.iter() { if n.starts_with(&under) && *n != own { parts.insert(nikaia_std::index::or(n.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(n)).to_string()); } }
+        for n in self.ints.iter() { if n.starts_with(&*under) && *n != own { parts.insert(nikaia_std::block::Text::from(nikaia_std::index::or(n.strip_suffix(".len()"), || std::convert::AsRef::<str>::as_ref(n)).to_string())); } }
         for part in parts.iter() { self.rebind(arena, part); }
         let length = length_of(name);
         self.ints.remove(name);
@@ -47,7 +47,7 @@ impl ProverScope {
         self.tainted.remove(name);
         self.entry.remove(name);
         self.entry.remove(&length);
-        self.locals.insert(name.to_string());
+        self.locals.insert(nikaia_std::block::Text::from(name.to_string()));
         self.loose.remove(name);
         self.loose.remove(&length);
         self.calls_of.remove(name);
@@ -59,11 +59,11 @@ impl ProverScope {
             for record in self.loops.iter() { if !nikaia_std::list::contains(&record.problem.state, &name) { standing.push(record.clone()); } }
             self.loops = standing;
         }
-        let mut gone: Vec<String> = vec![];
+        let mut gone: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (bound, alts) in self.summed.iter() {
             for alt in alts.iter() {
                 if arena.mentions(alt.guard, name) || arena.mentions(alt.value, name) || arena.mentions(alt.guard, &length) || arena.mentions(alt.value, &length) {
-                    gone.push(bound.to_string());
+                    gone.push(nikaia_std::block::Text::from(bound.to_string()));
                     break;
                 }
             }
@@ -88,7 +88,7 @@ impl ProverScope {
     pub fn renamed(&mut self, arena: &mut TermArena, name: &str, earlier: &str) {
         self.bits.remove(name);
         let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-        given.insert(name.to_string(), arena.var(earlier));
+        given.insert(nikaia_std::block::Text::from(name.to_string()), arena.var(earlier));
         let mut history: Vec<i64> = vec![];
         for fact in self.history.iter() {
             let fact = nikaia_std::num::value(fact);
@@ -102,11 +102,11 @@ impl ProverScope {
         if (kept.len() as i64) != self.facts.len() as i64 { self.exact = false; }
         self.facts = kept;
         self.history = history;
-        self.ints.insert(earlier.to_string());
-        if self.loose.contains(name) { self.loose.insert(earlier.to_string()); }
+        self.ints.insert(nikaia_std::block::Text::from(earlier.to_string()));
+        if self.loose.contains(name) { self.loose.insert(nikaia_std::block::Text::from(earlier.to_string())); }
         let at = self.entry.remove(name);
-        if at.is_some() { self.entry.insert(earlier.to_string(), nikaia_std::index::or(at, || 0)); }
-        let ints = self.ints.to_owned();
+        if at.is_some() { self.entry.insert(nikaia_std::block::Text::from(earlier.to_string()), nikaia_std::index::or(at, || 0)); }
+        let ints = self.ints.copy_owned();
         self.rebind(&arena, name);
         self.ints = ints;
     }
@@ -134,13 +134,13 @@ impl ProverScope {
         false
     }
     pub fn with_history(&self) -> Vec<i64> {
-        let mut all = self.facts.to_owned();
+        let mut all = self.facts.copy_owned();
         all.extend(self.history.iter().cloned());
         all
     }
     pub fn has_length(&mut self, arena: &mut TermArena, name: &str, known: Option<i64>) {
         let length = length_of(name);
-        self.ints.insert(length.to_string());
+        self.ints.insert(nikaia_std::block::Text::from(length.to_string()));
         let len = arena.var(&length);
         let zero = arena.int(0);
         self.facts.push(arena.ge(len, zero));
@@ -163,7 +163,7 @@ impl ProverScope {
         let mut values: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for name in read.iter() {
             let value = match *nikaia_std::index::get(&self.entry, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
-            values.insert(name.to_string(), value);
+            values.insert(nikaia_std::block::Text::from(name.to_string()), value);
         }
         Some(arena.substitute(term, &values))
     }
@@ -199,9 +199,9 @@ impl ProverScope {
         let result = arena.var(&result_name());
         let mut values: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for name in read.iter() {
-            if name == returned { values.insert(name.to_string(), result); } else {
+            if name == returned { values.insert(nikaia_std::block::Text::from(name.to_string()), result); } else {
                 let value = match *nikaia_std::index::get(&self.entry, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
-                values.insert(name.to_string(), value);
+                values.insert(nikaia_std::block::Text::from(name.to_string()), value);
             }
         }
         let term = arena.substitute(claim, &values);
@@ -229,8 +229,8 @@ impl ProverScope {
         Some(names)
     }
     pub fn bounded_bits(&mut self, arena: &mut TermArena, name: &str, bits: &ProverBits) {
-        self.ints.insert(name.to_string());
-        self.loose.insert(name.to_string());
+        self.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+        self.loose.insert(nikaia_std::block::Text::from(name.to_string()));
         let named = arena.var(name);
         let lo = arena.int(bits.lo);
         let above = arena.le(lo, named);
@@ -238,12 +238,12 @@ impl ProverScope {
         let hi = arena.int(bits.hi);
         let below = arena.le(named, hi);
         self.facts.push(below);
-        self.bits.insert(name.to_string(), ProverBits { lo: bits.lo, hi: bits.hi });
+        self.bits.insert(nikaia_std::block::Text::from(name.to_string()), ProverBits { lo: bits.lo, hi: bits.hi });
     }
     pub fn blind(&self) -> ProverScope {
         let mut scope = ProverScope::unknown();
-        scope.tainted = self.tainted.to_owned();
-        scope.locals = self.locals.to_owned();
+        scope.tainted = self.tainted.copy_owned();
+        scope.locals = self.locals.copy_owned();
         scope
     }
 }
@@ -262,7 +262,7 @@ pub(crate) fn pushed(path: Option<Vec<i64>>, c: i64) -> Option<Vec<i64>> {
 
 pub fn copied_path(path: Option<&Vec<i64>>) -> Option<Vec<i64>> {
     let p = match path { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(p.to_owned())
+    Some(p.copy_owned())
 }
 
 pub(crate) fn only_parameters(arena: &TermArena, term: i64, params: &collections::BTreeSet<String>) -> bool {

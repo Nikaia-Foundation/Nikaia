@@ -70,9 +70,9 @@ pub fn sv_log_verified(arena: &TermArena, facts: &[i64], goal: i64, log: &[SvSte
 }
 
 pub fn sv_log_text(log: &[SvStep]) -> String {
-    let mut steps: Vec<String> = vec![];
+    let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for step in log.iter() { steps.push(sv_step_text(step)); }
-    format!("{}{}", SV_LOG_PREFIX, steps.join(","))
+    format!("{}{}", SV_LOG_PREFIX, nikaia_std::block::Text::from(steps.join(",")))
 }
 
 pub(crate) fn sv_step_text(step: &SvStep) -> String {
@@ -89,25 +89,25 @@ pub(crate) fn sv_step_text(step: &SvStep) -> String {
 }
 
 pub(crate) fn sv_u32s_text(items: &[u32]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         let item = nikaia_std::num::value(item);
         words.push(format!("{}", item));
     }
-    words.join(".")
+    nikaia_std::block::Text::from(words.join("."))
 }
 
 pub(crate) fn sv_i64s_text(items: &[i64]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         let item = nikaia_std::num::value(item);
         words.push(format!("{}", item));
     }
-    words.join(".")
+    nikaia_std::block::Text::from(words.join("."))
 }
 
 pub(crate) fn sv_srcs_text(srcs: &[SvSrc]) -> String {
-    let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for src in srcs.iter() {
         let src = *src;
         words.push(match src {
@@ -115,13 +115,13 @@ pub(crate) fn sv_srcs_text(srcs: &[SvSrc]) -> String {
             SvSrc::Fact(e) => format!("e{}", e),
         });
     }
-    words.join(".")
+    nikaia_std::block::Text::from(words.join("."))
 }
 
 pub(crate) fn sv_row_word(row: &SvRow) -> String { format!("{}:{}:{}", sv_u32s_text(&row.cols), sv_i64s_text(&row.ks), row.constant) }
 
 pub fn sv_log_of(text: &str) -> Option<Vec<SvStep>> {
-    let body = match text.strip_prefix(SV_LOG_PREFIX) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let body = match text.strip_prefix(AsRef::<str>::as_ref(SV_LOG_PREFIX)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut steps: Vec<SvStep> = vec![];
     if body.is_empty() { return Some(steps); }
     for word in body.split(',') { steps.push(match sv_step_of(word) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
@@ -130,7 +130,7 @@ pub fn sv_log_of(text: &str) -> Option<Vec<SvStep>> {
 
 pub(crate) fn sv_step_of(word: &str) -> Option<SvStep> {
     for letter in ["i", "l", "d", "f", "c", "r", "s", "x"] {
-        let rest = match word.strip_prefix(letter) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let rest = match word.strip_prefix(AsRef::<str>::as_ref(letter)) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let fields: Vec<&str> = rest.split('/').collect::<Vec<_>>();
         return sv_step_from(letter, &fields);
     }

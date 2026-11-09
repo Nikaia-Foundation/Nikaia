@@ -22,6 +22,8 @@
 
 use crate::common;
 use nikaia::specbook::{self, Stage};
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 fn baseline() -> PathBuf {
@@ -117,12 +119,12 @@ fn the_specifications_version_is_the_changelogs() {
         let text = std::fs::read_to_string(root.join("docs/specification").join(page))
             .unwrap_or_else(|_| panic!("{page}"));
         assert!(
-            text.contains(&format!("**Version:** {version} (Draft)")),
+            text.contains(&*format!("**Version:** {version} (Draft)")),
             "{page} does not carry version {version}, which is the CHANGELOG's newest \
              heading - raise it there and here in the same change"
         );
         assert!(
-            text.contains(&format!("**Date:** {date}")),
+            text.contains(&*format!("**Date:** {date}")),
             "{page} does not carry the date {date} of that heading"
         );
     }
@@ -327,7 +329,7 @@ fn what_lowers_is_handed_to_rustc_and_the_verdicts_are_the_recorded_ones() {
             let mut codes: Vec<String> = stderr
                 .lines()
                 .filter(|l| l.starts_with("error["))
-                .map(|l| l.split(':').next().unwrap_or(l).to_string())
+                .map(|l| l.split(':').next().unwrap_or(l).to_text())
                 .collect();
             codes.sort();
             codes.dedup();

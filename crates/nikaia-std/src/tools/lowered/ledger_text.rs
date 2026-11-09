@@ -70,7 +70,7 @@ pub(crate) fn quoted_all(items: &[String]) -> String {
     out
 }
 
-pub(crate) fn ledger_escaped(value: &str) -> String { value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") }
+pub(crate) fn ledger_escaped(value: &str) -> String { nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::block::Text::from(value.replace("\\", "\\\\")).replace("\"", "\\\"")).replace("\n", "\\n")) }
 
 pub fn contract_text(ledger: &Ledger, notes: &Notes) -> String {
     let mut out = format!("version = {}\n", ledger.version);
@@ -114,7 +114,7 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         mutates_said = said.mutates_said;
         signature_line = format!("signature = \"{}\"\n", ledger_escaped(&said.text));
     }
-    if !contract.returns.is_empty() { out.push_str(&format!("returns = \"{}\"\n", contract.returns)); } else if !contract.borrows.is_empty() && !borrows_said { out.push_str(&format!("returns = \"ref({})\"\n", contract.borrows.join(" | "))); }
+    if !contract.returns.is_empty() { out.push_str(&format!("returns = \"{}\"\n", contract.returns)); } else if !contract.borrows.is_empty() && !borrows_said { out.push_str(&format!("returns = \"ref({})\"\n", nikaia_std::block::Text::from(contract.borrows.join(" | ")))); }
     if !contract.keeps.is_empty() { out.push_str(&format!("keeps = [{}]\n", quoted_all(&contract.keeps))); }
     if contract.mutates && !mutates_said { out.push_str("mutates = true\n"); }
     match contract.touches_a_lock {

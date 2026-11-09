@@ -18,7 +18,7 @@ pub(crate) fn viewed_of(ty: &Ty) -> FactViewed {
 // this was written - see `contracts::sync`.
 pub(crate) fn named_or_empty(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, .. } => name.to_string(),
+        Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => String::from(""),
     }
 }
@@ -99,7 +99,7 @@ impl CheckState {
         if pieces.len() == 2 {
             let message = format!("`{}` always has a value, so `?.` guards nothing.", written_expression(world.words, receiver));
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `?.` only passes over a `null`.";
-            self.findings.push(check_refusal("NK1121", span, message, vec![note.to_string()], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0), plain))));
+            self.findings.push(check_refusal("NK1121", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0), plain))));
             return;
         }
         self.facts.plain_reaches.insert(fact_key(reach));
@@ -123,10 +123,10 @@ impl CheckState {
         };
         let index = pieces.len() == 2;
         if !index { self.facts.plain_reaches.insert(fact_key(coalesce)); }
-        let message = format!("`{}` always has a value, so `??` has nothing to replace.", shown);
+        let message = format!("`{}` always has a value, so `??` has nothing to replace.", shown); #[allow(clippy::redundant_locals)] let pieces = pieces;
         if index {
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `??` only replaces a `null`.";
-            self.findings.push(check_refusal("NK1211", span, message, vec![note.to_string()], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0)))));
+            self.findings.push(check_refusal("NK1211", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0)))));
             return false;
         }
         let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.text());
@@ -141,7 +141,7 @@ impl CheckState {
         match written {
             Expr::MethodCall { receiver, method, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let word = world.words.resolve(method).to_string();
+                let word = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
                 if word == "clone" || word == "to_owned" { names_a_copy = true; } else if word == "to_string" { names_a_copy = !self.facts.text_as_is.contains(&fact_key(receiver)); }
             },
             _ => { },
@@ -152,7 +152,7 @@ impl CheckState {
         if !a_name || !moves(&owned) || !self.takes_away(world, &owned) { return; }
         let message = format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text());
         let notes: Vec<String> = vec![String::from("A view and the value it points into are different types, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back, so it can't make the two agree on its own.")];
-        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text());
+        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text()); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
 }
@@ -165,15 +165,15 @@ pub(crate) fn an_operation_in_one_type(op: &BinaryOp) -> bool { !(*op == BinaryO
 // this was written - see `contracts::sync`.
 pub(crate) fn check_fields_holds_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, open: &[String]) -> bool {
     let (name, args) = match ty {
-        Ty::Named { name, args, view } => { let view = *view; if view { return false; } else { (name.to_string(), args.to_owned()) } },
+        Ty::Named { name, args, view } => { let view = *view; if view { return false; } else { (nikaia_std::block::Text::from(name.to_string()), args.copy_owned()) } },
         _ => return false,
     };
     let base = a_type_base(&name);
     if base == "String" || !args.is_empty() { return true; }
     if nikaia_std::list::contains(&open, &base) { return false; }
     let fields = match *nikaia_std::index::get(&world.fields_by_base, &base) { Some(__nikaia_value) => __nikaia_value, None => return false };
-    let mut deeper = open.to_owned();
-    deeper.push(base.to_string());
+    let mut deeper = open.copy_owned();
+    deeper.push(nikaia_std::block::Text::from(base.to_string()));
     for field in fields.iter() { if check_fields_holds_text(world, field, &deeper) { return true; } }
     false
 }
@@ -197,7 +197,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_lent_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
         };
         let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -242,7 +242,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
         };
         let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -283,7 +283,7 @@ impl CheckState {
                 let mut written = format!("{}{}", digits, ty);
                 if value.negative { written = format!("({}{})", digits, ty); }
                 self.facts.comptime_uses.insert(fact_key(expr), written);
-                self.facts.folded_comptimes.insert(world.words.resolve(name).to_string());
+                self.facts.folded_comptimes.insert(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
             },
             Expr::Binary { op, lhs, rhs, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -320,10 +320,10 @@ impl CheckState {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-            return contract.fields.to_owned();
+            return contract.fields.copy_owned();
         }
         let suffix = format!("::{}", name);
-        for (key, contract) in world.library.types.iter() { if key == name || key.ends_with(&suffix) { return contract.fields.to_owned(); } }
+        for (key, contract) in world.library.types.iter() { if key == name || key.ends_with(AsRef::<str>::as_ref(&suffix)) { return contract.fields.copy_owned(); } }
         vec![]
     }
 }
@@ -337,7 +337,7 @@ pub fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld
             match base {
                 Expr::Variable(name, _) => {
                     let name = *name;
-                    let base_name: String = world.words.resolve(name).to_string();
+                    let base_name: String = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                     let local = match state.binding(&base_name) { Some(__nikaia_value) => __nikaia_value, None => return };
                     let open = match local.ty {
                         Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && ((*nikaia_std::index::get(&args, 0)).is_unknown() || (*nikaia_std::index::get(&args, 1)).is_unknown())),
@@ -362,7 +362,7 @@ pub fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld
 // this was written - see `contracts::sync`.
 pub(crate) fn check_fields_map_parts(ty: &Ty) -> Vec<Ty> {
     match ty {
-        Ty::Named { args, .. } => if args.len() == 2 { args.to_owned() } else { vec![Ty::Unknown, Ty::Unknown] },
+        Ty::Named { args, .. } => if args.len() == 2 { args.copy_owned() } else { vec![Ty::Unknown, Ty::Unknown] },
         _ => vec![Ty::Unknown, Ty::Unknown],
     }
 }

@@ -13,6 +13,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const FREED: [&str; 4] = ["loop", "const", "macro", "quote"];
 
@@ -83,7 +85,7 @@ fn the_three_the_backend_reserves_are_escaped() {
         ))
         .unwrap_or_else(|e| panic!("`{word}` lowers: {e}"));
         assert_eq!(
-            rust.contains(&format!("r#{word}")),
+            rust.contains(&*format!("r#{word}")),
             escaped,
             "`{word}`: escaped should be {escaped}\n{rust}"
         );
@@ -109,7 +111,7 @@ fn a_stray_word_is_told_what_to_write_instead() {
         // rather than the pair being counted.
         let found: Vec<_> = findings(&format!("fn main() {{\n    {word}\nx\n}}"))
             .into_iter()
-            .filter(|f| f.code == "NK1117" && f.message.contains(&format!("`{word}`")))
+            .filter(|f| f.code == "NK1117" && f.message.contains(&*format!("`{word}`")))
             .collect();
         assert_eq!(found.len(), 1, "`{word}` is one refusal: {found:#?}");
         let help = found[0].help.as_deref().expect("a way out");

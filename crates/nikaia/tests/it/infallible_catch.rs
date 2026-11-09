@@ -18,6 +18,8 @@ use crate::common;
 use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -99,10 +101,10 @@ fn what_cannot_fail_is_refused() {
 /// writes it down this moves with the rest.
 #[test]
 fn what_might_fail_is_left_alone() {
-    let undescribed = common::undescribed_call("text.to_string()");
+    let undescribed = common::undescribed_call("text.to_text()");
     for body in [
-        "risky(text) catch { 1 }".to_string(),
-        "safe(risky(text)) catch { 3 }".to_string(),
+        "risky(text) catch { 1 }".to_text(),
+        "safe(risky(text)) catch { 3 }".to_text(),
         format!("{undescribed} catch {{ 0 }}"),
     ] {
         assert!(
@@ -181,7 +183,7 @@ fn nothing_in_the_corpus_is_newly_refused() {
                 continue;
             }
             if !refusals(&source).is_empty() {
-                refused.push(path.display().to_string());
+                refused.push(path.display().to_text());
             }
         }
     }

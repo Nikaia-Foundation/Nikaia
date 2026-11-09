@@ -128,21 +128,21 @@ pub mod path {
     /// **Text for showing** (ADR-319 D6): `�` for what is not text. It never
     /// fails, and nothing tracks what is done with it.
     /// The name as text (ADR-319 D5): `NotText` where its bytes are not.
-    pub fn to_text(p: &FilePath) -> Result<String, crate::io::IoError> {
+    pub fn to_text(p: &FilePath) -> Result<crate::block::Text, crate::io::IoError> {
         match p.to_str() {
-            Some(text) => Ok(text.to_string()),
+            Some(text) => Ok(crate::block::Text::from(text)),
             None => Err(crate::io::IoError::NotText(p.display().to_string())),
         }
     }
 
     /// The name as text, where the compiler followed it back to text (D5):
     /// made from text, it is text, so nothing is lost.
-    pub fn text_of(p: &FilePath) -> String {
-        p.to_string_lossy().into_owned()
+    pub fn text_of(p: &FilePath) -> crate::block::Text {
+        crate::block::Text::from(&*p.to_string_lossy())
     }
 
-    pub fn display(p: &FilePath) -> String {
-        p.to_string_lossy().into_owned()
+    pub fn display(p: &FilePath) -> crate::block::Text {
+        crate::block::Text::from(&*p.to_string_lossy())
     }
 
     /// **A name that is not text keeps its bytes** (ADR-319 D1, D3), and
@@ -521,14 +521,14 @@ pub fn metadata(path: impl AsRef<FilePath>, root: &Root) -> Result<Metadata, cra
 /// **The names in a directory**, each its own name and not joined to the
 /// directory's, in byte order - so a program that prints them prints the same
 /// lines on every machine, whatever order the system keeps them in.
-pub type DirEntries = Vec<Path>;
+pub type DirEntries = crate::block::List<Path>;
 
 /// The names in the directory, as [`DirEntries`].
 pub fn read_dir(path: impl AsRef<FilePath>, root: &Root) -> Result<DirEntries, crate::io::IoError> {
     let asked = path.as_ref();
     let resolved = resolve(asked, root)?;
     let of = |e| crate::io::IoError::of(e, asked);
-    let mut names = Vec::new();
+    let mut names = crate::block::List::new();
     for entry in std::fs::read_dir(&resolved).map_err(of)? {
         names.push(Path::from(entry.map_err(of)?.file_name()));
     }
@@ -775,7 +775,7 @@ pub async fn map(path: impl AsRef<FilePath>, root: &Root) -> Result<Mapped, crat
 pub async fn read_to_string(
     path: impl AsRef<FilePath>,
     root: &Root,
-) -> Result<String, crate::io::IoError> {
+) -> Result<crate::block::Text, crate::io::IoError> {
     // **The name is written out only for a failure** (ADR-263 D3): building
     // it on every call was ~425 instructions a read spent on a message no
     // successful read reports.
@@ -784,7 +784,7 @@ pub async fn read_to_string(
     let bytes = crate::rt::io::reading(&resolved)
         .await
         .map_err(|e| crate::io::IoError::of(e, asked))?;
-    text_named(bytes, || asked.display().to_string())
+    text_named(bytes, || asked.display().to_string()).map(crate::block::Text::from)
 }
 
 /// Bytes as text, or the failure `read_to_string` reports for bytes that are
@@ -1160,7 +1160,7 @@ pub fn open(
 pub async fn walk(
     path: impl AsRef<FilePath>,
     root: &Root,
-) -> Result<Vec<Path>, crate::io::IoError> {
+) -> Result<crate::block::List<Path>, crate::io::IoError> {
     let start = resolve(path.as_ref(), root)?;
     let base = match root {
         Root::Dir(dir) => Some(
@@ -1205,7 +1205,7 @@ pub async fn walk(
         }
     }
     found.sort();
-    Ok(found)
+    Ok(crate::block::List::from(found))
 }
 
 #[cfg(test)]
@@ -1704,7 +1704,7 @@ mod walking {
 
         let inside = Root::Dir(tree.to_path_buf());
         // The names as text, which every one in this tree is.
-        let shown = |found: Vec<Path>| -> Vec<String> {
+        let shown = |found: crate::block::List<Path>| -> Vec<String> {
             found.iter().map(|p| p.display().to_string()).collect()
         };
         let found = crate::rt::exec::block_on(walk(".", &inside)).expect("walked");

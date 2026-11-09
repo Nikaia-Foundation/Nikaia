@@ -12,8 +12,8 @@ impl CliCommandsRefusal {
     pub fn message(&self) -> String {
         match self {
             CliCommandsRefusal::Host => String::from("a step of the command failed"),
-            CliCommandsRefusal::Refused(why) => why.to_string(),
-            CliCommandsRefusal::Failed(why) => why.to_string(),
+            CliCommandsRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
+            CliCommandsRefusal::Failed(why) => nikaia_std::block::Text::from(why.to_string()),
         }
     }
 }
@@ -34,7 +34,7 @@ pub trait CliTestHost {
 #[allow(clippy::too_many_arguments)]
 pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_parallelism: &str, blocks: bool, outputs: bool, own: bool, both_settings: bool, bless: bool, stderr: bool, filters: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
     if !blocks && !outputs && !own && !filters.is_empty() {
-        nikaia_std::io::println(format_args!("no tests: no test's name holds any of the `--filter` texts {}", filters.join(", ")))?;
+        nikaia_std::io::println(format_args!("no tests: no test's name holds any of the `--filter` texts {}", nikaia_std::block::Text::from(filters.join(", "))))?;
         return Ok(1);
     }
     if !blocks && !outputs && !own {
@@ -43,15 +43,15 @@ pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_
     }
     let settings: Vec<String> = match both_settings {
         true => vec![String::from("no"), String::from("yes")],
-        false => vec![user_parallelism.to_string()],
+        false => vec![nikaia_std::block::Text::from(user_parallelism.to_string())],
     };
     let kept = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("target")))), std::path::Path::new(&("nikaia")))), std::path::Path::new(&("tests")));
     match fs::create_dir(&kept, &fs::Root::Anywhere, true) {
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::raise(CliCommandsRefusal::Failed(format!("making a place for the test builds: {}", error)), &"cli_commands_test")); },
     };
-    let mut test_builds: Vec<(String, fs::Path)> = vec![];
-    let mut programs: Vec<(String, fs::Path)> = vec![];
+    let mut test_builds: Vec<(String, fs::Path)> = vec![]; #[allow(clippy::redundant_locals)] let settings = settings;
+    let mut programs: Vec<(String, fs::Path)> = vec![]; #[allow(clippy::redundant_locals)] let settings = settings;
     for setting in settings.iter() {
         for (wanted, testing) in [(blocks, true), (outputs, false)] {
             if !wanted { continue; }
@@ -68,8 +68,8 @@ pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_
                 Err(error) => { return Err(nikaia_std::error::raise(CliCommandsRefusal::Failed(format!("keeping {}: {}", nikaia_std::fs::path::display(&(binary)), error)), &"cli_commands_test")); },
             };
             match testing {
-                true => { test_builds.push((setting.to_string(), copy)); },
-                false => { programs.push((setting.to_string(), copy)); },
+                true => { test_builds.push((nikaia_std::block::Text::from(setting.to_string()), copy)); },
+                false => { programs.push((nikaia_std::block::Text::from(setting.to_string()), copy)); },
             }
         }
     }
@@ -116,27 +116,27 @@ pub fn cli_commands_described(crate_name: &str, written: &CliDescribed) -> Strin
     let mut said = String::from("");
     match &written.adopted {
         None => { },
-        Some(shipped) => { said = nikaia_std::concat::plus(said, format!("`{}` ships its reviewed description: adopted {}.\n", crate_name, nikaia_std::fs::path::display(&(shipped)))); },
+        Some(shipped) => { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("`{}` ships its reviewed description: adopted {}.\n", crate_name, nikaia_std::fs::path::display(&(shipped))))); },
     }
-    said = nikaia_std::concat::plus(said, format!("Wrote {} for {} {}: {} function{}, {} type{}\n", nikaia_std::fs::path::display(&(written.path)), crate_name, written.version, written.functions, cli_commands_plural(written.functions), written.types, cli_commands_plural(written.types)));
+    said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("Wrote {} for {} {}: {} function{}, {} type{}\n", nikaia_std::fs::path::display(&(written.path)), crate_name, written.version, written.functions, cli_commands_plural(written.functions), written.types, cli_commands_plural(written.types))));
     let unanswered = written.unanswered.len() as i64;
     if unanswered > 0 {
-        said = nikaia_std::concat::plus(said, format!("\n{} name{} the program uses that no `pub` signature covers. Each is a `?` \nfor you to fill in, or a name a macro wrote:\n", unanswered, cli_commands_plural(unanswered)));
-        for name in written.unanswered.iter() { said = nikaia_std::concat::plus(said, format!("    {}\n", name)); }
+        said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("\n{} name{} the program uses that no `pub` signature covers. Each is a `?` \nfor you to fill in, or a name a macro wrote:\n", unanswered, cli_commands_plural(unanswered))));
+        for name in written.unanswered.iter() { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("    {}\n", name))); }
     }
-    if written.promises { said = nikaia_std::concat::plus(said, "\nThis crate makes a promise the compiler can't check, and the file says \nwhere. Check yourself whether the promise is true.\n"); }
+    if written.promises { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, "\nThis crate makes a promise the compiler can't check, and the file says \nwhere. Check yourself whether the promise is true.\n")); }
     let proposed = written.proposed;
     if proposed > 0 {
         let (entries, carry, each) = match proposed {
             1 => ("y", "carries", "it"),
             _ => ("ies", "carry", "each"),
         };
-        said = nikaia_std::concat::plus(said, format!("\n{} entr{} {} something the signature doesn't say (a `Send` bound, \nor a call that reaches another thread), and the file asks beside {}: does \nthis put what it's given on a thread? Answer it in the file.\n", proposed, entries, carry, each));
+        said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("\n{} entr{} {} something the signature doesn't say (a `Send` bound, \nor a call that reaches another thread), and the file asks beside {}: does \nthis put what it's given on a thread? Answer it in the file.\n", proposed, entries, carry, each)));
     }
-    said = nikaia_std::concat::plus(said, match &written.adopted {
+    said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, match &written.adopted {
         None => "\nReview it before you commit it: what a signature can't say is written as \nthe safe answer, and a mistake in it is only caught by you.\n",
         _ => "\nIt was reviewed where the crate is, for this version and these sources; \ncommit it like code.\n",
-    });
+    }));
     said
 }
 
@@ -164,7 +164,7 @@ pub fn cli_commands_lowered(input: &std::path::Path, output: &std::path::Path, t
 pub fn cli_commands_lowered_std(std_dir: &std::path::Path, changed: &[fs::Path]) -> String {
     let mut said = String::from("");
     if changed.is_empty() { said = format!("{} is already what this compiler lowers its `.nika` sources to.\n", nikaia_std::fs::path::display(&(std_dir))); }
-    for path in changed.iter() { said = nikaia_std::concat::plus(said, format!("Lowered to {}\n", nikaia_std::fs::path::display(&(path)))); }
+    for path in changed.iter() { said = nikaia_std::block::Text::from(nikaia_std::concat::plus(said, format!("Lowered to {}\n", nikaia_std::fs::path::display(&(path))))); }
     said
 }
 

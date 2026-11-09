@@ -25,6 +25,8 @@
 //! bug, but a set that said "something I cannot name" about a call the compiler
 //! had already named.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::sync::{Reached, reached};
@@ -152,7 +154,7 @@ fn crashed(
         call: None,
         given: Vec::new(),
         errors: if can {
-            vec!["task::Crashed".to_string()]
+            vec!["task::Crashed".to_text()]
         } else {
             Vec::new()
         },
@@ -165,8 +167,8 @@ fn crashed(
 #[allow(dead_code)]
 fn function_key(parsed: &Parsed, name: Option<&winnow_grammar::Symbol>, owner: &str) -> String {
     let own = name
-        .map(|symbol| parsed.interner.resolve(*symbol).to_string())
-        .unwrap_or_else(|| "new".to_string());
+        .map(|symbol| parsed.interner.resolve(*symbol).to_text())
+        .unwrap_or_else(|| "new".to_text());
     match owner {
         "" => own,
         _ => format!("{owner}::{own}"),
@@ -204,7 +206,7 @@ fn contribution(
         // **A call by a name of this function is the place that name is**
         // (ADR-351 D1, D4), where the checker saw one; `@name` asks.
         Some(Reached::Opaque(Some(name))) => (Some(format!("@{name}")), Vec::new()),
-        Some(Reached::Opaque(None)) => (None, vec![UNNAMED_ERROR.to_string()]),
+        Some(Reached::Opaque(None)) => (None, vec![UNNAMED_ERROR.to_text()]),
         Some(Reached::Method) | None => (None, Vec::new()),
     };
     let fatal = errors
@@ -254,7 +256,7 @@ fn from_given(
             .position(|p| *p == param)
             .and_then(|i| args.get(i));
         let named = match arg {
-            Some(Expr::Variable(name, _)) => Some(parsed.interner.resolve(*name).to_string()),
+            Some(Expr::Variable(name, _)) => Some(parsed.interner.resolve(*name).to_text()),
             _ => None,
         };
         match named {
@@ -262,7 +264,7 @@ fn from_given(
             Some(name) if library.functions.contains_key(&name) => {
                 out.extend(library.functions[&name].fails_with.iter().cloned())
             }
-            _ => out.push(UNNAMED_ERROR.to_string()),
+            _ => out.push(UNNAMED_ERROR.to_text()),
         }
     }
     out

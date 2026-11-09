@@ -4,6 +4,8 @@
 //! same program written with `ref String`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// Lowers `source` as `name.nika` and hands back the Rust, without the line
 /// table, which names the file.
@@ -28,6 +30,7 @@ fn lowered(name: &str, source: &str) -> String {
         .filter(|line| !line.contains(".nika\""))
         .collect::<Vec<_>>()
         .join("\n")
+        .into()
 }
 
 /// Runs `source` and hands back what it printed.
@@ -46,7 +49,7 @@ fn ran(name: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    String::from_utf8_lossy(&ran.stdout).into_owned()
+    String::from_utf8_lossy(&ran.stdout)
 }
 
 /// The program with `ref String` in the places listed, and without.
@@ -202,7 +205,7 @@ fn a_lent_string_parameter_is_borrowed_in_the_ledger() {
     let program = "fn report(dna: TEXT, k: i64) -> i64 {\n    return dna.len() + k\n}\n\n\
                    fn main() throws {\n    let d = \"GGT\"\n    println(f\"{report(d, 1)}\")\n}\n";
     let written = views(&program.replace("TEXT", "ref String"));
-    assert_eq!(written, vec!["dna: borrowed".to_string()]);
+    assert_eq!(written, vec!["dna: borrowed".to_text()]);
     assert_eq!(views(&program.replace("TEXT", "String")), written);
 }
 
@@ -257,9 +260,9 @@ fn a_kept_option_is_owned_and_listed_in_keeps() {
     let parsed = nikaia::parser::parse_to_ast(source).expect("the source parses");
     let ledger = common::infer(&parsed);
     let keeps = |name: &str| ledger.functions.get(name).expect("an entry").keeps.clone();
-    assert_eq!(keeps("store"), vec!["label".to_string()]);
+    assert_eq!(keeps("store"), vec!["label".to_text()]);
     assert!(keeps("read").is_empty(), "{:?}", keeps("read"));
-    assert_eq!(keeps("hands"), vec!["text".to_string()]);
+    assert_eq!(keeps("hands"), vec!["text".to_text()]);
     let rust = lowered("kept_option", source);
     assert!(rust.contains("fn store(label: String)"), "{rust}");
     assert!(rust.contains("fn read(n: i64, sep: &str)"), "{rust}");
@@ -310,7 +313,7 @@ fn ref_string_outside_the_c_boundary_is_a_warning() {
     ] {
         let wanted = format!("a {position} written `{written}`");
         assert!(
-            found.iter().any(|m| m.contains(&wanted)),
+            found.iter().any(|m| m.contains(&*wanted)),
             "{wanted}: {found:#?}"
         );
     }

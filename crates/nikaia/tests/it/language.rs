@@ -13,6 +13,8 @@
 //! **In place, not in a copy**: each package keeps one path, so its builds are
 //! Cargo's to reuse and a run with nothing changed compiles nothing.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 use std::process::Command;
 

@@ -8,6 +8,8 @@
 //! The example is the real file, not a copy. It cannot drift.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -143,8 +145,10 @@ fn the_1brc_example_compiles_and_prints_what_the_benchmark_asks_for() {
 /// the same under every one of them.
 #[test]
 fn the_1brc_example_means_the_same_under_every_order_and_setting() {
-    let source = std::fs::read_to_string(repo_root().join("examples/1brc.nika"))
-        .expect("examples/1brc.nika");
+    let source = String::from(
+        std::fs::read_to_string(repo_root().join("examples/1brc.nika"))
+            .expect("examples/1brc.nika"),
+    );
     let written = "Summary::merge)";
     assert_eq!(source.matches(written).count(), 1, "the par_fold's merge");
     let with = |options: &str| -> String {
@@ -171,9 +175,9 @@ fn the_1brc_example_means_the_same_under_every_order_and_setting() {
             tenths.abs() % 10
         );
     }
-    let mut lines: Vec<String> = good.lines().map(str::to_owned).collect();
-    lines[1234] = "Hamburg;x.1".to_owned();
-    lines[3210] = "Bulawayo;1.y".to_owned();
+    let mut lines: Vec<String> = good.lines().map(str::to_text).collect();
+    lines[1234] = "Hamburg;x.1".to_text();
+    lines[3210] = "Bulawayo;1.y".to_text();
     let bad = lines.join("\n") + "\n";
     let good_path = dir.join("good.txt");
     let bad_path = dir.join("bad.txt");
@@ -235,9 +239,9 @@ fn the_1brc_example_means_the_same_under_every_order_and_setting() {
         let failed = ran(&bad_path);
         assert!(!failed.status.success(), "{name}: the broken file was read");
         answers.push((
-            name.to_owned(),
-            String::from_utf8_lossy(&ok.stdout).into_owned(),
-            String::from_utf8_lossy(&failed.stderr).into_owned(),
+            name.to_text(),
+            String::from_utf8_lossy(&ok.stdout),
+            String::from_utf8_lossy(&failed.stderr),
         ));
     }
     let (_, out, err) = &answers[0];

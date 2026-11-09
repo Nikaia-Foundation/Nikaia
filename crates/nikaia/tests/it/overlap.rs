@@ -16,6 +16,8 @@ use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 fn findings(source: &str) -> Vec<Finding> {
@@ -59,7 +61,7 @@ fn run(purpose: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    let out = String::from_utf8_lossy(&ran.stdout).to_string();
+    let out = String::from_utf8_lossy(&ran.stdout).to_text();
     std::fs::remove_dir_all(&dir).ok();
     out
 }

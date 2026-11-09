@@ -75,12 +75,12 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn open_part_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<i64> {
         let field: String = match expr {
-            Expr::Field { name, .. } => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Field { name, .. } => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return None,
         };
         let held: String = match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
-                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
                 _ => return None,
             } },
             _ => return None,
@@ -183,7 +183,7 @@ impl CheckState {
                 if !args.is_empty() {
                     let calls = *nikaia_std::index::get(&self.flow.open_calls, &(id_of(nikaia_std::index::get(&args, 0)) as i64));
                     for at in nikaia_std::index::or(match calls {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                         None => None,
                     }, || vec![].into()) { out.extend(self.open_numbers_in(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)))); }
                 }
@@ -247,7 +247,7 @@ impl CheckState {
     pub(crate) fn a_read_of_a_map(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let base: String = match expr {
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
-                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
                 _ => return false,
             } },
             _ => return false,
@@ -326,7 +326,7 @@ pub(crate) fn number_variable_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
-            return Some(world.words.resolve(name).to_string());
+            return Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
         },
         _ => { return None; },
     }
@@ -390,7 +390,7 @@ impl CheckState {
         let copy = value_of_a_copy(&seen);
         if self.elements_asked(world, value, &copy, at, beside) { return; }
         let ty = match integer_named(&copy) { Some(__nikaia_value) => __nikaia_value, None => return };
-        for number in self.open_numbers_in(world, value) { self.add_ask(number, ty.to_string(), at, beside); }
+        for number in self.open_numbers_in(world, value) { self.add_ask(number, nikaia_std::block::Text::from(ty.to_string()), at, beside); }
         self.comptimes_asked(world, value, &ty);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -403,7 +403,7 @@ impl CheckState {
         let mut asked = false;
         if keys.is_some() && key_ty.is_some() {
             let root = self.open_root(nikaia_std::index::or(keys, || 0));
-            self.add_ask(root, nikaia_std::index::or(key_ty.as_deref(), || "").to_string(), at, beside);
+            self.add_ask(root, nikaia_std::block::Text::from(nikaia_std::index::or(key_ty.as_deref(), || "").to_string()), at, beside);
             asked = true;
         }
         let number = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return asked };
@@ -418,7 +418,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn open_number_cast(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &Ty) -> bool {
         let into_name = match into {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return false,
         };
         let numbers = self.open_numbers_in(world, value);
@@ -467,7 +467,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn open_number_site(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[&Expr], site: i64) {
-        let mut numbers: Vec<i64> = vec![];
+        let mut numbers: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for value in values.iter() {
             let value = *value;
             numbers.extend(self.open_numbers_in(world, value));
@@ -496,7 +496,7 @@ impl CheckState {
         let hole: String = String::from("\u{0}");
         let wanted = want.text();
         let said = message(&hole, &wanted);
-        let text = said.replace(&format!("`{}`", hole), &"a number");
+        let text = nikaia_std::block::Text::from(said.replace(&*format!("`{}`", hole), &*"a number"));
         let mut note: String = String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.");
         if a_float_type(want) { note = String::from("A number nothing typed takes one of the integer types its uses ask for, and a float is none of them (Part I 2.4)."); }
         let mut help: String = format!("Make it a `{}`, or give the number to a place that holds one.", wanted);
@@ -508,7 +508,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn literals_are(&mut self, value: &Expr, ty: &str) {
         match value {
-            Expr::LitInt { .. } => { self.facts.unsigned_literals.insert(id_of(value) as i64, ty.to_string()); },
+            Expr::LitInt { .. } => { self.facts.unsigned_literals.insert(id_of(value) as i64, nikaia_std::block::Text::from(ty.to_string())); },
             Expr::Binary { lhs, rhs, op, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
                 self.literals_are(lhs, ty);
@@ -556,7 +556,7 @@ pub(crate) fn open_walk_held(ty: &Ty) -> Option<Ty> {
 // this was written - see `contracts::sync`.
 pub(crate) fn open_walk_named(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Var { name, .. } => Some(name.to_string()),
+        Ty::Var { name, .. } => Some(nikaia_std::block::Text::from(name.to_string())),
         _ => None,
     }
 }
@@ -593,7 +593,7 @@ pub(crate) fn open_walk_made(ty: &Ty) -> Option<Ty> {
 pub(crate) fn open_walk_hands_back(ty: &Ty, name: &str) -> bool {
     let result: Ty = match ty {
         Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); nikaia_std::index::or(match result {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         }, || Ty::Unknown) },
         _ => Ty::Unknown,
@@ -607,7 +607,7 @@ pub(crate) fn open_walk_hands_back(ty: &Ty, name: &str) -> bool {
 pub(crate) fn open_walk_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, ty: &Ty, held: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     let types: Vec<Ty> = match ty {
-        Ty::Fn { params, .. } => params.to_owned(),
+        Ty::Fn { params, .. } => params.copy_owned(),
         _ => return out,
     };
     match arg {
@@ -615,7 +615,7 @@ pub(crate) fn open_walk_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
             let mut at: i64 = 0;
             for p in params.iter() {
                 let p = *p;
-                if at < types.len() as i64 && open_walk_the_item(nikaia_std::index::get(&types, (at) as usize), held) { out.push(world.words.resolve(p).to_string()); }
+                if at < types.len() as i64 && open_walk_the_item(nikaia_std::index::get(&types, (at) as usize), held) { out.push(nikaia_std::block::Text::from(world.words.resolve(p).to_string())); }
                 at += 1;
             }
         },
@@ -727,7 +727,7 @@ impl CheckState {
     pub(crate) fn open_lambda_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lambda: &Expr, names: &[String], number: i64) -> Option<i64> {
         let mut frame: Vec<CheckLocal> = vec![];
         for name in names.iter() {
-            let mut local = CheckLocal::free(name.to_string(), Ty::Unknown, -1);
+            let mut local = CheckLocal::free(nikaia_std::block::Text::from(name.to_string()), Ty::Unknown, -1);
             local.open_number = Some(number);
             frame.push(local);
         }

@@ -11,8 +11,8 @@ pub struct Drafted {
 
 pub fn drafted(surface: &Surface, crate_word: &str, wanted: &collections::BTreeSet<String>) -> Drafted {
     let mut functions: collections::BTreeMap<String, FnContract> = collections::BTreeMap::new();
-    let mut unanswered: Vec<String> = vec![];
-    let mut named_types: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut unanswered: Vec<String> = vec![];
+    let mut named_types: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered;
     for name in wanted.iter() {
         if !answered(surface, name) {
             unanswered.push(format!("{}::{}", crate_word, name));
@@ -22,10 +22,10 @@ pub fn drafted(surface: &Surface, crate_word: &str, wanted: &collections::BTreeS
         let function = match *nikaia_std::index::get(&surface.functions, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         functions.insert(format!("{}::{}", crate_word, name), contract_of(function, crate_word, &surface.types, &mut named_types));
     }
-    for name in wanted.iter() { if surface.types.contains(name) { named_types.insert(name.to_string()); } }
-    let mut types: collections::BTreeMap<String, TypeContract> = collections::BTreeMap::new();
+    for name in wanted.iter() { if surface.types.contains(name) { named_types.insert(nikaia_std::block::Text::from(name.to_string())); } }
+    let mut types: collections::BTreeMap<String, TypeContract> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered;
     let no_fields: Vec<String> = vec![];
-    let no_derives: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let no_derives: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let no_fields = no_fields;
     for name in named_types.iter() {
         let fields = nikaia_std::index::or(*nikaia_std::index::get(&surface.fields, name), || &no_fields);
         let derives = nikaia_std::index::or(*nikaia_std::index::get(&surface.derives, name), || &no_derives);
@@ -38,7 +38,7 @@ pub(crate) fn notes_on(surface: &Surface, crate_word: &str, wanted: &collections
     let mut notes = Notes::empty();
     notes.about_the_crate = promise_lines(&surface.promises);
     let mut calls: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    for (path, function) in surface.functions.iter() { calls.insert(path.to_string(), function.calls.to_owned()); }
+    for (path, function) in surface.functions.iter() { calls.insert(nikaia_std::block::Text::from(path.to_string()), function.calls.copy_owned()); }
     for name in wanted.iter() {
         let at = match *nikaia_std::index::get(&surface.reachable, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let function = match *nikaia_std::index::get(&surface.functions, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -54,23 +54,23 @@ pub(crate) fn answered(surface: &Surface, name: &str) -> bool {
 }
 
 pub(crate) fn bound_parameters(function: &Function) -> Vec<String> {
-    let mut names: Vec<String> = vec![];
-    let mut types: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut types: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for arg in function.args.iter() {
-        names.push(arg.name.to_string());
-        types.push(arg.ty.to_string());
+        names.push(nikaia_std::block::Text::from(arg.name.to_string()));
+        types.push(nikaia_std::block::Text::from(arg.ty.to_string()));
     }
     sent_across(&names, &types, &function.bounds)
 }
 
 pub(crate) fn contract_of(function: &Function, crate_word: &str, types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> FnContract {
-    let mut names: Vec<String> = vec![];
-    let mut written_types: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut written_types: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for arg in function.args.iter() {
-        names.push(arg.name.to_string());
-        written_types.push(arg.ty.to_string());
+        names.push(nikaia_std::block::Text::from(arg.name.to_string()));
+        written_types.push(nikaia_std::block::Text::from(arg.ty.to_string()));
     }
-    let written = WrittenFn { names, types: written_types, result: function.result.to_string(), pauses: function.pauses, parameters: function.parameters.to_owned() };
+    let written = WrittenFn { names, types: written_types, result: nikaia_std::block::Text::from(function.result.to_string()), pauses: function.pauses, parameters: function.parameters.copy_owned() };
     contract(&written, crate_word, types, mentioned)
 }
 
@@ -86,9 +86,9 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
         Some(ref said) => { if said != version { return Some(format!("`{}`'s shipped {} describes version {}, and the crate is {}. A description is reviewed for one version: review it again in the crate.", declared, nikaia_std::fs::path::display(&(shipped)), said, version)); } },
     }
     if ledger.sources.is_empty() { return Some(format!("`{}`'s shipped {} has no `[sources]` in {} beside it, so nothing says which sources it was reviewed against.", declared, nikaia_std::fs::path::display(&(shipped)), nikaia_std::fs::path::display(&(derived)))); }
-    let now: collections::BTreeMap<String, String> = files.iter().map(|entry| { (entry.0.to_string(), hash::sha256_hex(&entry.1.bytes().collect::<Vec<_>>())) }).collect();
-    let all: collections::BTreeSet<String> = now.keys().chain(ledger.sources.keys()).map(|x| { x.to_string() }).collect();
-    let moved: Vec<String> = all.iter().filter(|&file| { now.get(file) != ledger.sources.get(file) }).map(|x| { x.to_string() }).collect::<Vec<_>>();
+    let now: collections::BTreeMap<String, String> = files.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), hash::sha256_hex(&entry.1.bytes().collect::<Vec<_>>())) }).collect();
+    let all: collections::BTreeSet<String> = now.keys().chain(ledger.sources.keys()).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect();
+    let moved: Vec<String> = all.iter().filter(|&file| { now.get(file) != ledger.sources.get(file) }).map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect::<Vec<_>>();
     let first = match moved.first() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let more = match moved.len() as i64 {
         1 => String::from(""),
@@ -102,12 +102,12 @@ pub fn describe_rust_dependency(manifest: &ManifestFile, crate_word: &str) -> Re
     for (key, declared) in manifest.dependencies.iter() {
         if key.replace('-', "_") != crate_word { continue; }
         match declared.shape {
-            DependencyShape::Rust => { return Ok(key.to_string()); },
+            DependencyShape::Rust => { return Ok(nikaia_std::block::Text::from(key.to_string())); },
             _ => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is a Nikaia package, not a Rust crate. `nikaia describe` is for `[dependencies]` entries with `type = \"rust\"`.", key)), &"describe_rust_dependency")); },
         }
     }
     for (key, _) in manifest.dependencies.iter() {
-        let word = key.replace('-', "_");
+        let word = nikaia_std::block::Text::from(key.replace('-', "_"));
         if *key != word && key == crate_word { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is the manifest's key, not the crate's name: write `nikaia describe {}`, the name a program writes after `use`.", crate_word, word)), &"describe_rust_dependency")); }
     }
     return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` isn't in this project's `[dependencies]`. Add it to `nikaia.toml` first: only crates the project depends on can be described.", crate_word)), &"describe_rust_dependency"))
@@ -120,7 +120,7 @@ pub(crate) fn describe_header_version(text: &str, crate_word: &str) -> Option<St
     let words: Vec<&str> = line.split_whitespace().collect::<Vec<_>>();
     let first = match words.first().copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if first != crate_word { return None; }
-    Some(nikaia_std::index::or(words.get(1).copied(), || "?").to_string())
+    Some(nikaia_std::block::Text::from(nikaia_std::index::or(words.get(1).copied(), || "?").to_string()))
 }
 
 pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String {
@@ -151,7 +151,7 @@ pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String
 
 pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path::Path, crate_word: &str, contracts: &str, host: &H) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut pending: Vec<fs::Path> = vec![nikaia_std::fs::path::clone(&(root))];
+    let mut pending: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(root))], nikaia_std::block::Place::Block);
     loop {
         let directory = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         let names = match fs::read_dir(&directory, &fs::Root::Anywhere) {
@@ -179,8 +179,8 @@ pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path
             };
             let written = match host.qualified_names(&text) { Some(__nikaia_value) => __nikaia_value, None => continue };
             for qualified in written.iter() {
-                let rest = match qualified.strip_prefix(&format!("{}::", crate_word)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                out.insert(rest.to_string());
+                let rest = match qualified.strip_prefix(&*format!("{}::", crate_word)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                out.insert(nikaia_std::block::Text::from(rest.to_string()));
             }
         }
     }
@@ -210,8 +210,8 @@ pub async fn describe_crate_sources<H: DescribeHost>(root: &std::path::Path, ver
     let path = match declared { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is a dependency by version, and `nikaia describe` can only read crates given by `path`. Use a `path` dependency, or write `contracts/{}.contracts` by hand.", key, crate_word)), &"describe_crate_sources")) };
     let crate_root = describe_without_dots(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&(path))));
     if !describe_is_dir(&crate_root) { return Err(nikaia_std::error::throwing(Refused::Because(format!("The sources of `{}` aren't at {}. (A `path` in `nikaia.toml` is relative to `nikaia.toml`.)", key, nikaia_std::fs::path::display(&(crate_root)))), &"describe_crate_sources")); }
-    let mut known = nikaia_std::index::or(version, || "?").to_string();
-    if known == "?" { known = nikaia_std::index::or(host.cargo_version(&crate_root), || "?".into()).to_string(); }
+    let mut known = nikaia_std::block::Text::from(nikaia_std::index::or(version, || "?").to_string());
+    if known == "?" { known = nikaia_std::block::Text::from(nikaia_std::index::or(host.cargo_version(&crate_root), || "?".into()).to_string()); }
     let src = nikaia_std::fs::path::join(&(crate_root), std::path::Path::new(&("src")));
     let mut files: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     if describe_is_dir(&src) {

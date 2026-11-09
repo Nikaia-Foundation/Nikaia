@@ -27,12 +27,12 @@ pub(crate) fn block(b: &Block, words: &winnow_grammar::InternerContext, debug: &
 pub(crate) fn statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, debug: &dyn Fn(&Expr) -> String, format_of: &dyn Fn(&[FPart]) -> String, out: &mut Vec<String>) {
     match stmt {
         Stmt::Let { names, value, .. } => {
-            let mut bound: Vec<String> = vec![];
+            let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for n in names.iter() {
                 let n = *n;
-                bound.push(words.resolve(n).to_string());
+                bound.push(nikaia_std::block::Text::from(words.resolve(n).to_string()));
             }
-            out.push(format!("[Nikaia Runtime] Bind: {} = <evaluated>", bound.join(", ")));
+            out.push(format!("[Nikaia Runtime] Bind: {} = <evaluated>", nikaia_std::block::Text::from(bound.join(", "))));
             expression(value, words, &debug, &format_of, out);
         },
         Stmt::Comptime { name, value, .. } => {

@@ -7,6 +7,8 @@
 //! error here would reach a user (Part III C.1).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 /// A library `lib` and a program `app` beside it, both lowered in this
@@ -769,7 +771,7 @@ fn a_c_binding_with_a_map_is_refused_in_nikaia_words() {
             .output()
             .expect("the binary runs");
         done(&dir);
-        String::from_utf8_lossy(&out.stderr).to_string()
+        String::from_utf8_lossy(&out.stderr).to_text()
     };
     let param = run(
         "use std::collections\n\npub extern fn count(m: collections::HashMap[String, i64]) -> i64 {\n    return m.len()\n}\n\nfn main() {\n}\n",
@@ -977,7 +979,7 @@ fn a_private_struct_that_holds_a_pub_struct_compiles_in_both_programs() {
          \x20   return h.t.counts.len()\n}\n\n\
          fn main() {\n}\n";
     library_compiles("holder", lib);
-    let socket = "use std::net\n\n".to_string() + lib;
+    let socket = "use std::net\n\n".to_text() + lib;
     let socket = socket.replace(
         "fn main() {\n}\n",
         "fn main() throws {\n\

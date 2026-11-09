@@ -73,19 +73,19 @@ pub(crate) fn sv_lin_constant(r: SvRat) -> SvLin { SvLin { terms: collections::B
 
 pub(crate) fn sv_lin_var(name: &str) -> SvLin {
     let mut terms: collections::BTreeMap<String, SvRat> = collections::BTreeMap::new();
-    terms.insert(name.to_string(), sv_int(1));
+    terms.insert(nikaia_std::block::Text::from(name.to_string()), sv_int(1));
     SvLin { terms, c: sv_int(0) }
 }
 
 pub(crate) fn sv_lin_add(a: &SvLin, b: &SvLin) -> Option<SvLin> {
-    let mut terms = a.terms.to_owned();
+    let mut terms = a.terms.copy_owned();
     for (name, k) in b.terms.iter() {
         let k = *k;
         let sum = match terms.get(name) {
             None => k.clone(),
             Some(old) => match sv_rat_add(&old, &k) { Some(__nikaia_value) => __nikaia_value, None => return None },
         };
-        if sum.num == 0 { terms.remove(name); } else { terms.insert(name.to_string(), sum); }
+        if sum.num == 0 { terms.remove(name); } else { terms.insert(nikaia_std::block::Text::from(name.to_string()), sum); }
     }
     let c = match sv_rat_add(&a.c, &b.c) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(SvLin { terms, c })
@@ -96,7 +96,7 @@ pub(crate) fn sv_lin_scale(a: &SvLin, r: &SvRat) -> Option<SvLin> {
     if r.num != 0 {
         for (name, k) in a.terms.iter() {
             let k = *k;
-            terms.insert(name.to_string(), match sv_rat_mul(&k, r) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            terms.insert(nikaia_std::block::Text::from(name.to_string()), match sv_rat_mul(&k, r) { Some(__nikaia_value) => __nikaia_value, None => return None });
         }
     }
     let c = match sv_rat_mul(&a.c, r) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -125,7 +125,7 @@ pub(crate) fn sv_decimal(a: &str) -> SvGot {
     let mut parts: Vec<&str> = vec![];
     for part in a.split('.') { parts.push(part); }
     if parts.len() != 2 || !sv_is_numeral(*nikaia_std::index::get(&parts, 0)) || !sv_is_numeral(*nikaia_std::index::get(&parts, 1)) { return SvGot::Failed(SvReadWhy::Unsupported(format!("the numeral {}", a))); }
-    let n = match text::parse_i64(&(nikaia_std::concat::plus(::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 0)), ::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 1))))) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
+    let n = match text::parse_i64(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 0)), ::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 1)))))) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
     let mut den: i64 = 1;
     for _ in 0..(*nikaia_std::index::get(&parts, 1)).len() as i64 { den = match den.checked_mul(10) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) }; }
     let r = match sv_rat(n, den) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
@@ -212,7 +212,7 @@ impl SvSmtReader {
             let one = self.arena.int(1);
             return SvGot::Val(SvVal::Formula(self.arena.ge(v, one)));
         }
-        SvGot::Failed(SvReadWhy::Undeclared(name.to_string()))
+        SvGot::Failed(SvReadWhy::Undeclared(nikaia_std::block::Text::from(name.to_string())))
     }
     pub(crate) fn atom(&mut self, a: &str) -> SvGot {
         if a == "true" { return SvGot::Val(SvVal::Formula(self.arena.boolean(true))); }
@@ -384,30 +384,30 @@ impl SvSmtReader {
         let key = format!("{} {} {}", op, a, b);
         match self.nl_names.get(&key) {
             None => { },
-            Some(name) => { return name.to_string(); },
+            Some(name) => { return nikaia_std::block::Text::from(name.to_string()); },
         }
         let name = self.fresh_name("nl");
-        if real { self.reals.insert(name.to_string()); } else { self.ints.insert(name.to_string()); }
-        self.nl_names.insert(key, name.to_string());
-        self.nl.push(SvNl { name: name.to_string(), op, a, b, partner });
+        if real { self.reals.insert(nikaia_std::block::Text::from(name.to_string())); } else { self.ints.insert(nikaia_std::block::Text::from(name.to_string())); }
+        self.nl_names.insert(key, nikaia_std::block::Text::from(name.to_string()));
+        self.nl.push(SvNl { name: nikaia_std::block::Text::from(name.to_string()), op, a, b, partner });
         name
     }
     pub(crate) fn nl_arg(&mut self, a: &SvLin) -> Option<String> {
         let mut key = String::from("arg");
         for (name, k) in a.terms.iter() {
             let k = *k;
-            if a.terms.len() == 1 && a.c.num == 0 && k.num == 1 && k.den == 1 { return Some(name.to_string()); }
+            if a.terms.len() == 1 && a.c.num == 0 && k.num == 1 && k.den == 1 { return Some(nikaia_std::block::Text::from(name.to_string())); }
             key = format!("{} {}*{}", key, sv_rat_text(&k), name);
         }
         key = format!("{} {}", key, sv_rat_text(&a.c));
         match self.nl_names.get(&key) {
             None => { },
-            Some(name) => { return Some(name.to_string()); },
+            Some(name) => { return Some(nikaia_std::block::Text::from(name.to_string())); },
         }
         let name = self.fresh_name("arg");
-        if self.is_real(a) { self.reals.insert(name.to_string()); } else { self.ints.insert(name.to_string()); }
-        self.nl_names.insert(key, name.to_string());
-        let d = match sv_lin_sub(&sv_lin_var(&name.to_string()), a) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if self.is_real(a) { self.reals.insert(nikaia_std::block::Text::from(name.to_string())); } else { self.ints.insert(nikaia_std::block::Text::from(name.to_string())); }
+        self.nl_names.insert(key, nikaia_std::block::Text::from(name.to_string()));
+        let d = match sv_lin_sub(&sv_lin_var(&nikaia_std::block::Text::from(name.to_string())), a) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let fact = match sv_lin_atom(&mut self.arena, "=", &d) { Some(__nikaia_value) => __nikaia_value, None => return None };
         self.side.push(fact);
         Some(name)
@@ -437,8 +437,8 @@ impl SvSmtReader {
                 LgSexp::Atom(_) => { },
             }
         }
-        let mut names: Vec<String> = vec![];
-        let mut values: Vec<SvVal> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut values: Vec<SvVal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for binding in bindings.iter() {
             let pair = match binding.clone() {
                 LgSexp::List(inside) => inside,
@@ -449,7 +449,7 @@ impl SvSmtReader {
                 SvGot::Val(ref v) => { values.push(v.clone()); },
                 SvGot::Failed(SvReadWhy::Undeclared(ref name)) => {
                     if own.contains(name) { return SvGot::Failed(SvReadWhy::Malformed(format!("{} is unbound: a parallel let binds its names only in its body", name))); }
-                    return SvGot::Failed(SvReadWhy::Undeclared(name.to_string()));
+                    return SvGot::Failed(SvReadWhy::Undeclared(nikaia_std::block::Text::from(name.to_string())));
                 },
                 SvGot::Failed(ref why) => { return SvGot::Failed(why.clone()); },
             }
@@ -457,7 +457,7 @@ impl SvSmtReader {
         }
         let depth = self.bound_names.len() as i64;
         for i in 0..names.len() as i64 {
-            self.bound_names.push((*nikaia_std::index::get(&names, (i) as usize)).to_string());
+            self.bound_names.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (i) as usize)).to_string()));
             self.bound_values.push((*nikaia_std::index::get(&values, (i) as usize)).clone());
         }
         let body = self.term(nikaia_std::index::get(&items, 2));
@@ -498,8 +498,8 @@ impl SvSmtReader {
                 if tc == 1 { return SvGot::Val(SvVal::Lin(a.clone())); }
                 if tc == 0 { return SvGot::Val(SvVal::Lin(b.clone())); }
                 let name = self.fresh_name("ite");
-                if self.is_real(a) || self.is_real(b) { self.reals.insert(name.to_string()); } else { self.ints.insert(name.to_string()); }
-                self.ites.insert(name.to_string(), SvIte { c, a: a.clone(), b: b.clone() });
+                if self.is_real(a) || self.is_real(b) { self.reals.insert(nikaia_std::block::Text::from(name.to_string())); } else { self.ints.insert(nikaia_std::block::Text::from(name.to_string())); }
+                self.ites.insert(nikaia_std::block::Text::from(name.to_string()), SvIte { c, a: a.clone(), b: b.clone() });
                 SvGot::Val(SvVal::Lin(sv_lin_var(&name)))
             },
             _ => SvGot::Failed(SvReadWhy::Unsupported(format!("an ite mixing a formula and a number: {}", lg_show(sexp)))),
@@ -509,7 +509,7 @@ impl SvSmtReader {
         if seen.contains(&id) { return; }
         seen.insert(id);
         match self.arena.at(id) {
-            SolverTerm::Var(ref name) => { names.insert(name.to_string()); },
+            SolverTerm::Var(ref name) => { names.insert(nikaia_std::block::Text::from(name.to_string())); },
             SolverTerm::Neg(a) => { self.reads(a, seen, names); },
             SolverTerm::Not(a) => { self.reads(a, seen, names); },
             SolverTerm::Quot(a, _) => { self.reads(a, seen, names); },
@@ -549,12 +549,12 @@ impl SvSmtReader {
             self.reads(id, &mut seen, &mut names);
         }
         let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut todo: Vec<String> = vec![];
-        for name in names.iter() { todo.push(name.to_string()); }
+        let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for name in names.iter() { todo.push(nikaia_std::block::Text::from(name.to_string())); }
         while !todo.is_empty() {
             let name = nikaia_std::index::or(todo.pop(), || "".into());
             if done.contains(&name) { continue; }
-            done.insert(name.to_string());
+            done.insert(nikaia_std::block::Text::from(name.to_string()));
             let ite = match self.ites.get(&name) {
                 None => { continue; },
                 Some(found) => found.clone(),
@@ -576,10 +576,10 @@ impl SvSmtReader {
             self.side.push(definition);
             let mut more: collections::BTreeSet<String> = collections::BTreeSet::new();
             self.reads(definition, &mut seen, &mut more);
-            for m in more.iter() { todo.push(m.to_string()); }
+            for m in more.iter() { todo.push(nikaia_std::block::Text::from(m.to_string())); }
         }
-        let mut unread: Vec<String> = vec![];
-        for (name, _) in self.ites.iter() { if !done.contains(name) { unread.push(name.to_string()); } }
+        let mut unread: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for (name, _) in self.ites.iter() { if !done.contains(name) { unread.push(nikaia_std::block::Text::from(name.to_string())); } }
         for name in unread.iter() {
             self.ints.remove(name);
             self.reals.remove(name);
@@ -588,10 +588,10 @@ impl SvSmtReader {
     }
     pub(crate) fn apply_fun(&mut self, sexp: &LgSexp, fun: &SvFun, args: &[SvVal]) -> SvGot {
         if (args.len() as i64) != fun.params.len() as i64 { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
-        let outer_names = self.bound_names.to_owned();
-        let outer_values = self.bound_values.to_owned();
-        self.bound_names = fun.params.to_owned();
-        self.bound_values = args.to_owned();
+        let outer_names = self.bound_names.copy_owned();
+        let outer_values = self.bound_values.copy_owned();
+        self.bound_names = fun.params.copy_owned();
+        self.bound_values = args.copy_owned();
         let body = self.term(&fun.body);
         self.bound_names = outer_names;
         self.bound_values = outer_values;
@@ -614,7 +614,7 @@ impl SvSmtReader {
             Some(fun) => { return self.apply_fun(sexp, &fun.clone(), &args); },
         }
         let mut formulas: Vec<i64> = vec![];
-        let mut lins: Vec<SvLin> = vec![];
+        let mut lins: Vec<SvLin> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for a in args.iter() {
             match a {
                 SvVal::Formula(id) => { let id = *id; formulas.push(id); },
@@ -633,7 +633,7 @@ impl SvSmtReader {
                 let mut at = n - 2;
                 while at >= 0 {
                     let not_x = self.arena.not(*nikaia_std::index::get(&formulas, nikaia_std::index::at(at)));
-                    acc = self.arena.or(vec![not_x, acc]);
+                    acc = { let __nikaia_value = self.arena.or(vec![not_x, acc]); __nikaia_value };
                     at -= 1;
                 }
                 return SvGot::Val(SvVal::Formula(acc));
@@ -707,7 +707,7 @@ impl SvSmtReader {
                     }
                     let x = match self.nl_arg(&acc) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
                     let y = match self.nl_arg(&next) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(lg_show(sexp)) };
-                    let q = self.nl_term(String::from("div"), x.to_string(), y.to_string(), String::from(""), false);
+                    let q = self.nl_term(String::from("div"), nikaia_std::block::Text::from(x.to_string()), nikaia_std::block::Text::from(y.to_string()), String::from(""), false);
                     acc = if op == "div" { sv_lin_var(&q) } else { sv_lin_var(&self.nl_term(String::from("mod"), x, y, q, false)) };
                 }
                 return SvGot::Val(SvVal::Lin(acc));
@@ -753,15 +753,15 @@ impl SvSmtReader {
     }
     pub(crate) fn declare(&mut self, name: &str, sort: &str) -> Option<SvReadWhy> {
         if sort == "Int" {
-            self.ints.insert(name.to_string());
+            self.ints.insert(nikaia_std::block::Text::from(name.to_string()));
             return None;
         }
         if sort == "Real" {
-            self.reals.insert(name.to_string());
+            self.reals.insert(nikaia_std::block::Text::from(name.to_string()));
             return None;
         }
         if sort == "Bool" {
-            self.bools.insert(name.to_string());
+            self.bools.insert(nikaia_std::block::Text::from(name.to_string()));
             let v = self.arena.var(&format!("|sv!|b:{}", name));
             let zero = self.arena.int(0);
             let one = self.arena.int(1);
@@ -793,8 +793,8 @@ impl SvSmtReader {
             self.funs.insert(name, SvFun { params: names, body: (*nikaia_std::index::get(&items, 4)).clone() });
             return None;
         }
-        let outer_names = self.bound_names.to_owned();
-        let outer_values = self.bound_values.to_owned();
+        let outer_names = self.bound_names.copy_owned();
+        let outer_values = self.bound_values.copy_owned();
         self.bound_names = vec![];
         self.bound_values = vec![];
         let got = self.term(nikaia_std::index::get(&items, 4));
@@ -832,12 +832,12 @@ pub enum SvSmtRead {
 
 pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
     let commands = match lg_parse(source) {
-        LgParsedSexps::Done(ref read) => read.to_owned(),
+        LgParsedSexps::Done(ref read) => read.copy_owned(),
         LgParsedSexps::Failed(ref why) => {
             return SvSmtRead::Failed(SvReadWhy::Syntax(match *why {
-                LgReadError::Syntax(ref s) => s.to_string(),
-                LgReadError::Unsupported(ref s) => s.to_string(),
-                LgReadError::Undeclared(ref s) => s.to_string(),
+                LgReadError::Syntax(ref s) => nikaia_std::block::Text::from(s.to_string()),
+                LgReadError::Unsupported(ref s) => nikaia_std::block::Text::from(s.to_string()),
+                LgReadError::Undeclared(ref s) => nikaia_std::block::Text::from(s.to_string()),
             }));
         },
     };
@@ -849,9 +849,9 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
         }
     }
     if queries > 1 { return SvSmtRead::Failed(SvReadWhy::Unsupported(format!("{} check-sat commands: a query is self-contained (ADR-270 D3)", queries))); }
-    let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new() };
-    let mut stack: Vec<Vec<i64>> = vec![vec![]];
-    let mut asserted = 0;
+    #[allow(unused_mut)] let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new() };
+    let mut stack: Vec<Vec<i64>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
+    let mut asserted = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut reader = reader;
     for command in commands.iter() {
         let items = match command.clone() {
             LgSexp::List(inside) => inside,
@@ -919,7 +919,7 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
             assertions.push(id);
         }
     }
-    let mut facts = assertions.to_owned();
+    let mut facts = assertions.copy_owned();
     for id in reader.side.iter() {
         let id = nikaia_std::num::value(id);
         facts.push(id);
@@ -949,8 +949,8 @@ pub fn sv_smtlib_read(source: &str) -> LgRead {
     match sv_smtlib_script(source) {
         SvSmtRead::Script(ref s, _) => LgRead::Script(s.clone()),
         SvSmtRead::Failed(ref why) => LgRead::Failed(match *why {
-            SvReadWhy::Syntax(ref s) => LgReadError::Syntax(s.to_string()),
-            SvReadWhy::Undeclared(ref s) => LgReadError::Undeclared(s.to_string()),
+            SvReadWhy::Syntax(ref s) => LgReadError::Syntax(nikaia_std::block::Text::from(s.to_string())),
+            SvReadWhy::Undeclared(ref s) => LgReadError::Undeclared(nikaia_std::block::Text::from(s.to_string())),
             _ => LgReadError::Unsupported(sv_read_why_text(why)),
         }),
     }

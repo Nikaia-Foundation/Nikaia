@@ -9,6 +9,8 @@
 
 use nikaia::ast::{Expr, Item, Stmt};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The statements of the program's `main`, as the parser built them.
 fn main_body(source: &str) -> Vec<Stmt> {

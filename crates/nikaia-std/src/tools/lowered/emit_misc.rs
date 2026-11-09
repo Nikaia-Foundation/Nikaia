@@ -5,7 +5,7 @@ pub fn is_reserved(name: &str) -> bool { matches!(name, "abstract" | "async" | "
 
 pub fn escaped_name(name: &str) -> String {
     if is_reserved(name) { return format!("r#{}", name); }
-    name.to_string()
+    nikaia_std::block::Text::from(name.to_string())
 }
 
 pub fn emit_local_name(comptimes: &collections::BTreeSet<String>, name: &str) -> String {
@@ -152,7 +152,7 @@ impl EmitState {
     pub fn method_closes_a_pausing_cycle(&self, caller: &str, method: &str) -> bool {
         let suffix = format!("::{}", method);
         for key in self.pausing_reach.keys() {
-            if !key.ends_with(&suffix) { continue; }
+            if !key.ends_with(AsRef::<str>::as_ref(&suffix)) { continue; }
             let seen = match self.pausing_reach.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if seen.contains(caller) { return true; }
         }
@@ -173,10 +173,10 @@ impl EmitState {
     }
     pub fn type_named(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, head: &str) -> String {
         let bound = walk.type_names.get(head);
-        if bound.is_some() { return nikaia_std::index::or(bound, || "").to_string(); }
-        let pair = match walk.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return head.to_string() };
-        if pair.first == head { return pair.second.to_string(); }
-        head.to_string()
+        if bound.is_some() { return nikaia_std::block::Text::from(nikaia_std::index::or(bound, || "").to_string()); }
+        let pair = match walk.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(head.to_string()) };
+        if pair.first == head { return nikaia_std::block::Text::from(pair.second.to_string()); }
+        nikaia_std::block::Text::from(head.to_string())
     }
     pub fn kind_subject(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, side: &Expr) -> String {
         match side {
@@ -190,18 +190,18 @@ impl EmitState {
             Expr::Field { base, name, .. } => {
                 let base = nikaia_std::boxed::open(base); let name = *name;
                 let ty = match self.reflected_field_type(world, walk, base, name, "ty::kind") { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-                return nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
+                return nikaia_std::block::Text::from(nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, || "Opaque".into()).to_string();
+                }, || "Opaque".into()).to_string());
             },
             Expr::Path(segments, _) => {
                 if segments.len() == 3 { return emit_text(world, *nikaia_std::index::get(&segments, 2)); }
                 let ty = self.type_named(world, walk, &emit_text(world, *nikaia_std::index::get(&segments, 0)));
-                return nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
+                return nikaia_std::block::Text::from(nikaia_std::index::or(match self.facts.type_kinds.get(&ty) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, || "Opaque".into()).to_string();
+                }, || "Opaque".into()).to_string());
             },
             _ => { },
         }
@@ -218,7 +218,7 @@ impl EmitState {
         }
     }
     pub fn enclosing_shape_walk(&self, on: &str) -> Option<String> {
-        for key in self.facts.unrolled.keys() { if key.1 == on { return Some(key.0.to_string()); } }
+        for key in self.facts.unrolled.keys() { if key.1 == on { return Some(nikaia_std::block::Text::from(key.0.to_string())); } }
         None
     }
     pub fn unrolled_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, on: &str, iter: &Expr) -> String {
@@ -227,8 +227,8 @@ impl EmitState {
             Expr::Path(segments, _) => nikaia_std::index::or(match walk.type_names.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || on.to_string().into()),
-            _ => on.to_string(),
+            }, || nikaia_std::block::Text::from(on.to_string()).into()),
+            _ => nikaia_std::block::Text::from(on.to_string()),
         }
     }
     pub fn unrolls_here(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, on: &str, iter: &Expr) -> Option<Vec<FieldContract>> {
@@ -248,7 +248,7 @@ impl EmitState {
                 if member != "fields" && member != "variants" { return None; }
                 let bound = walk.type_names.get(parameter);
                 if bound.is_some() {
-                    let ty = nikaia_std::index::or(bound, || "").to_string();
+                    let ty = nikaia_std::block::Text::from(nikaia_std::index::or(bound, || "").to_string());
                     if ty != on {
                         return match self.facts.type_fields.get(&ty) {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -257,8 +257,8 @@ impl EmitState {
                     }
                 } else if parameter != name { return None; }
                 let walk = match self.enclosing_shape_walk(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let found = match self.facts.unrolled.get(&(walk, on.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                return Some(found.to_owned());
+                let found = match self.facts.unrolled.get(&(walk, nikaia_std::block::Text::from(on.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return Some(found.copy_owned());
             },
             _ => { },
         }
@@ -278,8 +278,8 @@ impl EmitState {
                 let (owner, variant) = self.boxed_owner(world, path);
                 if owner.is_empty() { return out; }
                 for each in fields.iter() {
-                    let field = world.words.resolve(each.name).to_string();
-                    let mut member = field.to_string();
+                    let field = nikaia_std::block::Text::from(world.words.resolve(each.name).to_string());
+                    let mut member = nikaia_std::block::Text::from(field.to_string());
                     if !variant.is_empty() { member = boxed_member(&variant, -1, &field); }
                     if self.is_boxed(&owner, &member) && self.binds_one_name(&each.pat) { out.extend(self.single_binding(world, &each.pat)); } else { out.extend(self.boxed_bindings(world, &each.pat)); }
                 }
@@ -302,15 +302,15 @@ impl EmitState {
         }
     }
     pub(crate) fn binding_if_named(&self, world: &EmitWorld<'_, '_, '_, '_>, one: &[winnow_grammar::Symbol]) -> Vec<String> {
-        let name = world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string();
+        let name = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string());
         if name == "_" { return vec![]; }
         vec![escaped_name(&name)]
     }
     pub(crate) fn boxed_owner(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> (String, String) {
         if path.is_empty() { return (String::from(""), String::from("")); }
-        let last = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string();
+        let last = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string());
         if path.len() >= 2 {
-            let owner = world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string();
+            let owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 2))).to_string());
             if self.facts.boxed_members.contains_key(&owner) { return (owner, last); }
         }
         (last, String::from(""))
@@ -336,27 +336,27 @@ impl EmitState {
     }
     pub fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
         let pieces: Vec<&str> = written.split(" { ").collect::<Vec<_>>();
-        let name = (*nikaia_std::index::get(&pieces, 0)).to_string();
+        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
         let mut inside: String = String::from("");
         if pieces.len() > 1 {
-            let mut rest: Vec<String> = vec![];
-            for at in 1..pieces.len() as i64 { rest.push((*nikaia_std::index::get(&pieces, (at) as usize)).to_string()); }
-            let joined = rest.join(" { ");
+            let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for at in 1..pieces.len() as i64 { rest.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, (at) as usize)).to_string())); }
+            let joined = nikaia_std::block::Text::from(rest.join(" { "));
             let stripped = joined.strip_suffix(" }");
-            if stripped.is_some() { inside = nikaia_std::index::or(stripped, || "").to_string(); } else { inside = joined.to_string(); }
-        }
-        let mut fields: Vec<String> = vec![];
+            if stripped.is_some() { inside = nikaia_std::block::Text::from(nikaia_std::index::or(stripped, || "").to_string()); } else { inside = nikaia_std::block::Text::from(joined.to_string()); }
+        } ::core::mem::drop(pieces);
+        let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in top_level_parts(&inside) {
             let halves: Vec<&str> = part.split(": ").collect::<Vec<_>>();
             if halves.len() < 2 { continue; }
-            let field = (*nikaia_std::index::get(&halves, 0)).to_string();
-            let mut value_parts: Vec<String> = vec![];
-            for at in 1..halves.len() as i64 { value_parts.push((*nikaia_std::index::get(&halves, (at) as usize)).to_string()); }
-            let value = value_parts.join(": ");
+            let field = nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, 0)).to_string());
+            let mut value_parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for at in 1..halves.len() as i64 { value_parts.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, (at) as usize)).to_string())); }
+            let value = nikaia_std::block::Text::from(value_parts.join(": "));
             let ty = emit_field_type((self.field_contract(world, &name, &field)).as_ref());
             fields.push(format!("{}: {}", escaped_name(&field), held_literal(&value, &ty)));
         }
-        format!("{} {{ {} }}", name, fields.join(", "))
+        format!("{} {{ {} }}", name, nikaia_std::block::Text::from(fields.join(", ")))
     }
 }
 

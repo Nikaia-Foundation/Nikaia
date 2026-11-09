@@ -11,6 +11,8 @@
 //! the whole corpus and read, and being wrong costs a wrong line in a file
 //! rather than a wrong program.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::tether::State;
 use nikaia::contracts::{Ledger, LedgerOps, STD};

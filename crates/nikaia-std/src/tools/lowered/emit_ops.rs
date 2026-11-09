@@ -159,11 +159,11 @@ pub fn a_list_read_as_a_slice(written: String) -> String {
     if !written.starts_with('&') || !written.ends_with('>') { return written; }
     let after = nikaia_std::index::or(written.strip_prefix('&'), || "");
     let mut lead: String = String::from("&");
-    let mut rest: String = after.to_string();
+    let mut rest: String = nikaia_std::block::Text::from(after.to_string());
     if after.starts_with('\'') {
         let space = match nikaia_std::search::find(&after, &" ", 0) { Some(__nikaia_value) => __nikaia_value, None => return written };
         lead = format!("&{} ", nikaia_std::index::get(&after, nikaia_std::index::at(0..space)));
-        rest = nikaia_std::index::get(&after, nikaia_std::index::at(space + 1..)).to_string();
+        rest = nikaia_std::block::Text::from(nikaia_std::index::get(&after, nikaia_std::index::at(space + 1..)).to_string());
     }
     if rest.starts_with("Vec<") {
         let inner = nikaia_std::index::or(rest.strip_prefix("Vec<"), || "");
@@ -174,15 +174,15 @@ pub fn a_list_read_as_a_slice(written: String) -> String {
 }
 
 pub fn frame_attribute(frame: &FrameAttr) -> String {
-    let mut keys: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let boundary = match frame.boundary.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    };
+    }; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     if boundary.is_some() { keys.push(format!("boundary = \"{}\"", nikaia_std::index::or(boundary.as_deref(), || ""))); }
     if frame.unchecked { keys.push(String::from("unchecked")); }
     if keys.is_empty() { return String::from("#[frame]"); }
-    format!("#[frame({})]", keys.join(", "))
+    format!("#[frame({})]", nikaia_std::block::Text::from(keys.join(", ")))
 }
 
 pub fn is_a_place(expr: &Expr) -> bool { matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. }) }

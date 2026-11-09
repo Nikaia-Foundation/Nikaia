@@ -5,6 +5,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -13,7 +15,7 @@ fn codes(source: &str) -> Vec<String> {
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -29,7 +31,7 @@ fn an_item_level_ring_is_nk1168() {
     let source =
         "comptime A = B + 1\ncomptime B = A + 1\n\nfn main() throws {\n    println(f\"{A}\")\n}\n";
     assert!(
-        codes(source).contains(&"NK1168".to_string()),
+        codes(source).contains(&"NK1168".to_text()),
         "{:?}",
         codes(source)
     );
@@ -38,7 +40,7 @@ fn an_item_level_ring_is_nk1168() {
 #[test]
 fn a_body_level_forward_reference_is_nk1117_alone() {
     let source = "fn main() throws {\n    comptime D = C + 1\n    comptime C = 1\n    println(f\"{D}\")\n}\n";
-    assert_eq!(codes(source), vec!["NK1117".to_string()]);
+    assert_eq!(codes(source), vec!["NK1117".to_text()]);
 }
 
 #[test]

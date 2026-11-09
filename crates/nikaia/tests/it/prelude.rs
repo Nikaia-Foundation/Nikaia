@@ -13,6 +13,8 @@
 //! three of the four. This is the test that would have said so.
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// What the checker says about a source.
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
@@ -38,7 +40,7 @@ fn the_list() -> Vec<String> {
     let mut names = Vec::new();
     for piece in rest[..end].split("**`").skip(1) {
         if let Some(name) = piece.split("`**").next() {
-            names.push(name.to_string());
+            names.push(name.to_text());
         }
     }
     names

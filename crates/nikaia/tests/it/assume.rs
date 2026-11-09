@@ -5,6 +5,8 @@
 //! believed in one that does (D2), and listed by `--asserts` (D3).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
@@ -43,7 +45,7 @@ fn codes(source: &str) -> Vec<&'static str> {
 /// The lowered body of the function `name`, up to the next `fn`.
 fn body<'a>(rust: &'a str, name: &str) -> &'a str {
     let from = rust
-        .find(&format!("fn {name}("))
+        .find(&*format!("fn {name}("))
         .unwrap_or_else(|| panic!("no `{name}` in:\n{rust}"));
     let rest = &rust[from + 3..];
     let to = rest.find("fn ").unwrap_or(rest.len());
@@ -94,8 +96,8 @@ fn run(purpose: &str, source: &str, optimization: &str, input: &str) -> (bool, S
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
     )
 }
 
@@ -195,7 +197,7 @@ fn asserts_lists_every_assume() {
         .output()
         .expect("the nikaia binary runs");
     std::fs::remove_dir_all(&dir).ok();
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_text();
     assert!(
         out.status.success(),
         "{}",

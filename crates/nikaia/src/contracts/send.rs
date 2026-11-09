@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/send.rs
 //
 // Whether a value may cross a thread (ADR-005 §1 Group B, `NK25xx`).
@@ -224,7 +226,7 @@ mod tests {
         let library = Ledger::parse(super::super::STD).expect("std ships a ledger");
         for into in [Destination::Ours, Destination::Foreign] {
             for name in own.types.keys().chain(library.types.keys()) {
-                let answer = crossing(&Ty::named(name), &own, &library, into);
+                let answer = crossing(&Ty::named(name.clone()), &own, &library, into);
                 assert!(
                     answer.refused().is_none()
                         || ["Locked", "SharedMut", "Shared"]

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/prove.rs
 //
 // Every `assert` outside a `test` block, proved while the program is built
@@ -219,7 +221,7 @@ pub fn prove(
         &counted,
         &answer_of,
         &model_of,
-        &|name| crate::emit::escaped(name).into_owned(),
+        &|name| crate::emit::escaped(name).to_text(),
         &|e| crate::emit::literal_expressions(parsed, e),
         &|name| parsed.unaliased(name),
         &|e| crate::check::written(parsed, e),

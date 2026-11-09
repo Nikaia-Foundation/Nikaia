@@ -40,6 +40,8 @@ use nikaia_std::time;
 mod assets_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/assets.rs");
 }
 #[allow(unused_imports)]
@@ -48,6 +50,8 @@ pub use assets_lowered::*;
 mod ast_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ast.rs");
 }
 #[allow(unused_imports)]
@@ -56,6 +60,8 @@ pub use ast_lowered::*;
 mod boundaries_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/boundaries.rs");
 }
 #[allow(unused_imports)]
@@ -64,6 +70,8 @@ pub use boundaries_lowered::*;
 mod bounds_basic_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_basic.rs");
 }
 #[allow(unused_imports)]
@@ -72,6 +80,8 @@ pub use bounds_basic_lowered::*;
 mod bounds_body_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_body.rs");
 }
 #[allow(unused_imports)]
@@ -80,6 +90,8 @@ pub use bounds_body_lowered::*;
 mod bounds_derived_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_derived.rs");
 }
 #[allow(unused_imports)]
@@ -88,6 +100,8 @@ pub use bounds_derived_lowered::*;
 mod bounds_frame_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_frame.rs");
 }
 #[allow(unused_imports)]
@@ -96,6 +110,8 @@ pub use bounds_frame_lowered::*;
 mod bounds_interval_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_interval.rs");
 }
 #[allow(unused_imports)]
@@ -104,6 +120,8 @@ pub use bounds_interval_lowered::*;
 mod bounds_matched_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_matched.rs");
 }
 #[allow(unused_imports)]
@@ -112,6 +130,8 @@ pub use bounds_matched_lowered::*;
 mod bounds_proven_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_proven.rs");
 }
 #[allow(unused_imports)]
@@ -120,6 +140,8 @@ pub use bounds_proven_lowered::*;
 mod bounds_reasons_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_reasons.rs");
 }
 #[allow(unused_imports)]
@@ -128,6 +150,8 @@ pub use bounds_reasons_lowered::*;
 mod bounds_report_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_report.rs");
 }
 #[allow(unused_imports)]
@@ -136,6 +160,8 @@ pub use bounds_report_lowered::*;
 mod bounds_rules_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_rules.rs");
 }
 #[allow(unused_imports)]
@@ -144,6 +170,8 @@ pub use bounds_rules_lowered::*;
 mod bounds_shape_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_shape.rs");
 }
 #[allow(unused_imports)]
@@ -152,6 +180,8 @@ pub use bounds_shape_lowered::*;
 mod bounds_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/bounds_walk.rs");
 }
 #[allow(unused_imports)]
@@ -160,6 +190,8 @@ pub use bounds_walk_lowered::*;
 mod buffers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/buffers.rs");
 }
 #[allow(unused_imports)]
@@ -168,6 +200,8 @@ pub use buffers_lowered::*;
 mod build_eval_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/build_eval.rs");
 }
 #[allow(unused_imports)]
@@ -176,6 +210,8 @@ pub use build_eval_lowered::*;
 mod build_values_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/build_values.rs");
 }
 #[allow(unused_imports)]
@@ -184,6 +220,8 @@ pub use build_values_lowered::*;
 mod calls_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/calls.rs");
 }
 #[allow(unused_imports)]
@@ -192,6 +230,8 @@ pub use calls_lowered::*;
 mod cargo_json_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cargo_json.rs");
 }
 #[allow(unused_imports)]
@@ -200,6 +240,8 @@ pub use cargo_json_lowered::*;
 mod cexport_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cexport.rs");
 }
 #[allow(unused_imports)]
@@ -208,6 +250,8 @@ pub use cexport_lowered::*;
 mod cexport_mirror_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cexport_mirror.rs");
 }
 #[allow(unused_imports)]
@@ -216,6 +260,8 @@ pub use cexport_mirror_lowered::*;
 mod cexport_model_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cexport_model.rs");
 }
 #[allow(unused_imports)]
@@ -224,6 +270,8 @@ pub use cexport_model_lowered::*;
 mod cexport_node_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cexport_node.rs");
 }
 #[allow(unused_imports)]
@@ -232,6 +280,8 @@ pub use cexport_node_lowered::*;
 mod cexport_node_text_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cexport_node_text.rs");
 }
 #[allow(unused_imports)]
@@ -240,6 +290,8 @@ pub use cexport_node_text_lowered::*;
 mod cexport_python_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cexport_python.rs");
 }
 #[allow(unused_imports)]
@@ -248,6 +300,8 @@ pub use cexport_python_lowered::*;
 mod check_access_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_access.rs");
 }
 #[allow(unused_imports)]
@@ -256,6 +310,8 @@ pub use check_access_lowered::*;
 mod check_arguments_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_arguments.rs");
 }
 #[allow(unused_imports)]
@@ -264,6 +320,8 @@ pub use check_arguments_lowered::*;
 mod check_arith_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_arith.rs");
 }
 #[allow(unused_imports)]
@@ -272,6 +330,8 @@ pub use check_arith_lowered::*;
 mod check_arm_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_arm_leaves.rs");
 }
 #[allow(unused_imports)]
@@ -280,6 +340,8 @@ pub use check_arm_leaves_lowered::*;
 mod check_arms_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_arms.rs");
 }
 #[allow(unused_imports)]
@@ -288,6 +350,8 @@ pub use check_arms_lowered::*;
 mod check_attributes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_attributes.rs");
 }
 #[allow(unused_imports)]
@@ -296,6 +360,8 @@ pub use check_attributes_lowered::*;
 mod check_binds_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_binds.rs");
 }
 #[allow(unused_imports)]
@@ -304,6 +370,8 @@ pub use check_binds_lowered::*;
 mod check_boundary_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_boundary.rs");
 }
 #[allow(unused_imports)]
@@ -312,6 +380,8 @@ pub use check_boundary_lowered::*;
 mod check_boxes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_boxes.rs");
 }
 #[allow(unused_imports)]
@@ -320,6 +390,8 @@ pub use check_boxes_lowered::*;
 mod check_buildtime_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_buildtime.rs");
 }
 #[allow(unused_imports)]
@@ -328,6 +400,8 @@ pub use check_buildtime_lowered::*;
 mod check_buildtime2_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_buildtime2.rs");
 }
 #[allow(unused_imports)]
@@ -336,6 +410,8 @@ pub use check_buildtime2_lowered::*;
 mod check_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_calls.rs");
 }
 #[allow(unused_imports)]
@@ -344,6 +420,8 @@ pub use check_calls_lowered::*;
 mod check_claims_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_claims.rs");
 }
 #[allow(unused_imports)]
@@ -352,6 +430,8 @@ pub use check_claims_lowered::*;
 mod check_collect_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_collect.rs");
 }
 #[allow(unused_imports)]
@@ -360,6 +440,8 @@ pub use check_collect_lowered::*;
 mod check_compare_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_compare.rs");
 }
 #[allow(unused_imports)]
@@ -368,6 +450,8 @@ pub use check_compare_lowered::*;
 mod check_consts_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_consts.rs");
 }
 #[allow(unused_imports)]
@@ -376,6 +460,8 @@ pub use check_consts_lowered::*;
 mod check_copies_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_copies.rs");
 }
 #[allow(unused_imports)]
@@ -384,6 +470,8 @@ pub use check_copies_lowered::*;
 mod check_core_args_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_args.rs");
 }
 #[allow(unused_imports)]
@@ -392,6 +480,8 @@ pub use check_core_args_lowered::*;
 mod check_core_call_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_call.rs");
 }
 #[allow(unused_imports)]
@@ -400,6 +490,8 @@ pub use check_core_call_lowered::*;
 mod check_core_call_on_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_call_on.rs");
 }
 #[allow(unused_imports)]
@@ -408,6 +500,8 @@ pub use check_core_call_on_lowered::*;
 mod check_core_comptime_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_comptime.rs");
 }
 #[allow(unused_imports)]
@@ -416,6 +510,8 @@ pub use check_core_comptime_lowered::*;
 mod check_core_expr_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_expr.rs");
 }
 #[allow(unused_imports)]
@@ -424,6 +520,8 @@ pub use check_core_expr_lowered::*;
 mod check_core_flow_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_flow.rs");
 }
 #[allow(unused_imports)]
@@ -432,6 +530,8 @@ pub use check_core_flow_lowered::*;
 mod check_core_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_leaves.rs");
 }
 #[allow(unused_imports)]
@@ -440,6 +540,8 @@ pub use check_core_leaves_lowered::*;
 mod check_core_method_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_method.rs");
 }
 #[allow(unused_imports)]
@@ -448,6 +550,8 @@ pub use check_core_method_lowered::*;
 mod check_core_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_ops.rs");
 }
 #[allow(unused_imports)]
@@ -456,6 +560,8 @@ pub use check_core_ops_lowered::*;
 mod check_core_pilot_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_pilot.rs");
 }
 #[allow(unused_imports)]
@@ -464,6 +570,8 @@ pub use check_core_pilot_lowered::*;
 mod check_core_places_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_places.rs");
 }
 #[allow(unused_imports)]
@@ -472,6 +580,8 @@ pub use check_core_places_lowered::*;
 mod check_core_stmt_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_core_stmt.rs");
 }
 #[allow(unused_imports)]
@@ -480,6 +590,8 @@ pub use check_core_stmt_lowered::*;
 mod check_crossings_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_crossings.rs");
 }
 #[allow(unused_imports)]
@@ -488,6 +600,8 @@ pub use check_crossings_lowered::*;
 mod check_declared_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_declared.rs");
 }
 #[allow(unused_imports)]
@@ -496,6 +610,8 @@ pub use check_declared_lowered::*;
 mod check_decls_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_decls.rs");
 }
 #[allow(unused_imports)]
@@ -504,6 +620,8 @@ pub use check_decls_lowered::*;
 mod check_defaults_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_defaults.rs");
 }
 #[allow(unused_imports)]
@@ -512,6 +630,8 @@ pub use check_defaults_lowered::*;
 mod check_doors_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_doors.rs");
 }
 #[allow(unused_imports)]
@@ -520,6 +640,8 @@ pub use check_doors_lowered::*;
 mod check_expect_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_expect.rs");
 }
 #[allow(unused_imports)]
@@ -528,6 +650,8 @@ pub use check_expect_lowered::*;
 mod check_exprs_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_exprs.rs");
 }
 #[allow(unused_imports)]
@@ -536,6 +660,8 @@ pub use check_exprs_lowered::*;
 mod check_extern_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_extern.rs");
 }
 #[allow(unused_imports)]
@@ -544,6 +670,8 @@ pub use check_extern_lowered::*;
 mod check_facts_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_facts.rs");
 }
 #[allow(unused_imports)]
@@ -552,6 +680,8 @@ pub use check_facts_lowered::*;
 mod check_fallible_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_fallible.rs");
 }
 #[allow(unused_imports)]
@@ -560,6 +690,8 @@ pub use check_fallible_lowered::*;
 mod check_fields_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_fields.rs");
 }
 #[allow(unused_imports)]
@@ -568,6 +700,8 @@ pub use check_fields_lowered::*;
 mod check_flow_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_flow.rs");
 }
 #[allow(unused_imports)]
@@ -576,6 +710,8 @@ pub use check_flow_lowered::*;
 mod check_function_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_function.rs");
 }
 #[allow(unused_imports)]
@@ -584,6 +720,8 @@ pub use check_function_lowered::*;
 mod check_glue_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_glue.rs");
 }
 #[allow(unused_imports)]
@@ -592,6 +730,8 @@ pub use check_glue_lowered::*;
 mod check_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_grammar.rs");
 }
 #[allow(unused_imports)]
@@ -600,6 +740,8 @@ pub use check_grammar_lowered::*;
 mod check_host_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_host.rs");
 }
 #[allow(unused_imports)]
@@ -608,6 +750,8 @@ pub use check_host_lowered::*;
 mod check_imports_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_imports.rs");
 }
 #[allow(unused_imports)]
@@ -616,6 +760,8 @@ pub use check_imports_lowered::*;
 mod check_items_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_items.rs");
 }
 #[allow(unused_imports)]
@@ -624,6 +770,8 @@ pub use check_items_lowered::*;
 mod check_keep_marks_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_keep_marks.rs");
 }
 #[allow(unused_imports)]
@@ -632,6 +780,8 @@ pub use check_keep_marks_lowered::*;
 mod check_kinds_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_kinds.rs");
 }
 #[allow(unused_imports)]
@@ -640,6 +790,8 @@ pub use check_kinds_lowered::*;
 mod check_lambdas_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_lambdas.rs");
 }
 #[allow(unused_imports)]
@@ -648,6 +800,8 @@ pub use check_lambdas_lowered::*;
 mod check_literals_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_literals.rs");
 }
 #[allow(unused_imports)]
@@ -656,6 +810,8 @@ pub use check_literals_lowered::*;
 mod check_lookups_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_lookups.rs");
 }
 #[allow(unused_imports)]
@@ -664,6 +820,8 @@ pub use check_lookups_lowered::*;
 mod check_main_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_main.rs");
 }
 #[allow(unused_imports)]
@@ -672,6 +830,8 @@ pub use check_main_lowered::*;
 mod check_may_fail_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_may_fail.rs");
 }
 #[allow(unused_imports)]
@@ -680,6 +840,8 @@ pub use check_may_fail_lowered::*;
 mod check_members_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_members.rs");
 }
 #[allow(unused_imports)]
@@ -688,6 +850,8 @@ pub use check_members_lowered::*;
 mod check_name_in_text_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_name_in_text.rs");
 }
 #[allow(unused_imports)]
@@ -696,6 +860,8 @@ pub use check_name_in_text_lowered::*;
 mod check_names_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_names.rs");
 }
 #[allow(unused_imports)]
@@ -704,6 +870,8 @@ pub use check_names_lowered::*;
 mod check_narrow_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_narrow.rs");
 }
 #[allow(unused_imports)]
@@ -712,6 +880,8 @@ pub use check_narrow_lowered::*;
 mod check_notes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_notes.rs");
 }
 #[allow(unused_imports)]
@@ -720,6 +890,8 @@ pub use check_notes_lowered::*;
 mod check_numbers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_numbers.rs");
 }
 #[allow(unused_imports)]
@@ -728,6 +900,8 @@ pub use check_numbers_lowered::*;
 mod check_numbers2_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_numbers2.rs");
 }
 #[allow(unused_imports)]
@@ -736,6 +910,8 @@ pub use check_numbers2_lowered::*;
 mod check_numbers3_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_numbers3.rs");
 }
 #[allow(unused_imports)]
@@ -744,6 +920,8 @@ pub use check_numbers3_lowered::*;
 mod check_numbers4_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_numbers4.rs");
 }
 #[allow(unused_imports)]
@@ -752,6 +930,8 @@ pub use check_numbers4_lowered::*;
 mod check_numbers5_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_numbers5.rs");
 }
 #[allow(unused_imports)]
@@ -760,6 +940,8 @@ pub use check_numbers5_lowered::*;
 mod check_overflow_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_overflow.rs");
 }
 #[allow(unused_imports)]
@@ -768,6 +950,8 @@ pub use check_overflow_lowered::*;
 mod check_parts_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_parts.rs");
 }
 #[allow(unused_imports)]
@@ -776,6 +960,8 @@ pub use check_parts_lowered::*;
 mod check_patterns_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_patterns.rs");
 }
 #[allow(unused_imports)]
@@ -784,6 +970,8 @@ pub use check_patterns_lowered::*;
 mod check_pauses_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_pauses.rs");
 }
 #[allow(unused_imports)]
@@ -792,6 +980,8 @@ pub use check_pauses_lowered::*;
 mod check_places_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_places.rs");
 }
 #[allow(unused_imports)]
@@ -800,6 +990,8 @@ pub use check_places_lowered::*;
 mod check_program_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_program.rs");
 }
 #[allow(unused_imports)]
@@ -808,6 +1000,8 @@ pub use check_program_lowered::*;
 mod check_reads_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_reads.rs");
 }
 #[allow(unused_imports)]
@@ -816,6 +1010,8 @@ pub use check_reads_lowered::*;
 mod check_references_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_references.rs");
 }
 #[allow(unused_imports)]
@@ -824,6 +1020,8 @@ pub use check_references_lowered::*;
 mod check_refusals_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_refusals.rs");
 }
 #[allow(unused_imports)]
@@ -832,6 +1030,8 @@ pub use check_refusals_lowered::*;
 mod check_reports_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_reports.rs");
 }
 #[allow(unused_imports)]
@@ -840,6 +1040,8 @@ pub use check_reports_lowered::*;
 mod check_result_from_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_result_from.rs");
 }
 #[allow(unused_imports)]
@@ -848,6 +1050,8 @@ pub use check_result_from_lowered::*;
 mod check_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_scope.rs");
 }
 #[allow(unused_imports)]
@@ -856,6 +1060,8 @@ pub use check_scope_lowered::*;
 mod check_send_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_send.rs");
 }
 #[allow(unused_imports)]
@@ -864,6 +1070,8 @@ pub use check_send_lowered::*;
 mod check_shapes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_shapes.rs");
 }
 #[allow(unused_imports)]
@@ -872,6 +1080,8 @@ pub use check_shapes_lowered::*;
 mod check_simd_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_simd.rs");
 }
 #[allow(unused_imports)]
@@ -880,6 +1090,8 @@ pub use check_simd_lowered::*;
 mod check_state_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_state.rs");
 }
 #[allow(unused_imports)]
@@ -888,6 +1100,8 @@ pub use check_state_lowered::*;
 mod check_takes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_takes.rs");
 }
 #[allow(unused_imports)]
@@ -896,6 +1110,8 @@ pub use check_takes_lowered::*;
 mod check_task_pauses_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_task_pauses.rs");
 }
 #[allow(unused_imports)]
@@ -904,6 +1120,8 @@ pub use check_task_pauses_lowered::*;
 mod check_texts_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_texts.rs");
 }
 #[allow(unused_imports)]
@@ -912,6 +1130,8 @@ pub use check_texts_lowered::*;
 mod check_types_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_types.rs");
 }
 #[allow(unused_imports)]
@@ -920,6 +1140,8 @@ pub use check_types_lowered::*;
 mod check_values_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_values.rs");
 }
 #[allow(unused_imports)]
@@ -928,6 +1150,8 @@ pub use check_values_lowered::*;
 mod check_visit_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_visit.rs");
 }
 #[allow(unused_imports)]
@@ -936,6 +1160,8 @@ pub use check_visit_lowered::*;
 mod check_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_walk.rs");
 }
 #[allow(unused_imports)]
@@ -944,6 +1170,8 @@ pub use check_walk_lowered::*;
 mod check_walked_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_walked.rs");
 }
 #[allow(unused_imports)]
@@ -952,6 +1180,8 @@ pub use check_walked_lowered::*;
 mod check_walks_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_walks.rs");
 }
 #[allow(unused_imports)]
@@ -960,6 +1190,8 @@ pub use check_walks_lowered::*;
 mod check_widen_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_widen.rs");
 }
 #[allow(unused_imports)]
@@ -968,6 +1200,8 @@ pub use check_widen_lowered::*;
 mod check_with_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_with.rs");
 }
 #[allow(unused_imports)]
@@ -976,6 +1210,8 @@ pub use check_with_lowered::*;
 mod check_words_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/check_words.rs");
 }
 #[allow(unused_imports)]
@@ -984,6 +1220,8 @@ pub use check_words_lowered::*;
 mod claim_names_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/claim_names.rs");
 }
 #[allow(unused_imports)]
@@ -992,6 +1230,8 @@ pub use claim_names_lowered::*;
 mod cli_commands_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/cli_commands.rs");
 }
 #[allow(unused_imports)]
@@ -1000,6 +1240,8 @@ pub use cli_commands_lowered::*;
 mod comptime_bundle_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/comptime_bundle.rs");
 }
 #[allow(unused_imports)]
@@ -1008,6 +1250,8 @@ pub use comptime_bundle_lowered::*;
 mod comptime_driver_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/comptime_driver.rs");
 }
 #[allow(unused_imports)]
@@ -1016,6 +1260,8 @@ pub use comptime_driver_lowered::*;
 mod comptime_tree_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/comptime_tree.rs");
 }
 #[allow(unused_imports)]
@@ -1024,6 +1270,8 @@ pub use comptime_tree_lowered::*;
 mod contract_changes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/contract_changes.rs");
 }
 #[allow(unused_imports)]
@@ -1032,6 +1280,8 @@ pub use contract_changes_lowered::*;
 mod contracts_core_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/contracts_core.rs");
 }
 #[allow(unused_imports)]
@@ -1040,6 +1290,8 @@ pub use contracts_core_lowered::*;
 mod crossing_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/crossing.rs");
 }
 #[allow(unused_imports)]
@@ -1048,6 +1300,8 @@ pub use crossing_lowered::*;
 mod declared_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/declared.rs");
 }
 #[allow(unused_imports)]
@@ -1056,6 +1310,8 @@ pub use declared_lowered::*;
 mod describe_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/describe.rs");
 }
 #[allow(unused_imports)]
@@ -1064,6 +1320,8 @@ pub use describe_lowered::*;
 mod diagnostics_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/diagnostics.rs");
 }
 #[allow(unused_imports)]
@@ -1072,6 +1330,8 @@ pub use diagnostics_lowered::*;
 mod diffs_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/diffs.rs");
 }
 #[allow(unused_imports)]
@@ -1080,6 +1340,8 @@ pub use diffs_lowered::*;
 mod dsl_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/dsl.rs");
 }
 #[allow(unused_imports)]
@@ -1088,6 +1350,8 @@ pub use dsl_lowered::*;
 mod dump_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/dump.rs");
 }
 #[allow(unused_imports)]
@@ -1096,6 +1360,8 @@ pub use dump_lowered::*;
 mod emit_below_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_below.rs");
 }
 #[allow(unused_imports)]
@@ -1104,6 +1370,8 @@ pub use emit_below_lowered::*;
 mod emit_build_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_build.rs");
 }
 #[allow(unused_imports)]
@@ -1112,6 +1380,8 @@ pub use emit_build_lowered::*;
 mod emit_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_calls.rs");
 }
 #[allow(unused_imports)]
@@ -1120,6 +1390,8 @@ pub use emit_calls_lowered::*;
 mod emit_contracts_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_contracts.rs");
 }
 #[allow(unused_imports)]
@@ -1128,6 +1400,8 @@ pub use emit_contracts_lowered::*;
 mod emit_core_args_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_args.rs");
 }
 #[allow(unused_imports)]
@@ -1136,6 +1410,8 @@ pub use emit_core_args_lowered::*;
 mod emit_core_below_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_below.rs");
 }
 #[allow(unused_imports)]
@@ -1144,6 +1420,8 @@ pub use emit_core_below_lowered::*;
 mod emit_core_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_calls.rs");
 }
 #[allow(unused_imports)]
@@ -1152,6 +1430,8 @@ pub use emit_core_calls_lowered::*;
 mod emit_core_flow_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_flow.rs");
 }
 #[allow(unused_imports)]
@@ -1160,6 +1440,8 @@ pub use emit_core_flow_lowered::*;
 mod emit_core_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_leaves.rs");
 }
 #[allow(unused_imports)]
@@ -1168,6 +1450,8 @@ pub use emit_core_leaves_lowered::*;
 mod emit_core_match_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_match.rs");
 }
 #[allow(unused_imports)]
@@ -1176,6 +1460,8 @@ pub use emit_core_match_lowered::*;
 mod emit_core_places_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_places.rs");
 }
 #[allow(unused_imports)]
@@ -1184,6 +1470,8 @@ pub use emit_core_places_lowered::*;
 mod emit_core_reads_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_reads.rs");
 }
 #[allow(unused_imports)]
@@ -1192,6 +1480,8 @@ pub use emit_core_reads_lowered::*;
 mod emit_core_types_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_core_types.rs");
 }
 #[allow(unused_imports)]
@@ -1200,6 +1490,8 @@ pub use emit_core_types_lowered::*;
 mod emit_entry_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_entry.rs");
 }
 #[allow(unused_imports)]
@@ -1208,6 +1500,8 @@ pub use emit_entry_lowered::*;
 mod emit_expr_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_expr.rs");
 }
 #[allow(unused_imports)]
@@ -1216,6 +1510,8 @@ pub use emit_expr_lowered::*;
 mod emit_exprs_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_exprs.rs");
 }
 #[allow(unused_imports)]
@@ -1224,6 +1520,8 @@ pub use emit_exprs_lowered::*;
 mod emit_fold_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_fold.rs");
 }
 #[allow(unused_imports)]
@@ -1232,6 +1530,8 @@ pub use emit_fold_lowered::*;
 mod emit_function_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_function.rs");
 }
 #[allow(unused_imports)]
@@ -1240,6 +1540,8 @@ pub use emit_function_lowered::*;
 mod emit_function_body_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_function_body.rs");
 }
 #[allow(unused_imports)]
@@ -1248,6 +1550,8 @@ pub use emit_function_body_lowered::*;
 mod emit_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_grammar.rs");
 }
 #[allow(unused_imports)]
@@ -1256,6 +1560,8 @@ pub use emit_grammar_lowered::*;
 mod emit_holes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_holes.rs");
 }
 #[allow(unused_imports)]
@@ -1264,6 +1570,8 @@ pub use emit_holes_lowered::*;
 mod emit_host_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_host.rs");
 }
 #[allow(unused_imports)]
@@ -1272,6 +1580,8 @@ pub use emit_host_lowered::*;
 mod emit_item_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_item.rs");
 }
 #[allow(unused_imports)]
@@ -1280,6 +1590,8 @@ pub use emit_item_lowered::*;
 mod emit_items_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_items.rs");
 }
 #[allow(unused_imports)]
@@ -1288,6 +1600,8 @@ pub use emit_items_lowered::*;
 mod emit_keeps_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_keeps.rs");
 }
 #[allow(unused_imports)]
@@ -1296,6 +1610,8 @@ pub use emit_keeps_lowered::*;
 mod emit_kinds_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_kinds.rs");
 }
 #[allow(unused_imports)]
@@ -1304,6 +1620,8 @@ pub use emit_kinds_lowered::*;
 mod emit_locals_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_locals.rs");
 }
 #[allow(unused_imports)]
@@ -1312,6 +1630,8 @@ pub use emit_locals_lowered::*;
 mod emit_misc_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_misc.rs");
 }
 #[allow(unused_imports)]
@@ -1320,6 +1640,8 @@ pub use emit_misc_lowered::*;
 mod emit_needs_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_needs.rs");
 }
 #[allow(unused_imports)]
@@ -1328,6 +1650,8 @@ pub use emit_needs_lowered::*;
 mod emit_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_ops.rs");
 }
 #[allow(unused_imports)]
@@ -1336,6 +1660,8 @@ pub use emit_ops_lowered::*;
 mod emit_order_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_order.rs");
 }
 #[allow(unused_imports)]
@@ -1344,6 +1670,8 @@ pub use emit_order_lowered::*;
 mod emit_out_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_out.rs");
 }
 #[allow(unused_imports)]
@@ -1352,6 +1680,8 @@ pub use emit_out_lowered::*;
 mod emit_pattern_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_pattern.rs");
 }
 #[allow(unused_imports)]
@@ -1360,6 +1690,8 @@ pub use emit_pattern_lowered::*;
 mod emit_program_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_program.rs");
 }
 #[allow(unused_imports)]
@@ -1368,6 +1700,8 @@ pub use emit_program_lowered::*;
 mod emit_reach_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_reach.rs");
 }
 #[allow(unused_imports)]
@@ -1376,6 +1710,8 @@ pub use emit_reach_lowered::*;
 mod emit_seeds_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_seeds.rs");
 }
 #[allow(unused_imports)]
@@ -1384,6 +1720,8 @@ pub use emit_seeds_lowered::*;
 mod emit_state_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_state.rs");
 }
 #[allow(unused_imports)]
@@ -1392,6 +1730,8 @@ pub use emit_state_lowered::*;
 mod emit_stmt_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_stmt.rs");
 }
 #[allow(unused_imports)]
@@ -1400,6 +1740,8 @@ pub use emit_stmt_lowered::*;
 mod emit_sums_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_sums.rs");
 }
 #[allow(unused_imports)]
@@ -1408,6 +1750,8 @@ pub use emit_sums_lowered::*;
 mod emit_tables_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_tables.rs");
 }
 #[allow(unused_imports)]
@@ -1416,6 +1760,8 @@ pub use emit_tables_lowered::*;
 mod emit_text_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_text.rs");
 }
 #[allow(unused_imports)]
@@ -1424,6 +1770,8 @@ pub use emit_text_lowered::*;
 mod emit_types_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_types.rs");
 }
 #[allow(unused_imports)]
@@ -1432,6 +1780,8 @@ pub use emit_types_lowered::*;
 mod emit_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/emit_walk.rs");
 }
 #[allow(unused_imports)]
@@ -1440,6 +1790,8 @@ pub use emit_walk_lowered::*;
 mod escapes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/escapes.rs");
 }
 #[allow(unused_imports)]
@@ -1448,6 +1800,8 @@ pub use escapes_lowered::*;
 mod findings_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/findings.rs");
 }
 #[allow(unused_imports)]
@@ -1456,6 +1810,8 @@ pub use findings_lowered::*;
 mod fixed_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/fixed.rs");
 }
 #[allow(unused_imports)]
@@ -1464,6 +1820,8 @@ pub use fixed_lowered::*;
 mod fmt_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/fmt.rs");
 }
 #[allow(unused_imports)]
@@ -1472,6 +1830,8 @@ pub use fmt_lowered::*;
 mod fold_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/fold.rs");
 }
 #[allow(unused_imports)]
@@ -1480,6 +1840,8 @@ pub use fold_lowered::*;
 mod fold_bound_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/fold_bound.rs");
 }
 #[allow(unused_imports)]
@@ -1488,6 +1850,8 @@ pub use fold_bound_lowered::*;
 mod foreign_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/foreign.rs");
 }
 #[allow(unused_imports)]
@@ -1496,6 +1860,8 @@ pub use foreign_lowered::*;
 mod grammar_decode_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/grammar_decode.rs");
 }
 #[allow(unused_imports)]
@@ -1504,6 +1870,8 @@ pub use grammar_decode_lowered::*;
 mod grammar_run_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/grammar_run.rs");
 }
 #[allow(unused_imports)]
@@ -1512,6 +1880,8 @@ pub use grammar_run_lowered::*;
 mod grammar_types_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/grammar_types.rs");
 }
 #[allow(unused_imports)]
@@ -1520,6 +1890,8 @@ pub use grammar_types_lowered::*;
 mod integers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/integers.rs");
 }
 #[allow(unused_imports)]
@@ -1528,6 +1900,8 @@ pub use integers_lowered::*;
 mod interpreter_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/interpreter.rs");
 }
 #[allow(unused_imports)]
@@ -1536,6 +1910,8 @@ pub use interpreter_lowered::*;
 mod keep_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/keep.rs");
 }
 #[allow(unused_imports)]
@@ -1544,6 +1920,8 @@ pub use keep_lowered::*;
 mod keeps_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/keeps.rs");
 }
 #[allow(unused_imports)]
@@ -1552,6 +1930,8 @@ pub use keeps_lowered::*;
 mod leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/leaves.rs");
 }
 #[allow(unused_imports)]
@@ -1560,6 +1940,8 @@ pub use leaves_lowered::*;
 mod ledger_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ledger.rs");
 }
 #[allow(unused_imports)]
@@ -1568,6 +1950,8 @@ pub use ledger_lowered::*;
 mod ledger_defaults_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ledger_defaults.rs");
 }
 #[allow(unused_imports)]
@@ -1576,6 +1960,8 @@ pub use ledger_defaults_lowered::*;
 mod ledger_items_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ledger_items.rs");
 }
 #[allow(unused_imports)]
@@ -1584,6 +1970,8 @@ pub use ledger_items_lowered::*;
 mod ledger_ops_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ledger_ops.rs");
 }
 #[allow(unused_imports)]
@@ -1592,6 +1980,8 @@ pub use ledger_ops_lowered::*;
 mod ledger_text_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ledger_text.rs");
 }
 #[allow(unused_imports)]
@@ -1600,6 +1990,8 @@ pub use ledger_text_lowered::*;
 mod lends_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/lends.rs");
 }
 #[allow(unused_imports)]
@@ -1608,6 +2000,8 @@ pub use lends_lowered::*;
 mod libraries_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/libraries.rs");
 }
 #[allow(unused_imports)]
@@ -1616,6 +2010,8 @@ pub use libraries_lowered::*;
 mod locks_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/locks.rs");
 }
 #[allow(unused_imports)]
@@ -1624,6 +2020,8 @@ pub use locks_lowered::*;
 mod logic_alethe_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/logic_alethe.rs");
 }
 #[allow(unused_imports)]
@@ -1632,6 +2030,8 @@ pub use logic_alethe_lowered::*;
 mod logic_horn_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/logic_horn.rs");
 }
 #[allow(unused_imports)]
@@ -1640,6 +2040,8 @@ pub use logic_horn_lowered::*;
 mod logic_lia_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/logic_lia.rs");
 }
 #[allow(unused_imports)]
@@ -1648,6 +2050,8 @@ pub use logic_lia_lowered::*;
 mod logic_normal_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/logic_normal.rs");
 }
 #[allow(unused_imports)]
@@ -1656,6 +2060,8 @@ pub use logic_normal_lowered::*;
 mod logic_search_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/logic_search.rs");
 }
 #[allow(unused_imports)]
@@ -1664,6 +2070,8 @@ pub use logic_search_lowered::*;
 mod logic_smtlib_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/logic_smtlib.rs");
 }
 #[allow(unused_imports)]
@@ -1672,6 +2080,8 @@ pub use logic_smtlib_lowered::*;
 mod lsp_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/lsp.rs");
 }
 #[allow(unused_imports)]
@@ -1680,6 +2090,8 @@ pub use lsp_lowered::*;
 mod manifest_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/manifest.rs");
 }
 #[allow(unused_imports)]
@@ -1688,6 +2100,8 @@ pub use manifest_lowered::*;
 mod maps_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/maps.rs");
 }
 #[allow(unused_imports)]
@@ -1696,6 +2110,8 @@ pub use maps_lowered::*;
 mod migrate_print_throws_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/migrate_print_throws.rs");
 }
 #[allow(unused_imports)]
@@ -1704,6 +2120,8 @@ pub use migrate_print_throws_lowered::*;
 mod migrate_views3_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/migrate_views3.rs");
 }
 #[allow(unused_imports)]
@@ -1712,6 +2130,8 @@ pub use migrate_views3_lowered::*;
 mod modules_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/modules.rs");
 }
 #[allow(unused_imports)]
@@ -1720,6 +2140,8 @@ pub use modules_lowered::*;
 mod names_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/names.rs");
 }
 #[allow(unused_imports)]
@@ -1728,6 +2150,8 @@ pub use names_lowered::*;
 mod node_numbers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/node_numbers.rs");
 }
 #[allow(unused_imports)]
@@ -1736,6 +2160,8 @@ pub use node_numbers_lowered::*;
 mod order_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/order.rs");
 }
 #[allow(unused_imports)]
@@ -1744,6 +2170,8 @@ pub use order_lowered::*;
 mod panics_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/panics.rs");
 }
 #[allow(unused_imports)]
@@ -1752,6 +2180,8 @@ pub use panics_lowered::*;
 mod parse_errors_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parse_errors.rs");
 }
 #[allow(unused_imports)]
@@ -1760,6 +2190,8 @@ pub use parse_errors_lowered::*;
 mod parse_findings_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parse_findings.rs");
 }
 #[allow(unused_imports)]
@@ -1768,6 +2200,8 @@ pub use parse_findings_lowered::*;
 mod parse_notes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parse_notes.rs");
 }
 #[allow(unused_imports)]
@@ -1776,6 +2210,8 @@ pub use parse_notes_lowered::*;
 mod parse_numbers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parse_numbers.rs");
 }
 #[allow(unused_imports)]
@@ -1784,6 +2220,8 @@ pub use parse_numbers_lowered::*;
 mod parsed_tree_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parsed_tree.rs");
 }
 #[allow(unused_imports)]
@@ -1792,6 +2230,8 @@ pub use parsed_tree_lowered::*;
 mod parsed_view_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parsed_view.rs");
 }
 #[allow(unused_imports)]
@@ -1800,6 +2240,8 @@ pub use parsed_view_lowered::*;
 mod parser_grammar_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parser_grammar.rs");
 }
 #[allow(unused_imports)]
@@ -1808,6 +2250,8 @@ pub use parser_grammar_lowered::*;
 mod parser_leaves_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/parser_leaves.rs");
 }
 #[allow(unused_imports)]
@@ -1816,6 +2260,8 @@ pub use parser_leaves_lowered::*;
 mod paths_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/paths.rs");
 }
 #[allow(unused_imports)]
@@ -1824,6 +2270,8 @@ pub use paths_lowered::*;
 mod project_check_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_check.rs");
 }
 #[allow(unused_imports)]
@@ -1832,6 +2280,8 @@ pub use project_check_lowered::*;
 mod project_drive_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_drive.rs");
 }
 #[allow(unused_imports)]
@@ -1840,6 +2290,8 @@ pub use project_drive_lowered::*;
 mod project_features_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_features.rs");
 }
 #[allow(unused_imports)]
@@ -1848,6 +2300,8 @@ pub use project_features_lowered::*;
 mod project_lower_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_lower.rs");
 }
 #[allow(unused_imports)]
@@ -1856,6 +2310,8 @@ pub use project_lower_lowered::*;
 mod project_members_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_members.rs");
 }
 #[allow(unused_imports)]
@@ -1864,6 +2320,8 @@ pub use project_members_lowered::*;
 mod project_settings_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_settings.rs");
 }
 #[allow(unused_imports)]
@@ -1872,6 +2330,8 @@ pub use project_settings_lowered::*;
 mod project_tests_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_tests.rs");
 }
 #[allow(unused_imports)]
@@ -1880,6 +2340,8 @@ pub use project_tests_lowered::*;
 mod project_write_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/project_write.rs");
 }
 #[allow(unused_imports)]
@@ -1888,6 +2350,8 @@ pub use project_write_lowered::*;
 mod proofs_answers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/proofs_answers.rs");
 }
 #[allow(unused_imports)]
@@ -1896,6 +2360,8 @@ pub use proofs_answers_lowered::*;
 mod proofs_book_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/proofs_book.rs");
 }
 #[allow(unused_imports)]
@@ -1904,6 +2370,8 @@ pub use proofs_book_lowered::*;
 mod prove_run_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prove_run.rs");
 }
 #[allow(unused_imports)]
@@ -1912,6 +2380,8 @@ pub use prove_run_lowered::*;
 mod prove_terms_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prove_terms.rs");
 }
 #[allow(unused_imports)]
@@ -1920,6 +2390,8 @@ pub use prove_terms_lowered::*;
 mod prove_text_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prove_text.rs");
 }
 #[allow(unused_imports)]
@@ -1928,6 +2400,8 @@ pub use prove_text_lowered::*;
 mod prover_arena_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_arena.rs");
 }
 #[allow(unused_imports)]
@@ -1936,6 +2410,8 @@ pub use prover_arena_lowered::*;
 mod prover_calls_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_calls.rs");
 }
 #[allow(unused_imports)]
@@ -1944,6 +2420,8 @@ pub use prover_calls_lowered::*;
 mod prover_claims_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_claims.rs");
 }
 #[allow(unused_imports)]
@@ -1952,6 +2430,8 @@ pub use prover_claims_lowered::*;
 mod prover_loops_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_loops.rs");
 }
 #[allow(unused_imports)]
@@ -1960,6 +2440,8 @@ pub use prover_loops_lowered::*;
 mod prover_passes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_passes.rs");
 }
 #[allow(unused_imports)]
@@ -1968,6 +2450,8 @@ pub use prover_passes_lowered::*;
 mod prover_results_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_results.rs");
 }
 #[allow(unused_imports)]
@@ -1976,6 +2460,8 @@ pub use prover_results_lowered::*;
 mod prover_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_scope.rs");
 }
 #[allow(unused_imports)]
@@ -1984,6 +2470,8 @@ pub use prover_scope_lowered::*;
 mod prover_solver_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_solver.rs");
 }
 #[allow(unused_imports)]
@@ -1992,6 +2480,8 @@ pub use prover_solver_lowered::*;
 mod prover_state_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_state.rs");
 }
 #[allow(unused_imports)]
@@ -2000,6 +2490,8 @@ pub use prover_state_lowered::*;
 mod prover_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/prover_walk.rs");
 }
 #[allow(unused_imports)]
@@ -2008,6 +2500,8 @@ pub use prover_walk_lowered::*;
 mod render_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/render.rs");
 }
 #[allow(unused_imports)]
@@ -2016,6 +2510,8 @@ pub use render_lowered::*;
 mod rust_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/rust.rs");
 }
 #[allow(unused_imports)]
@@ -2024,6 +2520,8 @@ pub use rust_lowered::*;
 mod rustc_words_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/rustc_words.rs");
 }
 #[allow(unused_imports)]
@@ -2032,6 +2530,8 @@ pub use rustc_words_lowered::*;
 mod sharing_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sharing.rs");
 }
 #[allow(unused_imports)]
@@ -2040,6 +2540,8 @@ pub use sharing_lowered::*;
 mod signature_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/signature.rs");
 }
 #[allow(unused_imports)]
@@ -2048,6 +2550,8 @@ pub use signature_lowered::*;
 mod solver_terms_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/solver_terms.rs");
 }
 #[allow(unused_imports)]
@@ -2056,6 +2560,8 @@ pub use solver_terms_lowered::*;
 mod sources_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sources.rs");
 }
 #[allow(unused_imports)]
@@ -2064,6 +2570,8 @@ pub use sources_lowered::*;
 mod specbook_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/specbook.rs");
 }
 #[allow(unused_imports)]
@@ -2072,6 +2580,8 @@ pub use specbook_lowered::*;
 mod spelling_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/spelling.rs");
 }
 #[allow(unused_imports)]
@@ -2080,6 +2590,8 @@ pub use spelling_lowered::*;
 mod surface_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/surface.rs");
 }
 #[allow(unused_imports)]
@@ -2088,6 +2600,8 @@ pub use surface_lowered::*;
 mod sv_ask_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_ask.rs");
 }
 #[allow(unused_imports)]
@@ -2096,6 +2610,8 @@ pub use sv_ask_lowered::*;
 mod sv_check_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_check.rs");
 }
 #[allow(unused_imports)]
@@ -2104,6 +2620,8 @@ pub use sv_check_lowered::*;
 mod sv_cnf_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_cnf.rs");
 }
 #[allow(unused_imports)]
@@ -2112,6 +2630,8 @@ pub use sv_cnf_lowered::*;
 mod sv_elim_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_elim.rs");
 }
 #[allow(unused_imports)]
@@ -2120,6 +2640,8 @@ pub use sv_elim_lowered::*;
 mod sv_fast_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_fast.rs");
 }
 #[allow(unused_imports)]
@@ -2128,6 +2650,8 @@ pub use sv_fast_lowered::*;
 mod sv_lemma_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_lemma.rs");
 }
 #[allow(unused_imports)]
@@ -2136,6 +2660,8 @@ pub use sv_lemma_lowered::*;
 mod sv_nl_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_nl.rs");
 }
 #[allow(unused_imports)]
@@ -2144,6 +2670,8 @@ pub use sv_nl_lowered::*;
 mod sv_num_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_num.rs");
 }
 #[allow(unused_imports)]
@@ -2152,6 +2680,8 @@ pub use sv_num_lowered::*;
 mod sv_pre_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_pre.rs");
 }
 #[allow(unused_imports)]
@@ -2160,6 +2690,8 @@ pub use sv_pre_lowered::*;
 mod sv_proof_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_proof.rs");
 }
 #[allow(unused_imports)]
@@ -2168,6 +2700,8 @@ pub use sv_proof_lowered::*;
 mod sv_row_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_row.rs");
 }
 #[allow(unused_imports)]
@@ -2176,6 +2710,8 @@ pub use sv_row_lowered::*;
 mod sv_sat_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_sat.rs");
 }
 #[allow(unused_imports)]
@@ -2184,6 +2720,8 @@ pub use sv_sat_lowered::*;
 mod sv_simplex_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_simplex.rs");
 }
 #[allow(unused_imports)]
@@ -2192,6 +2730,8 @@ pub use sv_simplex_lowered::*;
 mod sv_smt_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_smt.rs");
 }
 #[allow(unused_imports)]
@@ -2200,6 +2740,8 @@ pub use sv_smt_lowered::*;
 mod sv_smtlib_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_smtlib.rs");
 }
 #[allow(unused_imports)]
@@ -2208,6 +2750,8 @@ pub use sv_smtlib_lowered::*;
 mod sv_strategy_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_strategy.rs");
 }
 #[allow(unused_imports)]
@@ -2216,6 +2760,8 @@ pub use sv_strategy_lowered::*;
 mod sv_theory_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_theory.rs");
 }
 #[allow(unused_imports)]
@@ -2224,6 +2770,8 @@ pub use sv_theory_lowered::*;
 mod sv_walk_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sv_walk.rs");
 }
 #[allow(unused_imports)]
@@ -2232,6 +2780,8 @@ pub use sv_walk_lowered::*;
 mod sync_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sync.rs");
 }
 #[allow(unused_imports)]
@@ -2240,6 +2790,8 @@ pub use sync_lowered::*;
 mod sysroot_cache_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sysroot_cache.rs");
 }
 #[allow(unused_imports)]
@@ -2248,6 +2800,8 @@ pub use sysroot_cache_lowered::*;
 mod sysroot_package_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/sysroot_package.rs");
 }
 #[allow(unused_imports)]
@@ -2256,6 +2810,8 @@ pub use sysroot_package_lowered::*;
 mod template_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/template.rs");
 }
 #[allow(unused_imports)]
@@ -2264,6 +2820,8 @@ pub use template_lowered::*;
 mod tether_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/tether.rs");
 }
 #[allow(unused_imports)]
@@ -2272,6 +2830,8 @@ pub use tether_lowered::*;
 mod text_tiers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/text_tiers.rs");
 }
 #[allow(unused_imports)]
@@ -2280,6 +2840,8 @@ pub use text_tiers_lowered::*;
 mod threads_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/threads.rs");
 }
 #[allow(unused_imports)]
@@ -2288,6 +2850,8 @@ pub use threads_lowered::*;
 mod throws_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/throws.rs");
 }
 #[allow(unused_imports)]
@@ -2296,6 +2860,8 @@ pub use throws_lowered::*;
 mod tiers_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/tiers.rs");
 }
 #[allow(unused_imports)]
@@ -2304,6 +2870,8 @@ pub use tiers_lowered::*;
 mod touch_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/touch.rs");
 }
 #[allow(unused_imports)]
@@ -2312,6 +2880,8 @@ pub use touch_lowered::*;
 mod traits_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/traits.rs");
 }
 #[allow(unused_imports)]
@@ -2320,6 +2890,8 @@ pub use traits_lowered::*;
 mod tree_build_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/tree_build.rs");
 }
 #[allow(unused_imports)]
@@ -2328,6 +2900,8 @@ pub use tree_build_lowered::*;
 mod trust_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/trust.rs");
 }
 #[allow(unused_imports)]
@@ -2336,6 +2910,8 @@ pub use trust_lowered::*;
 mod ty_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/ty.rs");
 }
 #[allow(unused_imports)]
@@ -2344,6 +2920,8 @@ pub use ty_lowered::*;
 mod type_rules_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/type_rules.rs");
 }
 #[allow(unused_imports)]
@@ -2352,6 +2930,8 @@ pub use type_rules_lowered::*;
 mod types_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/types.rs");
 }
 #[allow(unused_imports)]
@@ -2360,6 +2940,8 @@ pub use types_lowered::*;
 mod view_changes_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/view_changes.rs");
 }
 #[allow(unused_imports)]
@@ -2368,6 +2950,8 @@ pub use view_changes_lowered::*;
 mod views_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/views.rs");
 }
 #[allow(unused_imports)]
@@ -2376,6 +2960,8 @@ pub use views_lowered::*;
 mod written_lowered {
     #[allow(unused_imports)]
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
     include!("lowered/written.rs");
 }
 #[allow(unused_imports)]
@@ -2954,7 +3540,7 @@ pub mod emit_misc {
 }
 pub mod emit_needs {
     #[allow(unused_imports)]
-    pub use super::{EmitNeeds, emit_needs_abort_table};
+    pub use super::{block_types_import, block_text_open, block_text_close, emit_callee_is_std_text, answers_rust_text, EmitNeeds, emit_needs_abort_table};
 }
 pub mod emit_ops {
     #[allow(unused_imports)]

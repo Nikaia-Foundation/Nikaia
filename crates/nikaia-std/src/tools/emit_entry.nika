@@ -67,6 +67,11 @@ impl EmitState {
         // ADR-345 D4: where `process::Exit` may leave `main`, the process ends
         // with its code after the drain.
         let exits = main_exits(self.own_contracts)
+        // ADR-327 D14: `main` is the root task, but its budget is the
+        // strategy's, normally the memory the program may use (D7). A block
+        // is 64 KiB until the strategy sizes it (#490 step 8), so `main` is
+        // put in its block only then; until then what it places in a block
+        // lives outside, as where no task runs.
         if call_pauses(self.own_contracts, "main") {
             text = f"{text}    let outcome = nikaia_std::rt::exec::block_on({body}({passed}));\n"
         } else {

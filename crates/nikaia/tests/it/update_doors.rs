@@ -25,6 +25,8 @@
 use nikaia::contracts::LedgerOps;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -215,7 +217,7 @@ fn a_pausing_field_called_inside_a_lambda_is_refused_by_name() {
         nikaia::emit::emit_program(&parsed, nikaia::emit::Build::default()).expect_err("refused");
     assert!(
         refused
-            .to_string()
+            .to_text()
             .contains("This lambda calls `button.on_click`, which can pause"),
         "{refused}"
     );

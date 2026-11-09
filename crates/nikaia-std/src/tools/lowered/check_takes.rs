@@ -22,14 +22,14 @@ impl CheckState {
     pub fn taken(&self, path: String, ty: Ty, seq: i64, to: &str, span: &Span) -> CheckTaken {
         let root = a_root_segment(&path);
         let binding = self.binding_id(&root);
-        CheckTaken { path, ty, from: span.start as i64, at: span.end as i64, seq, choices: self.branch.to_owned(), until: None, to: to.to_string(), binding }
+        CheckTaken { path, ty, from: span.start as i64, at: span.end as i64, seq, choices: self.branch.copy_owned(), until: None, to: nikaia_std::block::Text::from(to.to_string()), binding }
     }
-    pub fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: name.to_string(), binding: None, depth: self.scope.len() as i64, choices: self.branch.to_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding }); }
+    pub fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding }); }
     pub fn failing_cleanups_bound(&mut self) {
         let depth = self.scope.len() as i64;
         for at in 0..self.cleanups_pending.len() as i64 {
             if nikaia_std::index::get(&self.cleanups_pending, (at) as usize).depth == depth && nikaia_std::index::get(&self.cleanups_pending, (at) as usize).binding.is_none() {
-                let name: String = nikaia_std::index::get(&self.cleanups_pending, (at) as usize).name.to_string();
+                let name: String = nikaia_std::block::Text::from(nikaia_std::index::get(&self.cleanups_pending, (at) as usize).name.to_string());
                 self.cleanups_pending[nikaia_std::index::at(at)].binding = self.binding_id(&name);
             }
         }
@@ -37,7 +37,7 @@ impl CheckState {
     pub fn failing_cleanups_left(&mut self, span: &Span) { for pending in self.cleanups_pending.iter_mut() { if (*pending).loops == self.flow.loops { (*pending).leaves.push(span.start as i64); } } }
     pub fn failing_cleanups_settled(&mut self) {
         let depth = self.scope.len() as i64;
-        let pending = self.cleanups_pending.to_owned();
+        let pending = self.cleanups_pending.copy_owned();
         let mut kept: Vec<CheckPendingCleanup> = vec![];
         for held in pending.iter() { if held.depth != depth { kept.push(held.clone()); } else if !self.closed_by_hand(held) { self.findings.push(held.finding.clone()); } }
         self.cleanups_pending = kept;
@@ -86,7 +86,7 @@ impl CheckState {
                 if how == "break" || how == "continue" { loop_frame = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame; }
             }
         }
-        self.ways_out.push(CheckWayOut { how: how.to_string(), word: word.to_string(), at: span.start as i64, seq: self.read_seq, choices: self.branch.to_owned(), span: span.clone(), loop_frame, in_loop });
+        self.ways_out.push(CheckWayOut { how: nikaia_std::block::Text::from(how.to_string()), word: nikaia_std::block::Text::from(word.to_string()), at: span.start as i64, seq: self.read_seq, choices: self.branch.copy_owned(), span: span.clone(), loop_frame, in_loop });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -110,7 +110,7 @@ impl CheckState {
         let path = match self.an_element_path(world, value, true) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let stand_in = match self.a_part_taken_out(world, &path, ty) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let root = a_root_segment(&path);
-        let taken = self.taken(path.to_string(), ty.clone(), self.read_seq, to, span);
+        let taken = self.taken(nikaia_std::block::Text::from(path.to_string()), ty.clone(), self.read_seq, to, span);
         self.handed.push(taken);
         self.facts.taken_parts.insert(node_key(value), stand_in);
         self.a_part_out(&root, &path, self.handed.len() as i64 - 1);
@@ -130,7 +130,7 @@ impl CheckState {
                 list = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 at = match index {
                     Expr::LitInt { value: n, negative, .. } => { let n = *n; let negative = *negative; if negative { format!("-{}", n) } else { format!("{}", n) } },
-                    Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+                    Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
                     _ => String::from("…"),
                 };
             },
@@ -165,7 +165,7 @@ impl CheckState {
             },
             Expr::Variable(name, _) => {
                 let name = *name;
-                at = world.words.resolve(name).to_string();
+                at = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
             },
             _ => { return None; },
         }
@@ -182,7 +182,7 @@ impl CheckState {
     pub fn a_view_described(&self, name: &str) -> String {
         let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return String::from("a view of a place") };
         if local.view_of != "" { return format!("the element of `{}`", local.view_of); }
-        let place = match self.view_places.get(&(name.to_string(), self.frame_of(name))) { Some(__nikaia_value) => __nikaia_value, None => return String::from("a view of a place") };
+        let place = match self.view_places.get(&(nikaia_std::block::Text::from(name.to_string()), self.frame_of(name))) { Some(__nikaia_value) => __nikaia_value, None => return String::from("a view of a place") };
         format!("the view of `{}`", place)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -208,14 +208,14 @@ impl CheckState {
         if best < 0 { return None; }
         let used = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(best)).at;
         for written in self.written_at.iter() { if a_path_revives(&written.0, &taken.path) && written.1 >= taken.from && written.1 <= used { return None; } }
-        Some(CheckUse { at: used, path: nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(best)).path.to_string() })
+        Some(CheckUse { at: used, path: nikaia_std::block::Text::from(nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(best)).path.to_string()) })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn lent_here(&self, name: &str) -> bool {
         let frame = self.frame_of(name);
         if frame < 0 { return false; }
-        if self.lent_lets.contains(&(name.to_string(), frame)) { return true; }
+        if self.lent_lets.contains(&(nikaia_std::block::Text::from(name.to_string()), frame)) { return true; }
         let found = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
         found.lent || found.ty.is_a_view()
     }
@@ -223,7 +223,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_lent_let(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> bool {
         let name = match side {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return false,
         };
         let frame = self.frame_of(&name);
@@ -255,7 +255,7 @@ impl CheckState {
     pub fn a_sequence_is_walked(&mut self, iter: &Expr, over: &Ty, span: &Span, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
         if !a_sequence_that_is_used_up(over) && !the_command_line(over) { return; }
         let name = match iter {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
         };
         let taken = self.taken(name, over.clone(), self.read_seq, "", span);
@@ -265,7 +265,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn hands_over_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, to: &str, span: &Span) {
         let ty = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return };
-        self.hands_over_path(world, &name.to_string(), &ty, self.read_seq, to, span);
+        self.hands_over_path(world, &nikaia_std::block::Text::from(name.to_string()), &ty, self.read_seq, to, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -287,10 +287,10 @@ impl CheckState {
             self.a_part_of_a_loan_handed_over(path, &root, to, span);
             return;
         }
-        let taken = self.taken(path.to_string(), ty.clone(), seq, to, span);
+        let taken = self.taken(nikaia_std::block::Text::from(path.to_string()), ty.clone(), seq, to, span);
         self.handed.push(taken);
         if stand_in.is_some() {
-            self.facts.taken_parts.insert(node, nikaia_std::index::or(stand_in.as_deref(), || "").to_string());
+            self.facts.taken_parts.insert(node, nikaia_std::block::Text::from(nikaia_std::index::or(stand_in.as_deref(), || "").to_string()));
             self.a_part_out(&root, path, self.handed.len() as i64 - 1);
         }
         let bound = self.frame_of(&root);
@@ -300,7 +300,7 @@ impl CheckState {
             self.held_in_a_loop(bound, path, ty, to, span);
             return;
         }
-        let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string();
+        let what = nikaia_std::block::Text::from(nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string());
         self.handed_over_again(&what, path, ty, to, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -327,7 +327,7 @@ impl CheckState {
             }
         }
         if holder < 0 { return; }
-        let held = CheckHeldTaking { path: path.to_string(), ty: ty.clone(), to: to.to_string(), span: span.clone(), choices: self.branch.to_owned(), from: self.ways_out.len() as i64, bound, loops };
+        let held = CheckHeldTaking { path: nikaia_std::block::Text::from(path.to_string()), ty: ty.clone(), to: nikaia_std::block::Text::from(to.to_string()), span: span.clone(), choices: self.branch.copy_owned(), from: self.ways_out.len() as i64, bound, loops };
         self.repeats[nikaia_std::index::at(holder)].held.push(held);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -336,7 +336,7 @@ impl CheckState {
         let last = self.repeats.len() as i64 - 1;
         if last < 0 { return; }
         let ending = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).opened;
-        let held = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).held.to_owned();
+        let held = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).held.copy_owned();
         self.repeats[nikaia_std::index::at(last)].held = vec![];
         for taking in held.iter() {
             if self.a_turn_follows(ending, taking) {
@@ -377,7 +377,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_move_out_of_an_immutable(&mut self, path: &str, root: &str, to: &str, span: &Span) {
-        let mut how: String = to.to_string();
+        let mut how: String = nikaia_std::block::Text::from(to.to_string());
         if how == "" { how = String::from("handed over"); }
         self.findings.push(check_refusal("NK1331", span, format!("`{}` is {} here, but `{}` is `immutable`, so nothing is moved out of it.", path, how, root), vec![String::from("An `immutable` binding is read through views only: a move would leave the name without its value, and the value changes owner (ADR-389).")], Some(format!("Hand over a view, or a copy: `{}`.", a_copy_said(path, &nikaia_std::index::or(self.lookup(path), || Ty::Unknown))))));
     }
@@ -391,13 +391,13 @@ impl CheckState {
             view = self.a_view_described(root);
             frame = self.frame_of(root);
         }
-        self.parts_out.push(CheckPartOut { subject: root.to_string(), part: path.to_string(), binding: local.id, handed, view, frame, ends: -1, from: -1, choices: vec![] });
+        self.parts_out.push(CheckPartOut { subject: nikaia_std::block::Text::from(root.to_string()), part: nikaia_std::block::Text::from(path.to_string()), binding: local.id, handed, view, frame, ends: -1, from: -1, choices: vec![] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_concatenated_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, ty: &Ty, span: &Span) {
         let name = match side {
-            Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol).to_string() },
+            Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
         };
         if ty.is_a_view() || !is_text_type(ty) { return; }
@@ -422,13 +422,13 @@ impl CheckState {
             return;
         }
         let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(nikaia_std::index::or(found, || 0)))).clone();
-        let taken = self.taken(read.path.to_string(), ty.clone(), read.seq, "", span);
+        let taken = self.taken(nikaia_std::block::Text::from(read.path.to_string()), ty.clone(), read.seq, "", span);
         self.flow.pending_concatenations.push(CheckPendingConcat { node, taken });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn concatenated_names_read_again(&mut self) {
-        let pending = self.flow.pending_concatenations.to_owned();
+        let pending = self.flow.pending_concatenations.copy_owned();
         self.flow.pending_concatenations = vec![];
         for one in pending.iter() { if self.read_beside(&one.taken) || self.first_read_after(&one.taken).is_some() { self.facts.lent_concatenated.insert(one.node); } }
     }
@@ -450,10 +450,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn data_handed_over_is_used_again(&mut self) {
         let mut said: collections::BTreeSet<i64> = collections::BTreeSet::new();
-        let mut found: Vec<CheckFinding> = vec![];
+        let mut found: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for taken in self.handed.iter() {
             let used = match self.first_read_after(taken) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let name = taken.path.to_string();
+            let name = nikaia_std::block::Text::from(taken.path.to_string());
             let mut message: String = format!("You're using `{}`, but `{}` was {}.", used.path, name, taken.to);
             if used.path == name { message = format!("You're using `{}` again, but it was {}.", name, taken.to); }
             if said.contains(&used.at) { continue; }
@@ -467,13 +467,13 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_sequence_is_taken(&mut self, name: &str, ty: &Ty, span: &Span) {
         if self.reading_only || !a_sequence_that_is_used_up(ty) { return; }
-        let taken = self.taken(name.to_string(), ty.clone(), self.read_seq, "", span);
+        let taken = self.taken(nikaia_std::block::Text::from(name.to_string()), ty.clone(), self.read_seq, "", span);
         self.walked.push(taken);
         let bound = self.frame_of(name);
         if bound < 0 { return; }
         let around = self.around_a_repeat(bound, name);
         if around < 0 { return; }
-        let what = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string();
+        let what = nikaia_std::block::Text::from(nikaia_std::index::get(&self.repeats, nikaia_std::index::at(around)).what.to_string());
         let item = an_item_text(ty);
         let mut again: &'static str = "a lambda may run more than once, and the second run would find it used up";
         let mut help: String = format!("Collect it into a list before the lambda and walk the list inside: `let {} = {}.collect()`.", name, name);
@@ -487,7 +487,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_sequence_was_walked_twice(&mut self) {
         let mut said: collections::BTreeSet<i64> = collections::BTreeSet::new();
-        let mut found: Vec<CheckFinding> = vec![];
+        let mut found: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for taken in self.walked.iter() {
             let used = match self.first_read_after(taken) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if said.contains(&used.at) { continue; }
@@ -503,13 +503,13 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_task_took_what_is_used_again(&mut self) {
-        let moved = self.moved_into_a_task.to_owned();
-        let read = self.read_at.to_owned();
-        let written = self.written_at.to_owned();
+        let moved = self.moved_into_a_task.copy_owned();
+        let read = self.read_at.copy_owned();
+        let written = self.written_at.copy_owned();
         self.moved_into_a_task = vec![];
         self.read_at = vec![];
         self.written_at = vec![];
-        let mut found: Vec<CheckFinding> = vec![];
+        let mut found: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, ty, at, who) in moved.iter() {
             let at = nikaia_std::num::value(at);
             let mut used: i64 = -1;
@@ -527,13 +527,13 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_part_left_out(&mut self) {
-        let outs = self.parts_out.to_owned();
-        let gives = self.gives.to_owned();
-        let ways = self.ways_out.to_owned();
+        let outs = self.parts_out.copy_owned();
+        let gives = self.gives.copy_owned();
+        let ways = self.ways_out.copy_owned();
         self.parts_out = vec![];
         self.gives = vec![];
         self.ways_out = vec![];
-        let mut reports: Vec<CheckMissing> = vec![];
+        let mut reports: Vec<CheckMissing> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for index in 0..outs.len() as i64 {
             let out = (*nikaia_std::index::get(&outs, nikaia_std::index::at(index))).clone();
             if out.handed < 0 || out.handed >= self.handed.len() as i64 { continue; }
@@ -541,11 +541,11 @@ impl CheckState {
             if nikaia_std::index::or(taken.binding, || -1) != out.binding { continue; }
             let mut from = taken.from;
             let mut seq = taken.seq;
-            let mut taking_choices = taken.choices.to_owned();
+            let mut taking_choices = taken.choices.copy_owned();
             if out.from >= 0 {
                 from = out.from;
                 seq = 0;
-                taking_choices = out.choices.to_owned();
+                taking_choices = out.choices.copy_owned();
             }
             let mut ends: i64 = 9223372036854775807i64;
             if out.ends >= 0 { ends = out.ends; }
@@ -562,33 +562,33 @@ impl CheckState {
             let places = by_position(&ahead);
             for position in places.iter() {
                 let mut choices: Vec<(i64, i64)> = vec![];
-                if position.2 >= 0 { choices = nikaia_std::index::get(&ways, nikaia_std::index::at(position.2)).choices.to_owned(); }
+                if position.2 >= 0 { choices = nikaia_std::index::get(&ways, nikaia_std::index::at(position.2)).choices.copy_owned(); }
                 let mut held: Vec<Vec<(i64, i64)>> = vec![];
-                for give in gives.iter() { if give.at >= from && give.at < position.0 && (a_path_revives(&give.path, &out.subject) || give.path == out.part) { held.push(give.choices.to_owned()); } }
-                let mut base = taking_choices.to_owned();
+                for give in gives.iter() { if give.at >= from && give.at < position.0 && (a_path_revives(&give.path, &out.subject) || give.path == out.part) { held.push(give.choices.copy_owned()); } }
+                let mut base = taking_choices.copy_owned();
                 base.extend(choices);
                 let given_back = gives_cover(&held, &base, &self.flow.choice_arms);
                 if given_back { continue; }
                 let mut found: i64 = -1;
                 for r in 0..reports.len() as i64 { if found < 0 && nikaia_std::index::get(&reports, (r) as usize).subject == out.subject && nikaia_std::index::get(&reports, (r) as usize).at == position.0 && nikaia_std::index::get(&reports, (r) as usize).seq == position.1 { found = r; } }
-                if found >= 0 { reports[nikaia_std::index::at(found)].parts.push(index); } else { reports.push(CheckMissing { subject: out.subject.to_string(), at: position.0, seq: position.1, way: position.2, parts: vec![index] }); }
+                if found >= 0 { reports[nikaia_std::index::at(found)].parts.push(index); } else { reports.push(CheckMissing { subject: nikaia_std::block::Text::from(out.subject.to_string()), at: position.0, seq: position.1, way: position.2, parts: vec![index] }); }
                 break;
             }
         }
-        let mut said: Vec<CheckFinding> = vec![];
+        let mut said: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for report in reports.iter() { said.push(self.a_part_is_missing(&outs, &ways, report)); }
         for one in said.iter() { self.findings.push(one.clone()); }
     }
     pub(crate) fn a_part_is_missing(&self, outs: &[CheckPartOut], ways: &[CheckWayOut], report: &CheckMissing) -> CheckFinding {
         let out = (*nikaia_std::index::get(&outs, nikaia_std::index::at(*nikaia_std::index::get(&report.parts, 0)))).clone();
         let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(out.handed))).clone();
-        let subject = out.subject.to_string();
-        let mut names: Vec<String> = vec![];
+        let subject = nikaia_std::block::Text::from(out.subject.to_string());
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for index in report.parts.iter() {
             let index = nikaia_std::num::value(index);
             names.push(format!("`{}`", nikaia_std::index::get(&outs, nikaia_std::index::at(index)).part));
         }
-        let mut part: String = (*nikaia_std::index::get(&names, 0)).to_string();
+        let mut part: String = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string());
         if names.len() > 1 {
             let mut head: String = String::from("");
             for at in 0..names.len() as i64 - 1 {
@@ -604,8 +604,8 @@ impl CheckState {
         let mut at_the_way = from.clone();
         if some {
             let way = (*nikaia_std::index::get(&ways, nikaia_std::index::at(report.way))).clone();
-            how = way.how.to_string();
-            word = way.word.to_string();
+            how = nikaia_std::block::Text::from(way.how.to_string());
+            word = nikaia_std::block::Text::from(way.word.to_string());
             at_the_way = way.span.clone();
         }
         let fails = some && how == "fails";
@@ -618,20 +618,20 @@ impl CheckState {
         }
         let mut message: String = format!("{} is left without {}: it was taken out and never given back.", named, part);
         let mut span = from.clone();
-        let mut label = CheckLabel { span: from.clone(), word: out.part.to_string(), text: String::from("taken out here and not given back"), main: true };
+        let mut label = CheckLabel { span: from.clone(), word: nikaia_std::block::Text::from(out.part.to_string()), text: String::from("taken out here and not given back"), main: true };
         if fails {
             message = format!("`{}` can fail, and {} is out of {} at that point.", word, part, named);
             if a_view { message = format!("`{}` can fail, and {} is out of `{}`, {}, at that point.", word, part, subject, out.view); }
             span = at_the_way.clone();
-            label = CheckLabel { span: at_the_way.clone(), word: word.to_string(), text: String::from("can fail while the part is out"), main: true };
+            label = CheckLabel { span: at_the_way.clone(), word: nikaia_std::block::Text::from(word.to_string()), text: String::from("can fail while the part is out"), main: true };
         } else if some {
             message = format!("This `{}` leaves {} without {}.", how, named, part);
             if a_view { message = format!("This `{}` leaves `{}`, {}, without {}.", how, subject, out.view, part); }
             span = at_the_way.clone();
-            label = CheckLabel { span: at_the_way.clone(), word: how.to_string(), text: format!("leaves {} with the part still out", left), main: true };
+            label = CheckLabel { span: at_the_way.clone(), word: nikaia_std::block::Text::from(how.to_string()), text: format!("leaves {} with the part still out", left), main: true };
         }
         let mut labels: Vec<CheckLabel> = vec![label];
-        if some { labels.push(CheckLabel { span: from.clone(), word: out.part.to_string(), text: format!("taken out of `{}` here", subject), main: false }); }
+        if some { labels.push(CheckLabel { span: from.clone(), word: nikaia_std::block::Text::from(out.part.to_string()), text: format!("taken out of `{}` here", subject), main: false }); }
         let mut kept: String = format!("`{}` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `{}` was {}, and nothing has put it back.", subject, out.part, taken.to);
         let of_self = !a_view && subject == "self";
         if of_self { kept = format!("The method takes `mut self`, so `self` is the caller's and is whole whenever the caller can see it. `{}` was {}, and nothing has put it back.", out.part, taken.to); }
@@ -672,7 +672,7 @@ pub(crate) fn a_copy_said(path: &str, ty: &Ty) -> String {
 pub(crate) fn a_root_segment(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
     let first: Vec<&str> = (*nikaia_std::index::get(&parts, 0)).split('[').collect::<Vec<_>>();
-    (*nikaia_std::index::get(&first, 0)).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&first, 0)).to_string())
 }
 
 pub(crate) fn by_position(ahead: &[(i64, i64, i64)]) -> Vec<(i64, i64, i64)> {
@@ -695,7 +695,7 @@ pub(crate) fn gives_cover(gives: &[Vec<(i64, i64)>], base: &[(i64, i64)], arms: 
             let count = match arms.get(&one.0) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
             let mut every = true;
             for k in 0..count {
-                let mut deeper = base.to_owned();
+                let mut deeper = base.copy_owned();
                 deeper.push((one.0, k));
                 if !gives_cover(gives, &deeper, arms) {
                     every = false;
@@ -722,7 +722,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn coalesces_not_lent_are_taken(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
-        let pending = self.flow.pending_coalesces.to_owned();
+        let pending = self.flow.pending_coalesces.copy_owned();
         self.flow.pending_coalesces = vec![];
         for one in pending.iter() {
             let key = (one.left, one.span.start as i64);
@@ -730,7 +730,7 @@ impl CheckState {
             if found.is_some() {
                 let at: i64 = match found { Some(__nikaia_value) => __nikaia_value, None => return }.clone();
                 let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at))).clone();
-                self.hands_over_path(world, &read.path.to_string(), &one.ty, read.seq, "given to `??`", &one.span);
+                self.hands_over_path(world, &nikaia_std::block::Text::from(read.path.to_string()), &one.ty, read.seq, "given to `??`", &one.span);
             }
         }
     }

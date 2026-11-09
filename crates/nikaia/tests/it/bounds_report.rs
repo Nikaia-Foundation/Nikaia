@@ -5,6 +5,8 @@
 use nikaia::bounds::{BoundsChecks, OverflowChecks};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn report(source: &str, bounds: BoundsChecks, overflow: OverflowChecks) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -51,7 +53,7 @@ fn every_site_is_listed_with_what_became_of_it() {
         out.lines()
             .find(|l| l.contains(text))
             .unwrap_or_else(|| panic!("no line for `{text}`:\n{out}"))
-            .to_string()
+            .to_text()
     };
     assert!(out.starts_with("bounds in p.nika: "), "{out}");
     assert!(
@@ -111,7 +113,7 @@ fn main() {
         out.lines()
             .find(|l| l.contains(text))
             .unwrap_or_else(|| panic!("no line for `{text}`:\n{out}"))
-            .to_string()
+            .to_text()
     };
     assert!(line("b.u64_le(i)").ends_with("proved"), "{out}");
     assert!(line("b.u32_le(i)").contains("checked"), "{out}");

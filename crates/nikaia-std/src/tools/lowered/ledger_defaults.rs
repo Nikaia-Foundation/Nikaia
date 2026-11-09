@@ -5,18 +5,18 @@ pub(crate) fn ld_type_named(ledger: &Ledger, library: &Ledger, name: &str) -> Op
     let direct = *nikaia_std::index::get(&ledger.types, name);
     if direct.is_some() {
         return match direct {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         };
     }
     let suffix = format!("::{}", name);
-    for (key, contract) in library.types.iter() { if key == name || key.ends_with(&suffix) { return Some(contract.clone()); } }
+    for (key, contract) in library.types.iter() { if key == name || key.ends_with(&*suffix) { return Some(contract.clone()); } }
     None
 }
 
 pub(crate) fn ld_variant_named(ledger: &Ledger, library: &Ledger, name: &str, word: &str) -> Option<String> {
     let held = match ld_type_named(ledger, library, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    for variant in held.variants.iter() { if check_attributes_same_word(&variant.name, word) { return Some(variant.name.to_string()); } }
+    for variant in held.variants.iter() { if check_attributes_same_word(&variant.name, word) { return Some(nikaia_std::block::Text::from(variant.name.to_string())); } }
     None
 }
 
@@ -27,7 +27,7 @@ pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow
             let word = *word;
             match ty {
                 Ty::Named { name, .. } => {
-                    let spelled = words.resolve(word).to_string();
+                    let spelled = nikaia_std::block::Text::from(words.resolve(word).to_string());
                     let variant = ld_variant_named(ledger, library, name, &spelled);
                     if variant.is_some() {
                         let shown = nikaia_std::index::or(variant, || "".into());
@@ -45,7 +45,7 @@ pub(crate) fn ld_argument_text(ledger: &Ledger, library: &Ledger, words: &winnow
 pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar::InternerContext, name: &str, attribute: &Attribute, computed: &impl Fn(&Ty, &Expr) -> Option<String>) -> Option<String> {
     let found = match ld_type_named(ledger, library, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut position: i64 = 0;
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in found.fields.iter() {
         let mut value: String = String::from("");
         if field.default.is_empty() {
@@ -59,11 +59,11 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
                 if given < 0 && words.resolve(option.name) == field.name { given = at; }
                 at += 1;
             }
-            if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = field.default.to_string(); }
+            if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = nikaia_std::block::Text::from(field.default.to_string()); }
         }
         written.push(format!("{}: {}", field.name, value));
     }
-    let joined = written.join(", ");
+    let joined = nikaia_std::block::Text::from(written.join(", "));
     Some(format!("{} {{ {} }}", name, joined))
 }
 
@@ -101,8 +101,8 @@ pub fn set_default(ledger: &mut Ledger, key: &str, at: i64, field: bool, text: S
 pub(crate) fn ld_columns(ledger: &Ledger) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for (_, contract) in ledger.functions.iter() {
-        let borrows = contract.borrows.join("\n");
-        let stores = contract.stores.join("\n");
+        let borrows = nikaia_std::block::Text::from(contract.borrows.join("\n"));
+        let stores = nikaia_std::block::Text::from(contract.stores.join("\n"));
         out.push(format!("{} | {} | {}", borrows, contract.returns, stores));
     }
     out
@@ -126,8 +126,8 @@ pub fn write_result_sources(ledger: &mut Ledger, units: i64, package: &impl Fn(&
             }
             for kept in stored(unit, &ledger, &shared) { fresh.insert(kept.key, kept.stores); }
         }
-        let mut keys: Vec<String> = vec![];
-        for (key, _) in ledger.functions.iter() { keys.push(key.to_string()); }
+        let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for (key, _) in ledger.functions.iter() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
         for key in keys.iter() {
             let contract = match nikaia_std::index::get_mut(&mut ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             contract.stores = nikaia_std::index::or(fresh.remove(key), || vec![].into());

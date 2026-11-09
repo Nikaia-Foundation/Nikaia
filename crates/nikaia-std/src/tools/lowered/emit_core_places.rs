@@ -42,7 +42,7 @@ pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &
 
 impl EmitState {
     pub(crate) fn emit_place_reach(&self, base: &Expr, place: &str, flattens: bool) -> String {
-        let view = match self.facts.viewed_reaches.get(&node_key(base)).copied() { Some(__nikaia_value) => __nikaia_value, None => return place.to_string() };
+        let view = match self.facts.viewed_reaches.get(&node_key(base)).copied() { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(place.to_string()) };
         match view {
             FactViewed::Text => emit_place_text_reach(place, flattens),
             FactViewed::Plain => emit_place_plain_reach(place, flattens),
@@ -60,7 +60,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_place_around(&self, node: &Expr, field: &str) -> Result<(String, String), nikaia_std::error::Thrown<EmitRefused>> {
-        let held = match self.facts.nullable_fields.get(&(node_key(node), field.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return Ok((String::from(""), String::from(""))) };
+        let held = match self.facts.nullable_fields.get(&(node_key(node), nikaia_std::block::Text::from(field.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return Ok((String::from(""), String::from(""))) };
         Ok(emit_around_held(&held)?)
     }
     pub(crate) fn a_list_read(&self, node: &Expr) -> bool {
@@ -77,14 +77,14 @@ impl EmitState {
         let mut lent: &'static str = "";
         if self.facts.lent_reaches.contains(&node_key(receiver)) && !emit_place_already_lent(world, receiver) { lent = ".as_ref()"; }
         out.push("match ");
-        let name = nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_string();
+        let name = nikaia_std::block::Text::from(nikaia_std::index::or(walk.held.get(&node_key(receiver)), || "").to_string());
         if walk.held.contains_key(&node_key(receiver)) { out.push(&name); } else if lent == "" && emit_place_an_index(receiver) {
             if self.a_list_read(receiver) { out.push("&"); }
             self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)?;
         } else { self.emit_core_postfix_base(world, walk, out, host, receiver, depth, flow, scope)?; }
         out.push(lent);
-        let inner = "    ".repeat(nikaia_std::count::of(depth + 1));
-        let outer = "    ".repeat(nikaia_std::count::of(depth));
+        let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
+        let outer = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         out.push(&format!(" {{\n{}", inner));
         out.push("Some(__nikaia_it) => ");
         if !flattens { out.push("Some("); }
@@ -103,7 +103,7 @@ impl EmitState {
             out.push(" }");
             done = true;
         } else if text_copy {
-            out.push("__nikaia_it.to_string()");
+            out.push(&format!("{}__nikaia_it.to_string(){}", block_text_open(self.on_block_types()), block_text_close(self.on_block_types())));
             done = true;
         } else { done = self.emit_core_a_field_call(world, walk, out, host, receiver, true, method, args, depth + 1, flow, scope)?; }
         if !done { self.emit_core_method_call(world, walk, out, host, None, node_key(receiver), method, args, config, depth + 1, flow, scope)?; }
@@ -157,7 +157,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_list_lit<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, items: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        if self.facts.array_literals.contains(&node_key(node)) { out.push("["); } else { out.push("vec!["); }
+        let placed = self.facts.placed_in_block.contains(&node_key(node));
+        if placed && items.is_empty() {
+            out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)");
+            return Ok(());
+        }
+        if placed { out.push("nikaia_std::block::List::from_array_in(["); } else if self.facts.array_literals.contains(&node_key(node)) { out.push("["); } else { out.push("vec!["); }
         let mut i = 0;
         for item in items.iter() {
             if i > 0 { out.push(", "); }
@@ -165,7 +170,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
             if self.facts.stored_handles.contains(&node_key(item)) { out.push(".clone()"); }
         }
-        out.push("]");
+        out.push(if placed { "], nikaia_std::block::Place::Block)" } else { "]" });
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -250,7 +255,7 @@ impl EmitState {
         out.push(&format!(".{}", escaped_name(&emit_text(world, name))));
         if boxed { out.push(")"); }
         if taken.is_some() {
-            let stand_in = nikaia_std::index::or(taken.as_deref(), || "").to_string();
+            let stand_in = nikaia_std::block::Text::from(nikaia_std::index::or(taken.as_deref(), || "").to_string());
             if stand_in == "" { out.push(")"); } else { out.push(&format!(", {})", stand_in)); }
         }
         Ok(())
@@ -283,7 +288,7 @@ impl EmitState {
             None => None,
         };
         if taken.is_some() && !flow.in_a_place {
-            let stand_in = nikaia_std::index::or(taken.as_deref(), || "").to_string();
+            let stand_in = nikaia_std::block::Text::from(nikaia_std::index::or(taken.as_deref(), || "").to_string());
             if stand_in == "" { out.push("std::mem::take(&mut "); } else { out.push("std::mem::replace(&mut "); }
             self.emit_core_index(world, walk, out, host, node, base, index, depth, flow.place(), scope)?;
             if stand_in == "" { out.push(")"); } else { out.push(&format!(", {})", stand_in)); }
@@ -399,7 +404,7 @@ impl EmitState {
                 let mut written = EmitOut::empty();
                 self.emit_core_nested(world, walk, &mut written, host, operand, 0, depth, flow, scope)?;
                 let open = format!(" as {}", into);
-                let already = written.buf.ends_with(&open);
+                let already = written.buf.ends_with(AsRef::<str>::as_ref(&open));
                 out.append(&written);
                 if already { return Ok(()); }
             } else { self.emit_core_nested(world, walk, out, host, operand, 255, depth, flow, scope)?; }
@@ -423,11 +428,11 @@ impl EmitState {
             let written = escaped_name(&emit_text(world, field.name));
             let plain = emit_text(world, field.name);
             out.push(&written);
-            let wrapped = self.facts.nullable_fields.contains_key(&(node_key(node), plain.to_string()));
+            let wrapped = self.facts.nullable_fields.contains_key(&(node_key(node), nikaia_std::block::Text::from(plain.to_string())));
             let (around_before, around_after) = self.emit_place_around(node, &plain)?;
             let boxed = self.is_boxed_field(&owner, &plain);
-            let mut before = around_before.to_string();
-            let mut after = around_after.to_string();
+            let mut before = nikaia_std::block::Text::from(around_before.to_string());
+            let mut after = nikaia_std::block::Text::from(around_after.to_string());
             if boxed {
                 before = format!("Box::new({}", around_before);
                 after = format!("{})", around_after);
@@ -466,15 +471,15 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
                 if self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
                 out.push(&after);
-            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) || self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) || self.facts.stored_handle_fields.contains(&(node_key(node), plain.to_string())) {
-                let mut put = written.to_string();
-                if self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
-                if self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) || self.facts.stored_handle_fields.contains(&(node_key(node), plain.to_string())) { put = format!("{}.clone()", written); }
+            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.stored_handle_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) {
+                let mut put = nikaia_std::block::Text::from(written.to_string());
+                if self.facts.kept_byte_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
+                if self.facts.kept_fn_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) || self.facts.stored_handle_fields.contains(&(node_key(node), nikaia_std::block::Text::from(plain.to_string()))) { put = format!("{}.clone()", written); }
                 if wrapped { put = format!("Some({})", put); }
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }
         }
-        let mut names: Vec<String> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for field in fields.iter() { names.push(emit_text(world, field.name)); }
         let mut after_one = !fields.is_empty();
         for (field, default, ty) in self.field_defaults(world, &owner) {
@@ -494,9 +499,9 @@ impl EmitState {
     }
     pub fn emit_place_all_defaults(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str) -> String {
         let owner = unaliased_in(world.aliases, name);
-        let mut parts: Vec<String> = vec![];
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (field, default, ty) in self.field_defaults(world, &owner) { parts.push(self.emit_place_field_default(&owner, &field, &default, &ty)); }
-        format!("{} {{ {} }}", owner, parts.join(", "))
+        format!("{} {{ {} }}", owner, nikaia_std::block::Text::from(parts.join(", ")))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -504,7 +509,7 @@ impl EmitState {
     pub fn emit_core_with<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, base: &Expr, fields: &[FieldInit], at: u32, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let known = self.facts.with_types.get(&node_key(node));
         if known.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The type of this `with` is unknown. This is a compiler bug: the check should have reported it first."), at: Some(at as i64) }, &"emit_core_with")); }
-        let owner = nikaia_std::index::or(known, || "").to_string();
+        let owner = nikaia_std::block::Text::from(nikaia_std::index::or(known, || "").to_string());
         let a_name = matches!(base, Expr::Variable(_, _));
         let whole = a_name && emit_core_with_names_every_field(world, &owner, fields.len() as i64);
         if whole {

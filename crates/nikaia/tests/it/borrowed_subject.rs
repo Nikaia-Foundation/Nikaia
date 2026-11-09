@@ -20,6 +20,8 @@
 //! is run, in `tests/language/src/borrowed_subject.nika`, beside every shape
 //! that leaked here.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -270,7 +272,7 @@ fn the_ledger_says_the_result_borrows_the_subject() {
             .get("Row::name")
             .expect("the accessor is in the ledger")
             .borrows,
-        vec!["self".to_string()],
+        vec!["self".to_text()],
     );
     // **And only where the result is a view.** A method that hands back an owned
     // value points into nothing, so there is no position to name.

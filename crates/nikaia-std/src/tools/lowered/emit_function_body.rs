@@ -55,7 +55,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_function_body<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, body: &Block, depth: i64, throws_: bool, returns_value: bool, awaited: &[winnow_grammar::Symbol], key: &str, channel: &str, counts_steps: bool, skip_free_at_exit: bool) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        walk.keep_function = key.to_string();
+        walk.keep_function = nikaia_std::block::Text::from(key.to_string());
         walk.kept_names = collections::BTreeSet::new();
         let mut locals: collections::BTreeSet<String> = collections::BTreeSet::new();
         let known = host.known_nonnegative(body);
@@ -63,11 +63,11 @@ impl EmitState {
             None => { for symbol in nonnegative_locals(body) { locals.insert(emit_text(world, symbol)); } },
             Some(ref names) => { locals.extend(names.iter().cloned()); },
         }
-        walk.nonnegative.insert(key.to_string(), locals);
+        walk.nonnegative.insert(nikaia_std::block::Text::from(key.to_string()), locals);
         let flow = EmitFlow { can_throw: throws_, ..EmitFlow::plain() };
-        let scope = EmitScope { origin: nikaia_std::index::or(key.rsplit("::").next(), || "").to_string(), function: key.to_string(), channel: channel.to_string(), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: awaited.to_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
+        let scope = EmitScope { origin: nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()), function: nikaia_std::block::Text::from(key.to_string()), channel: nikaia_std::block::Text::from(channel.to_string()), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: awaited.copy_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
         let tail = if returns_value { EmitTail::Return } else { EmitTail::Statement };
-        let mut first: Vec<String> = walk.either_prelude.to_owned();
+        #[allow(unused_mut)] let mut first: Vec<String> = walk.either_prelude.copy_owned();
         walk.either_prelude = vec![];
         if counts_steps { first.insert(0, format!("let __nikaia_frame = nikaia_std::build_time::enter({});", key.quoted())); }
         let mut leaves = false;
@@ -78,7 +78,7 @@ impl EmitState {
             if seen == count { leaves = emit_ends_in_a_jump(world, &stmt.node); }
         }
         let main_ends = skip_free_at_exit && depth == 0 && key == "main" && self.user_main(world).is_some() && !leaves;
-        let main_call = " nikaia_std::rt::exit::main_ends(); ";
+        let main_call = " nikaia_std::rt::exit::main_ends(); "; #[allow(unused_mut, clippy::redundant_locals)] let mut first = first;
         if !throws_ {
             let settled = self.facts.settle_fns.contains_key(key);
             if first.is_empty() && !main_ends {
@@ -88,12 +88,12 @@ impl EmitState {
             let mut written = EmitOut::empty();
             self.emit_function_block(world, walk, &mut written, host, body, depth, flow, &scope, &tail, settled)?;
             if main_ends { written.insert_before_last_brace(main_call); }
-            if !first.is_empty() { written.insert_after_first_brace(&format!(" {}", first.join(" "))); }
+            if !first.is_empty() { written.insert_after_first_brace(&format!(" {}", nikaia_std::block::Text::from(first.join(" ")))); }
             out.append(&written);
             return Ok(());
         }
-        let pad = "    ".repeat(nikaia_std::count::of(depth));
-        let inner_pad = "    ".repeat(nikaia_std::count::of(depth + 1));
+        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
+        let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(unused_mut, clippy::redundant_locals)] let mut first = first;
         out.push("{\n");
         for line in first.iter() { out.push(&format!("{}{}\n", inner_pad, line)); }
         let last = if count == 0 { 0 } else { count - 1 };
@@ -116,6 +116,8 @@ impl EmitState {
             if wrap { if binds { out.push(&format!(";\n{}Ok(__nikaia_value)", inner_pad)); } else { out.push(")"); } }
             out.record(&stmt.span, st);
             if ending { out.push(" };"); }
+            self.emit_view_list_drops(out, stmt.span.start as i64);
+            self.emit_view_list_rebinds(out, stmt.span.start as i64);
             out.push("\n");
             i += 1;
         }

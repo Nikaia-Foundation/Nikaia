@@ -3,6 +3,8 @@
 //! with `take`, `skip`, `count` and `for`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn run(name: &str, source: &str) -> String {
     let dir = common::scratch_dir(name);
@@ -20,7 +22,7 @@ fn run(name: &str, source: &str) -> String {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).into_owned()
+    String::from_utf8_lossy(&run.stdout)
 }
 
 /// `"aä€"` is three scalars of one, two and three bytes; `for` finds the `ä`,

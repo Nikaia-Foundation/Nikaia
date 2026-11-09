@@ -4,6 +4,8 @@
 //! (the checker's own, `tools/keeps.nika`, read through the ledger), and
 //! writes back what changed.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -187,6 +189,7 @@ fn keeps_in_package(file: &Path) -> Result<Package> {
     }
     let mut refs: Vec<&mut Parsed> = units.iter_mut().collect();
     crate::text_tiers::refine_package(&mut refs);
+    drop(refs);
     let shared: Vec<&Parsed> = units.iter().collect();
     let (ledger, checked) = Ledger::infer_package_checked(&shared, std_ledger());
     if in_tests {

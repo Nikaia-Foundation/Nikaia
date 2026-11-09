@@ -285,7 +285,11 @@ impl EmitState {
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
             // `error.message()` on an error, one of several (ADR-280 D30).
-            out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string() }}\n}}\n")
+            // On the block types (#490) `String` is a block's text, and
+            // so is what `Full` answers.
+            let block_types = self.on_block_types()
+            let into = if block_types { ".into()" } else { "" }
+            out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string(){into} }}\n}}\n")
             // The long form asks the member (D2): a member the program declares
             // carries its envelope and therefore its site, and a library's says
             // there is none.

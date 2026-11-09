@@ -17,7 +17,7 @@ pub(crate) fn main_refused_type(ty: &Type, words: &winnow_grammar::InternerConte
     None
 }
 
-pub fn main_option_word(name: &str) -> String { name.replace('_', "-") }
+pub fn main_option_word(name: &str) -> String { nikaia_std::block::Text::from(name.replace('_', "-")) }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -32,18 +32,18 @@ impl CheckState {
                 let mut maybe: String = String::from("");
                 for index in 0..args.len() as i64 {
                     let arg = nikaia_std::index::get(&args, (index) as usize);
-                    let param = world.words.resolve(arg.name).to_string();
+                    let param = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
                     let last = ((index + 1) as usize) == args.len();
                     let refused = main_refused_type(&arg.ty, world.words, last);
                     if refused.is_none() && maybe != "" && !arg.ty.is_nullable && !(last && world.words.resolve(arg.ty.name) == "Vec") { self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` is a required word after `{}`, which may be left out.", param, maybe), vec![String::from("A subject of type `T?` may be left out at the end; it stands after every required subject and before a last `Vec[T]` (Part I 5.5).")], Some(format!("Move `{}` before `{}`, or make it a `T?` too.", param, maybe)))); }
-                    if arg.ty.is_nullable && maybe == "" { maybe = param.to_string(); }
+                    if arg.ty.is_nullable && maybe == "" { maybe = nikaia_std::block::Text::from(param.to_string()); }
                     let why = match refused { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` can't be a word on the command line: it is {}.", param, why), vec![note.to_string()], Some("Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have.".to_string())));
+                    self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` can't be a word on the command line: it is {}.", param, why), vec![nikaia_std::block::Text::from(note.to_string())], Some(nikaia_std::block::Text::from("Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have."))));
                 }
                 for option in config.iter() {
-                    let param = world.words.resolve(option.name).to_string();
+                    let param = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
                     let why = main_refused_type(&option.ty, world.words, false);
-                    if why.is_some() { self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` can't be a word on the command line: it is {}.", param, nikaia_std::index::or(why.as_deref(), || "")), vec![note.to_string()], Some("Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have.".to_string()))); }
+                    if why.is_some() { self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` can't be a word on the command line: it is {}.", param, nikaia_std::index::or(why.as_deref(), || "")), vec![nikaia_std::block::Text::from(note.to_string())], Some(nikaia_std::block::Text::from("Take the word as a `String` and convert it in the body, or read `cli::args()` for a shape `main`'s parameters don't have.")))); }
                     let word = main_option_word(&param);
                     if word == "help" { self.findings.push(check_refusal("NK1274", span, String::from("`main` has an option named `help`, and `--help` prints the program's help."), vec![String::from("`--help` and `-h` are the program's own: they print the `///` lines above `main` and its parameters (Part I 5.5).")], Some(String::from("Name the option differently.")))); }
                 }
