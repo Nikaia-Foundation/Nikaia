@@ -39,11 +39,11 @@ pub fn paused_only_by_code(graph: &collections::BTreeMap<String, SyncReach>, hol
 }
 
 pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &collections::BTreeMap<String, bool>, start: &str) -> Vec<String> {
-    let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(start.to_string())];
-    let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new();
-    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(start.to_string())];
+    let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     seen.insert(nikaia_std::block::Text::from(start.to_string()));
-    let mut next: i64 = 0;
+    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while ((next) as usize) < queue.len() {
         let at = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
         next += 1;
@@ -61,8 +61,8 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
 }
 
 pub(crate) fn chain_back_to(came_from: &collections::BTreeMap<String, String>, at: &str) -> Vec<String> {
-    let mut backwards: Vec<String> = vec![nikaia_std::block::Text::from(at.to_string())];
-    let mut back = nikaia_std::block::Text::from(at.to_string());
+    #[allow(unused_mut)] let mut backwards: Vec<String> = vec![nikaia_std::block::Text::from(at.to_string())];
+    let mut back = nikaia_std::block::Text::from(at.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut backwards = backwards;
     while came_from.contains_key(&back) {
         back = nikaia_std::index::or(match *nikaia_std::index::get(&came_from, &back) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -70,7 +70,7 @@ pub(crate) fn chain_back_to(came_from: &collections::BTreeMap<String, String>, a
         }, || "".into());
         backwards.push(nikaia_std::block::Text::from(back.to_string()));
     }
-    let mut chain: Vec<String> = vec![];
+    let mut chain: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut backwards = backwards;
     let mut i = backwards.len() as i64;
     while i > 0 {
         i -= 1;
@@ -350,7 +350,7 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if declared.is_sync { allowed.insert(nikaia_std::block::Text::from(names.resolve(arg.name).to_string())); }
     }
-    let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = vec![];
     for one in sync_by.iter() {
         let one = *one;
         let parameter = nikaia_std::block::Text::from(names.resolve(one).to_string());
@@ -364,7 +364,7 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
         let pauses = nikaia_std::num::value(pauses);
         if !pauses { allowed.insert(nikaia_std::block::Text::from(local.to_string())); }
     }
-    let mut promise: String = String::from("sync");
+    let mut promise: String = String::from("sync"); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
     if !named.is_empty() {
         let joined = nikaia_std::block::Text::from(named.join(", "));
         promise = format!("sync({})", joined);

@@ -539,7 +539,7 @@ impl EmitState {
         };
         let lent = self.emit_arg_lent_params(world, value);
         if lent.is_empty() { return Ok(false); }
-        let mut written: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut written: Vec<String> = vec![];
         for item in world.items.iter() {
             match &item.node {
                 Item::Fn { name, receiver, generics, args, .. } => {
@@ -552,8 +552,8 @@ impl EmitState {
             }
         }
         if (written.len() as i64) != lent.len() as i64 { return Ok(false); }
-        let mut names: Vec<String> = vec![];
-        let mut typed: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+        let mut typed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
         for n in 0..lent.len() as i64 {
             names.push(format!("__nikaia_a{}", n));
             typed.push(format!("__nikaia_a{}: {}", n, *nikaia_std::index::get(&written, (n) as usize)));
@@ -566,8 +566,8 @@ impl EmitState {
 }
 
 pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
-    let mut passed: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut passed: Vec<String> = vec![];
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
     for name in names.iter() {
         if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
         at += 1;
@@ -700,7 +700,7 @@ impl EmitState {
         out.push(&path_types);
         let callee_name = nikaia_std::index::or(emit_callee_text(world, func), || "".into());
         let callee_parts: Vec<&str> = callee_name.split("::").collect::<Vec<_>>();
-        let mut callee_last: String = String::from(""); let callee_parts = callee_parts;
+        let mut callee_last: String = String::from(""); #[allow(clippy::redundant_locals)] let callee_parts = callee_parts;
         if !callee_parts.is_empty() { callee_last = nikaia_std::block::Text::from((*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_string()); }
         if self.seeded_calls.contains_key(&callee_last) {
             let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -1094,9 +1094,9 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub fn emit_async_binding<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Stmt, span: &Span, depth: i64, tail: &EmitTail, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         let mut tasks: Vec<(Expr, i64)> = vec![];
-        let mut deadlines: Vec<String> = vec![];
-        let mut admissions: Vec<String> = vec![];
-        let mut named: String = String::from("");
+        #[allow(unused_mut)] let mut deadlines: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut admissions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines;
+        let mut named: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
         let mut whole = true;
         let mut fallback = false;
         match node {
@@ -1150,11 +1150,11 @@ impl EmitState {
             if kind == "handle" { waits = self.emit_async_waits_before(each.1); }
         }
         if !whole { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate a tuple of `async e` and other parts yet (#988): bind each part with a `let` of its own."), at: Some(span.start as i64) }, &"emit_async_binding")); }
-        let channel = self.emit_async_tasks_channel(&emit_call_tasks_channel(&flow, scope));
+        let channel = self.emit_async_tasks_channel(&emit_call_tasks_channel(&flow, scope)); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
         let here = flow.at(span.start as i64);
         let mut first = true;
-        let mut joins: Vec<String> = vec![];
-        let mut inside: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut joins: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
+        let mut inside: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions; #[allow(unused_mut, clippy::redundant_locals)] let mut joins = joins;
         let mut index: i64 = 0;
         for each in tasks.iter() {
             let handle = format!("__task_{}", each.1);

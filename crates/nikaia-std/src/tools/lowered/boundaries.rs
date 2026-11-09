@@ -28,12 +28,12 @@ pub fn restated(reported: &Reported, on_the_line: Option<&str>, source: &str, bo
     let boundary = (*nikaia_std::index::get(&boundaries, nikaia_std::index::at(at))).clone();
     let word = nikaia_std::block::Text::from(boundary.word.to_string());
     let below = if !label.is_empty() { format!("{} - {}", reported.message, label) } else { nikaia_std::block::Text::from(reported.message.to_string()) };
-    let mut notes: Vec<String> = vec![format!("The Rust compiler said: {}", below)];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("The Rust compiler said: {}", below)];
     if !boundary.moved.is_empty() {
         let moved = nikaia_std::block::Text::from(boundary.moved.join(", "));
         notes.push(format!("`{}`'s {} changed since it was described.", word, moved));
     }
-    let message = if boundary.described { format!("The description of `{}` doesn't match the crate.", word) } else { format!("The ledger of `{}` doesn't match its sources.", word) };
+    let message = if boundary.described { format!("The description of `{}` doesn't match the crate.", word) } else { format!("The ledger of `{}` doesn't match its sources.", word) }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if boundary.described { notes.push(format!("help: Run `nikaia describe {}` again, and review what changed in `contracts/{}.contracts`.", word, word)); } else { notes.push(format!("help: Build `{}` again: `nikaia build` without `--locked` rebuilds its ledger from its sources.", word)); }
     for note in reported.notes.iter() { notes.push(nikaia_std::block::Text::from(note.to_string())); }
     Some(Reported { level: nikaia_std::block::Text::from(reported.level.to_string()), message, label: match reported.label.as_ref() {

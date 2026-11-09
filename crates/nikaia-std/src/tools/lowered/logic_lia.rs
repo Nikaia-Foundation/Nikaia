@@ -155,14 +155,14 @@ pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTr
         left_names.push(name);
         left_ks.push(k);
     }
-    #[allow(unused_mut)] let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut)] let mut left_names = left_names;
+    #[allow(unused_mut)] let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names;
     let mut right_ks: Vec<i64> = vec![];
     for (name, k) in b.iter() {
         let k = nikaia_std::num::value(k);
         right_names.push(name);
         right_ks.push(k);
     }
-    let mut at: i64 = 0; #[allow(unused_mut)] let mut left_names = left_names; #[allow(unused_mut)] let mut right_names = right_names;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names; #[allow(unused_mut, clippy::redundant_locals)] let mut right_names = right_names;
     while ((at) as usize) < left_ks.len() && ((at) as usize) < right_ks.len() {
         if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) { return -1; }
         if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) { return 1; }
@@ -507,14 +507,14 @@ pub(crate) fn lg_sorted_places(held: &[LgHeld], places: &[i64]) -> Vec<i64> {
 
 pub(crate) fn lg_contradictory(bounds: &[LgLin], budget: &LgBudget) -> LgClosed {
     let mut steps: Vec<LgStep> = vec![];
-    let mut round_names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut round_names: Vec<String> = vec![];
     let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = vec![];
     let mut alive: Vec<i64> = vec![];
     let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
     for bound in bounds.iter() { for (name, _) in bound.terms.iter() { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
-    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut rank_names: Vec<String> = vec![];
+    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
+    let mut rank_names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
     let mut quotients: Vec<bool> = vec![];
     for name in every.iter() {
         ranks.insert(nikaia_std::block::Text::from(name.to_string()), ranks.len() as i64);

@@ -94,9 +94,9 @@ pub fn resolve(surface: &mut Surface) {
 }
 
 pub fn offered(surface: &Surface, path: &str) -> bool {
-    let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
     for part in path.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
-    let mut at: String = String::from("");
+    let mut at: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for k in 0..parts.len() as i64 - 1 {
         at = joined(&at, nikaia_std::index::get(&parts, (k) as usize));
         let public = nikaia_std::index::or(surface.modules.get(&at), || false);
@@ -184,7 +184,7 @@ pub(crate) fn walk(surface: &mut Surface, items: &[RustItem<'_>], at: &str, impo
 }
 
 pub(crate) fn function_of(f: &Fun<'_, '_, '_, '_, '_, '_>, imports: &collections::BTreeMap<String, String>) -> Function {
-    let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
     for written in split_top_level(f.generics) {
         if written.starts_with('\'') { continue; }
         let name = before_colon(&written);
@@ -192,7 +192,7 @@ pub(crate) fn function_of(f: &Fun<'_, '_, '_, '_, '_, '_>, imports: &collections
     }
     let mut args: Vec<Arg> = vec![];
     for part in f.parts.iter() { if part.name != "self" { args.push(Arg { name: nikaia_std::block::Text::from(part.name.to_string()), ty: nikaia_std::block::Text::from(part.ty.to_string()) }); } }
-    let mut calls: Vec<String> = vec![];
+    let mut calls: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     for call in f.calls.iter() {
         let call = *call;
         let full = nikaia_std::index::or(imports.get(call), || call);

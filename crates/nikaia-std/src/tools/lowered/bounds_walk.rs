@@ -1966,15 +1966,15 @@ pub(crate) fn bounding_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut Boun
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounding_for_stmt(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Symbol], iter: &Expr, body: &Block, facts: &mut BoundsFacts, invariant: &[i64], context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) {
     let changed = bounding_changed(body, context, words);
-    let mut cands = bounding_candidates(&walk, &changed, &facts);
+    #[allow(unused_mut)] let mut cands = bounding_candidates(&walk, &changed, &facts);
     if cands.is_empty() {
         bounding_for(walk, bindings, iter, body, facts, &cands, invariant, context, program, words, &ask);
         return;
     }
     let start = facts.clone();
     let proven = walk.proven.clone();
-    let written = walk.written.copy_owned();
-    let poisoned = walk.poisoned.copy_owned();
+    let written = walk.written.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut cands = cands;
+    let poisoned = walk.poisoned.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut cands = cands;
     let falls = bounding_falls(&changed, &cands);
     loop {
         let added = bounding_grow(walk, &cands, &falls);
@@ -1995,15 +1995,15 @@ pub(crate) fn bounding_for_stmt(walk: &mut BoundsWalk, bindings: &[winnow_gramma
 pub(crate) fn bounding_while_stmt(walk: &mut BoundsWalk, cond: &Expr, body: &Block, facts: &mut BoundsFacts, invariant: &[i64], context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &dyn Fn(&TermArena, &[i64], i64) -> bool) {
     let mut changed = bounding_changed(body, context, words);
     bounding_extend(&mut changed, &bounding_changed_in_expr(cond, context, words));
-    let mut cands = bounding_candidates(&walk, &changed, &facts);
+    #[allow(unused_mut)] let mut cands = bounding_candidates(&walk, &changed, &facts);
     if cands.is_empty() {
         bounding_while(walk, cond, body, &changed, &cands, facts, invariant, context, program, words, &ask);
         return;
     }
     let start = facts.clone();
     let proven = walk.proven.clone();
-    let written = walk.written.copy_owned();
-    let poisoned = walk.poisoned.copy_owned();
+    let written = walk.written.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut cands = cands;
+    let poisoned = walk.poisoned.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut cands = cands;
     let falls = bounding_falls(&changed, &cands);
     loop {
         let added = bounding_grow(walk, &cands, &falls);
@@ -2220,7 +2220,7 @@ pub(crate) fn bounding_past_loop(walk: &mut BoundsWalk, block: &Block, from: i64
     let leaves = bounding_stmts(walk, block, from + 1, facts, bound, context, program, words, &ask);
     if walk.open == past.open || walk.settled_loops.contains(&start) { return leaves; }
     let changed = bounding_loop_changed(stmt, context, words);
-    let mut wanted: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut wanted: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let past = past;
     for (name, stamp) in walk.missed.iter() {
         let stamp = nikaia_std::num::value(stamp);
         if stamp > past.open && bounding_changes_name(&changed, name) { wanted.insert(nikaia_std::block::Text::from(name.to_string())); }
@@ -2344,10 +2344,10 @@ pub(crate) fn bounding_loop_proposals(walk: &mut BoundsWalk, stmt: &Stmt, start:
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounding_while_proposals(walk: &mut BoundsWalk, start: i64, cond: &Expr, body: &Block, entry: &BoundsFacts, changed: &BoundsChanged, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> BoundsProposals {
     let mut out = BoundsProposals { ghosts: vec![], fixed: vec![], candidates: vec![] };
-    let mut state: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut state: Vec<String> = vec![];
     for name in changed.values.iter() { if entry.ints.contains(name) && !walk.pinned.contains(&path_root(name)) { state.push(nikaia_std::block::Text::from(name.to_string())); } }
     if state.is_empty() { return out; }
-    let constants = walk.shape.constants.copy_owned();
+    let constants = walk.shape.constants.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut state = state;
     let claims: collections::BTreeSet<(i64, i64)> = collections::BTreeSet::new();
     let record = match loop_record(&mut walk.arena, start, &state, &entry.facts, &entry.ints, &|name| { (*nikaia_std::index::get(&constants, name)).copied() }, cond, body, words, &claims, &|e| { bounding_no_throw(e) }, &|e| { bounding_no_holes(e) }) { Some(__nikaia_value) => __nikaia_value, None => return out };
     for name in state.iter() {
@@ -2592,11 +2592,11 @@ pub(crate) fn bounding_turn_steps(walk: &BoundsWalk, body: &Block, outside: &col
         }
     }
     if start.names.is_empty() { return vec![]; }
-    let mut ends = BoundsSteps { names: start.names.copy_owned(), low: start.low.copy_owned(), high: start.high.copy_owned(), live: false };
-    let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut ends = BoundsSteps { names: start.names.copy_owned(), low: start.low.copy_owned(), high: start.high.copy_owned(), live: false };
+    let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ends = ends;
     bounding_steps_block(body, &mut start, &mut ends, &mut bad, context, words);
     bounding_steps_join(&mut ends, &start);
-    let mut out: Vec<(String, i64, i64)> = vec![];
+    let mut out: Vec<(String, i64, i64)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut ends = ends;
     if !ends.live { return out; }
     for k in 0..ends.names.len() as i64 {
         let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&ends.names, (k) as usize)).to_string());
@@ -2989,8 +2989,8 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     }
     if !bounding_block(walk, body, &mut inner, context, program, words, &ask) { bounding_turn_end(walk, &inner, false, false, &ask); }
     if classed.is_some() { walk.loop_classes.remove(&nikaia_std::index::or(classed, || "".into())); }
-    let mut filled: Vec<String> = vec![];
-    let mut count: i64 = 0;
+    #[allow(unused_mut)] let mut filled: Vec<String> = vec![];
+    let mut count: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut filled = filled;
     if counted && low.is_some() && high.is_some() {
         let l = nikaia_std::index::or(low, || 0);
         let h = nikaia_std::index::or(high, || 0);

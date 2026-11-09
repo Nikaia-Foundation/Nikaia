@@ -772,8 +772,8 @@ pub(crate) fn emit_seeds_mention(run: &mut EmitSeedsRun, path: &str, place: &mut
         }
     }
     let before = run.out.len() as i64;
-    let mut added: Vec<String> = vec![];
-    let mut name = nikaia_std::block::Text::from(path.to_string());
+    #[allow(unused_mut)] let mut added: Vec<String> = vec![];
+    let mut name = nikaia_std::block::Text::from(path.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut added = added;
     if map {
         if place.declaring {
             added.push(emit_seeds_own(place));

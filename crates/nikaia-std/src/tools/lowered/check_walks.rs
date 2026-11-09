@@ -314,10 +314,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
-        let mut inside: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut inside: Vec<String> = vec![];
         self.names_inside_boxes(world, pattern, &mut inside);
         if inside.is_empty() { return; }
-        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut inside = inside;
         for each in check_visit_preorder(guard) { check_walks_reads(world, host, each, &inside, &mut read); }
         if read.is_empty() { return; }
         let mut typed: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();

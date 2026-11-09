@@ -11,8 +11,8 @@ pub struct Drafted {
 
 pub fn drafted(surface: &Surface, crate_word: &str, wanted: &collections::BTreeSet<String>) -> Drafted {
     let mut functions: collections::BTreeMap<String, FnContract> = collections::BTreeMap::new();
-    let mut unanswered: Vec<String> = vec![];
-    let mut named_types: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut unanswered: Vec<String> = vec![];
+    let mut named_types: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered;
     for name in wanted.iter() {
         if !answered(surface, name) {
             unanswered.push(format!("{}::{}", crate_word, name));
@@ -23,9 +23,9 @@ pub fn drafted(surface: &Surface, crate_word: &str, wanted: &collections::BTreeS
         functions.insert(format!("{}::{}", crate_word, name), contract_of(function, crate_word, &surface.types, &mut named_types));
     }
     for name in wanted.iter() { if surface.types.contains(name) { named_types.insert(nikaia_std::block::Text::from(name.to_string())); } }
-    let mut types: collections::BTreeMap<String, TypeContract> = collections::BTreeMap::new();
+    let mut types: collections::BTreeMap<String, TypeContract> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut unanswered = unanswered;
     let no_fields: Vec<String> = vec![];
-    let no_derives: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let no_derives: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let no_fields = no_fields;
     for name in named_types.iter() {
         let fields = nikaia_std::index::or(*nikaia_std::index::get(&surface.fields, name), || &no_fields);
         let derives = nikaia_std::index::or(*nikaia_std::index::get(&surface.derives, name), || &no_derives);
@@ -54,8 +54,8 @@ pub(crate) fn answered(surface: &Surface, name: &str) -> bool {
 }
 
 pub(crate) fn bound_parameters(function: &Function) -> Vec<String> {
-    let mut names: Vec<String> = vec![];
-    let mut types: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut types: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for arg in function.args.iter() {
         names.push(nikaia_std::block::Text::from(arg.name.to_string()));
         types.push(nikaia_std::block::Text::from(arg.ty.to_string()));
@@ -64,8 +64,8 @@ pub(crate) fn bound_parameters(function: &Function) -> Vec<String> {
 }
 
 pub(crate) fn contract_of(function: &Function, crate_word: &str, types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> FnContract {
-    let mut names: Vec<String> = vec![];
-    let mut written_types: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut written_types: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for arg in function.args.iter() {
         names.push(nikaia_std::block::Text::from(arg.name.to_string()));
         written_types.push(nikaia_std::block::Text::from(arg.ty.to_string()));
@@ -118,7 +118,7 @@ pub fn describe_unanswered(names: &collections::BTreeSet<String>, crate_word: &s
 pub(crate) fn describe_header_version(text: &str, crate_word: &str) -> Option<String> {
     let line = match text.lines().find_map(|line| { line.strip_prefix("# crate: ") }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let words: Vec<&str> = line.split_whitespace().collect::<Vec<_>>();
-    let first = match words.first().copied() { Some(__nikaia_value) => __nikaia_value, None => return None }; let words = words;
+    let first = match words.first().copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if first != crate_word { return None; }
     Some(nikaia_std::block::Text::from(nikaia_std::index::or(words.get(1).copied(), || "?").to_string()))
 }

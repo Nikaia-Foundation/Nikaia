@@ -232,8 +232,8 @@ pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckW
 
 pub fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(on.to_string())];
-    let mut out: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(on.to_string())];
+    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while !queue.is_empty() {
         let next = match queue.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if next == "" || seen.contains(&next) { continue; }

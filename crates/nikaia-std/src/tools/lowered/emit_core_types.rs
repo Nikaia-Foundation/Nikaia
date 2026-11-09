@@ -107,9 +107,9 @@ impl EmitState {
         }
         if (*ty.code).is_some() {
             let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             for part in ty.generics.iter() { params.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &lifetimes, &count))); }
-            let mut outcome: String = String::from("()");
+            let mut outcome: String = String::from("()"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             if (*code.result).is_some() {
                 let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &lifetimes, &count));
@@ -125,10 +125,10 @@ impl EmitState {
                 }
                 let back = self.emit_code_part(world, walk, crossings, overlaps, result, &EmitLifetimes::Elided, &count);
                 if lent > 1 && (back.contains('&') || back.contains("'_")) {
-                    let mut called: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut called: Vec<String> = vec![];
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &EmitLifetimes::Call, &count))); }
                     let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &EmitLifetimes::Call, &count));
-                    let mut each = nikaia_std::block::Text::from(inner.to_string());
+                    let mut each = nikaia_std::block::Text::from(inner.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut called = called;
                     if code.can_throw { each = format!("Result<{}, Box<dyn std::error::Error>>", inner); }
                     if runs {
                         if code.is_sync { return format!("impl for<'call> Fn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each); }
@@ -139,9 +139,9 @@ impl EmitState {
                         if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
                         return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}{}>", nikaia_std::block::Text::from(called.join(", ")), each, crossing);
                     }
-                    let mut crossing: &'static str = "";
+                    let mut crossing: &'static str = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut called = called;
                     if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
-                    let future = emit_boxed_future_in(overlaps);
+                    let future = emit_boxed_future_in(overlaps); #[allow(unused_mut, clippy::redundant_locals)] let mut called = called;
                     return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", nikaia_std::block::Text::from(called.join(", ")), future, each, crossing);
                 }
             }
@@ -156,9 +156,9 @@ impl EmitState {
                     elided.push(written);
                 }
                 if !code.is_sync && lent {
-                    let mut called: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut called: Vec<String> = vec![];
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &EmitLifetimes::Call, &count))); }
-                    let future = emit_boxed_future_in(overlaps);
+                    let future = emit_boxed_future_in(overlaps); #[allow(unused_mut, clippy::redundant_locals)] let mut called = called;
                     return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", nikaia_std::block::Text::from(called.join(", ")), future, outcome, crossing);
                 }
                 if !code.is_sync {

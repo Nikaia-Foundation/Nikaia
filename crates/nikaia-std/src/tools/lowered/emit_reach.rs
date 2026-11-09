@@ -188,10 +188,10 @@ pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeS
     let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !reach_runs_code(own) { return false; }
     if !graph.contains_key(key) { return false; }
-    let mut pending: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut pending: Vec<String> = vec![];
     for first in reach_set_for(graph, key) { pending.push(first); }
-    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut at: i64 = 0;
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
     while ((at) as usize) < pending.len() {
         let next = nikaia_std::block::Text::from((*nikaia_std::index::get(&pending, (at) as usize)).to_string());
         at += 1;

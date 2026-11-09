@@ -9,7 +9,7 @@ pub(crate) fn check_is_fatal(ledger: &Ledger, error: &str) -> bool {
 impl CheckState {
     pub fn a_fatal_error_passes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &CheckGuarded, handler: &Block, span: &Span) {
         let named = fatal_named(handler, world.words);
-        let mut passing: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut passing: Vec<String> = vec![];
         for error in guarded.thrown.iter() { if (check_is_fatal(world.own, error) || check_is_fatal(world.library, error)) && !named.contains(error) { passing.push(nikaia_std::block::Text::from(error.to_string())); } }
         if passing.is_empty() { return; }
         if self.flow.guarded.is_some() {
@@ -23,7 +23,7 @@ impl CheckState {
             self.flow.guarded = Some(outer);
         }
         if self.flow.throwing || self.flow.caught { return; }
-        let mut quoted: Vec<String> = vec![];
+        let mut quoted: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut passing = passing;
         for error in passing.iter() { quoted.push(format!("`{}`", error)); }
         let list = nikaia_std::block::Text::from(quoted.join(", "));
         self.findings.push(check_refusal("NK2605", span, format!("This function can fail, because {} passes this `catch`.", list), vec![format!("{} is fatal: a `catch` takes it only in a `match` arm that names its type, and this handler does not.", list)], Some(String::from("Add `throws` to the function, or name the type in a `match error` arm of the handler."))));

@@ -181,7 +181,7 @@ pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorl
                     let base = nikaia_std::boxed::open(base);
                     let path = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return };
                     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-                    let root = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); let parts = parts;
+                    let root = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
                     let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
                     if found.without_mut.is_none() {
                         let mut lend: String = String::from("&mut ");
@@ -671,7 +671,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let single: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
         check_crossings_a_value_with_a_cleanup_bound(state, world, &single, &found, span);
     }
-    let mut bound_names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut bound_names: Vec<String> = vec![];
     for n in names.iter() {
         let n = *n;
         bound_names.push(format!("{}", world.words.resolve(n)));
@@ -684,7 +684,7 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         let want = written_ty(world.words, world.here.aliases, t);
         seen_through = !found.fits(&want) && state.fits_through_deref(world, &found, &want);
     }
-    let mut element_view: i64 = 0;
+    let mut element_view: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound_names = bound_names;
     if names.len() == 1 && ty.is_some() {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
@@ -1816,7 +1816,8 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
             Stmt::Let { names, value, .. } => {
                 if names.len() == 1 {
                     let name = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
-                    if check_core_view_list_bound_once(world, block, &name) && check_core_a_list_of_views(&state, &name) {
+                    let views = check_core_a_list_of_views(&state, &name);
+                    if check_core_view_list_bound_once(world, block, &name) && (views || check_core_holds_a_list_of_text(&state, &name)) {
                         let mut last: i64 = at;
                         let mut sources: collections::BTreeSet<String> = collections::BTreeSet::new();
                         names_in(value, world.words, &mut sources);
@@ -1835,7 +1836,7 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
                             for source in sources.iter() { if read.contains(source) { needed = true; } }
                             later += 1;
                         }
-                        if needed && !check_core_stmt_is_a_jump(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(last)).node) {
+                        if views && needed && !check_core_stmt_is_a_jump(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(last)).node) {
                             let key = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(last)).span.start as i64;
                             let mut ended = nikaia_std::index::or(match state.facts.view_list_drops.get(&key) {
                                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1844,7 +1845,8 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
                             ended.push(nikaia_std::block::Text::from(name.to_string()));
                             state.facts.view_list_drops.insert(key, ended);
                         }
-                        check_core_view_list_rebound(state, world, block, &name, at, last, stmt.span.start as i64);
+                        let viewed_ty = if views { check_core_viewed_name(&state, &name) } else { String::from("String") };
+                        check_core_view_list_rebound(state, world, block, &name, at, last, stmt.span.start as i64, &viewed_ty);
                     }
                 }
             },
@@ -1857,8 +1859,8 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, at: i64, last: i64, start: i64) {
-    let viewed_ty = check_core_viewed_name(&state, name);
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, at: i64, last: i64, start: i64, viewed_ty: &str) {
     if viewed_ty == "" { return; }
     let mut together: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut later = at + 1;
@@ -1872,12 +1874,20 @@ pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &Check
     later = at + 1;
     while later < last {
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node {
-            Stmt::Let { names, .. } => {
+            Stmt::Let { names, value, .. } => {
+                let mut reads: collections::BTreeSet<String> = collections::BTreeSet::new();
+                names_in(value, world.words, &mut reads);
+                if reads.contains(name) {
+                    for one in names.iter() {
+                        let one = *one;
+                        if !check_core_a_plain_binding(&state, &format!("{}", world.words.resolve(one))) { return; }
+                    }
+                }
                 let mut viewed = false;
                 for one in names.iter() {
                     let one = *one;
                     let named = format!("{}", world.words.resolve(one));
-                    if together.contains(&named) && check_core_a_binding_naming(&state, &named, &viewed_ty) { viewed = true; }
+                    if together.contains(&named) && check_core_a_binding_naming(&state, &named, viewed_ty) { viewed = true; }
                 }
                 if viewed {
                     let key = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).span.start as i64;
@@ -1917,6 +1927,40 @@ pub(crate) fn check_core_view_list_assigned(state: &mut CheckState, world: &Chec
             state.facts.view_list_assigns.insert(at);
             return;
         }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_plain_binding(state: &CheckState, name: &str) -> bool {
+    let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    a_copy_by_value(&found.ty)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_holds_a_list_of_text(state: &CheckState, name: &str) -> bool {
+    let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    check_core_ty_holds_a_list_of_text(state, &found.ty, 3)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ty_holds_a_list_of_text(state: &CheckState, ty: &Ty, depth: i64) -> bool {
+    if depth == 0 { return false; }
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if view { return false; }
+            if name == "Vec" && args.len() == 1 && check_core_ty_last_name(nikaia_std::index::get(&args, 0)) == "String" { return true; }
+            for field in nikaia_std::index::or(match state.structs.get(name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into()) { if check_core_ty_holds_a_list_of_text(state, &field.ty, depth - 1) { return true; } }
+            return false;
+        },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return check_core_ty_holds_a_list_of_text(state, inner, depth) },
+        _ => return false,
     }
 }
 

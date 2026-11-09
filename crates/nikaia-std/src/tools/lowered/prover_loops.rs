@@ -828,8 +828,8 @@ pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, 
         let value = match loop_start_term(&arena, &record.problem.fixed, &ghost) { Some(__nikaia_value) => __nikaia_value, None => continue };
         known.insert(ghost, value);
     }
-    let mut parts: Vec<String> = vec![];
-    let mut origins: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut origins: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for (term, origin) in found.parts.iter() {
         let term = nikaia_std::num::value(term);
         let shown = arena.substitute(term, &known);
@@ -841,7 +841,7 @@ pub fn loop_said(arena: &mut TermArena, record: &LoopRecord, found: &LoopFound, 
         parts.push(text);
         if !nikaia_std::list::contains(&origins, &origin) { origins.push(nikaia_std::block::Text::from(origin.to_string())); }
     }
-    let changes = nikaia_std::block::Text::from(record.problem.state.join("`, `"));
+    let changes = nikaia_std::block::Text::from(record.problem.state.join("`, `")); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut origins = origins;
     format!("proved {} the loop that changes `{}`, with the invariant `{}`, found by {} and checked by three queries", place, changes, nikaia_std::block::Text::from(parts.join(" && ")), nikaia_std::block::Text::from(origins.join(" and ")))
 }
 

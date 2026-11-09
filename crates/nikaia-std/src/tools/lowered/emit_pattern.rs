@@ -346,8 +346,8 @@ pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
 }
 
 pub(crate) fn emit_texts_a_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, out: &mut EmitOut, patterns: &[Spanned<Pattern>], at: i64) {
-    let mut names: Vec<String> = vec![];
-    let mut ranges: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     emit_text_bindings(world, walk, nikaia_std::index::get(&patterns, nikaia_std::index::at(at)), &mut names, &mut ranges);
     for (name, range) in names.iter().zip(ranges.iter()) { if patterns.iter().skip(nikaia_std::count::of(at + 1)).any(|later| { emit_guard_reads(world, &later.node, name) }) { out.push(&format!(" {}:{}(at = {})", name, emit_covered_rule(), range)); } }
 }
@@ -369,8 +369,8 @@ pub(crate) fn emit_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Patt
 }
 
 pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Spanned<Pattern>) -> bool {
-    let mut names: Vec<String> = vec![];
-    let mut ranges: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     emit_text_bindings(world, walk, pattern, &mut names, &mut ranges);
     names.iter().any(|name| { emit_guard_reads(world, &pattern.node, name) })
 }

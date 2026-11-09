@@ -237,8 +237,8 @@ pub(crate) fn throws_grow(sets: &mut collections::BTreeMap<String, collections::
 }
 
 pub(crate) fn theirs(sets: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, callee: &str) -> Vec<String> {
-    let mut errors: Vec<String> = vec![];
-    let prefix = format!("from({}::", callee);
+    #[allow(unused_mut)] let mut errors: Vec<String> = vec![];
+    let prefix = format!("from({}::", callee); #[allow(unused_mut, clippy::redundant_locals)] let mut errors = errors;
     if sets.contains_key(callee) {
         let set = match *nikaia_std::index::get(&sets, callee) { Some(__nikaia_value) => __nikaia_value, None => return errors };
         for error in set.iter() { if !error.starts_with(&*prefix) { errors.push(nikaia_std::block::Text::from(error.to_string())); } }
@@ -269,10 +269,10 @@ pub(crate) fn all_but_the_last(names: &winnow_grammar::InternerContext, segments
 }
 
 pub(crate) fn struct_type(written: &str) -> String {
-    let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
     for part in written.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     if parts.len() < 2 { return nikaia_std::block::Text::from(written.to_string()); }
-    let mut ty: String = String::from("");
+    let mut ty: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for k in 0..parts.len() as i64 - 1 {
         if k > 0 { ty = format!("{}::", ty); }
         ty = format!("{}{}", ty, *nikaia_std::index::get(&parts, (k) as usize));

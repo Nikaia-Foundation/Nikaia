@@ -374,16 +374,16 @@ impl EmitState {
                     out.push(&format!("          {}", separator));
                     self.emit_pattern(world, walk, out, host, &alt.pattern)?;
                     out.push("\n            -> ");
-                    let mut as_bytes: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut as_bytes: Vec<String> = vec![];
                     if !bytes { emit_bytes_bindings(world, &alt.pattern.node, &mut as_bytes); }
-                    let mut as_spans: Vec<String> = vec![];
-                    let mut spanned: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut as_spans: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut spanned: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
-                    let mut prelude = String::from("");
+                    let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
                     for name in as_bytes.iter() { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); }
                     for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
-                    let mut as_texts: Vec<String> = vec![];
-                    let mut covered: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![];
+                    let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
                     for (name, range) in as_texts.iter().zip(covered.iter()) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
                     if self.emit_action_can_fail(world, action) {
@@ -498,16 +498,16 @@ impl EmitState {
                 let rule = format!("__nikaia_members_{}", at);
                 let built = host.ty_named(walk, ty)?;
                 let owner = emit_text(world, ty.name);
-                let mut slots: Vec<String> = vec![];
-                let mut names: Vec<String> = vec![];
-                let mut nothing: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut slots: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut slots = slots;
+                #[allow(unused_mut)] let mut nothing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 for field in fields.iter() {
                     slots.push(format!("Option<Option<{}>>", host.ty_named(walk, &field.ty)?));
                     names.push(rust_string(&emit_text(world, field.name)));
                     nothing.push(String::from("None"));
                 }
                 let piece = emit_members_tuple(&slots);
-                let fail = "return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ";
+                let fail = "return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, "; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 out.push(&format!("\n        rule {} -> {} =\n", rule, built));
                 out.push(&format!("          pieces:{}_all\n", rule));
                 out.push("            -> { ");
@@ -515,8 +515,8 @@ impl EmitState {
                 out.push("for piece in pieces { ");
                 for i in 0..fields.len() as i64 { out.push(&format!("if let Some(v) = piece.{} {{ if f{}.is_some() {{ {}::nikaia_std::grammar::member_error({}, \"is given twice\")))); }} f{} = Some(v); }} ", i, i, fail, *nikaia_std::index::get(&names, (i) as usize), i)); }
                 out.push("} ");
-                let defaults = self.field_defaults(world, &owner);
-                let mut built_fields: Vec<String> = vec![];
+                let defaults = self.field_defaults(world, &owner); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+                let mut built_fields: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 for i in 0..fields.len() as i64 {
                     let field = emit_text(world, nikaia_std::index::get(&fields, (i) as usize).name);
                     let mut default: Option<String> = None;
@@ -547,7 +547,7 @@ impl EmitState {
                 out.push(&format!(" => p:{}_value(i = ::nikaia_std::grammar::member_index(&k, &[{}]))\n", rule, nikaia_std::block::Text::from(names.join(", "))));
                 out.push(&format!("            -> {{ match p {{ Some(p) => p, None => {}::nikaia_std::grammar::member_unknown(&k)))) }} }}\n", fail));
                 out.push(&format!("\n        rule {}_value(i: usize) -> Option<{}> =\n", rule, piece));
-                let mut separator = "  ";
+                let mut separator = "  "; #[allow(unused_mut, clippy::redundant_locals)] let mut nothing = nothing;
                 for i in 0..fields.len() as i64 {
                     match on_null {
                         Some(named) => {

@@ -70,7 +70,7 @@ impl CheckState {
         match on {
             Ty::Named { name, args, .. } => {
                 let order = match *nikaia_std::index::get(&self.struct_parameters, name) { Some(__nikaia_value) => __nikaia_value, None => return bound };
-                let mut at: i64 = 0;
+                let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let order = order;
                 while at < order.len() as i64 && at < args.len() as i64 {
                     if !(*nikaia_std::index::get(&args, nikaia_std::index::at(at))).is_unknown() { bound.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&order, nikaia_std::index::at(at))).to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
                     at = at + 1;

@@ -49,10 +49,10 @@ pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: 
         return Resulted { ty: plain.ty, fails: None };
     }
     let parts = split_top_level(nikaia_std::index::or(resulted.as_deref(), || ""));
-    let mut ok: String = String::from("");
+    let mut ok: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
     if !parts.is_empty() { ok = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); }
     let fine = translate(&ok, crate_word, parameters, types, mentioned);
-    let mut fails: String = String::from("?");
+    let mut fails: String = String::from("?"); #[allow(clippy::redundant_locals)] let parts = parts;
     if parts.len() > 1 {
         let error = (*nikaia_std::index::get(&parts, 1)).trim();
         if types.contains(error) { fails = format!("{}::{}", crate_word, error); }
@@ -70,7 +70,7 @@ pub fn view_of(ty: Ty) -> Ty {
 
 pub fn sent_across(names: &[String], types: &[String], bounds: &str) -> Vec<String> {
     let sent = sends(bounds);
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let sent = sent;
     for at in 0..names.len() as i64 {
         let ty = (*nikaia_std::index::get(&types, (at) as usize)).trim();
         let named = unreferenced(ty);
@@ -121,8 +121,8 @@ pub struct WrittenFn {
 }
 
 pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> FnContract {
-    let mut keeps: Vec<String> = vec![];
-    let mut params: Vec<(String, Ty)> = vec![];
+    #[allow(unused_mut)] let mut keeps: Vec<String> = vec![];
+    let mut params: Vec<(String, Ty)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keeps = keeps;
     for at in 0..written.names.len() as i64 {
         let translated = translate(nikaia_std::index::get(&written.types, (at) as usize), crate_word, &written.parameters, types, mentioned);
         if translated.kept { keeps.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&written.names, (at) as usize)).to_string())); }

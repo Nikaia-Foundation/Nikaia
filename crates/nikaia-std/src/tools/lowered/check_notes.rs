@@ -52,9 +52,9 @@ impl CheckState {
         let has = match note_seq_shape(actual) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let missing = has.missing(&wanted);
         if missing.is_empty() { return false; }
-        let mut needs: &'static str = "walks the sequence more than once";
-        let mut lacks: &'static str = "this one is used up by the first walk";
-        let mut way: String = String::from("Collect it into a list first.");
+        let mut needs: &'static str = "walks the sequence more than once"; #[allow(clippy::redundant_locals)] let missing = missing;
+        let mut lacks: &'static str = "this one is used up by the first walk"; #[allow(clippy::redundant_locals)] let missing = missing;
+        let mut way: String = String::from("Collect it into a list first."); #[allow(clippy::redundant_locals)] let missing = missing;
         if *nikaia_std::index::get(&missing, 0) == ENDS {
             needs = "walks a sequence from the back";
             lacks = "this one can only be walked from the front";

@@ -748,7 +748,7 @@ pub(crate) fn check_core_ops_a_pair_split(state: &mut CheckState, world: &CheckW
     }
     let joined = nikaia_std::block::Text::from(names.join(", "));
     let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("The place hands it one value, a `{}`, and a lambda takes what it is handed.", (*nikaia_std::index::get(&handed, 0)).text()).to_string())];
-    let help: String = format!("Take the tuple apart in the parameter, with brackets around the names: `fn(({})) {{ … }}`.", joined);
+    let help: String = format!("Take the tuple apart in the parameter, with brackets around the names: `fn(({})) {{ … }}`.", joined); #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1101", span, format!("This lambda takes {} arguments, but it is handed one tuple.", names.len() as i64), notes, Some(help)));
 }
 
@@ -763,7 +763,7 @@ pub fn check_core_ops_none_named(state: &mut CheckState, declared: Option<&Ty>, 
     };
     if handed == 0 { return; }
     let notes: Vec<String> = vec![String::from("A lambda takes the arguments it names, so `fn { … }` takes none (Part I 5.3).")];
-    let help: String = if handed == 1 { String::from("Name the argument, `fn(item) { … }`, or `fn(_) { … }` where the body does not use it.") } else { String::from("Name the arguments, `fn(a, b) { … }`, or `_` for one the body does not use.") };
+    let help: String = if handed == 1 { String::from("Name the argument, `fn(item) { … }`, or `fn(_) { … }` where the body does not use it.") } else { String::from("Name the arguments, `fn(a, b) { … }`, or `_` for one the body does not use.") }; #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1101", span, format!("This lambda takes no arguments, but it is handed {}.", counted(handed, "argument")), notes, Some(help)));
 }
 
@@ -797,8 +797,8 @@ pub fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world: &Chec
     check_core_ops_a_pair_split(state, world, (declared).as_ref(), params, span);
     check_core_ops_none_named(state, (declared).as_ref(), params, span);
     let mut frame: Vec<CheckLocal> = vec![];
-    let mut names: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for p in params.iter() {
         let p = *p;
         let mut ty: Ty = Ty::Unknown;

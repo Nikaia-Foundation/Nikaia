@@ -185,7 +185,7 @@ pub(crate) fn list_at(value: &str, at: &str) -> Result<Vec<String>, nikaia_std::
         Ok(value) => value,
         Err(_error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a list, found `{}`", at, value)), &"list_at")) },
     };
-    let mut out: Vec<String> = vec![]; let entries = entries;
+    let mut out: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let entries = entries;
     for entry in entries.iter() {
         let entry = *entry;
         out.push(unescaped(entry));
@@ -221,14 +221,14 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
     let mut current: String = String::from("");
     let mut function = FnContract::empty();
     let mut a_type = TypeContract::empty();
-    let mut traits: Vec<String> = vec![];
-    let mut functions: Vec<String> = vec![];
-    let mut answers: Vec<(String, String)> = vec![];
+    #[allow(unused_mut)] let mut traits: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut functions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits;
+    let mut answers: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits; #[allow(unused_mut, clippy::redundant_locals)] let mut functions = functions;
     let lines = match nikaia_std::grammar::parse(&*written, LedgerText::parse_file()) {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}", error)), &"read")) },
     };
-    let mut n: i64 = 0;
+    let mut n: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits; #[allow(unused_mut, clippy::redundant_locals)] let mut functions = functions;
     for one in lines.iter() {
         n += 1;
         match one {
@@ -897,8 +897,8 @@ pub fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_st
         }
     }
     let mut params: Vec<(String, Ty)> = vec![];
-    let mut changed: Vec<String> = vec![];
-    let mut order: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut changed: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut order: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed;
     let mut receiver_changes = false;
     let mut first = true;
     for part in parts.parts.iter() {
@@ -929,8 +929,8 @@ pub fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_st
     let mut config: Vec<ConfigContract> = vec![];
     for setting in parts.settings.iter() { config.push(ConfigContract { name: nikaia_std::block::Text::from(setting.name.to_string()), ty: typed(setting.ty, &variables), default: nikaia_std::block::Text::from(setting.default.to_string()) }); }
     let mut result: Option<Ty> = None;
-    let mut borrows: Vec<String> = vec![];
-    let result_text = nikaia_std::index::or(parts.result, || "");
+    #[allow(unused_mut)] let mut borrows: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed; #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
+    let result_text = nikaia_std::index::or(parts.result, || ""); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order; #[allow(unused_mut, clippy::redundant_locals)] let mut borrows = borrows;
     if parts.result.is_some() {
         result = Some(typed(result_text, &variables));
         borrows = pointed_into(result_text, &order);
@@ -950,14 +950,14 @@ pub(crate) fn pointed_into(result: &str, order: &[String]) -> Vec<String> {
         Ok(value) => value,
         Err(_error) => { return vec![]; },
     };
-    let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = vec![];
     for group in groups.iter() {
         for name in group.iter() {
             let name = *name;
             if !nikaia_std::list::contains(&named, &name) { named.push(nikaia_std::block::Text::from(name.to_string())); }
         }
     }
-    let mut borrows: Vec<String> = vec![];
+    let mut borrows: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
     for name in order.iter() { if nikaia_std::list::contains(&named, &name) { borrows.push(nikaia_std::block::Text::from(name.to_string())); } }
     for name in named.iter() { if !nikaia_std::list::contains(&borrows, &name) { borrows.push(nikaia_std::block::Text::from(name.to_string())); } }
     borrows
@@ -1037,8 +1037,8 @@ pub struct Spelled {
 
 pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelled {
     let c: Vec<scalar> = nikaia_std::list::chars(text.trim().chars());
-    let mut declared: Vec<String> = vec![];
-    let mut open: i64 = 0;
+    #[allow(unused_mut)] let mut declared: Vec<String> = vec![];
+    let mut open: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
     if !c.is_empty() && *nikaia_std::index::get(&c, 0) == '[' {
         let close = matching(&c, 1, '[', ']');
         if close < 0 { return as_written(text); }
@@ -1053,16 +1053,16 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
     let close = matching(&c, open + 1, '(', ')');
     if close < 0 { return as_written(text); }
     let inside: Vec<scalar> = nikaia_std::list::chars(slice(&c, open + 1, close).chars());
-    let mut result = slice(&c, close + 1, c.len() as i64);
+    let mut result = slice(&c, close + 1, c.len() as i64); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
     let semicolon = top_level_semicolon(&inside);
     let positional = if semicolon < 0 { slice(&inside, 0, inside.len() as i64) } else { slice(&inside, 0, semicolon) };
-    let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
     for part in split_args(&positional) {
         let part = trimmed(&part);
         if !part.is_empty() { parameters.push(part); }
     }
     let mut mutates_said = false;
-    let mut written_parameters: Vec<String> = vec![];
+    let mut written_parameters: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     for k in 0..parameters.len() as i64 {
         if k == 0 && !is_named(nikaia_std::index::get(&parameters, 0)) {
             written_parameters.push(receiver(nikaia_std::index::get(&parameters, 0), key, mutates));
@@ -1075,9 +1075,9 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
         result = replace_ref(&result, &format!("ref({})", pointed));
         borrows_said = true;
     }
-    let mut seen: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut seen: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
     for entry in declared.iter() { seen.push(before_colon(entry)); }
-    let mut body = joined_by(&written_parameters, ", ");
+    let mut body = joined_by(&written_parameters, ", "); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
     if semicolon >= 0 {
         let options = trimmed(&slice(&inside, semicolon + 1, inside.len() as i64));
         body = format!("{}; {}", body, options);
@@ -1088,7 +1088,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
             declared.push(nikaia_std::block::Text::from(variable.to_string()));
         }
     }
-    let mut before: String = String::from("");
+    let mut before: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
     if !declared.is_empty() {
         let names = joined_by(&declared, ", ");
         before = format!("[{}]", names);

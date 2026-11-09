@@ -203,7 +203,7 @@ pub(crate) fn emit_holes_fold_steps(pattern: &Pattern) -> Vec<&Expr> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn emit_holes_fold_callees<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, grammars: &collections::BTreeMap<String, GrammarDef>) -> collections::BTreeSet<String> {
-    let mut found: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut found: Vec<String> = vec![];
     for (_, def) in grammars.iter() {
         for rule in def.rules.iter() {
             for alt in rule.alts.iter() {
@@ -216,7 +216,7 @@ pub fn emit_holes_fold_callees<H: EmitHolesHost>(host: &H, words: &winnow_gramma
             }
         }
     }
-    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     names.extend(found.iter().cloned());
     names
 }
@@ -248,9 +248,9 @@ pub(crate) fn emit_holes_comptimes<H: EmitHolesHost>(host: &H, words: &winnow_gr
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
-    let mut waiting: Vec<String> = vec![];
-    let mut free: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut waiting: Vec<String> = vec![];
+    let mut free: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
     for item in items.iter() {
         match &item.node {
             Item::Comptime { value, .. } => { emit_holes_names_deep(host, words, value, 1, &mut waiting); },
@@ -267,7 +267,7 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
         }
         at += 1;
     }
-    let mut built: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut built: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
     while !waiting.is_empty() {
         let name = match waiting.pop() { Some(__nikaia_value) => __nikaia_value, None => return built };
         if free.contains_key(&nikaia_std::block::Text::from(name.to_string())) && !built.contains(&nikaia_std::block::Text::from(name.to_string())) {

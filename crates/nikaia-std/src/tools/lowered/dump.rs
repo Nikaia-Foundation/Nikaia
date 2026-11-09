@@ -140,20 +140,20 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
     out.push_str(&format!("{}match {} {{\n", pad, expr));
     for variant in variants.iter() {
         if variant.named { return uncrossable(ty, &format!("`{}::{}` has named fields, and variants with named fields can't be computed at build time yet", name, variant.name)); }
-        let mut bound: Vec<String> = vec![];
-        let mut at: i64 = 0;
+        #[allow(unused_mut)] let mut bound: Vec<String> = vec![];
+        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((at) as usize) < variant.carried.len() {
             bound.push(format!("__nikaia_p{}", at));
             at += 1;
         }
-        let mut pattern = format!("{}::{}", name, variant.name);
+        let mut pattern = format!("{}::{}", name, variant.name); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         if !bound.is_empty() {
             let joined = nikaia_std::block::Text::from(bound.join(", "));
             pattern = format!("{}::{}({})", name, variant.name, joined);
         }
         out.push_str(&format!("{}    {} => {{\n", pad, pattern));
         out.push_str(&format!("{}        out.push_str(\"(v {} {}\");\n", pad, name, variant.name));
-        let mut i: i64 = 0;
+        let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((i) as usize) < bound.len() {
             out.push_str(&format!("{}        out.push(' ');\n", pad));
             let refused = dump(shapes, nikaia_std::index::get(&variant.carried, (i) as usize), nikaia_std::index::get(&bound, (i) as usize), depth + 2, out);

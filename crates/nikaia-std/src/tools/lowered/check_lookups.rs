@@ -204,8 +204,8 @@ pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key:
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let mut take = segments.len() as i64 - 1;
     while take >= 1 {
-        let mut prefix: Vec<String> = vec![];
-        let mut at: i64 = 0;
+        #[allow(unused_mut)] let mut prefix: Vec<String> = vec![];
+        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
         while at < take {
             prefix.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(at))).to_string()));
             at = at + 1;

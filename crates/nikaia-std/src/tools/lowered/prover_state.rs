@@ -214,7 +214,7 @@ impl ProverState {
             } else { refuted = refuting_values(arena, &scope.facts, nikaia_std::index::or(claim, || 0), ask, model); }
         }
         let mut is_refuted = refuted.is_some();
-        let mut through_summaries: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut through_summaries: Vec<String> = vec![];
         let mut loop_base: Option<Vec<i64>> = copied_path((with_history).as_ref());
         if claim.is_some() && !is_refuted && !tainted_claim && !scope.summed.is_empty() {
             let read = summed_read(&arena, &scope, nikaia_std::index::or(claim, || 0));
@@ -276,7 +276,7 @@ impl ProverState {
             outcome.findings.push(Finding { code: String::from("NK1202"), span, message: format!("`{}` is a claim about data from outside the program.", written), notes: vec![format!("`{}` comes from outside the program, so nothing the compiler can see says what it holds.", first), String::from("That it is wrong is a case the program has to handle, not a defect an `assert` catches.")], help: Some(format!("Check it where it arrives, with a guard the program handles: `throw BadInput({}) if !({})`, or `return … if !({})`. After that line, this `assert` is proved.", first, written, written)), warning: false, labels: vec![] });
             return outcome;
         }
-        let refuted_values = nikaia_std::index::or(refuted, || collections::BTreeMap::new().into());
+        let refuted_values = nikaia_std::index::or(refuted, || collections::BTreeMap::new().into()); #[allow(unused_mut, clippy::redundant_locals)] let mut through_summaries = through_summaries;
         if is_refuted && !self.collecting {
             let mut notes: Vec<String> = vec![format!("What is known before it rules the claim out: {}.", shown(&refuted_values))];
             notes.extend(through_summaries);

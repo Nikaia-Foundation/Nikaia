@@ -174,11 +174,11 @@ pub fn a_list_read_as_a_slice(written: String) -> String {
 }
 
 pub fn frame_attribute(frame: &FrameAttr) -> String {
-    let mut keys: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
     let boundary = match frame.boundary.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    };
+    }; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     if boundary.is_some() { keys.push(format!("boundary = \"{}\"", nikaia_std::index::or(boundary.as_deref(), || ""))); }
     if frame.unchecked { keys.push(String::from("unchecked")); }
     if keys.is_empty() { return String::from("#[frame]"); }

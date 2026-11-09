@@ -24,8 +24,8 @@ pub(crate) fn cx_node_run(value: &str, name: &str, at: i64, element: &str) -> St
 
 impl CxNode {
     pub(crate) fn add_member(&mut self, owner: &str, text: String) {
-        let mut list: Vec<String> = vec![];
-        let before = *nikaia_std::index::get(&self.members, owner);
+        #[allow(unused_mut)] let mut list: Vec<String> = vec![];
+        let before = *nikaia_std::index::get(&self.members, owner); #[allow(unused_mut, clippy::redundant_locals)] let mut list = list;
         if before.is_some() {
             let held = match before { Some(__nikaia_value) => __nikaia_value, None => return };
             for one in held.iter() { list.push(nikaia_std::block::Text::from(one.to_string())); }
@@ -56,12 +56,12 @@ impl CxNode {
             None => None,
         }, || "".into());
         let constructor = owner_name.is_some() && !by_value && entry.receiver.is_none() && !entry.getter && entry.name == "new";
-        let mut locals: Vec<String> = vec![];
-        let mut steps: Vec<String> = vec![];
-        let mut args: Vec<String> = vec![];
-        let mut calls: Vec<String> = vec![];
-        let mut position: i64 = 0;
-        let written = entry.written();
+        #[allow(unused_mut)] let mut locals: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut steps: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals;
+        #[allow(unused_mut)] let mut args: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
+        #[allow(unused_mut)] let mut calls: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
+        let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
+        let written = entry.written(); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if entry.receiver.is_some() && owner_name.is_some() {
             let owner = nikaia_std::block::Text::from(owner_text.to_string());
             if by_value {
@@ -75,7 +75,7 @@ impl CxNode {
                 args.push(String::from("self_ptr"));
             }
         }
-        let mut place: i64 = 0;
+        let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         while ((place) as usize) < entry.arg_names.len() {
             let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&entry.arg_names, (place) as usize)).to_string());
             let ty = (*nikaia_std::index::get(&entry.arg_types, (place) as usize)).clone();
@@ -154,9 +154,9 @@ impl CxNode {
                 },
                 CxIn::Callback { ref lent, result } => {
                     let trampoline = format!("nk_back_{}_{}", symbol, at);
-                    let mut c_params: Vec<String> = vec![];
-                    let mut handed: Vec<String> = vec![];
-                    let mut number = 0;
+                    #[allow(unused_mut)] let mut c_params: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut handed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
+                    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
                     for part in lent.iter() {
                         match part {
                             CxLent::Value(shape) => {
@@ -178,16 +178,16 @@ impl CxNode {
                     c_params.push(String::from("void *ctx"));
                     let mut count = lent.len() as i64;
                     if count < 1 { count = 1; }
-                    let mut c_result: String = String::from("void");
-                    let mut back: String = String::from("");
-                    let mut early: &'static str = "return;";
+                    let mut c_result: String = String::from("void"); #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
+                    let mut back: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
+                    let mut early: &'static str = "return;"; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
                     if result.is_some() {
                         let shape = match result { Some(__nikaia_value) => __nikaia_value, None => continue };
                         c_result = nikaia_std::block::Text::from(shape.c.to_string());
                         back = format!("{} back = 0;\n    if (!nk_{}(call->env, result, \"the callback's result\", &back)) {{\n        call->failed = true;\n        return 0;\n    }}\n    return back;\n", shape.c, cx_node_scalar(&shape));
                         early = "return 0;";
                     }
-                    let handed_text = nikaia_std::block::Text::from(handed.join("\n    "));
+                    let handed_text = nikaia_std::block::Text::from(handed.join("\n    ")); #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
                     self.trampolines.push(format!("static {} {}({}) {{\n    nk_call *call = ctx;\n    napi_value handed[{}];\n    napi_value undefined;\n    napi_value result;\n    if (call->failed) {}\n    {}\n    napi_get_undefined(call->env, &undefined);\n    if (napi_call_function(call->env, undefined, call->fn, {}, handed, &result) != napi_ok) {{\n        call->failed = true;\n        {}\n    }}\n    (void)result;\n    {}}}\n", c_result, trampoline, nikaia_std::block::Text::from(c_params.join(", ")), count, early, handed_text, lent.len() as i64, early, back));
                     locals.push(format!("nk_call p{} = {{ env, NULL, false }};", at));
                     steps.push(format!("if (!nk_function(env, {}, \"{}\")) goto done;\n    p{}.fn = {};", value, name, at, value));
@@ -197,21 +197,21 @@ impl CxNode {
                 },
             }
         }
-        let takes: i64 = position;
+        let takes: i64 = position; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         let found = cx_result_of(entry, words, &ctx.plains, &ctx.handles, &ctx.records);
-        let mut body: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut body: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
         let mut has_finish = false;
-        let mut finish_c: Option<String> = None;
-        let mut finish_back: String = String::from("");
+        let mut finish_c: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
+        let mut finish_back: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
         let mut finish_flagged = false;
-        let mut failed: String = String::from("");
+        let mut failed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if !calls.is_empty() {
             let mut each: Vec<String> = vec![];
             for one in calls.iter() { each.push(format!("{}.failed", one)); }
             failed = format!("if ({}) goto done;\n    ", nikaia_std::block::Text::from(each.join(" || ")));
         }
-        let check = format!("{}if (status != 0) {{\n        nk_fail(env, status);\n        goto done;\n    }}", failed);
-        let call_text = format!("{}({})", symbol, nikaia_std::block::Text::from(args.join(", ")));
+        let check = format!("{}if (status != 0) {{\n        nk_fail(env, status);\n        goto done;\n    }}", failed); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
+        let call_text = format!("{}({})", symbol, nikaia_std::block::Text::from(args.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
         match found {
             CxResult::Made(ref out) => {
                 match *out {
@@ -286,10 +286,10 @@ impl CxNode {
             },
         }
         if by_value && entry.exclusive && owner_name.is_some() { body.push(format!("nk_assign_{}(env, argv[0], &self_value);", owner_text)); }
-        let mut argc: i64 = takes;
+        let mut argc: i64 = takes; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if argc < 1 { argc = 1; }
-        let function = cx_node_function(symbol);
-        let mut text = format!("/* `{}` */\nstatic napi_value {}(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    int status = 0;\n", written, function, argc, argc);
+        let function = cx_node_function(symbol); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
+        let mut text = format!("/* `{}` */\nstatic napi_value {}(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    int status = 0;\n", written, function, argc, argc); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
         for local in locals.iter() { text.push_str(&format!("    {}\n", local)); }
         text.push_str("    if (napi_get_cb_info(env, info, &argc, argv, &self, NULL) != napi_ok) goto done;\n");
         if takes > 0 { text.push_str(&format!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }
@@ -297,13 +297,13 @@ impl CxNode {
         for step in body.iter() { text.push_str(&format!("    {}\n", step)); }
         text.push_str("done:\n    nk_release(kept);\n    (void)self;\n    (void)status;\n    return result;\n}\n");
         self.functions.push(text);
-        let mut promised: String = String::from("");
+        let mut promised: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if has_finish && pauses && calls.is_empty() && !by_value {
             self.any_async = true;
             let finisher = format!("nk_finish_{}", symbol);
             let mut taken_out: String = String::from("");
             let mut read_out: String = String::from("(void)at;");
-            let mut out_arg: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut out_arg: Vec<String> = vec![];
             let has_out = finish_c.is_some();
             if has_out {
                 let c: String = nikaia_std::index::or(match finish_c.as_ref() {
@@ -321,18 +321,18 @@ impl CxNode {
                     out_arg.push(String::from("out"));
                 }
             }
-            let mut async_text = format!("static napi_value {}(napi_env env, void *at) {{\n    napi_value result = NULL;\n    {}\n    {}\n    return result;\n}}\n\n/* `{}`, as a Promise */\nstatic napi_value {}_async(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    nk_async *job = NULL;\n    int status = 0;\n    {}\n", finisher, read_out, finish_back, written, function, argc, argc, taken_out);
+            let mut async_text = format!("static napi_value {}(napi_env env, void *at) {{\n    napi_value result = NULL;\n    {}\n    {}\n    return result;\n}}\n\n/* `{}`, as a Promise */\nstatic napi_value {}_async(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    nk_async *job = NULL;\n    int status = 0;\n    {}\n", finisher, read_out, finish_back, written, function, argc, argc, taken_out); #[allow(unused_mut, clippy::redundant_locals)] let mut out_arg = out_arg;
             for local in locals.iter() { if !local.contains(" out = ") && !local.contains(" present = ") { async_text.push_str(&format!("    {}\n", local)); } }
             async_text.push_str("    if (napi_get_cb_info(env, info, &argc, argv, &self, NULL) != napi_ok) goto done;\n");
             if takes > 0 { async_text.push_str(&format!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }
             for step in steps.iter() { async_text.push_str(&format!("    {}\n", step)); }
             if !out_arg.is_empty() { async_text.push_str("    out = nk_keep(env, &kept, sizeof *out);\n    if (!out) goto done;\n    memset(out, 0, sizeof *out);\n"); }
-            let mut handed_args = args.copy_owned();
+            #[allow(unused_mut)] let mut handed_args = args.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut out_arg = out_arg;
             handed_args.extend(out_arg);
             handed_args.push(String::from("nk_landed"));
             handed_args.push(String::from("job"));
             handed_args.push(String::from("&job->ticket->op"));
-            let mut started: &'static str = "NULL";
+            let mut started: &'static str = "NULL"; #[allow(unused_mut, clippy::redundant_locals)] let mut handed_args = handed_args;
             if has_out { started = "out"; }
             async_text.push_str(&format!("    job = nk_start(env, &kept, {}, {}, &result);\n    if (!job) goto done;\n    status = {}_async({});\n    if (status != 0) nk_abandon(env, job, status);\ndone:\n    nk_release(kept);\n    (void)self;\n    return result;\n}}\n", started, finisher, symbol, nikaia_std::block::Text::from(handed_args.join(", "))));
             self.functions.push(async_text);
@@ -424,8 +424,8 @@ impl CxNode {
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
             let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_string());
-            let mut members: Vec<String> = vec![format!("{{ \"close\", NULL, nk_close_{}, NULL, NULL, NULL, napi_default_method, NULL }}", ty)];
-            let own = *nikaia_std::index::get(&self.members, &ty);
+            #[allow(unused_mut)] let mut members: Vec<String> = vec![format!("{{ \"close\", NULL, nk_close_{}, NULL, NULL, NULL, napi_default_method, NULL }}", ty)];
+            let own = *nikaia_std::index::get(&self.members, &ty); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
             if own.is_some() {
                 let held = match own { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 for one in held.iter() { members.push(nikaia_std::block::Text::from(one.to_string())); }
@@ -518,10 +518,10 @@ pub(crate) fn cx_node_record_text(record: &CxRecord, ctx: &CxCtx) -> String {
     let mut reads: String = String::from("");
     let mut writes: String = String::from("");
     if record.is_enum() {
-        let mut chosen: Vec<String> = vec![];
-        let mut cases: Vec<String> = vec![];
-        let mut names: Vec<String> = vec![];
-        let mut tag = 0;
+        #[allow(unused_mut)] let mut chosen: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut cases: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen;
+        #[allow(unused_mut)] let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen; #[allow(unused_mut, clippy::redundant_locals)] let mut cases = cases;
+        let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen; #[allow(unused_mut, clippy::redundant_locals)] let mut cases = cases; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
         for variant in record.variants.iter() {
             let mut variant_reads: String = String::from("");
             let mut variant_writes: String = String::from("");

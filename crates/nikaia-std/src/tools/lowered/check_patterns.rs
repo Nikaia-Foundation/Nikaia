@@ -263,18 +263,18 @@ impl CheckState {
         match pattern {
             MatchPattern::Named { path, fields, rest } => {
                 let rest = *rest;
-                let mut written: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut written: Vec<String> = vec![];
                 for part in path.iter() {
                     let part = *part;
                     written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
                 }
-                let mut key: String = self.pattern_variant(world, path, &owner);
+                let mut key: String = self.pattern_variant(world, path, &owner); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
                 if written.len() == 1 && *nikaia_std::index::get(&written, 0) == owner { key = nikaia_std::block::Text::from(owner.to_string()); }
                 let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                let mut named: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut named: Vec<String> = vec![];
                 for each in fields.iter() {
                     let name = nikaia_std::block::Text::from(world.words.resolve(each.name).to_string());
                     named.push(nikaia_std::block::Text::from(name.to_string()));
@@ -286,11 +286,11 @@ impl CheckState {
                     }
                 }
                 if rest || declared.is_empty() { return; }
-                let mut missing: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut missing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
                 for field in declared.iter() { if !nikaia_std::list::contains(&named, &field.name) { missing.push(format!("`{}`", field.name)); } }
                 if missing.is_empty() { return; }
-                let shown = nikaia_std::block::Text::from(written.join("::"));
-                let mut one: &'static str = "field";
+                let shown = nikaia_std::block::Text::from(written.join("::")); #[allow(unused_mut, clippy::redundant_locals)] let mut missing = missing;
+                let mut one: &'static str = "field"; #[allow(unused_mut, clippy::redundant_locals)] let mut missing = missing;
                 if missing.len() > 1 { one = "fields"; }
                 self.findings.push(check_refusal("NK1234", span, format!("This `{}` pattern leaves out the {} {}.", shown, one, nikaia_std::block::Text::from(missing.join(", "))), vec![String::from("A struct pattern names every field, or ends with `..` for the ones it does not name (Part I 3.4).")], Some(format!("Name them, or end the pattern with `..`: `{} {{ …, .. }}`.", shown))));
             },

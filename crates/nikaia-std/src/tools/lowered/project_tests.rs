@@ -154,8 +154,8 @@ pub fn project_tests_is_program(file: &std::path::Path, root: &std::path::Path) 
 }
 
 pub fn project_tests_program_manifest(root: &std::path::Path, package: Option<String>) -> ProjectMembersManifest {
-    let mut keys: Vec<String> = vec![];
-    let mut paths: Vec<(String, fs::Path)> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
+    let mut paths: Vec<(String, fs::Path)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     match package {
         None => { },
         Some(name) => {

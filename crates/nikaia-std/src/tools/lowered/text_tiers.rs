@@ -186,7 +186,7 @@ pub fn unaliased_in(aliases: &collections::BTreeMap<String, String>, name: &str)
     }
     let parts: Vec<&str> = bare.splitn(2, "::").collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(name.to_string()); }
-    let package = match *nikaia_std::index::get(&aliases, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) }; let parts = parts;
+    let package = match *nikaia_std::index::get(&aliases, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
     format!("{}{}::{}", amp, package, *nikaia_std::index::get(&parts, 1))
 }
 
@@ -717,9 +717,9 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
     }
     if plain && value.is_some() {
         let read = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut sources: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
         read_through(read, ask, walk, &mut sources);
-        let to = seen(&owner, &path, walk);
+        let to = seen(&owner, &path, walk); #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
         for from_word in sources.iter() { if *from_word != to { walk.flows.read_into.insert((nikaia_std::block::Text::from(from_word.to_string()), nikaia_std::block::Text::from(to.to_string()))); } }
     }
     let mut linked = a_container(ask.names, &ty) && comes_whole(value, ask, walk);
@@ -746,9 +746,9 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
     }
     if plain && kinds.still && value.is_some() {
         let given_value = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        let mut sources: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
         still_sources(given_value, ask, walk, &mut sources);
-        let to = seen(&owner, &path, walk);
+        let to = seen(&owner, &path, walk); #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
         for from_word in sources.iter() { if *from_word != to { walk.flows.still_into.insert((nikaia_std::block::Text::from(from_word.to_string()), nikaia_std::block::Text::from(to.to_string()))); } }
     }
     if a_container(ask.names, &ty) && path.is_empty() && holds_text(ask.names, &ty) { adopt(value, going, ask, walk); }
@@ -1901,9 +1901,9 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
     let mut declared: Option<Declaring> = None;
     let written = ty.is_some();
     let from = text_source_word(Some(value), ask, walk);
-    let mut through: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut through: Vec<String> = vec![];
     read_through(value, ask, walk, &mut through);
-    let mut items_of: Option<String> = None;
+    let mut items_of: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut through = through;
     if written {
         let declared_ty = match match ty {
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -2176,7 +2176,7 @@ pub(crate) fn lent_through_code(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>,
 
 pub(crate) fn count_use(name: &str, walk: &mut TierWalk) {
     let local = match tier_local(name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let mut word: String = String::from("");
+    let mut word: String = String::from(""); #[allow(clippy::redundant_locals)] let local = local;
     if local.declared.is_some() {
         let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return };
         let parameter = matches!(declared.owner, TextOwner::Param(_, _));
@@ -2484,7 +2484,7 @@ pub(crate) fn kept_literal(value: &Expr, owner: &TextOwner, path: &[i64], ty: &T
     let name = match literal_let_named(value, ask) { Some(__nikaia_value) => __nikaia_value, None => return };
     let local = match tier_local(&name, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     if local.literal < 0 { return; }
-    let word = seen(owner, path, walk);
+    let word = seen(owner, path, walk); #[allow(clippy::redundant_locals)] let local = local;
     walk.flows.literal_lets.entry(local.literal).or_insert(collections::BTreeSet::new()).insert(word);
 }
 
@@ -2965,7 +2965,7 @@ pub(crate) fn late_stmt(stmt: &Stmt, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
     match stmt {
         Stmt::Let { names, value, .. } => {
             let sources = late_sources(value, ask, &late);
-            let alias = late_alias(value, ask, &late);
+            let alias = late_alias(value, ask, &late); #[allow(clippy::redundant_locals)] let sources = sources;
             late_expr(value, false, ask, late);
             for name in names.iter() {
                 let name = *name;
@@ -5983,12 +5983,12 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
     let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && (*t.code).is_none();
     if is_extern || !text { return out; }
     let none: collections::BTreeSet<String> = collections::BTreeSet::new();
-    #[allow(unused_mut)] let mut handed: Vec<&Expr> = vec![];
+    let mut handed: Vec<&Expr> = vec![];
     for way in hb_ways_out(body) { handed.extend(hb_text_arms(way)); }
     if is_public && !handed.iter().all(|value| { hb_field_chain_root(value, words).is_some() }) { return out; }
-    #[allow(unused_mut)] let mut reads: Vec<&Expr> = handed.copy_owned(); #[allow(unused_mut)] let mut handed = handed;
+    #[allow(unused_mut)] let mut reads: Vec<&Expr> = handed.copy_owned();
     let mut measured: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    let visited = visited_in_block(body); #[allow(unused_mut)] let mut handed = handed; #[allow(unused_mut)] let mut reads = reads;
+    let visited = visited_in_block(body); #[allow(unused_mut, clippy::redundant_locals)] let mut reads = reads;
     for expr in visited.iter() {
         let expr = *expr;
         match expr {
@@ -6071,7 +6071,7 @@ pub(crate) fn hb_chain_variable_id(value: &Expr) -> i64 {
 pub(crate) fn hb_text_arms(value: &Expr) -> Vec<&Expr> {
     let arms = tail_arms(value);
     if arms.is_empty() { return vec![value]; }
-    let mut out: Vec<&Expr> = vec![]; let arms = arms;
+    let mut out: Vec<&Expr> = vec![]; #[allow(clippy::redundant_locals)] let arms = arms;
     for arm in arms.iter() {
         let arm = *arm;
         out.extend(hb_text_arms(arm));

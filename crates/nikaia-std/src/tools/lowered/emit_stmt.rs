@@ -124,7 +124,7 @@ impl EmitState {
         for (name, changing) in nikaia_std::index::or(match self.facts.view_list_rebinds.get(&start) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || vec![].into()) { if changing { out.push(&format!(" #[allow(unused_mut)] let mut {} = {};", name, name)); } else { out.push(&format!(" let {} = {};", name, name)); } }
+        }, || vec![].into()) { if changing { out.push(&format!(" #[allow(unused_mut, clippy::redundant_locals)] let mut {} = {};", name, name)); } else { out.push(&format!(" #[allow(clippy::redundant_locals)] let {} = {};", name, name)); } }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -808,18 +808,18 @@ impl EmitState {
             }
         }
         let fallible = self.facts.fallible_loops.contains(&at);
-        let mut each: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut each: Vec<String> = vec![];
         for one in bindings.iter() {
             let one = *one;
             let local = self.emit_stmt_local(&emit_text(world, one));
             if fallible && local == "_" { each.push(format!("__nikaia_step_{}", each.len() as i64)); } else { each.push(local); }
         }
         let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(&node_key(iter));
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
         for one in each.iter() { if mutable && !viewed && one != "_" { written.push(format!("mut {}", one)); } else { written.push(nikaia_std::block::Text::from(one.to_string())); } }
-        let names = nikaia_std::block::Text::from(written.join(", "));
+        let names = nikaia_std::block::Text::from(written.join(", ")); #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
         let bound = emit_stmt_tuple_pattern(&written, shape);
-        let mut allowed = "";
+        let mut allowed = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
         if mutable && !viewed && each.len() > 1 { allowed = "#[allow(unused_mut)] "; }
         let plain = emit_stmt_tuple_pattern(&each, shape);
         if self.facts.pausing_loops.contains(&at) {

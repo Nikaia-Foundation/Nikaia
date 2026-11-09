@@ -374,12 +374,12 @@ impl EmitState {
     }
     pub fn emit_core_guard_reopening<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr) -> String {
         let boxed = self.boxed_bindings(world, pattern);
-        let mut read: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut read: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let boxed = boxed;
         for each in self.emit_holes_names_read(world, host, guard) {
             let name = escaped_name(&each);
             if boxed.contains(&name) && !read.contains(&name) { read.push(name); }
         }
-        let mut out: String = String::from("");
+        let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut read = read;
         for name in read.iter() { out.push_str(&format!("let {} = nikaia_std::boxed::peek(&{}); ", name, name)); }
         out
     }

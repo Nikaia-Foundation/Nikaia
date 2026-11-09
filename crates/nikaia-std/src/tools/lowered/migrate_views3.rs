@@ -320,10 +320,10 @@ pub(crate) fn migrate_a_ref_code(tokens: &[MigrateToken], k: i64, in_brackets: b
 pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut Vec<String>, suffix: &mut Vec<String>) {
     let open = k + 1;
     let close = migrate_closing(tokens, open);
-    let mut sources: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
     let mut start = open + 1;
-    let mut depth = 0;
-    let mut position: i64 = 0;
+    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
+    let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     let mut j = open + 1;
     while j <= close {
         let ends = j == close || depth == 0 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == ",";
@@ -376,8 +376,8 @@ pub(crate) fn migrate_from_of_a_declaration(tokens: &[MigrateToken], k: i64, suf
     let close = migrate_closing(tokens, open);
     if migrate_text_at(tokens, close + 1) != "->" || migrate_text_at(tokens, close + 2) != "ref" || migrate_text_at(tokens, close + 3) == "mut" || migrate_text_at(tokens, close + 3) == "(" { return; }
     let mut takes_one = false;
-    let mut sources: Vec<String> = vec![];
-    let mut depth = 0;
+    #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     for j in open + 1..close {
         if migrate_a_ref_code(tokens, j, false) { takes_one = true; }
         match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {
@@ -410,8 +410,8 @@ pub(crate) fn migrate_trait_result(tokens: &[MigrateToken], k: i64) -> (i64, i64
     while migrate_text_at(tokens, after) == "sync" || migrate_text_at(tokens, after) == "throws" { after += 1; }
     if migrate_text_at(tokens, after) == "from" || migrate_text_at(tokens, after) == "{" { return none; }
     let mut lent_self = false;
-    let mut sources: Vec<String> = vec![];
-    let mut depth = 0;
+    #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     for j in open + 1..close {
         match nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind {
             MigrateKind::Open => { depth += 1; },
@@ -427,7 +427,7 @@ pub(crate) fn migrate_trait_result(tokens: &[MigrateToken], k: i64) -> (i64, i64
     }
     if lent_self { return (last, close + 2, String::from("self"), vec![]); }
     if sources.len() == 1 { return (last, close + 2, nikaia_std::block::Text::from((*nikaia_std::index::get(&sources, 0)).to_string()), vec![]); }
-    let mut choices: Vec<String> = vec![];
+    let mut choices: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
     for source in sources.iter() { choices.push(format!("`from {}`", source)); }
     if sources.len() > 1 { choices.push(format!("`from {}`", nikaia_std::block::Text::from(sources.join(" | ")))); }
     (last, close + 2, String::from(""), choices)
@@ -453,11 +453,11 @@ pub fn migrate_views3_unwritten(code: &str) -> Vec<String> { migrate_unwritten_f
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn migrate_views3_markdown_unwritten(source: &str) -> Vec<String> {
-    let mut out: Vec<String> = vec![];
-    let mut block: String = String::from("");
+    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let mut block: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     let mut inside = false;
-    let mut opened: i64 = 0;
-    let mut line: i64 = 0;
+    let mut opened: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut line: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for text in source.split("\n") {
         line += 1;
         let fence = text.trim();
@@ -482,9 +482,9 @@ pub(crate) fn migrate_unwritten_from(code: &str, before: i64) -> Vec<String> {
     let mut lexer = MigrateLexer { c: nikaia_std::list::chars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let tokens = &lexer.tokens;
-    let mut out: Vec<String> = vec![];
-    let mut in_trait: i64 = -1;
-    let mut guarded: i64 = -1;
+    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let mut in_trait: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut guarded: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for k in 0..tokens.len() as i64 {
         if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text == "extern" && k > guarded { guarded = migrate_extern_end(&tokens, k); }
         if k > in_trait && k > guarded { in_trait = migrate_trait_end(&tokens, k); }
@@ -545,9 +545,9 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
     let parameters = migrate_parameters(&tokens);
     let mut dropped: Vec<bool> = vec![];
     let mut gapless: Vec<bool> = vec![];
-    let mut prefix: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut prefix: Vec<String> = vec![];
     let mut guarded: Vec<bool> = vec![];
-    let mut suffix: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut suffix: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
     for _t in tokens.iter() {
         dropped.push(false);
         gapless.push(false);
@@ -556,12 +556,12 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
         suffix.push(String::from(""));
     }
     let in_params = migrate_in_params(&tokens);
-    let mut in_trait: i64 = -1;
+    let mut in_trait: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     let mut kept_ref: Vec<bool> = vec![];
     for _t in tokens.iter() { kept_ref.push(false); }
     let mut brackets: Vec<bool> = vec![];
-    let mut until: i64 = -1;
-    let mut k: i64 = 0;
+    let mut until: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
+    let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     while k < n {
         let t = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string());
         let kind = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind;
@@ -611,8 +611,8 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
             if at_parameter < 0 || at_parameter >= lent.len() as i64 || !*nikaia_std::index::get(&lent, nikaia_std::index::at(at_parameter)) { { let __nikaia_stored = String::from("keep "); nikaia_std::index::set(&mut prefix, nikaia_std::index::at(j), __nikaia_stored); } }
         }
     }
-    let mut out: String = String::from("");
-    let mut j: i64 = 0;
+    let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
+    let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
     while j < n {
         if !*nikaia_std::index::get(&gapless, nikaia_std::index::at(j)) { out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).gap); }
         out.push_str(nikaia_std::index::get(&prefix, nikaia_std::index::at(j)));

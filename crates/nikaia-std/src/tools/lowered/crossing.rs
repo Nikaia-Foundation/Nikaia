@@ -84,10 +84,10 @@ pub fn a_list(names: &[String], one: &str, many: &str) -> String {
 
 pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<Vec<String>> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(from.to_string())];
-    let mut ways: Vec<Vec<String>> = vec![vec![]];
+    #[allow(unused_mut)] let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(from.to_string())];
+    let mut ways: Vec<Vec<String>> = vec![vec![]]; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     seen.insert(nikaia_std::block::Text::from(from.to_string()));
-    let mut next: i64 = 0;
+    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while ((next) as usize) < queue.len() {
         let at = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
         let how = (*nikaia_std::index::get(&ways, (next) as usize)).copy_owned();

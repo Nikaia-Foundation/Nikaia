@@ -15,9 +15,9 @@ pub fn grammar_types_copy_name(words: &winnow_grammar::InternerContext, rule: &s
 }
 
 pub(crate) fn grammar_types_spelled(words: &winnow_grammar::InternerContext, ty: &Type) -> String {
-    let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
     for arg in ty.generics.iter() { parts.push(grammar_types_spelled(words, arg)); }
-    let mut text: String = String::from("");
+    let mut text: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     if ty.is_tuple { text = format!("({})", nikaia_std::block::Text::from(parts.join(", "))); } else if parts.is_empty() { text = format!("{}", words.resolve(ty.name)); } else { text = format!("{}[{}]", words.resolve(ty.name), nikaia_std::block::Text::from(parts.join(", "))); }
     if ty.is_nullable { text = format!("{}?", text); }
     text

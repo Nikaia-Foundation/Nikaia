@@ -21,7 +21,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                     None => None,
                 }, || collections::BTreeSet::new().into());
                 let target_name = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
-                let mut given: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut given: Vec<String> = vec![];
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, .. } => {
@@ -38,7 +38,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                         _ => { },
                     }
                 }
-                let mut missing: Vec<String> = vec![];
+                let mut missing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut given = given;
                 for wanted in declared.iter() { if !nikaia_std::list::contains(&given, &nikaia_std::block::Text::from(wanted.to_string())) { missing.push(nikaia_std::block::Text::from(wanted.to_string())); } }
                 if !missing.is_empty() { found.push(incomplete(&named, &target_name, &missing, item.span.clone())); }
             },

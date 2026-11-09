@@ -72,8 +72,8 @@ pub(crate) fn check_core_call_owner(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(name.to_string()); }
     let last = parts.len() as i64 - 1;
-    let mut owner: String = String::from(""); let parts = parts;
-    let mut i: i64 = 0; let parts = parts;
+    let mut owner: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut i: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts;
     for part in parts.iter() {
         let part = *part;
         if i == last { break; }
@@ -722,7 +722,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
     if pathed {
         parameters = signature_type_variables(&signature);
         if parameters.len() != 1 { return None; }
@@ -748,7 +748,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
     let walked: String = nikaia_std::index::or(match state.walks_fields.get(&name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || "".into());
+    }, || "".into()); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     at = 0;
     for parameter in parameters.iter() {
         if *parameter == walked && at < filled.len() as i64 && !(*nikaia_std::index::get(&filled, nikaia_std::index::at(at))).is_unknown() { check_core_instantiate(state, world, &name, id_of(base) as i64, nikaia_std::index::get(&filled, nikaia_std::index::at(at)), false); }

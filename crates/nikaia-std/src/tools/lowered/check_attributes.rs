@@ -385,7 +385,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
         Expr::Variable(word, _) => {
             let word = *word;
             let variants: Vec<String> = nikaia_std::index::or(check_attributes_variants_of_type(&state, world, &field.ty), || vec![].into());
-            let spelled = world.here.text(word);
+            let spelled = world.here.text(word); #[allow(clippy::redundant_locals)] let variants = variants;
             for variant in variants.iter() { if check_attributes_same_word(variant, &spelled) { return; } }
         },
         _ => { },

@@ -40,7 +40,7 @@ pub(crate) fn emit_angled(parts: &[String]) -> String {
 
 pub(crate) fn emit_renamed_lifetime(text: &str, from: &str, to: &str) -> String {
     let parts = text.split(AsRef::<str>::as_ref(from)).collect::<Vec<_>>();
-    let mut out: String = String::from(""); let parts = parts;
+    let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
     let mut first = true;
     for part in parts.iter() {
         let part = *part;
@@ -210,7 +210,7 @@ impl EmitState {
                     None => None,
                 }).as_deref(), has_declared_by);
                 let recv: i64 = if receiver.is_some() { 1 } else { 0 };
-                let mut params: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut params: Vec<String> = vec![];
                 if receiver.is_some() {
                     let is_ref = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
                     let is_mut = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
@@ -291,8 +291,8 @@ impl EmitState {
                 let plain_signature = (emit_is_elided(&lifetimes) || emit_is_inner(&lifetimes)) && inner_views.is_none() && input_empty && result_is_a_view;
                 let result_borrows = self.emit_fn_borrows(&key);
                 let has_borrows = result_borrows.is_some();
-                let named: Vec<String> = nikaia_std::index::or(result_borrows, || vec![].into());
-                let mut lowered_views = 0;
+                let named: Vec<String> = nikaia_std::index::or(result_borrows, || vec![].into()); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                let mut lowered_views = 0; #[allow(clippy::redundant_locals)] let named = named;
                 let mut index: i64 = 0;
                 for each in args.iter() {
                     if self.emit_fn_lowered_as_a_view(world, &key, recv, index, each) { lowered_views += 1; }
@@ -370,10 +370,10 @@ impl EmitState {
                     }
                 }
                 let sig = EmitSig { key: nikaia_std::block::Text::from(key.to_string()), lifetimes, has_kept, kept: kept_lt, stores: stores.copy_owned(), inner_views, carries_input: carries_input.copy_owned(), source_kept, source_name };
-                let mut lengths: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut lengths: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 let mut runs: Vec<bool> = vec![];
-                let mut open: Vec<String> = vec![];
-                let mut at: i64 = 0;
+                #[allow(unused_mut)] let mut open: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
+                let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open;
                 for each in args.iter() {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count.is_none() && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array";
                     let lent_run = any && (self.emit_fn_changes(&key, &emit_text(world, each.name)) || self.emit_fn_lends(world, &key, at + recv));
@@ -386,8 +386,8 @@ impl EmitState {
                 }
                 let on_a_cycle = code_on_a_cycle(&self.code_cycle_graph, &self.own_contracts, &key);
                 walk.dyn_code = on_a_cycle;
-                let mut either_first: Vec<String> = vec![];
-                let mut k: i64 = 0;
+                #[allow(unused_mut)] let mut either_first: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
+                let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut either_first = either_first;
                 for each in args.iter() {
                     if emit_text(world, each.ty.name) == "meta::Field" {
                         k += 1;
@@ -464,7 +464,7 @@ impl EmitState {
                     } else { params.push(format!("{}: {}{}", local, reference, spelled)); }
                     k += 1;
                 }
-                let mut j: i64 = 0;
+                let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 for each in config.iter() {
                     let pname = emit_text(world, each.name);
                     let mut position = self.emit_how(&sig, each.name, &pname, false, false);
@@ -485,7 +485,7 @@ impl EmitState {
                     None => { },
                 }
                 if has_kept { params.push(format!("__keep: {}nikaia_std::tether::Keep", kept_lt.reference())); }
-                let mut declared: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut declared: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open; #[allow(unused_mut, clippy::redundant_locals)] let mut either_first = either_first;
                 if walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string()))) {
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     for each in open.iter() { declared.push(nikaia_std::block::Text::from(each.to_string())); }
@@ -499,7 +499,7 @@ impl EmitState {
                 if shared { declared.insert(0, String::from("'r")); }
                 if !either_first.is_empty() { declared.insert(0, String::from("'e")); }
                 walk.either_prelude = either_first.copy_owned();
-                let mut returned: String = String::from("");
+                let mut returned: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 match ret_type {
                     Some(ty) => {
                         if emit_text(world, ty.name) == "Self::dsl" {
@@ -532,14 +532,14 @@ impl EmitState {
                     },
                     None => { returned = String::from("()"); },
                 }
-                let mut channel: String = String::from("Box<dyn std::error::Error>");
+                let mut channel: String = String::from("Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 if !has_declared_by {
                     let mut borrows_any = receiver.is_some();
                     for each in args.iter() { if self.carries_a_view(world, &each.ty) { borrows_any = true; } }
                     let static_lifetimes = EmitLifetimes::Static;
                     channel = self.error_channel(world, &key, emit_is_elided(&lifetimes), &lifetimes.params(), &static_lifetimes.params(), borrows_any);
                 }
-                let returns_text = self.emit_fn_returns(&key);
+                let returns_text = self.emit_fn_returns(&key); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if shared && !source_nested && several_at.len() >= 2 && returns_text.is_some() {
                     let mut sources: Vec<String> = vec![];
                     for each in several_at.iter() {
@@ -589,15 +589,15 @@ impl EmitState {
                         None => { },
                     }
                 }
-                let mut ret: String = String::from("");
+                let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
                 let ended = emit_seeds_end(walk, begun.seeded, begun.base);
                 for each in ended.declared.iter() { declared.push(nikaia_std::block::Text::from(each.to_string())); }
                 let outer_unpinned = walk.unpinned;
                 walk.unpinned = ended.hidden > 0 || begun.in_seeded_impl;
-                let mut vis: String = String::from("");
+                let mut vis: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if nikaia_std::index::or(owner_bridged, || false) || is_public { vis = String::from("pub "); }
-                let mut emitted: String = escaped_name(&own_name);
+                let mut emitted: String = escaped_name(&own_name); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if depth == 0 && own_name == "main" && self.user_main(world).is_some() { emitted = String::from("__nikaia_main"); }
                 let mut copy = false;
                 match walk.specialising {
@@ -614,7 +614,7 @@ impl EmitState {
                 if emitted == "__nikaia_main" { host.set_main_params(&params); }
                 let mut declared_pausing = false;
                 if has_declared_by && !is_bridged { declared_pausing = self.emit_fn_declared_pausing(&format!("{}::{}", declared_by, own_name)); }
-                let mut pausing: String = String::from("");
+                let mut pausing: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if call_pauses(&self.own_contracts, &key) || declared_pausing || self.lambda_decides(&key) { pausing = String::from("async "); }
                 let only_in_tests = emit_fn_only_in_tests(world.words, &written.attributes);
                 if only_in_tests {
@@ -629,7 +629,7 @@ impl EmitState {
                     out.push("#[allow(clippy::too_many_arguments)]\n");
                     out.push(&pad);
                 }
-                let written_hint: Option<String> = check_attributes_inline_written(world.words, &written.attributes);
+                let written_hint: Option<String> = check_attributes_inline_written(world.words, &written.attributes); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 let mut hint: Option<String> = match written_hint.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
@@ -647,9 +647,9 @@ impl EmitState {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                let mut check_lines: String = String::from("");
+                let mut check_lines: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 for each in checks.iter() { check_lines.push_str(&emit_call_failed_check(each)); }
-                let mut pending: Option<String> = None;
+                let mut pending: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if !checks.is_empty() && !copy {
                     out.push("#[allow(non_snake_case)]\n");
                     out.push(&pad);
@@ -661,14 +661,14 @@ impl EmitState {
                     }
                     let mut call: String = nikaia_std::block::Text::from(emitted.to_string());
                     if receiver.is_some() { call = format!("self.{}", emitted); } else if has_owner { call = format!("Self::{}", emitted); }
-                    let mut names: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
                     for each in params.iter() {
                         if !each.ends_with("self") {
                             let head = nikaia_std::index::or(each.split(':').next(), || "").trim();
                             names.push(nikaia_std::block::Text::from(nikaia_std::index::or(head.strip_prefix("mut "), || std::convert::AsRef::<str>::as_ref(head)).to_string()));
                         }
                     }
-                    let mut entry: String = format!("{}#[allow(dead_code)]\n{}{}", pad, hint_line, pad);
+                    let mut entry: String = format!("{}#[allow(dead_code)]\n{}{}", pad, hint_line, pad); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                     if only_in_tests { entry = format!("{}#[cfg(test)]\n{}", pad, entry); }
                     entry.push_str(&emit_fn_signature(&vis, &pausing, &emitted, &declared, &params, &ret));
                     entry.push_str("{ ");
@@ -775,7 +775,7 @@ impl EmitState {
 pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type, returns: &str, sources: &[String]) -> Option<EmitSplit> {
     if !ty.generics.is_empty() || ty.is_view || returns.is_empty() { return None; }
     let slots = match state.view_slots.get(&emit_text(world, ty.name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let mut of_field: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    let mut of_field: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let slots = slots;
     for entry in returns.split("),") {
         let colon = match nikaia_std::search::find(&entry, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let path = nikaia_std::index::get(&entry, nikaia_std::index::at(0..colon)).trim();
@@ -809,7 +809,7 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
             next += 1;
         }
     }
-    let mut named: collections::BTreeMap<i64, String> = collections::BTreeMap::new();
+    let mut named: collections::BTreeMap<i64, String> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let slots = slots;
     let mut own: Vec<EmitPair> = vec![];
     at = 0;
     for param in sources.iter() {
@@ -823,7 +823,7 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
         own.push(EmitPair { first: nikaia_std::block::Text::from(param.to_string()), second: nikaia_std::block::Text::from(nikaia_std::index::or(named.get(&root), || "").to_string()) });
         at += 1;
     }
-    let mut fields: Vec<String> = vec![];
+    let mut fields: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
     for slot in slots.iter() {
         let params = match of_field.get(slot) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let root = emit_split_root(&group, emit_split_index(sources, nikaia_std::index::get(&params, 0)));

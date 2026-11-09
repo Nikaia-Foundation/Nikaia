@@ -215,7 +215,7 @@ pub(crate) fn padded(word: &str, width: i64) -> String {
 }
 
 pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTreeSet<String>, plans: &[BufferPlan], library: &Ledger) -> String {
-    let mut lines: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut lines: Vec<String> = vec![];
     if !texts.is_empty() {
         lines.push(String::from("text (declared `String`):\n"));
         for line in texts.iter() { lines.push(format!("    {}\n", line)); }
@@ -240,7 +240,7 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
             lines.push(format!("    {} `{}`{}\n", padded(&state, 9), held.position, from));
         }
     }
-    let mut handed: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    let mut handed: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     for plan in plans.iter() {
         let mut names: Vec<String> = vec![];
         for (at, keep) in plan.puts.iter() {
@@ -271,8 +271,8 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
                 said.push(format!("    {} lives {}\n", an_argument(&callee), keep_words(&keep)));
                 continue;
             }
-            let mut names: Vec<String> = vec![];
-            let found = handed.get(callee);
+            #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+            let found = handed.get(callee); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
             if found.is_some() {
                 let list = match found { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
                 for one in list.iter() { names.push(nikaia_std::block::Text::from(one.to_string())); }

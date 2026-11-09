@@ -2228,10 +2228,10 @@ pub(crate) fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Si
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return false };
     if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
-    let mut wanted: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut wanted: Vec<String> = vec![];
     rsrc_ty_names(&result, &mut wanted);
-    let mut generics = 0;
-    let mut receiver: Vec<String> = vec![];
+    let mut generics = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
+    let mut receiver: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
     rsrc_ty_names(&nikaia_std::index::get(&signature.params, 0).1, &mut receiver);
     for name in wanted.iter() {
         let generic = !rsrc_plain_name(name) && !name.contains("::") && !asked.own.types.contains_key(name) && !asked.library.types.contains_key(name);
@@ -2321,8 +2321,8 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             };
             let params = rsrc_params(asked, (receiver).as_ref(), args, config);
             let self_name: &'static str = "self";
-            let mut sources: Vec<String> = vec![];
-            let mut position: i64 = 0;
+            #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+            let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
             if receiver.is_some() {
                 position = 1;
                 if takes_a_view_of_itself(Option::as_ref(receiver)) { sources.push(nikaia_std::block::Text::from(self_name.to_string())); } else if subject.is_some() {
@@ -2340,7 +2340,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
                 declared.push((option.name, option.ty.clone()));
                 if (*option.ty.code).is_none() && brings_buffer(unit, asked, &option.ty) { sources.push(nikaia_std::block::Text::from(asked.names.resolve(option.name).to_string())); }
             }
-            let mut declared_views: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut declared_views: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
             for arg in args.iter() { if (*arg.ty.code).is_none() && brings_buffer(unit, asked, &arg.ty) { declared_views.push(nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string())); } }
             let walked_here = Here { subject: match subject {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -2376,7 +2376,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
                 size = now;
                 rounds += 1;
             }
-            let mut reach = rsrc_none();
+            let mut reach = rsrc_none(); #[allow(clippy::redundant_locals)] let params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources; #[allow(unused_mut, clippy::redundant_locals)] let mut declared_views = declared_views;
             for way in flow.ways.iter() { rsrc_join(&mut reach, &way.reach); }
             if !settled { reach.extend(sources.iter().cloned()); }
             let before = nikaia_std::index::or(match *nikaia_std::index::get(&known, &key) {
@@ -2491,7 +2491,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
             }
         }
     }
-    let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = vec![];
     for source in sources.iter() { if reach.contains(source) { named.push(nikaia_std::block::Text::from(source.to_string())); } }
     if trait_name.is_none() || written_from { return; }
     if declared_result.found && !declared_result.view {
@@ -2517,7 +2517,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
         }
         return;
     }
-    let mut allowed: String = String::from("");
+    let mut allowed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
     if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = nikaia_std::block::Text::from((*nikaia_std::index::get(&declared_views, 0)).to_string()); } else if declared_views.len() > 1 { return; }
     for source in named.iter() {
         if *source != allowed {
@@ -2630,8 +2630,8 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
                 None => None,
             };
             let mut places = rsrc_none();
-            let mut sources: Vec<String> = vec![];
-            let mut position: i64 = 0;
+            #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
+            let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
             if receiver.is_some() {
                 position = 1;
                 let taken = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -2670,7 +2670,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
                 size = now;
                 rounds += 1;
             }
-            let mut stores: Vec<String> = vec![];
+            let mut stores: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
             for (place, kept) in flow.stores.iter() {
                 let reached = rsrc_plain(kept);
                 for source in sources.iter() { if reached.contains(source) { stores.push(format!("{}:{}", place, source)); } }

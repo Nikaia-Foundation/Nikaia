@@ -34,23 +34,23 @@ impl CheckState {
             message = format!("`{}` held more than {} bytes at once while the program was built.", bound, limit);
             note = String::from("What it holds is counted as it asks for it, the same on every machine.");
         } else if kind == "depth" { message = format!("`{}` went more than {} calls deep while the program was built.", bound, limit); }
-        let mut notes: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
         if !path.is_empty() {
             let mut shown: Vec<String> = vec![];
             for step in path.split(" > ").collect::<Vec<_>>() { if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&("…")) { shown.push(nikaia_std::block::Text::from(step.to_string())); } else if AsRef::<str>::as_ref(&(step)) == AsRef::<str>::as_ref(&(value_fn)) { shown.push(format!("`{}`", bound)); } else { shown.push(format!("`{}`", step)); } }
             notes.push(format!("It was in {}.", nikaia_std::block::Text::from(shown.join(" > "))));
         }
         notes.push(note);
-        let mut help: String = String::from("Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.");
+        let mut help: String = String::from("Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`."); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         if self.computing_default { help = String::from("Look for a loop or a recursion that does not end, or make the option a `T?` and compute the value in the body."); }
         self.findings.push(check_refusal("NK1152", span, message, notes, Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_constant_built_from_itself(&mut self, bound: &str, ring: &[String], span: &Span) {
-        let mut sorted: Vec<String> = ring.copy_owned();
+        #[allow(unused_mut)] let mut sorted: Vec<String> = ring.copy_owned();
         sorted.sort();
-        let mut unique: Vec<String> = vec![];
+        let mut unique: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
         for name in sorted.iter() { if unique.is_empty() || *nikaia_std::index::get(&unique, nikaia_std::index::at(unique.len() as i64 - 1)) != *name { unique.push(nikaia_std::block::Text::from(name.to_string())); } }
         if self.said_rings.contains(&unique) { return; }
         self.said_rings.insert(unique);

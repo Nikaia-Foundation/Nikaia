@@ -178,13 +178,14 @@ impl EmitState {
 
     /// **A list of views bound again after what it views** (#490,
     /// `view_list_rebinds`): declared after it, the list is dropped first on
-    /// every way out of the scope, a panic's included.
+    /// every way out of the scope, a panic's included. The binding is the
+    /// point, which Clippy's `redundant_locals` does not see.
     pub fn emit_view_list_rebinds(ref self, mut out: EmitOut, start: i64) {
         for (name, changing) in self.facts.view_list_rebinds.get(start)?.clone() ?? [] {
             if changing {
-                out.push(f" #[allow(unused_mut)] let mut {name} = {name};")
+                out.push(f" #[allow(unused_mut, clippy::redundant_locals)] let mut {name} = {name};")
             } else {
-                out.push(f" let {name} = {name};")
+                out.push(f" #[allow(clippy::redundant_locals)] let {name} = {name};")
             }
         }
     }

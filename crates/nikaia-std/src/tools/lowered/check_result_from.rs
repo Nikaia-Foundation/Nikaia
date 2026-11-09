@@ -80,9 +80,9 @@ pub(crate) fn result_from_note() -> String { String::from("A result's `from` nam
 pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, span: &Span) -> Option<Finding> {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if code.result_from.is_empty() { return None; }
-    let mut parameters: Vec<String> = vec![];
-    let mut shown: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut shown: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     for parameter in ty.generics.iter() {
         let mut text = written_type(names, parameter);
         let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *nikaia_std::index::get(&code.param_names, (at) as usize) } else { None };
@@ -98,7 +98,7 @@ pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, s
         at += 1;
     }
     let joined = nikaia_std::block::Text::from(shown.join(", "));
-    let mut function = format!("fn({})", joined);
+    let mut function = format!("fn({})", joined); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
     let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     function = format!("{} -> {}", function, written_type(names, result));
     for source in code.result_from.iter() {
@@ -122,7 +122,7 @@ pub(crate) fn result_from_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ite
             let parameters = result_from_parameters(view, (receiver).as_ref(), args);
             if result_from_names(view, &key, &item.span, ret_from, &parameters, out) { return; }
             let named: Vec<String> = ret_from.iter().map(|source| { view.text(*source) }).collect::<Vec<_>>();
-            let sources = match *nikaia_std::index::get(&reached, &key) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let sources = match *nikaia_std::index::get(&reached, &key) { Some(__nikaia_value) => __nikaia_value, None => return }; #[allow(clippy::redundant_locals)] let named = named;
             for source in sources.iter() {
                 if !nikaia_std::list::contains(&named, &source) {
                     let written = nikaia_std::block::Text::from(named.join(" | "));

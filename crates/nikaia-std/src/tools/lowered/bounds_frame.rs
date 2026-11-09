@@ -109,7 +109,7 @@ pub(crate) fn frame_of_body(receiver: Option<&Receiver>, args: &[FnArg], body: &
     for place in changed.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();
         if pieces.len() != 3 { continue; }
-        let list = *nikaia_std::index::get(&pieces, 0); let pieces = pieces;
+        let list = *nikaia_std::index::get(&pieces, 0);
         if roots.contains_key(&path_root(list)) {
             let mapped = frame_rooted(list, &roots);
             if frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else { out.elements.insert(format!("{}||{}", mapped, *nikaia_std::index::get(&pieces, 2))); }
@@ -252,7 +252,7 @@ pub fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Op
     for place in frame.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();
         if pieces.len() != 3 { continue; }
-        let list = match frame_onto(*nikaia_std::index::get(&pieces, 0), receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue }; let pieces = pieces;
+        let list = match frame_onto(*nikaia_std::index::get(&pieces, 0), receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue };
         out.elements.insert(format!("{}|{}|{}", list, *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 2)));
     }
     out

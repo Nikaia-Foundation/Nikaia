@@ -334,8 +334,8 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
             _ => { },
         }
     }
-    let mut classes = MapClasses { parent: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), lets: vec![], slots: vec![], unread: false, escaped: vec![] };
-    let mut counter = 0;
+    #[allow(unused_mut)] let mut classes = MapClasses { parent: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), lets: vec![], slots: vec![], unread: false, escaped: vec![] };
+    let mut counter = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut classes = classes;
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, generics, args, body, is_public, is_extern, .. } => {
@@ -378,7 +378,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
         let every = classes.slots.copy_owned();
         for slot in every.iter() { mc_poison(&mut classes, slot); }
     }
-    let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut bad: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut classes = classes;
     for node in classes.poisoned.iter() { bad.insert(mc_find(&classes, node)); }
     let mut plan = MapPlan { lets: collections::BTreeSet::new(), slots: collections::BTreeSet::new(), escaped: collections::BTreeSet::new() };
     plan.escaped.extend(classes.escaped.iter().cloned());
@@ -400,9 +400,9 @@ pub(crate) fn tm_remember(name: Option<winnow_grammar::Symbol>, words: &winnow_g
 pub(crate) fn tm_walk_function(fname: &str, alone: bool, args: &[FnArg], body: &Block, words: &winnow_grammar::InternerContext, library: &Ledger, env: &MapEnv, classes: &mut MapClasses) {
     let ret = format!("r:{}", fname);
     let mut first: collections::BTreeMap<winnow_grammar::Symbol, i64> = collections::BTreeMap::new();
-    let mut walk = MapWalk { nodes: vec![], ret: nikaia_std::block::Text::from(ret.to_string()), scopes: vec![], given: vec![], made: vec![], kept: vec![], escapes: collections::BTreeSet::new(), bound: collections::BTreeMap::new(), unread: false };
+    #[allow(unused_mut)] let mut walk = MapWalk { nodes: vec![], ret: nikaia_std::block::Text::from(ret.to_string()), scopes: vec![], given: vec![], made: vec![], kept: vec![], escapes: collections::BTreeSet::new(), bound: collections::BTreeMap::new(), unread: false };
     if alone { classes.slots.push(nikaia_std::block::Text::from(ret.to_string())); } else { mc_poison(classes, &ret); }
-    let mut at = 0;
+    let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut walk = walk;
     for arg in args.iter() {
         let node = format!("p:{}:{}", fname, at);
         if alone { classes.slots.push(nikaia_std::block::Text::from(node.to_string())); } else { mc_poison(classes, &node); }

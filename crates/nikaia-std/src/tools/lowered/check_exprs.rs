@@ -147,9 +147,9 @@ impl CheckState {
             Ty::Tuple(ref parts) => {
                 what = String::from("a tuple");
                 kinds = "a tuple has";
-                let mut names: Vec<String> = vec![];
-                let mut holes: Vec<String> = vec![];
-                let mut index: i64 = 0;
+                #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+                #[allow(unused_mut)] let mut holes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+                let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut holes = holes;
                 while index < parts.len() as i64 {
                     let letter = check_exprs_part_name(index);
                     holes.push(format!("`{{{}}}`", letter));
@@ -279,7 +279,7 @@ impl CheckState {
         let written = written_expression(world.words, read);
         let message = format!("The two sides of `??` don't match: the left is a view of the `{}` in the map, the fallback a value of its own.", held.text());
         let notes: Vec<String> = vec![String::from("The map keeps its values, so reading one gives a view of it, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back.")];
-        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.text(), written);
+        let help = format!("Copy the map's value when you need a `{}` of your own: `{}?.clone() ?? …`.", held.text(), written); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

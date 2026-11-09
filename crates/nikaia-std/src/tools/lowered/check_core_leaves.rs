@@ -24,9 +24,9 @@ pub fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state: &mut 
     if ty.is_unknown() || copies_plainly(&ty) { return; }
     if read && is_text_type(&ty) { return; }
     let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
-    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field);
+    let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field); #[allow(clippy::redundant_locals)] let notes = notes;
     if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", ty.text(), field); }
-    let mut message: String = format!("You can't give away `self.{}` here: this method only borrows `self`.", field);
+    let mut message: String = format!("You can't give away `self.{}` here: this method only borrows `self`.", field); #[allow(clippy::redundant_locals)] let notes = notes;
     if state.changing_self { message = format!("You can't give away `self.{}` here: this method takes `mut self`, which changes `self` in place but doesn't own it.", field); }
     state.findings.push(check_refusal("NK1131", span, message, notes, Some(help)));
 }
@@ -81,8 +81,8 @@ pub(crate) fn check_core_leaves_list_of_a_read(read: &str) -> Option<String> {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_leaves_an_element_read_given_away(state: &mut CheckState, what: &str, list: &str, read: &str, copy: &str, part: bool, span: &Span) {
     let notes: Vec<String> = vec![format!("`{}` reads an element `{}` keeps, and what `{}` keeps is lent, whether `{}` is owned here or borrowed. Giving it away by value would take it out of `{}`, and Nikaia never copies behind your back.", read, list, list, list, list)];
-    let help: String = format!("Write `{}.clone()` for a copy.", copy);
-    let whose: String = if part { format!("part of an element of `{}`", list) } else { format!("an element of `{}`", list) };
+    let help: String = format!("Write `{}.clone()` for a copy.", copy); #[allow(clippy::redundant_locals)] let notes = notes;
+    let whose: String = if part { format!("part of an element of `{}`", list) } else { format!("an element of `{}`", list) }; #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is {}, which keeps it.", what, whose), notes, Some(help)));
 }
 
@@ -105,7 +105,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
             if a_let_view {
                 let place = state.a_view_described(&written);
                 let notes: Vec<String> = vec![format!("`{}` is {}, and the place belongs to its owner: a change through `{}` reaches it. Giving it away whole would take it out of something this function doesn't own.", written, place, written)];
-                let help: String = format!("Write `{}.clone()` for a copy, or take the value out of its owner (`remove`).", written);
+                let help: String = format!("Write `{}.clone()` for a copy, or take the value out of its owner (`remove`).", written); #[allow(clippy::redundant_locals)] let notes = notes;
                 state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is {}, which is only borrowed.", written, place), notes, Some(help)));
                 return;
             }
@@ -116,7 +116,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
                 return;
             }
             let notes: Vec<String> = vec![format!("`{}` is the element of `{}` itself, and `{}` belongs to whoever lent it. Giving the element away would take a piece out of something this function doesn't own.", written, list, list)];
-            let help: String = format!("Write `{}.clone()` for a copy, or take the elements out of `{}` with `{}.drain()`.", written, list, list);
+            let help: String = format!("Write `{}.clone()` for a copy, or take the elements out of `{}` with `{}.drain()`.", written, list, list); #[allow(clippy::redundant_locals)] let notes = notes;
             state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: it is an element of `{}`, which is only borrowed.", written, list), notes, Some(help)));
             return;
         },
@@ -216,7 +216,7 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
     let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
-    let mut help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
+    let mut help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path); #[allow(clippy::redundant_locals)] let notes = notes;
     if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or declare the parameter `ref {}` if it only reads it.", path, ty.text()); }
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
 }

@@ -127,7 +127,7 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
         for (key, contract) in ledger.functions.iter() {
             if contract.ensures.is_empty() || out.contains_key(key) { continue; }
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
@@ -135,7 +135,7 @@ pub fn bm_ensured(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeS
                     chars.push(bm_char(ty));
                 }
             }
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             names.extend(params.iter().cloned());
             names.insert(String::from("result"));
             let mut conditions: Vec<Vec<SolverTerm>> = vec![];
@@ -159,7 +159,7 @@ pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTree
             if contract.requires.is_empty() || seen.contains(key) { continue; }
             seen.insert(nikaia_std::block::Text::from(key.to_string()));
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
@@ -167,7 +167,7 @@ pub fn bm_required(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTree
                     chars.push(bm_char(ty));
                 }
             }
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             for name in params.iter() {
                 names.insert(nikaia_std::block::Text::from(name.to_string()));
                 names.insert(length_of(name));
@@ -192,9 +192,9 @@ pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<
         for (key, contract) in ledger.functions.iter() {
             if contract.ensures_each.is_empty() || out.contains_key(key) { continue; }
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut params: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
                     params.push(nikaia_std::block::Text::from(name.to_string()));
@@ -202,7 +202,7 @@ pub fn bm_each(ledgers: &[&Ledger], read: &impl Fn(&str, &collections::BTreeSet<
                     names.insert(nikaia_std::block::Text::from(name.to_string()));
                 }
             }
-            let mut options: Vec<(String, String)> = vec![];
+            let mut options: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
             for option in signature.config.iter() {
                 options.push((nikaia_std::block::Text::from(option.name.to_string()), nikaia_std::block::Text::from(option.default.to_string())));
                 names.insert(nikaia_std::block::Text::from(option.name.to_string()));

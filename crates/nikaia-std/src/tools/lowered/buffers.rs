@@ -759,8 +759,8 @@ pub(crate) fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
     let segments: Vec<&str> = callee.split("::").collect::<Vec<_>>();
     if segments.len() < 2 { return false; }
     let variant = *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1));
-    let mut owner: String = String::from(""); let segments = segments;
-    let mut k: i64 = 0; let segments = segments;
+    let mut owner: String = String::from("");
+    let mut k: i64 = 0;
     for segment in segments.iter() {
         let segment = *segment;
         if k == segments.len() as i64 - 1 { break; }
@@ -1607,7 +1607,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
     for (known, way) in walk.escapes.iter() { if known.0 == id.0 && known.1 == id.1 { ways.insert(escape_word(way), way.clone()); } }
     let mut leaves = false;
     let mut task = false;
-    let mut outer: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut outer: Vec<String> = vec![];
     for (_, way) in ways.iter() {
         plan.escapes.push((source.clone(), way.clone()));
         match way {
@@ -1617,7 +1617,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
             Escape::Outer(name) => { outer.push(nikaia_std::block::Text::from(name.to_string())); },
         }
     }
-    let mut shedding: Vec<String> = vec![];
+    let mut shedding: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut outer = outer;
     for keeper in outer.iter() { if sheds_across(keeper, path, walk) { shedding.push(nikaia_std::block::Text::from(keeper.to_string())); } }
     if task && leaves {
         plan.refusals.push(source_refusal(source, "is passed to a task and also returned from this function.", "The task may outlive the caller, or the caller the task, so neither can be the one that keeps the data alive.", "Give the task a copy with `.clone()`, or pass the task only what it needs and return the rest."));
@@ -1746,15 +1746,15 @@ pub(crate) fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_
     let mut found: Vec<Finding> = vec![];
     for keeper in plan.element_keepers.iter() {
         let written = keeper_type(keeper, walk);
-        let mut whys: Vec<String> = vec![];
-        let held = not_held_maybe((written).as_ref(), ask);
+        #[allow(unused_mut)] let mut whys: Vec<String> = vec![];
+        let held = not_held_maybe((written).as_ref(), ask); #[allow(unused_mut, clippy::redundant_locals)] let mut whys = whys;
         if held.is_some() { whys.push(nikaia_std::index::or(held, || "".into())); }
         if walk.struct_puts.contains_key(keeper) {
-            let mut seen: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut seen: Vec<String> = vec![];
             let named = nikaia_std::index::or(match *nikaia_std::index::get(&walk.struct_puts, keeper) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || "".into());
+            }, || "".into()); #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
             let why = ask.context.struct_not_held(ask.names, &named, &mut seen);
             if why.is_some() { whys.push(nikaia_std::index::or(why, || "".into())); }
         }

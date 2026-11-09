@@ -545,7 +545,7 @@ pub(crate) fn check_core_flow_same_part(world: &CheckWorld<'_, '_, '_, '_, '_, '
     let b: Vec<String> = match other {
         MatchPattern::Path(p) => check_core_flow_path_words(world, p),
         _ => return false,
-    };
+    }; #[allow(clippy::redundant_locals)] let a = a;
     if a.is_empty() || (a.len() as i64) != b.len() as i64 { return false; }
     for at in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (at) as usize) != *nikaia_std::index::get(&b, (at) as usize) { return false; } }
     true

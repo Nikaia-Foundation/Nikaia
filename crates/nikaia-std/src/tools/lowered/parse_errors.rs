@@ -205,14 +205,14 @@ pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
 }
 
 pub(crate) fn what_was_expected(error: &Failure) -> String {
-    let mut listed: Vec<String> = vec![];
-    let from = if_empty(&error.expected, &error.also);
+    #[allow(unused_mut)] let mut listed: Vec<String> = vec![];
+    let from = if_empty(&error.expected, &error.also); #[allow(unused_mut, clippy::redundant_locals)] let mut listed = listed;
     for e in from.iter() {
         if e == "whitespace" || e == "block comment" || e == "`//`" || error.has_found && e == "end of input" { continue; }
         listed.push(nikaia_std::block::Text::from(e.to_string()));
     }
     let expected = sorted_words(&listed);
-    let mut wanted: Option<String> = None;
+    let mut wanted: Option<String> = None; #[allow(clippy::redundant_locals)] let expected = expected;
     if expected.len() == 1 { wanted = Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&expected, 0)).to_string())); } else if expected.len() >= 2 && expected.len() <= 4 {
         let mut head: Vec<String> = vec![];
         for k in 0..expected.len() as i64 - 1 { head.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&expected, (k) as usize)).to_string())); }
@@ -251,9 +251,9 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
         message = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
         if parts.len() > 1 { help = Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string())); }
     }
-    let mut notes: Vec<String> = vec![];
-    let said_word = nikaia_std::block::Text::from(error.found.to_string());
-    let reserved = reserved_word_note(error.has_found, &error.found, &c, at, stops_at);
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
+    let said_word = nikaia_std::block::Text::from(error.found.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    let reserved = reserved_word_note(error.has_found, &error.found, &c, at, stops_at); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if reserved.is_some() {
         if error.has_message { notes.push(nikaia_std::index::or(reserved, || "".into())); } else {
             notes.push(nikaia_std::block::Text::from(message.to_string()));
@@ -261,9 +261,9 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
             help = Some(format!("Choose another name, such as `{}_`.", said_word));
         }
     }
-    let lambda = an_effect_on_a_lambda_note(&said_word, &before);
+    let lambda = an_effect_on_a_lambda_note(&said_word, &before); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if lambda.is_some() { notes.push(nikaia_std::index::or(lambda, || "".into())); }
-    let ref_note = the_spelling_ref_replaced_note(&said_word);
+    let ref_note = the_spelling_ref_replaced_note(&said_word); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if ref_note.is_some() { notes.push(nikaia_std::index::or(ref_note, || "".into())); }
     if error.has_found {
         let pairs = vec![coalesce_fallback_note(&said_word, &before)];
@@ -274,7 +274,7 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
             }
         }
     }
-    let mut word: String = String::from("");
+    let mut word: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if error.has_found && slice(&c, at, c.len() as i64).starts_with(AsRef::<str>::as_ref(&said_word)) { word = said_word; }
     ParseReading { at, word, message, notes, help }
 }

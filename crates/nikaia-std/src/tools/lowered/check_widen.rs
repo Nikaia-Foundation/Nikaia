@@ -300,10 +300,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
-        let mut variables: Vec<String> = vec![];
-        let mut types: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut variables: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut types: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables;
         let mut places: Vec<i64> = vec![];
-        let mut at: i64 = 0;
+        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
         while at < wanted.len() as i64 && at < found.len() as i64 {
             let here: i64 = at;
             at = at + 1;

@@ -494,9 +494,9 @@ impl<'a> FbIndex<'a, 'a, 'a> {
     }
     pub(crate) fn whole_fields(&self, name: &str) -> Vec<&FbField<'a>> {
         #[allow(unused_mut)] let mut out: Vec<&FbField<'_>> = vec![];
-        let held = self.structs.get(name); #[allow(unused_mut)] let mut out = out;
+        let held = self.structs.get(name); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
         if held.is_none() { return out; }
-        let fields = match held { Some(__nikaia_value) => __nikaia_value, None => return out }; #[allow(unused_mut)] let mut out = out;
+        let fields = match held { Some(__nikaia_value) => __nikaia_value, None => return out };
         for f in fields.iter() { if f.ty.args.is_empty() && fb_is_whole(&nikaia_std::block::Text::from(f.ty.name.to_string())) { out.push(f); } }
         out
     }
@@ -1017,7 +1017,7 @@ impl FbMerge {
                 let mut cur = first;
                 #[allow(unused_mut)] let mut modify: Vec<&Expr> = vec![];
                 let mut inserted = false;
-                let mut target: Option<&Expr> = None; #[allow(unused_mut)] let mut modify = modify;
+                let mut target: Option<&Expr> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut modify = modify;
                 while target.is_none() {
                     match cur {
                         Expr::MethodCall { receiver, method, args, .. } => {
@@ -1037,7 +1037,7 @@ impl FbMerge {
                         _ => { return false; },
                     }
                 }
-                let into_field = match target { Some(__nikaia_value) => __nikaia_value, None => return false }; #[allow(unused_mut)] let mut modify = modify;
+                let into_field = match target { Some(__nikaia_value) => __nikaia_value, None => return false }; #[allow(unused_mut, clippy::redundant_locals)] let mut modify = modify;
                 match into_field {
                     Expr::Field { base, name, .. } => {
                         let base = nikaia_std::boxed::open(base); let name = *name;
@@ -1347,7 +1347,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     region.extend(merge.reached.iter().cloned());
     let me = fb_fold_owner(rule_at);
     let mut outside: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    let mut queue: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut queue: Vec<String> = vec![];
     for at in region.iter() {
         let at = nikaia_std::num::value(at);
         if ix.implicit.contains(&at) {
@@ -1363,7 +1363,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
         let inside = if owner >= 0 { region.contains(&owner) } else { owner == me };
         if !inside { for n in names.iter() { queue.push(nikaia_std::block::Text::from(n.to_string())); } }
     }
-    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while !queue.is_empty() {
         let name = match queue.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if seen.contains(&name) { continue; }

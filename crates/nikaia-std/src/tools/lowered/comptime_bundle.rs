@@ -288,7 +288,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("{}: {}", nikaia_std::fs::path::display(&(scratch)), error) }, &"comptime_bundle_run")); },
     };
     let binary = nikaia_std::fs::path::join(&(scratch), std::path::Path::new(&("run")));
-    let mut args: Vec<String> = vec![String::from("--edition=2024"), String::from("--crate-name"), String::from("comptime"), String::from("--crate-type"), String::from("bin"), String::from("-C"), String::from("opt-level=0"), String::from("-C"), String::from("overflow-checks=on"), String::from("-C"), String::from("debug-assertions=off"), String::from("-C"), String::from("prefer-dynamic"), String::from("-A"), String::from("warnings"), String::from("--extern"), format!("nikaia_bundle={}", nikaia_std::fs::path::display(&(bundle.dylib)))];
+    #[allow(unused_mut)] let mut args: Vec<String> = vec![String::from("--edition=2024"), String::from("--crate-name"), String::from("comptime"), String::from("--crate-type"), String::from("bin"), String::from("-C"), String::from("opt-level=0"), String::from("-C"), String::from("overflow-checks=on"), String::from("-C"), String::from("debug-assertions=off"), String::from("-C"), String::from("prefer-dynamic"), String::from("-A"), String::from("warnings"), String::from("--extern"), format!("nikaia_bundle={}", nikaia_std::fs::path::display(&(bundle.dylib)))];
     for (crate_name, rlib) in bundle.rlibs.iter() {
         args.push(String::from("--extern"));
         args.push(format!("{}={}", crate_name, nikaia_std::fs::path::display(&(rlib))));
@@ -298,7 +298,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
     args.push(String::from("-o"));
     args.push(nikaia_std::fs::path::display(&(binary)));
     args.push(nikaia_std::fs::path::display(&(source)));
-    let rustc = nikaia_std::index::or(env::var("RUSTC"), || "rustc".into());
+    let rustc = nikaia_std::index::or(env::var("RUSTC"), || "rustc".into()); #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
     let compiled = match process::run(&rustc, args, &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(CheckWall::DidNotBuild { detail: format!("running rustc: {}", error) }, &"comptime_bundle_run")) },

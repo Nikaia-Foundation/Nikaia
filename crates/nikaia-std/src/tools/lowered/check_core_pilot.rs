@@ -217,7 +217,7 @@ pub fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut Check
             if !nullable { return; }
             let slot = format!("{}[{}]", check_walked_written(base, world.words), check_walked_written(index, world.words));
             let notes: Vec<String> = vec![String::from("A missing key is normal, not a bug, so this line has to say what a missing key counts as.")];
-            let help: String = format!("Write it out with a fallback for a missing key: `{} = ({} ?? 0) + 1`.", slot, slot);
+            let help: String = format!("Write it out with a fallback for a missing key: `{} = ({} ?? 0) + 1`.", slot, slot); #[allow(clippy::redundant_locals)] let notes = notes;
             state.findings.push(check_refusal("NK1162", span, format!("`{}` reads the map before writing it, and the key might not be there yet.", slot), notes, Some(help)));
         },
         _ => { return; },
@@ -332,7 +332,7 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
     let ty = check_core_expr(state, world, host, value, span);
     if ty.is_a_view() && what == "handed back" {
         let notes: Vec<String> = vec![nikaia_std::block::Text::from(format!("`mut {}: {}` changes the caller's view in place, so handing it back hands back a view of the caller's view.", name, ty.text()).to_string())];
-        let help: String = format!("Take `{}: {}` without `mut`, and walk a local of its own: `let mut at = {}`, then `return at`.", name, ty.text(), name);
+        let help: String = format!("Take `{}: {}` without `mut`, and walk a local of its own: `let mut at = {}`, then `return at`.", name, ty.text(), name); #[allow(clippy::redundant_locals)] let notes = notes;
         state.findings.push(check_refusal("NK1131", span, format!("You can't hand back `{}` here: a `mut` parameter that is a view is only borrowed.", name), notes, Some(help)));
         return;
     }
@@ -340,14 +340,14 @@ pub fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckStat
     let mut way: &'static str = "";
     if what == "handed back" { way = " to return"; }
     let notes: Vec<String> = vec![format!("`mut {}` is passed as `ref mut`, so the caller's `{}` is changed in place and stays the caller's. Giving it away would take it from them.", name, ty.text())];
-    let help: String = format!("Write `{}.clone()` for a copy{}, or drop the `mut` if the function is meant to use up its value.", name, way);
+    let help: String = format!("Write `{}.clone()` for a copy{}, or drop the `mut` if the function is meant to use up its value.", name, way); #[allow(clippy::redundant_locals)] let notes = notes;
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: a `mut` parameter is only borrowed.", name), notes, Some(help)));
 }
 
 pub(crate) fn check_core_grammar_input_refused(key: &str, given: &Ty, span: &Span) -> CheckFinding {
     let message = format!("`{}` parses a `String` or a `Bytes`, and is handed a `{}`.", key, given.text());
     let notes: Vec<String> = vec![String::from("A grammar reads text or bytes; the argument decides which.")];
-    let help: String = String::from("Hand it the text or the bytes to parse.");
+    let help: String = String::from("Hand it the text or the bytes to parse."); #[allow(clippy::redundant_locals)] let notes = notes;
     check_refusal("NK1282", span, message, notes, Some(help))
 }
 
@@ -687,9 +687,9 @@ pub fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             state.a_kind_arm_names_no_case(&written, span);
             continue;
         }
-        let mut bounds: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut bounds: Vec<String> = vec![];
         if case == "Struct" || case == "Enum" { bounds.push(nikaia_std::block::Text::from(case.to_string())); }
-        let mut held: Vec<(String, Option<Vec<String>>)> = vec![];
+        let mut held: Vec<(String, Option<Vec<String>>)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut bounds = bounds;
         for name in names.iter() {
             if name == "_" { continue; }
             held.push((nikaia_std::block::Text::from(name.to_string()), match state.type_parameters.get(name) {

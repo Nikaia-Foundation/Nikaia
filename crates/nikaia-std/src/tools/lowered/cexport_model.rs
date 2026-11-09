@@ -519,7 +519,7 @@ pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ha
 }
 
 pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
-    let mut names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     for list in params.iter() {
         let mut depth = 0;
         let mut current: String = String::from("");
@@ -534,7 +534,7 @@ pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
         }
         names.push(nikaia_std::block::Text::from(current.trim().to_string()));
     }
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for param in names.iter() {
         let pieces: Vec<&str> = param.split(':').collect::<Vec<_>>();
         out.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).trim().to_string()));
@@ -579,7 +579,7 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                             let mut at: i64 = 0;
                             for field in types.iter() {
                                 #[allow(unused_mut)] let mut places: Vec<&'static str> = vec![];
-                                let mut other: i64 = 0; #[allow(unused_mut)] let mut places = places;
+                                let mut other: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut places = places;
                                 while ((other) as usize) < types.len() {
                                     if other == at { places.push("__nikaia_v"); } else { places.push("_"); }
                                     other += 1;

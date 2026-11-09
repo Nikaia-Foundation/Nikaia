@@ -580,8 +580,8 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
         }
     }
     let mut founds: Vec<Ty> = vec![];
-    let mut integers: Vec<String> = vec![];
-    let mut j: i64 = 0;
+    #[allow(unused_mut)] let mut integers: Vec<String> = vec![];
+    let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut integers = integers;
     for item in items.iter() {
         let mut found: Ty = (*nikaia_std::index::get(&walked, (j) as usize)).clone();
         match item {
@@ -654,7 +654,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
             state.a_list_whose_elements_disagree("a float", &first.text(), "an integer", &Ty::Unknown, span);
         }
     }
-    let common = check_core_args_plain_name(&agreed);
+    let common = check_core_args_plain_name(&agreed); #[allow(unused_mut, clippy::redundant_locals)] let mut integers = integers;
     if common != "" && check_core_args_an_integer(&common) {
         let mut m: i64 = 0;
         for item in items.iter() {

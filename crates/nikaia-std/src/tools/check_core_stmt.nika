@@ -2499,7 +2499,9 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
 ///   `facts.view_list_rebinds`, and the emitter binds the list again right
 ///   after it, so the list is declared after what it views and dropped
 ///   first, on every way out of the scope. A drop at the last use would not
-///   do: a panic before it drops the list after what it views.
+///   do: a panic before it drops the list after what it views. So is a
+///   value that holds a list of text (`check_core_holds_a_list_of_text`),
+///   whose text the lowering may make views.
 ///
 /// Asked before the block's names go, while the bindings' types are still in
 /// scope; a name bound twice in the block is left alone. An assignment over a
@@ -2513,7 +2515,8 @@ fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block
             Stmt::Let { names, value, .. } => {
                 if names.len() == 1 {
                     let name = f"{world.words.resolve(names[0])}"
-                    if check_core_view_list_bound_once(world, block, name) && check_core_a_list_of_views(state, name) {
+                    let views = check_core_a_list_of_views(state, name)
+                    if check_core_view_list_bound_once(world, block, name) && (views || check_core_holds_a_list_of_text(state, name)) {
                         let mut last = at
                         let mut sources: collections::BTreeSet[String] = collections::BTreeSet()
                         names_in(value, world.words, sources)
@@ -2538,13 +2541,14 @@ fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block
                             }
                             later += 1
                         }
-                        if needed && !check_core_stmt_is_a_jump(block.stmts[last].node) {
+                        if views && needed && !check_core_stmt_is_a_jump(block.stmts[last].node) {
                             let key = block.stmts[last].span.start as i64
                             let mut ended = state.facts.view_list_drops.get(key)?.clone() ?? []
                             ended.push(name.clone())
                             state.facts.view_list_drops.insert(key, ended)
                         }
-                        check_core_view_list_rebound(state, world, block, name, at, last, stmt.span.start as i64)
+                        let viewed_ty = if views { check_core_viewed_name(state, name) } else { "String" }
+                        check_core_view_list_rebound(state, world, block, name, at, last, stmt.span.start as i64, viewed_ty)
                     }
                 }
             },
@@ -2562,8 +2566,11 @@ fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block
 /// `let` said `mut`, and the list's `let` (at `start`) in
 /// `facts.view_list_rebound`. What it may view is a binding whose type names
 /// the type its elements view.
-fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, block: ref Block, name: ref String, at: i64, last: i64, start: i64) sync {
-    let viewed_ty = check_core_viewed_name(state, name)
+///
+/// **Not past a `let` that reads the list** into anything but a number, a
+/// `bool` or a `char`: a view of it, or a lambda over it, may still be read,
+/// and the list cannot move while it is.
+fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, block: ref Block, name: ref String, at: i64, last: i64, start: i64, viewed_ty: ref String) sync {
     if viewed_ty == "" {
         return
     }
@@ -2583,7 +2590,16 @@ fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, bl
     later = at + 1
     while later < last {
         match block.stmts[later].node {
-            Stmt::Let { names, .. } => {
+            Stmt::Let { names, value, .. } => {
+                let mut reads: collections::BTreeSet[String] = collections::BTreeSet()
+                names_in(value, world.words, reads)
+                if reads.contains(name) {
+                    for one in names {
+                        if !check_core_a_plain_binding(state, f"{world.words.resolve(one)}") {
+                            return
+                        }
+                    }
+                }
                 let mut viewed = false
                 for one in names {
                     let named = f"{world.words.resolve(one)}"
@@ -2634,6 +2650,45 @@ fn check_core_view_list_assigned(mut state: CheckState, world: ref CheckWorld, t
             state.facts.view_list_assigns.insert(at)
             return
         }
+    }
+}
+
+/// Whether `name` is bound, in this scope, to a number, a `bool` or a `char`.
+fn check_core_a_plain_binding(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return a_copy_by_value(found.ty)
+}
+
+/// **Whether `name` is bound to a value that holds a list of text**: a
+/// `Vec[String]`, or a struct of this program with such a field, whose text
+/// the lowering may make views (ADR-282) that the list holds until it is
+/// dropped.
+fn check_core_holds_a_list_of_text(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return check_core_ty_holds_a_list_of_text(state, found.ty, 3)
+}
+
+fn check_core_ty_holds_a_list_of_text(state: ref CheckState, ty: ref Ty, depth: i64) -> bool sync {
+    if depth == 0 {
+        return false
+    }
+    match ty {
+        Ty::Named { name, args, view } => {
+            if view {
+                return false
+            }
+            if name == "Vec" && args.len() == 1 && check_core_ty_last_name(args[0]) == "String" {
+                return true
+            }
+            for field in state.structs.get(name)?.clone() ?? [] {
+                if check_core_ty_holds_a_list_of_text(state, field.ty, depth - 1) {
+                    return true
+                }
+            }
+            return false
+        },
+        Ty::Nullable(inner) => return check_core_ty_holds_a_list_of_text(state, inner, depth),
+        else => return false,
     }
 }
 

@@ -655,7 +655,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
             }
         }
     }
-    let mut run_code: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut run_code: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(clippy::redundant_locals)] let keeps = keeps;
     for local in frame.iter() {
         match &local.ty {
             Ty::Fn { .. } => { if !nikaia_std::list::contains(&keeps, &local.name) { run_code.insert(nikaia_std::block::Text::from(local.name.to_string())); } },

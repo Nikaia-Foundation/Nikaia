@@ -190,9 +190,9 @@ pub fn parse(written: &str) -> Ty {
 }
 
 pub fn split_args(written: &str) -> Vec<String> {
-    let mut parts: Vec<String> = vec![];
-    let mut depth = 0;
-    let mut current: String = String::from("");
+    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+    let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for c in written.chars() {
         if c == '[' || c == '(' {
             depth += 1;
@@ -1306,8 +1306,8 @@ pub fn method_index(ledger: &Ledger) -> MethodIndex {
 pub fn method_keys(index: &MethodIndex, method: &str) -> Vec<String> {
     let last = nikaia_std::index::or(method.rsplit("::").next(), || "");
     let bucket = match *nikaia_std::index::get(&index.keys, last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    let suffix = format!("::{}", method);
-    let mut out: Vec<String> = vec![];
+    let suffix = format!("::{}", method); #[allow(clippy::redundant_locals)] let bucket = bucket;
+    let mut out: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let bucket = bucket;
     for key in bucket.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { out.push(nikaia_std::block::Text::from(key.to_string())); } }
     out
 }

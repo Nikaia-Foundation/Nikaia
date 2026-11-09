@@ -310,9 +310,9 @@ impl CheckState {
             Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return,
         };
-        let mut numeric: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut numeric: Vec<String> = vec![];
         if kind == "struct" && self.structs.contains_key(&name) { numeric = arith_numeric_fields(match *nikaia_std::index::get(&self.structs, &name) { Some(__nikaia_value) => __nikaia_value, None => return }); }
-        let mut field: Option<String> = None;
+        let mut field: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut numeric = numeric;
         if numeric.len() == 1 && declared_with_no_arithmetic(&world.here, other).is_none() {
             let bound = arith_a_variable(side, world);
             if bound.is_some() { field = Some(format!("{}.{}", nikaia_std::index::or(bound.as_deref(), || ""), *nikaia_std::index::get(&numeric, 0))); }

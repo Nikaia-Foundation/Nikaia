@@ -6,12 +6,12 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
-        let mut named: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut named: Vec<String> = vec![];
         for param in params.iter() {
             let param = *param;
             named.push(format!("`{}`", world.words.resolve(param)));
         }
-        let first = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&params, 0)).to_string());
+        let first = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&params, 0)).to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
         self.findings.push(check_refusal("NK2103", span, format!("This task's lambda takes {}, but a task isn't given any arguments.", nikaia_std::block::Text::from(named.join(", "))), vec![String::from("`spawn` starts a body without arguments; the body takes what it needs from the code around it.")], Some(format!("Remove the argument list: `spawn fn {{ … }}`. If `{}` is a value from here, declare it before the task and use it inside.", first))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

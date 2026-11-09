@@ -341,8 +341,8 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
             let declared = nikaia_std::index::or(payloads(ty, variant), || vec![].into());
-            let mut written: Vec<String> = vec![];
-            let mut at: i64 = 0;
+            #[allow(unused_mut)] let mut written: Vec<String> = vec![];
+            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
             for held in payload.iter() {
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -356,8 +356,8 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
                 Ty::Tuple(ref each) => each.copy_owned(),
                 _ => vec![],
             };
-            let mut written: Vec<String> = vec![];
-            let mut at: i64 = 0;
+            #[allow(unused_mut)] let mut written: Vec<String> = vec![];
+            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
             for held in parts.iter() {
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -391,10 +391,10 @@ impl CheckState {
             borrow = "&";
         }
         let some_held: Option<Ty> = Some(held.clone());
-        let mut keys: Vec<String> = vec![];
-        let mut values: Vec<String> = vec![];
-        let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-        let mut at: i64 = 0;
+        #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut values: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
+        let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
+        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
         for pair in pairs.iter() {
             let parts: Vec<BuildValue> = match pair {
                 BuildValue::Tuple(inner) => inner.copy_owned(),
@@ -414,14 +414,14 @@ impl CheckState {
             at = at + 1;
         }
         let table = match build(&keys) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
-        let mut disps: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut disps: Vec<String> = vec![];
         for (d1, d2) in table.disps.iter() {
             let d1 = nikaia_std::num::value(d1);let d2 = nikaia_std::num::value(d2);
             disps.push(format!("({}, {})", d1, d2));
         }
-        let mut written_keys: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut written_keys: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps;
         for key in table.keys.iter() { written_keys.push(format!("\"{}\"", as_a_literal(key))); }
-        let mut written_values: Vec<String> = vec![];
+        let mut written_values: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values; #[allow(unused_mut, clippy::redundant_locals)] let mut disps = disps; #[allow(unused_mut, clippy::redundant_locals)] let mut written_keys = written_keys;
         for place in table.order.iter() {
             let place = nikaia_std::num::value(place);
             written_values.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&values, nikaia_std::index::at(place))).to_string()));

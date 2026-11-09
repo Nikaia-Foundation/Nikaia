@@ -323,17 +323,17 @@ pub(crate) fn check_claim_refused(held: Option<&ClaimHeld>) -> Option<String> {
 }
 
 pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, derived: &[String], colour: bool, refuses: bool) -> String {
-    let mut refused: Vec<String> = vec![];
-    let mut at_run_time: Vec<String> = vec![];
-    let mut arrives: Vec<String> = vec![];
-    let mut by_the_test: Vec<String> = vec![];
-    let mut proved: Vec<String> = vec![];
-    let mut through_loops = 0;
-    let mut preconditions: Vec<String> = vec![];
-    let mut assumed: Vec<String> = vec![];
-    let mut mains: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut line = 1;
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut refused: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut at_run_time: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused;
+    #[allow(unused_mut)] let mut arrives: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time;
+    #[allow(unused_mut)] let mut by_the_test: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives;
+    #[allow(unused_mut)] let mut proved: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test;
+    let mut through_loops = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved;
+    #[allow(unused_mut)] let mut preconditions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved;
+    #[allow(unused_mut)] let mut assumed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions;
+    let mut mains: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
+    let mut line = 1; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     for (key, claim) in claims.iter() {
         let mut start = key.0;
         if start > source.len() as i64 { start = source.len() as i64; }
@@ -376,12 +376,12 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     }
     let unproved = refused.len() as i64 + at_run_time.len() as i64 + by_the_test.len() as i64;
     let done = proved.len() as i64 + preconditions.len() as i64;
-    let mut looped: String = String::from("");
+    let mut looped: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions;
     if through_loops > 0 { looped = format!(", through a loop {}", through_loops); }
-    let mut vouched: String = String::from("");
+    let mut vouched: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     if !assumed.is_empty() { vouched = format!("; assumed {}", assumed.len() as i64); }
     if !derived.is_empty() { vouched = format!("{}; derived from the callers {}", vouched, derived.len() as i64); }
-    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unproved + arrives.len() as i64 + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched);
+    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unproved + arrives.len() as i64 + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched); #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     let mut red: Vec<String> = vec![];
     red.extend(refused);
     red.extend(at_run_time);

@@ -52,15 +52,15 @@ impl CheckState {
             Item::Struct { name, generics, fields, .. } => {
                 let name = *name;
                 if generics.is_empty() { return; }
-                let mut order: Vec<String> = vec![];
-                let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+                #[allow(unused_mut)] let mut order: Vec<String> = vec![];
+                let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
                 for generic in generics.iter() {
                     order.push(other.text(generic.name));
                     parameters.insert(other.text(generic.name));
                 }
                 let mut held: Vec<FieldContract> = vec![];
                 for field in fields.iter() { held.push(FieldContract { name: other.text(field.name), ty: written_ty(other.words, other.aliases, &field.ty).parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] }); }
-                let named = other.text(name);
+                let named = other.text(name); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
                 self.struct_parameters.insert(nikaia_std::block::Text::from(named.to_string()), order);
                 self.structs.insert(named, held);
             },
@@ -70,8 +70,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
-        let mut order: Vec<String> = vec![];
-        let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
+        #[allow(unused_mut)] let mut order: Vec<String> = vec![];
+        let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
         for generic in generics.iter() {
             order.push(world.here.text(generic.name));
             parameters.insert(world.here.text(generic.name));
@@ -82,7 +82,7 @@ impl CheckState {
             let ty = self.collect_declared(world, beside, &field.ty, &field.span);
             held.push(FieldContract { name: world.here.text(field.name), ty: ty.parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] });
         }
-        let own = world.here.text(name);
+        let own = world.here.text(name); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
         self.nameable(&own, span, "a struct");
         if !order.is_empty() { self.struct_parameters.insert(nikaia_std::block::Text::from(own.to_string()), order); }
         self.structs.insert(own, held);

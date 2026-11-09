@@ -123,7 +123,7 @@ impl CheckState {
         };
         let index = pieces.len() == 2;
         if !index { self.facts.plain_reaches.insert(fact_key(coalesce)); }
-        let message = format!("`{}` always has a value, so `??` has nothing to replace.", shown);
+        let message = format!("`{}` always has a value, so `??` has nothing to replace.", shown); #[allow(clippy::redundant_locals)] let pieces = pieces;
         if index {
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `??` only replaces a `null`.";
             self.findings.push(check_refusal("NK1211", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0)))));
@@ -152,7 +152,7 @@ impl CheckState {
         if !a_name || !moves(&owned) || !self.takes_away(world, &owned) { return; }
         let message = format!("The two sides of `??` don't match: the left is a `{}`, the fallback a `{}`.", viewed.text(), owned.text());
         let notes: Vec<String> = vec![String::from("A view and the value it points into are different types, and `??` has to give back one type."), String::from("Nikaia never makes a copy behind your back, so it can't make the two agree on its own.")];
-        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text());
+        let help = format!("Make the fallback a view too - a text literal already is one, so `?? \"…\"` works and costs nothing - or, if you need a `{}`, put the value in a name of its own first.", owned.text()); #[allow(clippy::redundant_locals)] let notes = notes;
         self.findings.push(check_refusal("NK1185", span, message, notes, Some(help)));
     }
 }

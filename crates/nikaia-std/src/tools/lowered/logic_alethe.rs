@@ -283,7 +283,7 @@ pub(crate) fn lg_choice(arena: &mut TermArena, proof: &mut LgProof, chosen: &[Lg
     if !indexed.ors.is_empty() { return None; }
     let steps = match refutation { Some(__nikaia_value) => __nikaia_value, None => return None }.steps.copy_owned();
     let bounds = indexed.atoms.copy_owned();
-    let mut source_text: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut source_text: Vec<String> = vec![];
     let mut source_weight: Vec<i64> = vec![];
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
@@ -313,10 +313,10 @@ pub(crate) fn lg_choice(arena: &mut TermArena, proof: &mut LgProof, chosen: &[Lg
         }
     }
     if (source_text.len() as i64) != bounds.len() as i64 { return None; }
-    let mut lemmas: Vec<String> = vec![];
-    let mut used: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut lemmas: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut source_text = source_text;
+    #[allow(unused_mut)] let mut used: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut source_text = source_text; #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas;
     let mut made_lin: Vec<LgLin> = vec![];
-    let mut made_atom: Vec<String> = vec![];
+    let mut made_atom: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut source_text = source_text; #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas; #[allow(unused_mut, clippy::redundant_locals)] let mut used = used;
     for step in steps.iter() {
         let step = *step;
         let made = match lg_lemma_of(&step, &bounds, &source_text, &source_weight, &made_lin, &made_atom, &mut used) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -326,7 +326,7 @@ pub(crate) fn lg_choice(arena: &mut TermArena, proof: &mut LgProof, chosen: &[Lg
     }
     if made_lin.is_empty() { return None; }
     let last = (*nikaia_std::index::get(&made_lin, nikaia_std::index::at(made_lin.len() as i64 - 1))).clone();
-    let last_atom = nikaia_std::block::Text::from((*nikaia_std::index::get(&made_atom, nikaia_std::index::at(made_atom.len() as i64 - 1))).to_string());
+    let last_atom = nikaia_std::block::Text::from((*nikaia_std::index::get(&made_atom, nikaia_std::index::at(made_atom.len() as i64 - 1))).to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas;
     if !last.terms.is_empty() || last.constant <= 0 { return None; }
     lemmas.push(proof.step(&format!("(cl (not {})) :rule la_generic :args (1)", last_atom)));
     let step = proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&used), nikaia_std::block::Text::from(lemmas.join(" "))));
@@ -396,8 +396,8 @@ pub(crate) fn lg_hulled(arena: &mut TermArena, proof: &mut LgProof, clause: &LgC
     }
     for bound in bounds.iter() {
         let hull = lg_bound_term(arena, bound);
-        let mut lemmas: Vec<String> = vec![];
-        let mut lits: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut lemmas: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut lits: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas;
         let mut complete = true;
         for part in clause.parts.iter() {
             let part = *part;
@@ -407,13 +407,13 @@ pub(crate) fn lg_hulled(arena: &mut TermArena, proof: &mut LgProof, clause: &LgC
                 break;
             }
             let below = match found { Some(__nikaia_value) => __nikaia_value, None => return out };
-            let pivot = lg_negation(&lg_literal(&arena, &part));
+            let pivot = lg_negation(&lg_literal(&arena, &part)); #[allow(clippy::redundant_locals)] let below = below;
             for lit in below.lits.iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(nikaia_std::block::Text::from(lit.to_string())); } }
             lemmas.push(nikaia_std::block::Text::from(below.step.to_string()));
         }
         if !complete { continue; }
         if (lemmas.len() as i64) != clause.parts.len() as i64 { continue; }
-        let mut premises: Vec<String> = vec![nikaia_std::block::Text::from(clause.step.to_string())];
+        let mut premises: Vec<String> = vec![nikaia_std::block::Text::from(clause.step.to_string())]; #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
         for lemma in lemmas.iter() { premises.push(nikaia_std::block::Text::from(lemma.to_string())); }
         let step = proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&lits), nikaia_std::block::Text::from(premises.join(" "))));
         if lits.len() == 1 && *nikaia_std::index::get(&lits, 0) == lg_term(&arena, hull) { out.push(LgClause { step, parts: vec![LgPart { id: hull, positive: true }] }); }
@@ -436,28 +436,28 @@ pub(crate) fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPar
     if refuted.is_some() { return std::convert::identity(refuted); }
     if depth >= search.clauses.len() as i64 { return None; }
     let clause = LgClause { step: nikaia_std::block::Text::from(nikaia_std::index::get(&search.clauses, nikaia_std::index::at(depth)).step.to_string()), parts: nikaia_std::index::get(&search.clauses, nikaia_std::index::at(depth)).parts.copy_owned() };
-    let mut steps: Vec<String> = vec![];
-    let mut all_lits: Vec<Vec<String>> = vec![];
+    #[allow(unused_mut)] let mut steps: Vec<String> = vec![];
+    let mut all_lits: Vec<Vec<String>> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
     for part in clause.parts.iter() {
         let part = *part;
         chosen.push(LgPart { id: part.id, positive: part.positive });
         let found = lg_below(search, depth + 1, chosen);
         chosen.pop();
         let here = match found { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let pivot = lg_negation(&lg_literal(&search.arena, &part));
+        let pivot = lg_negation(&lg_literal(&search.arena, &part)); #[allow(clippy::redundant_locals)] let here = here;
         if !lg_has(&here.lits, &pivot) { return Some(here); }
         steps.push(nikaia_std::block::Text::from(here.step.to_string()));
         all_lits.push(here.lits.copy_owned());
     }
-    let mut lits: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut lits: Vec<String> = vec![];
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
     for part in clause.parts.iter() {
         let part = *part;
         let pivot = lg_negation(&lg_literal(&search.arena, &part));
         for lit in (*nikaia_std::index::get(&all_lits, (at) as usize)).iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(nikaia_std::block::Text::from(lit.to_string())); } }
         at += 1;
     }
-    let mut premises: Vec<String> = vec![nikaia_std::block::Text::from(clause.step.to_string())];
+    let mut premises: Vec<String> = vec![nikaia_std::block::Text::from(clause.step.to_string())]; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
     for one in steps.iter() { premises.push(nikaia_std::block::Text::from(one.to_string())); }
     let step = search.proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&lits), nikaia_std::block::Text::from(premises.join(" "))));
     Some(LgBelow { step, lits })

@@ -297,9 +297,9 @@ pub(crate) fn host_ring_graph(view: &ParsedView<'_, '_, '_, '_, '_, '_>, comptim
                     graph.insert(format!("f:{}", named), out);
                     labels.insert(format!("f:{}", named), nikaia_std::block::Text::from(named.to_string()));
                     for option in config.iter() {
-                        let mut read: Vec<String> = vec![];
+                        #[allow(unused_mut)] let mut read: Vec<String> = vec![];
                         for expr in visited_in_expr(&option.default) { host_ring_edge(view, expr, comptimes, options, &mut read); }
-                        let key = format!("d:{}:{}", named, view.text(option.name));
+                        let key = format!("d:{}:{}", named, view.text(option.name)); #[allow(unused_mut, clippy::redundant_locals)] let mut read = read;
                         graph.insert(nikaia_std::block::Text::from(key.to_string()), read);
                         labels.insert(key, nikaia_std::block::Text::from(named.to_string()));
                     }
@@ -356,15 +356,15 @@ pub(crate) fn host_ring(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &
     let mut options: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     if world.here_at < 0 { host_ring_names(&world.here, &mut comptimes, &mut options); }
     for file in world.beside.iter() { host_ring_names(file, &mut comptimes, &mut options); }
-    let mut start: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut start: Vec<String> = vec![];
     for expr in visited_in_expr(value) { host_ring_edge(&world.here, expr, &comptimes, &options, &mut start); }
     if start.is_empty() { return vec![]; }
-    let mut graph: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    let mut labels: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut graph: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut start = start;
+    let mut labels: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut start = start;
     if world.here_at < 0 { host_ring_graph(&world.here, &comptimes, &options, &mut graph, &mut labels); }
     for file in world.beside.iter() { host_ring_graph(file, &comptimes, &options, &mut graph, &mut labels); }
-    let mut path: Vec<String> = vec![];
-    let mut done: collections::BTreeSet<String> = collections::BTreeSet::new();
+    #[allow(unused_mut)] let mut path: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut start = start;
+    let mut done: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut start = start; #[allow(unused_mut, clippy::redundant_locals)] let mut path = path;
     for step in start.iter() {
         let ring = host_ring_reach(&graph, &labels, step, &mut path, &mut done);
         if !ring.is_empty() { return ring; }

@@ -192,11 +192,11 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     let members = host.drive_members()?;
     let order = project_members_dependencies_first(&members);
     let empty: &'static str = "";
-    let mut rust: Vec<String> = members.iter().map(|m| { nikaia_std::block::Text::from(empty.to_string()) }).collect::<Vec<_>>();
-    let mut header: Option<String> = None;
-    let mut python: Option<String> = None;
-    let mut node: Option<String> = None;
-    let mut link_flags: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut rust: Vec<String> = members.iter().map(|m| { nikaia_std::block::Text::from(empty.to_string()) }).collect::<Vec<_>>();
+    let mut header: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
+    let mut python: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
+    let mut node: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
+    #[allow(unused_mut)] let mut link_flags: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut rust = rust;
     for at in order.iter() {
         let at = nikaia_std::num::value(at);
         let member = (*nikaia_std::index::get(&members, nikaia_std::index::at(at))).clone();
@@ -229,7 +229,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         None => { },
         Some(ref dir) => { project_drive_make_dir(dir)?; },
     }
-    let (build, backend) = host.choices();
+    let (build, backend) = host.choices(); #[allow(unused_mut, clippy::redundant_locals)] let mut link_flags = link_flags;
     host.write_if_changed(&switches, &format!("{}\n{}\n{}\n{}\n", build, backend, nikaia_std::block::Text::from(link_flags.join(" ")), host.compiler()))?;
     match host.toolchain_is_new_enough() {
         None => { },
@@ -237,7 +237,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     }
     let triple = host.target_triple();
     if nikaia_std::index::or(host.host_triple(), || "".into()) != triple && !host.toolchain_can_build_for(&triple) { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(project_drive_no_std_for(&triple)), &"project_drive_drive_to")); }
-    let mut build_args: Vec<String> = vec![String::from("--target"), triple];
+    #[allow(unused_mut)] let mut build_args: Vec<String> = vec![String::from("--target"), triple];
     let manifest = host.write_workspace(&rust)?;
     if subcommand == "run" && host.runs_without_cargo(&link_flags) {
         match host.compile_fast(nikaia_std::index::get(&rust, 0))? {
@@ -253,8 +253,8 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     }
     let shared = nikaia_std::index::or(env::var("CARGO_TARGET_DIR"), || "".into()) == "";
     let env = project_drive_cargo_env(host, &link_flags, no_cache, shared, project_members_fetched_text(&members))?;
-    let mut unset: Vec<String> = vec![];
-    let mut env = env;
+    #[allow(unused_mut)] let mut unset: Vec<String> = vec![];
+    let mut env = env; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
     match host.cpu_rustflags()? {
         None => { },
         Some(flags) => {
@@ -267,7 +267,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
     if library && subcommand == "run" { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Refused(String::from("This package is built as a library (`artifact = \"c-library\"`), and a library has nothing to run: `nikaia build` makes it, and a C program calls it.")), &"project_drive_drive_to")); }
     if library && header.is_none() { return Err(nikaia_std::error::raise(ProjectDriveRefusal::Failed(cx_nothing_exported()), &"project_drive_drive_to")); }
     if subcommand == "run" || subcommand == "check" { build_args.push(String::from("--quiet")); }
-    let verb = if subcommand == "check" { "check" } else { "build" };
+    let verb = if subcommand == "check" { "check" } else { "build" }; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
     let (built_code, messages) = host.cargo_messages(verb, &build_args)?;
     let mut code = built_code;
     host.settle();

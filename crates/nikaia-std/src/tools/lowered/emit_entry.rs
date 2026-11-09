@@ -66,9 +66,9 @@ impl EmitState {
             }, || Signature::empty());
             options = signature.config.copy_owned();
         }
-        let mut params: Vec<String> = vec![];
-        let mut reads: String = String::from("");
-        let mut passed: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut params: Vec<String> = vec![];
+        let mut reads: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+        #[allow(unused_mut)] let mut passed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         for index in 0..args.len() as i64 {
             let arg = nikaia_std::index::get(&args, (index) as usize);
             let param = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
@@ -116,7 +116,7 @@ impl EmitState {
             if at < passing.len() as i64 { passed.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
         }
-        let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), nikaia_std::block::Text::from(params.join(", ")));
+        let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), nikaia_std::block::Text::from(params.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
         text = format!("{}    let __nikaia_words = nikaia_std::cli::Words::read(&__NIKAIA_INTERFACE);\n{}", text, reads);
         for check in checks.iter() {
             let mut operands: String = String::from("");
@@ -233,8 +233,8 @@ pub(crate) fn words_vec(ty: &Type, words: &winnow_grammar::InternerContext) -> b
 pub(crate) fn main_claim(written: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || std::convert::AsRef::<str>::as_ref(written)).to_string()) }
 
 pub(crate) fn main_claims_of(checks: &[PreconditionCheck], param: &str) -> String {
-    let mut claims: Vec<String> = vec![];
-    let length = format!("{}.", param);
+    #[allow(unused_mut)] let mut claims: Vec<String> = vec![];
+    let length = format!("{}.", param); #[allow(unused_mut, clippy::redundant_locals)] let mut claims = claims;
     for check in checks.iter() {
         let mut reads = false;
         for (name, _) in check.operands.iter() { if name == param || name.starts_with(&*length) { reads = true; } }

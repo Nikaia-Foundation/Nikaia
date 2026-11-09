@@ -50,8 +50,8 @@ pub fn cli_commands_test<H: CliTestHost>(host: &H, root: &std::path::Path, user_
         Ok(_) => {},
         Err(error) => { return Err(nikaia_std::error::raise(CliCommandsRefusal::Failed(format!("making a place for the test builds: {}", error)), &"cli_commands_test")); },
     };
-    let mut test_builds: Vec<(String, fs::Path)> = vec![];
-    let mut programs: Vec<(String, fs::Path)> = vec![];
+    let mut test_builds: Vec<(String, fs::Path)> = vec![]; #[allow(clippy::redundant_locals)] let settings = settings;
+    let mut programs: Vec<(String, fs::Path)> = vec![]; #[allow(clippy::redundant_locals)] let settings = settings;
     for setting in settings.iter() {
         for (wanted, testing) in [(blocks, true), (outputs, false)] {
             if !wanted { continue; }

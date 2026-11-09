@@ -57,7 +57,7 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, na
 pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-    let mut target: String = String::from(""); let parts = parts;
+    let mut target: String = String::from("");
     if parts.len() > 1 { target = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string()); }
     for item in view.items.iter() {
         if target == "" { if item_takes_either(view, &item.node, &own, at) { return true; } } else {
@@ -435,8 +435,8 @@ impl CheckState {
     pub fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let mut variants: Vec<String> = vec![];
-        let declared = item_declared_variants(view, on);
+        #[allow(unused_mut)] let mut variants: Vec<String> = vec![];
+        let declared = item_declared_variants(view, on); #[allow(unused_mut, clippy::redundant_locals)] let mut variants = variants;
         if declared.is_some() { variants = match declared { Some(__nikaia_value) => __nikaia_value, None => return None }; } else {
             let own = world.own.types.get(on);
             if own.is_some() { variants = item_contract_variants(match own { Some(__nikaia_value) => __nikaia_value, None => return None }); } else {
@@ -496,12 +496,12 @@ impl CheckState {
         declared = declared || self.grammars.contains_key(&head) || self.variant_owner.contains_key(&head) || self.type_parameters.contains_key(&head) || self.opaque_handles.contains(&head) || self.foreign_names.contains(&head) || world.own.types.contains_key(&head) || world.library.types.contains_key(&head) || self.modules.contains(&head) || self.std_modules.contains(&head);
         declared = declared || item_ledger_has(world.own, &prefix) || item_ledger_has(world.library, &prefix) || imports_a_package(view, &head);
         if declared { return; }
-        let mut heads: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut heads: Vec<String> = vec![];
         for m in self.std_modules.iter() { heads.push(nikaia_std::block::Text::from(m.to_string())); }
         for m in self.modules.iter() { heads.push(nikaia_std::block::Text::from(m.to_string())); }
         for (k, _) in self.structs.iter() { heads.push(nikaia_std::block::Text::from(k.to_string())); }
         for (k, _) in self.enums.iter() { heads.push(nikaia_std::block::Text::from(k.to_string())); }
-        let mut near: Option<String> = None;
+        let mut near: Option<String> = None; #[allow(unused_mut, clippy::redundant_locals)] let mut heads = heads;
         for known in heads.iter() { if near.is_none() && distance(&head, known) == 1 { near = Some(nikaia_std::block::Text::from(known.to_string())); } }
         if near.is_none() { near = nearest_name(&head, &heads); }
         let mut help: String = format!("If `{}` is a package or a `std` module, write `use {}` at the top of the file - for a package, also add it to `[dependencies]` in `nikaia.toml`; for a Rust crate, run `nikaia describe {}`. If it is a type, declare it in this package.", head, head, head);

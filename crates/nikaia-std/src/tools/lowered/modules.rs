@@ -61,9 +61,9 @@ pub(crate) fn alias_of(names: &winnow_grammar::InternerContext, item: &Item) -> 
 }
 
 pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, paused_by_code: &collections::BTreeMap<String, Vec<String>>) -> String {
-    let mut never: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut never: Vec<String> = vec![];
     for (key, contract) in contracts.functions.iter() { if !of_a_dependency(key, theirs) && contract.public && inferred_sync(&contract.sync_claim) { never.push(format!("`{}`", key)); } }
-    let mut through: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut through: Vec<String> = vec![];
     for (key, lambdas) in paused_by_code.iter() {
         let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if of_a_dependency(key, theirs) || !contract.public || !no_sync(&contract.sync_claim) { continue; }
@@ -71,7 +71,7 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         for lambda in lambdas.iter() { if !nikaia_std::list::contains(&contract.keeps, &lambda) { named.push(nikaia_std::block::Text::from(lambda.to_string())); } }
         if (named.len() as i64) == lambdas.len() as i64 { through.push(format!("`{}` (`sync({})`)", key, nikaia_std::block::Text::from(named.join(", ")))); }
     }
-    let mut out: String = String::from("");
+    let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut never = never; #[allow(unused_mut, clippy::redundant_locals)] let mut through = through;
     if !never.is_empty() {
         let one = never.len() == 1;
         let count = if one { String::from("") } else { format!("{} ", never.len() as i64) };
@@ -102,8 +102,8 @@ pub(crate) fn inferred_sync(claim: &Sync) -> bool { matches!(claim, Sync::Inferr
 pub(crate) fn no_sync(claim: &Sync) -> bool { matches!(claim, Sync::No) }
 
 pub fn pause_path(chain: &[String]) -> String {
-    let mut steps: Vec<String> = vec![];
-    let mut k: i64 = 0;
+    #[allow(unused_mut)] let mut steps: Vec<String> = vec![];
+    let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
     while ((k + 1) as usize) < chain.len() {
         steps.push(format!("`{}` calls `{}`", *nikaia_std::index::get(&chain, (k) as usize), *nikaia_std::index::get(&chain, (k + 1) as usize)));
         k += 1;
@@ -747,7 +747,7 @@ pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, pa
 
 pub(crate) fn modules_one_namespace<H: ModulesHost>(units: &[ModulesUnit], host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
     let paths: Vec<String> = units.iter().map(|unit| { nikaia_std::fs::path::display(&(unit.path)) }).collect::<Vec<_>>();
-    let declared: Vec<Vec<(String, Span)>> = units.iter().map(|unit| { host.declared(unit.parsed) }).collect::<Vec<_>>();
+    let declared: Vec<Vec<(String, Span)>> = units.iter().map(|unit| { host.declared(unit.parsed) }).collect::<Vec<_>>(); #[allow(clippy::redundant_locals)] let paths = paths;
     let (at, finding) = match declared_once(&paths, &declared) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
     return Err(nikaia_std::error::throwing(ModulesRefusal::Found { path: nikaia_std::block::Text::from((*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_string()), source: nikaia_std::block::Text::from(nikaia_std::index::get(&units, nikaia_std::index::at(at)).source.to_string()), finding }, &"modules_one_namespace"));
 }

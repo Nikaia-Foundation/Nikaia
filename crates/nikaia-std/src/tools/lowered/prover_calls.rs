@@ -15,9 +15,9 @@ pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext,
             Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
                 let can_throw = *can_throw; let name = *name;
                 if receiver.is_none() && named_as((name).as_ref(), words, wanted) {
-                    let mut params: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut params: Vec<String> = vec![];
                     for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
-                    let mut options: Vec<(String, Expr)> = vec![];
+                    let mut options: Vec<(String, Expr)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                     for option in config.iter() {
                         params.push(nikaia_std::block::Text::from(words.resolve(option.name).to_string()));
                         options.push((nikaia_std::block::Text::from(words.resolve(option.name).to_string()), option.default.clone()));
@@ -42,9 +42,9 @@ pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, ow
                             Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
                                 let can_throw = *can_throw; let name = *name;
                                 if receiver.is_some() && named_as((name).as_ref(), words, wanted) {
-                                    let mut params: Vec<String> = vec![];
+                                    #[allow(unused_mut)] let mut params: Vec<String> = vec![];
                                     for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
-                                    let mut options: Vec<(String, Expr)> = vec![];
+                                    let mut options: Vec<(String, Expr)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                                     for option in config.iter() {
                                         params.push(nikaia_std::block::Text::from(words.resolve(option.name).to_string()));
                                         options.push((nikaia_std::block::Text::from(words.resolve(option.name).to_string()), option.default.clone()));

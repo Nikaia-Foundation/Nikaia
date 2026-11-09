@@ -157,13 +157,13 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
         params.push((self_name, Ty::Named { name: owner, args: vec![], view: subject.is_ref }));
         mutates = subject.is_mut && subject.is_ref;
     }
-    let mut mutable: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut mutable: Vec<String> = vec![];
     for arg in args.iter() {
         let arg_name = nikaia_std::block::Text::from(names.resolve(arg.name).to_string());
         params.push((nikaia_std::block::Text::from(arg_name.to_string()), written_ty(names, aliases, &arg.ty).parameterise(&parameters)));
         if arg.mutable { mutable.push(arg_name); }
     }
-    let mut bounds: Vec<(String, Vec<String>)> = vec![];
+    let mut bounds: Vec<(String, Vec<String>)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut mutable = mutable;
     for generic in generics.iter() {
         if generic.bounds.is_empty() { continue; }
         let mut written: Vec<String> = vec![];

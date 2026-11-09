@@ -114,8 +114,8 @@ pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_,
                 Ty::Tuple(each) => each.copy_owned(),
                 _ => vec![],
             };
-            let mut each: Vec<String> = vec![];
-            let mut at: i64 = 0;
+            #[allow(unused_mut)] let mut each: Vec<String> = vec![];
+            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
             for part in parts.iter() {
                 let part_found: Ty = nikaia_std::index::or(nth_type(&declared, at), || Ty::Unknown).clone();
                 let one: Option<BuildValue> = Some(part.clone());

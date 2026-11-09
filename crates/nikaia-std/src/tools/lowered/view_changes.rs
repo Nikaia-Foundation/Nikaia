@@ -529,9 +529,9 @@ pub(crate) fn vc_place_view(at: &Span, name: &str, place: &Expr, outer: &[VcView
 }
 
 pub(crate) fn vc_mut_view(at: &Span, name: &str, place: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
-    let mut view = match vc_place_view(at, name, place, outer, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    #[allow(unused_mut)] let mut view = match vc_place_view(at, name, place, outer, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
     view.exclusive = true;
-    let root = match root_of(ask.names, place) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let root = match root_of(ask.names, place) { Some(__nikaia_value) => __nikaia_value, None => return None }; #[allow(unused_mut, clippy::redundant_locals)] let mut view = view;
     view.from = format!("`{}` is a mutable view into `{}`", name, root);
     Some(view)
 }
@@ -851,14 +851,14 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
         None => { },
         Some(used) => { labels.push(vc_label(used.clone(), &viewer, format!("`{}` is read here", viewer), false)); },
     }
-    let mut notes: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
     match *nikaia_std::index::get(&view.way_out, root) {
         None => { },
         Some(way) => { notes.push(nikaia_std::block::Text::from(way.to_string())); },
     }
     let close = if head.ends_with('(') { ")" } else { ", .. }" };
     let part = vc_part_of(head);
-    let mut help = format!("Hand over a copy: `{}{}.clone(){}`", head, root, close);
+    let mut help = format!("Hand over a copy: `{}{}.clone(){}`", head, root, close); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if part != "" {
         help.push_str(&format!(", or build the value first and take the view from its field: `let {} = {}{}{}`", name, head, root, close));
         match &view.callee {
@@ -894,12 +894,12 @@ pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[
         None => { },
         Some(used) => { labels.push(vc_label(used.clone(), &name, format!("`{}` is read here", name), false)); },
     }
-    let mut notes: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
     match *nikaia_std::index::get(&view.way_out, root) {
         None => { },
         Some(way) => { notes.push(nikaia_std::block::Text::from(way.to_string())); },
     }
-    let mut help = format!("Use `{}` first, or hand `{}` a copy: `{}({}.clone())`.", name, callee, callee, root);
+    let mut help = format!("Use `{}` first, or hand `{}` a copy: `{}({}.clone())`.", name, callee, callee, root); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     match &view.call {
         None => { },
         Some(call) => { help.push_str(&format!(" Or copy `{}` itself: `let {} = {}.clone()`.", name, name, call)); },
@@ -925,7 +925,7 @@ pub(crate) fn vc_refuse(root: &str, at: &Span, views: &[VcView], walk: &mut VcWa
         None => { },
         Some(used) => { labels.push(vc_label(used.clone(), &name, format!("`{}` is used here, after the change", name), false)); },
     }
-    let mut notes: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
     match *nikaia_std::index::get(&view.way_out, root) {
         None => { },
         Some(way) => { notes.push(nikaia_std::block::Text::from(way.to_string())); },
@@ -933,7 +933,7 @@ pub(crate) fn vc_refuse(root: &str, at: &Span, views: &[VcView], walk: &mut VcWa
     let help: String = match &view.help {
         None => format!("Use `{}` before this change, or take a copy of it with `{}.clone()` before the change.", name, name),
         Some(written) => nikaia_std::block::Text::from(written.to_string()),
-    };
+    }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is changed here, but `{}` may point into its data and is used later.", root, name), notes, help: Some(help), warning: false, labels });
 }
 

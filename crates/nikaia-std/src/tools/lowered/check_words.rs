@@ -77,8 +77,8 @@ pub fn indented_text(text: &str) -> String {
 
 pub fn brace_groups(text: &str) -> Vec<String> {
     let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
-    let mut found: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    #[allow(unused_mut)] let mut found: Vec<String> = vec![];
+    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     while ((at) as usize) < c.len() {
         if *nikaia_std::index::get(&c, (at) as usize) == '\\' {
             at += 1;
@@ -149,8 +149,8 @@ pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
 
 pub fn not_promised_note(callee: &str) -> String {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
-    let mut package: String = String::from("its package"); let parts = parts;
-    let mut function = nikaia_std::block::Text::from(callee.to_string()); let parts = parts;
+    let mut package: String = String::from("its package"); #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut function = nikaia_std::block::Text::from(callee.to_string()); #[allow(clippy::redundant_locals)] let parts = parts;
     if parts.len() == 2 {
         package = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
         function = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());

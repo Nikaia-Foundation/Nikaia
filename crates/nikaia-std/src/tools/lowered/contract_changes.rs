@@ -27,7 +27,7 @@ pub(crate) fn column_moved(key: &str, old: &FnContract, new: &FnContract, by_par
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into());
-        let mut who = String::from("an impl in this package keeps it");
+        let mut who = String::from("an impl in this package keeps it"); #[allow(clippy::redundant_locals)] let impls = impls;
         if !impls.is_empty() { who = format!("{} keeps it", nikaia_std::block::Text::from(impls.join(", "))); }
         out.push_str(&format!("warning[NK1265]: the trait method `{}` keeps `{}` now, and the committed ledger says it runs it.\n   = note: {}.\n   = note: a caller that lends into `{}` through the trait is refused now.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, parameter, who, parameter));
     }

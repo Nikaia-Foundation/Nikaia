@@ -35,9 +35,9 @@ pub fn rust_format_escape(text: &str) -> String {
 }
 
 pub fn top_level_parts(inside: &str) -> Vec<String> {
-    let mut parts: Vec<String> = vec![];
-    let mut current: String = String::from("");
-    let mut depth = 0;
+    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+    let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     let mut in_text = false;
     let mut escaped_next = false;
     for c in inside.chars() {

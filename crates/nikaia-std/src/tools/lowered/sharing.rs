@@ -73,10 +73,10 @@ pub fn every_count_plain(sharing: &mut Sharing) {
         (*decision).why = None;
         (*decision).fallback = None;
     }
-    let mut keys: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
     for key in sharing.counts.keys() { keys.push(nikaia_std::block::Text::from(key.to_string())); }
     for key in keys.iter() { sharing.counts.insert(nikaia_std::block::Text::from(key.to_string()), Count::Plain); }
-    let mut functions: Vec<String> = vec![];
+    let mut functions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     for key in sharing.summaries.keys() { functions.push(nikaia_std::block::Text::from(key.to_string())); }
     for function in functions.iter() {
         let classes = nikaia_std::index::or(match *nikaia_std::index::get(&sharing.summaries, function) {
@@ -153,7 +153,7 @@ pub fn split_slot(key: &str) -> (String, String) {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return (String::from(""), nikaia_std::block::Text::from(key.to_string())); }
     let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-    let mut function: Vec<String> = vec![]; let parts = parts;
+    let mut function: Vec<String> = vec![];
     for i in 0..parts.len() as i64 - 1 { function.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); }
     (nikaia_std::block::Text::from(function.join("::")), name)
 }
@@ -371,7 +371,7 @@ impl Slots {
 pub(crate) fn before_last(text: &str, separator: &str) -> String {
     let parts: Vec<&str> = text.split(AsRef::<str>::as_ref(separator)).collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
-    let mut kept: Vec<String> = vec![]; let parts = parts;
+    let mut kept: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let parts = parts;
     for i in 0..parts.len() as i64 - 1 { kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); } ::core::mem::drop(parts);
     nikaia_std::block::Text::from(kept.join(separator))
 }
@@ -399,11 +399,11 @@ pub fn decided(slots: &mut Slots) -> Sharing {
         let root = slots.class_of(key);
         if !holds_a_word(&handle_type(&slots, key)) { not_a_word.insert(root); }
     }
-    let duplicated = sites_by_slot(&slots.duplicated);
-    let copied_out = sites_by_slot(&slots.copies);
+    let duplicated = sites_by_slot(&slots.duplicated); #[allow(clippy::redundant_locals)] let keys = keys;
+    let copied_out = sites_by_slot(&slots.copies); #[allow(clippy::redundant_locals)] let keys = keys;
     let mut decisions: Vec<Decision> = vec![];
-    let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new();
-    let mut classes: collections::BTreeMap<String, collections::BTreeMap<i64, Class>> = collections::BTreeMap::new();
+    let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
+    let mut classes: collections::BTreeMap<String, collections::BTreeMap<i64, Class>> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
     for key in keys.iter() {
         let root = slots.class_of(key);
         let handle = match match *nikaia_std::index::get(&slots.handles, key) {
@@ -483,9 +483,9 @@ pub(crate) fn lock_kept(count: &Count, a_word: bool, held_together: bool) -> Opt
 }
 
 pub(crate) fn sorted_once(members: &[String]) -> Vec<String> {
-    let mut sorted = members.copy_owned();
+    #[allow(unused_mut)] let mut sorted = members.copy_owned();
     sorted.sort();
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
     for one in sorted.iter() { if out.is_empty() || *nikaia_std::index::get(&out, nikaia_std::index::at(out.len() as i64 - 1)) != *one { out.push(nikaia_std::block::Text::from(one.to_string())); } }
     out
 }

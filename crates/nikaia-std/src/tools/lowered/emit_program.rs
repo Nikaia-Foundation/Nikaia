@@ -110,8 +110,8 @@ impl EmitState {
     }
     pub(crate) fn emit_program_shadow_types(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         for (name, parameters) in shadow_types(world.words, world.items) {
-            let mut generics: Vec<String> = vec![];
-            let mut fields: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut generics: Vec<String> = vec![];
+            let mut fields: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut generics = generics;
             for i in 0..parameters.len() as i64 {
                 generics.push(format!("P{}", i));
                 fields.push(format!("    pub {}: P{},", *nikaia_std::index::get(&parameters, (i) as usize), i));
@@ -130,8 +130,8 @@ impl EmitState {
     }
     pub(crate) fn emit_program_entry_point<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut, host: &H) {
         let channel = self.error_channel(world, "main", true, &EmitLifetimes::Elided.params(), &EmitLifetimes::Static.params(), false);
-        let mut types: Vec<String> = vec![];
-        let mut passing: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut types: Vec<String> = vec![];
+        let mut passing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
         for param in host.main_params() {
             let ty = emit_program_param_type(&param);
             if ty == "&str" {
@@ -164,7 +164,7 @@ impl EmitState {
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
     if parts.len() < 2 { return String::from("_"); }
-    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string()); let parts = parts;
+    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
     for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *nikaia_std::index::get(&parts, (i) as usize)); }
     ty
 }

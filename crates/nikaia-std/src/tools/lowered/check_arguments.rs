@@ -344,8 +344,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let named = check_arguments_named(world, given_here);
         let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-        let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
-        let mut help: String = way_out_of_a_mismatch(&found_here, &want);
+        #[allow(unused_mut)] let mut notes: Vec<String> = vec![format!("It's declared as `{}{}`.", key, signature.text())];
+        let mut help: String = way_out_of_a_mismatch(&found_here, &want); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
         let why = state.a_view_kept(&found_here, &want, (named).as_deref(), &keeper);
         if why.is_some() {
             let kept_why = match why { Some(__nikaia_value) => __nikaia_value, None => continue };

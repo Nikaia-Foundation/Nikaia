@@ -30,8 +30,8 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
             ordered.insert(nikaia_std::count::of(at), LgOrdered { shape, named, fact });
         }
     }
-    let mut normal = LgNormal { arena: TermArena::empty(), facts: vec![], goal: 0, names: vec![] };
-    let mut renamed: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    #[allow(unused_mut)] let mut normal = LgNormal { arena: TermArena::empty(), facts: vec![], goal: 0, names: vec![] };
+    let mut renamed: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut normal = normal;
     for one in ordered.iter() {
         let copied = lg_copy(&mut normal, arena, one.fact, &mut renamed, true);
         normal.facts.push(copied);

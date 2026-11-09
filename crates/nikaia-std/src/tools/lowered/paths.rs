@@ -96,18 +96,18 @@ pub fn named(written: &str) -> Named {
 
 pub fn bases(export: &Export) -> Vec<String> {
     let prefix = export.prefix.trim();
-    let mut out: Vec<String> = vec![];
-    let from_root = after(prefix, "crate");
+    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let from_root = after(prefix, "crate"); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     if from_root.is_some() {
         out.push(nikaia_std::index::or(from_root, || "".into()));
         return out;
     }
-    let from_here = after(prefix, "self");
+    let from_here = after(prefix, "self"); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     if from_here.is_some() {
         out.push(joined(&export.at, nikaia_std::index::or(from_here.as_deref(), || "")));
         return out;
     }
-    let from_up = after(prefix, "super");
+    let from_up = after(prefix, "super"); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     if from_up.is_some() {
         let a: Vec<scalar> = nikaia_std::list::chars(export.at.chars());
         let cut = find_last_text(&a, "::");
@@ -116,17 +116,17 @@ pub fn bases(export: &Export) -> Vec<String> {
         out.push(joined(&parent, nikaia_std::index::or(from_up.as_deref(), || "")));
         return out;
     }
-    let here = joined(&export.at, prefix);
-    let root = nikaia_std::block::Text::from(prefix.to_string());
+    let here = joined(&export.at, prefix); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let root = nikaia_std::block::Text::from(prefix.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     if here != root { out.push(here); }
     out.push(root);
     out
 }
 
 pub fn split_top_level(text: &str) -> Vec<String> {
-    let mut out: Vec<String> = vec![];
-    let mut depth = 0;
-    let mut current: String = String::from("");
+    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for c in text.chars() {
         if c == '<' || c == '(' || c == '[' { depth += 1; } else if c == '>' || c == ')' || c == ']' { depth -= 1; } else if c == ',' && depth == 0 {
             out.push(nikaia_std::block::Text::from(current.trim().to_string()));
@@ -135,7 +135,7 @@ pub fn split_top_level(text: &str) -> Vec<String> {
         }
         current.push(c);
     }
-    let last = current.trim();
+    let last = current.trim(); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     if !last.is_empty() { out.push(nikaia_std::block::Text::from(last.to_string())); }
     out
 }

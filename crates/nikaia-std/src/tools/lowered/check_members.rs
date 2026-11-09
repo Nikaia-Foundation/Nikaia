@@ -144,8 +144,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_variant_nothing_declares(&mut self, ty: &str, member: &str, span: &Span) {
-        let mut variants: Vec<String> = vec![];
-        let held = match *nikaia_std::index::get(&self.enums, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
+        #[allow(unused_mut)] let mut variants: Vec<String> = vec![];
+        let held = match *nikaia_std::index::get(&self.enums, ty) { Some(__nikaia_value) => __nikaia_value, None => return }; #[allow(unused_mut, clippy::redundant_locals)] let mut variants = variants;
         for variant in held.iter() { variants.push(nikaia_std::block::Text::from(variant.to_string())); }
         let listed = mem_listed(&variants, &format!("{}::", ty));
         let near = nearest_name(member, &variants);

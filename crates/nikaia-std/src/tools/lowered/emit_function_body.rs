@@ -67,7 +67,7 @@ impl EmitState {
         let flow = EmitFlow { can_throw: throws_, ..EmitFlow::plain() };
         let scope = EmitScope { origin: nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()), function: nikaia_std::block::Text::from(key.to_string()), channel: nikaia_std::block::Text::from(channel.to_string()), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: awaited.copy_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
         let tail = if returns_value { EmitTail::Return } else { EmitTail::Statement };
-        let mut first: Vec<String> = walk.either_prelude.copy_owned();
+        #[allow(unused_mut)] let mut first: Vec<String> = walk.either_prelude.copy_owned();
         walk.either_prelude = vec![];
         if counts_steps { first.insert(0, format!("let __nikaia_frame = nikaia_std::build_time::enter({});", key.quoted())); }
         let mut leaves = false;
@@ -78,7 +78,7 @@ impl EmitState {
             if seen == count { leaves = emit_ends_in_a_jump(world, &stmt.node); }
         }
         let main_ends = skip_free_at_exit && depth == 0 && key == "main" && self.user_main(world).is_some() && !leaves;
-        let main_call = " nikaia_std::rt::exit::main_ends(); ";
+        let main_call = " nikaia_std::rt::exit::main_ends(); "; #[allow(unused_mut, clippy::redundant_locals)] let mut first = first;
         if !throws_ {
             let settled = self.facts.settle_fns.contains_key(key);
             if first.is_empty() && !main_ends {
@@ -93,7 +93,7 @@ impl EmitState {
             return Ok(());
         }
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
-        let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
+        let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(unused_mut, clippy::redundant_locals)] let mut first = first;
         out.push("{\n");
         for line in first.iter() { out.push(&format!("{}{}\n", inner_pad, line)); }
         let last = if count == 0 { 0 } else { count - 1 };
