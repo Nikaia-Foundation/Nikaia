@@ -69,6 +69,10 @@ it, like the checks in `docs/supervisor.md`.
   no body); the sites list goes into the issue by file and line (#1453).
   A site that needs several mechanisms is counted under the one built last,
   so that a group's count is what falls when its item is built (#1470).
+  A site in a method of a type with field rules (ADR-306 D21, D28) has a
+  probe reduced from the real code: the function and every `ref mut self`
+  method of its type, with stub types, kept as the acceptance check; a
+  synthetic probe passed while the real code stayed checked (#1470).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/` (or the package's tests), and the rows it must show.

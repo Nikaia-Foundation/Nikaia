@@ -252,6 +252,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 ### Prover
 
 * **An index read out of an inner list of a field** (`a = self.col[c][i]`, then `self.atoms[a]`) stays checked whatever length relation the lists have, until ADR-306 D28 is built; a local list of lists is proved already (D7). Sort such a site under D28, not under #385 (that is values computed from the same table). (issue-1470)
+* **A field rule holds only if every `ref mut self` method of the type keeps it** (checked at each `return`; `most_facts()` is 48, `rules_rounds()` is 8). One method that loses it (as `score` did for `sv_walk`) drops it for the whole type. So a probe for a field rule is reduced from the real type: the target function plus every `ref mut self` method, with stub types. A synthetic probe can pass while the real code stays checked. (issue-1470)
+* **Until #1483 is built, a rule's element facts are stated without the guard of an empty list**, so `if self.b.len() == 0 { self.b[100] }` is "proved". A proof that appears where a length is 0 is this defect, not progress. (issue-1470)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
   measured with `lower-std --bounds --asserts [--optimization
   prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
