@@ -260,9 +260,9 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-328.html" | relative_url }}">ADR-328 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <span class="safe-chip safe-chip-build">Checked while the program runs</span>
         <h3>Clients that send slowly</h3>
-        <p>In the specification the HTTP server gives a request's head ten seconds to arrive, asks a body to keep a minimum rate, and keeps a quiet connection open for a set time between requests, answering 408 to a client that falls behind. Today the server counts reads while it waits for the head, not time, and closes each connection after one answer.</p>
+        <p>The HTTP server gives a request's head ten seconds from its first byte, however the client splits it, and asks a body to arrive at 500 bytes a second once two seconds have passed. A client that falls behind gets 408 and its connection closes. Between requests a connection stays open for 75 seconds, and a quiet one is closed after that. Each limit is an option of <code>http::listen</code>, and each read waits with <code>read(within:)</code>, so no task waits on a timer.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-326.html" | relative_url }}">ADR-326, D6-D9 →</a>
       </div>
     </div>

@@ -142,6 +142,32 @@ impl Buffer {
     }
 }
 
+impl Buffer {
+    /// The bytes from `at` up to `end`, as text: one request's body where the
+    /// next request may already follow it on a kept-alive connection
+    /// ([ADR-326](../../../docs/specification/adr/adr-326.md) D9). Owned, for
+    /// `text_from`'s reason.
+    pub fn text_between(&self, at: i64, end: i64) -> Result<crate::block::Text, IoError> {
+        let at = at.max(0) as usize;
+        let end = end.max(0) as usize;
+        if at > end || end > self.bytes.len() {
+            return Err(IoError::Other("400 a body that ends past its bytes".into()));
+        }
+        match std::str::from_utf8(&self.bytes[at..end]) {
+            Ok(text) => Ok(crate::block::Text::from(text)),
+            Err(_) => Err(IoError::Other("400 a request body that is not text".into())),
+        }
+    }
+
+    /// **Forget the first `count` bytes**, the request just answered, so what
+    /// is left starts the next one (ADR-326 D9). More than there are forgets
+    /// them all.
+    pub fn discard(&mut self, count: i64) {
+        let count = (count.max(0) as usize).min(self.bytes.len());
+        self.bytes.drain(..count);
+    }
+}
+
 /// What the head of one request says.
 ///
 /// **`Clone`, because a Nikaia `struct` that holds one derives it.** Every
@@ -157,11 +183,10 @@ pub struct Head {
     length: i64,
     /// How many bytes the head took, so a caller knows where the body starts.
     size: i64,
-    /// Whether the client asked to keep the connection open. **Read and not
-    /// honoured** in the MVP: `Connection: close` is the scope
-    /// ([ADR-289](../../../docs/specification/adr/adr-289.md) D13), and a server
-    /// that read the header and ignored it silently would be lying to a client
-    /// that asked.
+    /// Whether the connection stays open after this request
+    /// ([ADR-326](../../../docs/specification/adr/adr-326.md) D9): HTTP/1.1
+    /// unless the client said `Connection: close`, HTTP/1.0 only where it said
+    /// `Connection: keep-alive`.
     keep_alive: bool,
     /// Every header, name lowercased, in the order they arrived.
     ///
@@ -239,7 +264,8 @@ impl Head {
         self.size
     }
 
-    /// Whether the client asked for the connection to stay open.
+    /// Whether the connection stays open after this request: HTTP/1.1 unless
+    /// the client said `close`, HTTP/1.0 only where it said `keep-alive`.
     pub fn keep_alive(&self) -> bool {
         self.keep_alive
     }

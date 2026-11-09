@@ -1150,6 +1150,14 @@ impl EmitState {
         // **And so does a call of a function whose set has `from(p)`**
         // (ADR-351 D4): its channel varies with the caller, so it is the box,
         // opened by the type each arm names.
+        // **A connection's `read(within:)` fails in two of `std`'s ways**
+        // (ADR-326 D8): `net::ReadFailed` crosses in the box, opened by the
+        // type each arm names, as `join(within:)`'s `Late` does.
+        if caught && sum == null && self.emit_catch_is_a_timed_read(guarded_expr) {
+            sum = ""
+            boxed = true
+            named = false
+        }
         if caught && sum == null && !named && (self.emit_catch_is_a_field_call(guarded_expr) || self.emit_catch_calls_given_code(world, guarded_expr)) {
             sum = ""
             boxed = true
@@ -1625,6 +1633,14 @@ impl EmitState {
             }
         }
         return false
+    }
+
+    /// Whether a `catch` guards a connection's `read(within:)` (ADR-326 D8).
+    fn emit_catch_is_a_timed_read(ref self, guarded: ref Expr) -> bool {
+        return match guarded {
+            Expr::MethodCall { receiver, .. } => (self.facts.method_callees[node_key(receiver)]?.clone() ?? "") == "net::Connection::read(within)",
+            else => false,
+        }
     }
 
     fn emit_catch_is_a_field_call(ref self, guarded: ref Expr) -> bool {

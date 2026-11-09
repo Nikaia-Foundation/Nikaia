@@ -719,6 +719,11 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
             Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
             None => false,
         }
+        || match error.downcast_ref::<crate::net::ReadFailed>() {
+            Some(crate::net::ReadFailed::Io(e)) => (e as &dyn Error).is::<E>(),
+            Some(crate::net::ReadFailed::TimedOut(e)) => (e as &dyn Error).is::<E>(),
+            None => false,
+        }
         || error
             .downcast_ref::<crate::supervisor::Handed>()
             .and_then(crate::supervisor::Handed::itself)
@@ -744,6 +749,13 @@ pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
         Ok(late) => match *late {
             crate::task::Late::Crashed(e) => Box::new(e),
             crate::task::Late::TimedOut(e) => Box::new(e),
+        },
+        Err(error) => error,
+    };
+    let error: Box<dyn Error> = match error.downcast::<crate::net::ReadFailed>() {
+        Ok(failed) => match *failed {
+            crate::net::ReadFailed::Io(e) => Box::new(e),
+            crate::net::ReadFailed::TimedOut(e) => Box::new(e),
         },
         Err(error) => error,
     };

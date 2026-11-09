@@ -6267,6 +6267,23 @@ throws = ["io::IoError"]
 provenance = "untrusted"
 signature = "(mut self: ref Connection; trusted: bool = false) -> Bytes"
 
+# **`read(within: d)` limits this one wait to `d`**
+# ([ADR-326](../../docs/specification/adr/adr-326.md) D8): what a protocol bounds
+# a read by. The wait is the same readiness registration as `read`'s with the
+# time left on it, so no task is started per read.
+# The next bytes the peer sent, waiting at most `within` for them.
+#
+# Bytes already there come back at once. When the time runs out first, this
+# throws `task::TimedOut` and the connection stays open. **Empty means the peer
+# closed.**
+[fn."net::Connection::read(within)"]
+pub = true
+panics = false
+touches = ["socket read"]
+throws = ["io::IoError", "task::TimedOut"]
+provenance = "untrusted"
+signature = "(mut self: ref Connection, within: time::Duration; trusted: bool = false) -> Bytes"
+
 # `?` for the bytes, for `fs::write`'s reason: it takes a `Bytes`, a `ref String`\
 # and a buffer, and writing one of them here would refuse a correct program.
 # All of the bytes, waiting for room where there is none yet.
@@ -6514,6 +6531,25 @@ touches = []
 throws = ["io::IoError"]
 signature = "(self: ref Buffer, cap: i64) -> i64"
 
+# The bytes from `at` up to `end`, as text: one request's body where the next
+# request may already follow it on a kept-alive connection (ADR-326 D9).
+[fn."http1::Buffer::text_between"]
+pub = true
+panics = false
+sync = true
+touches = []
+throws = ["io::IoError"]
+signature = "(self: ref Buffer, at: i64, end: i64) -> String"
+
+# Forget the first `count` bytes, the request just answered, so what is left
+# starts the next one (ADR-326 D9). More than there are forgets them all.
+[fn."http1::Buffer::discard"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(mut self: ref Buffer, count: i64)"
+
 # What the head says, where `head_end` said there is one.
 #
 # Every failure here is what a server sends back: a request line that is not
@@ -6622,11 +6658,9 @@ sync = true
 touches = []
 signature = "(self: ref Head) -> i64"
 
-# Whether the client asked for the connection to stay open.
-#
-# **Read and not honoured**: `Connection: close` is the MVP's scope, and a server
-# that read the header and ignored it silently would be lying to a client that
-# asked.
+# Whether the connection stays open after this request (ADR-326 D9): HTTP/1.1
+# unless the client said `Connection: close`, HTTP/1.0 only where it said
+# `Connection: keep-alive`.
 [fn."http1::Head::keep_alive"]
 pub = true
 panics = false

@@ -687,6 +687,11 @@ impl EmitState {
         if name == "set" && self.facts.witnessed_sets.contains(&flow.statement) { witness = emit_call_option_named(world, config, "after"); }
         let mut limit: Vec<Expr> = vec![];
         if name == "join" && args.is_empty() { limit = emit_call_option_named(world, config, "within"); }
+        let mut deadline: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        if name == "read" && args.is_empty() && nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into()) == "net::Connection::read(within)" { deadline = emit_call_option_named(world, config, "within"); }
         if receiver.is_some() && name == "to_string" && args.is_empty() {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.text_as_is.contains(&node_key(text)) {
@@ -832,7 +837,7 @@ impl EmitState {
                 None => { },
                 Some(on) => { if self.facts.text_copies.contains(&node_key(on)) { written = String::from("to_string"); } },
             }
-        } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(&on_node) { written = String::from("get_mut"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); }
+        } else if name == "get" && args.len() == 1 && self.facts.mut_view_gets.contains(&on_node) { written = String::from("get_mut"); } else if name == "set" && !witness.is_empty() { written = String::from("set_after"); } else if !limit.is_empty() { written = String::from("join_within"); } else if !deadline.is_empty() { written = String::from("read_within"); }
         if name == "fold" && receiver.is_some() {
             let folded = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.facts.par_folds.contains(&node_key(folded)) { written = String::from("fold_merged"); }
@@ -985,7 +990,7 @@ impl EmitState {
         if !witness.is_empty() {
             out.push(", &");
             self.emit_core_postfix_base(world, walk, out, host, nikaia_std::index::get(&witness, 0), depth, flow, scope)?;
-        } else if !limit.is_empty() {
+        } else if !deadline.is_empty() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&deadline, 0), depth, flow, scope)?; } else if !limit.is_empty() {
             self.emit_expr(world, walk, out, host, nikaia_std::index::get(&limit, 0), depth, flow, scope)?;
             let on_timeout = emit_call_option_named(world, config, "on_timeout");
             out.push(", ");
@@ -1207,8 +1212,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple89587| {
-        let (i, word) = __nikaia_tuple89587;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90196| {
+        let (i, word) = __nikaia_tuple90196;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

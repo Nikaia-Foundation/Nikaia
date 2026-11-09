@@ -135,6 +135,44 @@ impl Connection {
         }
     }
 
+    /// **[`Connection::read`] with a deadline on this one wait**
+    /// ([ADR-326](../../../docs/specification/adr/adr-326.md) D8): what a
+    /// protocol bounds a read by, `conn.read(within: d)` in Nikaia.
+    ///
+    /// Bytes already there come back however little time is left; where there
+    /// are none, the wait is the same readiness registration as `read`'s with
+    /// the time left on it, so the poller's own deadline ends it and no task or
+    /// timer is started per read, at either value of `user_parallelism`.
+    /// Running out is [`crate::task::TimedOut`], and the connection stays open.
+    pub async fn read_within(
+        &mut self,
+        within: crate::time::Duration,
+    ) -> Result<Bytes, ReadFailed> {
+        let deadline = std::time::Instant::now() + within;
+        let mut buffer = vec![0_u8; CHUNK];
+        loop {
+            match self.inner.read(&mut buffer) {
+                Ok(read) => {
+                    buffer.truncate(read);
+                    return Ok(Bytes::from(buffer));
+                }
+                Err(error) if would_block(&error) => {
+                    let left = deadline.saturating_duration_since(std::time::Instant::now());
+                    if left.is_zero() {
+                        return Err(ReadFailed::TimedOut(crate::task::TimedOut));
+                    }
+                    let ready = readiness::waiting(&self.inner, Interest::Readable, Some(left))
+                        .await
+                        .map_err(|error| IoError::of(error, "waiting for a socket"))?;
+                    if !ready {
+                        return Err(ReadFailed::TimedOut(crate::task::TimedOut));
+                    }
+                }
+                Err(error) => return Err(ReadFailed::Io(IoError::of(error, "a connection"))),
+            }
+        }
+    }
+
     /// All of `bytes`, awaiting room where there is none yet.
     ///
     /// **All of them**, because a partial write is not something a caller can
@@ -258,6 +296,33 @@ async fn finished(started: Vec<crate::task::TaskHandle<()>>) {
 /// What a handler ends with: nothing, or what it threw - the shape the emitter
 /// writes for a kept `fn(net::Connection) throws`.
 pub type Outcome = Result<(), Box<dyn std::error::Error>>;
+
+/// **What `read(within:)` fails with**: the socket's error, or the deadline
+/// that ran out first (ADR-326 D8). Two of `std`'s errors at once, as
+/// [`crate::task::Late`] is for `join(within:)`; a program's sum of both takes
+/// it apart, and a `catch` sees the one inside.
+#[derive(Debug)]
+pub enum ReadFailed {
+    Io(IoError),
+    TimedOut(crate::task::TimedOut),
+}
+
+impl From<IoError> for ReadFailed {
+    fn from(error: IoError) -> ReadFailed {
+        ReadFailed::Io(error)
+    }
+}
+
+impl std::fmt::Display for ReadFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadFailed::Io(e) => e.fmt(f),
+            ReadFailed::TimedOut(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ReadFailed {}
 
 /// [`serve`]'s handler at `user_parallelism = no`.
 pub type Handler = crate::func::Kept<dyn Fn(Connection) -> crate::func::Boxed<Outcome>>;
