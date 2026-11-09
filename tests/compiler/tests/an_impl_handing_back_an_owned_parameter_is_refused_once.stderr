@@ -1,0 +1,32 @@
+error[NK2302]: `P.pick` implements a trait method that hands back views of `a` only, but this hands back a view of `b`, which it takes by value.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:37:9
+    |
+ 37 |         return b
+    |         ^^^^^^^^
+    |
+    = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
+    = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
+error[NK2302]: `P.pick_all` implements a trait method that hands back views of `a` only, but this hands back a view of `b`, which it takes by value.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:43:9
+    |
+ 43 |         b
+    |         ^
+    |
+    = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick_all` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
+    = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
+error[NK2302]: `P.pick_named` implements a trait method that hands back views of `a` only, but this hands back a view of `b`, which it takes by value.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:49:9
+    |
+ 49 |         return b
+    |         ^^^^^^^^
+    |
+    = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick_named` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
+    = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
+error[NK1104]: You're returning `Number`, but the function is declared to return `ref Number`.
+   --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:55:16
+    |
+ 55 |         return b
+    |                ^
+    |
+    = help: Make it a `ref Number`, or change the declaration to `Number`.
+1 type error, 3 views kept past the call that was given it

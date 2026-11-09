@@ -607,6 +607,7 @@ impl CheckState {
         let mut at = Span { start: span.start, end: span.end };
         if value.is_some() {
             let whole = match value { Some(__nikaia_value) => __nikaia_value, None => return };
+            if what == "returns" && self.an_owned_parameter_handed_back(world, found, want, whole) { return; }
             at = check_span_at(world, whole, span);
             if found.is_unknown() { arms = self.arms_to_ask(world, whole); }
         }

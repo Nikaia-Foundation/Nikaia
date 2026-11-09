@@ -903,6 +903,10 @@ impl CheckState {
         let mut at = Span { start: span.start, end: span.end }
         if value != null {
             let whole = value ?? return
+            // **Refused by the views pass instead** (#1386, ADR-views-3 D14).
+            if what == "returns" && self.an_owned_parameter_handed_back(world, found, want, whole) {
+                return
+            }
             at = check_span_at(world, whole, span)
             if found.is_unknown() {
                 arms = self.arms_to_ask(world, whole)

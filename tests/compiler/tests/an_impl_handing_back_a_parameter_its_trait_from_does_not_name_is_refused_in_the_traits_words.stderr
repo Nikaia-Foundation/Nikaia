@@ -6,11 +6,4 @@ error[NK2302]: `P.pick` implements a trait method that hands back views of `a` o
     |
     = note: The trait's result says `from a`, so `b` is not lent: it is moved into `P.pick` and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).
     = help: Hand back a view of what the trait names, or write `from a | b` on the trait's result.
-error[NK1104]: You're returning `String`, but the function is declared to return `ref String`.
-   --> tests/an_impl_handing_back_a_parameter_its_trait_from_does_not_name_is_refused_in_the_traits_words.nika:15:16
-    |
- 15 |         return b
-    |                ^
-    |
-    = help: Write `ref` in front of it to pass a view of it.
-1 type error, 1 view kept past the call that was given it
+1 view kept past the call that was given it

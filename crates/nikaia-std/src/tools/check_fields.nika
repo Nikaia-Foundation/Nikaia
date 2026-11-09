@@ -205,6 +205,32 @@ fn an_operation_in_one_type(op: ref BinaryOp) -> bool sync {
 }
 
 /// Whether a frame of the scope binds a name.
+/// Whether a type surely holds text or a list a view can point into: the
+/// views pass marks a parameter of it as owned (`rsrc_textless` is false
+/// for it). A type whose fields are not known is not surely such a type.
+fn check_fields_holds_text(world: ref CheckWorld, ty: ref Ty, open: Vec[String]) -> bool sync {
+    let (name, args) = match ty {
+        Ty::Named { name, args, view } => if view { return false } else { (name.clone(), args.clone()) },
+        else => return false,
+    }
+    let base = a_type_base(name)
+    if base == "String" || !args.is_empty() {
+        return true
+    }
+    if open.contains(base) {
+        return false
+    }
+    let fields = world.fields_by_base[base] ?? return false
+    let mut deeper = open.clone()
+    deeper.push(base.clone())
+    for field in fields {
+        if check_fields_holds_text(world, field, deeper) {
+            return true
+        }
+    }
+    return false
+}
+
 fn check_fields_holds(frame: ref Vec[CheckLocal], name: ref String) -> bool sync {
     for local in frame {
         if local.name == name {
@@ -283,6 +309,20 @@ impl CheckState {
             return false
         }
         return !lends_in_own(contract, at, [world.library])
+    }
+
+    /// **A parameter this function owns, handed back whole where its result
+    /// is a view** (#1386): in an `impl` of a trait whose result writes
+    /// `from`, a parameter the trait does not name is not lent, and the views
+    /// pass refuses handing it back with NK2302, in the trait's words
+    /// (ADR-views-3 D14). An NK1104 asking for `ref` would refuse the same
+    /// fault twice, in a word that left the language (D4). Only where the
+    /// views pass marks the parameter: its type holds text or a list.
+    pub fn an_owned_parameter_handed_back(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty, given: ref Expr) -> bool sync {
+        if found.is_a_view() || !want.is_a_view() || want.text() != f"ref {found.text()}" {
+            return false
+        }
+        return check_fields_holds_text(world, found, []) && self.an_owned_parameter(world, given)
     }
 
     /// **A `comptime` binding used where a type is asked**: the use is written
