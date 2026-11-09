@@ -13,7 +13,7 @@ pub fn parse_findings_too_long(length: i64, longest: i64) -> Option<String> {
 }
 
 pub fn parse_findings_char_of(source: &str, byte: i64) -> i64 {
-    let end = byte.min(source.len() as i64);
+    let end = byte.min(source.as_bytes().len() as i64);
     nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter().copied().filter(|&b| { b & 192 != 128 }).count() as i64
 }
 
@@ -61,7 +61,7 @@ pub fn parse_findings_one_task_limit(at: i64) -> Finding {
 }
 
 pub fn parse_findings_refusal(finding: Finding, source: &str) -> ParseFindingsRefusal {
-    let end = (finding.span.start as i64).min(source.len() as i64);
+    let end = (finding.span.start as i64).min(source.as_bytes().len() as i64);
     let mut from = end;
     while from > 0 && *nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(from - 1)) != 10 { from -= 1; }
     let line = nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..from)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1;

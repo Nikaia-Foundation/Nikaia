@@ -335,7 +335,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let mut at: i64 = 0;
     for (key, claim) in claims.iter() {
         let mut start = key.0;
-        if start > source.len() as i64 { start = source.len() as i64; }
+        if start > source.as_bytes().len() as i64 { start = source.as_bytes().len() as i64; }
         if start > at {
             for c in nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).iter() {
                 let c = nikaia_std::num::value(c);

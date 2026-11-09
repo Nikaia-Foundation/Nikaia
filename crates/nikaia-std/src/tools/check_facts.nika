@@ -895,8 +895,8 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     let mut at = 0
     for (key, claim) in claims {
         let mut start = key.0
-        if start > source.len() {
-            start = source.len()
+        if start > source.bytes.len() {
+            start = source.bytes.len()
         }
         if start > at {
             for c in source.bytes[at..<start] {

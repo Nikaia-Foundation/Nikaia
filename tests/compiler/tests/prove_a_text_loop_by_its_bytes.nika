@@ -1,0 +1,18 @@
+/// **A text loop counts the unit it reads** (ADR-320 D3, #1496): text has
+/// no `s.len()`; a loop bounded by `s.bytes.len()` names the same length as
+/// the read `s.bytes[at]`, so the read is proved.
+fn first_newline(source: String) -> i64 {
+	let mut at = 0
+	while at < source.bytes.len() {
+		if source.bytes[at] == 10 {
+			return at
+		}
+		at += 1
+	}
+	return -1
+}
+
+fn main() throws {
+	println(f"{first_newline("ab\ncd")}")
+	println(f"{first_newline("abcd")}")
+}

@@ -139,7 +139,7 @@ pub fn bounds_report_trace(source: &str, path: &str, asked: &str) -> Vec<i64> {
     let mut from: i64 = -1;
     if wanted == 1 { from = 0; }
     let mut at: i64 = 0;
-    while ((at) as usize) < source.len() {
+    while ((at) as usize) < source.as_bytes().len() {
         if *nikaia_std::index::get(&source.as_bytes(), (at) as usize) == 10 {
             if seen == wanted { return vec![from, at + 1]; }
             seen += 1;
@@ -148,7 +148,7 @@ pub fn bounds_report_trace(source: &str, path: &str, asked: &str) -> Vec<i64> {
         at += 1;
     }
     if from < 0 { return vec![]; }
-    vec![from, source.len() as i64]
+    vec![from, source.as_bytes().len() as i64]
 }
 
 pub fn bounds_report_trace_rows(asked: &str, rows: &[String]) -> String {
@@ -157,7 +157,7 @@ pub fn bounds_report_trace_rows(asked: &str, rows: &[String]) -> String {
 }
 
 pub(crate) fn bounds_report_line(source: &str, at: i64) -> i64 {
-    let end = at.min(source.len() as i64);
+    let end = at.min(source.as_bytes().len() as i64);
     nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1
 }
 
