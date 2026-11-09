@@ -654,9 +654,6 @@ impl EmitState {
                     self.emit_core_grammar_entry(world, walk, out, host, segments[0], segments[1], args[0], values, config, parallelism, depth, flow, scope)
                     return true
                 }
-                if args.len() != 1 {
-                    return false
-                }
                 if segments.len() != 3 {
                     return false
                 }
@@ -674,6 +671,7 @@ impl EmitState {
                 // drives it, with this build's parallelism.
                 let mut pieces = false
                 let mut streamed = false
+                let mut options: Vec[String] = []
                 let contract = self.own_contracts.functions.get(f"{package}::{book}::{rule}")
                 if contract != null {
                     let held = contract ?? return false
@@ -687,18 +685,57 @@ impl EmitState {
                                 result => { streamed = a_sequence_type(result) },
                                 null => {},
                             }
+                            for option in signature.config {
+                                options.push(option.name.clone())
+                            }
                         },
                         null => {},
                     }
                 }
                 if streamed {
-                    if config.len() > 0 {
-                        throw EmitRefused { message: f"The compiler can't translate a call of `@stream` entry `{rule}` that hands it values or a table yet.", at: flow.statement }
-                    }
+                    // **The values, then each option the entry declares, in
+                    // its order** (ADR-grammar-1 D2, #1512): one the call leaves
+                    // out is `None`, and the walk takes its default where it is
+                    // declared; last the caller's `words:` table (ADR-388 D1),
+                    // which is no option the rule declares.
                     out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}::{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
                     self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
-                    out.push(f").to_vec())){question}")
+                    out.push(").to_vec()")
+                    for i in 1..<args.len() {
+                        out.push(", ")
+                        self.emit_expr(world, walk, out, host, args[i], depth, flow, scope)
+                    }
+                    for option in options {
+                        let mut given = false
+                        for c in config {
+                            if !given && emit_text(world, c.name) == option {
+                                out.push(", ::std::option::Option::Some(")
+                                self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                                out.push(")")
+                                given = true
+                            }
+                        }
+                        if !given {
+                            out.push(", ::std::option::Option::None")
+                        }
+                    }
+                    let mut table = false
+                    for c in config {
+                        if !table && emit_text(world, c.name) == "words" && !options.contains("words") {
+                            out.push(", ::std::option::Option::Some(nikaia_std::winnow_grammar::InternerContext::clone(&")
+                            self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                            out.push("))")
+                            table = true
+                        }
+                    }
+                    if !table {
+                        out.push(", ::std::option::Option::None")
+                    }
+                    out.push(f")){question}")
                     return true
+                }
+                if args.len() != 1 {
+                    return false
                 }
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*")

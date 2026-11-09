@@ -341,14 +341,36 @@ impl EmitState {
     /// (#1464), so a `pub grammar` writes beside itself, public and hidden,
     /// the function a caller in another package walks: the form of the walk
     /// in the grammar's own file (`emit_core_grammar_entry`), over a copy of
-    /// the input, the failure rendered against it.
+    /// the input, the failure rendered against it. It takes the entry's
+    /// values, owned, then each option as `Option`, `None` where the caller
+    /// left it out: the default is evaluated here, where it is declared and
+    /// visible (ADR-grammar-1 D2, #1512), and last the caller's `words:`
+    /// table, shared, where it hands one (ADR-388 D1).
     fn emit_stream_walk[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
         let rule_name = emit_text(world, rule.name)
         let ty = rule.ret_type ?? return
         let item = host.ty_named(walk, ty)
-        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        let mut params = String()
+        let mut handed = String()
+        for i in 0..<rule.args.len() {
+            let value_ty = host.ty_named(walk, rule.args[i].ty)
+            params.push_str(f", __wg_value{i}: {value_ty}")
+            handed.push_str(f"__wg_value{i}, ")
+        }
+        for j in 0..<rule.config.len() {
+            let option_ty = host.ty_named(walk, rule.config[j].ty)
+            params.push_str(f", __wg_given{j}: ::std::option::Option<{option_ty}>")
+            handed.push_str(f"__wg_option{j}, ")
+        }
+        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        for j in 0..<rule.config.len() {
+            out.push(f"let __wg_option{j} = match __wg_given{j} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ")
+            self.emit_expr(world, walk, out, host, rule.config[j].default, 0, EmitFlow::plain(), EmitScope::plain())
+            out.push(" }; ")
+        }
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
-        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+        out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
+        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(&__wg_source[..], &mut __wg_context, winnow_grammar::rt::Reading::default(), {handed}|__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n")
     }
 
@@ -769,8 +791,8 @@ fn emit_stream_readers(def: ref GrammarDef, offered_to_rust: bool) -> Vec[Gramma
 }
 
 /// **The `@stream` entries another Nikaia package walks** (#1505): those of
-/// a `pub grammar` that take no values, as for a reader; a package offered to
-/// Rust has the readers instead, whose features `project_features.nika`
+/// a `pub grammar`, with their values and options (#1512); a package offered
+/// to Rust has the readers instead, whose features `project_features.nika`
 /// derives, and writes none.
 fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarRule] {
     let mut found: Vec[GrammarRule] = []
@@ -778,7 +800,7 @@ fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarR
         return found
     }
     for rule in def.rules {
-        if rule.stream && rule.is_entry && rule.ret_type != null && rule.args.len() == 0 && rule.config.len() == 0 {
+        if rule.stream && rule.is_entry && rule.ret_type != null {
             found.push(rule.clone())
         }
     }

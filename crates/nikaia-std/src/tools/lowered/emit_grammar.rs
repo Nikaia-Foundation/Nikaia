@@ -213,9 +213,27 @@ impl EmitState {
         let rule_name = emit_text(world, rule.name);
         let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let item = host.ty_named(walk, ty)?;
-        out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>) -> impl Iterator<Item = Result<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), item));
+        let mut params = String::new();
+        let mut handed = String::new();
+        for i in 0..rule.args.len() as i64 {
+            let value_ty = host.ty_named(walk, &nikaia_std::index::get(&rule.args, (i) as usize).ty)?;
+            params.push_str(&format!(", __wg_value{}: {}", i, value_ty));
+            handed.push_str(&format!("__wg_value{}, ", i));
+        }
+        for j in 0..rule.config.len() as i64 {
+            let option_ty = host.ty_named(walk, &nikaia_std::index::get(&rule.config, (j) as usize).ty)?;
+            params.push_str(&format!(", __wg_given{}: ::std::option::Option<{}>", j, option_ty));
+            handed.push_str(&format!("__wg_option{}, ", j));
+        }
+        out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = Result<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), params, item));
+        for j in 0..rule.config.len() as i64 {
+            out.push(&format!("let __wg_option{} = match __wg_given{} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ", j, j));
+            self.emit_expr(world, walk, out, host, &nikaia_std::index::get(&rule.config, (j) as usize).default, 0, EmitFlow::plain(), &EmitScope::plain())?;
+            out.push(" }; ");
+        }
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", name, rule_name, item));
+        out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
+        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut __wg_context, winnow_grammar::rt::Reading::default(), {}|__wg_item: &{}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", name, rule_name, handed, item));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n");
         Ok(())
     }
@@ -499,7 +517,7 @@ pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Ve
 pub(crate) fn emit_stream_walks(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
     let mut found: Vec<GrammarRule> = vec![];
     if offered_to_rust || !def.public { return found; }
-    for rule in def.rules.iter() { if rule.stream && rule.is_entry && rule.ret_type.is_some() && rule.args.is_empty() && rule.config.is_empty() { found.push(rule.clone()); } }
+    for rule in def.rules.iter() { if rule.stream && rule.is_entry && rule.ret_type.is_some() { found.push(rule.clone()); } }
     found
 }
 
