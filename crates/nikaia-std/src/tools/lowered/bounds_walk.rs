@@ -1436,7 +1436,8 @@ pub(crate) fn bounding_derived_call(walk: &mut BoundsWalk, expr: &Expr, name: &s
             let mut given: Vec<i64> = vec![];
             let left = match bounding_derived_side(walk, &callee.params, &claim.left, false, claim.each, args, (on).as_deref(), facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let right = match bounding_derived_side(walk, &callee.params, &claim.right, claim.length, claim.each, args, (on).as_deref(), facts, &mut given, context, program, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let goal = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+            let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+            let goal = bounding_each_guarded(walk, side);
             if given.is_empty() { if bounding_proves(&walk, facts, goal, ask) { proved.insert(k); } } else {
                 let mut known = facts.clone();
                 for fact in given.iter() {
@@ -1503,11 +1504,13 @@ pub(crate) fn bounding_derived_each(walk: &mut BoundsWalk, params: &[String], pa
             let bound = match bounding_assumed(&walk, nikaia_std::index::or(key.as_deref(), || "")) { Some(__nikaia_value) => __nikaia_value, None => return Some(element) };
             if bound.lo.is_some() {
                 let lo = walk.arena.int(nikaia_std::index::or(bound.lo, || 0));
-                given.push(walk.arena.ge(element, lo));
+                let low = walk.arena.ge(element, lo);
+                given.push(bounding_each_guarded(walk, low));
             }
             if bound.hi.is_some() {
                 let hi = walk.arena.int(nikaia_std::index::or(bound.hi, || 0));
-                given.push(walk.arena.le(element, hi));
+                let high = walk.arena.le(element, hi);
+                given.push(bounding_each_guarded(walk, high));
             }
         }
         return Some(element);
@@ -1521,7 +1524,8 @@ pub(crate) fn bounding_derived_entry(walk: &mut BoundsWalk, facts: &mut BoundsFa
     for claim in held.iter() {
         let left = if claim.left == "" { walk.arena.int(0) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.left)) } else { walk.arena.var(&claim.left) };
         let right = if claim.length { walk.arena.var(&length_of(&claim.right)) } else if claim.each { walk.arena.var(&bounding_element_of(&claim.right)) } else { walk.arena.var(&claim.right) };
-        let fact = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+        let side = if claim.strict { walk.arena.lt(left, right) } else { walk.arena.le(left, right) };
+        let fact = bounding_each_guarded(walk, side);
         bounding_push(&walk, facts, fact);
     }
 }
@@ -1588,6 +1592,28 @@ pub(crate) fn bounding_fresh(walk: &mut BoundsWalk) -> i64 {
 }
 
 pub(crate) fn bounding_element_of(name: &str) -> String { format!("{}.each()", name) }
+
+pub(crate) fn bounding_each_guarded(walk: &mut BoundsWalk, fact: i64) -> i64 {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    walk.arena.variables(fact, &mut read);
+    let zero = walk.arena.int(0);
+    let mut parts: Vec<i64> = vec![];
+    for name in read.iter() {
+        let pieces: Vec<&str> = name.split(".each()").collect::<Vec<_>>();
+        if pieces.len() < 2 { continue; }
+        let len = walk.arena.var(&length_of(*nikaia_std::index::get(&pieces, 0)));
+        parts.push(walk.arena.le(len, zero));
+    }
+    if parts.is_empty() { return fact; }
+    parts.push(fact);
+    walk.arena.or(parts)
+}
+
+pub(crate) fn bounding_each_present(walk: &mut BoundsWalk, list: &str) -> i64 {
+    let len = walk.arena.var(&length_of(list));
+    let one = walk.arena.int(1);
+    walk.arena.ge(len, one)
+}
 
 pub(crate) fn bounding_variable(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
@@ -2827,7 +2853,10 @@ pub(crate) fn bounding_let(walk: &mut BoundsWalk, names: &[winnow_grammar::Symbo
     if names.len() != 1 { return; }
     let name = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
     let held = walk.arena.var(&bounding_element_of(&name));
-    for fact in bounding_each(walk, value, held, &facts, context, program, words) { bounding_push(&walk, facts, fact); }
+    for each in bounding_each(walk, value, held, &facts, context, program, words) {
+        let fact = bounding_each_guarded(walk, each);
+        bounding_push(&walk, facts, fact);
+    }
     rules_result_facts(walk, facts, &name, value, context, words);
     bounding_returned_facts(walk, facts, &name, value, context, words);
     let read_from = bounding_read_out_of(value, words);
@@ -3035,10 +3064,15 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
             let element = bounding_element_of(nikaia_std::index::or(held.as_deref(), || ""));
             let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
             given.insert(element.to_string(), item);
+            let mut of_every = false;
             for fact in facts.facts.iter() {
                 let fact = nikaia_std::num::value(fact);
-                if walk.arena.mentions(fact, &element) { stated.push(walk.arena.substitute(fact, &given)); }
+                if walk.arena.mentions(fact, &element) {
+                    stated.push(walk.arena.substitute(fact, &given));
+                    of_every = true;
+                }
             }
+            if of_every { stated.push(bounding_each_present(walk, nikaia_std::index::or(held.as_deref(), || ""))); }
         }
         for fact in stated.iter() {
             let fact = nikaia_std::num::value(fact);

@@ -575,8 +575,10 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
             bounding_push(&walk, facts, b_floor);
         } else if rule.kind == "index" {
             let each = walk.arena.var(&bounding_element_of(&format!("{}.{}", root, rule.a)));
-            let low = walk.arena.ge(each, zero);
-            let high = walk.arena.lt(each, b);
+            let low_each = walk.arena.ge(each, zero);
+            let high_each = walk.arena.lt(each, b);
+            let low = bounding_each_guarded(walk, low_each);
+            let high = bounding_each_guarded(walk, high_each);
             bounding_push(&walk, facts, low);
             bounding_push(&walk, facts, high);
             bounding_push(&walk, facts, b_floor);
@@ -616,7 +618,10 @@ pub(crate) fn rules_called(walk: &BoundsWalk, call: &Expr, context: &BoundsConte
 
 pub(crate) fn rules_element_facts(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str, value: &Expr, words: &winnow_grammar::InternerContext) {
     let base = match value {
-        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); base },
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match index {
+            Expr::Range { .. } => return,
+            _ => base,
+        } },
         _ => return,
     };
     let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -631,6 +636,8 @@ pub(crate) fn rules_element_facts(walk: &mut BoundsWalk, facts: &mut BoundsFacts
     }
     if stated.is_empty() { return; }
     facts.ints.insert(name.to_string());
+    let present = bounding_each_present(walk, &list);
+    bounding_push(&walk, facts, present);
     for fact in stated.iter() {
         let fact = nikaia_std::num::value(fact);
         bounding_push(&walk, facts, fact);
@@ -649,7 +656,8 @@ pub(crate) fn rules_element_inside(walk: &mut BoundsWalk, len: i64, index: &Expr
     let zero = walk.arena.int(0);
     let low = walk.arena.ge(each, zero);
     let high = walk.arena.lt(each, len);
-    let goal = walk.arena.and(vec![low, high]);
+    let inside = walk.arena.and(vec![low, high]);
+    let goal = bounding_each_guarded(walk, inside);
     bounding_proves(&walk, facts, goal, ask)
 }
 
@@ -688,7 +696,8 @@ pub(crate) fn rules_position(walk: &mut BoundsWalk, facts: &BoundsFacts, value: 
     let len = walk.arena.var(&length_of(&format!("self.{}", b)));
     let low = walk.arena.ge(v, zero);
     let high = walk.arena.lt(v, len);
-    let goal = walk.arena.and(vec![low, high]);
+    let inside = walk.arena.and(vec![low, high]);
+    let goal = if read.is_some() { bounding_each_guarded(walk, inside) } else { inside };
     bounding_proves(&walk, facts, goal, ask)
 }
 
@@ -765,8 +774,10 @@ pub(crate) fn rules_elements_kept(walk: &mut BoundsWalk, facts: &mut BoundsFacts
             let zero = walk.arena.int(0);
             let b = walk.arena.var(&length_of(&format!("{}.{}", root, rule.b)));
             let each = walk.arena.var(&bounding_element_of(&of));
-            let low = walk.arena.ge(each, zero);
-            let high = walk.arena.lt(each, b);
+            let low_each = walk.arena.ge(each, zero);
+            let high_each = walk.arena.lt(each, b);
+            let low = bounding_each_guarded(walk, low_each);
+            let high = bounding_each_guarded(walk, high_each);
             bounding_push(&walk, facts, low);
             bounding_push(&walk, facts, high);
         }

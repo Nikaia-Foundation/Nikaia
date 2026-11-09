@@ -1,0 +1,4 @@
+bounds in tests/prove_no_index_from_an_element_fact_of_an_empty_list.nika: 3 indexes, 2 proved; 0 operations, 0 proved
+    27  self.other[100]            checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    34  self.other[self.slots[0]]  proved
+    34  self.slots[0]              proved
