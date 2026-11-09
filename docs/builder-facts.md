@@ -182,4 +182,13 @@ together with the specification section and an example test.
 * A `let x: V? = m.get(k)` or `m[k]` is typed `ref V?` by #297's `of_a_map` block in `check_core_stmt.nika`; a value-typed read must be exempted there. (issue-1460)
 * New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
 * A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
+* A wip branch with a single commit on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`. Check with `git diff --stat BASE HEAD` that HEAD has not touched its files since. (issue-1470)
+* The fixpoint check after applying a wip is `git diff --stat wip/X -- crates/nikaia-std/src/tools/lowered` after `lower-std`: empty means the lowered files committed on the wip are current. (issue-1470)
+* `lower-std --sysroot` takes the `crates` directory of the copy (`X/crates`); given `X` it fails at once with "reading X/nikaia-std/src". (issue-1473)
+* When a wip draft was built before your run, `target/fast/nikaia` already holds it; build the before binary by checking out HEAD's version of only your own files, building, then `git apply` your saved patch. (issue-1473)
+* The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)
+* A new `nikaia` flag must be declared in clap in `crates/nikaia/src/main.rs` (Rust); a development aid read deep inside can be kept in a static `OnceLock` set there, instead of passing it through every caller. (issue-1495)
+* `lower-std --bounds` prints only verdicts; to see a site's goal and facts, run `lower-std --bounds --bounds-trace tools/FILE.nika:LINE`. (issue-1496)
+* The walk gets no fact from `let end = a.min(n)`, so a slice `s.bytes[0..<end]` stays checked whatever length `n` names. (issue-1496)
+* A test parameter written `ref String` draws an NK1261 warning; write `String`. (issue-1496)
 
