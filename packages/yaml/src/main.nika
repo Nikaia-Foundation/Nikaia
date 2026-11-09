@@ -1333,9 +1333,9 @@ fn block_fits(k: TagKind) -> bool sync {
 }
 
 // Whether a block scalar's content fits its tag: a core tag that fixes a
-// kind wants the content, as `text()` gives it, to be the written text
-// trimmed and of the tag's shape (`|` keeps the line break after `7200`, so
-// that does not fit `!!int`); any other tag fits.
+// kind wants the content, as `text()` gives it, to be of the tag's shape (`|`
+// keeps the line break after `7200`, so that does not fit `!!int`); any other
+// tag fits.
 fn block_content_fits(
 	k: TagKind,
 	raw: String,
@@ -1344,10 +1344,10 @@ fn block_content_fits(
 	style: Style,
 ) -> bool sync {
 	return match k {
-		TagKind::Null => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
-		TagKind::Bool => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
-		TagKind::Int => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
-		TagKind::Float => fits(k, raw.trim()) && block_text(raw, indent, chomp, style) == raw.trim()
+		TagKind::Null => fits(k, block_text(raw, indent, chomp, style))
+		TagKind::Bool => fits(k, block_text(raw, indent, chomp, style))
+		TagKind::Int => fits(k, block_text(raw, indent, chomp, style))
+		TagKind::Float => fits(k, block_text(raw, indent, chomp, style))
 		else => true
 	}
 }

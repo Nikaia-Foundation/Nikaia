@@ -655,6 +655,7 @@ pub(crate) fn rules_element_inside(walk: &mut BoundsWalk, len: i64, index: &Expr
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn rules_exit(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: Option<&Expr>, throwing: bool, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
+    bounding_returned(walk, facts, returned, throwing, context, program, words, ask);
     if !walk.checking || !walk.rule_roots.contains_key("self") { return; }
     for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
         if rule.kind == "length" { if !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing {

@@ -6,7 +6,7 @@ pub(crate) fn frame_depth() -> i64 { 4 }
 pub(crate) fn frame_rounds() -> i64 { 64 }
 
 pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&winnow_grammar::InternerContext], ledgers: &[&Ledger], std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>, words: &winnow_grammar::InternerContext) -> Around {
-    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new() };
+    let mut around = Around { functions: collections::BTreeMap::new(), changing_methods: bm_changing_methods(ledgers), changing_receivers: collections::BTreeSet::new(), frames: collections::BTreeMap::new(), rules: vec![], derived: no_derived(), fields: collections::BTreeSet::new(), field_writers: collections::BTreeSet::new(), field_bounds: collections::BTreeMap::new(), returning: collections::BTreeSet::new() };
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, .. } => {
@@ -53,7 +53,7 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
     context.around
 }
 
-pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.to_owned(), simd_loads: simd_loads.to_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new() } }
+pub(crate) fn frame_context(around: Around, std_receivers: &collections::BTreeMap<i64, String>, simd_loads: &collections::BTreeMap<i64, i64>) -> BoundsContext { BoundsContext { lengths: collections::BTreeSet::new(), sized: collections::BTreeSet::new(), arithmetic: collections::BTreeMap::new(), nonnegative: collections::BTreeSet::new(), char_codes: collections::BTreeSet::new(), ensured: collections::BTreeMap::new(), required: collections::BTreeMap::new(), each: collections::BTreeMap::new(), std_receivers: std_receivers.to_owned(), simd_loads: simd_loads.to_owned(), shifts: collections::BTreeMap::new(), given: collections::BTreeMap::new(), negations: collections::BTreeMap::new(), classes: collections::BTreeMap::new(), text_lengths: collections::BTreeMap::new(), text_classes: collections::BTreeMap::new(), around, whole_fields: collections::BTreeSet::new(), whole_loops: collections::BTreeSet::new(), whole_parts: collections::BTreeMap::new(), array_lengths: collections::BTreeMap::new(), through_loops: false, decided: collections::BTreeMap::new(), list_indices: collections::BTreeSet::new(), returns: collections::BTreeMap::new() } }
 
 pub(crate) fn frames_round(program: &Program, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, BoundsChanged> {
     let mut out: collections::BTreeMap<String, BoundsChanged> = collections::BTreeMap::new();
@@ -335,9 +335,11 @@ pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::Interne
                     if field.is_public && is_public { reached.insert(name.to_string()); }
                     let mut fits = here && generics.is_empty() && !is_extern && field.default.is_none() && field.attributes.is_empty();
                     let list = words.resolve(ty.name);
-                    fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1;
+                    let map_name: String = nikaia_std::index::or(list.split("::").last(), || "").to_string();
+                    let map = (map_name == "BTreeMap" || map_name == "HashMap") && ty.generics.len() == 2;
+                    fits = fits && ((list == "Vec" || list == "List") && ty.generics.len() == 1 || map);
                     if fits {
-                        let inner = nikaia_std::index::get(&ty.generics, 0);
+                        let inner = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(ty.generics.len() as i64 - 1));
                         fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name));
                     }
                     let was = nikaia_std::index::or(scan.live.get(&name), || true);

@@ -42,7 +42,7 @@ pub(crate) fn emit_place_already_lent(world: &EmitWorld<'_, '_, '_, '_>, node: &
 
 impl EmitState {
     pub(crate) fn emit_place_reach(&self, base: &Expr, place: &str, flattens: bool) -> String {
-        let view = match self.facts.viewed_reaches.get(&node_key(base)) { Some(__nikaia_value) => __nikaia_value, None => return place.to_string() };
+        let view = match self.facts.viewed_reaches.get(&node_key(base)).copied() { Some(__nikaia_value) => __nikaia_value, None => return place.to_string() };
         match view {
             FactViewed::Text => emit_place_text_reach(place, flattens),
             FactViewed::Plain => emit_place_plain_reach(place, flattens),

@@ -4,3 +4,4 @@
 # `refuted` with its model, or `unknown` with the solver that gave up.
 # Every entry is checked when it is read; a wrong one is searched again.
 2f091133c78cd1aa78a7d1ccfe792766305f46b908d32c8f214ca8d1dd04658e refuted v0=10,v1=3,v2=-1
+c8c67005dd5457e1ee58f859875e7d4f4963c6c9195b45b1e090a1d469ee9f95 refuted v0=0,v1=10,v2=3,v3=-1

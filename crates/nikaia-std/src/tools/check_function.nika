@@ -537,7 +537,11 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
     for arg in args {
         let name = world.words.resolve(arg.name).clone()
         state.nameable(name, arg.span, "a parameter")
-        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.len() == 0 && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable
+        // **A `String` both kinds of text flow into is lent the same way**
+        // (ADR-282 D15, #1479): the tier pass marks it `either` over a view,
+        // and it is lent as a `&str`, so what its callers hand it does not
+        // change its type in the body.
+        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.len() == 0 && (!arg.ty.is_view || arg.ty.either) && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable
         // **And a `T?` it only reads is the option of a view** (#1256): `ref
         // String?`, `ref T?`, as the lowering writes it.
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && arg.ty.code == null && !arg.mutable
@@ -549,6 +553,7 @@ fn check_function_frame[H: CheckHost](mut state: CheckState, world: ref CheckWor
         if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, at + offset) {
             let mut viewed = arg.ty.clone()
             viewed.is_view = true
+            viewed.either = false
             ty = check_walked_declared(state, world, viewed, arg.span)
         } else {
             ty = check_walked_declared(state, world, arg.ty, arg.span)

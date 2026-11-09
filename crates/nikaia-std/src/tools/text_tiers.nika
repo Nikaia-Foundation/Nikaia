@@ -542,6 +542,9 @@ struct TierLocal {
     /// Bound by a `let` without a type to an empty list, set or map: the
     /// byte the `let` stands at, and -1 for anything else (ADR-282 D16).
     empty: i64,
+    /// Bound by a `let` without a type to a list literal with items: the
+    /// byte the `let` stands at, and -1 for anything else (#1449).
+    listed: i64,
     /// The words of the positions its value is read out of whole, also
     /// through a `??` (#696).
     through: Vec[String],
@@ -820,7 +823,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -1147,6 +1150,9 @@ fn flow_value(going: ref TierGoing, value: ref Expr?, kinds: ref Kinds, ask: ref
     if ty.is_view && value != null {
         let lent_value = value ?? return
         lent_whole(lent_value, ask, walk)
+        if path.len() == 0 {
+            adopt_lent(lent_value, going, ask, walk)
+        }
     }
     // **A view of static text read out of a position** is remembered with
     // where it goes (ADR-282 D29).
@@ -1212,7 +1218,14 @@ fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: Tie
         else => return,
     }
     let local = tier_local(name, walk) ?? return
-    if local.empty < 0 {
+    // **And a list literal going whole into a published position** (#1449):
+    // that position keeps text of its own (ADR-282 D22), so the literal's
+    // text is built there.
+    let mut at = local.empty
+    if at < 0 && local.listed >= 0 && position_published(going.owner, walk.declared) {
+        at = local.listed
+    }
+    if at < 0 {
         return
     }
     // A hashed container's keys stay text of their own, and its `let` is
@@ -1222,7 +1235,47 @@ fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: Tie
     if is_a_map_name(kind) || kind == "HashSet" {
         return
     }
-    walk.flows.adopted.insert(local.empty, Declaring { owner: going.owner.clone(), ty: going.ty.clone() })
+    walk.flows.adopted.insert(at, Declaring { owner: going.owner.clone(), ty: going.ty.clone() })
+}
+
+/// **A list of the function's own lent whole to a `ref` list is declared as
+/// that list** (ADR-282 D16, #1449): the text a `ref` container holds is
+/// `String` below (`lent_whole`), so a `let` without a type bound to an empty
+/// list or to a list literal takes the position's type without its `ref` -
+/// `[("a", [1])]` lent to `ref Vec[(String, Vec[i64])]` builds its text there.
+fn adopt_lent(given: ref Expr, going: ref TierGoing, ask: ref TierAsk, mut walk: TierWalk) {
+    let name = match given {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        else => return,
+    }
+    let local = tier_local(name, walk) ?? return
+    let at = if local.empty >= 0 { local.empty } else { local.listed }
+    if at < 0 || walk.flows.adopted.contains_key(at) {
+        return
+    }
+    let mut ty = going.ty.clone()
+    ty.is_view = false
+    ty.is_mut = false
+    if !a_container(ask.names, ty) || !holds_text(ask.names, ty) {
+        return
+    }
+    let kind = container_of(ask.names, ty) ?? ""
+    if is_a_map_name(kind) || kind == "HashSet" {
+        return
+    }
+    // Its own position, held as text of its own: what is put into it later
+    // goes there, not into the `ref` parameter's.
+    let owner = TextOwner::Let(at)
+    demote_inside(owner, ty, [], ask, walk)
+    walk.flows.adopted.insert(at, Declaring { owner: owner, ty: ty })
+}
+
+/// A list literal, `[a, b]`.
+fn is_a_list_literal_expr(value: ref Expr) -> bool {
+    return match value {
+        Expr::ListLit { .. } => true,
+        else => false,
+    }
 }
 
 /// `Vec()`, `collections::HashMap()`, `[]`: a list, a set or a map with
@@ -2739,6 +2792,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
     let mut of = tier_struct_of(value, ask, walk)
     let mut literal = -1
     let mut empty = -1
+    let mut listed = -1
     let mut declared: Declaring? = null
     let written = ty != null
     let from = text_source_word(value, ask, walk)
@@ -2767,6 +2821,9 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
             walk.reads.adopted.insert(at)
             declared = walk.adopted[at]?.clone()
         }
+        if !an_empty_container(value, ask) && is_a_list_literal_expr(value) {
+            listed = at
+        }
     }
     let mut bound = kinds
     if declared != null {
@@ -2784,7 +2841,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         if !written {
             element_of = made_element_read(value, ask, walk)
         }
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -6389,7 +6446,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         if lent_fields.contains(ask.names.resolve(arg.name)) {
             ty.is_view = true
         }
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -6402,7 +6459,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1

@@ -910,6 +910,8 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
 /// again; a `result` rule of the method checked must hold of what a
 /// `return` hands back.
 fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?, throwing: bool, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    // What the function is found to return (ADR-306 D23).
+    bounding_returned(walk, facts, returned, throwing, context, program, words, ask)
     if !walk.checking || !walk.rule_roots.contains_key("self") {
         return
     }

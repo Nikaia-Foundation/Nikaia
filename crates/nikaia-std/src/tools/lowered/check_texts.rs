@@ -332,6 +332,30 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn tuple_list_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+        let element: Ty = match want {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return None; },
+            _ => return None,
+        };
+        let held: Ty = match found {
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return None; },
+            _ => return None,
+        };
+        match value {
+            Expr::ListLit { items, .. } => {
+                let mut answered: Option<Ty> = None;
+                for item in items.iter() {
+                    let got = match self.tuple_literal(world, &held, &element, item) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                    if answered.is_none() { answered = Some(got); }
+                }
+                let each = match answered { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return Some(Ty::Named { name: String::from("Vec"), args: vec![each], view: false });
+            },
+            _ => return None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let wants: Vec<Ty> = match want {
             Ty::Tuple(parts) => parts.to_owned(),

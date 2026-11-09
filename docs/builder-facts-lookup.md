@@ -21,7 +21,10 @@ goes into the section of its topic, in one line, with the run that paid for it.
   (several `--filter`s allowed, #1238). Without `--filter` it runs everything:
   write the output to a file and grep it, never `| tail` (b933).
 * **`--bless` creates a missing `.stdout`**, never a `.stderr`; `--bless-stderr`
-  does both. With `--filter` it blesses only that test. A new test is run
+  does both. Exception: a program the compiler refuses (a refusal test) is
+  blessed by plain `--bless` into its `.stderr` only, no `.stdout`; so a test
+  meant to run that `--bless` turns into a `.stderr` is a refusal to fix, not
+  a missing flag (`project_tests_bless_program`, #1238; issue-1431). With `--filter` it blesses only that test. A new test is run
   through `nikaia test`, not only `nikaia run`: `print` writes no newline and
   the `.stdout` holds the bytes exactly (7c1643d).
 * **`tests/compiler` runs `target/fast/nikaia`**: never run the `it` binary
@@ -179,6 +182,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * The emitter's `world.library` is std only; to know a dependency's errors, ask `name_of_error` (it checks `own_contracts.types`), not `error_kind`. (issue-539)
 * Whether an argument to an `EitherText` parameter is lent or moved is decided by the late-read walk in `text_tiers.nika` (`late_argument`, `late_args`), not by the emitter. (issue-1334)
 * A list of string literals is tiered to `Vec<&'static str>`, so `ref $T` binds `T` to a view and a walk gives `&&str`; `AsRef::<str>::as_ref` treats `&str`, `&&str` and `&String` alike. (issue-1388)
+* The emitter knows a call borrows its root mutably through `emit_lends_mut` (facts `mut_receivers`/`mut_args`); use it rather than a new checker fact. (issue-1445)
+* An index *write* already hoists a position that names the target's root (#570); an index *read* is `emit_core_index_read`, and it hoists inside a `*{ let ..; get(..) }` block. (issue-1445)
 * Rust generics get no deref coercion, so an argument at a lent type-variable parameter gets exactly one `&` (`&&C` does not satisfy `C: Bound`). (issue-1342)
 * In the checker state a type parameter is `Ty::Named` (listed in `state.type_parameters`), not `Ty::Var`; `Ty::Var` appears only in contracts and signatures from `parameterise`. (issue-1342)
 * Under `impl<'a>` (`EmitLifetimes::Inner`), `EmitLifetimes::Named` means the impl's `'a`, so a store into self ties the source to it without declaring a new lifetime. (issue-1344)
@@ -254,14 +259,27 @@ goes into the section of its topic, in one line, with the run that paid for it.
   prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
   before and after on the same tree. Where the walk stops:
   `docs/formal-verification.md` §2.
+  The two can differ: `check --bounds FILE` proved a site D23 reaches that
+  `lower-std --bounds` did not (#1465); a figure is claimed only from
+  `lower-std`. (issue-1414)
+* **A `for` binding is a number of the walk** (`CheckFacts.whole_loops`):
+  check it before blaming the prover when a guard on `for k in ks` is lost.
+  (issue-1414)
 * **A test's `.bounds` keys sites by line**: an edited comment keeps its line
   count, or bless again. A precondition on a parameter's length is carried to
   the function's start (ADR-269 D20); a call is carried back only from the top
   of a body. After a precondition change run the `grep -rln 'assert('
   crates/nikaia/tests/it/` modules, not the whole `it` binary.
 * Nikaia has no `i8`; widening is `i64::from`. Valgrind needs `x86-64-v3`.
-* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist; `touch` them first. (issue-1397)
+* **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist, a new test's included: create an empty `NAME.bounds` first. (issue-1397, issue-1414)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
+* **A length in a solver fact goes through `bounding_length_named`** (typed `i64`, capped at 2^60 when its elements take space, ADR-385 D1); a bare variable as a length proves nothing past `+ 1`. (issue-1465)
+* **`Expr::Call` covers constructor paths** (`collections::BTreeMap()`): a walk arm on
+  `Call` names its callee, or it poisons map roots; only the `prove_` tests showed it. (issue-1453)
+* **D21 takes a list as an end only when its `.len()` already appears in a fact**: a change
+  that forgets lengths restates one. Roots come only from `read_let` (`bounds_shape.nika`);
+  `whole_loops` is filled by the checker (`check_core_stmt.nika`), not by the walk. (issue-1453)
+* **A proof that holds under `check` but not in `lower-std`**: first suspect ADR-391 D1 (a callee also called from another file of the package takes no bound from its callers). Rebuild it as a two-file package, the callee called from the second file, before suspecting the solver budget or the toolchain; a whole-package scratch run takes minutes, the two-file one under a second. (issue-1465)
 * **`f.rank[f.find(c)]` (a `ref mut` method call in an index of the same value) passes the checker and fails rustc (E0502)**: a defect, #1445; until it lands, a test probe binds the call to a `let`, and no code under `tools/` relies on the form. (issue-1414)
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
 * The tools package is a library the Rust crate imports and writes (`emit/host.rs`), so under ADR-306 D22 its `pub` fields of `pub` types are never seen-only-by-Nikaia. Element-bound machinery: `fields_seen`, `fields_declared`, `bounds_fields`. (issue-1414)
@@ -293,6 +311,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * the old binary lowers `for x in xs.f[a..]` wrong (NK1343, `expected Symbol, found &Symbol`); after the checker fix in fb2698e9, the first build of a tool that uses it needs the index-skip form, then a switch back. (issue-1383)
 
 ### Syntax gaps of tools/*.nika
+
+* `grammar` is a reserved word: a binding named `grammar` in `tools/*.nika` is refused by `lower-std`. (issue-1431)
 
 Classes (CLAUDE.md, *A missing form stops the work*): **[design]** holds,
 build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect

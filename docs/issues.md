@@ -32,10 +32,16 @@ it, like the checks in `docs/supervisor.md`.
   the command, the **expected** output and the **actual** output (the error
   with its code and message, or the `rustc` error on the emitted Rust). It was
   run on the binary of the day the issue was written; the issue says so.
+  A proof that differs between two runs (`check` and `lower-std`, one file
+  and a package) is reduced to a probe of at most two files, and says whether
+  the function is called from more than one file (ADR-391 D1) (#1465).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
   (`CLAUDE.md`, *A missing form stops the work*).
+  A step that rests on a decision says whether it is built (the function
+  that does it) or text only; text only is a dependency, named by its issue
+  (I4) and built first (#1453).
 * **I7. The cause, as far as known**: the file and function, and how sure
   (traced / suspected / unknown). With several shapes of the probe, which were
   traced to that cause.
@@ -44,12 +50,23 @@ it, like the checks in `docs/supervisor.md`.
 
 * **I8. Done when**: one sentence saying what is true when the issue is
   finished, checkable without the author.
+  When the last item may end in filed issues instead of code, the issue
+  says which code step carries `Fixes #N` (#1453).
 * **I8a. Measured sizes** (2026-11-08, #1397, #1414): an item that promises to
   remove sites gives the count it measured per group, with one probe per group,
   and checks the group against the governing ADR's *does not decide* list; an
   estimate not measured says so. A *Done when* figure names the reason it
   counts (the walk's report line), and each item says which reason it moves;
   an item that moves none of the counted reasons does not promise the figure.
+  A count taken from a builder's `Found:` is a hypothesis: the issue measures
+  it, or makes the count its step 1 and stops when it is short (#1431).
+  A figure of the toolchain is measured with `lower-std --bounds`, and each
+  group's probe is a real site from that run, not only a test program
+  (#1414).
+  Each group's probe is run against the decision the issue builds on: an
+  item counts a site only when that decision's mechanism reaches its probe
+  (the D24 value range of a returned list does not reach a trait method with
+  no body); the sites list goes into the issue by file and line (#1453).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/` (or the package's tests), and the rows it must show.

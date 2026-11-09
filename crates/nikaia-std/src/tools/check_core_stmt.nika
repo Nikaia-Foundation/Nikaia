@@ -1256,7 +1256,13 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
         }
     }
     // **And typed as one**: a `V?` read out of a map is an option of a view.
-    if of_a_map {
+    // **Unless a word by its kind is copied out of it** (ADR-279 D8, #1460):
+    // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
+    let word_copied = match bound {
+        Ty::Nullable(inner) => !a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
+        else => false,
+    }
+    if of_a_map && !word_copied {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
@@ -2021,6 +2027,37 @@ pub fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref Check
     }
     if shape.len() > 0 {
         elements = state.nested_pattern_parts(world, elements, shape, bindings.len() as i64, "A `for`", span)
+    }
+    // **A `for` over whole numbers binds a number of the bounds walk**
+    // (ADR-306 D7): `for k in ks` is bounded by every test of `k` in the
+    // body, as a name bound to a call's whole result is (#781).
+    if bindings.len() == 1 && elements.len() == 1 {
+        match elements[0] {
+            Ty::Named { name, args, .. } => {
+                if args.is_empty() && is_whole_number(name) {
+                    state.facts.whole_loops.insert(id_of(iter) as i64)
+                }
+            },
+            else => {}
+        }
+    }
+    // **And each name of several a `for` binds to a whole number**: a
+    // tuple's part, an `enumerate()`'s position.
+    if bindings.len() > 1 && elements.len() == bindings.len() {
+        let mut parts: collections::BTreeSet[i64] = collections::BTreeSet()
+        for (at, element) in elements.iter().enumerate() {
+            match element {
+                Ty::Named { name, args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        parts.insert(at as i64)
+                    }
+                },
+                else => {}
+            }
+        }
+        if !parts.is_empty() {
+            state.facts.whole_parts.insert(id_of(iter) as i64, parts)
+        }
     }
     // **An element of a list of code is given what the list was** (ADR-351
     // D1, D4).

@@ -1,0 +1,51 @@
+// **A position below a list's length, taken in a loop that grows the list,
+// bounds a read of it** (ADR-306 D21): a list just grown holds at least one
+// element, so `held.len() - 1` is below its length, at the head of a loop
+// as outside one. A position taken before the push keeps its check.
+
+pub fn after_push(bounds: Vec[i64]) -> i64 sync {
+	let mut held: Vec[i64] = []
+	let mut alive: Vec[i64] = []
+	for b in bounds {
+		held.push(b)
+		alive.push(held.len() - 1)
+	}
+	let mut sum = 0
+	for place in alive {
+		sum += held[place]
+	}
+	return sum
+}
+
+pub fn through_a_let(n: i64) -> i64 sync {
+	let mut held: Vec[i64] = []
+	let mut alive: Vec[i64] = []
+	for k in 0..<n {
+		held.push(k)
+		let at = held.len() - 1
+		alive.push(at)
+	}
+	let mut sum = 0
+	for place in alive {
+		sum += held[place]
+	}
+	return sum
+}
+
+pub fn before_push(bounds: Vec[i64]) -> i64 sync {
+	let mut held: Vec[i64] = []
+	let mut alive: Vec[i64] = []
+	for b in bounds {
+		alive.push(held.len())
+		held.push(b)
+	}
+	let mut sum = 0
+	for place in alive {
+		sum += held[place]
+	}
+	return sum
+}
+
+fn main() throws {
+	println(f"{after_push([1, 2])} {through_a_let(3)} {before_push([4])}")
+}
