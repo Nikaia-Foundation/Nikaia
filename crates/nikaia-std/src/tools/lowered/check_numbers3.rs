@@ -55,7 +55,7 @@ impl CheckState {
             let head_at = nikaia_std::num::value(head_at);
             let mut head = nikaia_std::index::get(&members, 0).1.clone();
             for member in members.iter() { if member.0 == head_at { head = member.1.clone(); } }
-            let mut beside: Vec<(String, Span)> = vec![];
+            let mut beside: Vec<(String, Span)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut indexed = false;
             for member in members.iter() {
                 for ask in member.1.asks.iter() {
@@ -66,7 +66,7 @@ impl CheckState {
                     } else { indexed = true; }
                 }
             }
-            let mut types: Vec<(String, Span)> = vec![];
+            let mut types: Vec<(String, Span)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for ask in beside.iter() {
                 let mut seen = false;
                 for one in types.iter() { if one.0 == ask.0 { seen = true; } }

@@ -2545,6 +2545,7 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
         state.tasks_meet_on_nothing(world, block, ends_group ?? 0)
     }
     check_core_view_lists_end(state, world, block)
+    check_core_place_in_block(state, world, block)
     state.scope.pop()
     return tail
 }
@@ -2714,6 +2715,189 @@ fn check_core_view_list_assigned(mut state: CheckState, world: ref CheckWorld, t
             state.facts.view_list_assigns.insert(at)
             return
         }
+    }
+}
+
+/// **Which list literals go in the task's block** (ADR-327 D9, step 5 of
+/// #490). A list is placed where it cannot outlive the task: bound once in
+/// this block by a `let` of its own, a `Vec` whose elements are no views
+/// and no functions, and every later use of the name proven local - a
+/// method of the list that keeps it where it is, an index, a `for` over
+/// it, a hole of an `f"…"`. Anything else - handed to a call, moved into a
+/// value, a closure, a task or a group, returned, a method not on the list
+/// - keeps it outside, as does every case not named here: conservative,
+/// because a value of the block freed by another task would be freed in
+/// the wrong place.
+fn check_core_place_in_block(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    let count = block.stmts.len() as i64
+    let mut at = 0
+    while at < count {
+        match block.stmts[at].node {
+            Stmt::Let { names, value, .. } => {
+                if names.len() == 1 && check_core_placeable_literal(value) {
+                    let name = f"{world.words.resolve(names[0])}"
+                    if check_core_a_plain_list(state, name) && check_core_view_list_bound_once(world, block, name) {
+                        let mut local = true
+                        let mut later = at + 1
+                        while later < count && local {
+                            local = check_core_stays_in_stmt(state, world, block.stmts[later].node, name)
+                            later += 1
+                        }
+                        if local {
+                            state.facts.placed_in_block.insert(node_key(value))
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// Whether `value` is a list literal the emitter can place.
+fn check_core_placeable_literal(value: ref Expr) -> bool sync {
+    return match value {
+        Expr::ListLit { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether `name` is bound, in this scope, to a `Vec` whose elements are
+/// neither views nor functions.
+fn check_core_a_plain_list(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return match found.ty {
+        Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1 && match args[0] {
+            Ty::Named { view, .. } => !view,
+            Ty::Tuple(_) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether `expr` is the name itself.
+fn check_core_is_the_name(world: ref CheckWorld, expr: ref Expr, name: ref String) -> bool sync {
+    return match expr {
+        Expr::Variable(found, _) => world.words.resolve(found) == name,
+        else => false,
+    }
+}
+
+/// Whether a method of a list keeps it where it is: it reads it, changes
+/// it in place or hands out an element, never the list's memory itself
+/// (`clone`, `split_off`, `into_iter` and the rest are not here).
+fn check_core_kept_method(method: ref String) -> bool sync {
+    return method == "len" || method == "is_empty" || method == "push" || method == "pop" || method == "get" || method == "first" || method == "last" || method == "contains" || method == "iter" || method == "iter_mut" || method == "sort" || method == "sort_by" || method == "sort_by_key" || method == "reverse" || method == "clear" || method == "insert" || method == "remove" || method == "swap" || method == "truncate" || method == "extend" || method == "join" || method == "resize" || method == "retain" || method == "dedup"
+}
+
+/// Whether a statement after the binding uses `name` only where it stays.
+fn check_core_stays_in_stmt(state: ref CheckState, world: ref CheckWorld, stmt: ref Stmt, name: ref String) -> bool sync {
+    return match stmt {
+        Stmt::Let { value, .. } => check_core_stays_in(state, world, value, name),
+        Stmt::Comptime { value, .. } => check_core_stays_in(state, world, value, name),
+        Stmt::Expr(value) => check_core_stays_in(state, world, value, name),
+        Stmt::Assign { target, value, .. } => check_core_stays_in_target(state, world, target, name) && check_core_stays_in(state, world, value, name),
+        Stmt::For { iter, body, .. } => (check_core_is_the_name(world, iter, name) || check_core_stays_in(state, world, iter, name)) && check_core_stays_in_block(state, world, body, name),
+        Stmt::While { cond, body } => check_core_stays_in(state, world, cond, name) && check_core_stays_in_block(state, world, body, name),
+        Stmt::Return(value) => check_core_stays_in(state, world, value ?? return true, name),
+        Stmt::Break => true,
+        Stmt::Continue => true,
+    }
+}
+
+/// Whether an assignment's target writes the list, an element of it or a
+/// field of one, or does not touch it.
+fn check_core_stays_in_target(state: ref CheckState, world: ref CheckWorld, target: ref Expr, name: ref String) -> bool sync {
+    return match target {
+        Expr::Variable(_, _) => true,
+        Expr::Index { base, index, .. } => (check_core_is_the_name(world, base, name) || check_core_stays_in_target(state, world, base, name)) && check_core_stays_in(state, world, index, name),
+        Expr::Field { base, .. } => check_core_stays_in_target(state, world, base, name),
+        else => check_core_stays_in(state, world, target, name),
+    }
+}
+
+/// Whether every statement of a block uses `name` only where it stays.
+fn check_core_stays_in_block(state: ref CheckState, world: ref CheckWorld, block: ref Block, name: ref String) -> bool sync {
+    for stmt in block.stmts {
+        if !check_core_stays_in_stmt(state, world, stmt.node, name) {
+            return false
+        }
+    }
+    return true
+}
+
+/// Whether each of `exprs` uses `name` only where it stays.
+fn check_core_stays_in_all(state: ref CheckState, world: ref CheckWorld, exprs: ref Vec[Expr], name: ref String) -> bool sync {
+    for expr in exprs {
+        if !check_core_stays_in(state, world, expr, name) {
+            return false
+        }
+    }
+    return true
+}
+
+/// **Whether `expr` uses `name` only where the list stays in its task**: an
+/// expression that does not mention it does; the name itself, bare, does
+/// not (it is moved or lent somewhere this walk does not follow).
+fn check_core_stays_in(state: ref CheckState, world: ref CheckWorld, expr: ref Expr, name: ref String) -> bool sync {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(expr, world.words, read)
+    if !read.contains(name) {
+        return true
+    }
+    return match expr {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if config.len() > 0 {
+                return false
+            }
+            if check_core_is_the_name(world, receiver, name) {
+                let described = state.facts.method_callees.get(id_of(receiver) as i64)
+                check_core_kept_method(world.words.resolve(method)) && (described?.starts_with("Vec::") ?? true) && check_core_stays_in_all(state, world, args, name)
+            } else {
+                check_core_stays_in(state, world, receiver, name) && check_core_stays_in_all(state, world, args, name)
+            }
+        },
+        Expr::Index { base, index, .. } => (check_core_is_the_name(world, base, name) || check_core_stays_in(state, world, base, name)) && check_core_stays_in(state, world, index, name),
+        Expr::Field { base, .. } => check_core_stays_in(state, world, base, name),
+        Expr::Binary { lhs, rhs, .. } => check_core_stays_in(state, world, lhs, name) && check_core_stays_in(state, world, rhs, name),
+        Expr::Unary { expr, .. } => check_core_stays_in(state, world, expr, name),
+        Expr::Cast { expr, .. } => check_core_stays_in(state, world, expr, name),
+        Expr::Try(inner, _) => check_core_stays_in(state, world, inner, name),
+        Expr::Call { func, args, config, .. } => config.len() == 0 && check_core_stays_in(state, world, func, name) && check_core_stays_in_all(state, world, args, name),
+        Expr::Tuple(parts, _) => check_core_stays_in_all(state, world, parts, name),
+        Expr::ListLit { items, .. } => check_core_stays_in_all(state, world, items, name),
+        Expr::Coalesce { value, fallback, .. } => check_core_stays_in(state, world, value, name) && check_core_stays_in(state, world, fallback, name),
+        Expr::Range { start, end, .. } => check_core_stays_in(state, world, start, name) && check_core_stays_in(state, world, end, name),
+        Expr::Block(inner, _) => check_core_stays_in_block(state, world, inner, name),
+        Expr::If { cond, then_branch, else_branch, .. } => check_core_stays_in(state, world, cond, name) && check_core_stays_in_block(state, world, then_branch, name) && check_core_stays_in_block(state, world, else_branch ?? return true, name),
+        Expr::Match { value, arms, .. } => {
+            if !check_core_stays_in(state, world, value, name) {
+                return false
+            }
+            for arm in arms {
+                if !check_core_stays_in(state, world, arm.body, name) || !check_core_stays_in(state, world, arm.guard ?? continue, name) {
+                    return false
+                }
+            }
+            true
+        },
+        Expr::Throw(thrown, _) => check_core_stays_in(state, world, thrown, name),
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => {
+                        if !check_core_is_the_name(world, expr, name) && !check_core_stays_in(state, world, expr, name) {
+                            return false
+                        }
+                    },
+                    FPart::Text(_) => {},
+                }
+            }
+            true
+        },
+        else => false,
     }
 }
 

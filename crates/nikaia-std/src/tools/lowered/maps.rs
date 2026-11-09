@@ -644,7 +644,7 @@ impl<'a> MpBody<'a> {
         if dep.unknown { return None; }
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut todo: Vec<String> = vec![];
+        let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for n in dep.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
         while !todo.is_empty() {
             let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&todo, nikaia_std::index::at(todo.len() as i64 - 1))).to_string());
@@ -775,7 +775,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         let class = nikaia_std::num::value(class);
         #[allow(unused_mut)] let mut labels = found.copy_owned();
         labels.sort();
-        #[allow(unused_mut)] let mut distinct: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut labels = labels;
+        #[allow(unused_mut)] let mut distinct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut labels = labels;
         for l in labels.iter() { if distinct.is_empty() || *nikaia_std::index::get(&distinct, nikaia_std::index::at(distinct.len() as i64 - 1)) != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
         let mut said: String = String::from("keyed"); #[allow(unused_mut, clippy::redundant_locals)] let mut distinct = distinct;
         let entry = match *nikaia_std::index::get(&how, &class) {
@@ -785,7 +785,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         if !b.all_keyed && entry.is_some() {
             let h = nikaia_std::index::or(entry, || MpHow { known: false, names: collections::BTreeSet::new() });
             if h.known {
-                let mut from: Vec<String> = vec![];
+                let mut from: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for n in h.names.iter() { from.push(nikaia_std::block::Text::from(n.to_string())); }
                 said = format!("from({})", nikaia_std::block::Text::from(from.join(", ")));
             }
@@ -793,7 +793,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         out.push(format!("{}: {}", nikaia_std::block::Text::from(distinct.join(" | ")), said));
     }
     out.sort();
-    #[allow(unused_mut)] let mut keys: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
+    #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
     for at in 0..positions.len() as i64 { if exact { keys.push(format!("{}", b.find(at))); } else { keys.push(nikaia_std::block::Text::from(nikaia_std::index::get(&positions, nikaia_std::index::at(at)).group.to_string())); } }
     let mut first: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
     let mut conflict = false;

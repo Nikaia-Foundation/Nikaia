@@ -2,7 +2,7 @@
 // Edit project_check.nika in the directory above, not this file.
 
 pub fn project_check_summary(findings: &[CheckFinding], violations: i64) -> String {
-    let mut refused: Vec<String> = vec![];
+    let mut refused: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let refuted = project_check_count(findings, "NK1207");
     if refuted > 0 { refused.push(format!("{} claim{} shown false", refuted, project_check_plural(refuted))); }
     let types = project_check_count(findings, "NK1") - refuted;

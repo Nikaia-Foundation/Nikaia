@@ -141,7 +141,7 @@ pub(crate) fn derived_body(config: &[ConfigParam], body: &Block, words: &winnow_
 }
 
 pub(crate) fn derived_callers_first(derived: &Derived, called: &[collections::BTreeSet<String>]) -> Vec<i64> {
-    let mut waiting: Vec<i64> = vec![];
+    let mut waiting: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _k in 0..called.len() as i64 { waiting.push(0); }
     for k in 0..called.len() as i64 {
         for name in (*nikaia_std::index::get(&called, nikaia_std::index::at(k))).iter() {
@@ -174,9 +174,9 @@ pub(crate) fn derived_callers_first(derived: &Derived, called: &[collections::BT
 }
 
 pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: &winnow_grammar::InternerContext) -> Vec<DerivedClaim> {
-    #[allow(unused_mut)] let mut ints: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut ints: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut unsigned: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints;
-    #[allow(unused_mut)] let mut lists: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints;
+    #[allow(unused_mut)] let mut lists: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints;
     for arg in args.iter() {
         let name = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
         let ty = nikaia_std::block::Text::from(words.resolve(arg.ty.name).to_string());
@@ -383,9 +383,9 @@ pub fn derived_rows(around: &Around) -> Vec<String> {
     let mut rows: Vec<String> = vec![];
     for (name, function) in around.derived.functions.iter() {
         let held = match *nikaia_std::index::get(&around.derived.entry, &function.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        #[allow(unused_mut)] let mut claims: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut claims: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for claim in held.iter() { claims.push(derived_written(claim)); }
-        let mut sites: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut claims = claims;
+        let mut sites: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut claims = claims;
         for site in function.sites.iter() { sites.push(nikaia_std::block::Text::from(site.1.to_string())); }
         rows.push(format!("{}\t{}\t{}", name, nikaia_std::block::Text::from(claims.join(", ")), nikaia_std::block::Text::from(sites.join(" "))));
     }

@@ -80,7 +80,7 @@ pub fn declared_errors(words: &winnow_grammar::InternerContext, items: &[Spanned
 }
 
 pub fn sum_name(members: &[String]) -> String {
-    let mut spelled: Vec<String> = vec![];
+    let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for member in members.iter() { spelled.push(nikaia_std::block::Text::from(member.replace("::", "_"))); }
     format!("__NikaiaThrows_{}", nikaia_std::block::Text::from(spelled.join("__")))
 }
@@ -120,14 +120,14 @@ pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections
         return None;
     }
     if path.len() < 2 { return None; }
-    let mut whole: Vec<String> = vec![];
+    let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for symbol in path.iter() {
         let symbol = *symbol;
         whole.push(nikaia_std::block::Text::from(words.resolve(symbol).to_string()));
     }
     let written = nikaia_std::block::Text::from(whole.join("::"));
     if error_kind(declared, library, &written) != 0 { return Some(written); }
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for at in 0..path.len() as i64 - 1 { parts.push(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string())); }
     let member = nikaia_std::block::Text::from(parts.join("::"));
     if error_kind(declared, library, &member) == 0 { return None; }

@@ -221,9 +221,9 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
     let mut current: String = String::from("");
     let mut function = FnContract::empty();
     let mut a_type = TypeContract::empty();
-    #[allow(unused_mut)] let mut traits: Vec<String> = vec![];
-    #[allow(unused_mut)] let mut functions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits;
-    let mut answers: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits; #[allow(unused_mut, clippy::redundant_locals)] let mut functions = functions;
+    #[allow(unused_mut)] let mut traits: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut functions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits;
+    let mut answers: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits; #[allow(unused_mut, clippy::redundant_locals)] let mut functions = functions;
     let lines = match nikaia_std::grammar::parse(&*written, LedgerText::parse_file()) {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}", error)), &"read")) },
@@ -311,7 +311,7 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
         }
         ledger.traits.insert(nikaia_std::block::Text::from(name.to_string()), methods);
     }
-    let mut done: Vec<String> = vec![];
+    let mut done: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (trait_name, _) in answers.iter() {
         if !nikaia_std::list::contains(&done, &trait_name) {
             let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -382,7 +382,7 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
             classes.push(nikaia_std::index::or(read, || Class { members: vec![], count: Count::Atomic }));
         }
         entry.sharing = classes;
-    } else if key == "maps" { entry.maps = entries(value, n)?; } else if key == "ends_by_length" { entry.ends_by_length = value == "true"; } else if key == "pieces" { entry.pieces = value == "true"; } else if key == "consumers" { entry.consumers = entries(value, n)?; } else if key == "requires" { entry.requires = entries(value, n)?; } else if key == "ensures" { entry.ensures = entries(value, n)?; } else if key == "ensures_each" { entry.ensures_each = entries(value, n)?; } else if key == "inferred" { entry.inferred = entries(value, n)?; } else if key == "from" { entry.from = entries(value, n)?; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a fn", n, key)), &"function_key")); }
+    } else if key == "maps" { entry.maps = entries(value, n)?; } else if key == "ends_by_length" { entry.ends_by_length = value == "true"; } else if key == "places" { entry.places = value == "true"; } else if key == "pieces" { entry.pieces = value == "true"; } else if key == "consumers" { entry.consumers = entries(value, n)?; } else if key == "requires" { entry.requires = entries(value, n)?; } else if key == "ensures" { entry.ensures = entries(value, n)?; } else if key == "ensures_each" { entry.ensures_each = entries(value, n)?; } else if key == "inferred" { entry.inferred = entries(value, n)?; } else if key == "from" { entry.from = entries(value, n)?; } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a fn", n, key)), &"function_key")); }
     Ok(())
 }
 
@@ -950,7 +950,7 @@ pub(crate) fn pointed_into(result: &str, order: &[String]) -> Vec<String> {
         Ok(value) => value,
         Err(_error) => { return vec![]; },
     };
-    #[allow(unused_mut)] let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for group in groups.iter() {
         for name in group.iter() {
             let name = *name;
@@ -1056,7 +1056,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
     let mut result = slice(&c, close + 1, c.len() as i64); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
     let semicolon = top_level_semicolon(&inside);
     let positional = if semicolon < 0 { slice(&inside, 0, inside.len() as i64) } else { slice(&inside, 0, semicolon) };
-    #[allow(unused_mut)] let mut parameters: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in split_args(&positional) {
         let part = trimmed(&part);
         if !part.is_empty() { parameters.push(part); }
@@ -1075,7 +1075,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
         result = replace_ref(&result, &format!("ref({})", pointed));
         borrows_said = true;
     }
-    #[allow(unused_mut)] let mut seen: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+    #[allow(unused_mut)] let mut seen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
     for entry in declared.iter() { seen.push(before_colon(entry)); }
     let mut body = joined_by(&written_parameters, ", "); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
     if semicolon >= 0 {

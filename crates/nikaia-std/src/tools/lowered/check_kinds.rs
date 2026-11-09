@@ -170,7 +170,7 @@ pub(crate) fn kind_callee_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, f
 }
 
 pub(crate) fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
         parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
@@ -278,7 +278,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
-        let mut members: Vec<String> = vec![];
+        let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for member in several_errors_of(on) { members.push(member.text()); }
         if members.is_empty() {
             match on {

@@ -467,7 +467,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn open_number_site(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[&Expr], site: i64) {
-        let mut numbers: Vec<i64> = vec![];
+        let mut numbers: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for value in values.iter() {
             let value = *value;
             numbers.extend(self.open_numbers_in(world, value));

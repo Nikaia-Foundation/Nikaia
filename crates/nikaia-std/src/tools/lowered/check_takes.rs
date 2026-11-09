@@ -450,7 +450,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn data_handed_over_is_used_again(&mut self) {
         let mut said: collections::BTreeSet<i64> = collections::BTreeSet::new();
-        let mut found: Vec<CheckFinding> = vec![];
+        let mut found: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for taken in self.handed.iter() {
             let used = match self.first_read_after(taken) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let name = nikaia_std::block::Text::from(taken.path.to_string());
@@ -487,7 +487,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_sequence_was_walked_twice(&mut self) {
         let mut said: collections::BTreeSet<i64> = collections::BTreeSet::new();
-        let mut found: Vec<CheckFinding> = vec![];
+        let mut found: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for taken in self.walked.iter() {
             let used = match self.first_read_after(taken) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if said.contains(&used.at) { continue; }
@@ -509,7 +509,7 @@ impl CheckState {
         self.moved_into_a_task = vec![];
         self.read_at = vec![];
         self.written_at = vec![];
-        let mut found: Vec<CheckFinding> = vec![];
+        let mut found: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, ty, at, who) in moved.iter() {
             let at = nikaia_std::num::value(at);
             let mut used: i64 = -1;
@@ -533,7 +533,7 @@ impl CheckState {
         self.parts_out = vec![];
         self.gives = vec![];
         self.ways_out = vec![];
-        let mut reports: Vec<CheckMissing> = vec![];
+        let mut reports: Vec<CheckMissing> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for index in 0..outs.len() as i64 {
             let out = (*nikaia_std::index::get(&outs, nikaia_std::index::at(index))).clone();
             if out.handed < 0 || out.handed >= self.handed.len() as i64 { continue; }
@@ -575,7 +575,7 @@ impl CheckState {
                 break;
             }
         }
-        let mut said: Vec<CheckFinding> = vec![];
+        let mut said: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for report in reports.iter() { said.push(self.a_part_is_missing(&outs, &ways, report)); }
         for one in said.iter() { self.findings.push(one.clone()); }
     }
@@ -583,7 +583,7 @@ impl CheckState {
         let out = (*nikaia_std::index::get(&outs, nikaia_std::index::at(*nikaia_std::index::get(&report.parts, 0)))).clone();
         let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(out.handed))).clone();
         let subject = nikaia_std::block::Text::from(out.subject.to_string());
-        let mut names: Vec<String> = vec![];
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for index in report.parts.iter() {
             let index = nikaia_std::num::value(index);
             names.push(format!("`{}`", nikaia_std::index::get(&outs, nikaia_std::index::at(index)).part));

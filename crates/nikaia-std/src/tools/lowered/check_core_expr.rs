@@ -504,7 +504,7 @@ pub(crate) fn check_core_expr_a_bare_case(ledger: &Ledger, owner: &str, variant:
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_expr_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], span: &Span) -> Ty {
-    let mut names: Vec<String> = vec![];
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
         names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
@@ -679,12 +679,13 @@ pub(crate) fn check_core_async_one_at_a_time(limit: Option<&Expr>) -> bool {
 }
 
 pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, task: &Expr, span: &Span) {
-    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.copy_owned(), negations: state.facts.negations.copy_owned(), shifts: state.facts.shifts.copy_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new() };
-    if !panics_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
+    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.copy_owned(), negations: state.facts.negations.copy_owned(), shifts: state.facts.shifts.copy_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new(), placed: state.facts.placed_in_block.copy_owned() };
     let function = nikaia_std::index::or(match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
+    if places_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function)); }
+    if !panics_of_task(task, world.here.items, world.words, &|literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
     check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
 }
 

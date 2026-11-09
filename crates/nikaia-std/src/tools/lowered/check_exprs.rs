@@ -147,8 +147,8 @@ impl CheckState {
             Ty::Tuple(ref parts) => {
                 what = String::from("a tuple");
                 kinds = "a tuple has";
-                #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-                #[allow(unused_mut)] let mut holes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+                #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                #[allow(unused_mut)] let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut holes = holes;
                 while index < parts.len() as i64 {
                     let letter = check_exprs_part_name(index);
@@ -193,7 +193,7 @@ impl CheckState {
                     None => None,
                 }, || false) { return; }
                 if implements_error(&world.here, &world.beside, name) { return; }
-                let mut fields: Vec<String> = vec![];
+                let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let mut an_enum = is_enum;
                 if is_struct {
                     let own_fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -219,7 +219,7 @@ impl CheckState {
                         help = format!("Write `{{{}:?}}` for its debug form.", shown);
                         if printed { help = format!("Print `f\"{{{}:?}}\"` for its debug form.", shown); }
                     } else {
-                        let mut holes: Vec<String> = vec![];
+                        let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                         for field in fields.iter() { holes.push(format!("`{{{}.{}}}`", shown, field)); }
                         let listed = nikaia_std::block::Text::from(holes.join(", "));
                         help = format!("Write its fields in holes of their own: {}.", listed);

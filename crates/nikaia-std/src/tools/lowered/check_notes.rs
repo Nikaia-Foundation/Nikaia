@@ -217,7 +217,7 @@ impl CheckState {
 }
 
 pub(crate) fn note_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
         parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));

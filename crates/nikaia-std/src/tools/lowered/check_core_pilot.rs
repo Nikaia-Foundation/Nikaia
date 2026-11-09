@@ -107,7 +107,7 @@ pub(crate) fn check_holds_a_symbol(state: &CheckState, world: &CheckWorld<'_, '_
             if !declared { return name == "winnow_grammar::Symbol" || name == "Symbol"; }
             if seen.contains(name) { return false; }
             seen.insert(nikaia_std::block::Text::from(name.to_string()));
-            let mut parts: Vec<Ty> = vec![];
+            let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             if state.structs.contains_key(name) {
                 let fields = match state.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 for field in fields.iter() { parts.push(field.ty.clone()); }
@@ -582,7 +582,7 @@ pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || check_reflect_kind(&state, ty).into());
-    let mut parts: Vec<Ty> = vec![];
+    let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); parts.push(inner.clone()); },
         Ty::Tuple(each) => { parts.extend(each.iter().cloned()); },
@@ -689,7 +689,7 @@ pub fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWo
         }
         #[allow(unused_mut)] let mut bounds: Vec<String> = vec![];
         if case == "Struct" || case == "Enum" { bounds.push(nikaia_std::block::Text::from(case.to_string())); }
-        let mut held: Vec<(String, Option<Vec<String>>)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut bounds = bounds;
+        let mut held: Vec<(String, Option<Vec<String>>)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bounds = bounds;
         for name in names.iter() {
             if name == "_" { continue; }
             held.push((nikaia_std::block::Text::from(name.to_string()), match state.type_parameters.get(name) {

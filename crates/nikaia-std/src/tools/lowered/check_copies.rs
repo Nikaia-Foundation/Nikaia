@@ -85,7 +85,7 @@ impl CheckState {
             let mut joining: Vec<String> = vec![];
             for name in package.iter() {
                 if copies.contains(name) || dropped.contains(name) { continue; }
-                let mut parts: Vec<Ty> = vec![];
+                let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 if nikaia_std::list::contains(&declared, &name) {
                     if self.enum_payloads.contains_key(name) {
                         let held = match self.enum_payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };

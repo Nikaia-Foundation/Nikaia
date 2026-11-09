@@ -56,6 +56,7 @@ pub(crate) trait Grow<T> {
 
 impl<T> Grow<T> for PlacedVec<T, Place> {
     #[inline]
+    #[track_caller]
     fn grow(&mut self, more: usize) {
         if self.capacity() - self.len() < more && self.try_reserve(more).is_err() {
             full()
@@ -63,6 +64,7 @@ impl<T> Grow<T> for PlacedVec<T, Place> {
     }
 
     #[inline]
+    #[track_caller]
     fn grow_exact(&mut self, more: usize) {
         if self.capacity() - self.len() < more && self.try_reserve_exact(more).is_err() {
             full()
@@ -70,6 +72,7 @@ impl<T> Grow<T> for PlacedVec<T, Place> {
     }
 
     #[inline]
+    #[track_caller]
     fn push_or_end(&mut self, item: T) {
         if self.len() == self.capacity() && self.try_reserve(1).is_err() {
             full()
@@ -100,6 +103,7 @@ impl<T> Grow<T> for PlacedVec<T, Place> {
     /// `extend_from_slice` clones one element at a time on stable Rust,
     /// which doubled the tasks' count (`benches/fallible`).
     #[inline]
+    #[track_caller]
     fn extend_copied(&mut self, run: &[T])
     where
         T: Copy,
@@ -183,12 +187,14 @@ impl<T> List<T> {
     /// Room for `more` elements, the list growing as `Vec` grows, or the
     /// task ends (D6).
     #[inline]
+    #[track_caller]
     pub fn reserve(&mut self, more: usize) {
         self.items_mut().grow(more);
     }
 
     /// Room for exactly `more` elements, or the task ends (D6).
     #[inline]
+    #[track_caller]
     pub fn reserve_exact(&mut self, more: usize) {
         self.items_mut().grow_exact(more);
     }
@@ -204,6 +210,7 @@ impl<T> List<T> {
 
     /// Push `item`, ending the task where the block refuses (D6).
     #[inline]
+    #[track_caller]
     pub fn push(&mut self, item: T) {
         self.items_mut().push_or_end(item);
     }
@@ -216,6 +223,7 @@ impl<T> List<T> {
 
     /// Put `item` at `at`, moving the rest one on.
     #[inline]
+    #[track_caller]
     pub fn insert(&mut self, at: usize, item: T) {
         self.reserve(1);
         self.items_mut().insert(at, item);
@@ -338,6 +346,7 @@ impl<T> List<T> {
 
     /// The elements of `run`, one clone each, after one reservation.
     #[inline]
+    #[track_caller]
     pub fn extend_from_slice(&mut self, run: &[T])
     where
         T: Clone,
@@ -350,6 +359,7 @@ impl<T> List<T> {
 
     /// Grow or shrink to `len`, new elements clones of `item`.
     #[inline]
+    #[track_caller]
     pub fn resize(&mut self, len: usize, item: T)
     where
         T: Clone,
@@ -373,6 +383,16 @@ impl<T> List<T> {
     #[inline]
     pub fn from_iter_in(items: impl IntoIterator<Item = T>, place: Place) -> List<T> {
         let mut list = List::new_in(place);
+        list.extend(items);
+        list
+    }
+
+    /// The items listed, placed at `place`: an array, not an iterator, so
+    /// that `rustc` carries the list's element type into each item (a
+    /// closure becomes the list's `dyn Fn`), as `list_of` does outside.
+    #[inline]
+    pub fn from_array_in<const N: usize>(items: [T; N], place: Place) -> List<T> {
+        let mut list = List::with_capacity_in(N, place);
         list.extend(items);
         list
     }
@@ -402,6 +422,7 @@ impl<T: Copy> List<T> {
     /// `allocator-api2`'s `extend_from_slice` clones one element at a time on
     /// stable Rust, which doubled the tasks' count (`benches/fallible`).
     #[inline]
+    #[track_caller]
     pub fn extend_copied(&mut self, run: &[T]) {
         self.items_mut().extend_copied(run);
     }
@@ -561,6 +582,7 @@ impl<T> FromIterator<T> for List<T> {
 /// iterator's lower bound first, as `Vec` does.
 impl<T> Extend<T> for List<T> {
     #[inline]
+    #[track_caller]
     fn extend<I: IntoIterator<Item = T>>(&mut self, items: I) {
         let items = items.into_iter();
         self.reserve(items.size_hint().0);
@@ -572,6 +594,7 @@ impl<T> Extend<T> for List<T> {
 
 impl<'a, T: Copy + 'a> Extend<&'a T> for List<T> {
     #[inline]
+    #[track_caller]
     fn extend<I: IntoIterator<Item = &'a T>>(&mut self, items: I) {
         self.extend(items.into_iter().copied());
     }
@@ -678,6 +701,15 @@ impl<T: Clone> List<T> {
     #[inline]
     pub fn from_elem(item: T, n: usize) -> List<T> {
         let mut list = List::with_capacity(n);
+        list.resize(n, item);
+        list
+    }
+
+    /// `n` clones of `item`, placed at `place`: one allocation of `n`.
+    #[inline]
+    #[track_caller]
+    pub fn from_elem_in(item: T, n: usize, place: Place) -> List<T> {
+        let mut list = List::with_capacity_in(n, place);
         list.resize(n, item);
         list
     }

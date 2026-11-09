@@ -137,7 +137,7 @@ pub(crate) fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
     if name == "List" { name = String::from("Vec"); }
     let mut inner: String = String::from("");
     if !args.is_empty() {
-        let mut spelled: Vec<String> = vec![];
+        let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for arg in args.iter() { spelled.push(plain_rust_spelling(arg)); }
         inner = format!("<{}>", nikaia_std::block::Text::from(spelled.join(", ")));
     }

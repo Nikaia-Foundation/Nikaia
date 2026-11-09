@@ -115,7 +115,7 @@ pub(crate) fn reach_edges_of(words: &winnow_grammar::InternerContext, aliases: &
                 match func {
                     Expr::Variable(name, _) => { let name = *name; reach_note(aliases, pausing, by_last, &nikaia_std::block::Text::from(words.resolve(name).to_string()), &mut out); },
                     Expr::Path(segments, _) => {
-                        let mut joined: Vec<String> = vec![];
+                        let mut joined: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                         for segment in segments.iter() {
                             let segment = *segment;
                             joined.push(nikaia_std::block::Text::from(words.resolve(segment).to_string()));
@@ -188,7 +188,7 @@ pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeS
     let own = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !reach_runs_code(own) { return false; }
     if !graph.contains_key(key) { return false; }
-    #[allow(unused_mut)] let mut pending: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut pending: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for first in reach_set_for(graph, key) { pending.push(first); }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;

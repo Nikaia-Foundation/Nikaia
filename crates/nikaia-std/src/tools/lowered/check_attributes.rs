@@ -315,8 +315,8 @@ pub(crate) fn check_attributes_the_mark(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_attributes_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, fields: &[FieldContract], attribute: &Attribute) {
-    let mut required: Vec<FieldContract> = vec![];
-    let mut options: Vec<FieldContract> = vec![];
+    let mut required: Vec<FieldContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut options: Vec<FieldContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in fields.iter() { if field.default == "" { required.push(field.clone()); } else { options.push(field.clone()); } }
     if (attribute.args.len() as i64) != required.len() as i64 {
         let mut wanted: String = String::from("");

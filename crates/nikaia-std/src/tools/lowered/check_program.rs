@@ -143,7 +143,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
             None => None,
         }, || "T".into());
         let said = format!("This happened while going through `{}::{}` for `{}`, at the {} `{}`.", walker, member, on, one, field.name);
-        let mut fresh: Vec<CheckFinding> = vec![];
+        let mut fresh: Vec<CheckFinding> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut next = before;
         while next < state.findings.len() as i64 {
             let mut found = (*nikaia_std::index::get(&state.findings, nikaia_std::index::at(next))).clone();
@@ -162,7 +162,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
 // this was written - see `contracts::sync`.
 pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     check_program_copies_called(state, world);
-    let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = vec![];
+    let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); }
     for (name, on, fields) in instantiations.iter() {
         for item in world.here.items.iter() {
@@ -187,7 +187,7 @@ pub fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckW
 pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
     let mut walked: collections::BTreeSet<(String, String)> = collections::BTreeSet::new();
     loop {
-        let mut pending: Vec<(String, String, Vec<FieldContract>)> = vec![];
+        let mut pending: Vec<(String, String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for ((name, on), fields) in state.facts.field_copies.iter() { if !walked.contains(&(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()))) { pending.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); } }
         if pending.is_empty() { break; }
         for (name, on, fields) in pending.iter() {
@@ -212,7 +212,7 @@ pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, w
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
-    let mut pending: Vec<(String, String)> = vec![];
+    let mut pending: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, _) in state.facts.unrolled.iter() { pending.push(key.clone()); }
     while !pending.is_empty() {
         let next = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
@@ -232,7 +232,7 @@ pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckW
 
 pub fn check_program_reached(state: &CheckState, on: &str) -> Vec<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    #[allow(unused_mut)] let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(on.to_string())];
+    #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(on.to_string())], nikaia_std::block::Place::Block);
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while !queue.is_empty() {
         let next = match queue.pop() { Some(__nikaia_value) => __nikaia_value, None => break };

@@ -387,7 +387,7 @@ pub(crate) fn write_value(v: &Value, out: &mut String) {
 }
 
 pub(crate) fn write_string(s: &str, out: &mut String) {
-    let digits: Vec<scalar> = vec!['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+    let digits: Vec<scalar> = nikaia_std::block::List::from_array_in(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'], nikaia_std::block::Place::Block);
     out.push('"');
     for c in s.chars() {
         let code = c as i64;

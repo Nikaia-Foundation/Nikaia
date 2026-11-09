@@ -1,0 +1,36 @@
+// A task over its budget fails only itself (ADR-327 D13, ADR-async-5 D19): its sibling in
+// the group runs on, and the function that started both fails with
+// `task::OverBudget`, which its caller catches.
+fn fill() -> i64 {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100000 {
+        xs.push(i)
+    }
+    return xs.len()
+}
+
+fn small() -> i64 {
+    let mut n = 0
+    for i in 0..<10 {
+        n += i
+    }
+    return n
+}
+
+fn total() -> i64 throws {
+    let a = async fill()
+    let b = async small()
+    println(f"the sibling gave {b}")
+    return a + b
+}
+
+fn main() throws {
+    let m = total() catch {
+        match error {
+            task::OverBudget => println("caught task::OverBudget"),
+            else => println(f"caught: {error}"),
+        }
+        0
+    }
+    println(f"after: {m}")
+}

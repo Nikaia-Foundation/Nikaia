@@ -39,7 +39,7 @@ pub fn paused_only_by_code(graph: &collections::BTreeMap<String, SyncReach>, hol
 }
 
 pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &collections::BTreeMap<String, bool>, start: &str) -> Vec<String> {
-    #[allow(unused_mut)] let mut queue: Vec<String> = vec![nikaia_std::block::Text::from(start.to_string())];
+    #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(start.to_string())], nikaia_std::block::Place::Block);
     let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     seen.insert(nikaia_std::block::Text::from(start.to_string()));
@@ -61,7 +61,7 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
 }
 
 pub(crate) fn chain_back_to(came_from: &collections::BTreeMap<String, String>, at: &str) -> Vec<String> {
-    #[allow(unused_mut)] let mut backwards: Vec<String> = vec![nikaia_std::block::Text::from(at.to_string())];
+    #[allow(unused_mut)] let mut backwards: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(at.to_string())], nikaia_std::block::Place::Block);
     let mut back = nikaia_std::block::Text::from(at.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut backwards = backwards;
     while came_from.contains_key(&back) {
         back = nikaia_std::index::or(match *nikaia_std::index::get(&came_from, &back) {
@@ -350,7 +350,7 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
         let declared = match (*arg.ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if declared.is_sync { allowed.insert(nikaia_std::block::Text::from(names.resolve(arg.name).to_string())); }
     }
-    #[allow(unused_mut)] let mut named: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for one in sync_by.iter() {
         let one = *one;
         let parameter = nikaia_std::block::Text::from(names.resolve(one).to_string());

@@ -1,0 +1,10 @@
+// `main` is the root task, but its budget is the strategy's, normally the
+// memory the program may use (ADR-327 D14, D7): a list it keeps to itself
+// may outgrow the 64 KiB a spawned task's block holds.
+fn main() throws {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100000 {
+        xs.push(i)
+    }
+    println(f"{xs.len()}")
+}

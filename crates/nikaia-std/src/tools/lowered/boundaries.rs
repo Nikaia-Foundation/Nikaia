@@ -49,7 +49,7 @@ pub(crate) fn written_or_nothing(text: Option<&str>) -> String {
 
 pub(crate) fn the_boundary(on_the_line: Option<&str>, source: &str, boundaries: &[Boundary]) -> i64 {
     let line = written_or_nothing(on_the_line);
-    let mut in_the_file: Vec<i64> = vec![];
+    let mut in_the_file: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for at in 0..boundaries.len() as i64 {
         let called = format!("{}::", nikaia_std::index::get(&boundaries, nikaia_std::index::at(at)).word);
         if on_the_line.is_some() && line.contains(AsRef::<str>::as_ref(&called)) { return at; }

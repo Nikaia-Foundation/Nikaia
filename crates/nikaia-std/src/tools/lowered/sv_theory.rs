@@ -97,7 +97,7 @@ pub(crate) fn sv_src_same(a: &SvSrc, b: &SvSrc) -> bool {
 }
 
 pub(crate) fn sv_written(refutation: &LgRefutation, held: &[SvHeld], book: &mut SvBook) -> Option<SvClause> {
-    let mut spelled: Vec<SvSpelled> = vec![];
+    let mut spelled: Vec<SvSpelled> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for step in refutation.steps.iter() {
         let step = *step;
         let made = match step {

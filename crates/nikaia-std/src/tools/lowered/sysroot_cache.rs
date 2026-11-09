@@ -139,7 +139,7 @@ pub fn sysroot_file_key<H: SysrootHost>(interface: &str, name: &str, text: &str,
 }
 
 pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![nikaia_std::block::Text::from(SYSROOT_TOOLS_PACKAGE.to_string())];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_TOOLS_PACKAGE.to_string())], nikaia_std::block::Place::Block);
     names.extend(sysroot_stale(dir, &vec![]));
     let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for name in names.iter() {

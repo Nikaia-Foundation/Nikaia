@@ -152,7 +152,7 @@ impl EmitState {
                     match &variant.fields {
                         VariantFields::Unit => { out.push(&format!("    {},\n", vname)); },
                         VariantFields::Tuple(types) => {
-                            #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+                            #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                             let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
                             for t in types.iter() {
                                 let member = boxed_member(&owner, i, "");
@@ -163,7 +163,7 @@ impl EmitState {
                             out.push(&format!("    {}({}),\n", vname, nikaia_std::block::Text::from(parts.join(", "))));
                         },
                         VariantFields::Named(fields) => {
-                            let mut parts: Vec<String> = vec![];
+                            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                             for f in fields.iter() {
                                 let member = boxed_member(&owner, -1, &emit_text(world, f.name));
                                 let lowered = self.emit_item_ty(world, walk, host, &f.ty, &EmitLifetimes::Named);
@@ -227,7 +227,7 @@ impl EmitState {
                     let declares = emit_angled(&emit_seeds_declared(0, hidden, false));
                     let applied = emit_angled(&emit_seeds_applied(0, hidden));
                     let me = escaped_name(&text);
-                    #[allow(unused_mut)] let mut same: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut same: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for f in fields.iter() {
                         let n = escaped_name(&emit_text(world, f.name));
                         same.push(format!("self.{} == other.{}", n, n));
@@ -262,7 +262,7 @@ impl EmitState {
             },
             Item::Import { path, alias } => {
                 let alias = *alias;
-                let mut segments: Vec<String> = vec![];
+                let mut segments: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for s in path.iter() {
                     let s = *s;
                     segments.push(emit_text(world, s));
@@ -426,7 +426,7 @@ impl EmitState {
     pub(crate) fn emit_trait_method<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, trait_name: &str, method: &TraitMethod, is_sync: bool, foreign: bool) -> Result<(), Box<dyn std::error::Error>> {
         walk.floor = true;
         let key = format!("{}::{}", trait_name, emit_text(world, method.name));
-        #[allow(unused_mut)] let mut from_names: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut from_names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if !foreign {
             for source in method.ret_from.iter() {
                 let source = *source;
@@ -434,7 +434,7 @@ impl EmitState {
             }
         }
         let mut shares_a_lifetime = false;
-        #[allow(unused_mut)] let mut params: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names;
+        #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names;
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         if method.receiver.is_some() {
             let mut receiver = emit_item_receiver(Option::as_ref(&method.receiver));
@@ -546,7 +546,7 @@ impl EmitState {
         self.emit_trait_method(world, walk, &mut written, host, trait_name, declared, declared.is_sync, false)?;
         let trimmed = written.buf.trim_end();
         let signature = nikaia_std::block::Text::from(nikaia_std::index::or(trimmed.strip_suffix(';'), || std::convert::AsRef::<str>::as_ref(trimmed)).to_string());
-        #[allow(unused_mut)] let mut passed: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if declared.receiver.is_some() { passed.push(String::from("self")); }
         for a in declared.args.iter() { passed.push(escaped_name(&emit_text(world, a.name))); }
         for o in declared.config.iter() { passed.push(escaped_name(&emit_text(world, o.name))); }

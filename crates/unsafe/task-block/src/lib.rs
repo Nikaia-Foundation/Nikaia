@@ -138,11 +138,25 @@ const MEMORY: std::alloc::Layout = match std::alloc::Layout::from_size_align(BLO
 };
 
 /// **A full block ends the task** (D6), here and not in the allocator, which
-/// only refuses. Cold: a task that fits its block never comes here.
+/// only refuses. Cold: a task that fits its block never comes here. It unwinds
+/// as a panic does, so the cleanups run, but past the panic hook: the task did
+/// not crash, it ran out of its budget, and whoever waits for it is told so
+/// with `task::OverBudget` (ADR-327 D13, ADR-async-5 D19).
 #[cold]
 #[inline(never)]
 pub fn full() -> ! {
-    panic!("the task is over its memory budget")
+    std::panic::resume_unwind(Box::new(OverBudget))
+}
+
+/// **What a full block unwinds with** (ADR-327 D13): the task's edge tells it
+/// from a panic by this payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverBudget;
+
+impl std::fmt::Display for OverBudget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("the task is over its memory budget")
+    }
 }
 
 impl Block {
@@ -471,18 +485,21 @@ pub fn list<T>(place: Place) -> List<T> {
 
 /// Room for `more` elements, or the task ends (D6).
 #[inline]
+#[track_caller]
 pub fn reserve<T>(list: &mut List<T>, more: usize) {
     list.reserve(more);
 }
 
 /// Push `item`, ending the task where the block refuses (D6).
 #[inline]
+#[track_caller]
 pub fn push<T>(list: &mut List<T>, item: T) {
     list.push(item);
 }
 
 /// **Append a run of elements with one copy** ([`List::extend_copied`]).
 #[inline]
+#[track_caller]
 pub fn extend<T: Copy>(list: &mut List<T>, run: &[T]) {
     list.extend_copied(run);
 }
@@ -567,10 +584,7 @@ mod tests {
             reserve(&mut more, 4000);
         }));
         let payload = ended.expect_err("a full block ends the task");
-        assert_eq!(
-            payload.downcast_ref::<&str>(),
-            Some(&"the task is over its memory budget")
-        );
+        assert_eq!(payload.downcast_ref::<OverBudget>(), Some(&OverBudget));
         // What it frees, it can allocate again.
         held.clear();
         reserve(&mut more, 4000);

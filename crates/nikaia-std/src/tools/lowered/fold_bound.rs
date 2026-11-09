@@ -1300,7 +1300,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     let mut init = fb_new_walk();
     match &spec.init {
         Expr::Variable(..) => {
-            let mut starts: Vec<i64> = vec![];
+            let mut starts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in fb_vec_of(&ix.methods, &fb_key(&nikaia_std::block::Text::from(acc.name.to_string()), "")) {
                 let fun = match ix.fns.get(&at) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if fun.args.is_empty() { starts.push(at); }
@@ -1347,7 +1347,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
     region.extend(merge.reached.iter().cloned());
     let me = fb_fold_owner(rule_at);
     let mut outside: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    #[allow(unused_mut)] let mut queue: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for at in region.iter() {
         let at = nikaia_std::num::value(at);
         if ix.implicit.contains(&at) {
@@ -1411,7 +1411,7 @@ pub fn fb_fold_counters<H: FbHost>(host: &H, ix: &FbIndex<'_, '_, '_>, uses: &Fb
         if spec.parallel { pieces = 0; }
         let grown = match k.checked_mul(steps) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let bound = match grown.checked_add(k0 * pieces) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let mut sites: Vec<i64> = vec![];
+        let mut sites: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         sites.extend(fb_vec_of(&step.sites, field));
         sites.extend(fb_vec_of(&merge.sites, field));
         sites.extend(fb_vec_of(&init.sites, field));

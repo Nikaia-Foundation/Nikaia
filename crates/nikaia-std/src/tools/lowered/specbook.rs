@@ -10,7 +10,7 @@ pub struct SpecBlock {
 }
 
 pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
-    #[allow(unused_mut)] let mut lines: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for line in text.split("\n") { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     let mut found: Vec<SpecBlock> = vec![];
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
@@ -93,7 +93,7 @@ pub(crate) fn wrapped(body: &str) -> String {
 }
 
 pub(crate) fn split_at_the_first_statement(code: &str) -> Vec<String> {
-    #[allow(unused_mut)] let mut lines: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for line in code.trim_end().split("\n") { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     let mut head: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     let mut depth: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
@@ -192,7 +192,7 @@ pub fn specbook_report(lines: &[SpecLine]) -> String {
     for v in lines.iter() {
         let ordinal = nikaia_std::index::or(nth.get(&v.file), || 0) + 1;
         nth.insert(nikaia_std::block::Text::from(v.file.to_string()), ordinal);
-        #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut notes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if v.discusses_a_refusal { notes.push(String::from("about-a-refusal")); }
         if v.sketch { notes.push(String::from("sketch")); }
         if !v.codes.is_empty() { notes.push(nikaia_std::block::Text::from(v.codes.join(","))); }

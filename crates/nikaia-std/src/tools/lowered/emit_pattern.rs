@@ -281,7 +281,7 @@ impl EmitState {
         let raw_any = walk.grammar_raw && called == "any" && args.is_empty();
         out.push(&if raw_any { String::from("byte") } else { nikaia_std::block::Text::from(called.to_string()) });
         if !generics.is_empty() {
-            let mut params: Vec<String> = vec![];
+            let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for g in generics.iter() { params.push(host.ty_named(walk, g)?); }
             out.push(&format!("<{}>", nikaia_std::block::Text::from(params.join(", "))));
         }

@@ -8,7 +8,7 @@ pub fn call_written_name(words: &winnow_grammar::InternerContext, func: &Expr) -
             return Some(nikaia_std::block::Text::from(words.resolve(name).to_string()));
         },
         Expr::Path(segments, _) => {
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(nikaia_std::block::Text::from(words.resolve(segment).to_string()));
@@ -114,7 +114,7 @@ pub fn call_returns_either(words: &winnow_grammar::InternerContext, items: &[Spa
     let mut qualified = false;
     if parts.len() > 1 {
         qualified = true;
-        let mut before: Vec<String> = vec![];
+        let mut before: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for at in 0..parts.len() as i64 - 1 { before.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (at) as usize)).to_string())); }
         wanted = nikaia_std::block::Text::from(before.join("::"));
     }

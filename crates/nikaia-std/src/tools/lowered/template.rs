@@ -174,7 +174,7 @@ impl Splitter {
         let mut header: String = String::from("");
         for k in self.at + 4..close { header.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
         self.at = close + 1;
-        let mut words: Vec<String> = vec![];
+        let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for word in header.split_whitespace() { words.push(nikaia_std::block::Text::from(word.to_string())); }
         if words.len() != 3 || *nikaia_std::index::get(&words, 1) != "in" { return Err(nikaia_std::error::throwing(Refused::Because(format!("a template loop is written `<for name in :collection>`, not `<for{}>`", header)), &"loop_header")); }
         let binding = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 0)).to_string());

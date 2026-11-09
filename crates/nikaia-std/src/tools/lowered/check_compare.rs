@@ -64,7 +64,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         if nikaia_std::list::contains(&COMPARE_UNCOPIED, &name) { return false; }
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for arg in args.iter() { written.push(arg.text()); }
             key = format!("{}[{}]", name, nikaia_std::block::Text::from(written.join(", ")));
         }
@@ -128,7 +128,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) { return self.all_of(args, &how, seen); }
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if !args.is_empty() {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for arg in args.iter() { written.push(arg.text()); }
             key = format!("{}[{}]", name, nikaia_std::block::Text::from(written.join(", ")));
         }
@@ -206,7 +206,7 @@ pub struct CompareDeclared {
 }
 
 pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_>) -> CompareDeclared {
-    let mut declared: Vec<String> = vec![];
+    let mut declared: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in here.items.iter() {
         match &item.node {
             Item::Struct { name, .. } => { let name = *name; declared.push(here.text(name)); },
@@ -217,7 +217,7 @@ pub fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, he
     let mut found = CompareDeclared { compares: vec![], totally: vec![] };
     for name in declared.iter() {
         if asking.implements("Eq", name) { continue; }
-        let mut parts: Vec<Ty> = vec![];
+        let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if asking.payloads.contains_key(name) { parts = match asking.payloads.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue }.copy_owned(); } else if asking.structs.contains_key(name) {
             let fields = match asking.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             for field in fields.iter() { parts.push(field.ty.clone()); }
@@ -344,7 +344,7 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
 
 pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let mut refused: Vec<CheckFinding> = vec![];
-    let mut stack: Vec<Ty> = vec![ty.clone()];
+    let mut stack: Vec<Ty> = nikaia_std::block::List::from_array_in([ty.clone()], nikaia_std::block::Place::Block);
     while !stack.is_empty() {
         let one = match stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         match one {

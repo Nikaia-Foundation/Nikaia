@@ -133,7 +133,7 @@ pub fn infer(
 }
 
 /// What `async e` contributes: `task::Crashed` where its task can panic,
-/// nothing where it cannot.
+/// `task::OverBudget` where it builds in its block, nothing otherwise.
 fn crashed(
     parsed: &Parsed,
     task: &Expr,
@@ -150,14 +150,27 @@ fn crashed(
         own,
         library,
     );
+    // **A task with a site in its block can run over it** (ADR-327 D13).
+    let places = nikaia_std::tools::panics::places_of_task(
+        task,
+        &parsed.program.items,
+        &parsed.interner,
+        &|expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+        facts,
+        own,
+        library,
+    );
+    let mut errors = Vec::new();
+    if can {
+        errors.push("task::Crashed".to_text());
+    }
+    if places {
+        errors.push("task::OverBudget".to_text());
+    }
     nikaia_std::tools::throws::Contribution {
         call: None,
         given: Vec::new(),
-        errors: if can {
-            vec!["task::Crashed".to_text()]
-        } else {
-            Vec::new()
-        },
+        errors,
         fatal: Vec::new(),
         result: None,
     }

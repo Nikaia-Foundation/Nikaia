@@ -38,7 +38,7 @@ pub(crate) fn emit_own_ws_rule() -> &'static str { "NIKAIA_OWN_WS" }
 pub(crate) fn emit_default_ws() -> String { String::from("multispace0") }
 
 pub(crate) fn emit_same_line_function(name: &str) -> String {
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     out.push(String::from("#[allow(non_snake_case, dead_code)]\n"));
     out.push(format!("fn {}_{}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> Result<(), ::winnow_grammar::ParseError>\n", emit_same_line_rule(), name));
     out.push(String::from("where\n"));
@@ -387,7 +387,7 @@ impl EmitState {
             Some(text) => { label = format!(" # {}", rust_string(text)); },
             None => { },
         }
-        let mut values: Vec<String> = vec![];
+        let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for arg in rule.args.iter() { values.push(format!("{}: {}", emit_text(world, arg.name), host.ty_named(walk, &arg.ty)?)); }
         for option in rule.config.iter() { values.push(format!("{}: {}", emit_text(world, option.name), host.ty_named(walk, &option.ty)?)); }
         let taken = if values.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(values.join(", "))) };
@@ -615,7 +615,7 @@ impl EmitState {
                 let built = host.ty_named(walk, ty)?;
                 let owner = emit_text(world, ty.name);
                 #[allow(unused_mut)] let mut slots: Vec<String> = vec![];
-                #[allow(unused_mut)] let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut slots = slots;
+                #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut slots = slots;
                 #[allow(unused_mut)] let mut nothing: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 for field in fields.iter() {
                     slots.push(format!("Option<Option<{}>>", host.ty_named(walk, &field.ty)?));
@@ -632,7 +632,7 @@ impl EmitState {
                 for i in 0..fields.len() as i64 { out.push(&format!("if let Some(v) = piece.{} {{ if f{}.is_some() {{ {}::nikaia_std::grammar::member_error({}, \"is given twice\")))); }} f{} = Some(v); }} ", i, i, fail, *nikaia_std::index::get(&names, (i) as usize), i)); }
                 out.push("} ");
                 let defaults = self.field_defaults(world, &owner); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-                let mut built_fields: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+                let mut built_fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 for i in 0..fields.len() as i64 {
                     let field = emit_text(world, nikaia_std::index::get(&fields, (i) as usize).name);
                     let mut default: Option<String> = None;

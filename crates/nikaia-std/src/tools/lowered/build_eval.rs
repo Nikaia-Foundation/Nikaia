@@ -306,7 +306,7 @@ pub(crate) fn bt_operate(op: &BinaryOp, left: &BuildValue, right: &BuildValue) -
 // this was written - see `contracts::sync`.
 pub(crate) fn bt_interpolated<H: BtHost>(parts: &[FPart], host: &H, state: &mut BtState) -> Result<BuildValue, nikaia_std::error::Thrown<BtRefusal>> {
     let mut format: String = String::from("");
-    let mut values: Vec<BuildValue> = vec![];
+    let mut values: Vec<BuildValue> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         match part {
             FPart::Text(written) => { format.push_str(written); },

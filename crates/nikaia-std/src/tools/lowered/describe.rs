@@ -151,7 +151,7 @@ pub async fn describe_descriptions_digest(directory: &std::path::Path) -> String
 
 pub async fn describe_names_the_program_writes<H: DescribeHost>(root: &std::path::Path, crate_word: &str, contracts: &str, host: &H) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut pending: Vec<fs::Path> = vec![nikaia_std::fs::path::clone(&(root))];
+    let mut pending: Vec<fs::Path> = nikaia_std::block::List::from_array_in([nikaia_std::fs::path::clone(&(root))], nikaia_std::block::Place::Block);
     loop {
         let directory = match pending.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         let names = match fs::read_dir(&directory, &fs::Root::Anywhere) {

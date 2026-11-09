@@ -194,7 +194,7 @@ pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
         while ((at) as usize) < out.len() && AsRef::<str>::as_ref(&(*nikaia_std::index::get(&out, (at) as usize))) < AsRef::<str>::as_ref(&(item)) { at += 1; }
         if ((at) as usize) < out.len() && *nikaia_std::index::get(&out, (at) as usize) == *item { seen = true; }
         if !seen {
-            let mut rest: Vec<String> = vec![];
+            let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for k in at..out.len() as i64 { rest.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&out, nikaia_std::index::at(k))).to_string())); }
             while out.len() > ((at) as usize) { out.pop(); }
             out.push(nikaia_std::block::Text::from(item.to_string()));
@@ -214,7 +214,7 @@ pub(crate) fn what_was_expected(error: &Failure) -> String {
     let expected = sorted_words(&listed);
     let mut wanted: Option<String> = None; #[allow(clippy::redundant_locals)] let expected = expected;
     if expected.len() == 1 { wanted = Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&expected, 0)).to_string())); } else if expected.len() >= 2 && expected.len() <= 4 {
-        let mut head: Vec<String> = vec![];
+        let mut head: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for k in 0..expected.len() as i64 - 1 { head.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&expected, (k) as usize)).to_string())); }
         wanted = Some(format!("{} or {}", nikaia_std::block::Text::from(head.join(", ")), *nikaia_std::index::get(&expected, nikaia_std::index::at(expected.len() as i64 - 1))));
     }
@@ -266,7 +266,7 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     let ref_note = the_spelling_ref_replaced_note(&said_word); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     if ref_note.is_some() { notes.push(nikaia_std::index::or(ref_note, || "".into())); }
     if error.has_found {
-        let pairs = vec![coalesce_fallback_note(&said_word, &before)];
+        let pairs = nikaia_std::block::List::from_array_in([coalesce_fallback_note(&said_word, &before)], nikaia_std::block::Place::Block);
         for pair in pairs.iter() {
             if pair.len() >= 2 {
                 notes.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pair, 0)).to_string()));

@@ -42,7 +42,7 @@ pub fn read_items(surface: &mut Surface, relative: &str, items: &[RustItem<'_>])
 }
 
 pub fn resolve(surface: &mut Surface) {
-    let mut direct: Vec<String> = vec![];
+    let mut direct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for path in surface.offers.iter() { if offered(&surface, path) { direct.push(nikaia_std::block::Text::from(path.to_string())); } }
     for path in surface.types.iter() { if offered(&surface, path) { direct.push(nikaia_std::block::Text::from(path.to_string())); } }
     for path in direct.iter() { surface.reachable.insert(nikaia_std::block::Text::from(path.to_string()), nikaia_std::block::Text::from(path.to_string())); }
@@ -69,7 +69,7 @@ pub fn resolve(surface: &mut Surface) {
             } else {
                 for base in bases(export) {
                     let under = format!("{}::", base);
-                    let mut names: Vec<String> = vec![];
+                    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for path in surface.offers.iter() {
                         let rest = directly_under(path, &under);
                         if rest.is_some() { names.push(nikaia_std::index::or(rest, || "".into())); }
@@ -94,7 +94,7 @@ pub fn resolve(surface: &mut Surface) {
 }
 
 pub fn offered(surface: &Surface, path: &str) -> bool {
-    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in path.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     let mut at: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for k in 0..parts.len() as i64 - 1 {

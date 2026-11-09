@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1371] — 2026-11-09
+
+**Memory budget: a full block ends its task with task::OverBudget**
+- A task whose block is full ends with `task::OverBudget` (ADR-327 D13): only a task that places memory in its block adds it to the throw set, and unhandled it is NK2605; the async form hands it to its waiter, a group child fails alone, and a crash it carried is handed as `OverBudget`, not `Crashed`. Part of #490.
+
+## [0.0.1370] — 2026-11-09
+
+**Memory budget: lists that stay in their task live in its block**
+- Memory budget (ADR-327, part of #490): a list that stays in its task is built in the task's 64 KiB block; a placed list sized at once keeps the resize merge; `main` enters its block only once the strategy sizes it (step 8). A list literal's items take the list's element type (fixes the red arm64 accepted sweep, E0308).
+
 ## [0.0.1369] — 2026-11-09
 
 **Memory budget: a block's list is 32 bytes again; a list of views is bound again after each text it may view (Part of #490)**

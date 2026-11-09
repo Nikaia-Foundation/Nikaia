@@ -1339,7 +1339,7 @@ pub(crate) fn kept_unseen(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk:
 }
 
 pub(crate) fn literals_beside_null(value: &Expr) -> bool {
-    let mut tails: Vec<Expr> = vec![];
+    let mut tails: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match value {
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -3916,7 +3916,7 @@ pub(crate) fn field_value_kinds(field: &FieldInit, shorthand: &Expr, ask: &TierA
 
 pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     let mut given: Vec<Kinds> = vec![];
-    let mut params: Vec<Type> = vec![];
+    let mut params: Vec<Type> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if args.iter().any(|arg| { a_lambda(arg) }) {
         let found = match *nikaia_std::index::get(&walk.declared.fns, &(nikaia_std::index::or(tier_callee(func, ask), || "".into()))) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -4515,7 +4515,7 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_>, 
 pub(crate) fn own_stream_items(ret_type: Option<&Type>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
     let item = nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string());
-    let mut owners: Vec<(TextOwner, Type)> = vec![];
+    let mut owners: Vec<(TextOwner, Type)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let prefix = format!("{}::", item);
     for (key, field) in walk.declared.fields.iter() { if key.0 == item { owners.push((TextOwner::Field(nikaia_std::block::Text::from(key.0.to_string()), nikaia_std::block::Text::from(key.1.to_string())), field.ty.clone())); } }
     for (key, ty) in walk.declared.variant_fields.iter() { if key.0.starts_with(&*prefix) { owners.push((TextOwner::Field(nikaia_std::block::Text::from(key.0.to_string()), nikaia_std::block::Text::from(key.1.to_string())), ty.clone())); } }
@@ -5159,9 +5159,9 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextT
     walk.late_args = found.args;
     walk.late_params = found.params;
     let units = tier_units(program);
-    let mut found_flows: Vec<Flows> = vec![];
-    let mut found_reads: Vec<TierReads> = vec![];
-    let mut dirty: Vec<bool> = vec![];
+    let mut found_flows: Vec<Flows> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut found_reads: Vec<TierReads> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut dirty: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in units.iter() {
         found_flows.push(no_flows());
         found_reads.push(no_reads());
@@ -5292,7 +5292,7 @@ pub(crate) fn tw_tiers(decided: &TextTiers) -> collections::BTreeMap<(i64, Strin
     for (at, target) in decided.adopted.iter() {
         let at = nikaia_std::num::value(at);
         let owner = tw_key(&target.owner, &no_path());
-        let mut inherited: Vec<(Vec<i64>, Tier)> = vec![];
+        let mut inherited: Vec<(Vec<i64>, Tier)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (key, tier) in tiers.iter() {
             let tier = *tier;
             if key.0 == owner.0 && key.1 == owner.1 && key.2 == owner.2 && key.3 == owner.3 { inherited.push((key.4.copy_owned(), tier)); }

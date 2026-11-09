@@ -86,9 +86,9 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/#changes" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-part">Memory budget still being built</span>
+        <span class="safe-chip safe-chip-part">Memory budget, first part built</span>
         <h3><a href="{{ "/safe/#load" | relative_url }}">Steady under load and failure</a></h3>
-        <p>A wait with a deadline has to handle its timeout. A lock held across a pause is refused, and a value a task was changing when it crashed is not read half-changed. A memory budget for every task is specified and not built yet.</p>
+        <p>A wait with a deadline has to handle its timeout. A lock held across a pause is refused, and a value a task was changing when it crashed is not read half-changed. A task that fills its memory block ends alone with <code>task::OverBudget</code>, and the tasks beside it run on.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let price = async(within: 100.millis()) lookup()
     catch { "cached price" }</code></pre></div>
         <a class="safe-more" href="{{ "/safe/#load" | relative_url }}">Read more →</a>

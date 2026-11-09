@@ -14,7 +14,7 @@ pub(crate) fn emit_match_else_unreachable(world: &EmitWorld<'_, '_, '_, '_>, arm
     let count = arms.len() as i64;
     if count < 2 || !emit_match_is_otherwise(&nikaia_std::index::get(&arms, nikaia_std::index::at(count - 1)).pattern) { return false; }
     let mut owner: String = String::from("");
-    let mut named: Vec<String> = vec![];
+    let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for arm in arms.iter() {
         if arm.guard.is_some() || emit_match_is_otherwise(&arm.pattern) { continue; }
         let path = match emit_match_whole_variant(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -172,7 +172,7 @@ pub(crate) fn emit_match_list_positions(pattern: &MatchPattern, sliced: &mut Vec
 }
 
 pub(crate) fn emit_match_path(world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for each in path.iter() {
         let each = *each;
         parts.push(emit_text(world, each));
@@ -445,7 +445,7 @@ impl EmitState {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || vec![].into());
-            let mut held: Vec<(String, Option<String>)> = vec![]; #[allow(clippy::redundant_locals)] let parts = parts;
+            let mut held: Vec<(String, Option<String>)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
             for at in 0..names.len() as i64 {
                 let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string());
                 if name == "_" { continue; }
@@ -504,10 +504,10 @@ impl EmitState {
         }
         let opened = self.boxed_bindings(world, pattern);
         let read = self.emit_holes_names_read(world, host, body);
-        #[allow(unused_mut)] let mut copied: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let opened = opened; #[allow(clippy::redundant_locals)] let read = read;
+        #[allow(unused_mut)] let mut copied: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let opened = opened; #[allow(clippy::redundant_locals)] let read = read;
         for name in self.emit_copied_bindings(node_key(body)) { if nikaia_std::list::contains(&read, &name) && self.facts.changed_copies.contains(&(node_key(body), nikaia_std::block::Text::from(name.to_string()))) { copied.push(format!("let mut {} = *{}; ", name, name)); } else if nikaia_std::list::contains(&read, &name) { copied.push(format!("let {} = *{}; ", name, name)); } }
         for one in self.facts.changed_bindings.iter() { if one.0 == node_key(body) { copied.push(format!("let mut {} = {}; ", one.1, one.1)); } }
-        let mut cloned: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let opened = opened; #[allow(unused_mut, clippy::redundant_locals)] let mut copied = copied;
+        let mut cloned: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let opened = opened; #[allow(unused_mut, clippy::redundant_locals)] let mut copied = copied;
         for one in self.facts.cloned_bindings.iter() { if one.0 == node_key(body) { cloned.push(nikaia_std::block::Text::from(one.1.to_string())); } }
         let statements = flow.arms_are_statements;
         let inside = EmitFlow { arms_are_statements: false, subject_copies: false, ..flow };
@@ -589,7 +589,7 @@ impl EmitState {
         let listed = self.sum_members(sum);
         if listed.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-        let mut home: Vec<i64> = vec![];
+        let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(clippy::redundant_locals)] let members = members;
         for arm in arms.iter() {
             let mut at: i64 = -1;
@@ -668,8 +668,8 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        #[allow(unused_mut)] let mut members: Vec<String> = vec![];
-        let mut home: Vec<i64> = vec![];
+        #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
         for arm in arms.iter() {
             let mut at: i64 = -1;
@@ -847,7 +847,7 @@ impl EmitState {
             if arm.guard.is_some() {
                 let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 let guard_read = self.emit_holes_names_read(world, host, guard);
-                let mut guard_copied: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let guard_read = guard_read;
+                let mut guard_copied: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let guard_read = guard_read;
                 for name in self.emit_copied_bindings(node_key(&arm.body)) { if nikaia_std::list::contains(&guard_read, &name) { guard_copied.push(name); } }
                 if nests == 0 && !guard_copied.is_empty() {
                     out.push(" if { ");

@@ -38,7 +38,7 @@ pub(crate) fn lg_smt_binary(op: &str, arena: &TermArena, a: i64, b: i64) -> Stri
 pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &str) -> String {
     if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
     if parts.len() == 1 { return lg_term(arena, *nikaia_std::index::get(&parts, 0)); }
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(lg_term(arena, part));
@@ -108,7 +108,7 @@ pub(crate) fn lg_show(sexp: &LgSexp) -> String {
     match sexp {
         LgSexp::Atom(a) => nikaia_std::block::Text::from(a.to_string()),
         LgSexp::List(items) => {
-            let mut shown: Vec<String> = vec![];
+            let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() { shown.push(lg_show(item)); }
             format!("({})", nikaia_std::block::Text::from(shown.join(" ")))
         },
@@ -131,7 +131,7 @@ pub(crate) enum LgParsedSexps {
 
 pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
     let chars: Vec<scalar> = nikaia_std::list::chars(source.chars());
-    let mut stack: Vec<Vec<LgSexp>> = vec![vec![]];
+    let mut stack: Vec<Vec<LgSexp>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
         let c = *nikaia_std::index::get(&chars, (at) as usize);

@@ -52,7 +52,7 @@ pub(crate) fn written_path(names: &winnow_grammar::InternerContext, segments: &[
 }
 
 pub(crate) fn names_a_variant(names: &winnow_grammar::InternerContext, name: &str, own: &Ledger, library: &Ledger, items: &[Spanned<Item>]) -> bool {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in name.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     if parts.len() < 2 || own.functions.contains_key(name) { return false; }
     let declared = struct_type(name);

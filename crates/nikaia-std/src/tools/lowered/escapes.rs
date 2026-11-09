@@ -164,7 +164,7 @@ pub(crate) fn hex_digit(c: scalar) -> Option<i64> {
 pub fn hex_of(n: i64) -> String {
     if n == 0 { return String::from("0"); }
     let digits: Vec<scalar> = nikaia_std::list::chars(HEX.chars());
-    let mut backwards: Vec<scalar> = vec![];
+    let mut backwards: Vec<scalar> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut rest = n;
     while rest > 0 {
         backwards.push(*nikaia_std::index::get(&digits, nikaia_std::index::at(rest % 16)));

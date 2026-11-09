@@ -36,7 +36,7 @@ impl EmitState {
     }
     pub fn lifetime_args(&self, name: &str, lifetime: &str) -> String {
         let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(lifetime.to_string()) };
-        #[allow(unused_mut)] let mut parts: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
+        #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let slots = slots;
         let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
         while ((at) as usize) < slots.len() {
             parts.push(nikaia_std::block::Text::from(lifetime.to_string()));
@@ -73,6 +73,10 @@ impl EmitState {
         if self.borrows_named(world, member) { return sum_member_type(kind, member, params, self.is_std); }
         sum_member_type(kind, member, "", self.is_std)
     }
+    pub fn sum_member_value(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, value: &str) -> String {
+        if self.name_of_error(world, member) == 0 { return nikaia_std::block::Text::from(value.to_string()); }
+        format!("nikaia_std::error::Thrown::from({})", value)
+    }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
         for (members, name) in self.sums.iter() {
@@ -93,9 +97,22 @@ impl EmitState {
                 out.push(&format!("    {}({}),\n", variant, held));
             }
             out.push("}\n");
+            let mut over = false;
+            let mut crash_member = false;
+            for member in members.iter() {
+                if member == "task::OverBudget" { over = true; }
+                if member == "task::Crashed" { crash_member = true; }
+            }
+            if over {
+                let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget");
+                let crash = self.sum_member_value(world, "task::Crashed", "error");
+                let rest = if crash_member { format!("{}::{}({})", name, sum_variant("task::Crashed"), crash) } else { String::from("std::panic::resume_unwind(Box::new(error.to_string()))") };
+                out.push(&format!("impl{} From<nikaia_std::task::Crashed> for {}{} {{\n    fn from(error: nikaia_std::task::Crashed) -> {}{} {{\n        if error.over_budget() {{\n            return {}::{}({});\n        }}\n        {}\n    }}\n}}\n", decl, name, params, name, params, name, sum_variant("task::OverBudget"), budget, rest));
+            }
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
+                if over && member == "task::Crashed" { continue; }
                 out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
                 if self.name_of_error(world, member) == 2 {
                     let bare = library_error_path(member, self.is_std);
@@ -217,7 +234,7 @@ impl EmitState {
 
 pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, units: &[ParsedView<'_, '_, '_, '_, '_, '_>], used_here: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut declared: Vec<collections::BTreeSet<String>> = vec![];
+    let mut declared: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for unit in units.iter() { declared.push(declared_errors(unit.words, unit.items)); }
     for (members, name) in sums.iter() {
         if units.len() < 2 {
@@ -245,7 +262,7 @@ pub(crate) fn sums_declared_here(world: &EmitWorld<'_, '_, '_, '_>) -> collectio
             },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
-                let mut owners: Vec<String> = vec![nikaia_std::block::Text::from(world.words.resolve(target.name).to_string())];
+                let mut owners: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(world.words.resolve(target.name).to_string())], nikaia_std::block::Place::Block);
                 match trait_name {
                     None => { },
                     Some(named) => { owners.push(nikaia_std::block::Text::from(world.words.resolve(named).to_string())); },

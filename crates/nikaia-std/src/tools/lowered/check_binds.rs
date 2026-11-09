@@ -99,7 +99,7 @@ impl CheckState {
             for _ in 0..count { out.push(Ty::Unknown); }
             return out;
         }
-        let mut pending: Vec<Ty> = vec![];
+        let mut pending: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut index = top.len() as i64;
         while index > 0 {
             index -= 1;

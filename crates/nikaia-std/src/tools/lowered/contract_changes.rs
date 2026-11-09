@@ -58,7 +58,7 @@ pub(crate) fn type_name_of(ty: &Ty) -> String {
 
 pub(crate) fn conditions_said(list: &[String]) -> String {
     if list.is_empty() { return String::from("nothing"); }
-    let mut said: Vec<String> = vec![];
+    let mut said: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for condition in list.iter() { said.push(format!("`{}`", condition)); }
     nikaia_std::block::Text::from(said.join(" and "))
 }

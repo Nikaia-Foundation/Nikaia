@@ -20,8 +20,8 @@ pub(crate) fn cx_converted_value(shape: &CxByValue, of: &str) -> (String, String
 }
 
 pub(crate) fn cx_converted_choice(plain: &CxPlain, of: &str) -> (String, String, String) {
-    #[allow(unused_mut)] let mut inward: Vec<String> = vec![];
-    #[allow(unused_mut)] let mut outward: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut inward = inward;
+    #[allow(unused_mut)] let mut inward: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut outward: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut inward = inward;
     let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut inward = inward; #[allow(unused_mut, clippy::redundant_locals)] let mut outward = outward;
     for variant in plain.variants.iter() {
         inward.push(format!("{} => Some({}::{}),", number, plain.name, variant));
@@ -49,8 +49,8 @@ pub(crate) fn cx_field_mirror(part: &CxPart, records: &[CxRecord], plains: &[CxP
 pub fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) -> String {
     let ty = nikaia_std::block::Text::from(record.name.to_string());
     let mut fields: String = String::from("");
-    #[allow(unused_mut)] let mut into: Vec<String> = vec![];
-    let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into;
+    #[allow(unused_mut)] let mut into: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut from: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut into = into;
     for (field, part) in record.fields.iter() {
         let local = cx_escaped(field);
         let (lowered, inward, outward) = cx_field_mirror(part, records, plains, &format!("self.{}", local), &format!("value.{}", local));
@@ -64,9 +64,9 @@ pub fn cx_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) ->
 pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPlain]) -> String {
     let ty = nikaia_std::block::Text::from(record.name.to_string());
     let mut out: String = String::from("");
-    #[allow(unused_mut)] let mut members: Vec<String> = vec![];
-    #[allow(unused_mut)] let mut into: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
-    #[allow(unused_mut)] let mut from: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into;
+    #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut into: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
+    #[allow(unused_mut)] let mut from: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into;
     let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members; #[allow(unused_mut, clippy::redundant_locals)] let mut into = into; #[allow(unused_mut, clippy::redundant_locals)] let mut from = from;
     for variant in record.variants.iter() {
         let path = format!("{}::{}", ty, cx_escaped(&variant.name));
@@ -80,9 +80,9 @@ pub fn cx_tagged_mirror(record: &CxRecord, records: &[CxRecord], plains: &[CxPla
         let member = cx_escaped(&variant.member);
         members.push(format!("{}: {}", member, shape));
         let mut fields: String = String::from("");
-        #[allow(unused_mut)] let mut taken: Vec<String> = vec![];
-        #[allow(unused_mut)] let mut made: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut taken = taken;
-        #[allow(unused_mut)] let mut bound: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut taken = taken; #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
+        #[allow(unused_mut)] let mut taken: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        #[allow(unused_mut)] let mut made: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut taken = taken;
+        #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut taken = taken; #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
         for (field, part) in variant.fields.iter() {
             let local = cx_escaped(field);
             let mut named = nikaia_std::block::Text::from(local.to_string());

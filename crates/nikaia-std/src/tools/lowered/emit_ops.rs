@@ -174,7 +174,7 @@ pub fn a_list_read_as_a_slice(written: String) -> String {
 }
 
 pub fn frame_attribute(frame: &FrameAttr) -> String {
-    #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let boundary = match frame.boundary.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

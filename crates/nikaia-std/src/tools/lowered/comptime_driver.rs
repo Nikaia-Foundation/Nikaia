@@ -95,7 +95,7 @@ pub fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump
     let close = match nikaia_std::search::find(&rust, &"\n}\n", start + "\n".len() as i64) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let end = close + "\n}\n".len() as i64;
     let main = cr_main(value_fn, dump, budget, memory);
-    let mut starts: Vec<i64> = vec![0];
+    let mut starts: Vec<i64> = nikaia_std::block::List::from_array_in([0], nikaia_std::block::Place::Block);
     let mut byte: i64 = 0;
     for c in rust.chars() {
         let code = c as i64;

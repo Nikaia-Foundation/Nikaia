@@ -236,8 +236,8 @@ pub fn sv_walk(query: &SvQuery, carried: &[Vec<u32>], params: &SvWalkParams, mov
     let mut least = w.unsat.len() as i64;
     let mut phases = w.holds.copy_owned();
     let mut step: i64 = 0;
-    let mut candidates: Vec<SvMove> = vec![];
-    let mut scores: Vec<i64> = vec![];
+    let mut candidates: Vec<SvMove> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut scores: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     while step < moves && !w.unsat.is_empty() {
         step += 1;
         let c = *nikaia_std::index::get(&w.unsat, nikaia_std::index::at(rng.below(w.unsat.len() as i64)));

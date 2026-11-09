@@ -82,7 +82,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn names_a_grammar_rule(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in segments.iter() {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
@@ -136,7 +136,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn names_a_function_by_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
-        let mut written: Vec<String> = vec![];
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for part in segments.iter() {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
@@ -204,7 +204,7 @@ pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key:
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let mut take = segments.len() as i64 - 1;
     while take >= 1 {
-        #[allow(unused_mut)] let mut prefix: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut prefix: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
         while at < take {
             prefix.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(at))).to_string()));

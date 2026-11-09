@@ -121,7 +121,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         },
         BuildValue::Text(text) => return Some(format!("\"{}\"", as_a_literal(text))),
         BuildValue::Struct { name, fields } => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for (field, held) in fields.iter() {
                 let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(format!("{}: {}", field, text));
@@ -130,7 +130,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         },
         BuildValue::List(items) => {
             for item in items.iter() { if !is_a_scalar_value(item) { return None; } }
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for item in items.iter() {
                 let text = match literal_of(item, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -139,7 +139,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
         },
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", ty, variant)); }
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in payload.iter() {
                 let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
@@ -147,7 +147,7 @@ pub fn literal_of(value: &BuildValue, float_text: &dyn Fn(f64) -> String) -> Opt
             return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
         },
         BuildValue::Constant { constructor, parts } => {
-            let mut written: Vec<String> = vec![];
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for held in parts.iter() {
                 let text = match literal_of(held, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);

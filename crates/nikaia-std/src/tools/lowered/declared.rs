@@ -185,7 +185,7 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     }
     let mut sync_claim = Sync::No;
     if is_sync { sync_claim = Sync::Asserted; } else if !sync_by.is_empty() {
-        let mut lambdas: Vec<String> = vec![];
+        let mut lambdas: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for lambda in sync_by.iter() {
             let lambda = *lambda;
             lambdas.push(nikaia_std::block::Text::from(names.resolve(lambda).to_string()));

@@ -21,8 +21,8 @@ pub(crate) struct SvPreSide {
 pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
     let mut out = sv_pre_none();
     if !book.reals.is_empty() { return out; }
-    let mut unit_lits: Vec<u32> = vec![];
-    let mut unit_ids: Vec<u32> = vec![];
+    let mut unit_lits: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut unit_ids: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut held: Vec<SvHeld> = vec![];
     let mut c: i64 = 0;
     while ((c) as usize) < cnf.query.clauses.len() {

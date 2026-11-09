@@ -11,7 +11,7 @@ pub fn declared_at(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
 }
 
 pub fn a_use_refused(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], reachable: &collections::BTreeSet<String>, alone: bool, beside: &impl Fn(&str) -> bool) -> Option<Finding> {
-    let mut named: Vec<(String, String, Span)> = vec![];
+    let mut named: Vec<(String, String, Span)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() {
         let segments = use_segments(names, &item.node);
         if segments.is_empty() || *nikaia_std::index::get(&segments, 0) == "std" { continue; }
@@ -61,13 +61,13 @@ pub(crate) fn alias_of(names: &winnow_grammar::InternerContext, item: &Item) -> 
 }
 
 pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, paused_by_code: &collections::BTreeMap<String, Vec<String>>) -> String {
-    #[allow(unused_mut)] let mut never: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut never: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, contract) in contracts.functions.iter() { if !of_a_dependency(key, theirs) && contract.public && inferred_sync(&contract.sync_claim) { never.push(format!("`{}`", key)); } }
-    #[allow(unused_mut)] let mut through: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut through: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, lambdas) in paused_by_code.iter() {
         let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if of_a_dependency(key, theirs) || !contract.public || !no_sync(&contract.sync_claim) { continue; }
-        let mut named: Vec<String> = vec![];
+        let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for lambda in lambdas.iter() { if !nikaia_std::list::contains(&contract.keeps, &lambda) { named.push(nikaia_std::block::Text::from(lambda.to_string())); } }
         if (named.len() as i64) == lambdas.len() as i64 { through.push(format!("`{}` (`sync({})`)", key, nikaia_std::block::Text::from(named.join(", ")))); }
     }
@@ -102,7 +102,7 @@ pub(crate) fn inferred_sync(claim: &Sync) -> bool { matches!(claim, Sync::Inferr
 pub(crate) fn no_sync(claim: &Sync) -> bool { matches!(claim, Sync::No) }
 
 pub fn pause_path(chain: &[String]) -> String {
-    #[allow(unused_mut)] let mut steps: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
     while ((k + 1) as usize) < chain.len() {
         steps.push(format!("`{}` calls `{}`", *nikaia_std::index::get(&chain, (k) as usize), *nikaia_std::index::get(&chain, (k + 1) as usize)));
@@ -177,7 +177,7 @@ pub fn groups(packages: &[Option<String>]) -> Vec<(i64, i64)> {
 }
 
 pub fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
-    let mut unpromised: Vec<String> = vec![];
+    let mut unpromised: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(nikaia_std::block::Text::from(key.to_string())); } }
     for key in unpromised.iter() {
         let mut entry = match *nikaia_std::index::get(&ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue }.clone();
@@ -362,7 +362,7 @@ pub fn modules_test_only_mark() -> String { String::from("cfg(test)") }
 pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, texts: &[String], own: i64) -> collections::BTreeSet<String> {
     let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut candidates: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut tests: Vec<i64> = vec![];
+    let mut tests: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     for item in items.iter() {
         match &item.node {

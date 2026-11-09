@@ -60,7 +60,7 @@ pub fn touches_of(unknown: &collections::BTreeMap<String, bool>, outside: &colle
         if !holds { continue; }
         let mut found: Vec<Touch> = vec![];
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-        let mut todo: Vec<String> = vec![nikaia_std::block::Text::from(name.to_string())];
+        let mut todo: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(name.to_string())], nikaia_std::block::Place::Block);
         while !todo.is_empty() {
             let here = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
             if seen.contains(&here) { continue; }

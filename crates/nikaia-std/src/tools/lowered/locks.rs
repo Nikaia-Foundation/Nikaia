@@ -224,7 +224,7 @@ pub(crate) fn described(library: &Ledger, key: &str) -> Option<Lock> {
 }
 
 pub(crate) fn is_a_variant(declared: &collections::BTreeSet<String>, callee: &str) -> bool {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in callee.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     if parts.len() < 2 || *nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1)) == "new" { return false; }
     declared.contains(&struct_type(callee))

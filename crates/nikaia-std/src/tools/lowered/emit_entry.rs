@@ -57,7 +57,7 @@ impl EmitState {
     pub(crate) fn main_words_of(&self, world: &EmitWorld<'_, '_, '_, '_>, args: &[FnArg], config: &[ConfigParam], about: &str, types: &[String], passing: &[String]) -> (String, String) {
         let mut checks: Vec<PreconditionCheck> = vec![];
         if self.facts.entries.contains_key("main") { checks = match self.facts.entries.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) }.copy_owned(); }
-        let mut options: Vec<ConfigContract> = vec![];
+        let mut options: Vec<ConfigContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         if self.own_contracts.functions.contains_key("main") {
             let contract = match self.own_contracts.functions.get("main") { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
             let signature = nikaia_std::index::or(match contract.signature.as_ref() {
@@ -66,9 +66,9 @@ impl EmitState {
             }, || Signature::empty());
             options = signature.config.copy_owned();
         }
-        #[allow(unused_mut)] let mut params: Vec<String> = vec![];
+        #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut reads: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
-        #[allow(unused_mut)] let mut passed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+        #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         for index in 0..args.len() as i64 {
             let arg = nikaia_std::index::get(&args, (index) as usize);
             let param = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
@@ -193,7 +193,7 @@ impl EmitState {
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &str, a: &str, any: &str, long: &str, short: &str, fields: &[FieldDef]) -> String {
-        let mut parts: Vec<String> = vec![];
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for field in fields.iter() {
             let field_name = escaped_name(world.words.resolve(field.name));
             if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) { parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name)); } else { parts.push(format!("{}: self.{}", field_name, field_name)); }
@@ -220,7 +220,7 @@ pub(crate) fn main_exits(own: &Ledger) -> bool {
 pub(crate) fn main_written_type(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
     let mut text = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
     if !ty.generics.is_empty() {
-        let mut inner: Vec<String> = vec![];
+        let mut inner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for arg in ty.generics.iter() { inner.push(main_written_type(arg, words)); }
         text = format!("{}[{}]", text, nikaia_std::block::Text::from(inner.join(", ")));
     }
@@ -233,7 +233,7 @@ pub(crate) fn words_vec(ty: &Type, words: &winnow_grammar::InternerContext) -> b
 pub(crate) fn main_claim(written: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(written.strip_prefix("precondition of `main`: "), || std::convert::AsRef::<str>::as_ref(written)).to_string()) }
 
 pub(crate) fn main_claims_of(checks: &[PreconditionCheck], param: &str) -> String {
-    #[allow(unused_mut)] let mut claims: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut claims: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let length = format!("{}.", param); #[allow(unused_mut, clippy::redundant_locals)] let mut claims = claims;
     for check in checks.iter() {
         let mut reads = false;

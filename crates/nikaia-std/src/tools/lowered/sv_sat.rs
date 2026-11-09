@@ -322,8 +322,8 @@ impl SvSat {
     pub(crate) fn analyze(&mut self, conflict: i64) -> SvLearned {
         let current = self.decision_level();
         let mut lits: Vec<u32> = vec![0u32];
-        let mut zero: Vec<i64> = vec![];
-        let mut chain: Vec<u32> = vec![self.clause_id(conflict)];
+        let mut zero: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut chain: Vec<u32> = nikaia_std::block::List::from_array_in([self.clause_id(conflict)], nikaia_std::block::Place::Block);
         let mut path = 0;
         let mut p: u32 = 0u32;
         let mut resolving = false;
@@ -482,7 +482,7 @@ impl SvSat {
     pub(crate) fn add_lemma(&mut self, lits: &[u32], id: u32) -> i64 {
         if self.refuted { return -1; }
         let mut ordered: Vec<u32> = vec![];
-        let mut falsified: Vec<u32> = vec![];
+        let mut falsified: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut holds = false;
         for l in lits.iter() {
             let l = nikaia_std::num::value(l);
@@ -559,7 +559,7 @@ impl SvSat {
     pub(crate) fn reduce(&mut self) {
         self.stats.reductions += 1;
         self.next_reduce = self.stats.conflicts + self.reduce_first + self.stats.reductions * self.reduce_step;
-        let mut keys: Vec<i64> = vec![];
+        let mut keys: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
             let glue = (*nikaia_std::index::get(&self.arena, nikaia_std::index::at(c as i64 + 1)) >> 2) as i64;

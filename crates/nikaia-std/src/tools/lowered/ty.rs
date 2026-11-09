@@ -739,6 +739,7 @@ pub struct FnContract {
     pub mutates: bool,
     pub touches_a_lock: Lock,
     pub panics: Panics,
+    pub places: bool,
     pub threads: Threads,
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
@@ -754,7 +755,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1342,7 +1343,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 pub(crate) fn __nikaia_test_1() -> Result<(), Box<dyn std::error::Error>> {
-    let pairs = vec![("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")];
+    let pairs = nikaia_std::block::List::from_array_in([("&str", "ref String"), ("&String", "ref String"), ("&Stats", "ref Stats"), ("&mut sqlite3", "ref mut sqlite3"), ("&[u8]", "ref Array[u8]"), ("ref [u8]", "ref Array[u8]"), ("&$V", "ref $V"), ("HashMap[&str, Stats]", "HashMap[ref String, Stats]")], nikaia_std::block::Place::Block);
     for (old, new) in pairs.iter() {
         let old = *old;let new = *new;
         if !(parse(old) == parse(new)) { nikaia_std::abort::assertion_failed("assert(parse(old) == parse(new))", None, &[("parse(old)", (&&nikaia_std::abort::Operand(&(parse(old)))).shown()), ("parse(new)", (&&nikaia_std::abort::Operand(&(parse(new)))).shown()), ]) };

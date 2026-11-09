@@ -217,7 +217,7 @@ impl EmitState {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return self.map_name(trusting, name); }
         let last = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-        let mut module: Vec<String> = vec![];
+        let mut module: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for at in 0..parts.len() as i64 - 1 { module.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (at) as usize)).to_string())); }
         format!("{}::{}", nikaia_std::block::Text::from(module.join("::")), self.map_name(trusting, &last))
     }

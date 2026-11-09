@@ -9,13 +9,13 @@ pub struct GrammarTypesCall {
 }
 
 pub fn grammar_types_copy_name(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
-    let mut spelled: Vec<String> = vec![];
+    let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
     check_specialised(rule, &nikaia_std::block::Text::from(spelled.join(", ")))
 }
 
 pub(crate) fn grammar_types_spelled(words: &winnow_grammar::InternerContext, ty: &Type) -> String {
-    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for arg in ty.generics.iter() { parts.push(grammar_types_spelled(words, arg)); }
     let mut text: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     if ty.is_tuple { text = format!("({})", nikaia_std::block::Text::from(parts.join(", "))); } else if parts.is_empty() { text = format!("{}", words.resolve(ty.name)); } else { text = format!("{}[{}]", words.resolve(ty.name), nikaia_std::block::Text::from(parts.join(", "))); }
@@ -143,7 +143,7 @@ pub(crate) fn grammar_types_has_members(pattern: &Spanned<Pattern>) -> bool {
 }
 
 pub(crate) fn grammar_types_called(words: &winnow_grammar::InternerContext, rule: &str, types: &[Type]) -> String {
-    let mut spelled: Vec<String> = vec![];
+    let mut spelled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for ty in types.iter() { spelled.push(grammar_types_spelled(words, ty)); }
     format!("{}[{}]", rule, nikaia_std::block::Text::from(spelled.join(", ")))
 }
@@ -308,7 +308,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
     let mut subject: String = String::from("");
     match value {
         Expr::Path(segments, _) => {
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for segment in segments.iter() {
                 let segment = *segment;
                 parts.push(format!("{}", words.resolve(segment)));

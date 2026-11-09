@@ -52,7 +52,7 @@ pub(crate) fn hole_written(names: &winnow_grammar::InternerContext, expr: &Expr,
 }
 
 pub(crate) fn path_written(names: &winnow_grammar::InternerContext, segments: &[winnow_grammar::Symbol]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for segment in segments.iter() {
         let segment = *segment;
         parts.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
@@ -61,14 +61,14 @@ pub(crate) fn path_written(names: &winnow_grammar::InternerContext, segments: &[
 }
 
 pub(crate) fn all_written(names: &winnow_grammar::InternerContext, items: &[Expr]) -> String {
-    let mut parts: Vec<String> = vec![];
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in items.iter() { parts.push(written_expression(names, item)); }
     nikaia_std::block::Text::from(parts.join(", "))
 }
 
 pub(crate) fn call_written(names: &winnow_grammar::InternerContext, args: &[Expr], config: &[ConfigArg]) -> String {
     if config.is_empty() { return format!("({})", all_written(names, args)); }
-    let mut options: Vec<String> = vec![];
+    let mut options: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for option in config.iter() { options.push(format!("{}: {}", names.resolve(option.name), written_expression(names, &option.value))); }
     if args.is_empty() { return format!("(; {})", nikaia_std::block::Text::from(options.join(", "))); }
     format!("({}; {})", all_written(names, args), nikaia_std::block::Text::from(options.join(", ")))
@@ -154,7 +154,7 @@ pub fn written_pattern(names: &winnow_grammar::InternerContext, pattern: &MatchP
         MatchPattern::Named { path, .. } => format!("{} {{ … }}", path_written(names, path)),
         MatchPattern::Literal(literal) => written_expression(names, literal),
         MatchPattern::Or(alternatives) => {
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for alternative in alternatives.iter() { parts.push(written_pattern(names, alternative)); }
             nikaia_std::block::Text::from(parts.join(" | "))
         },

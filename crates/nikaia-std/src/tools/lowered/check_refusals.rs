@@ -102,7 +102,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_struct_called_without_a_constructor(&mut self, name: &str, span: &Span) {
-        let mut fields: Vec<String> = vec![];
+        let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -203,7 +203,7 @@ pub(crate) fn a_known_value(ty: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn left_out_text(missing: &[String]) -> String {
-    let mut quoted: Vec<String> = vec![];
+    let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in missing.iter() { quoted.push(format!("`{}`", field)); }
     nikaia_std::block::Text::from(quoted.join(", "))
 }

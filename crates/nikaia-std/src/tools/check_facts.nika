@@ -279,6 +279,11 @@ pub struct CheckFacts {
     /// value first, so the temporary list ends before the assignment
     /// (`check_core_view_list_assigned`).
     pub view_list_assigns: collections::BTreeSet[i64],
+    /// **The list literals placed in the running task's block** (ADR-327
+    /// D9, step 5 of #490), by the literal's node: the emitter writes
+    /// `Place::Block` there, `Place::Outside` everywhere else
+    /// (`check_core_place_in_block`).
+    pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),
     /// by the `let`'s start, with whether the list's `let` said `mut`: the
     /// emitter binds each list again right after it, so the list is dropped
@@ -704,6 +709,7 @@ impl CheckFacts {
             view_patterns: collections::BTreeSet(),
             view_list_drops: collections::BTreeMap(),
             view_list_assigns: collections::BTreeSet(),
+            placed_in_block: collections::BTreeSet(),
             view_list_rebinds: collections::BTreeMap(),
             view_list_rebound: collections::BTreeSet(),
             counted: collections::BTreeSet(),

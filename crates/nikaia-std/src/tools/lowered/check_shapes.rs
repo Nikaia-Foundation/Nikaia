@@ -180,7 +180,7 @@ pub fn is_growable(ty: &Ty) -> bool {
 pub fn constructed(constructor: &str) -> Option<String> {
     let parts: Vec<&str> = constructor.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return None; }
-    #[allow(unused_mut)] let mut kept: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let parts = parts;
+    #[allow(unused_mut)] let mut kept: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
     let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut kept = kept;
     while at < parts.len() as i64 - 1 {
         kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_string()));

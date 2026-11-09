@@ -214,7 +214,7 @@ pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
 }
 
 pub fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in unit.items.iter() {
         let name: String = match &item.node {
             Item::Fn { name, is_public: true, receiver: None, .. } => { let name = *name; unit.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue }) },
@@ -246,9 +246,9 @@ pub fn sysroot_package_facade(file: &str, unit: &ParsedView<'_, '_, '_, '_, '_, 
 }
 
 pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[ParsedView<'_, '_, '_, '_, '_, '_>]) -> Vec<(String, String)> {
-    #[allow(unused_mut)] let mut imports: Vec<String> = vec![];
-    let mut modules: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
-    let mut facades: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
+    #[allow(unused_mut)] let mut imports: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut modules: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
+    let mut facades: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
     let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
     let mut has_grammar = false;
     for at in 0..names.len() as i64 {

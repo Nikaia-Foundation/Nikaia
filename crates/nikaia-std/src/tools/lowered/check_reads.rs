@@ -267,7 +267,7 @@ impl CheckState {
         for repeat in self.repeats.iter() { if repeat.what == "lambda" { return; } }
         if self.scope.is_empty() { return; }
         let frame = (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(self.scope.len() as i64 - 1))).copy_owned();
-        let mut found: Vec<(String, i64)> = vec![];
+        let mut found: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (name, _) in parts.iter() {
             for local in frame.iter() {
                 if local.name == *name {

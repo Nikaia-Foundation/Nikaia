@@ -519,7 +519,7 @@ pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ha
 }
 
 pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for list in params.iter() {
         let mut depth = 0;
         let mut current: String = String::from("");
@@ -721,6 +721,7 @@ pub fn cx_std_codes(error: &str, target: &str) -> Vec<CxCode> {
     if error == "io::IoError" { return vec![cx_numbered(target, "NotFound", "IO_NOT_FOUND", "ENOENT"), cx_numbered(target, "PermissionDenied", "IO_PERMISSION_DENIED", "EACCES"), cx_numbered(target, "NotText", "IO_NOT_TEXT", "EILSEQ"), cx_one_code(Some(String::from("Outside")), 1000, "IO_OUTSIDE", None), cx_one_code(Some(String::from("Other")), 1001, "IO_OTHER", None)]; }
     if error == "task::Crashed" { return vec![cx_one_code(None, 1100, "TASK_CRASHED", None)]; }
     if error == "task::TimedOut" { return vec![cx_one_code(None, 1101, "TASK_TIMED_OUT", None)]; }
+    if error == "task::OverBudget" { return vec![cx_one_code(None, 1102, "TASK_OVER_BUDGET", None)]; }
     if error == "supervisor::Escalated" { return vec![cx_one_code(None, 1200, "SUPERVISOR_ESCALATED", None)]; }
     if error == "cleanup::Failure" { return vec![cx_one_code(None, 1300, "CLEANUP_FAILURE", None)]; }
     if error == "Overtaken" { return vec![cx_one_code(None, 1400, "OVERTAKEN", None)]; }

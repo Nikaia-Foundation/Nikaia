@@ -77,7 +77,7 @@ pub(crate) fn mem_a_unit_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 }
 
 pub(crate) fn mem_listed(names: &[String], before: &str) -> String {
-    let mut shown: Vec<String> = vec![];
+    let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for name in names.iter() { shown.push(format!("`{}{}`", before, name)); }
     nikaia_std::block::Text::from(shown.join(", "))
 }

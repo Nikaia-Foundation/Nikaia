@@ -140,7 +140,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
         Expr::Path(parts, _) => parts,
         _ => return None,
     };
-    let mut written: Vec<String> = vec![];
+    let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = *part;
         written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));

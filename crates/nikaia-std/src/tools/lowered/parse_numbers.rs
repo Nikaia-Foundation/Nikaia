@@ -80,7 +80,7 @@ pub fn float_end(text: &str) -> Option<String> {
 
 pub(crate) fn times(digits: &str, by: u64) -> String {
     let d: Vec<scalar> = nikaia_std::list::chars(digits.chars());
-    let mut out: Vec<u64> = vec![];
+    let mut out: Vec<u64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut carry: u64 = 0u64;
     let mut k = d.len() as i64;
     while k > 0 {

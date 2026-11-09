@@ -17,13 +17,13 @@ description: >-
     <div class="limit-class">
         <dl class="limit-steps">
           <dt>The problem</dt>
-          <dd>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine. Nikaia is specified to keep such a task from taking the rest of the program down with it.</dd>
+          <dd>A single runaway task can use up all the memory and bring down the whole program, including the parts that were working fine. Nikaia keeps such a task from taking the rest of the program down with it.</dd>
           <dt>An example</dt>
           <dd>A background task reads a large upload into memory, and keeps reading. Your main application, which was serving requests, runs out of memory with it.</dd>
           <dt>What Nikaia checks</dt>
-          <dd>Every task gets a memory budget of its own. A task that spends it ends on its own, and the rest of the program, your main application included, runs on. A shared value has a budget of its own too. This is decided and written into the specification. A calculation that runs while the program is built is already bounded in steps and in memory.</dd>
+          <dd>Every task gets a memory block of its own, and a list the task builds and keeps to itself is placed in it. A task that fills its block ends with <code>task::OverBudget</code>, an error like any other. Only that task ends. The tasks beside it run on, and the function that started it hands the error to its caller, which handles it or fails with it. A task that places nothing in its block cannot end this way, so nobody is asked to handle it. A shared value is to get a budget of its own too, which is specified and not built yet. A calculation that runs while the program is built is already bounded in steps and in memory.</dd>
           <dt>The limit</dt>
-          <dd>The per-task budget is not built yet. Today a task that takes too much memory can still take it from the whole program. Once built, it is a protection while the program runs, not a proof. Nikaia will not show at build time that a task stays within its budget, but it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</dd>
+          <dd>The block is a fixed 64 KiB for now, and its size is not yet chosen to fit the machine. Only the lists a task keeps to itself are counted, so text and values a task hands on still come from the whole program, and <code>main</code> runs outside every block. A task waited for with <code>join</code> reports a full block as <code>task::Crashed</code>, which tells it with <code>over_budget()</code>. The budget is a protection while the program runs, not a proof. Nikaia does not show at build time that a task stays within its budget, but it makes sure that a task which does not ends with <code>task::OverBudget</code>, an error like any other, and only that task ends. Memory that a Rust crate or a C library allocates and keeps for itself is in no budget.</dd>
         </dl>
 
 

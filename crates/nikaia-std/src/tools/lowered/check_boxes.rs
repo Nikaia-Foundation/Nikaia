@@ -17,7 +17,7 @@ impl CheckState {
     pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: &CheckDepth) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
-                let mut written: Vec<String> = vec![];
+                let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for symbol in path.iter() {
                     let symbol = *symbol;
                     written.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
@@ -212,7 +212,7 @@ impl CheckState {
         }, || collections::BTreeSet::new().into());
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() && !self.looks_inside_a_box(world, &arm.pattern) { variants_named(world, &arm.pattern, &mut named); } }
-        let mut missing: Vec<String> = vec![];
+        let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for variant in variants.iter() { if !named.contains(variant) { missing.push(format!("{}::{}", name, variant)); } }
         if !missing.is_empty() {
             let text = nikaia_std::block::Text::from(missing.join("`, `"));
@@ -222,7 +222,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
-        let mut parts: Vec<String> = vec![];
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match pattern {
             MatchPattern::Path(path) => {
                 for symbol in path.iter() {
@@ -242,7 +242,7 @@ impl CheckState {
     pub(crate) fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() { check_boxes_qualified(world, &arm.pattern, &mut named); } }
-        let mut missing: Vec<String> = vec![];
+        let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for member in members.iter() {
             let name: String = match member {
                 Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -284,7 +284,7 @@ pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
     let n = path.len() as i64;
     if n == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string())); } else if n >= 2 {
         out.insert(format!("{}::{}", world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 2))), world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(n - 1)))));
-        let mut whole: Vec<String> = vec![];
+        let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for symbol in path.iter() {
             let symbol = *symbol;
             whole.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));

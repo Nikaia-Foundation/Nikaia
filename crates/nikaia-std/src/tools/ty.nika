@@ -1205,6 +1205,12 @@ pub struct FnContract {
     /// **Whether it can panic** (ADR-async-5 D35, Part III 13.5 `panics`):
     /// inferred over the call graph; absent from a ledger is `Unknown`.
     pub panics: Panics,
+    /// **Whether it builds a list in the block of the task it runs in**
+    /// (ADR-327 D13): one of its own literals placed there
+    /// (`check_core_place_in_block`), or a callee that does. A task whose
+    /// body reaches one can end with `task::OverBudget`. Written only where
+    /// it holds; a call nobody can see into does not count.
+    pub places: bool,
     pub threads: Threads,
     pub views: Vec[Held],
     pub sharing: Vec[Class],
@@ -1264,6 +1270,7 @@ impl FnContract {
             mutates: false,
             touches_a_lock: Lock::No,
             panics: Panics::Unknown,
+            places: false,
             threads: Threads::Undecided,
             views: [],
             sharing: [],

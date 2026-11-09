@@ -230,7 +230,7 @@ pub(crate) fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world
 pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block, span: &Span) -> Ty {
     state.scope.push(vec![]);
     let mut parts: Vec<Ty> = vec![];
-    let mut ranges: Vec<(i64, i64)> = vec![];
+    let mut ranges: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for stmt in block.stmts.iter() {
         let saved = state.enter_boundary("`overlap` branch");
         let from = state.changed.len() as i64;
@@ -379,7 +379,7 @@ pub(crate) fn check_core_flow_member(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
             at += 1;
         }
     }
-    let mut whole: Vec<String> = vec![];
+    let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for symbol in path.iter() {
         let symbol = *symbol;
         whole.push(nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()));
@@ -424,7 +424,7 @@ pub(crate) fn check_core_flow_a_lent_name(state: &CheckState, world: &CheckWorld
 pub(crate) fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr, span: &Span) {
     let boxed = state.boxed_names(world, pattern);
     let last = state.scope.len() as i64 - 1;
-    let mut saved: Vec<CheckLocal> = vec![];
+    let mut saved: Vec<CheckLocal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if last >= 0 {
         saved = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).copy_owned();
         for at in 0..saved.len() as i64 {
@@ -922,7 +922,7 @@ pub(crate) fn check_core_flow_owned_texts(state: &mut CheckState, world: &CheckW
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_frame(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, at: i64, parts: &collections::BTreeMap<String, Ty>, lent_parts: bool, owned_text: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
     let names = pattern_names(world, pattern);
-    let mut bound: Vec<CheckLocal> = vec![];
+    let mut bound: Vec<CheckLocal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for name in names.iter() {
         let id = state.a_new_binding();
         bound.push(CheckLocal::free(nikaia_std::block::Text::from(name.to_string()), Ty::Unknown, id));
@@ -1264,7 +1264,7 @@ pub(crate) fn check_core_flow_changed_through_a_mut_element(state: &mut CheckSta
     if local.view_of == "" { return; }
     let mut bodies: collections::BTreeSet<i64> = collections::BTreeSet::new();
     for arm in arms.iter() { bodies.insert(id_of(&arm.body) as i64); }
-    let mut changed: Vec<(i64, String)> = vec![];
+    let mut changed: Vec<(i64, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for one in state.facts.changed_bindings.iter() { if bodies.contains(&one.0) { changed.push(one.clone()); } }
     if changed.is_empty() { return; }
     for one in changed.iter() { state.facts.changed_bindings.remove(one); }
@@ -1371,7 +1371,7 @@ pub(crate) fn check_core_flow_lambda_caught(state: &mut CheckState, caught: bool
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_caught_type(guarded: &CheckGuarded) -> Ty {
     if guarded.unanswered { return Ty::Unknown; }
-    let mut thrown: Vec<String> = vec![];
+    let mut thrown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut unknown = false;
     for name in guarded.thrown.iter() {
         if name == "?" || throws_given(name) { unknown = true; }

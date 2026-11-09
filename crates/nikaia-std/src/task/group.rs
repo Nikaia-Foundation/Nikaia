@@ -31,8 +31,9 @@ pub enum Ended<T, E> {
     /// The task was cancelled through its handle, or never ran because a task
     /// before it crashed. Not a failure (D22): it runs no fallback.
     Cancelled,
-    /// **Reserved** for a full memory block, `task::OverBudget` (D19). Nothing
-    /// produces it yet: per-task blocks are not built.
+    /// **Reserved**: a full memory block ends as a [`Crashed`] that says so
+    /// (`Crashed::over_budget`, ADR-327 D13), which a channel naming
+    /// `task::OverBudget` takes as that, and which cancels no other task.
     OverBudget,
 }
 
@@ -71,7 +72,8 @@ impl<E> Group<E> {
 
 impl<E: From<Crashed>> Group<E> {
     pub(super) fn crash(&mut self, at: usize, crash: Crashed) {
-        self.crashed = true;
+        // A full block fails only its own task (ADR-async-5 D19).
+        self.crashed |= !crash.over_budget();
         self.failed.push((at, E::from(crash)));
     }
 }
@@ -200,9 +202,18 @@ fn run_now<T, E>(
         return None;
     };
     let mut outcome = None;
-    let end = match caught(|| outcome = Some(body())) {
+    // **The task's own block** (ADR-327 D5): its lists live there, and a
+    // full one ends it alone (ADR-async-5 D19).
+    let block = crate::block::Block::default();
+    let entered = crate::block::enter(&block);
+    let caught = caught(|| outcome = Some(body()));
+    drop(entered);
+    let end = match caught {
         Err(crash) => {
-            group.crashed(at);
+            // A full block fails only its own task (ADR-async-5 D19).
+            if !crash.over_budget() {
+                group.crashed(at);
+            }
             Ended::Crashed(crash)
         }
         Ok(()) => match outcome {
@@ -232,6 +243,48 @@ impl<T, E> Drop for Unended<T, E> {
     }
 }
 
+/// **A pausing task's body in its own block** (ADR-327 D5): the block is in
+/// place while the body is made, polled and dropped, also where the group
+/// drops the task before it ended, and is handed back after the body.
+struct InBlock<F> {
+    running: Option<std::pin::Pin<Box<F>>>,
+    block: crate::block::Block,
+}
+
+impl<F: std::future::Future> InBlock<F> {
+    fn new() -> InBlock<F> {
+        InBlock {
+            running: None,
+            block: crate::block::Block::default(),
+        }
+    }
+
+    /// Make the body, in the block.
+    fn made(&mut self, body: impl FnOnce() -> F) {
+        let _block = crate::block::enter(&self.block);
+        self.running = Some(Box::pin(body()));
+    }
+
+    /// Poll the body, in the block.
+    fn poll(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<F::Output> {
+        let _block = crate::block::enter(&self.block);
+        self.running
+            .as_mut()
+            .expect("a task's body is made before it is polled")
+            .as_mut()
+            .poll(cx)
+    }
+}
+
+impl<F> Drop for InBlock<F> {
+    fn drop(&mut self) {
+        if let Some(running) = self.running.take() {
+            let _block = crate::block::enter(&self.block);
+            drop(running);
+        }
+    }
+}
+
 /// **A pausing task as the group polls it**: its body, stopped at a pause
 /// once its handle asked for a cancel (D14), and its end settled into the
 /// slot.
@@ -244,12 +297,13 @@ async fn paused_task<'g, T: 'g, E: 'g, F>(
     F: std::future::Future<Output = Result<T, E>> + 'g,
 {
     let _unended = Unended(slot.clone());
-    let mut running = Box::pin(body());
+    let mut running = InBlock::new();
+    running.made(body);
     let outcome = std::future::poll_fn(|cx| {
         if locked(&slot).cancel {
             return std::task::Poll::Ready(None);
         }
-        running.as_mut().poll(cx).map(Some)
+        running.poll(cx).map(Some)
     })
     .await;
     // The teardown of a cancelled task is the drop of its body (ADR-292
@@ -276,17 +330,17 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
 {
     let _unended = Unended(slot.clone());
     let mut body = Some(body);
-    let mut running: Option<std::pin::Pin<Box<F>>> = None;
+    let mut running = InBlock::new();
     let outcome = std::future::poll_fn(|cx| {
         if locked(&slot).cancel {
             return std::task::Poll::Ready(Ok(None));
         }
         let mut polled = std::task::Poll::Pending;
         let crash = caught(|| {
-            let task = running.get_or_insert_with(|| {
-                Box::pin(body.take().expect("a task's body is made once")())
-            });
-            polled = task.as_mut().poll(cx).map(Some);
+            if let Some(body) = body.take() {
+                running.made(body);
+            }
+            polled = running.poll(cx).map(Some);
         });
         match crash {
             Err(crash) => std::task::Poll::Ready(Err(crash)),
@@ -297,7 +351,10 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     drop(running);
     let end = match outcome {
         Err(crash) => {
-            group.crashed(at);
+            // A full block fails only its own task (ADR-async-5 D19).
+            if !crash.over_budget() {
+                group.crashed(at);
+            }
             Ended::Crashed(crash)
         }
         Ok(None) => Ended::Cancelled,
@@ -815,10 +872,9 @@ fn joined_end<T, E: From<Crashed>>(end: Ended<T, E>) -> Result<T, E> {
         Ended::Value(value) => Ok(value),
         Ended::Failed(error) => Err(error),
         Ended::Crashed(crash) => Err(E::from(crash)),
-        Ended::Cancelled | Ended::OverBudget => Err(E::from(Crashed {
-            message: "a task before it in its group crashed, which cancelled it".to_string(),
-            site: String::new(),
-        })),
+        Ended::Cancelled | Ended::OverBudget => Err(E::from(Crashed::said(
+            "a task before it in its group crashed, which cancelled it",
+        ))),
     }
 }
 

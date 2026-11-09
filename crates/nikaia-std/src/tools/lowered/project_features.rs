@@ -283,7 +283,7 @@ pub(crate) fn features_item(first: i64, words: &[String], header: &[String]) -> 
 pub(crate) fn features_closure(items: &[FeatureItem], named: &collections::BTreeMap<String, Vec<i64>>, seeds: &[i64], any: bool) -> Vec<bool> {
     let mut inside: Vec<bool> = vec![];
     for _ in 0..items.len() as i64 { inside.push(false); }
-    let mut work: Vec<i64> = vec![];
+    let mut work: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for seed in seeds.iter() {
         let seed = nikaia_std::num::value(seed);
         if !*nikaia_std::index::get(&inside, nikaia_std::index::at(seed)) {
@@ -357,7 +357,7 @@ pub(crate) fn features_roots(feature: &ManifestFeature, package: &str, items: &[
         if entry.starts_with(&*prefix) {
             let rest = nikaia_std::block::Text::from(entry.replace(&*prefix, &*""));
             for at in 0..items.len() as i64 { if nikaia_std::index::get(&items, nikaia_std::index::at(at)).name == rest && nikaia_std::index::get(&items, nikaia_std::index::at(at)).kind != "use" { found = at; } }
-            let mut readers: Vec<i64> = vec![];
+            let mut readers: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for at in 0..items.len() as i64 {
                 let path = match features_reader_path(&nikaia_std::index::get(&items, nikaia_std::index::at(at)).name) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if path == rest || path.starts_with(&*format!("{}::", rest)) { readers.push(at); }
@@ -424,7 +424,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
         }
         let mut condition: String = String::from("");
         if nikaia_std::index::get(&items, (at) as usize).kind == "impl" {
-            let mut parts: Vec<String> = vec![];
+            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for owner in nikaia_std::index::get(&items, (at) as usize).owners.iter() {
                 let owner = nikaia_std::num::value(owner);
                 if *nikaia_std::index::get(&core, nikaia_std::index::at(owner)) { continue; }
@@ -450,12 +450,12 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
         }
     }
     #[allow(unused_mut)] let mut optional: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
-    let mut uses: Vec<Vec<String>> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
+    let mut uses: Vec<Vec<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
     for _ in resolved.iter() { uses.push(vec![]); }
     for key in features_dependency_keys(manifest) {
         let word = nikaia_std::block::Text::from(key.replace('-', "_"));
         let mut in_core = false;
-        let mut users: Vec<i64> = vec![];
+        let mut users: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for at in 0..items.len() as i64 {
             if !nikaia_std::list::contains(&nikaia_std::index::get(&items, (at) as usize).words, &word) { continue; }
             if *nikaia_std::index::get(&core, (at) as usize) {
@@ -477,7 +477,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
     let mut table = String::from("[features]\n"); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
     let quoted: Vec<String> = default.iter().map(|name| { format!("\"{}\"", name) }).collect::<Vec<_>>();
     if features.iter().any(|feature| { feature.name == "default" }) { table = format!("{}default = [{}]\n", table, nikaia_std::block::Text::from(quoted.join(", "))); }
-    let mut edges: Vec<(i64, i64)> = vec![];
+    let mut edges: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for f in 0..resolved.len() as i64 {
         for g in 0..resolved.len() as i64 {
             if f == g || edges.contains(&(g, f)) { continue; }
@@ -489,7 +489,7 @@ pub fn features_applied(rust: &str, manifest: &str, features: &[ManifestFeature]
     let mut names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines; #[allow(unused_mut, clippy::redundant_locals)] let mut optional = optional;
     for f in 0..resolved.len() as i64 {
         names.push(nikaia_std::block::Text::from(nikaia_std::index::get(&resolved, (f) as usize).name.to_string()));
-        let mut entries: Vec<String> = vec![];
+        let mut entries: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for edge in edges.iter() { if edge.0 == f { entries.push(format!("\"{}\"", nikaia_std::index::get(&resolved, nikaia_std::index::at(edge.1)).name)); } }
         for dep in (*nikaia_std::index::get(&uses, (f) as usize)).iter() { entries.push(format!("\"{}\"", dep)); }
         table = format!("{}{} = [{}]\n", table, nikaia_std::index::get(&resolved, (f) as usize).name, nikaia_std::block::Text::from(entries.join(", ")));
@@ -528,7 +528,7 @@ pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &
     if crosses(&own).may_not() { return Some((nikaia_std::block::Text::from(ty.to_string()), String::from(""))); }
     let mut lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 };
     #[allow(unused_mut)] let mut queue = features_scan_line(ty, &mut lexer).words;
-    #[allow(unused_mut)] let mut seen: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    #[allow(unused_mut)] let mut seen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue; #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
     while ((next) as usize) < queue.len() {
         let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
@@ -557,7 +557,7 @@ pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &
 
 pub fn features_kept(rust: &str, features: &[ManifestFeature], package: &str, chosen: Option<&Vec<String>>) -> Result<Vec<String>, nikaia_std::error::Thrown<FeaturesRefusal>> {
     let reach = features_reach(rust, features, package)?;
-    #[allow(unused_mut)] let mut wanted: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let reach = reach;
+    #[allow(unused_mut)] let mut wanted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let reach = reach;
     let named = match chosen {
         None => reach.default.copy_owned(),
         Some(list) => list.copy_owned(),

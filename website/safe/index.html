@@ -235,10 +235,10 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
         <a class="safe-more" href="{{ "/safe/stuck-tasks.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b" id="memory">
-        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <span class="safe-chip safe-chip-part">First part built</span>
         <h3><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a></h3>
-        <p>In the specification every task gets a memory budget of its own. A task that spends it ends with <code>task::OverBudget</code>, and the rest of the program runs on. It is a protection while the program runs, not a proof, and memory a Rust crate or a C library keeps for itself is in no budget.</p>
-        <p class="safe-note">This is decided and specified, not built yet, so today a task can still take memory from the whole program.</p>
+        <p>Every task gets a memory block of its own. A task that fills it ends with <code>task::OverBudget</code>, and the rest of the program runs on. It is a protection while the program runs, not a proof, and memory a Rust crate or a C library keeps for itself is in no budget.</p>
+        <p class="safe-note">The block is a fixed 64 KiB for now and counts the lists a task keeps to itself. Text and values a task hands on, and <code>main</code>, still take memory from the whole program.</p>
         <a class="safe-more" href="{{ "/safe/memory.html" | relative_url }}">In depth →</a>
       </div>
       <div class="safe-tile safe-tile-b">

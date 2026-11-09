@@ -158,7 +158,7 @@ pub(crate) fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
 pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut sets = direct.copy_owned();
     throws_grow(&mut sets, calls, fatal_calls, fatal, own);
-    let mut unnamed: Vec<String> = vec![];
+    let mut unnamed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, set) in sets.iter() {
         if !set.is_empty() || places.contains(name) { continue; }
         let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -269,7 +269,7 @@ pub(crate) fn all_but_the_last(names: &winnow_grammar::InternerContext, segments
 }
 
 pub(crate) fn struct_type(written: &str) -> String {
-    #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in written.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     if parts.len() < 2 { return nikaia_std::block::Text::from(written.to_string()); }
     let mut ty: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
@@ -551,7 +551,7 @@ pub(crate) fn named_in_match(expr: &Expr, names: &winnow_grammar::InternerContex
             for arm in arms.iter() {
                 let path = match pattern_path(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if path.len() < 2 { continue; }
-                let mut parts: Vec<String> = vec![];
+                let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for at in 0..path.len() as i64 - 1 { parts.push(nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string())); }
                 out.insert(nikaia_std::block::Text::from(parts.join("::")));
             }

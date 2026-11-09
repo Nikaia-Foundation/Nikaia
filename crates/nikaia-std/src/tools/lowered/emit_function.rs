@@ -183,7 +183,7 @@ impl EmitState {
             Item::Fn { name, generics, receiver, args: written_args, config, spread, ret_type, body, is_sync, is_public, can_throw, .. } => {
                 let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; let spread = *spread;
                 let throws_ = can_throw;
-                let mut args: Vec<FnArg> = vec![];
+                let mut args: Vec<FnArg> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 for each in written_args.iter() { if emit_text(world, each.name) != "" { args.push(each.clone()); } }
                 let has_owner = owner_target.is_some();
                 let target: String = nikaia_std::index::or(match owner_target {
@@ -225,7 +225,7 @@ impl EmitState {
                     match ret_type {
                         Some(ty) => {
                             if self.carries_a_view(world, ty) && input_empty {
-                                let mut carrying: Vec<i64> = vec![];
+                                let mut carrying: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                                 let mut at: i64 = 0;
                                 for each in args.iter() {
                                     if self.carries_a_view(world, &each.ty) { carrying.push(at); }
@@ -311,10 +311,10 @@ impl EmitState {
                         if receiver.is_some() || lowered_views > 1 || has_kept || owned || loan && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && (self.borrows(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.name) || inside) { source_at = Some(at); }
                     }
                 }
-                let mut several_at: Vec<i64> = vec![];
+                let mut several_at: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let receiver_is_shared = receiver.is_none() || !nikaia_std::list::contains(&named, &"self") || nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) && !nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_mut), || false);
                 if has_borrows && plain_signature && named.len() >= 2 && receiver_is_shared && !has_kept && source_at.is_none() {
-                    let mut wanted: Vec<String> = vec![];
+                    let mut wanted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for each in named.iter() { if receiver.is_none() || each != "self" { wanted.push(nikaia_std::block::Text::from(each.to_string())); } }
                     let mut found: Vec<i64> = vec![];
                     for each in wanted.iter() {
@@ -370,9 +370,9 @@ impl EmitState {
                     }
                 }
                 let sig = EmitSig { key: nikaia_std::block::Text::from(key.to_string()), lifetimes, has_kept, kept: kept_lt, stores: stores.copy_owned(), inner_views, carries_input: carries_input.copy_owned(), source_kept, source_name };
-                #[allow(unused_mut)] let mut lengths: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                #[allow(unused_mut)] let mut lengths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 let mut runs: Vec<bool> = vec![];
-                #[allow(unused_mut)] let mut open: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
+                #[allow(unused_mut)] let mut open: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
                 let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open;
                 for each in args.iter() {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count.is_none() && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array";
@@ -661,7 +661,7 @@ impl EmitState {
                     }
                     let mut call: String = nikaia_std::block::Text::from(emitted.to_string());
                     if receiver.is_some() { call = format!("self.{}", emitted); } else if has_owner { call = format!("Self::{}", emitted); }
-                    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     for each in params.iter() {
                         if !each.ends_with("self") {
                             let head = nikaia_std::index::or(each.split(':').next(), || "").trim();

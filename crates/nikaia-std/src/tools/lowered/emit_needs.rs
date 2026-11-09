@@ -98,7 +98,7 @@ pub fn emit_needs_abort_table(rust: &str, rows: &[(i64, i64, i64)], paths: &[Str
 
 pub(crate) fn emit_needs_abort_rows(rust: &str, rows: &[(i64, i64, i64)], paths: &[String], sources: &[&str]) -> String {
     let starts = emit_needs_line_starts(rust);
-    let mut nika: Vec<Vec<i64>> = vec![];
+    let mut nika: Vec<Vec<i64>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for source in sources.iter() {
         let source = *source;
         nika.push(emit_needs_line_starts(source));

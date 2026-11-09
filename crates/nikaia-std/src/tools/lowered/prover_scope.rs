@@ -59,7 +59,7 @@ impl ProverScope {
             for record in self.loops.iter() { if !nikaia_std::list::contains(&record.problem.state, &name) { standing.push(record.clone()); } }
             self.loops = standing;
         }
-        let mut gone: Vec<String> = vec![];
+        let mut gone: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (bound, alts) in self.summed.iter() {
             for alt in alts.iter() {
                 if arena.mentions(alt.guard, name) || arena.mentions(alt.value, name) || arena.mentions(alt.guard, &length) || arena.mentions(alt.value, &length) {
