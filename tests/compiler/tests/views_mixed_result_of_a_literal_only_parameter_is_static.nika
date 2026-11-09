@@ -1,0 +1,36 @@
+// #1420: a `String` parameter that only literal callers feed is a view of
+// static text (ADR-282 D29), and a mixed `String?` result that may hand it
+// back (ADR-282 D14) is of that same static lifetime, so rustc sees one
+// lifetime and warns about none. Beside a parameter that does borrow, the
+// result stays of that one.
+
+fn own(s: String) -> String? { return s + "!" }
+
+fn early(a: String, c: i64) -> String? {
+    if c == 0 { return null }
+    if c == 1 { return a }
+    let o = own(a) ?? return null
+    return o
+}
+
+fn either_of(a: String, b: String, c: i64) -> String? {
+    if c == 0 { return a }
+    if c == 1 { return b }
+    let o = own(a) ?? return null
+    return o
+}
+
+fn made() -> String {
+    let mut g = String()
+    g.push_str("made")
+    return g
+}
+
+fn main() throws {
+    println(early("x", 1) ?? "none")
+    println(early("y", 0) ?? "none")
+    println(early("z", 2) ?? "none")
+    let m = made()
+    println(either_of("lit", m, 1) ?? "none")
+    println(either_of("lit", m, 2) ?? "none")
+}
