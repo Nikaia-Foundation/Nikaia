@@ -50,6 +50,8 @@ it, like the checks in `docs/supervisor.md`.
 
 * **I8. Done when**: one sentence saying what is true when the issue is
   finished, checkable without the author.
+  When the last item may end in filed issues instead of code, the issue
+  says which code step carries `Fixes #N` (#1453).
 * **I8a. Measured sizes** (2026-11-08, #1397, #1414): an item that promises to
   remove sites gives the count it measured per group, with one probe per group,
   and checks the group against the governing ADR's *does not decide* list; an
@@ -61,6 +63,10 @@ it, like the checks in `docs/supervisor.md`.
   A figure of the toolchain is measured with `lower-std --bounds`, and each
   group's probe is a real site from that run, not only a test program
   (#1414).
+  Each group's probe is run against the decision the issue builds on: an
+  item counts a site only when that decision's mechanism reaches its probe
+  (the D24 value range of a returned list does not reach a trait method with
+  no body); the sites list goes into the issue by file and line (#1453).
 * **I9. A numbered *To build* list.** Each item is one change a builder can
   commit on its own, and names its test: a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/` (or the package's tests), and the rows it must show.

@@ -271,6 +271,11 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **Bless bounds expectations**: `nikaia test --bless` writes `NAME.bounds` and `NAME.loops.bounds` only when they exist, a new test's included: create an empty `NAME.bounds` first. (issue-1397, issue-1414)
 * **A `.bounds` test checks a private function's body only through its callers**: private functions get derived preconditions (ADR-391 D1), so make the tested functions `pub` for the expectation to read the body. (issue-1414)
 * **A length in a solver fact goes through `bounding_length_named`** (typed `i64`, capped at 2^60 when its elements take space, ADR-385 D1); a bare variable as a length proves nothing past `+ 1`. (issue-1465)
+* **`Expr::Call` covers constructor paths** (`collections::BTreeMap()`): a walk arm on
+  `Call` names its callee, or it poisons map roots; only the `prove_` tests showed it. (issue-1453)
+* **D21 takes a list as an end only when its `.len()` already appears in a fact**: a change
+  that forgets lengths restates one. Roots come only from `read_let` (`bounds_shape.nika`);
+  `whole_loops` is filled by the checker (`check_core_stmt.nika`), not by the walk. (issue-1453)
 * **A proof that holds under `check` but not in `lower-std`**: first suspect ADR-391 D1 (a callee also called from another file of the package takes no bound from its callers). Rebuild it as a two-file package, the callee called from the second file, before suspecting the solver budget or the toolchain; a whole-package scratch run takes minutes, the two-file one under a second. (issue-1465)
 * **`f.rank[f.find(c)]` (a `ref mut` method call in an index of the same value) passes the checker and fails rustc (E0502)**: a defect, #1445; until it lands, a test probe binds the call to a `let`, and no code under `tools/` relies on the form. (issue-1414)
 * `BodyShape.bound` holds the parameters too: "the body never binds it again" is `!twice.contains(name)`. `BoundsChanged.lengths` counts growth as well as shrinking; "never shrinks" reads `falls`. (issue-1397, issue-1414)
