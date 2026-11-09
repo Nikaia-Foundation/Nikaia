@@ -544,6 +544,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     let mut at: i64 = 0;
     for item in items.iter() {
         state.hands_over(world, item, nikaia_std::index::get(&walked, (at) as usize), "put into a list", span);
+        check_core_places_store_handle(state, item, nikaia_std::index::get(&walked, (at) as usize));
         at += 1;
     }
     let mut a_null = false;

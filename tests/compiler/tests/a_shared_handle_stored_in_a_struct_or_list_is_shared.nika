@@ -1,0 +1,22 @@
+// A handle on a shared value put into a struct literal's field or a list
+// is duplicated, so the name can be read afterwards (ADR-312 D1, #1411).
+struct H { a: SharedMut[i64] }
+struct G { s: Shared[i64] }
+
+fn main() throws {
+    let a = SharedMut(0)
+    let h = H { a: a }
+    println(f"{a.get()}")
+    println(f"{h.a.get()}")
+    let shorthand = H { a }
+    let from_field = H { a: h.a }
+    let list = [a, h.a]
+    a.set(7)
+    println(f"{shorthand.a.get()} {from_field.a.get()} {list[0].get()} {list[1].get()}")
+    let s = Shared(5)
+    let g = G { s: s }
+    println(f"{s} {g.s}")
+    let last = SharedMut(1)
+    let once = H { a: last }
+    println(f"{once.a.get()}")
+}

@@ -2586,7 +2586,7 @@ pub mod check_core_pilot {
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
-    pub use super::{check_core_places_beyond_f32, check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
+    pub use super::{check_core_places_beyond_f32, check_core_field, check_core_places_array_length, check_core_places_stored, check_core_places_stored_keys, check_core_places_code_keys, check_core_places_code_into, check_core_places_store_handle, check_core_struct_literal, check_core_with, check_core_places_text_key, check_core_places_text_position, check_core_index, check_core_cast, check_core_range};
 }
 pub mod check_core_stmt {
     #[allow(unused_imports)]

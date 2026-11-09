@@ -755,6 +755,7 @@ pub fn check_core_list_literal[H: CheckHost](mut state: CheckState, world: ref C
     let mut at = 0
     for item in items {
         state.hands_over(world, item, walked[at], "put into a list", span)
+        check_core_places_store_handle(state, item, walked[at])
         at += 1
     }
     // **A list with a `null` in it is a list of `T?`** (#312).
