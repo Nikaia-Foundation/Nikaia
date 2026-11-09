@@ -627,6 +627,16 @@ touches = []
 views = ["xs: borrowed"]
 signature = "(xs: ref Vec[i64]) -> i64"
 
+[fn."node"]
+pub = true
+sync = true
+returns = "value: ref(value)"
+keeps = ["value"]
+panics = false
+touches = []
+views = ["value: borrowed", "<result>: borrowed"]
+signature = "(value: Value) -> Node"
+
 [fn."nodes_in"]
 sync = true
 panics = true
@@ -725,6 +735,15 @@ panics = false
 touches = []
 views = ["e: borrowed"]
 signature = "(e: ref Event) -> String"
+
+[fn."quoted_node"]
+pub = true
+sync = true
+keeps = ["t"]
+panics = false
+touches = []
+views = ["<result>: borrowed"]
+signature = "(t: String) -> Node"
 
 [fn."radix_value"]
 sync = true
@@ -828,7 +847,17 @@ sync = true
 panics = true
 touches = []
 views = ["tag: borrowed"]
-signature = "(tag: ref String) -> String"
+signature = "(tag: String) -> String"
+
+[fn."tagged"]
+pub = true
+sync = true
+returns = "ref(n)"
+keeps = ["n", "tag"]
+panics = false
+touches = []
+views = ["n: borrowed", "<result>: borrowed"]
+signature = "(n: Node, tag: String) -> Node"
 
 [fn."text"]
 pub = true
@@ -851,7 +880,7 @@ sync = true
 panics = true
 touches = []
 views = ["t: borrowed"]
-signature = "(t: ref String) -> String"
+signature = "(t: String) -> String"
 
 [fn."walk"]
 sync = true
@@ -885,7 +914,7 @@ sync = true
 panics = true
 touches = []
 views = ["tag: borrowed"]
-signature = "(tag: ref String) -> String"
+signature = "(tag: String) -> String"
 
 [fn."yaml_once"]
 sync = true

@@ -2751,6 +2751,34 @@ pub fn string_node(t: String) -> Node sync {
 	}
 }
 
+// A string node as `string_node` builds it, asked for single-quoted, as
+// serde_yaml writes a `char`.
+pub fn quoted_node(t: String) -> Node sync {
+	return string_node(t) with { style: Style::Single }
+}
+
+// A node a program builds to write it, untagged, `value` its value: `Null`,
+// `Bool`, `Int` or `Float` with its text, `Seq`, `Map` (a string is
+// `string_node`'s).
+pub fn node(value: Value) -> Node sync {
+	return Node {
+		start: 0,
+		end: 0,
+		anchor: null,
+		tag: null,
+		flow: false,
+		raw: "",
+		style: Style::Plain,
+		value: value,
+	}
+}
+
+// `n` with the tag `tag`, a resolved one as `write` takes it: `!x` a local
+// tag, `tag:yaml.org,2002:str` a core one.
+pub fn tagged(n: Node, tag: String) -> Node sync {
+	return n with { tag: tag }
+}
+
 impl Writer {
 	// The text of one document with `root` as its root: `---` before it
 	// unless it is the first, a line break after it.
@@ -3157,7 +3185,7 @@ fn tag_length(tag: ref String?) -> i64 sync {
 
 // A resolved tag as a node's property: the non-specific `!` as itself, any
 // other by `written_tag`.
-fn tag_written(tag: ref String) -> String sync {
+fn tag_written(tag: String) -> String sync {
 	if tag == "!" {
 		return "!"
 	}

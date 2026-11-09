@@ -47,7 +47,6 @@ pub(crate) enum ErrorImpl {
     BytesUnsupported,
     UnknownAnchor(Mark),
     Io(io::Error),
-    #[allow(dead_code)] // raised by the serializer of #1515
     SerializeNestedEnum,
     ScalarInMerge,
     TaggedInMerge,

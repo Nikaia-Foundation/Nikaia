@@ -1,15 +1,16 @@
-//! serde_yaml 0.9's `tests/test_de.rs`, `test_value.rs` and
-//! `test_error.rs` over `nikaia_yaml` (the modules `value` and `error`), with
-//! the strings of `indoc!` written out, and the issue's own cases. Only
-//! `test_serialize_nested_enum` is left out: it needs `to_string` (#1515).
+//! serde_yaml 0.9's `tests/test_de.rs`, `test_value.rs`, `test_error.rs` and
+//! `test_serde.rs` over `nikaia_yaml` (the modules `value`, `error` and
+//! `ser`), with the strings of `indoc!` written out, and the issue's own
+//! cases.
 //! Each case prints `ok NAME` or `FAILED NAME: why`.
 
 mod error;
+mod ser;
 mod value;
 
 use nikaia_yaml::{Deserializer, Mapping, Number, Value};
-use serde::Deserialize;
 use serde::de::IgnoredAny;
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::panic;
@@ -329,16 +330,12 @@ fn test_numbers() {
 
 fn test_nan() {
     // There is no negative NaN in YAML.
-    assert!(
-        nikaia_yaml::from_str::<f32>(".nan")
-            .unwrap()
-            .is_sign_positive()
-    );
-    assert!(
-        nikaia_yaml::from_str::<f64>(".nan")
-            .unwrap()
-            .is_sign_positive()
-    );
+    assert!(nikaia_yaml::from_str::<f32>(".nan")
+        .unwrap()
+        .is_sign_positive());
+    assert!(nikaia_yaml::from_str::<f64>(".nan")
+        .unwrap()
+        .is_sign_positive());
 }
 
 fn test_stateful() {
@@ -551,7 +548,11 @@ fn main() {
         ("test_one_document", test_one_document),
         ("test_location", test_location),
     ];
-    let cases = de.iter().chain(value::CASES).chain(error::CASES);
+    let cases = de
+        .iter()
+        .chain(value::CASES)
+        .chain(error::CASES)
+        .chain(ser::CASES);
     for (name, case) in cases {
         match panic::catch_unwind(case) {
             Ok(()) => println!("ok {}", name),
