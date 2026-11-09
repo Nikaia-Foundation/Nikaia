@@ -34,6 +34,10 @@ together with the specification section and an example test.
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
   to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
   views syntax and cannot serve.
+  The copy may predate HEAD (another session built it from another tree,
+  and its mtime is when you copied it): when a fails-before result surprises,
+  build the before binary from HEAD's own sources first; a stale copy cost
+  a run 30 turns chasing a regression HEAD never had. (issue-1483)
 * A rebuild while `nikaia test` runs fails tests at random: rerun the failed
   ones alone before calling them failures. (issue-1414)
 * **The checkout is shared.** A file another agent has modified: stage only
