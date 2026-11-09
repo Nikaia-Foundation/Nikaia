@@ -18,8 +18,8 @@ pub fn pb_read(text: &str, long: &impl Fn(&str) -> Option<String>) -> Vec<PbLine
             continue;
         }
         if words.len() != 3 { continue; }
-        let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 0)).to_string());
-        let kind = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 1)).to_string());
+        let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 0)).to_string()); let words = words;
+        let kind = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 1)).to_string()); let words = words;
         let body = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 2)).to_string());
         if kind == "proved" && body == "@" {
             let held = match long(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };

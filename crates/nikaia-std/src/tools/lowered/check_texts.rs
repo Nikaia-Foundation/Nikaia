@@ -153,7 +153,7 @@ pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
             let first = block_tail(then_branch);
-            let second = block_tail(otherwise);
+            let second = block_tail(otherwise); let first = first;
             return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), text) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), text);
         },
         Expr::Match { arms, .. } => {
@@ -240,7 +240,7 @@ impl CheckState {
                 if else_branch.is_some() {
                     let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let first = block_tail(then_branch);
-                    let second = block_tail(otherwise);
+                    let second = block_tail(otherwise); let first = first;
                     if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), true) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), true) {
                         self.text_literal(world, want, *nikaia_std::index::get(&first, 0), owned);
                         return self.text_literal(world, want, *nikaia_std::index::get(&second, 0), owned);
@@ -370,7 +370,7 @@ impl CheckState {
         if (wants.len() as i64) != parts.len() as i64 || (founds.len() as i64) != parts.len() as i64 { return None; }
         let mut built = false;
         let mut answered: Vec<Ty> = vec![];
-        let mut at: i64 = 0;
+        let mut at: i64 = 0; let parts = parts;
         while at < parts.len() as i64 {
             let mut got = self.text_literal(world, nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at)), true);
             if got.is_none() { got = self.tuple_literal(world, nikaia_std::index::get(&founds, nikaia_std::index::at(at)), nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at))); }
@@ -426,7 +426,7 @@ impl CheckState {
 pub fn ends_in_tuple(expr: &Expr) -> bool {
     let ends = tuple_ends(expr);
     if ends.is_empty() { return false; }
-    let mut tuples = 0;
+    let mut tuples = 0; let ends = ends;
     for end in ends.iter() {
         let end = *end;
         match end {

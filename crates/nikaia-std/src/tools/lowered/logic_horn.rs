@@ -134,10 +134,10 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
     for name in problem.state.iter() { primed_names.insert(lg_primed(name)); }
     let mut head: Vec<String> = vec![];
     for name in read.iter() { if !primed_names.contains(name) { head.push(nikaia_std::block::Text::from(name.to_string())); } }
-    let mut sorts: Vec<&'static str> = vec![];
-    let mut bound: Vec<String> = vec![];
-    let mut at_head: Vec<String> = vec![];
-    let mut after: Vec<String> = vec![];
+    #[allow(unused_mut)] let mut sorts: Vec<&'static str> = vec![];
+    let mut bound: Vec<String> = vec![]; #[allow(unused_mut)] let mut sorts = sorts;
+    let mut at_head: Vec<String> = vec![]; #[allow(unused_mut)] let mut sorts = sorts;
+    let mut after: Vec<String> = vec![]; #[allow(unused_mut)] let mut sorts = sorts;
     for name in head.iter() {
         sorts.push("Int");
         bound.push(format!("({} Int)", lg_symbol(name)));
@@ -148,7 +148,7 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
     for name in problem.state.iter() { with_primed.push(format!("({} Int)", lg_symbol(&lg_primed(name)))); }
     let inv_head = format!("(inv {})", nikaia_std::block::Text::from(at_head.join(" ")));
     let inv_after = format!("(inv {})", nikaia_std::block::Text::from(after.join(" ")));
-    let mut out: String = String::from("(set-logic HORN)\n");
+    let mut out: String = String::from("(set-logic HORN)\n"); #[allow(unused_mut)] let mut sorts = sorts;
     out.push_str(&format!("(declare-fun inv ({}) Bool)\n", nikaia_std::block::Text::from(sorts.join(" "))));
     let mut entry_parts = problem.fixed.copy_owned();
     for fact in problem.entry.iter() {

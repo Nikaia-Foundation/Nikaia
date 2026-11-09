@@ -42,9 +42,9 @@ pub(crate) fn cx_sum_name(members: &[String]) -> String {
 pub(crate) fn cx_replace_first(text: &str, from: &str, to: &str) -> String {
     let pieces: Vec<&str> = text.split(AsRef::<str>::as_ref(from)).collect::<Vec<_>>();
     if pieces.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
-    let mut out = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
+    let mut out = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string()); let pieces = pieces;
     out.push_str(to);
-    let mut at: i64 = 1;
+    let mut at: i64 = 1; let pieces = pieces;
     while ((at) as usize) < pieces.len() {
         if at > 1 { out.push_str(from); }
         out.push_str(*nikaia_std::index::get(&pieces, (at) as usize));

@@ -185,7 +185,7 @@ pub(crate) fn list_at(value: &str, at: &str) -> Result<Vec<String>, nikaia_std::
         Ok(value) => value,
         Err(_error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a list, found `{}`", at, value)), &"list_at")) },
     };
-    let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![]; let entries = entries;
     for entry in entries.iter() {
         let entry = *entry;
         out.push(unescaped(entry));

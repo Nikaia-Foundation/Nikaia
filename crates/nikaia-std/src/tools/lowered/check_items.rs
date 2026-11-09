@@ -57,7 +57,7 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, na
 pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-    let mut target: String = String::from("");
+    let mut target: String = String::from(""); let parts = parts;
     if parts.len() > 1 { target = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string()); }
     for item in view.items.iter() {
         if target == "" { if item_takes_either(view, &item.node, &own, at) { return true; } } else {

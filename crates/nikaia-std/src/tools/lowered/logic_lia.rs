@@ -148,21 +148,21 @@ pub fn lg_tightened(a: &LgLin) -> LgLin {
 }
 
 pub fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collections::BTreeMap<String, i64>) -> i64 {
-    let mut left_names: Vec<&str> = vec![];
+    #[allow(unused_mut)] let mut left_names: Vec<&str> = vec![];
     let mut left_ks: Vec<i64> = vec![];
     for (name, k) in a.iter() {
         let k = nikaia_std::num::value(k);
         left_names.push(name);
         left_ks.push(k);
     }
-    let mut right_names: Vec<&str> = vec![];
+    #[allow(unused_mut)] let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut)] let mut left_names = left_names;
     let mut right_ks: Vec<i64> = vec![];
     for (name, k) in b.iter() {
         let k = nikaia_std::num::value(k);
         right_names.push(name);
         right_ks.push(k);
     }
-    let mut at: i64 = 0;
+    let mut at: i64 = 0; #[allow(unused_mut)] let mut left_names = left_names; #[allow(unused_mut)] let mut right_names = right_names;
     while ((at) as usize) < left_ks.len() && ((at) as usize) < right_ks.len() {
         if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) { return -1; }
         if AsRef::<str>::as_ref(&(*nikaia_std::index::get(&right_names, (at) as usize))) < AsRef::<str>::as_ref(&(*nikaia_std::index::get(&left_names, (at) as usize))) { return 1; }

@@ -72,8 +72,8 @@ pub(crate) fn check_core_call_owner(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(name.to_string()); }
     let last = parts.len() as i64 - 1;
-    let mut owner: String = String::from("");
-    let mut i: i64 = 0;
+    let mut owner: String = String::from(""); let parts = parts;
+    let mut i: i64 = 0; let parts = parts;
     for part in parts.iter() {
         let part = *part;
         if i == last { break; }

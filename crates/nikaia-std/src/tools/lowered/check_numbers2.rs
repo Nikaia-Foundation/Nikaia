@@ -204,7 +204,7 @@ impl CheckState {
         let wanted = named_arguments_of(want);
         let items = items_of(value);
         let mut has_count = false;
-        let mut count: i64 = 0;
+        let mut count: i64 = 0; let items = items;
         if name == "Array" && wanted.len() == 2 {
             match *nikaia_std::index::get(&wanted, 1) {
                 Ty::Count(n) => {
@@ -280,7 +280,7 @@ impl CheckState {
         let parts = named_arguments_of(&into);
         let base = type_last_segment(&wanted_name);
         let mut fits = false;
-        if optional && base == "Vec" && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = item.fits(&Ty::Tuple(vec![(*nikaia_std::index::get(&parts, 0)).clone(), (*nikaia_std::index::get(&parts, 1)).clone()])); } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
+        if optional && base == "Vec" && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if (base == "HashMap" || base == "BTreeMap" || base == "TrustedMap") && parts.len() == 2 { fits = { let __nikaia_value = item.fits(&Ty::Tuple(vec![(*nikaia_std::index::get(&parts, 0)).clone(), (*nikaia_std::index::get(&parts, 1)).clone()])); __nikaia_value }; } else if (base == "HashSet" || base == "BTreeSet" || base == "TrustedSet") && parts.len() == 1 { fits = item.fits(nikaia_std::index::get(&parts, 0)); } else if base == "String" && parts.is_empty() { fits = a_type_named(&item, "char", false) || a_type_named(&item, "scalar", false) || a_type_named(&item, "str", true) || a_type_named(&item, "String", false); }
         if !fits { return None; }
         self.facts.collected_into.insert(number_key(*nikaia_std::index::get(&receiver, 0)));
         Some(want.clone())

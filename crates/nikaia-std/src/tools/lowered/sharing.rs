@@ -153,7 +153,7 @@ pub fn split_slot(key: &str) -> (String, String) {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return (String::from(""), nikaia_std::block::Text::from(key.to_string())); }
     let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-    let mut function: Vec<String> = vec![];
+    let mut function: Vec<String> = vec![]; let parts = parts;
     for i in 0..parts.len() as i64 - 1 { function.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); }
     (nikaia_std::block::Text::from(function.join("::")), name)
 }
@@ -371,7 +371,7 @@ impl Slots {
 pub(crate) fn before_last(text: &str, separator: &str) -> String {
     let parts: Vec<&str> = text.split(AsRef::<str>::as_ref(separator)).collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
-    let mut kept: Vec<String> = vec![];
+    let mut kept: Vec<String> = vec![]; let parts = parts;
     for i in 0..parts.len() as i64 - 1 { kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (i) as usize)).to_string())); } ::core::mem::drop(parts);
     nikaia_std::block::Text::from(kept.join(separator))
 }

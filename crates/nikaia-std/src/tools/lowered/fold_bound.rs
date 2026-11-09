@@ -493,10 +493,10 @@ impl<'a> FbIndex<'a, 'a, 'a> {
         ix
     }
     pub(crate) fn whole_fields(&self, name: &str) -> Vec<&FbField<'a>> {
-        let mut out: Vec<&FbField<'_>> = vec![];
-        let held = self.structs.get(name);
+        #[allow(unused_mut)] let mut out: Vec<&FbField<'_>> = vec![];
+        let held = self.structs.get(name); #[allow(unused_mut)] let mut out = out;
         if held.is_none() { return out; }
-        let fields = match held { Some(__nikaia_value) => __nikaia_value, None => return out };
+        let fields = match held { Some(__nikaia_value) => __nikaia_value, None => return out }; #[allow(unused_mut)] let mut out = out;
         for f in fields.iter() { if f.ty.args.is_empty() && fb_is_whole(&nikaia_std::block::Text::from(f.ty.name.to_string())) { out.push(f); } }
         out
     }
@@ -1015,9 +1015,9 @@ impl FbMerge {
         match stmt {
             Stmt::Expr(first) => {
                 let mut cur = first;
-                let mut modify: Vec<&Expr> = vec![];
+                #[allow(unused_mut)] let mut modify: Vec<&Expr> = vec![];
                 let mut inserted = false;
-                let mut target: Option<&Expr> = None;
+                let mut target: Option<&Expr> = None; #[allow(unused_mut)] let mut modify = modify;
                 while target.is_none() {
                     match cur {
                         Expr::MethodCall { receiver, method, args, .. } => {
@@ -1037,7 +1037,7 @@ impl FbMerge {
                         _ => { return false; },
                     }
                 }
-                let into_field = match target { Some(__nikaia_value) => __nikaia_value, None => return false };
+                let into_field = match target { Some(__nikaia_value) => __nikaia_value, None => return false }; #[allow(unused_mut)] let mut modify = modify;
                 match into_field {
                     Expr::Field { base, name, .. } => {
                         let base = nikaia_std::boxed::open(base); let name = *name;

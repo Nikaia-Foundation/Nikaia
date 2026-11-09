@@ -17,58 +17,26 @@ use allocator_api2::vec::Vec as PlacedVec;
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
-use std::mem::{ManuallyDrop, MaybeUninit};
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut, RangeBounds};
 
 /// **A list whose growth may be refused** (D4), placed by its handle.
 ///
-/// **Dropped as `Vec` is** (#490): the elements may hold views that end
-/// before the list does, the way `std`'s `Vec<&str>` declared before the text
-/// its views are cut from may. `Vec` says so with `#[may_dangle]`, which
-/// stable Rust does not have; here the list's own type has no `Drop` at all.
-/// What it holds sits in [`Held`], which knows nothing of `T` and drops it
-/// through the function it was made with, so Rust's drop check asks of `T`
-/// only what `PhantomData<T>` asks: that dropping a `T` is sound then.
+/// **It holds its `Vec` directly** (#490, supervisor 2026-11-09), so it is
+/// as large as the `Vec`, 32 bytes: the nesting depth on the default stack.
+/// `allocator-api2`'s `Vec` has no `#[may_dangle]` on stable Rust, so a list
+/// of views keeps what it views borrowed until it is dropped; the emitter
+/// drops such a list at its last use where what it views ends first
+/// (`view_list_drops`).
 pub struct List<T> {
-    held: Held,
-    _items: PhantomData<T>,
+    items: PlacedVec<T, Place>,
 }
 
-/// The bytes of an `allocator-api2` `Vec<T, Place>`, whatever `T`: a
-/// pointer, a capacity, a length and the handle.
-type Room = MaybeUninit<[usize; 4]>;
+const _: () = assert!(size_of::<List<u8>>() == size_of::<PlacedVec<u8, Place>>());
+const _: () = assert!(size_of::<List<u8>>() == 32);
 
-/// **A list's `Vec`, held without its element type**: its bytes, and the
-/// function that drops it as the `Vec<T, Place>` it is.
-struct Held {
-    room: Room,
-    drop: unsafe fn(*mut Room),
-}
-
-impl Drop for Held {
-    #[inline]
-    fn drop(&mut self) {
-        // SAFETY: `drop` is `dropped::<T>` for the `T` whose `Vec` `room`
-        // holds (`List::of`), and nothing reads `room` after this.
-        unsafe { (self.drop)(&mut self.room) }
-    }
-}
-
-/// Drops the `Vec<T, Place>` at `room`.
-///
-/// # Safety
-///
-/// `room` holds a `Vec<T, Place>`, which is not used again.
-unsafe fn dropped<T>(room: *mut Room) {
-    // SAFETY: the caller's.
-    unsafe { std::ptr::drop_in_place(room.cast::<PlacedVec<T, Place>>()) }
-}
-
-/// **What a list's growth does to its `Vec`**, whoever holds it: a [`List`]
-/// through [`Held`], a [`Text`](crate::Text) as a plain `Vec<u8, Place>`
-/// (bytes never view anything, so text needs no type-erased drop and is as
-/// large as the `Vec`, #490: the nesting depth on the default stack).
+/// **What a list's growth does to its `Vec`**, whoever holds it: a [`List`] or a
+/// [`Text`](crate::Text).
 pub(crate) trait Grow<T> {
     /// Room for `more` elements, or the task ends (D6).
     fn grow(&mut self, more: usize);
@@ -148,60 +116,29 @@ impl<T> Grow<T> for PlacedVec<T, Place> {
     }
 }
 
-/// A `Vec<T, Place>` written into a [`Room`], in a `const fn`.
-union Pun<T> {
-    items: ManuallyDrop<PlacedVec<T, Place>>,
-    room: Room,
-}
-
 impl<T> List<T> {
     /// The list that holds `items`.
     #[inline(always)]
     pub(crate) const fn of(items: PlacedVec<T, Place>) -> List<T> {
-        const {
-            assert!(
-                size_of::<PlacedVec<T, Place>>() <= size_of::<Room>()
-                    && align_of::<PlacedVec<T, Place>>() <= align_of::<Room>()
-            )
-        };
-        List {
-            held: Held {
-                // SAFETY: the `Vec` fits the room and its alignment (checked
-                // above); `MaybeUninit` takes its bytes as they are, padding
-                // and the pointer's provenance included.
-                room: unsafe {
-                    Pun {
-                        items: ManuallyDrop::new(items),
-                    }
-                    .room
-                },
-                drop: dropped::<T>,
-            },
-            _items: PhantomData,
-        }
+        List { items }
     }
 
     /// Its `Vec`.
     #[inline(always)]
     fn items(&self) -> &PlacedVec<T, Place> {
-        // SAFETY: `room` holds a `Vec<T, Place>` (`List::of`), aligned for it.
-        unsafe { &*self.held.room.as_ptr().cast::<PlacedVec<T, Place>>() }
+        &self.items
     }
 
     /// Its `Vec`, to change.
     #[inline(always)]
     fn items_mut(&mut self) -> &mut PlacedVec<T, Place> {
-        // SAFETY: as `items`, through the list's own unique borrow.
-        unsafe { &mut *self.held.room.as_mut_ptr().cast::<PlacedVec<T, Place>>() }
+        &mut self.items
     }
 
     /// Its `Vec`, taken out.
     #[inline(always)]
     pub(crate) fn into_items(self) -> PlacedVec<T, Place> {
-        let list = ManuallyDrop::new(self);
-        // SAFETY: `room` holds a `Vec<T, Place>`, read once: the list is
-        // never dropped, so the `Vec` has one owner.
-        unsafe { std::ptr::read(list.held.room.as_ptr().cast::<PlacedVec<T, Place>>()) }
+        self.items
     }
 
     /// A new, empty list placed at `place`.

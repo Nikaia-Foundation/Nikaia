@@ -180,8 +180,8 @@ pub fn is_growable(ty: &Ty) -> bool {
 pub fn constructed(constructor: &str) -> Option<String> {
     let parts: Vec<&str> = constructor.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return None; }
-    let mut kept: Vec<String> = vec![];
-    let mut at: i64 = 0;
+    let mut kept: Vec<String> = vec![]; let parts = parts;
+    let mut at: i64 = 0; let parts = parts;
     while at < parts.len() as i64 - 1 {
         kept.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).to_string()));
         at = at + 1;

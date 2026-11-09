@@ -337,7 +337,7 @@ impl EmitState {
     pub fn attribute_in_rust(&self, world: &EmitWorld<'_, '_, '_, '_>, written: &str) -> String {
         let pieces: Vec<&str> = written.split(" { ").collect::<Vec<_>>();
         let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
-        let mut inside: String = String::from("");
+        let mut inside: String = String::from(""); let pieces = pieces;
         if pieces.len() > 1 {
             let mut rest: Vec<String> = vec![];
             for at in 1..pieces.len() as i64 { rest.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, (at) as usize)).to_string())); }
@@ -350,7 +350,7 @@ impl EmitState {
             let halves: Vec<&str> = part.split(": ").collect::<Vec<_>>();
             if halves.len() < 2 { continue; }
             let field = nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, 0)).to_string());
-            let mut value_parts: Vec<String> = vec![];
+            let mut value_parts: Vec<String> = vec![]; let halves = halves;
             for at in 1..halves.len() as i64 { value_parts.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&halves, (at) as usize)).to_string())); }
             let value = nikaia_std::block::Text::from(value_parts.join(": "));
             let ty = emit_field_type((self.field_contract(world, &name, &field)).as_ref());

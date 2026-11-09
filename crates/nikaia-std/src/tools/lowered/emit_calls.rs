@@ -110,7 +110,7 @@ pub(crate) fn call_throws_of(ledger: &Ledger, name: &str) -> Option<Vec<String>>
 pub fn call_returns_either(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], function: &str) -> bool {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
     let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
-    let mut wanted: String = String::from("");
+    let mut wanted: String = String::from(""); let parts = parts;
     let mut qualified = false;
     if parts.len() > 1 {
         qualified = true;

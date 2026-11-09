@@ -181,7 +181,7 @@ pub(crate) fn check_core_stmt_mut_view(state: &mut CheckState, world: &CheckWorl
                     let base = nikaia_std::boxed::open(base);
                     let path = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return };
                     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-                    let root = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
+                    let root = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); let parts = parts;
                     let found = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
                     if found.without_mut.is_none() {
                         let mut lend: String = String::from("&mut ");
@@ -1841,15 +1841,133 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
                                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                                 None => None,
                             }, || vec![].into());
-                            ended.push(name);
+                            ended.push(nikaia_std::block::Text::from(name.to_string()));
                             state.facts.view_list_drops.insert(key, ended);
                         }
+                        check_core_view_list_rebound(state, world, block, &name, at, last, stmt.span.start as i64);
                     }
+                }
+            },
+            Stmt::Assign { target, op, value } => { check_core_view_list_assigned(state, world, target, (op).as_ref(), value, stmt.span.start as i64); },
+            _ => { },
+        }
+        at += 1;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, at: i64, last: i64, start: i64) {
+    let viewed_ty = check_core_viewed_name(&state, name);
+    if viewed_ty == "" { return; }
+    let mut together: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut later = at + 1;
+    while later <= last {
+        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in_statement(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node, world.words, &mut read);
+        if read.contains(name) { for one in read.iter() { together.insert(nikaia_std::block::Text::from(one.to_string())); } }
+        later += 1;
+    }
+    let changing = nikaia_std::index::or(state.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.written_mut), || false);
+    later = at + 1;
+    while later < last {
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node {
+            Stmt::Let { names, .. } => {
+                let mut viewed = false;
+                for one in names.iter() {
+                    let one = *one;
+                    let named = format!("{}", world.words.resolve(one));
+                    if together.contains(&named) && check_core_a_binding_naming(&state, &named, &viewed_ty) { viewed = true; }
+                }
+                if viewed {
+                    let key = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).span.start as i64;
+                    let mut rebound = nikaia_std::index::or(match state.facts.view_list_rebinds.get(&key) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || vec![].into());
+                    rebound.push((nikaia_std::block::Text::from(name.to_string()), changing));
+                    state.facts.view_list_rebinds.insert(key, rebound);
+                    state.facts.view_list_rebound.insert(start);
                 }
             },
             _ => { },
         }
-        at += 1;
+        later += 1;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_view_list_assigned(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, op: Option<&BinaryOp>, value: &Expr, at: i64) {
+    if op.is_some() { return; }
+    let assigned = match target {
+        Expr::Variable(name, _) => { let name = *name; format!("{}", world.words.resolve(name)) },
+        _ => return,
+    };
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(value, world.words, &mut read);
+    if !read.contains(&assigned) { return; }
+    for inner in visited_in_expr(value) {
+        let listed = match inner {
+            Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "collect" },
+            Expr::ListLit { .. } => true,
+            _ => false,
+        };
+        if listed {
+            state.facts.view_list_assigns.insert(at);
+            return;
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_viewed_name(state: &CheckState, name: &str) -> String {
+    let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+    match found.ty {
+        Ty::Named { ref args, .. } => if args.len() == 1 { check_core_ty_last_name(nikaia_std::index::get(&args, 0)) } else { String::from("") },
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ty_last_name(ty: &Ty) -> String {
+    match ty {
+        Ty::Named { name, .. } => check_core_text_as_one(name),
+        _ => String::from(""),
+    }
+}
+
+pub(crate) fn check_core_text_as_one(name: &str) -> String {
+    let last = type_last_segment(name);
+    if last == "str" { return String::from("String"); }
+    format!("{}", last)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_binding_naming(state: &CheckState, name: &str, viewed: &str) -> bool {
+    let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+    check_core_ty_names(&found.ty, viewed)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_ty_names(ty: &Ty, viewed: &str) -> bool {
+    match ty {
+        Ty::Unknown => true,
+        Ty::Named { name, args, .. } => {
+            if check_core_text_as_one(name) == viewed { return true; }
+            for arg in args.iter() { if check_core_ty_names(arg, viewed) { return true; } }
+            false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if check_core_ty_names(part, viewed) { return true; } }
+            false
+        },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); check_core_ty_names(inner, viewed) },
+        _ => true,
     }
 }
 

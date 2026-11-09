@@ -118,7 +118,7 @@ pub fn describe_unanswered(names: &collections::BTreeSet<String>, crate_word: &s
 pub(crate) fn describe_header_version(text: &str, crate_word: &str) -> Option<String> {
     let line = match text.lines().find_map(|line| { line.strip_prefix("# crate: ") }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let words: Vec<&str> = line.split_whitespace().collect::<Vec<_>>();
-    let first = match words.first().copied() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let first = match words.first().copied() { Some(__nikaia_value) => __nikaia_value, None => return None }; let words = words;
     if first != crate_word { return None; }
     Some(nikaia_std::block::Text::from(nikaia_std::index::or(words.get(1).copied(), || "?").to_string()))
 }

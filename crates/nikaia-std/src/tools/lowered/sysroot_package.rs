@@ -103,15 +103,15 @@ pub(crate) fn sysroot_package_has_for(text: &str, at: i64) -> bool {
 
 pub fn sysroot_package_shared(text: &str) -> String {
     let keywords: Vec<&'static str> = vec!["fn ", "const ", "static ", "struct ", "enum ", "type ", "trait ", "unsafe fn ", "async fn "];
-    let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "];
+    let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "]; let keywords = keywords;
     let n = text.as_bytes().len() as i64;
-    let mut out: String = String::from("");
-    let mut at: i64 = 0;
-    let mut depth = 0;
+    let mut out: String = String::from(""); let keywords = keywords; let method_keywords = method_keywords;
+    let mut at: i64 = 0; let keywords = keywords; let method_keywords = method_keywords;
+    let mut depth = 0; let keywords = keywords; let method_keywords = method_keywords;
     let mut start = true;
     let mut inherent = false;
     let mut in_struct = false;
-    let mut copied: i64 = 0;
+    let mut copied: i64 = 0; let keywords = keywords; let method_keywords = method_keywords;
     while at < n {
         if start && depth == 0 {
             in_struct = sysroot_package_at(text, at, "struct ") || sysroot_package_at(text, at, "pub struct ");

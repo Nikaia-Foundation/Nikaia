@@ -164,7 +164,7 @@ impl EmitState {
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
     if parts.len() < 2 { return String::from("_"); }
-    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
+    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string()); let parts = parts;
     for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *nikaia_std::index::get(&parts, (i) as usize)); }
     ty
 }

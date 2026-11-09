@@ -633,7 +633,7 @@ impl SvSmtReader {
                 let mut at = n - 2;
                 while at >= 0 {
                     let not_x = self.arena.not(*nikaia_std::index::get(&formulas, nikaia_std::index::at(at)));
-                    acc = self.arena.or(vec![not_x, acc]);
+                    acc = { let __nikaia_value = self.arena.or(vec![not_x, acc]); __nikaia_value };
                     at -= 1;
                 }
                 return SvGot::Val(SvVal::Formula(acc));

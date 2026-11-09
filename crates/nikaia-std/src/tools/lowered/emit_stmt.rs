@@ -120,6 +120,12 @@ impl EmitState {
             None => None,
         }, || vec![].into()) { out.push(&format!(" ::core::mem::drop({});", ended)); }
     }
+    pub fn emit_view_list_rebinds(&self, out: &mut EmitOut, start: i64) {
+        for (name, changing) in nikaia_std::index::or(match self.facts.view_list_rebinds.get(&start) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) { if changing { out.push(&format!(" #[allow(unused_mut)] let mut {} = {};", name, name)); } else { out.push(&format!(" let {} = {};", name, name)); } }
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
@@ -215,6 +221,7 @@ impl EmitState {
             }
             out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64));
             self.emit_view_list_drops(out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64);
+            self.emit_view_list_rebinds(out, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span.start as i64);
             out.push("\n");
             pos += 1;
         }
@@ -468,6 +475,7 @@ impl EmitState {
             return Ok(());
         }
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
+        if mut_word != "" && self.facts.view_list_rebound.contains(&at) { out.push("#[allow(unused_mut)] "); }
         out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
         out.push(&before);
         match value {
@@ -546,6 +554,8 @@ impl EmitState {
         if rebound.is_some() { if nikaia_std::index::or(rebound, || false) { out.push("let mut "); } else { out.push("let "); } }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
         if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(std::convert::identity(op)))); }
+        let bound_first = op.is_none() && self.facts.view_list_assigns.contains(&at);
+        if bound_first { out.push("{ let __nikaia_value = "); }
         let reput = self.emit_stmt_reput(&walk, &scope.function, at);
         let reputted = reput.is_some();
         if reputted { out.push(nikaia_std::index::or(reput.as_deref(), || "")); }
@@ -590,6 +600,7 @@ impl EmitState {
         if appended { out.push(")"); }
         out.push(&after);
         if reputted { out.push(")"); }
+        if bound_first { out.push("; __nikaia_value }"); }
         out.push(";");
         Ok(())
     }

@@ -2485,15 +2485,26 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
     return tail
 }
 
-/// **A list of views ends at its last use** (#490, supervisor 2026-11-09): a
-/// block's `List` has no `#[may_dangle]` drop on stable Rust, so a list of
-/// views keeps what it views borrowed to the end of its scope, where Rust's
-/// `Vec` ended the borrow at the last use. Where a `let` of this block binds
-/// such a list and a later statement than its last use reads what its value
-/// was made of (moves, returns or writes it), the statement of the last use
-/// is recorded in `facts.view_list_drops`, and the emitter drops the list
-/// right after it. Asked before the block's names go, while the binding's
-/// type is still in scope; a name bound twice in the block is left alone.
+/// **A list of views ends before what it views** (#490, supervisor
+/// 2026-11-09): a block's `List` has no `#[may_dangle]` drop on stable Rust,
+/// so a list of views keeps what it views borrowed until it is dropped, where
+/// Rust's `Vec` ended the borrow at the last use. For a `let` of this block
+/// that binds such a list:
+/// - where a later statement than its last use reads what its value was made
+///   of (moves, returns or writes it), the statement of the last use is
+///   recorded in `facts.view_list_drops`, and the emitter drops the list
+///   right after it;
+/// - where a later `let` binds what it may view (a name read by a statement
+///   that also reads the list), that `let` is recorded in
+///   `facts.view_list_rebinds`, and the emitter binds the list again right
+///   after it, so the list is declared after what it views and dropped
+///   first, on every way out of the scope. A drop at the last use would not
+///   do: a panic before it drops the list after what it views.
+///
+/// Asked before the block's names go, while the bindings' types are still in
+/// scope; a name bound twice in the block is left alone. An assignment over a
+/// text that collects views of it in its own value is
+/// `check_core_view_list_assigned`'s.
 fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
     let count = block.stmts.len() as i64
     let mut at = 0
@@ -2530,15 +2541,160 @@ fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block
                         if needed && !check_core_stmt_is_a_jump(block.stmts[last].node) {
                             let key = block.stmts[last].span.start as i64
                             let mut ended = state.facts.view_list_drops.get(key)?.clone() ?? []
-                            ended.push(name)
+                            ended.push(name.clone())
                             state.facts.view_list_drops.insert(key, ended)
                         }
+                        check_core_view_list_rebound(state, world, block, name, at, last, stmt.span.start as i64)
                     }
+                }
+            },
+            Stmt::Assign { target, op, value } => check_core_view_list_assigned(state, world, target, op, value, stmt.span.start as i64),
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// **The `let`s after the list `name`'s** (at `at`), before its last use
+/// `last`, **that bind what it may view**: a name a statement up to `last`
+/// reads together with the list, which is not a number, a `bool` or a `char`.
+/// Each is recorded in `facts.view_list_rebinds`, with whether the list's
+/// `let` said `mut`, and the list's `let` (at `start`) in
+/// `facts.view_list_rebound`. What it may view is a binding whose type names
+/// the type its elements view.
+fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, block: ref Block, name: ref String, at: i64, last: i64, start: i64) sync {
+    let viewed_ty = check_core_viewed_name(state, name)
+    if viewed_ty == "" {
+        return
+    }
+    let mut together: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut later = at + 1
+    while later <= last {
+        let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in_statement(block.stmts[later].node, world.words, read)
+        if read.contains(name) {
+            for one in read {
+                together.insert(one.clone())
+            }
+        }
+        later += 1
+    }
+    let changing = state.binding(name)?.written_mut ?? false
+    later = at + 1
+    while later < last {
+        match block.stmts[later].node {
+            Stmt::Let { names, .. } => {
+                let mut viewed = false
+                for one in names {
+                    let named = f"{world.words.resolve(one)}"
+                    if together.contains(named) && check_core_a_binding_naming(state, named, viewed_ty) {
+                        viewed = true
+                    }
+                }
+                if viewed {
+                    let key = block.stmts[later].span.start as i64
+                    let mut rebound = state.facts.view_list_rebinds.get(key)?.clone() ?? []
+                    rebound.push((name.clone(), changing))
+                    state.facts.view_list_rebinds.insert(key, rebound)
+                    state.facts.view_list_rebound.insert(start)
                 }
             },
             else => {},
         }
-        at += 1
+        later += 1
+    }
+}
+
+/// **An assignment whose own value collects views of what it assigns over**
+/// (#490): `s = s.split("{").collect()[0].trim().clone()`. The list the value
+/// collected is a temporary, dropped at the statement's end, after the new
+/// text is in place; a block's `List` holds what it views until then. The
+/// statement is recorded in `facts.view_list_assigns`, and the emitter binds
+/// the value before the assignment, so the list ends first.
+fn check_core_view_list_assigned(mut state: CheckState, world: ref CheckWorld, target: ref Expr, op: ref BinaryOp?, value: ref Expr, at: i64) sync {
+    if op != null {
+        return
+    }
+    let assigned = match target {
+        Expr::Variable(name, _) => f"{world.words.resolve(name)}",
+        else => return,
+    }
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(value, world.words, read)
+    if !read.contains(assigned) {
+        return
+    }
+    for inner in visited_in_expr(value) {
+        let listed = match inner {
+            Expr::MethodCall { method, .. } => world.words.resolve(method) == "collect",
+            Expr::ListLit { .. } => true,
+            else => false,
+        }
+        if listed {
+            state.facts.view_list_assigns.insert(at)
+            return
+        }
+    }
+}
+
+/// The type the elements of the list `name` view, by its last name, text's
+/// two forms as one: `String` for `Vec[ref String]`, `Expr` for `Vec[ref
+/// Expr]`; empty where it is none of these.
+fn check_core_viewed_name(state: ref CheckState, name: ref String) -> String sync {
+    let found = state.binding(name) ?? return ""
+    return match found.ty {
+        Ty::Named { args, .. } => if args.len() == 1 { check_core_ty_last_name(args[0]) } else { "" },
+        else => "",
+    }
+}
+
+/// A named type's last name, text's two forms as one; empty for any other.
+fn check_core_ty_last_name(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { name, .. } => check_core_text_as_one(name),
+        else => "",
+    }
+}
+
+fn check_core_text_as_one(name: ref String) -> String {
+    let last = type_last_segment(name)
+    if last == "str" {
+        return "String"
+    }
+    return f"{last}"
+}
+
+/// Whether `name` is bound, in this scope, to a type that names `viewed`
+/// anywhere in it, or to one the checker does not know.
+fn check_core_a_binding_naming(state: ref CheckState, name: ref String, viewed: ref String) -> bool sync {
+    let found = state.binding(name) ?? return true
+    return check_core_ty_names(found.ty, viewed)
+}
+
+fn check_core_ty_names(ty: ref Ty, viewed: ref String) -> bool sync {
+    return match ty {
+        Ty::Unknown => true,
+        Ty::Named { name, args, .. } => {
+            if check_core_text_as_one(name) == viewed {
+                return true
+            }
+            for arg in args {
+                if check_core_ty_names(arg, viewed) {
+                    return true
+                }
+            }
+            false
+        },
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if check_core_ty_names(part, viewed) {
+                    return true
+                }
+            }
+            false
+        },
+        Ty::Nullable(inner) => check_core_ty_names(inner, viewed),
+        else => true,
     }
 }
 

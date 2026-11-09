@@ -18,10 +18,9 @@ use std::ops::{Add, AddAssign, Deref, DerefMut, RangeBounds};
 /// grown as a [`List`] grows. Every byte in it came from a `str`, so it is
 /// handed out as one without being checked again, as `String` does.
 ///
-/// **As large as the `Vec`** (#490): a byte never views anything, so the
-/// text needs none of [`List`]'s type-erased drop, which costs a word; text
-/// sits inside the compiler's syntax tree, whose size the nesting depth on
-/// the default stack pays for.
+/// **As large as the `Vec`** (#490), as a [`List`] is: text sits inside the
+/// compiler's syntax tree, whose size the nesting depth on the default stack
+/// pays for.
 pub struct Text {
     bytes: PlacedVec<u8, Place>,
 }

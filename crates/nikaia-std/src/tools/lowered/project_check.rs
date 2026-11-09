@@ -112,7 +112,7 @@ pub struct ProjectCheckSaid {
 
 pub fn project_check_check<H: ProjectCheckHost>(host: &H, path: &str, source: &str, user_parallelism: &str, refuted_claims: &str, unproved_claims: &str, building_a_library: bool) -> ProjectCheckSaid {
     let mut all = host.check_against();
-    if building_a_library { all = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); }
+    if building_a_library { all = { let __nikaia_value = all.iter().filter(|&finding| { finding.code != "NK1238" }).map(|finding| { finding.clone() }).collect::<Vec<_>>(); __nikaia_value }; }
     all.extend(host.foreign_check());
     all.sort_by_key(|finding| { finding.span.start });
     project_check_lint_where_nothing_crosses(&mut all, user_parallelism);

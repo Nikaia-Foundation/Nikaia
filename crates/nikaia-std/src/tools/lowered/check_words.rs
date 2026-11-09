@@ -149,8 +149,8 @@ pub fn collapsed_doubled_braces(text: &str) -> Option<String> {
 
 pub fn not_promised_note(callee: &str) -> String {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
-    let mut package: String = String::from("its package");
-    let mut function = nikaia_std::block::Text::from(callee.to_string());
+    let mut package: String = String::from("its package"); let parts = parts;
+    let mut function = nikaia_std::block::Text::from(callee.to_string()); let parts = parts;
     if parts.len() == 2 {
         package = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
         function = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());

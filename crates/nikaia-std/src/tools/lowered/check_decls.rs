@@ -142,7 +142,7 @@ impl CheckState {
     pub fn grammar_path(&self, name: &str) -> Option<String> {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() != 2 { return None; }
-        let rules = match *nikaia_std::index::get(&self.grammars, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let rules = match *nikaia_std::index::get(&self.grammars, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }; let parts = parts;
         if !rules.contains(*nikaia_std::index::get(&parts, 1)) { return None; } ::core::mem::drop(parts);
         Some(nikaia_std::block::Text::from(name.to_string()))
     }

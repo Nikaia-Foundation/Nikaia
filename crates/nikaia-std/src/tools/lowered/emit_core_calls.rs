@@ -23,8 +23,8 @@ pub(crate) fn emit_call_claim_held(claim: &FactClaim) -> bool {
 pub(crate) fn emit_call_owner(function: &str) -> Option<String> {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return None; }
-    let mut owner: Vec<String> = vec![];
-    let mut n: i64 = 0;
+    let mut owner: Vec<String> = vec![]; let parts = parts;
+    let mut n: i64 = 0; let parts = parts;
     for part in parts.iter() {
         let part = *part;
         if n < parts.len() as i64 - 1 { owner.push(nikaia_std::block::Text::from(part.to_string())); }

@@ -186,7 +186,7 @@ pub fn unaliased_in(aliases: &collections::BTreeMap<String, String>, name: &str)
     }
     let parts: Vec<&str> = bare.splitn(2, "::").collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(name.to_string()); }
-    let package = match *nikaia_std::index::get(&aliases, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    let package = match *nikaia_std::index::get(&aliases, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) }; let parts = parts;
     format!("{}{}::{}", amp, package, *nikaia_std::index::get(&parts, 1))
 }
 
@@ -5983,12 +5983,12 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
     let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && (*t.code).is_none();
     if is_extern || !text { return out; }
     let none: collections::BTreeSet<String> = collections::BTreeSet::new();
-    let mut handed: Vec<&Expr> = vec![];
+    #[allow(unused_mut)] let mut handed: Vec<&Expr> = vec![];
     for way in hb_ways_out(body) { handed.extend(hb_text_arms(way)); }
     if is_public && !handed.iter().all(|value| { hb_field_chain_root(value, words).is_some() }) { return out; }
-    let mut reads: Vec<&Expr> = handed.copy_owned();
+    #[allow(unused_mut)] let mut reads: Vec<&Expr> = handed.copy_owned(); #[allow(unused_mut)] let mut handed = handed;
     let mut measured: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    let visited = visited_in_block(body);
+    let visited = visited_in_block(body); #[allow(unused_mut)] let mut handed = handed; #[allow(unused_mut)] let mut reads = reads;
     for expr in visited.iter() {
         let expr = *expr;
         match expr {
@@ -6071,7 +6071,7 @@ pub(crate) fn hb_chain_variable_id(value: &Expr) -> i64 {
 pub(crate) fn hb_text_arms(value: &Expr) -> Vec<&Expr> {
     let arms = tail_arms(value);
     if arms.is_empty() { return vec![value]; }
-    let mut out: Vec<&Expr> = vec![];
+    let mut out: Vec<&Expr> = vec![]; let arms = arms;
     for arm in arms.iter() {
         let arm = *arm;
         out.extend(hb_text_arms(arm));

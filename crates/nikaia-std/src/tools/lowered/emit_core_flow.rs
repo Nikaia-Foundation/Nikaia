@@ -293,12 +293,12 @@ impl EmitState {
             if block { out.push(" }"); }
         }
         if from_a_let {
-            let mut each: Vec<&'static str> = vec![];
+            #[allow(unused_mut)] let mut each: Vec<&'static str> = vec![];
             for p in params.iter() {
                 let p = *p;
                 each.push("_");
             }
-            let mut crossing: &'static str = "";
+            let mut crossing: &'static str = ""; #[allow(unused_mut)] let mut each = each;
             if host.overlaps_user_code() { crossing = " + std::marker::Send + std::marker::Sync"; }
             out.push(&format!(") as std::sync::Arc<dyn Fn({}) -> _{}>)", nikaia_std::block::Text::from(each.join(", ")), crossing));
         } else { out.push("))"); }

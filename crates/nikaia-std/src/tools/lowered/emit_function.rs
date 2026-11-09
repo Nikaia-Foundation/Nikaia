@@ -40,7 +40,7 @@ pub(crate) fn emit_angled(parts: &[String]) -> String {
 
 pub(crate) fn emit_renamed_lifetime(text: &str, from: &str, to: &str) -> String {
     let parts = text.split(AsRef::<str>::as_ref(from)).collect::<Vec<_>>();
-    let mut out: String = String::from("");
+    let mut out: String = String::from(""); let parts = parts;
     let mut first = true;
     for part in parts.iter() {
         let part = *part;

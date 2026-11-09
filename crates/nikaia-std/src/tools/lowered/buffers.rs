@@ -759,8 +759,8 @@ pub(crate) fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
     let segments: Vec<&str> = callee.split("::").collect::<Vec<_>>();
     if segments.len() < 2 { return false; }
     let variant = *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1));
-    let mut owner: String = String::from("");
-    let mut k: i64 = 0;
+    let mut owner: String = String::from(""); let segments = segments;
+    let mut k: i64 = 0; let segments = segments;
     for segment in segments.iter() {
         let segment = *segment;
         if k == segments.len() as i64 - 1 { break; }

@@ -176,6 +176,19 @@ impl EmitState {
         }
     }
 
+    /// **A list of views bound again after what it views** (#490,
+    /// `view_list_rebinds`): declared after it, the list is dropped first on
+    /// every way out of the scope, a panic's included.
+    pub fn emit_view_list_rebinds(ref self, mut out: EmitOut, start: i64) {
+        for (name, changing) in self.facts.view_list_rebinds.get(start)?.clone() ?? [] {
+            if changing {
+                out.push(f" #[allow(unused_mut)] let mut {name} = {name};")
+            } else {
+                out.push(f" let {name} = {name};")
+            }
+        }
+    }
+
     /// A block as it is written, with no settle point after it.
     pub fn emit_stmt_block_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
         if block.stmts.len() == 0 {
@@ -306,6 +319,7 @@ impl EmitState {
             }
             out.push(self.emit_stmt_late_puts(walk, scope.function, block.stmts[i].span.start as i64))
             self.emit_view_list_drops(out, block.stmts[i].span.start as i64)
+            self.emit_view_list_rebinds(out, block.stmts[i].span.start as i64)
             out.push("\n")
             pos += 1
         }
@@ -645,6 +659,11 @@ impl EmitState {
         // Part I 2.3: a plain value standing in a nullable slot keeps its hull
         // in the compiler, because it is one a program cannot observe.
         let (before, after) = emit_around(self.facts.nullable_sites.get(at))
+        // **A list of views bound again** (#490, `view_list_rebinds`) may
+        // change nothing before it is.
+        if mut_word != "" && self.facts.view_list_rebound.contains(at) {
+            out.push("#[allow(unused_mut)] ")
+        }
         out.push(f"let {mut_word}{local}{annotation} = ")
         out.push(before)
         // **A `let mut` over a list's element is the `&mut` of it** (#959).
@@ -747,6 +766,13 @@ impl EmitState {
         } else {
             out.push(f" {emit_stmt_op_text(op)} ")
         }
+        // **A value that collects views of the place it replaces is bound
+        // first** (#490, `view_list_assigns`): its temporary list ends before
+        // the assignment.
+        let bound_first = op == null && self.facts.view_list_assigns.contains(at)
+        if bound_first {
+            out.push("{ let __nikaia_value = ")
+        }
         // **A kept buffer assigned again goes into its keep too** (#293): the
         // binding is a place in the keep, and the views of the old value still
         // point into the old one.
@@ -814,6 +840,9 @@ impl EmitState {
         out.push(after)
         if reputted {
             out.push(")")
+        }
+        if bound_first {
+            out.push("; __nikaia_value }")
         }
         out.push(";")
     }

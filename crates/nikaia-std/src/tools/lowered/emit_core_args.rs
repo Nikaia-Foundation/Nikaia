@@ -700,7 +700,7 @@ impl EmitState {
         out.push(&path_types);
         let callee_name = nikaia_std::index::or(emit_callee_text(world, func), || "".into());
         let callee_parts: Vec<&str> = callee_name.split("::").collect::<Vec<_>>();
-        let mut callee_last: String = String::from("");
+        let mut callee_last: String = String::from(""); let callee_parts = callee_parts;
         if !callee_parts.is_empty() { callee_last = nikaia_std::block::Text::from((*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_string()); }
         if self.seeded_calls.contains_key(&callee_last) {
             let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };

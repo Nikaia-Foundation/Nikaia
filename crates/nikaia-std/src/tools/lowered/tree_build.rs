@@ -87,7 +87,7 @@ pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
     let mut recv = base;
     for step in tail.into_iter() {
         let id = node_id::NodeId::parsed();
-        recv = match step {
+        recv = { let __nikaia_value = match step {
             Postfix::Field(name) => Expr::Field { base: Box::new(recv), name, id },
             Postfix::SafeField(name) => Expr::SafeField { base: Box::new(recv), name, id },
             Postfix::SafeMethod(method, args, config) => Expr::SafeMethod { receiver: Box::new(recv), method, args, config, id },
@@ -95,7 +95,7 @@ pub fn fold_postfix(base: Expr, tail: Vec<Postfix>) -> Expr {
             Postfix::Index(index) => Expr::Index { base: Box::new(recv), index: Box::new(index), id },
             Postfix::IndexFrom(start, len) => Expr::Index { base: Box::new(recv.clone()), index: Box::new(Expr::Range { start: Box::new(start), end: Box::new(Expr::MethodCall { receiver: Box::new(recv), method: len, args: vec![], config: vec![], id: node_id::NodeId::parsed() }), inclusive: false, id: node_id::NodeId::parsed() }), id },
             Postfix::With(fields, at) => Expr::With { base: Box::new(recv), fields, at, id },
-        };
+        }; __nikaia_value };
     }
     recv
 }

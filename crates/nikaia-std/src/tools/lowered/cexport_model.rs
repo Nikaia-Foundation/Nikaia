@@ -578,8 +578,8 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                             pattern = format!("{}(..)", path);
                             let mut at: i64 = 0;
                             for field in types.iter() {
-                                let mut places: Vec<&'static str> = vec![];
-                                let mut other: i64 = 0;
+                                #[allow(unused_mut)] let mut places: Vec<&'static str> = vec![];
+                                let mut other: i64 = 0; #[allow(unused_mut)] let mut places = places;
                                 while ((other) as usize) < types.len() {
                                     if other == at { places.push("__nikaia_v"); } else { places.push("_"); }
                                     other += 1;
