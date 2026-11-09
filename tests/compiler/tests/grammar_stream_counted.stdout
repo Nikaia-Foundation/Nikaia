@@ -1,0 +1,15 @@
+x
+y
+2 exact
+x
+y
+short: unexpected end of input, expected `;` at line 1, column 7
+   1 | 3:x;y;
+             ^
+in item
+in item 3
+in items
+-1
+a
+b
+2 at most

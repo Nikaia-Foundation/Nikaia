@@ -674,11 +674,6 @@ impl EmitState {
             }
             match stream_fold(world, parts[i].node) {
                 fold => {
-                    // A bound that is a value has no form in the engine's
-                    // fold yet, which counts only by integers written out.
-                    if fold.counted {
-                        throw EmitRefused { message: "The compiler can't translate a `@stream` entry whose repetition is counted by a value (`item{n}`) yet: write the bounds as integers, `item{2,5}`.", at: rule.span.start as i64 }
-                    }
                     match fold.max {
                         most => {
                             if most < 1 || most < fold.min {
@@ -706,6 +701,26 @@ impl EmitState {
                     }
                     match fold.max {
                         most => out.push(f", max = {most}"),
+                        null => {},
+                    }
+                    // **A bound that is a value** (`item{n}`, ADR-grammar-1
+                    // D3) is a computed `min` / `max` of the fold, read where
+                    // the parser reaches it (winnow-grammar#31); it starts
+                    // with an integer as the bounds of a repetition do.
+                    match fold.low {
+                        low => {
+                            out.push(", min = 0i64 + (")
+                            self.emit_grammar_value(world, walk, out, host, low)
+                            out.push(")")
+                        },
+                        null => {},
+                    }
+                    match fold.high {
+                        high => {
+                            out.push(", max = 0i64 + (")
+                            self.emit_grammar_value(world, walk, out, host, high)
+                            out.push(")")
+                        },
                         null => {},
                     }
                     out.push(")")
@@ -753,8 +768,10 @@ struct StreamFold {
     sep: Spanned[Pattern]?,
     min: i64,
     max: i64?,
-    /// `item{n}`: a bound that is a value (ADR-grammar-1 D3).
-    counted: bool,
+    /// `item{n}`, `item{n,}`, `item{n, m}`: the bounds that are values
+    /// (ADR-grammar-1 D3); `{n}` is both.
+    low: Expr?,
+    high: Expr?,
 }
 
 /// The repetition of a `@stream` entry's body element: `item*`, `item+`,
@@ -766,23 +783,30 @@ fn stream_fold(world: ref EmitWorld, pattern: ref Pattern) -> StreamFold? {
         Pattern::Repeat { pat, rep } => {
             if stream_item(pat.node) {
                 match rep {
-                    Repeat::Star => return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, counted: false },
-                    Repeat::Plus => return StreamFold { item: pat.clone(), sep: null, min: 1, max: null, counted: false },
-                    Repeat::Exactly(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: n as i64, counted: false },
-                    Repeat::AtLeast(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: null, counted: false },
-                    Repeat::Between(low, high) => return StreamFold { item: pat.clone(), sep: null, min: low as i64, max: high as i64, counted: false },
+                    Repeat::Star => return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, low: null, high: null },
+                    Repeat::Plus => return StreamFold { item: pat.clone(), sep: null, min: 1, max: null, low: null, high: null },
+                    Repeat::Exactly(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: n as i64, low: null, high: null },
+                    Repeat::AtLeast(n) => return StreamFold { item: pat.clone(), sep: null, min: n as i64, max: null, low: null, high: null },
+                    Repeat::Between(low, high) => return StreamFold { item: pat.clone(), sep: null, min: low as i64, max: high as i64, low: null, high: null },
                     Repeat::Optional => {},
                 }
             }
         },
-        Pattern::Counted { pat, .. } => {
+        Pattern::Counted { pat, low, high, comma } => {
             if stream_item(pat.node) {
-                return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, counted: true }
+                let mut most: Expr? = low.clone()
+                if comma {
+                    most = match high {
+                        bound => bound.clone(),
+                        null => null,
+                    }
+                }
+                return StreamFold { item: pat.clone(), sep: null, min: 0, max: null, low: low.clone(), high: most }
             }
         },
         Pattern::Ref { name, generics, args } => {
             if emit_text(world, name) == "list" && generics.len() == 0 && args.len() == 2 && stream_item(args[0].node) {
-                return StreamFold { item: args[0].clone(), sep: args[1].clone(), min: 0, max: null, counted: false }
+                return StreamFold { item: args[0].clone(), sep: args[1].clone(), min: 0, max: null, low: null, high: null }
             }
         },
         else => {},
