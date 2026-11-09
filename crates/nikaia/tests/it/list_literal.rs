@@ -71,7 +71,9 @@ fn an_empty_list_takes_the_type_the_let_writes() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("let mut xs: Vec<i64> = vec![];"),
+        lowered(source).contains(
+            "let mut xs: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);"
+        ),
         "{}",
         lowered(source)
     );
@@ -250,7 +252,7 @@ fn a_list_of_lists_is_a_list() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("vec![vec![1, 2], vec![3, 4]]"),
+        lowered(source).contains("nikaia_std::block::List::from_array_in([vec![1, 2], vec![3, 4]], nikaia_std::block::Place::Block)"),
         "{}",
         lowered(source)
     );
