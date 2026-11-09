@@ -26,6 +26,7 @@ together with the specification section and an example test.
 
 ### Every run
 
+* **A new `nikaia` flag is declared in clap in `crates/nikaia/src/main.rs` (Rust)**: the command line cannot be Nikaia-only, so a flag needs that Rust plumbing even under *no new Rust*. A development aid read deep inside is kept in a static `OnceLock` set there, not passed through every caller. (issue-1495)
 * **ADRs live in `docs/specification/adr/`**; search them with the Grep tool, since a `grep -r` from the root runs into `target/`. A script test run by hand resolves a relative `target/fast/nikaia` under its tmp dir: run a copy with the absolute path. (issue-1397, issue-1414)
 * **Copy `target/fast/nikaia` to your scratchpad before your first build**: it
   is the before binary for the fails-before run, and the binary long test runs
