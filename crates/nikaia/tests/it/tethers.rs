@@ -116,7 +116,7 @@ fn text_a_body_owns_is_a_buffer() {
         "struct Entry { pub name: ref String }\n\
          \n\
          pub fn owned(seed: i64) -> Vec[Entry] {\n\
-         \x20   let text = seed.to_text()\n\
+         \x20   let text = seed.to_string()\n\
          \x20   return [Entry { name: text.trim() }]\n\
          }\n\
          \n\

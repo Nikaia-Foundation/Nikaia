@@ -619,7 +619,7 @@ fn returned_text_is_copied_by_std() {
                   \n\
                   fn main() throws {\n\
                   \x20   let raw = unsafe { getenv(\"HOME\\0\") }\n\
-                  \x20   let home = raw.to_text()\n\
+                  \x20   let home = raw.to_string()\n\
                   \x20   println(home)\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -636,9 +636,9 @@ fn returned_text_is_copied_by_std() {
         rust.contains("foreign::CStr::from_c(\"getenv\", getenv("),
         "{rust}"
     );
-    assert!(rust.contains("let home = raw.to_text()?;"), "{rust}");
+    assert!(rust.contains("let home = raw.to_string()?;"), "{rust}");
     assert!(
-        !rust.contains("unsafe { raw.to_text()"),
+        !rust.contains("unsafe { raw.to_string()"),
         "the `unsafe` is `std`'s and not the program's:\n{rust}"
     );
 }
@@ -655,7 +655,7 @@ fn the_copy_is_a_call_that_can_fail() {
          \n\
          fn main() {\n\
          \x20   let raw = unsafe { getenv(\"HOME\\0\") }\n\
-         \x20   let text = raw.to_text()\n\
+         \x20   let text = raw.to_string()\n\
          \x20   println(text) catch { return }\n\
          }\n",
     )
@@ -682,7 +682,7 @@ extern {
 
 fn main() throws {
     let raw = unsafe { getenv("PATH\0") }
-    let path = raw.to_text()
+    let path = raw.to_string()
     println(f"{path.len() > 0}")
 }
 "#,
@@ -720,7 +720,7 @@ fn a_handle_may_be_absent() {
                   \n\
                   fn main() throws {\n\
                   \x20   let home = unsafe { getenv(\"HOME\\0\") }\n\
-                  \x20   println(home?.to_text() ?? \"none\")\n\
+                  \x20   println(home?.to_string() ?? \"none\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
@@ -852,10 +852,10 @@ extern {
 
 fn main() throws {
     let home = unsafe { getenv("HOME\0") }
-    let found = home?.to_text() ?? "none"
+    let found = home?.to_string() ?? "none"
     println(f"{found.len() > 0}")
     let nope = unsafe { getenv("NIKAIA_NOT_SET\0") }
-    println(nope?.to_text() ?? "none")
+    println(nope?.to_string() ?? "none")
 }
 "#,
     );

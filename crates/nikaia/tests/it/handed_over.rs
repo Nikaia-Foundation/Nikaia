@@ -360,7 +360,7 @@ fn a_copy_has_one_word() {
     let found = findings(
         "fn main() throws {\n\
          \x20   let name: String = \"a\"\n\
-         \x20   let copy = name.to_text()\n\
+         \x20   let copy = name.to_owned()\n\
          \x20   println(copy)\n\
          }\n",
     );
@@ -378,7 +378,7 @@ fn a_copy_has_one_word() {
         codes_of(&findings(
             "fn main() throws {\n\
              \x20   let n = 3\n\
-             \x20   let a = n.to_text()\n\
+             \x20   let a = n.to_string()\n\
              \x20   let b = \"x\"\n\
              \x20   println(f\"{a}{b}\")\n\
              }\n"
@@ -396,17 +396,17 @@ fn the_text_form_of_text_is_the_text() {
         "fn main() throws {\n\
          \x20   let a = \"x\"\n\
          \x20   let n = 3\n\
-         \x20   println(f\"{a}{n.to_text()}\")\n\
+         \x20   println(f\"{a}{n.to_string()}\")\n\
          }\n",
         Build::default(),
     );
     assert!(rust.contains("let a = \"x\";"), "{rust}");
-    assert!(rust.contains("n.to_text()"), "{rust}");
+    assert!(rust.contains("n.to_string()"), "{rust}");
     let refused = findings(
         "struct P { name: String }\n\n\
          fn main() throws {\n\
          \x20   let v = \"x\"\n\
-         \x20   let p = P { name: v.to_text() }\n\
+         \x20   let p = P { name: v.to_string() }\n\
          \x20   println(p.name)\n\
          }\n",
     );

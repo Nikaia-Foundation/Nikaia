@@ -87,13 +87,13 @@ fn a_postfix_reparenthesises_what_binds_looser() {
     let emitted = emit(
         "fn f(a: i32, b: i32, xs: Vec[i32]) {\n\
          let c = (a as f64).sqrt()\n\
-         let d = (a + b).to_text()\n\
+         let d = (a + b).to_string()\n\
          let e = (a - b).abs()\n\
          let g = (a + b) as f64\n\
          }",
     );
     assert!(emitted.contains("(a as f64).sqrt()"), "{emitted}");
-    assert!(emitted.contains("(a + b).to_text()"), "{emitted}");
+    assert!(emitted.contains("(a + b).to_string()"), "{emitted}");
     assert!(emitted.contains("(a - b).abs()"), "{emitted}");
     assert!(emitted.contains("(a + b) as f64"), "{emitted}");
 }
@@ -628,7 +628,7 @@ fn text_made_in_place_is_lent_to_a_pattern() {
              return rest.len() + head.len() + line.split(f\"{n};\").count()\n\
          }\n",
     );
-    assert!(emitted.contains("strip_prefix(&format!("), "{emitted}");
-    assert!(emitted.contains("strip_suffix(&format!("), "{emitted}");
-    assert!(emitted.contains("split(&format!("), "{emitted}");
+    assert!(emitted.contains("strip_prefix(&*format!("), "{emitted}");
+    assert!(emitted.contains("strip_suffix(&*format!("), "{emitted}");
+    assert!(emitted.contains("split(&*format!("), "{emitted}");
 }

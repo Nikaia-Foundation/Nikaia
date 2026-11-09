@@ -1438,7 +1438,7 @@ struct User { name: String }
 fn main() throws {
     let user: User? = User { name: f\"Ada\" }
     let nobody: String = f\"nobody\"
-    let name = user?.name ?? nobody.to_text()
+    let name = user?.name ?? nobody.to_string()
     println(f\"{name}\")
 }
 ",
@@ -1456,7 +1456,7 @@ struct User { name: String }
 fn main() throws {
     let user: User? = User { name: \"Ada\" }
     let n = 5
-    let name = user?.name ?? n.to_text()
+    let name = user?.name ?? n.to_string()
     println(f\"{name}\")
 }
 ",

@@ -83,7 +83,7 @@ fn a_method_of_a_number_nothing_describes_is_refused() {
 #[test]
 fn the_common_methods_of_a_number_are_described() {
     let source = "fn calc(a: i64, c: i32, d: i32, u: u64, f: f64, g: f64) -> String {\n\
-         \x20   let parts = [a.to_text(), a.pow(2).to_text(), (-a).rem_euclid(3).to_text(), (-a).signum().to_text(), c.min(d).to_text(), u.count_ones().to_text(), f.floor().to_text(), f.round().to_text(), f.max(g).to_text(), f.powi(2).to_text(), f.is_nan().to_text()]\n\
+         \x20   let parts = [a.to_string(), a.pow(2).to_string(), (-a).rem_euclid(3).to_string(), (-a).signum().to_string(), c.min(d).to_string(), u.count_ones().to_string(), f.floor().to_string(), f.round().to_string(), f.max(g).to_string(), f.powi(2).to_string(), f.is_nan().to_string()]\n\
          \x20   return parts.join(\" \")\n\
          }\n\
          \n\

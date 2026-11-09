@@ -61,7 +61,9 @@ fn main() throws {
 "#,
     );
     assert!(
-        rust.contains("nikaia_std::concat::plus(nikaia_std::concat::plus(\"p\", \"q\"), \"r\")"),
+        rust.contains(
+            "nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(\"p\", \"q\")), \"r\")"
+        ),
         "two operators, two calls, nested the way they were written:\n{rust}"
     );
 }
