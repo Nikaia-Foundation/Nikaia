@@ -1,23 +1,32 @@
 //! **`String`'s ground** (ADR-327 D4, #490 step 1 of the switch): valid UTF-8
-//! in a [`List`] of bytes, placed by its handle, growing only through
-//! `try_reserve`. What only reads is the `str`'s ([`Deref`]).
+//! in a `Vec` of bytes, placed by its handle, growing only through
+//! `try_reserve` as a [`List`] grows. What only reads is the `str`'s ([`Deref`]).
 //!
 //! **Toward Rust it crosses as it is** where it lives outside the running
 //! task's block (D8): `String::from(text)` hands over the same memory, as
 //! `Text::from(string)` takes it; only text in the block is copied out.
 
+use crate::list::Grow;
 use crate::{List, Place};
+use allocator_api2::vec::Vec as PlacedVec;
 use std::borrow::Borrow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, AddAssign, Deref, DerefMut, RangeBounds};
 
-/// **Text whose growth may be refused**: valid UTF-8 in a [`List`] of bytes.
-/// Every byte in it came from a `str`, so it is handed out as one without
-/// being checked again, as `String` does.
+/// **Text whose growth may be refused**: valid UTF-8 in a `Vec` of bytes,
+/// grown as a [`List`] grows. Every byte in it came from a `str`, so it is
+/// handed out as one without being checked again, as `String` does.
+///
+/// **As large as the `Vec`** (#490): a byte never views anything, so the
+/// text needs none of [`List`]'s type-erased drop, which costs a word; text
+/// sits inside the compiler's syntax tree, whose size the nesting depth on
+/// the default stack pays for.
 pub struct Text {
-    bytes: List<u8>,
+    bytes: PlacedVec<u8, Place>,
 }
+
+const _: () = assert!(size_of::<Text>() == size_of::<PlacedVec<u8, Place>>());
 
 impl Text {
     /// **The text form of text is the text** (ADR-282 D8): a copy, a
@@ -32,7 +41,7 @@ impl Text {
     #[inline]
     pub const fn new_in(place: Place) -> Text {
         Text {
-            bytes: List::new_in(place),
+            bytes: PlacedVec::new_in(place),
         }
     }
 
@@ -45,9 +54,9 @@ impl Text {
     /// A new text with room for `room` bytes, placed at `place`.
     #[inline]
     pub fn with_capacity_in(room: usize, place: Place) -> Text {
-        Text {
-            bytes: List::with_capacity_in(room, place),
-        }
+        let mut text = Text::new_in(place);
+        text.bytes.grow_exact(room);
+        text
     }
 
     /// A new text with room for `room` bytes, outside every block.
@@ -67,7 +76,7 @@ impl Text {
     /// Where the text lives.
     #[inline]
     pub fn place(&self) -> Place {
-        self.bytes.place()
+        *self.bytes.allocator()
     }
 
     /// How many bytes it has room for.
@@ -79,7 +88,7 @@ impl Text {
     /// Room for `more` bytes, or the task ends (D6).
     #[inline]
     pub fn reserve(&mut self, more: usize) {
-        self.bytes.reserve(more);
+        self.bytes.grow(more);
     }
 
     /// Append `s`, with one copy.
@@ -92,7 +101,7 @@ impl Text {
     #[inline]
     pub fn push(&mut self, c: char) {
         if c.is_ascii() {
-            self.bytes.push(c as u8);
+            self.bytes.push_or_end(c as u8);
         } else {
             self.push_str(c.encode_utf8(&mut [0; 4]));
         }
@@ -121,14 +130,16 @@ impl Text {
     /// Its bytes, as the list they are.
     #[inline]
     pub fn into_bytes(self) -> List<u8> {
-        self.bytes
+        List::of(self.bytes)
     }
 
     /// `bytes` as text where they are UTF-8, in their place.
     #[inline]
     pub fn from_utf8(bytes: List<u8>) -> Result<Text, std::str::Utf8Error> {
         match std::str::from_utf8(&bytes) {
-            Ok(_) => Ok(Text { bytes }),
+            Ok(_) => Ok(Text {
+                bytes: bytes.into_items(),
+            }),
             Err(e) => Err(e),
         }
     }
@@ -227,7 +238,7 @@ impl Text {
             "assertion failed: self.is_char_boundary(at)"
         );
         Text {
-            bytes: self.bytes.split_off(at),
+            bytes: self.bytes.split_off_placed(at),
         }
     }
 
@@ -472,7 +483,7 @@ impl From<String> for Text {
     #[inline]
     fn from(s: String) -> Text {
         Text {
-            bytes: List::from(s.into_bytes()),
+            bytes: List::from(s.into_bytes()).into_items(),
         }
     }
 }
@@ -482,7 +493,7 @@ impl From<String> for Text {
 impl From<Text> for String {
     #[inline]
     fn from(text: Text) -> String {
-        let bytes: Vec<u8> = text.bytes.into();
+        let bytes: Vec<u8> = List::of(text.bytes).into();
         // SAFETY: the bytes are the text's, UTF-8.
         unsafe { String::from_utf8_unchecked(bytes) }
     }
@@ -612,7 +623,7 @@ pub fn to_uppercase(s: &str, place: Place) -> Text {
     let mut text = Text::with_capacity_in(s.len(), place);
     for c in s.chars() {
         if c.is_ascii() {
-            text.bytes.push(c.to_ascii_uppercase() as u8);
+            text.bytes.push_or_end(c.to_ascii_uppercase() as u8);
         } else {
             text.extend(c.to_uppercase());
         }
@@ -631,7 +642,7 @@ pub fn to_lowercase(s: &str, place: Place) -> Text {
     let mut text = Text::with_capacity_in(s.len(), place);
     for c in s.chars() {
         if c.is_ascii() {
-            text.bytes.push(c.to_ascii_lowercase() as u8);
+            text.bytes.push_or_end(c.to_ascii_lowercase() as u8);
         } else {
             text.extend(c.to_lowercase());
         }

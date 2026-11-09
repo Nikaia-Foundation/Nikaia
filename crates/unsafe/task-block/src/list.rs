@@ -65,6 +65,89 @@ unsafe fn dropped<T>(room: *mut Room) {
     unsafe { std::ptr::drop_in_place(room.cast::<PlacedVec<T, Place>>()) }
 }
 
+/// **What a list's growth does to its `Vec`**, whoever holds it: a [`List`]
+/// through [`Held`], a [`Text`](crate::Text) as a plain `Vec<u8, Place>`
+/// (bytes never view anything, so text needs no type-erased drop and is as
+/// large as the `Vec`, #490: the nesting depth on the default stack).
+pub(crate) trait Grow<T> {
+    /// Room for `more` elements, or the task ends (D6).
+    fn grow(&mut self, more: usize);
+    /// Room for exactly `more` elements, or the task ends (D6).
+    fn grow_exact(&mut self, more: usize);
+    /// Push `item`, ending the task where the block refuses (D6).
+    fn push_or_end(&mut self, item: T);
+    /// The elements from `at` on, as a new `Vec` in the same place.
+    fn split_off_placed(&mut self, at: usize) -> PlacedVec<T, Place>;
+    /// Whether its memory is the global allocator's, or none at all.
+    fn is_outside(&self) -> bool;
+    /// Append a run of elements with one copy.
+    fn extend_copied(&mut self, run: &[T])
+    where
+        T: Copy;
+}
+
+impl<T> Grow<T> for PlacedVec<T, Place> {
+    #[inline]
+    fn grow(&mut self, more: usize) {
+        if self.capacity() - self.len() < more && self.try_reserve(more).is_err() {
+            full()
+        }
+    }
+
+    #[inline]
+    fn grow_exact(&mut self, more: usize) {
+        if self.capacity() - self.len() < more && self.try_reserve_exact(more).is_err() {
+            full()
+        }
+    }
+
+    #[inline]
+    fn push_or_end(&mut self, item: T) {
+        if self.len() == self.capacity() && self.try_reserve(1).is_err() {
+            full()
+        }
+        self.push(item);
+    }
+
+    #[inline]
+    fn split_off_placed(&mut self, at: usize) -> PlacedVec<T, Place> {
+        assert!(
+            at <= self.len(),
+            "`at` split index (is {at}) should be <= len"
+        );
+        let mut tail = PlacedVec::new_in(*self.allocator());
+        tail.grow_exact(self.len() - at);
+        tail.extend(self.drain(at..));
+        tail
+    }
+
+    #[inline]
+    fn is_outside(&self) -> bool {
+        self.capacity() == 0
+            || size_of::<T>() == 0
+            || !self.allocator().holds(self.as_ptr().cast_mut().cast())
+    }
+
+    /// **One copy**, as `std`'s `Vec` does: `allocator-api2`'s
+    /// `extend_from_slice` clones one element at a time on stable Rust,
+    /// which doubled the tasks' count (`benches/fallible`).
+    #[inline]
+    fn extend_copied(&mut self, run: &[T])
+    where
+        T: Copy,
+    {
+        self.grow(run.len());
+        let len = self.len();
+        // SAFETY: `grow` left room for `run.len()` more, and a `Copy`
+        // element has nothing to drop; a `Vec` and a run it is extended from
+        // are two values, so they do not overlap.
+        unsafe {
+            std::ptr::copy_nonoverlapping(run.as_ptr(), self.as_mut_ptr().add(len), run.len());
+            self.set_len(len + run.len());
+        }
+    }
+}
+
 /// A `Vec<T, Place>` written into a [`Room`], in a `const fn`.
 union Pun<T> {
     items: ManuallyDrop<PlacedVec<T, Place>>,
@@ -74,7 +157,7 @@ union Pun<T> {
 impl<T> List<T> {
     /// The list that holds `items`.
     #[inline(always)]
-    const fn of(items: PlacedVec<T, Place>) -> List<T> {
+    pub(crate) const fn of(items: PlacedVec<T, Place>) -> List<T> {
         const {
             assert!(
                 size_of::<PlacedVec<T, Place>>() <= size_of::<Room>()
@@ -114,7 +197,7 @@ impl<T> List<T> {
 
     /// Its `Vec`, taken out.
     #[inline(always)]
-    fn into_items(self) -> PlacedVec<T, Place> {
+    pub(crate) fn into_items(self) -> PlacedVec<T, Place> {
         let list = ManuallyDrop::new(self);
         // SAFETY: `room` holds a `Vec<T, Place>`, read once: the list is
         // never dropped, so the `Vec` has one owner.
@@ -164,21 +247,13 @@ impl<T> List<T> {
     /// task ends (D6).
     #[inline]
     pub fn reserve(&mut self, more: usize) {
-        if self.items_mut().capacity() - self.items_mut().len() < more
-            && self.items_mut().try_reserve(more).is_err()
-        {
-            full()
-        }
+        self.items_mut().grow(more);
     }
 
     /// Room for exactly `more` elements, or the task ends (D6).
     #[inline]
     pub fn reserve_exact(&mut self, more: usize) {
-        if self.items_mut().capacity() - self.items_mut().len() < more
-            && self.items_mut().try_reserve_exact(more).is_err()
-        {
-            full()
-        }
+        self.items_mut().grow_exact(more);
     }
 
     /// Room for `more` elements, or the block's refusal.
@@ -193,12 +268,7 @@ impl<T> List<T> {
     /// Push `item`, ending the task where the block refuses (D6).
     #[inline]
     pub fn push(&mut self, item: T) {
-        if self.items_mut().len() == self.items_mut().capacity()
-            && self.items_mut().try_reserve(1).is_err()
-        {
-            full()
-        }
-        self.items_mut().push(item);
+        self.items_mut().push_or_end(item);
     }
 
     /// The last element, taken out.
@@ -281,13 +351,7 @@ impl<T> List<T> {
     /// The elements from `at` on, as a new list in the same place.
     #[inline]
     pub fn split_off(&mut self, at: usize) -> List<T> {
-        assert!(
-            at <= self.len(),
-            "`at` split index (is {at}) should be <= len"
-        );
-        let mut tail = List::with_capacity_in(self.len() - at, self.place());
-        tail.items_mut().extend(self.items_mut().drain(at..));
-        tail
+        List::of(self.items_mut().split_off_placed(at))
     }
 
     /// Grow or shrink to `len`, new elements made by `make`.
@@ -392,9 +456,7 @@ impl<T> List<T> {
     /// too), or no memory at all.
     #[inline]
     pub fn is_outside(&self) -> bool {
-        self.items().capacity() == 0
-            || size_of::<T>() == 0
-            || !self.place().holds(self.items().as_ptr().cast_mut().cast())
+        self.items().is_outside()
     }
 }
 
@@ -404,19 +466,7 @@ impl<T: Copy> List<T> {
     /// stable Rust, which doubled the tasks' count (`benches/fallible`).
     #[inline]
     pub fn extend_copied(&mut self, run: &[T]) {
-        self.reserve(run.len());
-        let len = self.items_mut().len();
-        // SAFETY: `reserve` left room for `run.len()` more, and a `Copy`
-        // element has nothing to drop; a list and a run it is extended from
-        // are two values, so they do not overlap.
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                run.as_ptr(),
-                self.items_mut().as_mut_ptr().add(len),
-                run.len(),
-            );
-            self.items_mut().set_len(len + run.len());
-        }
+        self.items_mut().extend_copied(run);
     }
 }
 
