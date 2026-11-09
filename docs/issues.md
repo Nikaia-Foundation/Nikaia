@@ -93,6 +93,10 @@ it, like the checks in `docs/supervisor.md`.
   A change to a pass every build runs (the bounds walk runs in each
   `lower-std`) names the time before it, on one named file, as a limit
   (#1470: a rule that made the walk 4.5 times slower stopped the run).
+  The limit says the command, the file and whether wall or user time, with
+  the figure measured before (#1470: "1.2 times its time" without a
+  baseline cost a run its measuring), and names any recomputation the
+  pass already does per body that the change would multiply.
   An issue that changes which facts the bounds walk asks with shows a
   `--bounds-trace` of its probe on the binary of the day (#1500: the
   trace showed the shared turn variable the rule had missed).

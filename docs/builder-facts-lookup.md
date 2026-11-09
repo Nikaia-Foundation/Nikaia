@@ -127,6 +127,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Lowering and lower-std
 
+* `commit.nika` stages whole files: a defect fix that shares a file with a step is split by putting HEAD's version plus the fix hunks (in the `.nika` and its lowered `.rs`) in place, committing, then restoring the step. Plan the fix as its own commit before starting the step in that file. (issue-1470)
+
 * **Check lowered tools code with `cargo check --profile fast -p nikaia-std
   --features compiler --message-format short`** right after the first
   `lower-std`; without the feature the check is a false green (k3a2).
@@ -266,6 +268,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **Expressions in the bounds walk carry no byte span** (`node_key` is a node id): a goal's line is its statement's first byte (`walk.at`, set in the statement loop), as in the `--bounds` report; `--bounds-trace LINE` shows the goals of statements starting on that line. (issue-1495)
 * **`rules_give` pushes about 3 facts per length rule**, so a type with many equal-length fields fills the 48-fact cap and later goals fail without a word (ADR-306 D30, #1500, moves the cap to the question). To see why a rule is dropped or a goal fails, put an env-gated `eprintln!` into the lowered `.rs` (`walk.rule_failed.insert` in `bounds_rules.rs`, the goal in `bounds_walk.rs`), rebuild without `lower-std`, then restore the file by name; it finds in one build what guessing took 15 turns for. (issue-1470)
 * Every turn fact of a loop names that loop's `#turn` variable, so "facts connected to the goal" through shared names takes in every list the loop grows; weight a name by how many facts name it. (issue-1500)
+* `rules_settle` recomputes `rules_holding` (the fixpoint over every `ref mut self` method of the type) for every body it walks, so a change that adds field-rule candidates multiplies the cost of a type like sv_walk's; only `bounds_fields` (a plain ask, no ledger) may cache it, since `ask_in` writes each proof into `nikaia.proofs` per function. (issue-1470)
 * `lower-std --bounds` writes nothing and reads no cache, so the old and new binaries can measure the same tree in parallel and be diffed site by site. (issue-1500)
 * Code that runs for every question of the bounds walk must not loop over string-keyed maps; give the names integer ids first, or `lower-std` grows from minutes to tens of minutes. (issue-1500)
 * **Before adding debug prints to `bounds_*.nika`, run `nikaia check --bounds --bounds-trace LINE F.nika`** (`lower-std --bounds --bounds-trace FILE:LINE` for a tools file): for each goal of a statement starting on that line it prints the goal, every fact it was asked with (rule facts and ledger facts included), how many the 48-fact cap evicted, and the type's field rules. (issue-1495)
