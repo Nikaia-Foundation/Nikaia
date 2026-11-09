@@ -177,7 +177,9 @@ impl EmitState {
                     let st = declared.mark();
                     self.emit_stmt(world, walk, &mut declared, host, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, depth + 1, &tail.at(i, last), flow, scope)?;
                     declared.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
-                    let head = declared.buf.strip_suffix("vec![];");
+                    let plain = declared.buf.strip_suffix("vec![];");
+                    let placed = declared.buf.strip_suffix("nikaia_std::block::list(nikaia_std::block::Place::Block);");
+                    let head = nikaia_std::index::or_maybe(plain, || placed);
                     if head.is_some() {
                         let beside = flow.at(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64);
                         let mut value = EmitOut::empty();
@@ -190,7 +192,7 @@ impl EmitState {
                         }
                         out.push(&inner_pad);
                         let st = out.mark();
-                        out.push(&format!("{}vec![{}; {}];", nikaia_std::index::or(head, || ""), value.buf, count.buf));
+                        if plain.is_some() { out.push(&format!("{}vec![{}; {}];", nikaia_std::index::or(head, || ""), value.buf, count.buf)); } else { out.push(&format!("{}nikaia_std::block::List::from_elem_in({}, {}, nikaia_std::block::Place::Block);", nikaia_std::index::or(head, || ""), value.buf, count.buf)); }
                         out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
                         out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64));
                         out.push("\n");

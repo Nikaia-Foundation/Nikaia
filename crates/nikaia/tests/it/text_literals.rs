@@ -191,7 +191,10 @@ fn a_literal_beside_text_of_its_own_becomes_it() {
                   }\n";
     assert!(findings(source).is_empty(), "{:?}", findings(source));
     let rust = lowered(source);
-    assert!(rust.contains("vec![String::from(\"a\")"), "{rust}");
+    assert!(
+        rust.contains("List::from_array_in([String::from(\"a\")"),
+        "{rust}"
+    );
 }
 
 /// **A view handed to a `String` the callee only reads is lent as it is**

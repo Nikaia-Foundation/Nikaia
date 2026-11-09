@@ -269,7 +269,11 @@ impl EmitState {
                     let st = declared.mark()
                     self.emit_stmt(world, walk, declared, host, block.stmts[i].node, block.stmts[i].span, depth + 1, tail.at(i, last), flow, scope)
                     declared.record(block.stmts[i].span, st)
-                    let head = declared.buf.strip_suffix("vec![];")
+                    // A list that stays in its task is made in its block
+                    // (ADR-327 D9), at once as long as the `resize` asks.
+                    let plain = declared.buf.strip_suffix("vec![];")
+                    let placed = declared.buf.strip_suffix("nikaia_std::block::list(nikaia_std::block::Place::Block);")
+                    let head = plain ?? placed
                     if head != null {
                         let beside = flow.at(block.stmts[i + 1].span.start as i64)
                         let mut value = EmitOut::empty()
@@ -284,7 +288,11 @@ impl EmitState {
                         }
                         out.push(inner_pad)
                         let st = out.mark()
-                        out.push(f"{head ?? ""}vec![{value.buf}; {count.buf}];")
+                        if plain != null {
+                            out.push(f"{head ?? ""}vec![{value.buf}; {count.buf}];")
+                        } else {
+                            out.push(f"{head ?? ""}nikaia_std::block::List::from_elem_in({value.buf}, {count.buf}, nikaia_std::block::Place::Block);")
+                        }
                         out.record(block.stmts[i].span, st)
                         out.push(self.emit_stmt_late_puts(walk, scope.function, block.stmts[i + 1].span.start as i64))
                         out.push("\n")

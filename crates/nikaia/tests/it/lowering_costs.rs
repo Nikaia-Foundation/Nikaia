@@ -84,7 +84,10 @@ fn main() {
 }
 ";
     let rust = lowered(source);
-    assert!(rust.contains("= vec![7; "), "{rust}");
+    assert!(
+        rust.contains("= nikaia_std::block::List::from_elem_in(7, "),
+        "{rust}"
+    );
     assert!(!rust.contains(".resize("), "{rust}");
 }
 

@@ -694,6 +694,15 @@ impl<T: Clone> List<T> {
         list
     }
 
+    /// `n` clones of `item`, placed at `place`: one allocation of `n`.
+    #[inline]
+    #[track_caller]
+    pub fn from_elem_in(item: T, n: usize, place: Place) -> List<T> {
+        let mut list = List::with_capacity_in(n, place);
+        list.resize(n, item);
+        list
+    }
+
     /// This list with clones of `run` after its elements.
     #[inline]
     fn with_clones_of(mut self, run: &[T]) -> List<T> {
