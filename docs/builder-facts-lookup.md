@@ -116,6 +116,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * A by-value parameter handed back is marked `=x` (owned text, no refusal, ADR-282 D12) in a free function, but `!x` (NK2302) in an `impl` of a trait whose result writes `from`, because the contract follows the trait. (issue-1280)
 * In that `impl` case the checker also gives NK1104 with the help "write `ref`"; following it leaves only NK2302, and `it` test `views_handed_back::following_nk1104s_help_is_a_program` checks that help word for word. (issue-1280)
 * `unviewed_type` of the text view must give owned `String`, not `str`, or `.cloned().collect()` comes out as `Vec[str]`. (issue-1388)
+* The views pass marks a by-value parameter `!` (NK2302) only when its type is not textless (`rsrc_textless`); a struct of only numbers gets no NK2302, so a checker refusal of it must stay. (issue-1386)
+* NK1104 for a `return` and for a function's last value both go through `expect_kept_asked` (`check_arm_leaves.nika`) with `what == "returns"`, so one guard there covers both. (issue-1386)
+* NK1104's help still says "write `ref`" (`way_out_of_a_mismatch`, `check_types.nika`), and `return ref s` of a local in a trait impl with a `from` result is an NK1343 internal error. (issue-1386)
 
 ### Lowering and lower-std
 
