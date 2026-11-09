@@ -20,6 +20,19 @@ fn root() -> String throws {
     return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// The tests' cache entry cargo builds in, `<kind>/<toolchain key>` under
+// target/nikaia-project-tests: stamped as `use_entry` stamps one
+// (`.nikaia-used`), so `nikaia cache prune` counts it and removes it when it
+// was used longest ago (#1521); cargo's lock on it keeps it while it builds.
+// One per toolchain, so what an older compiler built goes as a whole.
+fn cache_entry(repo: String, nikaia: String, kind: String) -> String throws {
+    let key = process::run("sha256sum", [nikaia]).stdout.split(" ").collect()[0].clone()
+    let entry = f"{repo}/target/nikaia-project-tests/{kind}/{key}"
+    process::run("mkdir", ["-p", entry.clone()])
+    fs::write(f"{entry}/.nikaia-used", fs::Root::Anywhere, "")
+    return entry
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
@@ -31,7 +44,7 @@ fn main() throws {
         let there = fs::exists(f"{tmp}/demo/target/rust-library/nikaia_demo/{file}", fs::Root::Anywhere)
         println(f"{file}: {there}")
     }
-    let cache = f"{repo}/target/nikaia-project-tests/rust-library-user"
+    let cache = cache_entry(repo.clone(), nikaia.clone(), "rust-library-user")
     let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: [("CARGO_TARGET_DIR", cache), ("CARGO_NET_OFFLINE", "true")])
     println(ran.stdout.trim())
     if ran.code != 0 { println(ran.stderr.trim()) }
