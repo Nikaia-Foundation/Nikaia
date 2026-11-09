@@ -122,6 +122,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * The views pass marks a by-value parameter `!` (NK2302) only when its type is not textless (`rsrc_textless`); a struct of only numbers gets no NK2302, so a checker refusal of it must stay. (issue-1386)
 * NK1104 for a `return` and for a function's last value both go through `expect_kept_asked` (`check_arm_leaves.nika`) with `what == "returns"`, so one guard there covers both. (issue-1386)
 * NK1104's help still says "write `ref`" (`way_out_of_a_mismatch`, `check_types.nika`), and `return ref s` of a local in a trait impl with a `from` result is an NK1343 internal error. (issue-1386)
+* Under views-3, NK1131 fires only on bodies that mix a view path with an owned path, on `for`-binding roots and on `mut`-parameter roots; `from` gives NK1104 on all three, so a help must not offer it. (issue-1403)
+* A nullable result written `from self` is still NK1131, and `-> ref U?` on a method is NK1343. (issue-1403)
 
 ### Lowering and lower-std
 
@@ -193,6 +195,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * `ref Array[T]` is `Ty::Pointed { slice: true, mutable: false }` in the checker, not `Named { view: true }`, and a `Vec` fits it, so `!found.fits(want)` guards never fire for it. (issue-1362)
 * In the checker, a text view's base name is "str" (shown as "ref String"), so a test on `name == "String"` misses it. (issue-1368)
 * `check_core_returns` decides `lending` before `check_core_expr` runs, so a fact recorded while checking the value must be read after `found`. (issue-1368)
+* A plain `let` over a local's field is lent by the emitter (`lent_lets`); its binding type must be a view too, or a later keeper becomes NK1343. (issue-1404)
 
 ### Grammar
 
@@ -332,6 +335,7 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * `i64` has no `checked_div_euclid`/`checked_rem_euclid`; guard `MIN / -1` and use `div_euclid`/`rem_euclid`. (issue-1339)
 * A trailing `;` does not drop a value and `let _ = x` is NK1144, so a value can't be discarded explicitly; a body's last value is dropped only where the function type hands back nothing. (issue-1321)
 * `let mut s = ""` and then assigning an owned `String` is NK1105; start it as `String()`. (issue-539)
+* A `for` over a list literal of strings binds views, so pushing the loop variable into a struct field needs `.clone()` (NK1106). (issue-1404)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`

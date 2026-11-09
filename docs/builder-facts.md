@@ -161,4 +161,6 @@ together with the specification section and an example test.
 * A `let` bound to a cut (`v[0..]`) or a `std` method result (`s.trim()`) is a view only if `vc_view_of` in `view_changes.nika` sees it; otherwise a later change becomes a rustc NK1343 instead of NK2305. (issue-1363)
 * The library ledger has no `borrows` entries for `std` methods (`String::trim` is missing from `described.contracts`), so the view-change walk cannot tell that a method result points into its receiver. (issue-1363)
 * The tier pass runs without checker types, so a rule there must not mark lists whose items are already views (split/map) as owned. (issue-1368)
+* Changing a help's wording re-records many `.stderr` files and the `lsp_diagnostics*.stdout` files; grep `tests/compiler` for the old phrase before building. (issue-1403)
+* A probe of ownership needs a `String` made by a call (`fn make()` with `push_str`), because a literal-filled `String` is tiered to `&str` and hides NK1343. (issue-1404)
 
