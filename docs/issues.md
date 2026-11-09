@@ -35,6 +35,8 @@ it, like the checks in `docs/supervisor.md`.
   A proof that differs between two runs (`check` and `lower-std`, one file
   and a package) is reduced to a probe of at most two files, and says whether
   the function is called from more than one file (ADR-391 D1) (#1465).
+  The probe names what it needs in order to fail (which writes keep a field
+  rule alive), so a test grown from it still fails before the fix (#1483).
 * **I6. The governing decision**: the ADR and its decision (`ADR-282 D7`) or
   the section of Part I-III that says what is right. Without one, the issue
   says "no decision yet" and is a `decision` issue, not a bug
