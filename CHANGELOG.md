@@ -8,6 +8,57 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1367] — 2026-11-09
+
+**Builders' changes (#1378, #1380, #1381, #1400, #1401, #1405, #1406, #1416, #1418, #1419, #1421, #1422, #1438, #1447, #1468, #1471, #1439, #1479, #929, #948, #1013, #1015, #1056, #1063, #1070, #1071, #1072, #1085, #1089, #1094, #1026)**
+- none (y32 and y30 change crates/: the supervisor raises the version from their reports)
+- A call that hands back a struct of views, passed straight to another call by value, lowers to a lent temporary instead of a keep that rustc refused (#1378).
+- An owned parameter whose type holds several views, handed back whole or through a matched payload, now lowers with one named lifetime instead of elided ones that rustc refused.
+- yaml: `events` writes tags in the yaml-test-suite's form: `!!int` as `tag:yaml.org,2002:int`, `%TAG` handles expanded per document, local tags and the verbatim form unchanged.
+- yaml: the parser refuses the yaml-test-suite's remaining invalid inputs: multi-line implicit keys, document markers and under-indented lines inside flow and quoted nodes, comments without a space before them, tabs after block scalars (400 of 402 cases pass)
+- yaml: an undeclared tag handle (`!e!foo` without `%TAG !e!`) is refused at the end of the tag with "a tag handle a %TAG directive declares", no longer one token later with a TagChar message
+- yaml: node properties on a line of their own, split over two lines, or on an empty node are kept (9KAX, BU8L, FH7J, PW8X, SKE5)
+- yaml: a tab is accepted as separation whitespace after the indentation (YAML 1.2.2 s-separate-in-line), and trailing space-only lines of a block scalar at the end of input are read as empty lines (l-chomped-empty); seven more yaml-test-suite cases pass (379 of 402)
+- A `for` over `cli::args()` now types each word as an owned `String`, so a view of one assigned to a `String` is NK1105 rather than a compiler error; a name holding `cli::args()` can be walked by a `for` (once: a second walk is NK2702), and the type is written `cli::Args`.
+- Fixed: a function that fails with a dependency's error and with another error (for example `yaml::parse` beside `fs::read` in `main`) no longer gives an internal compiler error (NK1343); the dependency's error is held in its envelope in the generated error sum
+- yaml: an empty implicit key in a flow sequence pair or a flow mapping entry without a value (`[: b]`, `{ : }`) parses; the parser passes all 402 yaml-test-suite cases
+- A `for` over what holds no elements is refused: a number, a `bool` or a declared struct or enum is now NK1206 with a help (a range up to the number, a list field), where it used to reach rustc as NK1343 "no method named `iter`".
+- Checker: a struct or `enum` of a dependency in an `f"…"` hole or a print call is NK1201, as one of the package's own, instead of rustc's NK1343. An error leaving `main` through a sum of error types prints the message and its site, without the variant's name around it (`Error: fault at line 7`, not `Error: Fault(fault at line 7 …)`).
+- A rust-library package can splice in hand-written Rust: [rust-library] root = "rust/lib.rs" becomes the crate's lib.rs, the lowered items move to nikaia_<name>::native (native = "..." renames it), every feature is checked with it; a missing root file, or the table in a package that is not a rust-library, is NK1348 (ADR-393 D7).
+- yaml package: built as the Rust crate nikaia_yaml, with serde_yaml 0.9's from_str, Value, Mapping, Number and Error (location()) over the native parser
+- Grammars: `@stream entry rule` is checked: its body repeats one item, the call is a sequence walked once (NK1349 for any other body)
+- A Rust user reads a grammar's `@stream` entry from any `std::io::Read`: `G::<rule>_reader(r)`, under the feature whose root names `<package>::<Grammar>::<rule>` (or `<package>::<Grammar>`).
+- A rust-library with a hand-written root (ADR-393 D7) builds a pub function that fails in two ways: its error sum is written below the lowered package's root, crate::<native>, and a rust-library's sums are pub so a Rust crate can call those functions (#1447).
+- A rust-library feature that roots a `@stream` entry whose item type is not `Send` is refused with NK1345 at the root, naming the entry, the item and the field, before rustc runs
+- yaml: a core-schema tag on a block scalar (`!!int |-`, as PyYAML's safe_dump writes) is read by its content, and a byte order mark at the start of the stream or of a document is skipped; the serde_yaml facade passes all its cases
+- A `String` parameter that the callers hand both a view and text of its own is lent in the body as with one kind of caller, so `s.strip_prefix("-") ?? s` no longer depends on what the callers pass (#1479).
+- A `String` parameter that the callers hand both a view and text of its own is now lent in the body as it is with one kind of caller, so a `??` that falls back on it checks (#1479).
+- none (test only; it closes #929, which 0.0.1261 and 0.0.1279 built)
+- A user type named `S` or `E` in a grammar rule's type or action is the user's: winnow-grammar moves to 9e23474f, whose generated type parameters are `__WgS`, `__WgEr` and `__WgB` (#1013).
+- A label on a literal in a grammar binds the matched text, now also when the action returns it or stores it in a field (#1030).
+- A function called from a grammar guard is now a call site for the text-tier pass, so its text parameters are no longer tiered from its other callers alone (#1032).
+- A guard in a grammar can read a `text(..)` label whose pattern binds names, as the action can.
+- A dependency's struct with two or more view fields, named as a type in the reading package (`n: ref two::Node`), is lowered with one lifetime per view field (ADR-353 D7), as in its own package
+- A guard after a bound `text(..)` in a grammar reads the names bound inside it: `s:text(d:P+) if(d.len() > 1)` (Part II 10, #1013).
+- `nikaia fmt` keeps a grammar rule's parentheses (guard `if(..)`, `fail(..)`) on one line and puts a rule's continuation lines one level deeper than the rule
+- An unbound `text(..)` in a grammar binds the names inside it as a bound one does, for the action and a later guard (`text(d:P+) if(d.len() > 1)`), and a name below a repeat, a counted repeat, a choice or another built-in's argument is refused in the action (NK1117) instead of reaching rustc (Part II 10, #1039).
+- A grammar entry's value parameters take their arguments as an ordinary call's kept parameters do: a caller's parameter handed there is owned, no longer lent (#1041).
+- (step 1, #1049) A built-in that takes one pattern (`peek`, `not`, `intern`, `text`, `recover`) takes a sequence or a choice there, as Part II 10's element table says; they passed `nikaia check` and stopped at the run. (#1050) A guard or bound that hands a label to a parameter that keeps it is refused with NK2105, as inside a lambda: the guard only reads its alternative's labels. It used to pass `nikaia check` and stop in rustc. The help suggests `t?.clone()` for an optional.
+- NK2105's help for an optional handed over and read again suggests `t?.clone()`, the copy that compiles, instead of `t.clone()` (#1056).
+- A `String` field that holds a view can be copied from a borrowed struct (a `ref` parameter or a `for` element) into a new struct, which views the same buffer and can outlive the list it was copied from.
+- A by-value parameter whose type holds no text (a field-less enum, or a struct or enum of only such fields and scalars) is no longer taken as the source of a view handed back, so building a view-holding struct from it is no longer refused NK2302.
+- A list of views handed back may now be returned as a list literal, start from a non-empty literal, or grow with `extend`, as one built by `push` already could.
+- A `String` field that holds a view can be copied from a struct bound by a `match` pattern (a tuple or named variant payload, or an element of a payload list) of a borrowed value into a new struct.
+- A list or struct holding views of a `ref` parameter that is handed back through an `if`, a `match` or a block arm is now treated as handed back, not as kept past the call (NK2302).
+- A local bound by a `get` whose miss jumps (`m.get(k) ?? throw ..`, or `match m.get(k) { null => throw ..  x => x }`) is a view of the element, so a `match` on one of its fields borrows it instead of being refused by rustc.
+- A call's result built from a by-value struct argument no longer counts as a view of a `ref` argument beside it, and a method called on a local bound to a struct literal gets its result's lifetimes from the method's sources.
+- An integer other than a `u8` cast `as scalar` is refused with `NK1241`, whose help names `scalar::from(n)`, instead of being checked at run time.
+- The prover follows a loop of a constant number of turns, at most 16, turn by turn: each whole-number name it changes gets one interval per turn, each checked as an invariant, so `n = n * 16 + d` over four turns proves `n <= 0xFFFF`; a `throw` in a loop body is a way out of the loop, and a whole-number `let` the prover does not read is a name of its own (ADR-361 D12).
+- The prover reads a let mut bound to a call, a whole number handed to a function that does not change it, what a branch's own let of a call bounds past the if, and a call's precondition through the history of an if, so json's surrogate-pair decoding proves scalar::from.
+- The prover follows a `let mut` whole number through a `match` statement as through an `if`: each arm knows what its `bool`, literal or range pattern says of the matched value, and after the `match` the number is one arm's value or another's (ADR-361 D9).
+- A text field read from a struct that a grammar label binds, or bound by a struct pattern, now keeps the tier of its position, so a view stays a view instead of being refused as text of its own (NK1106).
+- A label on a group around one element (`n:(P)`, `k:((P))`, `s:(text(p))`) binds what the element yields, as Part II 10.8 says, instead of reaching rustc as an unknown name.
+
 ## [0.0.1366] — 2026-11-08
 
 **No needless poisoning, and the task block measured (ADR-327 D10, D11; #490 steps 1-2)**
