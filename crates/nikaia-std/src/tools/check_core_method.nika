@@ -563,6 +563,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") {
         state.facts.text_finds.insert(id_of(receiver) as i64)
     }
+    // **A view of the receiver** (ADR-views-3 D9, #1478): `s.trim()` points
+    // into `s`, so a change to `s` while it is used is NK2305.
+    if text && views_what_it_is_called_on(name) {
+        state.facts.receiver_views.insert(id_of(expr) as i64)
+    }
     // **A copy of a list or a set** (ADR-collections-1 D4): `extend` takes its
     // elements one by one.
     let collection = match on {

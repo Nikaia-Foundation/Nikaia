@@ -131,6 +131,11 @@ pub struct CheckFacts {
     pub number_lets: collections::BTreeMap[i64, String],
     pub changed_elements: collections::BTreeSet[i64],
     pub text_finds: collections::BTreeSet[i64],
+    /// **A method of text whose result is a view of the text it is called
+    /// on** (`s.trim()`, `s.split(",")`, ADR-views-3 D9, #1478), by the
+    /// call's node: the view-change walk watches the receiver while the
+    /// result is used.
+    pub receiver_views: collections::BTreeSet[i64],
     /// **A `Bytes` cut by a set** (ADR-375 D3), by the receiver: written
     /// `nikaia_std::bytes::split(&b, set)`, since a slice's own `split` takes
     /// a closure and is the one the language below would pick.
@@ -624,6 +629,7 @@ impl CheckFacts {
             number_lets: collections::BTreeMap(),
             changed_elements: collections::BTreeSet(),
             text_finds: collections::BTreeSet(),
+            receiver_views: collections::BTreeSet(),
             bytes_splits: collections::BTreeSet(),
             char_patterns: collections::BTreeMap(),
             standard_compares: collections::BTreeMap(),

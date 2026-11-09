@@ -463,6 +463,7 @@ impl CheckWalkedPasses for Host<'_> {
         lent: &BTreeSet<i64>,
         coalesced: &BTreeSet<i64>,
         mut_viewed: &BTreeSet<i64>,
+        receiver_views: &BTreeSet<i64>,
     ) -> Vec<Finding> {
         crate::view_changes::analyse(
             self.parsed,
@@ -471,6 +472,7 @@ impl CheckWalkedPasses for Host<'_> {
             lent,
             coalesced,
             mut_viewed,
+            receiver_views,
         )
         .0
     }

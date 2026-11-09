@@ -1,0 +1,41 @@
+// A change to text while a view a method of it handed back is still used is
+// refused (NK2305, ADR-views-3 D9, #1478): `s.trim()` points into `s`, and so
+// does a struct literal given it, so the change cannot be emitted as Rust that
+// rustc then refuses.
+
+struct Line {
+    text: String,
+    at: i64,
+}
+
+fn trimmed() throws {
+    let mut s = String()
+    s.push_str(" a ")
+    let t = s.trim()
+    s.push_str("!")
+    println(t)
+}
+
+fn split() throws {
+    let mut s = String()
+    s.push_str("a,b")
+    let parts = s.split(",")
+    s.push_str(",c")
+    for p in parts {
+        println(p)
+    }
+}
+
+fn held(n: i64) -> Line {
+    let mut text = String()
+    text.push_str(" a ")
+    let l = Line { text: text.trim(), at: n }
+    text.push_str("z")
+    return l
+}
+
+fn main() throws {
+    trimmed()
+    split()
+    println(held(1).text)
+}

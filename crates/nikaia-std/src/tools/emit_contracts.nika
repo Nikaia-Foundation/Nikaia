@@ -224,6 +224,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
         refused: refused,
         viewed: units[0].viewed_arms,
         mut_viewed: mut_viewed,
+        receiver_views: state.facts.receiver_views,
     }
     // The give-ups read the state, so they are worked out before it moves.
     return EmitContractsMade { give_ups: vc_analyse(ask, fn(e) { emit_holes_literal(parsed, words, e) }).give_ups, state: state, order_proofs: order_proofs }

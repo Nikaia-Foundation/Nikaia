@@ -414,6 +414,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         _ => false,
     };
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") { state.facts.text_finds.insert(id_of(receiver) as i64); }
+    if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {
         Ty::Named { ref name, ref args, .. } => args.len() == 1 && (name == "Vec" || name == "List" || name == "HashSet" || name == "BTreeSet" || name == "Set" || name == "collections::HashSet" || name == "collections::BTreeSet"),
         _ => false,
