@@ -475,7 +475,10 @@ pub fn check_core_a_mut_parameter_given_away[H: CheckHost](mut state: CheckState
         way = " to return"
     }
     let notes: Vec[String] = [f"`mut {name}` is passed as `ref mut`, so the caller's `{ty.text()}` is changed in place and stays the caller's. Giving it away would take it from them."]
-    let help: String = f"Write `{name}.clone()` for a copy{way}, or drop the `mut` if the function is meant to use up its value."
+    // **Views-3 has no `keep mut`** (#1486): a function that uses up the
+    // value takes it `keep` and changes a local of its own, since a plain
+    // parameter it changes is `NK1138`.
+    let help: String = f"Write `{name}.clone()` for a copy{way}, or, if the function is meant to use up its value, take `keep {name}` and change a local of its own: `let mut own = {name}`."
     state.findings.push(check_refusal("NK1131", span, f"You can't give away `{name}` here: a `mut` parameter is only borrowed.", notes, help))
 }
 

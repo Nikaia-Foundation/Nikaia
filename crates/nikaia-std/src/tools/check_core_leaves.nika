@@ -708,6 +708,22 @@ fn check_core_lambda_a_unit(ty: ref Ty) -> bool {
     }
 }
 
+/// Whether an expression reads a field.
+pub fn check_core_a_field(value: ref Expr) -> bool {
+    return match value {
+        Expr::Field { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether a type is nullable.
+pub fn check_core_a_nullable(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
+    }
+}
+
 /// What a nullable type holds, or the type itself.
 fn check_core_lambda_held(ty: ref Ty) -> Ty {
     return match ty {
@@ -774,6 +790,13 @@ pub fn check_core_returns[H: CheckHost](mut state: CheckState, world: ref CheckW
         if !lending && state.a_made_element_lent(world, given, state.expected?.clone() ?? Ty::Unknown) {
             lending = true
             state.facts.lent_returns.insert(span.start as i64)
+        }
+        // **A `T?` lent into a `ref T?` result is the option of a view**
+        // (ADR-views-3 D7, D8, #1486): `self.o.as_ref()`, not `&self.o`. A
+        // map read is the option of a view already.
+        if lending && check_core_a_field(given) && check_core_a_nullable(found) && !found.is_a_view() && check_core_a_nullable(state.expected?.clone() ?? Ty::Unknown) {
+            state.facts.lent_returns.remove(span.start as i64)
+            state.facts.lent_option_results.insert(node_key(given))
         }
     }
     state.flow.lambda_expected = null

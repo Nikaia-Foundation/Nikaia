@@ -608,6 +608,9 @@ pub struct CheckFacts {
     pub lent_list_reads: collections::BTreeSet[i64],
     /// **An arm that reads an element or a field off a place, lent** (#613).
     pub lent_reads: collections::BTreeSet[i64],
+    /// **A `T?` place handed back into a `ref T?` result** (#1486): written
+    /// `.as_ref()`, the option of a view, not `&` before it.
+    pub lent_option_results: collections::BTreeSet[i64],
     pub view_fallbacks: collections::BTreeSet[i64],
     /// **A map read that jumps where it finds nothing** (`m[k] ?? return`),
     /// by the `??`: of a value that moves, the answer is a view of the map
@@ -857,6 +860,7 @@ impl CheckFacts {
             kept_byte_fields: collections::BTreeSet(),
             lent_list_reads: collections::BTreeSet(),
             lent_reads: collections::BTreeSet(),
+            lent_option_results: collections::BTreeSet(),
             view_fallbacks: collections::BTreeSet(),
             map_read_views: collections::BTreeSet(),
             keep_plans: null,
