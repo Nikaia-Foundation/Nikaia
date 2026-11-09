@@ -673,10 +673,32 @@ impl EmitState {
                 // **A `par_fold` entry is driven in pieces** (#521), as its own file
                 // drives it, with this build's parallelism.
                 let mut pieces = false
+                let mut streamed = false
                 let contract = self.own_contracts.functions.get(f"{package}::{book}::{rule}")
                 if contract != null {
                     let held = contract ?? return false
                     pieces = held.pieces
+                    // **A `@stream` entry's call is a sequence** (ADR-grammar-2
+                    // D7, #1505), walked through the function its package
+                    // writes beside the grammar (`emit_stream_walk`).
+                    match held.signature {
+                        signature => {
+                            match signature.result {
+                                result => { streamed = a_sequence_type(result) },
+                                null => {},
+                            }
+                        },
+                        null => {},
+                    }
+                }
+                if streamed {
+                    if config.len() > 0 {
+                        throw EmitRefused { message: f"The compiler can't translate a call of `@stream` entry `{rule}` that hands it values or a table yet.", at: flow.statement }
+                    }
+                    out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}::{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
+                    self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                    out.push(f").to_vec())){question}")
+                    return true
                 }
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*")

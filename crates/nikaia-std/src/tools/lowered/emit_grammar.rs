@@ -184,6 +184,7 @@ impl EmitState {
         }
         let readers = emit_stream_readers(def, self.offered_to_rust);
         for rule in readers.iter() { self.emit_stream_reader(world, walk, out, host, &name, rule)?; }
+        for rule in emit_stream_walks(def, self.offered_to_rust) { self.emit_stream_walk(world, walk, out, host, &name, &rule)?; }
         if !readers.is_empty() {
             out.push(&format!("\n#[allow(non_snake_case)]\npub mod {} {{\n    #[allow(unused_imports)]\n    pub use super::{}::{}::*;\n", name, emit_stream_grammar_module(&name), name));
             for rule in readers.iter() {
@@ -204,6 +205,18 @@ impl EmitState {
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
         out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", name, rule_name, item));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n");
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_stream_walk<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, rule: &GrammarRule) -> Result<(), Box<dyn std::error::Error>> {
+        let rule_name = emit_text(world, rule.name);
+        let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let item = host.ty_named(walk, ty)?;
+        out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>) -> impl Iterator<Item = Result<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), item));
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+        out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", name, rule_name, item));
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n");
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -482,6 +495,15 @@ pub(crate) fn emit_stream_readers(def: &GrammarDef, offered_to_rust: bool) -> Ve
     for rule in def.rules.iter() { if rule.stream && rule.is_entry && rule.ret_type.is_some() && rule.args.is_empty() && rule.config.is_empty() { found.push(rule.clone()); } }
     found
 }
+
+pub(crate) fn emit_stream_walks(def: &GrammarDef, offered_to_rust: bool) -> Vec<GrammarRule> {
+    let mut found: Vec<GrammarRule> = vec![];
+    if offered_to_rust || !def.public { return found; }
+    for rule in def.rules.iter() { if rule.stream && rule.is_entry && rule.ret_type.is_some() && rule.args.is_empty() && rule.config.is_empty() { found.push(rule.clone()); } }
+    found
+}
+
+pub fn emit_stream_walk_name(book: &str, rule: &str) -> String { format!("__nikaia_walk_{}__{}", book, rule) }
 
 pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format!("__nikaia_reader_{}__{}", book, rule) }
 

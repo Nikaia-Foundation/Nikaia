@@ -452,10 +452,27 @@ impl EmitState {
                 let mut question: &'static str = "?";
                 if flow.caught { question = ""; }
                 let mut pieces = false;
+                let mut streamed = false;
                 let contract = self.own_contracts.functions.get(&format!("{}::{}::{}", package, book, rule));
                 if contract.is_some() {
                     let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                     pieces = held.pieces;
+                    match &held.signature {
+                        Some(signature) => {
+                            match &signature.result {
+                                Some(result) => { streamed = a_sequence_type(result); },
+                                None => { },
+                            }
+                        },
+                        None => { },
+                    }
+                }
+                if streamed {
+                    if !config.is_empty() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("The compiler can't translate a call of `@stream` entry `{}` that hands it values or a table yet.", rule), at: Some(flow.statement) }, &"emit_call_grammar")); }
+                    out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}::{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
+                    self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                    out.push(&format!(").to_vec())){}", question));
+                    return Ok(true);
                 }
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*");
@@ -1161,8 +1178,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple86081| {
-        let (i, word) = __nikaia_tuple86081;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple87354| {
+        let (i, word) = __nikaia_tuple87354;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

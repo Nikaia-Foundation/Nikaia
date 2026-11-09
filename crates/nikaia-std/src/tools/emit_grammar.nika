@@ -294,6 +294,9 @@ impl EmitState {
         for rule in readers {
             self.emit_stream_reader(world, walk, out, host, name, rule)
         }
+        for rule in emit_stream_walks(def, self.offered_to_rust) {
+            self.emit_stream_walk(world, walk, out, host, name, rule)
+        }
         // **The readers under the grammar's name**: the backend takes only a
         // private `use` into a grammar, so a grammar with readers is written
         // inside a module of its own (`emit_grammar_over`) and the module
@@ -331,6 +334,22 @@ impl EmitState {
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
         out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
+    }
+
+    /// **Another package's walk of a `@stream` entry** (ADR-grammar-2 D7,
+    /// #1505): the engine's `parse_<rule>_reader_each` is the crate's alone
+    /// (#1464), so a `pub grammar` writes beside itself, public and hidden,
+    /// the function a caller in another package walks: the form of the walk
+    /// in the grammar's own file (`emit_core_grammar_entry`), over a copy of
+    /// the input, the failure rendered against it.
+    fn emit_stream_walk[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
+        let rule_name = emit_text(world, rule.name)
+        let ty = rule.ret_type ?? return
+        let item = host.ty_named(walk, ty)
+        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>) -> impl Iterator<Item = Result<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
+        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &{item}| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ")
+        out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() }\n")
     }
 
     /// **The options a `par_fold` entry names after its `;`** (ADR-372 D6),
@@ -747,6 +766,29 @@ fn emit_stream_readers(def: ref GrammarDef, offered_to_rust: bool) -> Vec[Gramma
         }
     }
     return found
+}
+
+/// **The `@stream` entries another Nikaia package walks** (#1505): those of
+/// a `pub grammar` that take no values, as for a reader; a package offered to
+/// Rust has the readers instead, whose features `project_features.nika`
+/// derives, and writes none.
+fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarRule] {
+    let mut found: Vec[GrammarRule] = []
+    if offered_to_rust || !def.public {
+        return found
+    }
+    for rule in def.rules {
+        if rule.stream && rule.is_entry && rule.ret_type != null && rule.args.len() == 0 && rule.config.len() == 0 {
+            found.push(rule.clone())
+        }
+    }
+    return found
+}
+
+/// The function beside grammar `book` another package walks its `@stream`
+/// entry `rule` with; `emit_call_grammar` in `emit_core_calls.nika` calls it.
+pub fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
+    return f"__nikaia_walk_{book}__{rule}"
 }
 
 /// The function beside grammar `book` that reads its `@stream` entry `rule`
