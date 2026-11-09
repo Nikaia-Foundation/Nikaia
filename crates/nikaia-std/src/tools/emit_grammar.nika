@@ -298,9 +298,12 @@ impl EmitState {
         // private `use` into a grammar, so a grammar with readers is written
         // inside a module of its own (`emit_grammar_over`) and the module
         // under its name takes in all of it and the readers, each `use` line
-        // one a feature's `#[cfg]` keeps or leaves out.
+        // one a feature's `#[cfg]` keeps or leaves out. The glob passes the
+        // `pub(crate)` functions of a `@stream` entry on to the crate alone
+        // (`emit_stream_rule`), and holds nothing public where that entry is
+        // the grammar's only one.
         if readers.len() > 0 {
-            out.push(f"\n#[allow(non_snake_case)]\npub mod {name} {{\n    pub use super::{emit_stream_grammar_module(name)}::{name}::*;\n")
+            out.push(f"\n#[allow(non_snake_case)]\npub mod {name} {{\n    #[allow(unused_imports)]\n    pub use super::{emit_stream_grammar_module(name)}::{name}::*;\n")
             for rule in readers {
                 let rule_name = emit_text(world, rule.name)
                 out.push(f"    pub use super::{emit_stream_reader_name(name, rule_name)} as {rule_name}_reader;\n")
@@ -636,7 +639,11 @@ impl EmitState {
     /// **A `@stream` entry is the engine's `#[stream(each)]`** (ADR-grammar-2
     /// D7, amended 2026-11-08): its `item*` becomes a `fold` that counts, on
     /// the path the reader hands each item over on, and the caller sees the
-    /// items through `each` (`nikaia_std::grammar::stream`).
+    /// items through `each` (`nikaia_std::grammar::stream`). The rule is
+    /// `pub(crate)`, and so is every function the engine writes for it
+    /// (`parse_<rule>`, `parse_<rule>_reader`, `parse_<rule>_reader_each`,
+    /// #1464): the walk calls them inside the crate, and a Rust user reads
+    /// the entry only through `G::<rule>_reader` (`emit_stream_reader`).
     fn emit_stream_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, rule_name: ref String, taken: ref String, label: ref String) sync throws {
         let item = match rule.ret_type {
             ty => host.ty_named(walk, ty),
@@ -660,7 +667,7 @@ impl EmitState {
             throw EmitRefused { message: "The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`.", at: rule.span.start as i64 }
         }
         out.push("        #[stream(each)]\n")
-        out.push(f"        pub rule {rule_name}{taken} -> usize{label} =\n          ")
+        out.push(f"        pub(crate) rule {rule_name}{taken} -> usize{label} =\n          ")
         for i in 0..<parts.len() {
             if i > 0 {
                 out.push(" ")

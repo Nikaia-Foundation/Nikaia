@@ -185,7 +185,7 @@ impl EmitState {
         let readers = emit_stream_readers(def, self.offered_to_rust);
         for rule in readers.iter() { self.emit_stream_reader(world, walk, out, host, &name, rule)?; }
         if !readers.is_empty() {
-            out.push(&format!("\n#[allow(non_snake_case)]\npub mod {} {{\n    pub use super::{}::{}::*;\n", name, emit_stream_grammar_module(&name), name));
+            out.push(&format!("\n#[allow(non_snake_case)]\npub mod {} {{\n    #[allow(unused_imports)]\n    pub use super::{}::{}::*;\n", name, emit_stream_grammar_module(&name), name));
             for rule in readers.iter() {
                 let rule_name = emit_text(world, rule.name);
                 out.push(&format!("    pub use super::{} as {}_reader;\n", emit_stream_reader_name(&name, &rule_name), rule_name));
@@ -426,7 +426,7 @@ impl EmitState {
         for part in parts.iter() { if stream_fold(world, &part.node).is_some() { folds += 1; } }
         if folds != 1 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
         out.push("        #[stream(each)]\n");
-        out.push(&format!("        pub rule {}{} -> usize{} =\n          ", rule_name, taken, label));
+        out.push(&format!("        pub(crate) rule {}{} -> usize{} =\n          ", rule_name, taken, label));
         for i in 0..parts.len() as i64 {
             if i > 0 { out.push(" "); }
             match stream_fold(world, &nikaia_std::index::get(&parts, (i) as usize).node) {
