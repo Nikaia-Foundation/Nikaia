@@ -1,0 +1,5 @@
+bounds in tests/prove_a_match_arm_keeps_the_facts.nika: 3 indexes, 2 proved; 1 operations, 0 proved
+    10  xs[i]      proved
+    20  xs[i]      proved
+    22  xs[i] + 1  checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    30  xs[i]      checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)

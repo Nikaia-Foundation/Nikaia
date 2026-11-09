@@ -310,6 +310,11 @@ struct BoundsWalk {
 	checking: bool,
 	checked_results: collections::BTreeSet[i64],
 	rule_failed: collections::BTreeSet[i64],
+	/// **The value a builder builds** (`rules_builder`, ADR-306 D25): its
+	/// `length` rules are asked for where it is handed back and before each
+	/// method of its type is called on it, not given; empty in any other
+	/// body.
+	rule_built: collections::BTreeSet[String],
 	/// **The postcondition this walk looks for** (ADR-306 D23): the name of
 	/// each list parameter by position, empty for any other and when the
 	/// walk looks for none; whether the function returns a list (`each`).
@@ -549,11 +554,16 @@ pub fn bounds_fields(
 			else => {},
 		}
 	}
+	// The rules that hold depend on the context alone, not on the body
+	// walked: found once a round, not once a body.
 	for _round in 0..<2 {
+		context.around.held = rules_held_all(context, program, words, ask)
 		context.around.field_bounds = fields_round(context, bodies, program, words, ask)
 	}
 	for _round in 0..<4 {
+		context.around.held = rules_held_all(context, program, words, ask)
 		let found = fields_round(context, bodies, program, words, ask)
+		context.around.held = collections::BTreeMap()
 		let before = context.around.field_bounds.len()
 		let mut kept: collections::BTreeMap[String, Range] = collections::BTreeMap()
 		for (key, bound) in context.around.field_bounds {
@@ -680,6 +690,7 @@ fn bounding_new(
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
+		rule_built: collections::BTreeSet(),
 		lists: collections::BTreeSet(),
 		return_params: [],
 		return_each: false,
@@ -6359,9 +6370,16 @@ fn bounding_expr(
 			bounding_expr(walk, value, facts, context, program, words, ask)
 			let mut changed = nothing_changed()
 			for arm in arms {
-				// A pattern may bind a name that hides an outer one, so
-				// nothing known outside is carried into an arm.
-				let mut inner = BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }
+				// What is known outside holds in an arm, but of the names
+				// its pattern binds: such a name hides an outer one, so
+				// what was known of that is forgotten (as a `let` hides).
+				let mut inner = facts.clone()
+				let mut hidden: Vec[String] = []
+				frame_pattern_names(arm.pattern, words, hidden)
+				for name in hidden {
+					bounding_forget(walk, inner, name)
+					inner.ints.remove(name)
+				}
 				bounding_maybe_expr(walk, arm.guard, inner, context, program, words, ask)
 				bounding_expr(walk, arm.body, inner, context, program, words, ask)
 				bounding_extend(changed, bounding_changed_in_expr(arm.body, context, words))
@@ -6731,8 +6749,10 @@ fn bounding_method_call(
 		)
 	}
 	if frame != null {
-		bounding_by_frame(walk, facts, frame ?? nothing_changed(), receiver, args, words)
-		rules_after_call(walk, facts, call, path_of(receiver, words), context)
+		let known = frame ?? nothing_changed()
+		bounding_by_frame(walk, facts, known, receiver, args, words)
+		let written = frame_at_call(known, receiver_path, frame_handed(args, words))
+		rules_after_call(walk, facts, call, path_of(receiver, words), context, false, written)
 		return
 	}
 	// **A method on an element may change it** and, the index not being
@@ -6781,7 +6801,7 @@ fn bounding_method_call(
 			bounding_forget(walk, facts, text)
 		}
 	}
-	rules_after_call(walk, facts, call, path_of(receiver, words), context)
+	rules_after_call(walk, facts, call, path_of(receiver, words), context, true, nothing_changed())
 }
 
 /// A method on a name: what it does to the name's length.
