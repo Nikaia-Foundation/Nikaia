@@ -2045,6 +2045,10 @@ pub fn qualify(ty: ref Ty, module: ref String, declared: ref collections::BTreeS
         Ty::Named { name, args, view } => Ty::Named { name: qualified_name(name, module, declared), args: qualified_each(args, module, declared), view: view },
         Ty::Tuple(parts) => Ty::Tuple(qualified_each(parts, module, declared)),
         Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: qualified_each(params, module, declared), result: qualified_result(result, module, declared), is_sync: is_sync, can_throw: can_throw },
+        // **A `T?` of the module's own `T` is qualified inside** (#1417):
+        // `ref H?` of a package's signature is `ref lib::H?` to its caller,
+        // or a plain value handed to it fits no slot and is not lent.
+        Ty::Nullable(inner) => Ty::Nullable(qualify(inner, module, declared)),
         else => ty.clone(),
     }
 }

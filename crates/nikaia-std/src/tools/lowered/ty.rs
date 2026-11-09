@@ -1217,6 +1217,7 @@ pub fn qualify(ty: &Ty, module: &str, declared: &collections::BTreeSet<String>) 
         Ty::Named { name, args, view } => { let view = *view; Ty::Named { name: qualified_name(name, module, declared), args: qualified_each(args, module, declared), view } },
         Ty::Tuple(parts) => Ty::Tuple(qualified_each(parts, module, declared)),
         Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: qualified_each(params, module, declared), result: Box::new(qualified_result((result).as_ref(), module, declared)), is_sync, can_throw } },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(qualify(inner, module, declared))) },
         _ => ty.clone(),
     }
 }
