@@ -1,25 +1,42 @@
-//! serde_yaml 0.9's `tests/test_de.rs`, the cases that use only `from_str`
-//! and `Value`, over `nikaia_yaml`. The parts of `test_de` that need
-//! `from_value`, `T::deserialize(&Value)` or `Deserializer::from_str` wait
-//! for that API; so does `test_stateful`. Each case prints `ok NAME` or
-//! `FAILED NAME: why`.
+//! serde_yaml 0.9's `tests/test_de.rs`, `test_value.rs` and
+//! `test_error.rs` over `nikaia_yaml` (the modules `value` and `error`), with
+//! the strings of `indoc!` written out, and the issue's own cases. Only
+//! `test_serialize_nested_enum` is left out: it needs `to_string` (#1515).
+//! Each case prints `ok NAME` or `FAILED NAME: why`.
 
-use nikaia_yaml::{Mapping, Number, Value};
-use serde::de::IgnoredAny;
+mod error;
+mod value;
+
+use nikaia_yaml::{Deserializer, Mapping, Number, Value};
 use serde::Deserialize;
+use serde::de::IgnoredAny;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::panic;
 
-/// `test_de` without the `Value`-to-`T` and `Deserializer` parts.
+pub type Case = (&'static str, fn());
+
 fn test_de<T>(yaml: &str, expected: &T)
 where
     T: serde::de::DeserializeOwned + PartialEq + Debug,
 {
     let deserialized: T = nikaia_yaml::from_str(yaml).unwrap();
     assert_eq!(*expected, deserialized);
-    nikaia_yaml::from_str::<Value>(yaml).unwrap();
+
+    let value: Value = nikaia_yaml::from_str(yaml).unwrap();
+    let deserialized = T::deserialize(&value).unwrap();
+    assert_eq!(*expected, deserialized);
+
+    let deserialized: T = nikaia_yaml::from_value(value).unwrap();
+    assert_eq!(*expected, deserialized);
+
     nikaia_yaml::from_str::<IgnoredAny>(yaml).unwrap();
+
+    let mut deserializer = Deserializer::from_str(yaml);
+    let document = deserializer.next().unwrap();
+    let deserialized = T::deserialize(document).unwrap();
+    assert_eq!(*expected, deserialized);
+    assert!(deserializer.next().is_none());
 }
 
 fn test_de_no_value<'de, T>(yaml: &'de str, expected: &T)
@@ -28,6 +45,18 @@ where
 {
     let deserialized: T = nikaia_yaml::from_str(yaml).unwrap();
     assert_eq!(*expected, deserialized);
+    nikaia_yaml::from_str::<Value>(yaml).unwrap();
+    nikaia_yaml::from_str::<IgnoredAny>(yaml).unwrap();
+}
+
+fn test_de_seed<'de, T, S>(yaml: &'de str, seed: S, expected: &T)
+where
+    T: PartialEq + Debug,
+    S: serde::de::DeserializeSeed<'de, Value = T>,
+{
+    let deserialized: T = seed.deserialize(Deserializer::from_str(yaml)).unwrap();
+    assert_eq!(*expected, deserialized);
+
     nikaia_yaml::from_str::<Value>(yaml).unwrap();
     nikaia_yaml::from_str::<IgnoredAny>(yaml).unwrap();
 }
@@ -300,12 +329,52 @@ fn test_numbers() {
 
 fn test_nan() {
     // There is no negative NaN in YAML.
-    assert!(nikaia_yaml::from_str::<f32>(".nan")
-        .unwrap()
-        .is_sign_positive());
-    assert!(nikaia_yaml::from_str::<f64>(".nan")
-        .unwrap()
-        .is_sign_positive());
+    assert!(
+        nikaia_yaml::from_str::<f32>(".nan")
+            .unwrap()
+            .is_sign_positive()
+    );
+    assert!(
+        nikaia_yaml::from_str::<f64>(".nan")
+            .unwrap()
+            .is_sign_positive()
+    );
+}
+
+fn test_stateful() {
+    struct Seed(i64);
+
+    impl<'de> serde::de::DeserializeSeed<'de> for Seed {
+        type Value = i64;
+        fn deserialize<D>(self, deserializer: D) -> Result<i64, D::Error>
+        where
+            D: serde::de::Deserializer<'de>,
+        {
+            struct Visitor(i64);
+            impl<'de> serde::de::Visitor<'de> for Visitor {
+                type Value = i64;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    write!(formatter, "an integer")
+                }
+
+                fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<i64, E> {
+                    Ok(v * self.0)
+                }
+
+                fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<i64, E> {
+                    Ok(v as i64 * self.0)
+                }
+            }
+
+            deserializer.deserialize_any(Visitor(self.0))
+        }
+    }
+
+    let cases = [("3", 5, 15), ("6", 7, 42), ("-5", 9, -45)];
+    for &(yaml, seed, expected) in &cases {
+        test_de_seed(yaml, Seed(seed), &expected);
+    }
 }
 
 fn test_ignore_tag() {
@@ -455,7 +524,7 @@ fn test_location() {
 
 fn main() {
     panic::set_hook(Box::new(|_| {}));
-    let cases: &[(&str, fn())] = &[
+    let de: &[Case] = &[
         ("test_borrowed", test_borrowed),
         ("test_alias", test_alias),
         ("test_option", test_option),
@@ -472,6 +541,7 @@ fn main() {
         ("test_bomb", test_bomb),
         ("test_numbers", test_numbers),
         ("test_nan", test_nan),
+        ("test_stateful", test_stateful),
         ("test_ignore_tag", test_ignore_tag),
         ("test_no_required_fields", test_no_required_fields),
         ("test_empty_scalar", test_empty_scalar),
@@ -481,6 +551,7 @@ fn main() {
         ("test_one_document", test_one_document),
         ("test_location", test_location),
     ];
+    let cases = de.iter().chain(value::CASES).chain(error::CASES);
     for (name, case) in cases {
         match panic::catch_unwind(case) {
             Ok(()) => println!("ok {}", name),
