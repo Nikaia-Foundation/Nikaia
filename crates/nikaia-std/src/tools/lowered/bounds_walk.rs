@@ -25,6 +25,7 @@ pub struct BoundsContext {
     pub whole_parts: collections::BTreeMap<i64, collections::BTreeSet<i64>>,
     pub array_lengths: collections::BTreeMap<i64, i64>,
     pub through_loops: bool,
+    pub trace: Vec<i64>,
     pub decided: collections::BTreeMap<String, bool>,
     pub list_indices: collections::BTreeSet<i64>,
     pub returns: collections::BTreeMap<String, BoundsReturns>,
@@ -59,12 +60,14 @@ pub struct BoundsProven {
     pub fields: collections::BTreeMap<String, Range>,
     pub fields_lost: collections::BTreeSet<String>,
     pub returned: Option<collections::BTreeSet<i64>>,
+    pub trace: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct BoundsFacts {
     pub(crate) ints: collections::BTreeSet<String>,
     pub(crate) facts: Vec<i64>,
+    pub(crate) evicted: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +128,7 @@ pub(crate) struct BoundsWalk {
     pub(crate) return_names: collections::BTreeSet<String>,
     pub(crate) return_seen: collections::BTreeSet<i64>,
     pub(crate) return_lost: bool,
+    pub(crate) trace: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,7 +146,7 @@ pub(crate) fn most_facts() -> i64 { 48 }
 
 pub(crate) fn call_depth() -> i64 { 4 }
 
-pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None } }
+pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![] } }
 
 pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), falls: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
 
@@ -287,7 +291,7 @@ pub(crate) fn bounding_new(args: &[FnArg], body: &Block, nonnegative: collection
             _ => { },
         }
     }
-    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), assumed_ends: collections::BTreeMap::new(), written_ends: collections::BTreeMap::new(), steady: bounding_changed(body, context, words), end_roots: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), rule_facts: vec![], checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new(), lists: collections::BTreeSet::new(), return_params: vec![], return_each: false, return_below: None, return_names: collections::BTreeSet::new(), return_seen: collections::BTreeSet::new(), return_lost: false };
+    let mut walk = BoundsWalk { arena: TermArena::empty(), proven: no_proofs(), axioms: collections::BTreeMap::new(), unsized_names: collections::BTreeSet::new(), floors: collections::BTreeMap::new(), pinned, nonnegative, codes: 0, loop_classes: collections::BTreeMap::new(), shape, assumed: context.around.field_bounds.to_owned(), written: collections::BTreeMap::new(), poisoned: collections::BTreeSet::new(), assumed_ends: collections::BTreeMap::new(), written_ends: collections::BTreeMap::new(), steady: bounding_changed(body, context, words), end_roots: collections::BTreeSet::new(), collecting: false, at: 0, growing: collections::BTreeSet::new(), grow_failed: collections::BTreeSet::new(), falling: collections::BTreeSet::new(), fall_failed: collections::BTreeSet::new(), entries: 0, open: 0, missed: collections::BTreeMap::new(), missed_goals: vec![], through_loops: context.through_loops, turns: vec![], leaving: collections::BTreeSet::new(), settled_loops: collections::BTreeSet::new(), typed: collections::BTreeMap::new(), rules: vec![], rule_roots: collections::BTreeMap::new(), rule_facts: vec![], checking: false, checked_results: collections::BTreeSet::new(), rule_failed: collections::BTreeSet::new(), lists: collections::BTreeSet::new(), return_params: vec![], return_each: false, return_below: None, return_names: collections::BTreeSet::new(), return_seen: collections::BTreeSet::new(), return_lost: false, trace: context.trace.to_owned() };
     for arg in args.iter() {
         let name = words.resolve(arg.name).to_string();
         let ty = words.resolve(arg.ty.name).to_string();
@@ -326,7 +330,7 @@ pub(crate) fn bounding_pass(walk: &mut BoundsWalk, args: &[FnArg], body: &Block,
     walk.return_names = collections::BTreeSet::new();
     walk.return_seen = collections::BTreeSet::new();
     walk.return_lost = false;
-    let mut facts = BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![] };
+    let mut facts = BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![], evicted: 0 };
     for arg in args.iter() {
         let name = words.resolve(arg.name).to_string();
         let ty = words.resolve(arg.ty.name).to_string();
@@ -493,7 +497,7 @@ pub(crate) fn bounding_end_inside(walk: &mut BoundsWalk, len: i64, index: &Expr,
     };
     let key = match elements_key(&walk.shape, base, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !walk.assumed_ends.contains_key(&key) { return false; }
-    let mut known = BoundsFacts { ints: facts.ints.to_owned(), facts: facts.facts.to_owned() };
+    let mut known = BoundsFacts { ints: facts.ints.to_owned(), facts: facts.facts.to_owned(), evicted: facts.evicted };
     let each = format!("{}.end()", key);
     bounding_end_facts(walk, &mut known, &each, &key);
     let n = walk.arena.var(&each);
@@ -563,10 +567,30 @@ pub(crate) fn bounding_join(walk: &mut BoundsWalk, key: &str, range: Range) {
 }
 
 pub(crate) fn bounding_proves_goal(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
-    if bounding_proves(&walk, facts, goal, ask) { return true; }
+    if bounding_proves(&walk, facts, goal, ask) {
+        bounding_traced(walk, facts, goal, true);
+        return true;
+    }
+    bounding_traced(walk, facts, goal, false);
     bounding_missed(walk, facts, goal);
     false
 }
+
+pub(crate) fn bounding_tracing(walk: &BoundsWalk) -> bool { walk.trace.len() == 2 && !walk.collecting && walk.at >= *nikaia_std::index::get(&walk.trace, 0) && walk.at < *nikaia_std::index::get(&walk.trace, 1) }
+
+pub(crate) fn bounding_traced(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: i64, proved: bool) {
+    if !bounding_tracing(&walk) { return; }
+    let verdict = if proved { "proved" } else { "open" };
+    let mut known: Vec<String> = vec![];
+    for fact in bounding_known(&walk, facts, goal) { known.push(walk.arena.text(fact)); }
+    let mut rules: Vec<String> = vec![];
+    for rule in walk.rules.iter() { rules.push(format!("{}: {} {} {}", rule.owner, rule.kind, rule.a, rule.b)); }
+    let held = if known.is_empty() { String::from("none") } else { known.join(", ") };
+    let found = if rules.is_empty() { String::from("none") } else { rules.join(", ") };
+    ({ let __nikaia_arg1 = format!("  goal {}: {}\n    facts ({}, {} evicted by the cap of {}): {}\n    rules: {}", walk.arena.text(goal), verdict, known.len() as i64, facts.evicted, most_facts(), held, found); bounding_trace_row(walk, __nikaia_arg1) });
+}
+
+pub(crate) fn bounding_trace_row(walk: &mut BoundsWalk, row: String) { if !nikaia_std::list::contains(&walk.proven.trace, &row) { walk.proven.trace.push(row); } }
 
 pub(crate) fn bounding_missed(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: i64) {
     if walk.through_loops {
@@ -1022,7 +1046,10 @@ pub(crate) fn bounding_push(walk: &BoundsWalk, facts: &mut BoundsFacts, fact: i6
     walk.arena.variables(fact, &mut read);
     for name in read.iter() { if walk.pinned.contains(&path_root(name)) { return; } }
     facts.facts.push(fact);
-    if (facts.facts.len() as i64) > most_facts() { facts.facts.remove(0); }
+    if (facts.facts.len() as i64) > most_facts() {
+        facts.facts.remove(0);
+        facts.evicted += 1;
+    }
 }
 
 pub(crate) fn bounding_at_least_zero(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str) {
@@ -1928,7 +1955,13 @@ pub(crate) fn bounding_word_inside(walk: &mut BoundsWalk, list: &str, node: i64,
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounding_index(walk: &mut BoundsWalk, base: &Expr, index: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) {
     let list = match path_of(base, words) { Some(__nikaia_value) => __nikaia_value, None => return };
-    if bounding_inside(walk, &list, node_key(base), index, facts, context, program, words, ask) { walk.proven.indices.insert(node_key(base)); } else { walk.open += 1; }
+    if bounding_inside(walk, &list, node_key(base), index, facts, context, program, words, ask) {
+        walk.proven.indices.insert(node_key(base));
+        if bounding_tracing(&walk) { bounding_trace_row(walk, format!("  read {}[…]: proved", list)); }
+    } else {
+        walk.open += 1;
+        if bounding_tracing(&walk) { bounding_trace_row(walk, format!("  read {}[…]: checked", list)); }
+    }
 }
 
 pub(crate) fn bounding_list_length(walk: &mut BoundsWalk, list: &str, node: i64, context: &BoundsContext) -> i64 {
@@ -2345,7 +2378,7 @@ pub(crate) fn bounding_past_loop(walk: &mut BoundsWalk, block: &Block, from: i64
 pub(crate) fn bounding_could_pay(walk: &mut BoundsWalk, guesses: &[i64], open: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
     for missed in walk.missed_goals.iter() {
         if missed.stamp <= open { continue; }
-        let mut there = BoundsFacts { ints: collections::BTreeSet::new(), facts: missed.facts.to_owned() };
+        let mut there = BoundsFacts { ints: collections::BTreeSet::new(), facts: missed.facts.to_owned(), evicted: 0 };
         for guess in guesses.iter() {
             let guess = nikaia_std::num::value(guess);
             there.facts.push(guess);
@@ -3400,7 +3433,7 @@ pub(crate) fn bounding_expr(walk: &mut BoundsWalk, expr: &Expr, facts: &mut Boun
             bounding_expr(walk, value, facts, context, program, words, ask);
             let mut changed = nothing_changed();
             for arm in arms.iter() {
-                let mut inner = BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![] };
+                let mut inner = BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![], evicted: 0 };
                 bounding_maybe_expr(walk, (arm.guard).as_ref(), &mut inner, context, program, words, &ask);
                 bounding_expr(walk, &arm.body, &mut inner, context, program, words, ask);
                 bounding_extend(&mut changed, &bounding_changed_in_expr(&arm.body, context, words));

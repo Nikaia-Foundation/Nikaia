@@ -907,7 +907,7 @@ fn rules_given(mut walk: BoundsWalk, mut facts: BoundsFacts, args: ref Vec[FnArg
         // what holds of its elements holds from its literal on, each write
         // checked where it stands (ADR-306 D22).
         if walk.shape.bound.contains(root) && !args.iter().any(fn(arg) { words.resolve(arg.name) == root }) {
-            rules_give(walk, BoundsFacts { ints: collections::BTreeSet(), facts: [] }, root, owner, true)
+            rules_give(walk, BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }, root, owner, true)
             continue
         }
         rules_give(walk, facts, root, owner, true)
@@ -1083,7 +1083,9 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
     // The inner read stops the program where `list` is empty, so the outer
     // one needs its position only where it is not (#1483).
     let goal = bounding_each_guarded(walk, inside)
-    return bounding_proves(walk, facts, goal, ask)
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
 }
 
 /// **Where control leaves a checked body**: by its end, a `return`, a
@@ -1118,7 +1120,9 @@ fn rules_same_length(mut walk: BoundsWalk, facts: ref BoundsFacts, rule: ref Bou
     let a = walk.arena.var(length_of(f"self.{rule.a}"))
     let b = walk.arena.var(length_of(f"self.{rule.b}"))
     let goal = walk.arena.equal(a, b)
-    return bounding_proves(walk, facts, goal, ask)
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
 }
 
 /// Whether `value` is a position of `self.b`: `0 <= value < len(self.b)`,
@@ -1142,7 +1146,9 @@ fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr,
     let inside = walk.arena.and([low, high])
     // An element read stops the program where its list is empty (#1483).
     let goal = if read != null { bounding_each_guarded(walk, inside) } else { inside }
-    return bounding_proves(walk, facts, goal, ask)
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
 }
 
 /// **`list[i]` where facts hold of every element of `list`**: the term of
@@ -1169,7 +1175,9 @@ fn rules_up_to(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr, of
     let low = walk.arena.ge(v, zero)
     let high = walk.arena.le(v, len)
     let goal = walk.arena.and([low, high])
-    return bounding_proves(walk, facts, goal, ask)
+    let proved = bounding_proves(walk, facts, goal, ask)
+    bounding_traced(walk, facts, goal, proved)
+    return proved
 }
 
 /// **An element of a list of `self` written in a checked body**

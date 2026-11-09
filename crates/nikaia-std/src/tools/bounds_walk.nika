@@ -78,6 +78,10 @@ pub struct BoundsContext {
 	/// **`prove-through-loops:on`** (ADR-361 D10): a check a loop leaves
 	/// open is asked once more through the loop's invariant.
 	pub through_loops: bool,
+	/// **The bytes `--bounds-trace` asks about** (#1495): `[from, to]` of a
+	/// line, empty when it asks nothing. A goal of a statement starting
+	/// there is written into `BoundsProven::trace`.
+	pub trace: Vec[i64],
 	/// **A `comptime` of the module of type `bool`, by name, with what the
 	/// build computed for it**: an `if` on it takes one arm only.
 	pub decided: collections::BTreeMap[String, bool],
@@ -153,6 +157,9 @@ pub struct BoundsProven {
 	/// (ADR-306 D23), by position, where the walk was asked; nothing where a
 	/// return was lost.
 	pub returned: collections::BTreeSet[i64]?,
+	/// **What `--bounds-trace` shows** (#1495): each goal of the asked line,
+	/// with the facts the walk held, on the last pass.
+	pub trace: Vec[String],
 }
 
 /// What holds at one point of a body.
@@ -160,6 +167,9 @@ struct BoundsFacts {
 	/// Names that are whole numbers here.
 	ints: collections::BTreeSet[String],
 	facts: Vec[i64],
+	/// How many facts the `most_facts()` cap dropped here, for
+	/// `--bounds-trace` (#1495).
+	evicted: i64,
 }
 
 /// The names whose value, and the lists whose length, a block may change.
@@ -312,6 +322,8 @@ struct BoundsWalk {
 	return_names: collections::BTreeSet[String],
 	return_seen: collections::BTreeSet[i64],
 	return_lost: bool,
+	/// The context's `trace`: the bytes `--bounds-trace` asks about.
+	trace: Vec[i64],
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -362,6 +374,7 @@ fn no_proofs() -> BoundsProven {
 		fields: collections::BTreeMap(),
 		fields_lost: collections::BTreeSet(),
 		returned: null,
+		trace: [],
 	}
 }
 
@@ -667,6 +680,7 @@ fn bounding_new(
 		return_names: collections::BTreeSet(),
 		return_seen: collections::BTreeSet(),
 		return_lost: false,
+		trace: context.trace.clone(),
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -728,7 +742,7 @@ fn bounding_pass(
 	walk.return_names = collections::BTreeSet()
 	walk.return_seen = collections::BTreeSet()
 	walk.return_lost = false
-	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [] }
+	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
 		let ty = words.resolve(arg.ty.name).clone()
@@ -989,7 +1003,7 @@ fn bounding_end_inside(
 	if !walk.assumed_ends.contains_key(key) {
 		return false
 	}
-	let mut known = BoundsFacts { ints: facts.ints.clone(), facts: facts.facts.clone() }
+	let mut known = BoundsFacts { ints: facts.ints.clone(), facts: facts.facts.clone(), evicted: facts.evicted }
 	let each = f"{key}.end()"
 	bounding_end_facts(walk, known, each, key)
 	let n = walk.arena.var(each)
@@ -1100,10 +1114,47 @@ fn bounding_proves_goal(
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	if bounding_proves(walk, facts, goal, ask) {
+		bounding_traced(walk, facts, goal, true)
 		return true
 	}
+	bounding_traced(walk, facts, goal, false)
 	bounding_missed(walk, facts, goal)
 	return false
+}
+
+/// Whether `--bounds-trace` asks about the statement being walked
+/// (#1495): never on a pass that only collects.
+fn bounding_tracing(walk: ref BoundsWalk) -> bool {
+	return walk.trace.len() == 2 && !walk.collecting && walk.at >= walk.trace[0] && walk.at < walk.trace[1]
+}
+
+/// **A goal as `--bounds-trace` shows it** (#1495): the goal and whether it
+/// was proved, every fact the question was asked with (`bounding_known`,
+/// the rule facts among them), how many the `most_facts()` cap dropped, and
+/// the rules of the types the body uses.
+fn bounding_traced(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64, proved: bool) {
+	if !bounding_tracing(walk) {
+		return
+	}
+	let verdict = if proved { "proved" } else { "open" }
+	let mut known: Vec[String] = []
+	for fact in bounding_known(walk, facts, goal) {
+		known.push(walk.arena.text(fact))
+	}
+	let mut rules: Vec[String] = []
+	for rule in walk.rules {
+		rules.push(f"{rule.owner}: {rule.kind} {rule.a} {rule.b}")
+	}
+	let held = if known.is_empty() { "none" } else { known.join(", ") }
+	let found = if rules.is_empty() { "none" } else { rules.join(", ") }
+	bounding_trace_row(walk, f"  goal {walk.arena.text(goal)}: {verdict}\n    facts ({known.len()}, {facts.evicted} evicted by the cap of {most_facts()}): {held}\n    rules: {found}")
+}
+
+/// One row of `--bounds-trace`, once however often a loop is walked again.
+fn bounding_trace_row(mut walk: BoundsWalk, row: String) {
+	if !walk.proven.trace.contains(row) {
+		walk.proven.trace.push(row)
+	}
 }
 
 /// A goal left open: where the walk keeps them (ADR-361 D2), what it read.
@@ -1874,6 +1925,7 @@ fn bounding_push(walk: ref BoundsWalk, mut facts: BoundsFacts, fact: i64) {
 	facts.facts.push(fact)
 	if facts.facts.len() > most_facts() {
 		facts.facts.remove(0)
+		facts.evicted += 1
 	}
 }
 
@@ -3366,8 +3418,14 @@ fn bounding_index(
 	let list = path_of(base, words) ?? return
 	if bounding_inside(walk, list, node_key(base), index, facts, context, program, words, ask) {
 		walk.proven.indices.insert(node_key(base))
+		if bounding_tracing(walk) {
+			bounding_trace_row(walk, f"  read {list}[…]: proved")
+		}
 	} else {
 		walk.open += 1
+		if bounding_tracing(walk) {
+			bounding_trace_row(walk, f"  read {list}[…]: checked")
+		}
 	}
 }
 
@@ -4167,7 +4225,7 @@ fn bounding_could_pay(
 		if missed.stamp <= open {
 			continue
 		}
-		let mut there = BoundsFacts { ints: collections::BTreeSet(), facts: missed.facts.clone() }
+		let mut there = BoundsFacts { ints: collections::BTreeSet(), facts: missed.facts.clone(), evicted: 0 }
 		for guess in guesses {
 			there.facts.push(guess)
 		}
@@ -6024,7 +6082,7 @@ fn bounding_expr(
 			for arm in arms {
 				// A pattern may bind a name that hides an outer one, so
 				// nothing known outside is carried into an arm.
-				let mut inner = BoundsFacts { ints: collections::BTreeSet(), facts: [] }
+				let mut inner = BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }
 				bounding_maybe_expr(walk, arm.guard, inner, context, program, words, ask)
 				bounding_expr(walk, arm.body, inner, context, program, words, ask)
 				bounding_extend(changed, bounding_changed_in_expr(arm.body, context, words))

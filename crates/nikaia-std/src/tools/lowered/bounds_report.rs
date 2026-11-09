@@ -125,6 +125,37 @@ pub(crate) fn bounds_report_lambda(lambda: &Expr, args: &[FnArg], words: &winnow
     }
 }
 
+pub fn bounds_report_trace(source: &str, path: &str, asked: &str) -> Vec<i64> {
+    let mut number = text::parse_i64(asked.trim());
+    let split = asked.rsplit_once(":");
+    if split.is_some() {
+        let (file, line) = nikaia_std::index::or(split, || ("".into(), "".into()));
+        if !path.ends_with(file) { return vec![]; }
+        number = text::parse_i64(line.trim());
+    }
+    let wanted = match number { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    if wanted < 1 { return vec![]; }
+    let mut seen: i64 = 1;
+    let mut from: i64 = -1;
+    if wanted == 1 { from = 0; }
+    let mut at: i64 = 0;
+    while ((at) as usize) < source.len() {
+        if *nikaia_std::index::get(&source.as_bytes(), (at) as usize) == 10 {
+            if seen == wanted { return vec![from, at + 1]; }
+            seen += 1;
+            if seen == wanted { from = at + 1; }
+        }
+        at += 1;
+    }
+    if from < 0 { return vec![]; }
+    vec![from, source.len() as i64]
+}
+
+pub fn bounds_report_trace_rows(asked: &str, rows: &[String]) -> String {
+    if rows.is_empty() { return format!("bounds trace {}: no goal\n", asked); }
+    format!("bounds trace {}:\n{}\n", asked, rows.join("\n"))
+}
+
 pub(crate) fn bounds_report_line(source: &str, at: i64) -> i64 {
     let end = at.min(source.len() as i64);
     nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..end)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1

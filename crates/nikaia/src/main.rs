@@ -176,6 +176,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub bounds: bool,
 
+    /// With `--bounds`, show for each goal the walk asks on line `LINE`
+    /// (`FILE:LINE` for `lower-std`, the file named by the end of its path)
+    /// the facts it was asked with, how many the cap on facts dropped, and
+    /// the rules between list fields the body uses (#1495). A development
+    /// aid: without it, nothing changes.
+    #[arg(long, global = true, value_name = "LINE")]
+    pub bounds_trace: Option<String>,
+
     /// Print what a `T::fields` loop was unrolled to, for the types actually
     /// used ([ADR-304](../../../docs/specification/adr/adr-304.md) D9,
     /// [ADR-304](../../../docs/specification/adr/adr-304.md)).
@@ -1151,6 +1159,9 @@ fn run() -> Result<()> {
     }
 
     let args = Cli::parse();
+    if let Some(asked) = &args.bounds_trace {
+        nikaia::bounds_report::trace_at(asked.clone());
+    }
 
     let Some(command) = &args.command else {
         refuse!(

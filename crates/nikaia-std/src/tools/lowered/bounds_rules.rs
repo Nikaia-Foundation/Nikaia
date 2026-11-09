@@ -664,7 +664,7 @@ pub(crate) fn rules_given(walk: &mut BoundsWalk, facts: &mut BoundsFacts, args: 
     }
     for (root, owner) in walk.rule_roots.to_owned() {
         if walk.shape.bound.contains(&root) && !args.iter().any(|arg| { words.resolve(arg.name) == root }) {
-            rules_give(walk, &mut BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![] }, &root, &owner, true);
+            rules_give(walk, &mut BoundsFacts { ints: collections::BTreeSet::new(), facts: vec![], evicted: 0 }, &root, &owner, true);
             continue;
         }
         rules_give(walk, facts, &root, &owner, true);
@@ -800,7 +800,9 @@ pub(crate) fn rules_element_inside(walk: &mut BoundsWalk, len: i64, index: &Expr
     let high = walk.arena.lt(each, len);
     let inside = walk.arena.and(vec![low, high]);
     let goal = bounding_each_guarded(walk, inside);
-    bounding_proves(&walk, facts, goal, ask)
+    let proved = bounding_proves(&walk, facts, goal, ask);
+    bounding_traced(walk, facts, goal, proved);
+    proved
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -822,7 +824,9 @@ pub(crate) fn rules_same_length(walk: &mut BoundsWalk, facts: &BoundsFacts, rule
     let a = walk.arena.var(&length_of(&format!("self.{}", rule.a)));
     let b = walk.arena.var(&length_of(&format!("self.{}", rule.b)));
     let goal = walk.arena.equal(a, b);
-    bounding_proves(&walk, facts, goal, ask)
+    let proved = bounding_proves(&walk, facts, goal, ask);
+    bounding_traced(walk, facts, goal, proved);
+    proved
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -840,7 +844,9 @@ pub(crate) fn rules_position(walk: &mut BoundsWalk, facts: &BoundsFacts, value: 
     let high = walk.arena.lt(v, len);
     let inside = walk.arena.and(vec![low, high]);
     let goal = if read.is_some() { bounding_each_guarded(walk, inside) } else { inside };
-    bounding_proves(&walk, facts, goal, ask)
+    let proved = bounding_proves(&walk, facts, goal, ask);
+    bounding_traced(walk, facts, goal, proved);
+    proved
 }
 
 pub(crate) fn rules_element_read(walk: &mut BoundsWalk, value: &Expr, facts: &BoundsFacts, words: &winnow_grammar::InternerContext) -> Option<i64> {
@@ -862,7 +868,9 @@ pub(crate) fn rules_up_to(walk: &mut BoundsWalk, facts: &BoundsFacts, value: &Ex
     let low = walk.arena.ge(v, zero);
     let high = walk.arena.le(v, len);
     let goal = walk.arena.and(vec![low, high]);
-    bounding_proves(&walk, facts, goal, ask)
+    let proved = bounding_proves(&walk, facts, goal, ask);
+    bounding_traced(walk, facts, goal, proved);
+    proved
 }
 
 #[allow(clippy::too_many_arguments)]

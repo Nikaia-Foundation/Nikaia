@@ -65,6 +65,8 @@ pub struct Proven {
     pub calls: BTreeMap<i64, String>,
     /// The derived preconditions, for `--bounds` (ADR-391 D4).
     pub derived: Vec<String>,
+    /// What `--bounds-trace` shows (#1495): each goal of the line asked.
+    pub trace: Vec<String>,
 }
 
 /// **Every index and every operation the walks prove**
@@ -80,6 +82,28 @@ pub fn proven(
     nonnegative: &BTreeSet<i64>,
     through_loops: bool,
 ) -> Proven {
+    proven_traced(
+        parsed,
+        beside,
+        facts,
+        ledgers,
+        nonnegative,
+        through_loops,
+        &[],
+    )
+}
+
+/// [`proven`], with the goals of the bytes `trace` (`[from, to]` of the
+/// line `--bounds-trace` asks about, #1495) written into `Proven::trace`.
+pub fn proven_traced(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    facts: &crate::check::CheckFacts,
+    ledgers: &[&crate::contracts::Ledger],
+    nonnegative: &BTreeSet<i64>,
+    through_loops: bool,
+    trace: &[i64],
+) -> Proven {
     let counters = std::cell::RefCell::new(HashMap::new());
     let all = nikaia_std::tools::bounds_proven::bounds_proven(
         &parsed.program,
@@ -90,6 +114,7 @@ pub fn proven(
         ledgers,
         nonnegative,
         through_loops,
+        trace,
         &|text, names| crate::prove::condition_nodes(text, names),
         &|arena, known, goal| {
             crate::proofs::ask(arena, known, goal) == crate::proofs::Asked::Proved
@@ -116,5 +141,6 @@ pub fn proven(
         nonnegative_locals: counters.into_inner(),
         calls: all.calls,
         derived: all.derived,
+        trace: all.trace,
     }
 }

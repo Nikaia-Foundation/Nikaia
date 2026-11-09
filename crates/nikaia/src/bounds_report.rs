@@ -22,7 +22,19 @@
 use crate::bounds::{BoundsChecks, OverflowChecks};
 use crate::contracts::Ledger;
 use crate::parser::Parsed;
-use nikaia_std::tools::bounds_report::{BoundsReportFacts, bounds_report_checked};
+use nikaia_std::tools::bounds_report::{
+    BoundsReportFacts, bounds_report_checked, bounds_report_trace, bounds_report_trace_rows,
+};
+
+/// **The line `--bounds-trace` asks about** (#1495), `LINE` or `FILE:LINE`,
+/// set once from the command line: a development aid, read where a report is
+/// written, so no caller between passes it on.
+static TRACE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Sets the line `--bounds-trace` asks about, for every report of the run.
+pub fn trace_at(asked: String) {
+    let _ = TRACE.set(asked);
+}
 
 /// The report, for one file. What is proved does not depend on what the
 /// build drops (ADR-306 D14), only on `through_loops`
@@ -72,14 +84,23 @@ pub fn report_checked(
     through_loops: bool,
 ) -> String {
     let published = crate::prove::with_published(own, &checked.facts.published);
-    let proven = crate::bounds::proven(
+    let asked = TRACE.get();
+    let trace = asked
+        .map(|asked| bounds_report_trace(source, path, asked))
+        .unwrap_or_default();
+    let proven = crate::bounds::proven_traced(
         parsed,
         beside,
         &checked.facts,
         &[&published, library],
         &std::collections::BTreeSet::new(),
         through_loops,
+        &trace,
     );
+    let traced = match asked {
+        Some(asked) if !trace.is_empty() => bounds_report_trace_rows(asked, &proven.trace),
+        _ => String::new(),
+    };
     let facts = BoundsReportFacts {
         lists: checked.facts.list_indices.clone(),
         arithmetic: checked.facts.arithmetic.clone(),
@@ -89,7 +110,7 @@ pub fn report_checked(
         proven_negations: proven.negations.iter().copied().collect(),
         derived: proven.derived,
     };
-    bounds_report_checked(
+    let report = bounds_report_checked(
         &parsed.program,
         &parsed.interner,
         source,
@@ -98,7 +119,8 @@ pub fn report_checked(
         &bounds,
         &overflow,
         &|e: &crate::ast::Expr| crate::emit::literal_expressions(parsed, e),
-    )
+    );
+    report + &traced
 }
 
 /// **The derived preconditions as the reports write them** (ADR-391 D4), for
