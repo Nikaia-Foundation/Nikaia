@@ -97,6 +97,9 @@ it, like the checks in `docs/supervisor.md`.
   the figure measured before (#1470: "1.2 times its time" without a
   baseline cost a run its measuring), and names any recomputation the
   pass already does per body that the change would multiply.
+  Several steps in one pass get one limit on the whole run, or a per-step
+  limit only where that step's own cost was measured or estimated (#1470: a
+  1.2 times limit per probe could not hold the cost of D25's own checks).
   An issue that changes which facts the bounds walk asks with shows a
   `--bounds-trace` of its probe on the binary of the day (#1500: the
   trace showed the shared turn variable the rule had missed).

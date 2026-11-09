@@ -330,6 +330,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **Delete the dead locals** a replaced block leaves, and re-grep function names
   instead of trusting line numbers from an earlier listing.
 * the old binary lowers `for x in xs.f[a..]` wrong (NK1343, `expected Symbol, found &Symbol`); after the checker fix in fb2698e9, the first build of a tool that uses it needs the index-skip form, then a switch back. (issue-1383)
+* `for rule in found` lends each element from the named local, so `held.push(rule)` in the loop is refused (NK1102, a borrowed value moved); write `held.extend(found)`. (issue-1470)
 
 ### Syntax gaps of tools/*.nika
 

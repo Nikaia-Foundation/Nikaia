@@ -28,6 +28,7 @@ together with the specification section and an example test.
 
 * **`lower-std` runs the bounds walk**, so a slower walk slows every `lower-std` (one ran past 20 minutes and was killed): while you change the walk, lower with the binary before your change and measure with yours once. (issue-1470)
 * **After a change to any `bounds_*.nika`, each `lower-std` re-proves std with the new walk: 10-13 minutes, not the 40 s of `builder.md`.** Plan one such cycle per hour; iterate with `check --bounds` on a probe reduced from the real site, and find a slowdown with a few `gdb` stack samples (a minute), not callgrind (an hour). (issue-1470)
+* `/usr/bin/time` does not exist here; time a command with the bash `time` keyword or `date +%s.%N` before and after. (issue-1470)
 * **A new `nikaia` flag is declared in clap in `crates/nikaia/src/main.rs` (Rust)**: the command line cannot be Nikaia-only, so a flag needs that Rust plumbing even under *no new Rust*. A development aid read deep inside is kept in a static `OnceLock` set there, not passed through every caller. (issue-1495)
 * **ADRs live in `docs/specification/adr/`**; search them with the Grep tool, since a `grep -r` from the root runs into `target/`. A script test run by hand resolves a relative `target/fast/nikaia` under its tmp dir: run a copy with the absolute path. (issue-1397, issue-1414)
 * **Copy `target/fast/nikaia` to your scratchpad before your first build**: it
