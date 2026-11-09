@@ -153,4 +153,7 @@ together with the specification section and an example test.
 * Before planning, check whether the issue is closed or marked duplicate, and run its probe on `develop`; a fix under another issue's `Part of` may already have landed. (issue-1356)
 * No binary from before the views syntax exists (`target/release/nikaia` is absent); a fails-before run for a fix already on `develop` needs a build of the fixing commit's parent, so report it as not done. (issue-1356)
 * Turning a move into a lend in the checker also needs `vc_view_of` (`view_changes.nika`) to see the `let` as a view, or a later write to the source passes the checker and becomes a rustc NK1343 internal error. (issue-1362)
+* A `let` bound to a cut (`v[0..]`) or a `std` method result (`s.trim()`) is a view only if `vc_view_of` in `view_changes.nika` sees it; otherwise a later change becomes a rustc NK1343 instead of NK2305. (issue-1363)
+* The library ledger has no `borrows` entries for `std` methods (`String::trim` is missing from `described.contracts`), so the view-change walk cannot tell that a method result points into its receiver. (issue-1363)
+* The tier pass runs without checker types, so a rule there must not mark lists whose items are already views (split/map) as owned. (issue-1368)
 
