@@ -702,7 +702,14 @@ fn classify(expr: ref Expr, interner: ref winnow_grammar::InternerContext, holes
         // moving part on the left of `??` keeps its parameter too** (#891):
         // `p.0 ?? ".."` and `s.name ?? ".."` move the option out of it, as a
         // part handed back does.
-        Expr::Coalesce { value, .. } => keep_part(value, interner, context, own, library, walk),
+        // **`b ?? -1` unwraps a copy** (#1472): a fallback that is a number,
+        // a character or a truth value says the option holds a scalar, which
+        // the lowering copies out and leaves where it is.
+        Expr::Coalesce { value, fallback, .. } => {
+            if !keeps_a_scalar_literal(fallback) {
+                keep_part(value, interner, context, own, library, walk)
+            }
+        },
         // **A read through `?.` of a field that copies keeps nothing**
         // (ADR-views-3 D2, #1254): `row?.id ?? 0` copies the number out and
         // leaves the row where it is.
@@ -1211,6 +1218,18 @@ fn keeps_text_as_is(expr: ref Expr, interner: ref winnow_grammar::InternerContex
     }
 }
 
+// A number, a character or a truth value written out, negated or not.
+fn keeps_a_scalar_literal(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::LitInt { .. } => true,
+        Expr::LitFloat(_, _) => true,
+        Expr::LitChar(_, _) => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Unary { expr: inner, .. } => keeps_a_scalar_literal(inner),
+        else => false,
+    }
+}
+
 fn keep_part(expr: ref Expr?, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody, own: ref Ledger, library: ref Ledger, mut walk: KeepsWalk) {
     let part = expr ?? return
     walk.uses.kept.extend(keeps_handed(part, interner, context, own, library, walk))
@@ -1345,14 +1364,30 @@ fn parameter_named(expr: ref Expr, interner: ref winnow_grammar::InternerContext
 }
 
 // **`p ?? e` over an option parameter** (ADR-views-3 D2, #1254, #1346): the
-// parameter `p`, or `null`.
+// parameter `p`, or `null`. **So is `p.f ?? e` over an option field of one**
+// (#1472): `let s = c.signature ?? return -1` reads the field in place.
 fn coalesced_option(expr: ref Expr, interner: ref winnow_grammar::InternerContext, context: ref KeepsBody) -> String? {
     return match expr {
-        Expr::Coalesce { value, .. } => {
-            let parameter = parameter_named(value, interner, context) ?? return null
-            if context.options.contains(parameter) { parameter } else { null }
+        Expr::Coalesce { value, .. } => match value {
+            Expr::Field { base, name, .. } => {
+                let parameter = parameter_named(base, interner, context) ?? return null
+                if parameter != "self" && an_option_field(parameter, interner.resolve(name), context) { parameter } else { null }
+            },
+            else => {
+                let parameter = parameter_named(value, interner, context) ?? return null
+                if context.options.contains(parameter) { parameter } else { null }
+            },
         },
         else => null,
+    }
+}
+
+fn an_option_field(parameter: ref String, field: ref String, context: ref KeepsBody) -> bool {
+    let fields = context.fields[parameter] ?? return false
+    let ty = fields[field] ?? return false
+    return match ty {
+        Ty::Nullable(_) => true,
+        else => false,
     }
 }
 

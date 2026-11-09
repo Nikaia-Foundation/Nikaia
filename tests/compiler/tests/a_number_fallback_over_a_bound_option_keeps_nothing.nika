@@ -1,0 +1,25 @@
+// `b ?? -1` over an `i64?` a match bound out of `c` copies the number out
+// (#1472): `c` is not kept, so it is handed in twice.
+enum Call { Op(String?), Two(i64, i64?) }
+
+fn show(c: Call) -> String {
+	return match c {
+		Call::Op(text) => text?.clone() ?? "nothing",
+		Call::Two(a, b) => f"{a} {b ?? -1}",
+	}
+}
+
+fn make() -> String {
+	let mut g = String()
+	g.push_str("abc")
+	return g
+}
+
+fn main() throws {
+	let c = Call::Op(make())
+	println(show(c))
+	println(show(c))
+	let d = Call::Two(1, null)
+	println(show(d))
+	println(show(d))
+}

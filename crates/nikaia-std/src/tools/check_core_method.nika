@@ -342,8 +342,11 @@ fn check_core_method_run(on: ref Ty) -> Ty? {
                 return item.clone()
             }
         },
-        Ty::Named { name, args, view } => {
-            if view && name == ARRAY && args.len() == 1 {
+        // **An `Array[T]` with no length is a run whether or not it is
+        // written `ref`** (ADR-views-3 D11, #1472): a plain parameter
+        // `xs: Array[i64]` views the caller's elements as `ref` does.
+        Ty::Named { name, args, .. } => {
+            if name == ARRAY && args.len() == 1 {
                 return args[0].clone()
             }
         },

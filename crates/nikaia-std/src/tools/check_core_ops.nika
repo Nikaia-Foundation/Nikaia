@@ -628,6 +628,15 @@ fn check_core_ops_lent_root(state: ref CheckState, world: ref CheckWorld, value:
     return found.changing
 }
 
+/// **A field of a parameter the function lends** (ADR-views-3 D2, #1472):
+/// `c.signature ?? return -1` of a lent `c: C` reads the option in place.
+fn check_core_ops_field_of_a_lent_parameter(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Field { base, .. } => state.a_lent_parameter(world, base),
+        else => false,
+    }
+}
+
 /// **A place reached through a field that is a view** (#735):
 /// `found.c.sig` where `c` is a `ref C` is lent, however `found` is held.
 fn check_core_ops_behind_a_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
@@ -891,7 +900,7 @@ pub fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref C
         return view_of_type(inner)
     }
     // **A loan on the left and a jump on the right is a view** (ADR-279 D10).
-    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value)) {
+    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, inner.unseen()) && (check_core_ops_lent_root(state, world, value) || check_core_ops_behind_a_view(state, world, value) || check_core_ops_field_of_a_lent_parameter(state, world, value)) {
         if check_core_ops_plain_text(inner) {
             state.facts.lent_coalesces.insert(id_of(expr) as i64, ".as_deref()")
         } else {

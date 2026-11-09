@@ -240,10 +240,7 @@ pub(crate) fn check_core_method_run(on: &Ty) -> Option<Ty> {
             let item = nikaia_std::boxed::open(item); let slice = *slice;
             if slice { return Some(item.clone()); }
         },
-        Ty::Named { name, args, view } => {
-            let view = *view;
-            if view && name == ARRAY && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); }
-        },
+        Ty::Named { name, args, .. } => { if name == ARRAY && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); } },
         _ => { },
     }
     None

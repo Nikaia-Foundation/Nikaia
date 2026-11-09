@@ -1,0 +1,21 @@
+// `let s = c.signature ?? return -1` reads the option field in place
+// (ADR-views-3 D2, #1472): `c` stays lent, so it is handed in twice.
+struct Sig { name: String }
+struct C { signature: Sig? }
+
+fn count(c: C) -> i64 {
+	let s = c.signature ?? return -1
+	return s.name.len() as i64
+}
+
+fn make() -> String {
+	let mut g = String()
+	g.push_str("abc")
+	return g
+}
+
+fn main() throws {
+	let c = C { signature: Sig { name: make() } }
+	println(count(c))
+	println(count(c))
+}

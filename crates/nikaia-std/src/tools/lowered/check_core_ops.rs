@@ -414,6 +414,15 @@ pub(crate) fn check_core_ops_lent_root(state: &CheckState, world: &CheckWorld<'_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_ops_field_of_a_lent_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); state.a_lent_parameter(world, base) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_ops_behind_a_view(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Field { base, .. } => {
@@ -612,7 +621,7 @@ pub fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, world: &Che
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()")); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_ref()")); }
         return view_of_type(&inner);
     }
-    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value)) {
+    if place && state.jumps(world, fallback) && nullable && state.takes_away(world, &inner.unseen()) && (check_core_ops_lent_root(&state, world, value) || check_core_ops_behind_a_view(&state, world, value) || check_core_ops_field_of_a_lent_parameter(&state, world, value)) {
         if check_core_ops_plain_text(&inner) { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_deref()")); } else { state.facts.lent_coalesces.insert(id_of(expr) as i64, String::from(".as_ref()")); }
         return view_of_type(&inner);
     }
