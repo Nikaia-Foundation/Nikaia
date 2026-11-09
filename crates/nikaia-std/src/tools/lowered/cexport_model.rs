@@ -7,7 +7,7 @@ pub enum CxRefused {
 }
 
 impl CxRefused {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             CxRefused::Because(why) => why.to_string(),
         }

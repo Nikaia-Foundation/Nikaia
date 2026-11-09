@@ -604,7 +604,7 @@ pub enum ModulesRefusal {
 }
 
 impl ModulesRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ModulesRefusal::Parse => String::from("a file did not parse"),
             ModulesRefusal::Refused(why) => why.to_string(),

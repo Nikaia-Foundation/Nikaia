@@ -8,7 +8,7 @@ pub enum ProjectWriteRefusal {
 }
 
 impl ProjectWriteRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ProjectWriteRefusal::Refused(why) => why.to_string(),
             ProjectWriteRefusal::Failed(why) => why.to_string(),

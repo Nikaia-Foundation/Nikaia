@@ -136,7 +136,7 @@ pub enum ProjectDriveRefusal {
 }
 
 impl ProjectDriveRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ProjectDriveRefusal::Host => String::from("a step of the build failed"),
             ProjectDriveRefusal::Refused(why) => why.to_string(),

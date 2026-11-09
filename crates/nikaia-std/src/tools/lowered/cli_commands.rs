@@ -9,7 +9,7 @@ pub enum CliCommandsRefusal {
 }
 
 impl CliCommandsRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             CliCommandsRefusal::Host => String::from("a step of the command failed"),
             CliCommandsRefusal::Refused(why) => why.to_string(),
