@@ -175,4 +175,9 @@ together with the specification section and an example test.
 * Checker facts (`check_facts.nika`) are pure Nikaia with no Rust mirror: a new field needs only its declaration and its initializer there. (issue-1411)
 * A defect that shows only when the call crosses packages is often a type `qualify` (`ty.nika`) leaves unqualified, so a dependency's `H` never matches the caller's `lib::H`; check that before the lend logic. (issue-1417)
 * A cross-package probe or test copies the `mktemp` two-package setup of `tests/compiler/tests/dependency_struct_in_a_hole.nika` and runs `run` in `{tmp}/app`. (issue-1417)
+* A test for "rustc warns no more" needs an empty `NAME.stderr` beside `NAME.stdout`, since stdout alone passes on the unfixed compiler too. (issue-1420)
+* Never pipe the cycle's two `lower-std` runs into one grep without a marker; you cannot tell which binary raised the error, so echo a label between them. (issue-1425)
+* Before planning, also probe the inherent-impl and concrete-type variants of an issue's trait or generic probe: a trait method's by-value data parameter is seeded as kept in `keeps.nika` `trait_keeps` (pending #1012 step 3), so NK2105 there is not your defect. (issue-1448)
+* An impl method's contract is built by `declared_function` (`declared.nika`) from `ledger_items.nika`; a generic impl is written `impl Box[T]`, never `impl[T] Box[T]`. (issue-1448)
+* Views-3 D12 (returned parameter is a view) is built only for text; a struct or generic `T` result still keeps its argument (`fn second<T>(x: &T, y: T) -> T`). (issue-1448)
 
