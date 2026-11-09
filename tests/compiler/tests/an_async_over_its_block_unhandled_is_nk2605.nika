@@ -1,0 +1,19 @@
+// A task that builds a list in its block can run over its budget (ADR-327
+// D13): a function that starts it and says no `throws` is NK2605.
+fn fill() -> i64 {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100000 {
+        xs.push(i)
+    }
+    return xs.len()
+}
+
+fn total() -> i64 {
+    let a = async fill()
+    let b = 41
+    return a + b
+}
+
+fn main() throws {
+    println(f"{total()}")
+}

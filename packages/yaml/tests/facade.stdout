@@ -15,6 +15,7 @@ ok test_byte_order_mark
 ok test_bomb
 ok test_numbers
 ok test_nan
+ok test_stateful
 ok test_ignore_tag
 ok test_no_required_fields
 ok test_empty_scalar
@@ -25,3 +26,42 @@ ok test_one_document
   b: invalid type: string "x", expected u8 at line 2 column 4
   unexpected end of input, expected one of: `m > n`, `plain_char(x, flow, after_space)` at line 2 column 1 (2:1)
 ok test_location
+ok value::test_nan
+ok value::test_digits
+ok value::test_into_deserializer
+ok value::test_merge
+ok value::test_debug
+ok value::test_tagged
+ok value::test_index
+ok value::test_mapping
+ok value::test_tagged_value
+ok value::test_singleton_map
+ok value::test_singleton_map_recursive
+FAILED error::test_scan_error: called `Result::unwrap_err()` on an `Ok` value: String("@")
+ok error::test_incorrect_type
+ok error::test_incorrect_nested_type
+ok error::test_empty
+ok error::test_missing_field
+ok error::test_unknown_anchor
+ok error::test_ignored_unknown_anchor
+ok error::test_bytes
+ok error::test_two_documents
+FAILED error::test_second_document_syntax_error: called `Result::unwrap()` on an `Err` value: Error("expected `plain_first(x)`; found unexpected token `newline`", line: 4, column: 2)
+ok error::test_missing_enum_tag
+FAILED error::test_deserialize_nested_enum: assertion `left == right` failed   left: "deserializing nested enum in Outer::Inner from YAML is not supported yet at line 2 column 1"  right: "expected `plain_first(x)`; found unexpected token `Variant` at line 2 column 9"
+ok error::test_variant_not_a_seq
+ok error::test_struct_from_sequence
+FAILED error::test_bad_bool: assertion `left == right` failed   left: "invalid value: string \"str\", expected a boolean at line 2 column 1"  right: "unexpected end of input, expected one of: `:`, any character at line 3 column 1"
+FAILED error::test_bad_int: assertion `left == right` failed   left: "invalid value: string \"str\", expected an integer at line 2 column 1"  right: "unexpected end of input, expected one of: `:`, any character at line 3 column 1"
+FAILED error::test_bad_float: assertion `left == right` failed   left: "invalid value: string \"str\", expected a float at line 2 column 1"  right: "unexpected end of input, expected one of: `:`, any character at line 3 column 1"
+FAILED error::test_bad_null: assertion `left == right` failed   left: "invalid value: string \"str\", expected null at line 2 column 1"  right: "unexpected end of input, expected one of: `:`, any character at line 3 column 1"
+ok error::test_short_tuple
+ok error::test_long_tuple
+ok error::test_invalid_scalar_type
+ok error::test_infinite_recursion_objects
+ok error::test_infinite_recursion_arrays
+ok error::test_infinite_recursion_newtype
+FAILED error::test_finite_recursion_objects: assertion `left == right` failed   left: "recursion limit exceeded at line 1 column 641"  right: "nesting deeper than the depth limit of 128 at line 1 column 642"
+FAILED error::test_finite_recursion_arrays: assertion `left == right` failed   left: "recursion limit exceeded at line 1 column 513"  right: "nesting deeper than the depth limit of 128 at line 1 column 514"
+ok error::test_billion_laughs
+ok error::test_duplicate_keys

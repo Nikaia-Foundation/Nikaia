@@ -165,7 +165,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
-        signature.params.len() == 1 && nikaia_std::index::get(&signature.params, 0).0 == "input"
+        !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "input"
     }
     pub fn copy_substitutes(&self, on: &str) -> bool {
         let kind = match self.facts.type_kinds.get(on) { Some(__nikaia_value) => __nikaia_value, None => return true };

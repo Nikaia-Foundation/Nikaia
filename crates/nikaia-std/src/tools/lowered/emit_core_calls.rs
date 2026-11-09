@@ -443,7 +443,6 @@ impl EmitState {
                     self.emit_core_grammar_entry(world, walk, out, host, *nikaia_std::index::get(&segments, 0), *nikaia_std::index::get(&segments, 1), nikaia_std::index::get(&args, 0), &values, config, &parallelism, depth, flow, scope)?;
                     return Ok(true);
                 }
-                if args.len() != 1 { return Ok(false); }
                 if segments.len() != 3 { return Ok(false); }
                 let package = emit_text(world, *nikaia_std::index::get(&segments, 0));
                 let book = emit_text(world, *nikaia_std::index::get(&segments, 1));
@@ -452,11 +451,57 @@ impl EmitState {
                 let mut question: &'static str = "?";
                 if flow.caught { question = ""; }
                 let mut pieces = false;
+                let mut streamed = false;
+                let mut options: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let contract = self.own_contracts.functions.get(&format!("{}::{}::{}", package, book, rule));
                 if contract.is_some() {
                     let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                     pieces = held.pieces;
+                    match &held.signature {
+                        Some(signature) => {
+                            match &signature.result {
+                                Some(result) => { streamed = a_sequence_type(result); },
+                                None => { },
+                            }
+                            for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
+                        },
+                        None => { },
+                    }
                 }
+                if streamed {
+                    out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}::{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
+                    self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                    out.push(").to_vec()");
+                    for i in 1..args.len() as i64 {
+                        out.push(", ");
+                        self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, (i) as usize), depth, flow, scope)?;
+                    }
+                    for option in options.iter() {
+                        let mut given = false;
+                        for c in config.iter() {
+                            if !given && emit_text(world, c.name) == *option {
+                                out.push(", ::std::option::Option::Some(");
+                                self.emit_expr(world, walk, out, host, &c.value, depth, flow, scope)?;
+                                out.push(")");
+                                given = true;
+                            }
+                        }
+                        if !given { out.push(", ::std::option::Option::None"); }
+                    }
+                    let mut table = false;
+                    for c in config.iter() {
+                        if !table && emit_text(world, c.name) == "words" && !nikaia_std::list::contains(&options, &"words") {
+                            out.push(", ::std::option::Option::Some(nikaia_std::winnow_grammar::InternerContext::clone(&");
+                            self.emit_expr(world, walk, out, host, &c.value, depth, flow, scope)?;
+                            out.push("))");
+                            table = true;
+                        }
+                    }
+                    if !table { out.push(", ::std::option::Option::None"); }
+                    out.push(&format!(")){}", question));
+                    return Ok(true);
+                }
+                if args.len() != 1 { return Ok(false); }
                 if pieces {
                     out.push("nikaia_std::grammar::parse_pieces(&*");
                     self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
@@ -1161,8 +1206,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple86081| {
-        let (i, word) = __nikaia_tuple86081;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple89273| {
+        let (i, word) = __nikaia_tuple89273;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

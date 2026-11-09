@@ -295,14 +295,15 @@ impl EmitState {
     }
 
     /// Whether the function is a grammar's entry in a package: it fails with
-    /// the parse error and takes the input alone.
+    /// the parse error and takes the input first.
     pub fn a_package_grammar_entry(ref self, key: ref String) -> bool {
         let contract = self.own_contracts.functions.get(key) ?? return false
         if contract.fails_with.len() != 1 || contract.fails_with[0] != "ParseError" {
             return false
         }
         let signature = contract.signature?.clone() ?? return false
-        return signature.params.len() == 1 && signature.params[0].0 == "input"
+        // The values after the input are an entry's too (ADR-grammar-1 D2, #1512).
+        return signature.params.len() >= 1 && signature.params[0].0 == "input"
     }
 
     /// **Whether a copy writes the type it is made for in place of its

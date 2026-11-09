@@ -644,7 +644,7 @@ impl FmtPrinter {
         while k < n {
             if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Open {
                 let m = fmt_partner(&toks, k);
-                if m > k + 1 && (fmt_sealed(&toks, k, m) || rule && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "(") { k = m; } else if m > k + 1 && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
+                if m > k + 1 && (fmt_sealed(&toks, k, m) || rule && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "(" || rule && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "{" && k > 0 && nikaia_std::index::get(&toks, nikaia_std::index::at(k - 1)).kind == FmtKind::Word) { k = m; } else if m > k + 1 && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
                     group = k;
                     close = m;
                     k = m;

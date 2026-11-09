@@ -218,6 +218,10 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         Panics::Yes => out.push_str("panics = true\n"),
         Panics::Unknown => {}
     }
+    // **Whether it builds a list in its task's block** (ADR-327 D13).
+    if contract.places {
+        out.push_str("places = true\n")
+    }
     // Claims about what a body does that no signature shows (ADR-290 D6).
     match contract.threads {
         Threads::Undecided => {}

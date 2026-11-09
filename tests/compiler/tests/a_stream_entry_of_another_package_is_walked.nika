@@ -1,0 +1,34 @@
+// #1505: a program walks another package's `@stream` entry (ADR-grammar-2
+// D7): the call is a sequence of the package's item type, walked through the
+// function the package writes beside its `pub grammar`, since the engine's
+// reader is that crate's alone (#1464). A `break` stops the walk, and the
+// parse error is the sequence's last element. An option of the package's type
+// is read by its fields too.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/words/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/words/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"words\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/words/src/main.nika", fs::Root::Anywhere, "pub struct Item {\n\tpub word: String,\n}\n\npub grammar Words {\n\t@stream entry rule items -> Item = item*\n\trule item -> Item = w:until(\";\") \";\" -> { Item { word: w.clone() } }\n}\n\npub fn first(text: String) -> Item? throws {\n\tfor it in Words::items(text) {\n\t\treturn it\n\t}\n\treturn null\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nwords = { path = \"../words\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use words\n\nfn all_words(text: String) -> i64 throws {\n\tlet mut seen = 0\n\tfor it in words::Words::items(text) {\n\t\tprintln(f\"held {it.word}\")\n\t\tseen += 1\n\t}\n\treturn seen\n}\n\nfn main() throws {\n\tlet mut kept: Vec[words::Item] = []\n\tfor it in words::Words::items(\"a;b;stop;c;\") {\n\t\tif it.word == \"stop\" {\n\t\t\tbreak\n\t\t}\n\t\tkept.push(it)\n\t}\n\tfor k in kept {\n\t\tprintln(k.word)\n\t}\n\tlet whole = all_words(\"x;y;\") catch { -1 }\n\tprintln(f\"walked: {whole}\")\n\tlet broken = all_words(\"x;y;z\") catch { -1 }\n\tprintln(f\"walked to the end: {broken}\")\n\tmatch words::first(\"one;two;\") {\n\t\tnull => println(\"none\"),\n\t\ti => println(f\"first {i.word}\"),\n\t}\n}\n")
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let text = line.trim()
+        if !text.starts_with("Compiling") && !text.starts_with("Finished") && !text.starts_with("Running") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

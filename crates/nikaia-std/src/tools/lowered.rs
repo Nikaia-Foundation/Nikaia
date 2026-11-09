@@ -3505,7 +3505,10 @@ pub mod emit_function {
     pub use super::{EmitSeedsBegin, EmitSeedsEnd, EmitSplit, EmitSig};
 }
 pub mod emit_function_body {}
-pub mod emit_grammar {}
+pub mod emit_grammar {
+    #[allow(unused_imports)]
+    pub use super::{emit_stream_walk_name};
+}
 pub mod emit_holes {
     #[allow(unused_imports)]
     pub use super::{EmitHole, EmitHolesHost, emit_holes_literal_bound, emit_holes_literal, EmitHoleTables, emit_holes_tables, emit_holes_fold_callees, emit_holes_built_at_build_time};
@@ -3743,7 +3746,7 @@ pub mod order {
 }
 pub mod panics {
     #[allow(unused_imports)]
-    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, panics_worth_proving, panics_of_task};
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_worth_proving, panics_of_task, places_of_task};
 }
 pub mod parse_errors {
     #[allow(unused_imports)]

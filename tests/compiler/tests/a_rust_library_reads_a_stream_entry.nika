@@ -3,9 +3,11 @@
 // `rust_library_stream/lines` names the entry `lines::Words::items` as the
 // root of its feature `stream`, which gates `Words::items_reader` alone; the
 // in-crate walk of `counted` is core. The crate `user` reads items from a
-// `Cursor`, stops early, and gets the parse error last. Then the grammar as a
-// root takes all its entries, and without `[features]` the crate holds no
-// reader.
+// `Cursor`, stops early, and gets the parse error last; the crate `private`
+// calls the engine's `parse_items_reader`, which stays private to the
+// grammar's module (#1464), and its build fails with E0603. Then the grammar
+// as a root takes all its entries, and without `[features]` the crate holds
+// no reader.
 use std::fs
 use std::process
 
@@ -45,11 +47,12 @@ fn main() throws {
     let nikaia = toolchain(repo.clone())
     let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
     let from = f"{repo}/tests/compiler/rust_library_stream"
-    process::run("cp", ["-r", f"{from}/lines", f"{from}/user", tmp.clone()])
+    process::run("cp", ["-r", f"{from}/lines", f"{from}/user", f"{from}/private", tmp.clone()])
     process::run("rm", ["-rf", f"{tmp}/lines/target"])
     let mut env: Vec[(String, String)] = []
     env.push(("CARGO_TARGET_DIR", f"{repo}/target/nikaia-project-tests/rust-library-user"))
     env.push(("CARGO_NET_OFFLINE", "true"))
+    env.push(("CARGO_TERM_COLOR", "never"))
     let made = f"{tmp}/lines/target/rust-library/nikaia_lines"
     let toml = fs::read_to_string(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere)
     let whole = (toml.split("[features]").next() ?? "").clone()
@@ -68,6 +71,13 @@ fn main() throws {
             let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: env.clone())
             println(ran.stdout.trim())
             if ran.code != 0 { println(ran.stderr.trim().replace(tmp, "TMP")) }
+            let refused = process::run("cargo", ["build", "-q"]; dir: f"{tmp}/private", env: env.clone())
+            println(f"private builds: {refused.code == 0}")
+            let mut said = 0
+            for line in refused.stderr.lines() {
+                if line.starts_with("error[E0603]") { println(line); said += 1 }
+            }
+            if said == 0 { println(refused.stderr.trim().replace(tmp, "TMP")) }
         }
     }
     process::run("rm", ["-rf", tmp])

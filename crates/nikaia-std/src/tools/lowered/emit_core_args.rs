@@ -832,13 +832,13 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_channel_holds_a_crash(&self, channel: &str) -> bool {
-        if channel == "nikaia_std::task::Crashed" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" { return true; }
-        if channel.starts_with("nikaia_std::error::Thrown<") { return channel.ends_with("task::Crashed>"); }
+        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" { return true; }
+        if channel.starts_with("nikaia_std::error::Thrown<") { return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>"); }
         let root = self.sum_root();
         for (members, name) in self.sums.iter() {
             let full = format!("{}{}", root, name);
             if channel == full || channel.starts_with(&*format!("{}<", full)) {
-                for member in members.iter() { if member == "task::Crashed" { return true; } }
+                for member in members.iter() { if member == "task::Crashed" || member == "task::OverBudget" { return true; } }
                 return false;
             }
         }

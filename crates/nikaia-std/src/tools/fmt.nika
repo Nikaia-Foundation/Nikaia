@@ -830,8 +830,9 @@ impl FmtPrinter {
                 first = true
             }
         }
-        // A rule's parentheses (a guard's `if(..)`, a `fail(..)`, a group)
-        // stay whole: the grammar parser takes no break inside them.
+        // A rule's parentheses (a guard's `if(..)`, a `fail(..)`, a group) and a
+        // count's braces (`item{n}`, `item{least, most}`) stay whole: the grammar
+        // parser takes no break inside them.
         let rule = self.in_grammar()
         let mut group = -1
         let mut close = -1
@@ -839,7 +840,7 @@ impl FmtPrinter {
         while k < n {
             if toks[k].kind == FmtKind::Open {
                 let m = fmt_partner(toks, k)
-                if m > k + 1 && (fmt_sealed(toks, k, m) || (rule && toks[k].text == "(")) {
+                if m > k + 1 && (fmt_sealed(toks, k, m) || (rule && toks[k].text == "(") || (rule && toks[k].text == "{" && k > 0 && toks[k - 1].kind == FmtKind::Word)) {
                     k = m
                 } else if m > k + 1 && fmt_breakable(toks, shape, k, m) && (group < 0 || !first) {
                     group = k

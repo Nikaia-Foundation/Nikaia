@@ -739,6 +739,7 @@ pub struct FnContract {
     pub mutates: bool,
     pub touches_a_lock: Lock,
     pub panics: Panics,
+    pub places: bool,
     pub threads: Threads,
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
@@ -754,7 +755,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1218,6 +1219,8 @@ pub fn qualify(ty: &Ty, module: &str, declared: &collections::BTreeSet<String>) 
         Ty::Tuple(parts) => Ty::Tuple(qualified_each(parts, module, declared)),
         Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: qualified_each(params, module, declared), result: Box::new(qualified_result((result).as_ref(), module, declared)), is_sync, can_throw } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(qualify(inner, module, declared))) },
+        Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: Box::new(qualify(item, module, declared)), slice, mutable } },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: Box::new(qualify(item, module, declared)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
         _ => ty.clone(),
     }
 }
@@ -1246,6 +1249,8 @@ pub fn renamed(ty: &Ty, renames: &collections::BTreeMap<String, String>) -> Ty {
         Ty::Tuple(parts) => Ty::Tuple(renamed_each(parts, renames)),
         Ty::Fn { params, result, is_sync, can_throw } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: renamed_each(params, renames), result: Box::new(renamed_result((result).as_ref(), renames)), is_sync, can_throw } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(renamed(inner, renames))) },
+        Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: Box::new(renamed(item, renames)), slice, mutable } },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: Box::new(renamed(item, renames)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
         _ => ty.clone(),
     }
 }

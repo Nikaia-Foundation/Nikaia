@@ -1366,18 +1366,20 @@ impl EmitState {
     /// Whether a channel can carry a task's crash: the crash itself, the box,
     /// its envelope, or a generated sum with `task::Crashed` among its members.
     fn emit_channel_holds_a_crash(ref self, channel: ref String) -> bool sync {
-        if channel == "nikaia_std::task::Crashed" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
+        // `task::OverBudget` takes a crash apart (ADR-327 D13): a full block
+        // is its own, any other crash unwinds on.
+        if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" {
             return true
         }
         if channel.starts_with("nikaia_std::error::Thrown<") {
-            return channel.ends_with("task::Crashed>")
+            return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>")
         }
         let root = self.sum_root()
         for (members, name) in self.sums {
             let full = f"{root}{name}"
             if channel == full || channel.starts_with(f"{full}<") {
                 for member in members {
-                    if member == "task::Crashed" {
+                    if member == "task::Crashed" || member == "task::OverBudget" {
                         return true
                     }
                 }

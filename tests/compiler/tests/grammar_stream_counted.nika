@@ -1,0 +1,41 @@
+// An `@stream` entry walks a repetition counted by a value (ADR-grammar-1
+// D3, ADR-grammar-2 D7, #1459): `item{n}` takes exactly `n` items, read where
+// the parser reaches the repetition, and `item{1, n}` stops after the `n`-th.
+
+struct Item {
+	word: String,
+}
+
+grammar Exact {
+	@stream entry rule items -> Item = n:i64 ":" item{n}
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+grammar AtMost {
+	@stream entry rule items -> Item = n:i64 ":" item{1, n} until("!") "!"
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+fn exact(text: String) -> i64 throws {
+	let mut seen = 0
+	for it in Exact::items(text) {
+		println(it.word)
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	println(f"{exact("2:x;y;")} exact")
+	let short = exact("3:x;y;") catch {
+		println(f"short: {error}")
+		-1
+	}
+	println(short)
+	let mut most = 0
+	for it in AtMost::items("2:a;b;c;!") {
+		println(it.word)
+		most += 1
+	}
+	println(f"{most} at most")
+}
