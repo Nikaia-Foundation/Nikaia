@@ -280,15 +280,21 @@ pub fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     let element = part_of_a_list(found, want)
     if element != null {
         let written = element ?? "?"
-        return f"This is part of a list. Declare the parameter `ref Array[{written}]` to take a part or a whole list alike."
+        return f"This is part of a list. Declare the parameter `Array[{written}]` to take a part or a whole list alike."
     }
     let found_text = found.text()
     let want_text = want.text()
     if found_text == "ref String" && want_text == "String" {
         return "Write `.clone()` to turn this view into text of its own."
     }
+    // **No `ref` to write** (ADR-views-3 D4, #1403): a view is said by
+    // what it is handed, and the help names that, never a `ref` the next
+    // check calls redundant (`NK1261`) or needless (`NK1137`).
     if found_text == "String" && want_text == "ref String" {
-        return "Write `ref` in front of it to pass a view of it."
+        return "Write `String` without `ref` in the declaration: text of its own is lent wherever a view suffices."
+    }
+    if found.is_a_view() && !want.is_a_view() && found.owned().text() == want_text {
+        return "Write `.clone()` to turn this view into a value of its own."
     }
     // **A span is made from a number, never written as one** (Part II,
     // `select`; #1246).
@@ -298,8 +304,16 @@ pub fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if a_number_name(found_text) && a_number_name(want_text) {
         return f"Convert it with `as {want_text}`. A number goes into another type on its own only where every value it can hold fits."
     }
-    let article = if want_text.starts_with("i") || want_text.starts_with("a") || want_text.starts_with("e") || want_text.starts_with("o") || want_text.starts_with("I") || want_text.starts_with("A") || want_text.starts_with("E") || want_text.starts_with("O") { "an" } else { "a" }
-    return f"Make it {article} `{want_text}`, or change the declaration to `{found_text}`."
+    let shown = want.owned().text()
+    let article = if shown.starts_with("i") || shown.starts_with("a") || shown.starts_with("e") || shown.starts_with("o") || shown.starts_with("I") || shown.starts_with("A") || shown.starts_with("E") || shown.starts_with("O") { "an" } else { "a" }
+    let mut wanted: String = f"Make it {article} `{shown}`"
+    if want.is_a_view() && shown != want_text {
+        wanted = f"Make it a view of {article} `{shown}` that something else keeps"
+    }
+    if found.is_a_view() {
+        return f"{wanted}."
+    }
+    return f"{wanted}, or change the declaration to `{found_text}`."
 }
 
 /// A view of a run handed where a `Vec` is wanted: the element's text.

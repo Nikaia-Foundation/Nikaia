@@ -163,6 +163,7 @@ impl EmitState {
             if i > 0 { out.push(", "); }
             i += 1;
             self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
+            if self.facts.stored_handles.contains(&node_key(item)) { out.push(".clone()"); }
         }
         out.push("]");
         Ok(())
@@ -457,17 +458,18 @@ impl EmitState {
                 if same {
                     let mut inner = EmitOut::empty();
                     self.emit_expr(world, walk, &mut inner, host, value, depth, flow, scope)?;
-                    if inner.buf == written && !self.facts.lent_fields.contains(&node_key(value)) { continue; }
+                    if inner.buf == written && !self.facts.lent_fields.contains(&node_key(value)) && !self.facts.stored_handles.contains(&node_key(value)) { continue; }
                 }
                 out.push(": ");
                 out.push(&before);
                 if self.facts.lent_fields.contains(&node_key(value)) { out.push("&"); }
                 self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+                if self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
                 out.push(&after);
-            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) || self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) {
+            } else if wrapped || boxed || self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) || self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) || self.facts.stored_handle_fields.contains(&(node_key(node), plain.to_string())) {
                 let mut put = written.to_string();
                 if self.facts.kept_byte_fields.contains(&(node_key(node), plain.to_string())) { put = format!("nikaia_std::bytes::Bytes::from({})", written); }
-                if self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) { put = format!("{}.clone()", written); }
+                if self.facts.kept_fn_fields.contains(&(node_key(node), plain.to_string())) || self.facts.stored_handle_fields.contains(&(node_key(node), plain.to_string())) { put = format!("{}.clone()", written); }
                 if wrapped { put = format!("Some({})", put); }
                 if boxed { out.push(&format!(": Box::new({})", put)); } else { out.push(&format!(": {}", put)); }
             }

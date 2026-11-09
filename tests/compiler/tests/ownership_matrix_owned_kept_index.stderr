@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `xs[0]` here: it is an element of `xs`, which keeps it.
+   --> tests/ownership_matrix_owned_kept_index.nika:18:5
+    |
+ 18 |     store(xs[0], all)
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: `xs[0]` reads an element `xs` keeps, and what `xs` keeps is lent, whether `xs` is owned here or borrowed. Giving it away by value would take it out of `xs`, and Nikaia never copies behind your back.
+    = help: Write `xs[0].clone()` for a copy.
+1 type error

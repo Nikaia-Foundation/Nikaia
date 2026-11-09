@@ -404,7 +404,7 @@ pub enum ProjectTestsRefusal {
 }
 
 impl ProjectTestsRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ProjectTestsRefusal::Refused(why) => why.to_string(),
         }

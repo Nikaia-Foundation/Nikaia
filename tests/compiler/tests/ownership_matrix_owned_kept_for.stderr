@@ -1,0 +1,12 @@
+error[NK1102]: `store` expects `a` to be `String`, but you're passing `ref String`.
+   --> tests/ownership_matrix_owned_kept_for.nika:19:15
+    |
+ 19 |         store(x, all)
+    |               ^
+    |
+    = note: It's declared as `store(a: String, mut into: Vec[String])`.
+    = note: This is a view: it points into text that something else owns.
+    = note: `store` keeps its `a` after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+1 type error

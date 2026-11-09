@@ -163,6 +163,23 @@ pub(crate) fn an_operation_in_one_type(op: &BinaryOp) -> bool { !(*op == BinaryO
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_fields_holds_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, open: &[String]) -> bool {
+    let (name, args) = match ty {
+        Ty::Named { name, args, view } => { let view = *view; if view { return false; } else { (name.to_string(), args.to_owned()) } },
+        _ => return false,
+    };
+    let base = a_type_base(&name);
+    if base == "String" || !args.is_empty() { return true; }
+    if nikaia_std::list::contains(&open, &base) { return false; }
+    let fields = match *nikaia_std::index::get(&world.fields_by_base, &base) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let mut deeper = open.to_owned();
+    deeper.push(base.to_string());
+    for field in fields.iter() { if check_fields_holds_text(world, field, &deeper) { return true; } }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_fields_holds(frame: &[CheckLocal], name: &str) -> bool {
     for local in frame.iter() { if local.name == name { return true; } }
     false
@@ -246,6 +263,12 @@ impl CheckState {
         }
         if at < 0 || nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view() { return false; }
         !lends_in_own(&contract, at, &vec![world.library])
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn an_owned_parameter_handed_back(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, given: &Expr) -> bool {
+        if found.is_a_view() || !want.is_a_view() || want.text() != format!("ref {}", found.text()) { return false; }
+        check_fields_holds_text(world, found, &vec![]) && self.an_owned_parameter(world, given)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -763,7 +763,9 @@ pub fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &CheckWo
             bound = nikaia_std::index::or(met, || found.clone().into());
         } else if found == a_string_type() {
             let lent = state.lent_arms_bound(world, value);
+            let none_lent = lent.is_none();
             bound = nikaia_std::index::or(lent, || found.clone().into());
+            if none_lent && !mutable && !moved_out && names.len() == 1 && shape.is_empty() && check_core_stmt_a_place(&state, value) && state.facts.lent_lets.contains(&(span.start as i64)) { bound = Ty::Named { name: TEXT_VIEW.to_string(), args: vec![], view: true }; }
         } else { bound = found.clone(); }
         if state.flow.view_reads.contains(&(id_of(value) as i64)) { let viewed = state.facts.copied_reads.insert(id_of(value) as i64); }
     }

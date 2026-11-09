@@ -161,6 +161,13 @@ pub struct CheckFacts {
     pub kept_fn_copies: collections::BTreeSet[i64],
     /// `P { f }` over such a name, by the struct literal and the field.
     pub kept_fn_fields: collections::BTreeSet[(i64, String)],
+    /// **A handle on a shared value stored by value is duplicated** (ADR-312
+    /// D1, #1411): a name or a field path of `Shared`/`SharedMut` type put
+    /// into a struct literal's field or a list literal, by the value's id;
+    /// the lowering clones the handle, as a call's argument does.
+    pub stored_handles: collections::BTreeSet[i64],
+    /// `P { a }` over such a name, by the struct literal and the field.
+    pub stored_handle_fields: collections::BTreeSet[(i64, String)],
     pub copied_tuple_parts: collections::BTreeSet[(i64, String)],
     pub std_lengths: collections::BTreeSet[i64],
     pub sized_lengths: collections::BTreeSet[i64],
@@ -628,6 +635,8 @@ impl CheckFacts {
             kept_fn_reads: collections::BTreeSet(),
             kept_fn_copies: collections::BTreeSet(),
             kept_fn_fields: collections::BTreeSet(),
+            stored_handles: collections::BTreeSet(),
+            stored_handle_fields: collections::BTreeSet(),
             copied_tuple_parts: collections::BTreeSet(),
             std_lengths: collections::BTreeSet(),
             sized_lengths: collections::BTreeSet(),

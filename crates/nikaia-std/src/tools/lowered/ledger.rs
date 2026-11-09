@@ -17,7 +17,7 @@ pub enum Refused {
 }
 
 impl Refused {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             Refused::Because(why) => why.to_string(),
         }

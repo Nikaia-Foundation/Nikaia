@@ -209,7 +209,11 @@ fn drive_restart(exe: String) throws {
 		again.push(args[i].clone())
 		i += 1
 	}
-	let ran = process::run(exe, again; stdout: process::Stream::Inherited, stderr: process::Stream::Inherited)
+	let ran = process::run(
+		exe,
+		again; stdout: process::Stream::Inherited,
+		stderr: process::Stream::Inherited,
+	)
 	if ran.code < 0 { process::exit(3) }
 	process::exit(ran.code)
 }
@@ -373,7 +377,10 @@ fn drive_push(sha: String) -> String throws {
 		// they are stashed around the merge, not a reason to stop (2026-10-28).
 		let fetched = process::run("git", ["fetch", "-q", "origin", "develop"])
 		if !fetched.ok { drive_escalate("push rejected, and git fetch origin develop failed") }
-		let base = process::run("git", ["merge-base", sha.clone(), "FETCH_HEAD"]).stdout.trim().clone()
+		let base = process::run(
+			"git",
+			["merge-base", sha.clone(), "FETCH_HEAD"],
+		).stdout.trim().clone()
 		let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
 		drive_merge_fetched(f"'{exe}' lower-std", "cargo build -q --profile fast -p nikaia")
 		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
@@ -712,7 +719,10 @@ fn drive_badges() throws {
 	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
 	let made = process::run(
 		"sh",
-		["-c", f"git archive HEAD | tar -x -C '{copy}' && cd '{copy}' && python3 scripts/badges.py"],
+		[
+			"-c",
+			f"git archive HEAD | tar -x -C '{copy}' && cd '{copy}' && python3 scripts/badges.py",
+		],
 	)
 	if made.ok {
 		process::run("sh", ["-c", f"cp '{copy}'/assets/badges/*.svg assets/badges/"])
@@ -2008,10 +2018,55 @@ fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
 	return f"{text}\n"
 }
 
+// BATCH without the `#N` lines whose N is in CLOSED (the first word of a
+// line, as drive_queue_add reads it).
+fn drive_queue_drop(batch: String, closed: Vec[String]) -> String {
+	let mut out: Vec[String] = []
+	for l in batch.split("\n") {
+		let w = l.trim().clone()
+		if w == "" { continue }
+		let first: Vec[String] = w.split(" ").collect()
+		if closed.contains(first[0].clone()) { continue }
+		out.push(l.clone())
+	}
+	if out.len() == 0 { return "" }
+	let text = out.join("\n")
+	return f"{text}\n"
+}
+
+// Drops from DIR/batch.txt the queued issues closed since they were queued
+// (#1388 was queued open, closed by a promote, then run for nothing): each
+// `#N` line without a report whose issue is closed goes; prints
+// `DROPPED #N closed` for each.
+fn drive_queue_prune(dir: String) throws {
+	let repo = drive_repo()
+	let path = f"{dir}/batch.txt"
+	let old = drive_read(path.clone())
+	let mut closed: Vec[String] = []
+	for l in old.split("\n") {
+		let w = l.trim().clone()
+		if !w.starts_with("#") { continue }
+		let words: Vec[String] = w.split(" ").collect()
+		let tag = words[0].clone()
+		let n = (tag.strip_prefix("#") ?? "").clone()
+		if n == "" { continue }
+		let mut name = f"issue-{n}"
+		if words.len() > 1 && words[1].trim() != "" { name = name + "-" + words[1].trim().clone() }
+		if fs::exists(f"{dir}/{name}.md.report.md", fs::Root::Anywhere) { continue }
+		let got = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state"])
+		if got.ok && got.stdout.trim() == "closed" { closed.push(tag) }
+	}
+	if closed.len() == 0 { return }
+	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, closed.clone()))
+	for tag in closed { println(f"DROPPED {tag} closed") }
+}
+
 // Queues the lane's ready issues (owner, 2026-11-06): the open issues
 // labelled `ready` and AREA, without `wip` (one being worked on), go into DIR/batch.txt as `#N` lines, oldest
-// first (drive_queue_add); prints `QUEUED #N AREA` for each new one.
+// first (drive_queue_add); prints `QUEUED #N AREA` for each new one. Closed
+// ones still queued are dropped first (drive_queue_prune).
 fn drive_queue(dir: String, area: String) throws {
+	drive_queue_prune(dir.clone())
 	let repo = drive_repo()
 	let got = process::run(
 		"gh",

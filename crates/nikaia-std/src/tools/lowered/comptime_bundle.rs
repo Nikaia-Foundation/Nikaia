@@ -36,7 +36,7 @@ pub enum ComptimeBundleFailed {
 }
 
 impl ComptimeBundleFailed {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ComptimeBundleFailed::Said(text) => text.to_string(),
         }

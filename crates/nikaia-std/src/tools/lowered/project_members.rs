@@ -143,7 +143,7 @@ pub enum ProjectMembersRefusal {
 }
 
 impl ProjectMembersRefusal {
-    pub(crate) fn message(&self) -> String {
+    pub fn message(&self) -> String {
         match self {
             ProjectMembersRefusal::Manifest => String::from("a manifest did not read"),
             ProjectMembersRefusal::Refused(why) => why.to_string(),

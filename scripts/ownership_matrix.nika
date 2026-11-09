@@ -1,0 +1,249 @@
+// The ownership matrix (#1404): one test program per cell of form × mode ×
+// position, written into tests/compiler/tests/ as `ownership_matrix_*.nika`.
+// Each cell either runs (its `.stdout` beside it) or is refused with a
+// specific NK code (its `.stderr`); none may reach rustc and come back as
+// NK1343. The expectations are reviewed and committed by hand from what the
+// language specifies (ADR-282, ADR-views-3), never blessed blindly.
+//
+//     nikaia run scripts/ownership_matrix.nika [-- --list]
+//
+// Writes only the `.nika` programs, and only where one differs or is missing;
+// an expectation file is never touched. A new form, mode or position is a row
+// below, not a hand-written test. `--list` prints the cells and the open ones.
+//
+// The axes:
+//
+// * form: the value `s` is `owned` (a `String` made by a call) or a `view`
+//   (`let s = h.name`, a view of a field of a local, ADR-views-3 D5);
+// * mode: `lent` puts `s` where the position lends it and uses `s` again
+//   after; `kept` puts it where the position keeps it and never uses it
+//   again; `given` keeps it and uses `s` again after (refused for an owned
+//   value, D2; a view handed where a value of its own is wanted is refused
+//   with a `.clone()` help, D5);
+// * position: parameter, result, struct field, map value, function-typed
+//   field (called), lambda capture, lambda result, operand of `??`, an
+//   index `a[i]`, and a `for` over a place.
+//
+// A cell with no program says why: a form the language lacks, or an outcome
+// today that the specification does not give (an expectation is never
+// written for that); each is filed as an issue. The run prints them.
+
+use std::cli
+use std::fs
+
+struct Position {
+    name: String,
+    lent_helpers: String,
+    kept_helpers: String,
+    lent: String,
+    kept: String,
+}
+
+struct Open {
+    cell: String,
+    why: String,
+}
+
+fn om_make() -> String {
+    return "fn make() -> String {\n    let mut g = String()\n    g.push_str(\"abc\")\n    return g\n}\n"
+}
+
+fn om_measure() -> String {
+    return "fn measure(a: String) -> i64 {\n    return a.len()\n}\n"
+}
+
+fn om_store() -> String {
+    return "fn store(keep a: String, mut into: Vec[String]) {\n    into.push(a)\n}\n"
+}
+
+fn om_pick() -> String {
+    return "fn pick(a: String) -> String {\n    return a\n}\n"
+}
+
+fn om_none() -> String {
+    return "fn none() -> String? {\n    return null\n}\n"
+}
+
+fn om_positions() -> Vec[Position] {
+    let mut all: Vec[Position] = []
+    all.push(Position {
+        name: "parameter",
+        lent_helpers: om_measure(),
+        kept_helpers: om_store(),
+        lent: "    println(measure(s))\n",
+        kept: "    let mut all: Vec[String] = []\n    store(s, all)\n    println(all[0])\n",
+    })
+    all.push(Position {
+        name: "result",
+        lent_helpers: om_pick(),
+        kept_helpers: "fn own(keep a: String) -> String {\n    return a\n}\n",
+        lent: "    let r = pick(s)\n    println(r)\n",
+        kept: "    let r = own(s)\n    println(r)\n",
+    })
+    all.push(Position {
+        name: "field",
+        lent_helpers: "struct Named {\n    name: String,\n}\n",
+        kept_helpers: "struct Named {\n    name: String,\n}\n",
+        lent: "    let w = Named { name: s }\n    println(w.name)\n",
+        kept: "    let mut all: Vec[Named] = []\n    all.push(Named { name: s })\n    println(all[0].name)\n",
+    })
+    all.push(Position {
+        name: "map_value",
+        lent_helpers: "",
+        kept_helpers: "fn fill(mut m: collections::HashMap[String, String], keep v: String) {\n    m.insert(\"k\", v)\n}\n",
+        lent: "    let mut m: collections::HashMap[String, String] = collections::HashMap()\n    m.insert(\"k\", s)\n    println(m[\"k\"] ?? \"none\")\n",
+        kept: "    let mut m: collections::HashMap[String, String] = collections::HashMap()\n    fill(m, s)\n    println(m[\"k\"] ?? \"none\")\n",
+    })
+    all.push(Position {
+        name: "fn_field",
+        kept_helpers: "",
+        lent_helpers: "struct Act {\n    f: fn(String) -> i64,\n}\n\n" + om_measure(),
+        lent: "    let a = Act { f: measure }\n    println(a.f(s))\n",
+        kept: "",
+    })
+    all.push(Position {
+        name: "capture",
+        lent_helpers: "fn apply(f: fn() -> i64) -> i64 {\n    return f()\n}\n",
+        kept_helpers: "fn counter(keep a: String) -> fn() -> i64 {\n    return fn { a.len() }\n}\n",
+        lent: "    println(apply(fn { s.len() }))\n",
+        kept: "    let c = counter(s)\n    println(c())\n",
+    })
+    all.push(Position {
+        name: "lambda_result",
+        lent_helpers: "",
+        kept_helpers: "",
+        lent: "    let f: fn(x: String) -> String from x = fn(x) { x }\n    let r = f(s)\n    println(r)\n",
+        kept: "    let f: fn() -> String = fn { s }\n    let r = f()\n    println(r)\n",
+    })
+    all.push(Position {
+        name: "coalesce",
+        lent_helpers: om_none(),
+        kept_helpers: om_none() + "\n" + om_store(),
+        lent: "    let r = none() ?? s\n    println(r)\n",
+        kept: "    let mut all: Vec[String] = []\n    store(none() ?? s, all)\n    println(all[0])\n",
+    })
+    all.push(Position {
+        name: "index",
+        lent_helpers: om_measure(),
+        kept_helpers: om_store(),
+        lent: "    let xs: Vec[String] = [s]\n    println(measure(xs[0]))\n",
+        kept: "    let xs: Vec[String] = [s]\n    let mut all: Vec[String] = []\n    store(xs[0], all)\n    println(all[0])\n",
+    })
+    all.push(Position {
+        name: "for",
+        lent_helpers: om_measure(),
+        kept_helpers: om_store(),
+        lent: "    let xs: Vec[String] = [s]\n    for x in xs {\n        println(measure(x))\n    }\n",
+        kept: "    let xs: Vec[String] = [s]\n    let mut all: Vec[String] = []\n    for x in xs {\n        store(x, all)\n    }\n    println(all.len())\n",
+    })
+    return all
+}
+
+// The cells with no program: a form the language does not have yet, or an
+// outcome that disagrees with the specification (#1404's findings).
+fn om_open() -> Vec[Open] {
+    let mut open: Vec[Open] = []
+    for form in ["owned", "view"] {
+        for mode in ["kept", "given"] {
+            open.push(Open {
+                cell: f"{form}_{mode}_fn_field",
+                why: "a function type cannot mark a parameter `keep` (`fn(keep a: String)` is a parse error); ADR-views-3 D14 does not decide it",
+            })
+        }
+    }
+    let literals = "a struct or list literal over `s` takes it (NK2105) or refuses a view of it (NK1103, NK1106), though ADR-views-3 D5 says a literal lends while the value stays in the function"
+    for cell in ["owned_lent_field", "owned_lent_index", "owned_lent_for", "owned_given_index", "owned_given_for", "view_lent_field", "view_lent_index", "view_lent_for", "view_kept_index", "view_kept_for", "view_given_index", "view_given_for"] {
+        open.push(Open { cell: cell.clone(), why: literals.clone() })
+    }
+    for cell in ["owned_kept_result", "owned_given_result", "view_kept_result", "view_given_result"] {
+        open.push(Open { cell: cell.clone(), why: "`fn own(keep a: String) -> String { return a }` warns NK1334 and its ledger lends `a` (`-> ref(a) String`), against ADR-views-3 D12; a view handed to it runs" })
+    }
+    for cell in ["owned_given_parameter", "owned_given_map_value", "view_given_parameter", "view_given_map_value"] {
+        open.push(Open { cell: cell.clone(), why: "with `s` used again after it, the text tiers (ADR-282) lower the `keep a: String` parameter to a view and the cell runs, where ADR-views-3 D2 (D5 for a view) refuses it; the `kept` cell of the same position is refused or owns" })
+    }
+    return open
+}
+
+fn om_is_open(open: ref Vec[Open], cell: String) -> bool {
+    for o in open {
+        if o.cell == cell { return true }
+    }
+    return false
+}
+
+fn om_source(form: String) -> String {
+    if form == "owned" {
+        return "    let s = make()\n"
+    }
+    return "    let h = Holder { name: make() }\n    let s = h.name\n"
+}
+
+fn om_program(form: String, mode: String, p: Position) -> String {
+    let body = match mode == "lent" {
+        true => p.lent.clone(),
+        false => p.kept.clone(),
+    }
+    let helpers = match mode == "lent" {
+        true => p.lent_helpers.clone(),
+        false => p.kept_helpers.clone(),
+    }
+    let mut text = f"// Ownership matrix (#1404): a {form} value, {mode}, in the position `{p.name}`.\n"
+    text.push_str("// Generated by scripts/ownership_matrix.nika: change the generator, not this file.\n\n")
+    if body.contains("collections::") {
+        text.push_str("use std::collections\n\n")
+    }
+    if form == "view" {
+        text.push_str("struct Holder {\n    name: String,\n}\n\n")
+    }
+    text.push_str(om_make())
+    if helpers != "" {
+        text.push_str("\n")
+        text.push_str(helpers)
+    }
+    text.push_str("\nfn main() throws {\n")
+    text.push_str(om_source(form))
+    text.push_str(body)
+    if mode != "kept" {
+        text.push_str("    println(s)\n")
+    }
+    text.push_str("}\n")
+    return text
+}
+
+fn main() throws {
+    let mut list = false
+    for a in cli::args() {
+        if a == "--list" { list = true }
+    }
+    let dir = "tests/compiler/tests"
+    let mut written = 0
+    let mut cells = 0
+    let open = om_open()
+    for p in om_positions() {
+        for form in ["owned", "view"] {
+            for mode in ["lent", "kept", "given"] {
+                if mode != "lent" && p.kept == "" { continue }
+                cells += 1
+                let name = f"ownership_matrix_{form}_{mode}_{p.name}"
+                if om_is_open(open, f"{form}_{mode}_{p.name}") { continue }
+                if list {
+                    println(name)
+                    continue
+                }
+                let path = f"{dir}/{name}.nika"
+                let text = om_program(form, mode, p)
+                let old = fs::read_to_string(path.clone(), fs::Root::Anywhere) catch { "" }
+                if old != text {
+                    fs::write(path, fs::Root::Anywhere, text)
+                    written += 1
+                }
+            }
+        }
+    }
+    for o in open {
+        println(f"open: ownership_matrix_{o.cell}: {o.why}")
+    }
+    if !list {
+        println(f"{cells} cells, {written} programs written")
+    }
+}

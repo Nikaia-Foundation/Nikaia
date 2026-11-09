@@ -54,7 +54,7 @@ pub struct FeaturesRefusal {
 }
 
 impl FeaturesRefusal {
-    pub(crate) fn message(&self) -> String { self.message.to_string() }
+    pub fn message(&self) -> String { self.message.to_string() }
 }
 impl std::fmt::Display for FeaturesRefusal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -4,5 +4,5 @@ error[NK1104]: This action builds `ref Bytes`, but its rule returns `Bytes`.
  2 |     rule n -> Bytes = s:bytes(until(";")) -> { s }
    |                                                ^
    |
-   = help: Make it a `Bytes`, or change the declaration to `ref Bytes`.
+   = help: Write `.clone()` to turn this view into a value of its own.
 1 type error

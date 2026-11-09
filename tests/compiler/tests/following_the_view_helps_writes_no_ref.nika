@@ -1,0 +1,51 @@
+// Each help of `a_view_handed_back_is_never_offered_ref`, followed: a
+// program, and no NK1261 (ADR-views-3 D4, D7, D11; #1403).
+
+struct Item { n: i64, s: String }
+
+struct Shelf { items: Vec[Item] }
+
+impl Shelf {
+	fn items_of(self, all: bool) -> Vec[Item] {
+		if all {
+			return self.items.clone()
+		}
+		let none: Vec[Item] = []
+		return none
+	}
+
+	fn every_item(self) -> Vec[Item] {
+		return self.items
+	}
+}
+
+fn items_in(shelves: Vec[Shelf]) -> Vec[Item] {
+	for shelf in shelves {
+		return shelf.items.clone()
+	}
+	let none: Vec[Item] = []
+	return none
+}
+
+fn copied(shelves: Vec[Vec[Item]]) -> Vec[Item] {
+	for items in shelves {
+		return items.clone()
+	}
+	let none: Vec[Item] = []
+	return none
+}
+
+fn total(xs: Array[i64]) -> i64 {
+	return xs.len() as i64
+}
+
+fn label() -> String {
+	let s: String = f"x{1}"
+	return s
+}
+
+fn main() throws {
+	let shelf = Shelf { items: [Item { n: 1, s: "a" }] }
+	let v = [1, 2, 3]
+	println(f"{label()} {shelf.items_of(true).len()} {shelf.every_item().len()} {items_in([Shelf { items: [] }]).len()} {copied([[Item { n: 2, s: "b" }]]).len()} {total(v[0..<2])}")
+}

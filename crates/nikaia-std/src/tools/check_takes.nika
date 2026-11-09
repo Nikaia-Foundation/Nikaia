@@ -208,6 +208,45 @@ impl CheckState {
         return true
     }
 
+    /// **An element of a list given away where it cannot be taken out**
+    /// (#1404, as #1044 for a lent list): `store(xs[0], all)` to a `keep`
+    /// parameter, `all.push(xs[0])`. What the list keeps is lent, and a value
+    /// of its own is wanted: `NK1131` with a `.clone()` help, not a move out
+    /// of a reference the language below refuses. True where it said so.
+    pub fn an_element_given_away(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, to: ref String, span: ref Span) -> bool sync {
+        if to.starts_with("bound to") || to.starts_with("assigned") || to.starts_with("written into") {
+            return false
+        }
+        if self.task_bindings.len() > 0 || !self.takes_away(world, ty.unseen()) {
+            return false
+        }
+        let mut list: String = ""
+        let mut at: String = ""
+        match value {
+            Expr::Index { base, index, .. } => {
+                if !self.facts.list_indices.contains(node_key(base)) {
+                    return false
+                }
+                list = dotted_path(world, base) ?? return false
+                at = match index {
+                    Expr::LitInt { value: n, negative, .. } => if negative { f"-{n}" } else { f"{n}" },
+                    Expr::Variable(name, _) => world.words.resolve(name).clone(),
+                    else => "…",
+                }
+            },
+            else => return false,
+        }
+        let root = self.rooted_at(world, value) ?? return false
+        // A lent list's element is `NK1131`'s already (#738).
+        if root == "self" || self.lent_here(root) {
+            return false
+        }
+        let read = f"{list}[{at}]"
+        let notes: Vec[String] = [f"`{read}` reads an element `{list}` keeps, and what `{list}` keeps is lent, whether `{list}` is owned here or borrowed. Giving it away by value would take it out of `{list}`, and Nikaia never copies behind your back."]
+        self.findings.push(check_refusal("NK1131", span, f"You can't give away `{read}` here: it is an element of `{list}`, which keeps it.", notes, f"Write `{read}.clone()` for a copy."))
+        return true
+    }
+
     /// **An element of a list as a place** (ADR-views-1 D1, #1208): `w[1]`,
     /// `self.w[i]`, where the index is a literal or a name, so that a
     /// give-back written the same way is seen to be one. Where `read`, only

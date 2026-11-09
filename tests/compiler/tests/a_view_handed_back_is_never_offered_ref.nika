@@ -1,0 +1,49 @@
+// The helps of a view handed back name `.clone()`, `keep`, a view handed
+// back with no mark or a parameter without `ref`, never a `ref` that NK1261
+// then calls redundant (ADR-views-3 D4, D7, D11; #1403). Following them is
+// `following_the_view_helps_writes_no_ref`.
+
+struct Item { n: i64, s: String }
+
+struct Shelf { items: Vec[Item] }
+
+impl Shelf {
+	fn items_of(self, all: bool) -> Vec[Item] {
+		if all {
+			return self.items
+		}
+		let none: Vec[Item] = []
+		return none
+	}
+}
+
+fn items_in(shelves: Vec[Shelf]) -> Vec[Item] {
+	for shelf in shelves {
+		return shelf.items
+	}
+	let none: Vec[Item] = []
+	return none
+}
+
+fn copied(shelves: Vec[Vec[Item]]) -> Vec[Item] {
+	for items in shelves {
+		return items
+	}
+	let none: Vec[Item] = []
+	return none
+}
+
+fn total(xs: Vec[i64]) -> i64 {
+	return xs.len() as i64
+}
+
+fn label() -> ref String {
+	let s: String = f"x{1}"
+	return s
+}
+
+fn main() throws {
+	let shelf = Shelf { items: [] }
+	let v = [1, 2, 3]
+	println(f"{label()} {shelf.items_of(true).len()} {items_in([]).len()} {copied([]).len()} {total(v[0..<2])}")
+}

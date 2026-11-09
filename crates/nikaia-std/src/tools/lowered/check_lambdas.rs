@@ -219,6 +219,36 @@ impl CheckState {
         if local.ty != a_string_type() { return; }
         self.findings.push(check_refusal("NK1104", at, format!("This lambda returns `{}`, which it captures, but `{}` returns text of its own.", name, wanted), vec![String::from("A lambda may run more than once, so what it captures stays with it and is not given away.")], Some(format!("Hand back a copy with `{}.clone()`.", name))));
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn a_lambdas_result_is_its_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, code: &Ty, body: &Block, tail: &Ty, span: &Span) {
+        let result: Ty = match code {
+            Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
+                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return } },
+            _ => return,
+        };
+        if !wholly_known(&result) || body.stmts.is_empty() || a_body_never_ends(body) { return; }
+        let wanted = code.text();
+        let last = tail_value_of(body);
+        if last.is_some() {
+            let value = match last { Some(__nikaia_value) => __nikaia_value, None => return };
+            self.a_lambda_value_is_its_types(world, &result, &wanted, value, tail, &check_span_at(world, value, span));
+        }
+        let returned: Vec<CheckLambdaReturn> = self.flow.last_lambda_returns.to_owned();
+        for one in returned.iter() { for value in one.value.iter() { self.a_lambda_value_is_its_types(world, &result, &wanted, value, &one.ty, &one.at); } }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lambda_value_is_its_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, result: &Ty, wanted: &str, value: &Expr, ty: &Ty, at: &Span) {
+        let text_wanted = *result == a_string_type() || lambda_a_text_view(result);
+        let mut found: Ty = ty.clone();
+        if a_text_literal_expr(value) { found = a_string_type(); }
+        if text_wanted && (found == a_string_type() || lambda_a_text_view(&found)) { return; }
+        found = nikaia_std::index::or(number_where_no_number_is(result, value), || found.into());
+        self.expect_type(world, &found, result, at, "returns", &|was, want| { format!("This lambda returns `{}`, but `{}` returns `{}`.", was, wanted, want) });
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

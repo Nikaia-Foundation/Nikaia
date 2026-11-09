@@ -177,7 +177,7 @@ pub fn the_spelling_ref_replaced_note(found: ref String) -> String? {
     if found != "&" {
         return null
     }
-    return "A view is written `ref T`: `ref String` for text, `ref Array[T]` for elements something else keeps, and `ref value` to borrow a value. (`&&` still means *and*.)"
+    return "Nikaia writes no `&`: a parameter is lent and a result is a view wherever a view suffices, so the type is written as it is, `String` or `Array[T]` (ADR-views-3 D4). (`&&` still means *and*.)"
 }
 
 /// `fn(info) sync { … }`: an effect written on a lambda, which nothing in the
