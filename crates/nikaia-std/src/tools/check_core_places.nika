@@ -862,7 +862,7 @@ pub fn check_core_with[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
     for init in fields {
-        check_core_places_a_with_field(state, world, host, name, declared, init, seen, span)
+        check_core_places_a_with_field(state, world, host, expr, name, declared, init, seen, span)
     }
     // **The type, for the emitter** (ADR-296 D17).
     state.facts.with_types.insert(id_of(expr) as i64, name.clone())
@@ -870,7 +870,7 @@ pub fn check_core_with[H: CheckHost](mut state: CheckState, world: ref CheckWorl
 }
 
 /// **One field of a `with`**: the literal's rules for naming it, and its type.
-fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, name: ref String, declared: ref Vec[FieldContract], init: ref FieldInit, mut seen: collections::BTreeSet[String], span: ref Span) sync {
+fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, name: ref String, declared: ref Vec[FieldContract], init: ref FieldInit, mut seen: collections::BTreeSet[String], span: ref Span) sync {
     let field: String = f"{world.words.resolve(init.name)}"
     if seen.contains(field) {
         state.a_field_written_twice(name, field, span)
@@ -918,6 +918,13 @@ fn check_core_places_a_with_field[H: CheckHost](mut state: CheckState, world: re
     let waiting = state.slots_waiting(span)
     state.expect_type(world, given, want, span, "field", fn(was, wanted) { f"`{name}.{field}` holds `{wanted}`, but you're giving it `{was}`." })
     state.findings_moved(span, said, pushed, waiting)
+    // Part I 2.3: a plain value in a field the struct declares nullable, as
+    // in a literal, by the `with`'s id (#1515).
+    let how: FactWrap? = check_widened_slot(state, world, host, given, want, init.value, span)
+    if how != null {
+        let wrap: FactWrap = how ?? return
+        state.facts.nullable_fields.insert((id_of(expr) as i64, field.clone()), wrap)
+    }
     // **What a `ref` field takes is lent to it** (D37), as a call's argument is.
     if init.value != null && check_core_places_lent_field(want, given) {
         let v: ref Expr = init.value ?? return

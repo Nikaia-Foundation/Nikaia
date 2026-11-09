@@ -833,17 +833,22 @@ impl EmitState {
                 continue
             }
             let either = self.either_field(world, owner, field.name) && !emit_place_null(field.value) && !emit_place_mixed(self.facts.mixed_choices, field.value)
+            // Part I 2.3: a plain value in a nullable field, as in a literal.
+            let (before, after) = self.emit_place_around(node, emit_text(world, field.name))
             if field.value != null {
                 let value = field.value ?? return
+                out.push(": ")
+                out.push(before)
                 if either {
-                    out.push(": ")
                     self.emit_place_either(world, walk, out, host, value, depth, flow, scope)
                 } else {
-                    out.push(": ")
                     self.emit_expr(world, walk, out, host, value, depth, flow, scope)
                 }
+                out.push(after)
             } else if either {
-                out.push(f": nikaia_std::either_text::either({written})")
+                out.push(f": {before}nikaia_std::either_text::either({written}){after}")
+            } else if before != "" || after != "" {
+                out.push(f": {before}{written}{after}")
             }
             out.push(", ")
         }

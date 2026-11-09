@@ -552,16 +552,14 @@ impl EmitState {
                 continue;
             }
             let either = self.either_field(world, &owner, field.name) && !emit_place_null((field.value).as_ref()) && !emit_place_mixed(&self.facts.mixed_choices, (field.value).as_ref());
+            let (before, after) = self.emit_place_around(node, &emit_text(world, field.name))?;
             if field.value.is_some() {
                 let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                if either {
-                    out.push(": ");
-                    self.emit_place_either(world, walk, out, host, value, depth, flow, scope)?;
-                } else {
-                    out.push(": ");
-                    self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-                }
-            } else if either { out.push(&format!(": nikaia_std::either_text::either({})", written)); }
+                out.push(": ");
+                out.push(&before);
+                if either { self.emit_place_either(world, walk, out, host, value, depth, flow, scope)?; } else { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
+                out.push(&after);
+            } else if either { out.push(&format!(": {}nikaia_std::either_text::either({}){}", before, written, after)); } else if before != "" || after != "" { out.push(&format!(": {}{}{}", before, written, after)); }
             out.push(", ");
         }
         if whole {
