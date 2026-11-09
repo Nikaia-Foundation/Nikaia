@@ -15,7 +15,7 @@ allocator-api2 = { version = "0.2", default-features = false, features = ["alloc
 # winnow-grammar 0.2). Optional, so the checks of this crate need none of it;
 # the same pin as Nikaia's workspace, no default features (the seed source
 # stays the choice of whoever builds `nikaia-std`).
-winnow-grammar = { git = "https://github.com/keywan-ghadami/winnow-grammar", rev = "b8626fe5", version = "0.2.0", default-features = false, optional = true }
+winnow-grammar = { git = "https://github.com/keywan-ghadami/winnow-grammar", rev = "2eb219c", version = "0.2.0", default-features = false, optional = true }
 
 # `tether`: a block's text is a buffer views are cut from (`tether::Viewed`),
 # so a keep holds it as it holds a `String` (#490). Optional, as `collect`.
