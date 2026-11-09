@@ -8,6 +8,8 @@
 //! [ADR-269]: ../../../docs/specification/adr/adr-269.md
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::bounds::{BoundsChecks, OverflowChecks};
@@ -35,9 +37,9 @@ fn report(source: &str) -> String {
 fn site(out: &str, line: usize, text: &str) -> String {
     let at = format!("{line:>6}  {text} ");
     out.lines()
-        .find(|l| l.starts_with(&at))
+        .find(|l| l.starts_with(&*at))
         .unwrap_or_else(|| panic!("no line {line} for `{text}`:\n{out}"))
-        .to_string()
+        .to_text()
 }
 
 fn proved(out: &str, line: usize, text: &str) {
@@ -320,8 +322,8 @@ fn asserted(purpose: &str, source: &str) -> (String, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     (
-        String::from_utf8_lossy(&lowered.stdout).to_string(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
+        String::from_utf8_lossy(&lowered.stdout).to_text(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
     )
 }
 

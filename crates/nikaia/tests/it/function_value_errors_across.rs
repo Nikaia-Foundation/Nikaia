@@ -5,6 +5,8 @@
 //! `catch` over the call takes the passed function's errors by name.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 

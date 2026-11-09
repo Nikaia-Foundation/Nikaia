@@ -213,6 +213,7 @@ impl EmitState {
             if ending {
                 out.push(" };")
             }
+            self.emit_view_list_drops(out, stmt.span.start as i64)
             out.push("\n")
             i += 1
         }

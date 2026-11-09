@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 mod accepted_compiles;
 mod accepted_sweep;
 mod anonymous_constructors;

@@ -5,6 +5,8 @@
 //! take it as a parameter), so it is named: the place of the second crossing
 //! and the rule it broke.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 /// The value out of an emptied slot, or a panic naming the second crossing.
 #[track_caller]
 pub(crate) fn out_of<T>(slot: Option<T>, what: &str) -> T {

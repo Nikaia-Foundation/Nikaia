@@ -54,11 +54,11 @@ impl TextNormalized for str {
 pub trait TextQuoted {
     /// The text between double quotes, with `"`, `\`, newline, tab, carriage
     /// return and the other control characters escaped, as new text.
-    fn quoted(&self) -> String;
+    fn quoted(&self) -> crate::block::Text;
 }
 
 impl TextQuoted for str {
-    fn quoted(&self) -> String {
-        format!("{self:?}")
+    fn quoted(&self) -> crate::block::Text {
+        crate::block::format(crate::block::Place::Outside, format_args!("{self:?}"))
     }
 }

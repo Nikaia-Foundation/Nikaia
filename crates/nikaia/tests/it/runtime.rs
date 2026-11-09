@@ -13,6 +13,8 @@
 //! pool starts is `user_parallelism`'s answer rather than the operator's.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -48,7 +50,7 @@ fn lower(dir: &Path, source: &str, flags: &[&str]) -> String {
         "lowering failed:\n{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read_to_string(&output).expect("the emitted Rust")
+    String::from(std::fs::read_to_string(&output).expect("the emitted Rust"))
 }
 
 /// Lower, compile, and hand back the binary.
@@ -93,8 +95,8 @@ fn run(binary: &Path, at: &Path, config: Option<&str>) -> (String, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     (
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
     )
 }
 
@@ -369,8 +371,8 @@ fn the_runtime_configuration_file_reaches_the_runtime() {
         }
         let out = command.output().expect("run");
         (
-            String::from_utf8_lossy(&out.stdout).into_owned(),
-            String::from_utf8_lossy(&out.stderr).into_owned(),
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
         )
     };
 
@@ -462,7 +464,8 @@ fn no_nika_file_says_async_or_names_a_mechanism() {
                     None => line,
                 })
                 .collect::<Vec<_>>()
-                .join("\n");
+                .join("\n")
+                .into();
             let code = outside_string_literals(&without_comments);
             checked += 1;
             for forbidden in [

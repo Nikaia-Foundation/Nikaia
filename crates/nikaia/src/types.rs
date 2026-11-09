@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/types.rs
 //
 // Part I 2.2 and Part III C.1: **a type nothing declares is refused here rather

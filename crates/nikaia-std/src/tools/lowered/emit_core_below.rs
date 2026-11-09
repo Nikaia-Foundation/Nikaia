@@ -138,7 +138,7 @@ pub fn emit_held_in(expr: &Expr, lazy: bool, called: bool) -> (Vec<&Expr>, EmitH
     (found, EmitHeldFound { safe: flags, called: ran })
 }
 
-pub(crate) fn emit_text(world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String { world.words.resolve(name).to_string() }
+pub(crate) fn emit_text(world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String { nikaia_std::block::Text::from(world.words.resolve(name).to_string()) }
 
 pub(crate) fn emit_declared_empty(world: &EmitWorld<'_, '_, '_, '_>, declared: &Stmt) -> Option<String> {
     match declared {
@@ -303,7 +303,7 @@ impl EmitState {
         if joined.is_some() { return self.named_error_of(world, &match joined { Some(__nikaia_value) => __nikaia_value, None => return false }) != 0; }
         let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let parts: Vec<&str> = name.splitn(2, "::").collect::<Vec<_>>();
-        let a_grammar = self.grammars.contains_key(*nikaia_std::index::get(&parts, 0));
+        let a_grammar = self.grammars.contains_key(*nikaia_std::index::get(&parts, 0)); ::core::mem::drop(parts);
         if a_grammar { return false; }
         self.named_error(world, &name) != 0
     }
@@ -311,12 +311,12 @@ impl EmitState {
         let joined = self.emit_joined_set(world, expr);
         if joined.is_some() {
             let sum = match self.sums.get(&match joined { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(sum.to_string());
+            return Some(nikaia_std::block::Text::from(sum.to_string()));
         }
         let name = match call_callee_name(world.words, world.aliases, expr) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let contract = match self.own_contracts.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let sum = match self.sums.get(&contract.fails_with) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(sum.to_string())
+        Some(nikaia_std::block::Text::from(sum.to_string()))
     }
     pub fn branch_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, stmt: &Stmt, at: i64) -> bool {
         match stmt {

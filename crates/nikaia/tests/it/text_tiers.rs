@@ -14,6 +14,8 @@
 
 use crate::common;
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::emit::{Build, emit_program};
@@ -59,7 +61,7 @@ fn ran(purpose: &str, source: &str, how: Build) -> String {
         "{purpose} failed:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let printed = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let printed = String::from_utf8_lossy(&out.stdout).trim().to_text();
     std::fs::remove_dir_all(&dir).ok();
     printed
 }
@@ -705,7 +707,7 @@ fn a_value_handed_over_inside_a_hole_is_handed_over_there() {
         "{rust}"
     );
     assert!(
-        rust.contains("vec![text.trim().into_either(), \"x\".to_string().into_either()]"),
+        rust.contains("vec![text.trim().into_either(), \"x\".to_text().into_either()]"),
         "{rust}"
     );
 }
@@ -792,14 +794,14 @@ fn the_http_example_without_ref_on_its_results_lowers_the_same() {
     let mut with = source.clone();
     for accessor in ["method_text", "path", "target", "body"] {
         let written = format!("fn {accessor}(self) -> String");
-        assert!(with.contains(&written), "{written}");
-        with = with.replace(&written, &format!("fn {accessor}(ref self) -> ref String"));
+        assert!(with.contains(&*written), "{written}");
+        with = with.replace(&*written, &format!("fn {accessor}(ref self) -> ref String"));
     }
     for accessor in ["query", "header"] {
         let written = format!("fn {accessor}(self, name: String) -> String?");
-        assert!(with.contains(&written), "{written}");
+        assert!(with.contains(&*written), "{written}");
         with = with.replace(
-            &written,
+            &*written,
             &format!("fn {accessor}(ref self, name: ref String) -> ref String?"),
         );
     }
@@ -1552,7 +1554,7 @@ fn main() throws {
     println(w)
 }
 "##;
-    for source in [probe.to_string(), probe.replace("pub fn", "fn")] {
+    for source in [probe.to_text(), String::from(probe.replace("pub fn", "fn"))] {
         let found = findings(&source);
         assert!(
             found.iter().any(|f| f.code == "NK1102"

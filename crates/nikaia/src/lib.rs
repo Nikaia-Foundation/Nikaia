@@ -11,6 +11,9 @@
 // a cycle: release and `fast` build at 256 too.
 #![recursion_limit = "512"]
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
+
 pub mod assets;
 pub mod ast;
 pub(crate) mod baton;

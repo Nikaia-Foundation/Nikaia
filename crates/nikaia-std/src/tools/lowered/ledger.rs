@@ -19,7 +19,7 @@ pub enum Refused {
 impl Refused {
     pub(crate) fn message(&self) -> String {
         match self {
-            Refused::Because(why) => why.to_string(),
+            Refused::Because(why) => nikaia_std::block::Text::from(why.to_string()),
         }
     }
 }
@@ -32,6 +32,8 @@ impl std::error::Error for Refused {}
 
 grammar! {
     grammar LedgerText {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
 
         rule WS =
             ""
@@ -120,6 +122,8 @@ grammar! {
 
 grammar! {
     grammar LedgerValue {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
 
         pub rule list -> Vec<&'a str> =
             "[" items:__nikaia_list<&'a str>(item = QUOTED, sep = ",") TRAILING "]" eof
@@ -167,8 +171,8 @@ pub fn unquote(value: &str) -> Result<String, nikaia_std::error::Thrown<Refused>
 
 pub(crate) fn unquote_at(value: &str, at: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
     if value.len() < 2 || !value.starts_with("\"") || !value.ends_with("\"") { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a quoted string, found `{}`", at, value)), &"unquote_at")); }
-    let opened: String = nikaia_std::index::or(value.strip_prefix("\""), || "").to_string();
-    Ok(unescaped(&nikaia_std::index::or(opened.strip_suffix("\""), || "").to_string()))
+    let opened: String = nikaia_std::block::Text::from(nikaia_std::index::or(value.strip_prefix("\""), || "").to_string());
+    Ok(unescaped(&nikaia_std::block::Text::from(nikaia_std::index::or(opened.strip_suffix("\""), || "").to_string())))
 }
 
 pub fn list(value: &str) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
@@ -190,7 +194,7 @@ pub(crate) fn list_at(value: &str, at: &str) -> Result<Vec<String>, nikaia_std::
 }
 
 pub(crate) fn unescaped(inside: &str) -> String {
-    if !inside.contains("\\") { return inside.to_string(); }
+    if !inside.contains("\\") { return nikaia_std::block::Text::from(inside.to_string()); }
     let mut out: String = String::from("");
     let mut escaped = false;
     for c in inside.chars() {
@@ -232,14 +236,14 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
                 let kind = *kind; let name = *name;
                 if section == Section::Function {
                     ledger_borrows_in_order(&mut function);
-                    ledger.functions.insert(current.to_string(), function);
+                    ledger.functions.insert(nikaia_std::block::Text::from(current.to_string()), function);
                     function = FnContract::empty();
                 }
                 if section == Section::Kind {
-                    ledger.types.insert(current.to_string(), a_type);
+                    ledger.types.insert(nikaia_std::block::Text::from(current.to_string()), a_type);
                     a_type = TypeContract::empty();
                 }
-                current = name.to_string();
+                current = nikaia_std::block::Text::from(name.to_string());
                 if kind == "fn" {
                     if ledger.functions.contains_key(&current) {
                         function = nikaia_std::index::or(match *nikaia_std::index::get(&ledger.functions, &current) {
@@ -247,7 +251,7 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
                             None => None,
                         }, || FnContract::empty());
                     }
-                    functions.push(current.to_string());
+                    functions.push(nikaia_std::block::Text::from(current.to_string()));
                     section = Section::Function;
                 } else if kind == "type" {
                     if ledger.types.contains_key(&current) {
@@ -258,8 +262,8 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
                     }
                     section = Section::Kind;
                 } else if kind == "trait" {
-                    if !ledger.traits.contains_key(&current) { ledger.traits.insert(current.to_string(), collections::BTreeSet::new()); }
-                    traits.push(current.to_string());
+                    if !ledger.traits.contains_key(&current) { ledger.traits.insert(nikaia_std::block::Text::from(current.to_string()), collections::BTreeSet::new()); }
+                    traits.push(nikaia_std::block::Text::from(current.to_string()));
                     section = Section::Nothing;
                 } else {
                     answers.push(implemented(&current, n)?);
@@ -269,11 +273,11 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
             LedgerLine::Sources => {
                 if section == Section::Function {
                     ledger_borrows_in_order(&mut function);
-                    ledger.functions.insert(current.to_string(), function);
+                    ledger.functions.insert(nikaia_std::block::Text::from(current.to_string()), function);
                     function = FnContract::empty();
                 }
                 if section == Section::Kind {
-                    ledger.types.insert(current.to_string(), a_type);
+                    ledger.types.insert(nikaia_std::block::Text::from(current.to_string()), a_type);
                     a_type = TypeContract::empty();
                 }
                 section = Section::Sources;
@@ -292,9 +296,9 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
     }
     if section == Section::Function {
         ledger_borrows_in_order(&mut function);
-        ledger.functions.insert(current.to_string(), function);
+        ledger.functions.insert(nikaia_std::block::Text::from(current.to_string()), function);
     }
-    if section == Section::Kind { ledger.types.insert(current.to_string(), a_type); }
+    if section == Section::Kind { ledger.types.insert(nikaia_std::block::Text::from(current.to_string()), a_type); }
     for name in traits.iter() {
         let prefix = format!("{}::", name);
         let mut methods: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -302,18 +306,18 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
             let method = after_prefix(entry, &prefix);
             if method.is_some() {
                 let rest = nikaia_std::index::or(method, || "".into());
-                if !rest.contains("::") { methods.insert(rest.to_string()); }
+                if !rest.contains("::") { methods.insert(nikaia_std::block::Text::from(rest.to_string())); }
             }
         }
-        ledger.traits.insert(name.to_string(), methods);
+        ledger.traits.insert(nikaia_std::block::Text::from(name.to_string()), methods);
     }
     let mut done: Vec<String> = vec![];
     for (trait_name, _) in answers.iter() {
         if !nikaia_std::list::contains(&done, &trait_name) {
             let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for (other, answering) in answers.iter() { if other == trait_name { types.insert(answering.to_string()); } }
-            ledger.implementations.insert(trait_name.to_string(), types);
-            done.push(trait_name.to_string());
+            for (other, answering) in answers.iter() { if other == trait_name { types.insert(nikaia_std::block::Text::from(answering.to_string())); } }
+            ledger.implementations.insert(nikaia_std::block::Text::from(trait_name.to_string()), types);
+            done.push(nikaia_std::block::Text::from(trait_name.to_string()));
         }
     }
     Ok(ledger)
@@ -341,12 +345,12 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
         let written = unquoted(value, n)?;
         if written.contains(':') {
             entry.borrows = path_borrows_of(&written, n)?;
-            entry.returns = written.to_string();
+            entry.returns = nikaia_std::block::Text::from(written.to_string());
         } else { entry.borrows = borrows_of(&written, n)?; }
     } else if key == "signature" {
         let spelled = spelled_signature(&unquoted(value, n)?, name)?;
         if spelled.mutates { entry.mutates = true; }
-        if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.to_owned(); }
+        if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.copy_owned(); }
         entry.signature = Some(spelled.signature);
     } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
         let said = value.trim();
@@ -400,9 +404,9 @@ pub(crate) fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64)
             let c: Vec<scalar> = nikaia_std::list::chars(one.chars());
             let colon = find(&c, 0, ':');
             if colon < 0 { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: a variant's attribute is `Variant: Value {{ … }}`, not `{}`", n, one)), &"type_key")); }
-            let named = slice(&c, 0, colon).trim().to_string();
-            let held = slice(&c, colon + 1, c.len() as i64).trim().to_string();
-            for variant in entry.variants.iter_mut() { if (*variant).name == named { (*variant).attributes.push(held.to_string()); } }
+            let named = nikaia_std::block::Text::from(slice(&c, 0, colon).trim().to_string());
+            let held = nikaia_std::block::Text::from(slice(&c, colon + 1, c.len() as i64).trim().to_string());
+            for variant in entry.variants.iter_mut() { if (*variant).name == named { (*variant).attributes.push(nikaia_std::block::Text::from(held.to_string())); } }
         }
     } else if key == "field_attributes" {
         for one in entries(value, n)? {
@@ -411,8 +415,8 @@ pub(crate) fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64)
             if colon < 0 { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: a field's attribute is `field: Value {{ … }}`, not `{}`", n, one)), &"type_key")); }
             let field = slice(&c, 0, colon);
             let held = slice(&c, colon + 1, c.len() as i64);
-            let named = field.trim().to_string();
-            for known in entry.fields.iter_mut() { if (*known).name == named { (*known).attributes.push(held.trim().to_string()); } }
+            let named = nikaia_std::block::Text::from(field.trim().to_string());
+            for known in entry.fields.iter_mut() { if (*known).name == named { (*known).attributes.push(nikaia_std::block::Text::from(held.trim().to_string())); } }
         }
     } else { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: unknown key `{}` on a type", n, key)), &"type_key")); }
     Ok(())
@@ -434,7 +438,7 @@ pub(crate) fn sync_of(value: &str, n: i64) -> Result<Sync, nikaia_std::error::Th
     if value.ends_with(")\"") && (value.starts_with("\"sync(") || value.starts_with("\"from(")) && c.len() >= 8 {
         let inside = slice(&c, 6, c.len() as i64 - 2);
         let name = inside.trim();
-        if !name.is_empty() { return Ok(Sync::From(name.to_string())); }
+        if !name.is_empty() { return Ok(Sync::From(nikaia_std::block::Text::from(name.to_string()))); }
     }
     return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: `sync` is `true` (the source says so), `\"inferred\"` (the body implies it) or `\"sync(f)\"` (its lambda decides), not `{}`", n, value)), &"sync_of"))
 }
@@ -454,7 +458,7 @@ pub(crate) fn ledger_borrows_in_order(entry: &mut FnContract) {
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut ordered: Vec<String> = vec![];
-    for param in signature.params.iter() { if nikaia_std::list::contains(&entry.borrows, &param.0) { ordered.push(param.0.to_string()); } }
+    for param in signature.params.iter() { if nikaia_std::list::contains(&entry.borrows, &param.0) { ordered.push(nikaia_std::block::Text::from(param.0.to_string())); } }
     if (ordered.len() as i64) == entry.borrows.len() as i64 { entry.borrows = ordered; }
 }
 
@@ -463,9 +467,9 @@ pub(crate) fn path_borrows_of(value: &str, n: i64) -> Result<Vec<String>, nikaia
     for part in value.split("),") {
         let pieces: Vec<&str> = part.split(':').collect::<Vec<_>>();
         if pieces.len() != 2 { return Err(nikaia_std::error::throwing(Refused::Because(format!("line {}: expected `path: ref(…)`, found `{}`", n, value)), &"path_borrows_of")); }
-        let mut written = (*nikaia_std::index::get(&pieces, 1)).trim().to_string();
+        let mut written = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 1)).trim().to_string());
         if !written.ends_with(')') { written = format!("{})", written); }
-        for name in borrows_of(&written, n)? { if !nikaia_std::list::contains(&names, &name) { names.push(name.to_string()); } }
+        for name in borrows_of(&written, n)? { if !nikaia_std::list::contains(&names, &name) { names.push(nikaia_std::block::Text::from(name.to_string())); } }
     }
     Ok(names)
 }
@@ -479,7 +483,7 @@ pub(crate) fn borrows_of(value: &str, n: i64) -> Result<Vec<String>, nikaia_std:
     let mut names: Vec<String> = vec![];
     for part in inside.split('|') {
         let name = part.trim();
-        if !name.is_empty() { names.push(name.to_string()); }
+        if !name.is_empty() { names.push(nikaia_std::block::Text::from(name.to_string())); }
     }
     Ok(names)
 }
@@ -504,14 +508,14 @@ pub fn touch_of(written: &str) -> Result<Touch, nikaia_std::error::Thrown<Refuse
     let resource = before.trim();
     let r: Vec<scalar> = nikaia_std::list::chars(resource.chars());
     let open = find(&r, 0, '(');
-    let mut kind: String = resource.to_string();
+    let mut kind: String = nikaia_std::block::Text::from(resource.to_string());
     let mut parameter: Option<String> = None;
     if open >= 0 {
         if !resource.ends_with(')') { return Err(nikaia_std::error::throwing(Refused::Because(format!("a resource is `kind(parameter)`, and `{}` has no `)`", resource)), &"touch_of")); }
         let named = __keep_frame.put(slice(&r, 0, open));
-        kind = named.trim().to_string();
+        kind = nikaia_std::block::Text::from(named.trim().to_string());
         let inside = __keep_frame.put(slice(&r, open + 1, r.len() as i64 - 1));
-        parameter = Some(inside.trim().to_string());
+        parameter = Some(nikaia_std::block::Text::from(inside.trim().to_string()));
     }
     if kind.is_empty() { return Err(nikaia_std::error::throwing(Refused::Because(format!("a touch needs a resource kind, found `{}`", whole)), &"touch_of")); }
     let mut named: Option<String> = None;
@@ -534,7 +538,7 @@ pub fn held_of(written: &str) -> Option<Held> {
     let state = State::parse(&slice(&c, colon + 1, c.len() as i64));
     if state.is_none() { return None; }
     let position = slice(&c, 0, colon);
-    Some(Held { position: position.trim().to_string(), state: nikaia_std::index::or(state, || State::Borrowed) })
+    Some(Held { position: nikaia_std::block::Text::from(position.trim().to_string()), state: nikaia_std::index::or(state, || State::Borrowed) })
 }
 
 pub fn class_of(written: &str) -> Option<Class> {
@@ -545,7 +549,7 @@ pub fn class_of(written: &str) -> Option<Class> {
     let mut members: Vec<String> = vec![];
     for part in named.split('|') {
         let member = part.trim();
-        if !member.is_empty() { members.push(member.to_string()); }
+        if !member.is_empty() { members.push(nikaia_std::block::Text::from(member.to_string())); }
     }
     if members.is_empty() { return None; }
     let count = Count::parse(&slice(&c, colon + 1, c.len() as i64));
@@ -568,7 +572,7 @@ pub fn variant_of(written: &str) -> VariantContract {
             holds.push(FieldContract { name: format!("{}", at), ty: parse(&part), public: true, default: String::from(""), attributes: vec![] });
             at += 1;
         }
-        return VariantContract { name: named.trim().to_string(), holds, positional: true, attributes: vec![] };
+        return VariantContract { name: nikaia_std::block::Text::from(named.trim().to_string()), holds, positional: true, attributes: vec![] };
     }
     let brace = find(&c, 0, '{');
     if brace >= 0 {
@@ -581,34 +585,34 @@ pub fn variant_of(written: &str) -> VariantContract {
             let colon = find(&p, 0, ':');
             if colon >= 0 {
                 let field = __keep_frame.put(slice(&p, 0, colon));
-                holds.push(FieldContract { name: field.trim().to_string(), ty: parse(&slice(&p, colon + 1, p.len() as i64)), public: true, default: String::from(""), attributes: vec![] });
+                holds.push(FieldContract { name: nikaia_std::block::Text::from(field.trim().to_string()), ty: parse(&slice(&p, colon + 1, p.len() as i64)), public: true, default: String::from(""), attributes: vec![] });
             }
         }
-        return VariantContract { name: named.trim().to_string(), holds, positional: false, attributes: vec![] };
+        return VariantContract { name: nikaia_std::block::Text::from(named.trim().to_string()), holds, positional: false, attributes: vec![] };
     }
     let nothing: Vec<FieldContract> = vec![];
-    VariantContract { name: whole.to_string(), holds: nothing, positional: false, attributes: vec![] }
+    VariantContract { name: nikaia_std::block::Text::from(whole.to_string()), holds: nothing, positional: false, attributes: vec![] }
 }
 
 pub(crate) fn field_of(written: &str) -> FieldContract {
     let __keep_frame = nikaia_std::tether::Keep::new();
-    let mut field: String = written.trim().to_string();
+    let mut field: String = nikaia_std::block::Text::from(written.trim().to_string());
     let mut public = false;
     if field.starts_with("pub ") {
         public = true;
         let rest = __keep_frame.put(from_char(&field, 4));
-        field = rest.trim().to_string();
+        field = nikaia_std::block::Text::from(rest.trim().to_string());
     }
     let c: Vec<scalar> = nikaia_std::list::chars(field.chars());
     let colon = find(&c, 0, ':');
-    if colon < 0 { return FieldContract { name: field.to_string(), ty: Ty::Unknown, public, default: String::from(""), attributes: vec![] }; }
+    if colon < 0 { return FieldContract { name: nikaia_std::block::Text::from(field.to_string()), ty: Ty::Unknown, public, default: String::from(""), attributes: vec![] }; }
     let name = slice(&c, 0, colon);
     let equals = find(&c, colon + 1, '=');
     if equals >= 0 {
         let default = slice(&c, equals + 1, c.len() as i64);
-        return FieldContract { name: name.trim().to_string(), ty: parse(&slice(&c, colon + 1, equals)), public, default: default.trim().to_string(), attributes: vec![] };
+        return FieldContract { name: nikaia_std::block::Text::from(name.trim().to_string()), ty: parse(&slice(&c, colon + 1, equals)), public, default: nikaia_std::block::Text::from(default.trim().to_string()), attributes: vec![] };
     }
-    FieldContract { name: name.trim().to_string(), ty: parse(&slice(&c, colon + 1, c.len() as i64)), public, default: String::from(""), attributes: vec![] }
+    FieldContract { name: nikaia_std::block::Text::from(name.trim().to_string()), ty: parse(&slice(&c, colon + 1, c.len() as i64)), public, default: String::from(""), attributes: vec![] }
 }
 
 pub fn signature_of(written: &str) -> Result<Signature, nikaia_std::error::Thrown<Refused>> {
@@ -653,6 +657,8 @@ pub(crate) struct Signed<'a, 'a1, 'a2, 'a3> {
 
 grammar! {
     grammar SignatureText {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
 
         pub rule signature -> Signed<'a, 'a, 'a, 'a> =
             d:bracket "(" ps:__nikaia_list<Piece<'a>>(item = part, sep = ",") TRAILING ss:settings ")" r:result? eof
@@ -880,12 +886,12 @@ pub fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_st
     let mut variables: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut bounds: Vec<(String, Vec<String>)> = vec![];
     for declared in parts.declared.iter() {
-        variables.insert(declared.name.to_string());
+        variables.insert(nikaia_std::block::Text::from(declared.name.to_string()));
         if !declared.traits.is_empty() || key.is_empty() {
             let mut traits: Vec<String> = vec![];
             for one in declared.traits.iter() {
                 let one = *one;
-                traits.push(one.to_string());
+                traits.push(nikaia_std::block::Text::from(one.to_string()));
             }
             bounds.push(a_bound(declared.name, traits));
         }
@@ -900,7 +906,7 @@ pub fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_st
             Piece::Owner { view, mutates } => {
                 let mutates = *mutates; let view = *view;
                 let owner = nikaia_std::index::or(owner_of(key), || "?".into());
-                let written_type = if view { format!("ref {}", owner) } else { owner.to_string() };
+                let written_type = if view { format!("ref {}", owner) } else { nikaia_std::block::Text::from(owner.to_string()) };
                 params.push(a_param("self", typed(&written_type, &variables)));
                 if mutates { receiver_changes = true; }
                 if first { order.push(a_receiver()); }
@@ -914,14 +920,14 @@ pub fn spelled_signature(written: &str, key: &str) -> Result<Spelling, nikaia_st
             Piece::Named { name, ty, mutable } => {
                 let mutable = *mutable; let name = *name; let ty = *ty;
                 params.push(a_param(name, typed(ty, &variables)));
-                if mutable { changed.push(name.to_string()); }
-                order.push(name.to_string());
+                if mutable { changed.push(nikaia_std::block::Text::from(name.to_string())); }
+                order.push(nikaia_std::block::Text::from(name.to_string()));
             },
         }
         first = false;
     }
     let mut config: Vec<ConfigContract> = vec![];
-    for setting in parts.settings.iter() { config.push(ConfigContract { name: setting.name.to_string(), ty: typed(setting.ty, &variables), default: setting.default.to_string() }); }
+    for setting in parts.settings.iter() { config.push(ConfigContract { name: nikaia_std::block::Text::from(setting.name.to_string()), ty: typed(setting.ty, &variables), default: nikaia_std::block::Text::from(setting.default.to_string()) }); }
     let mut result: Option<Ty> = None;
     let mut borrows: Vec<String> = vec![];
     let result_text = nikaia_std::index::or(parts.result, || "");
@@ -948,16 +954,16 @@ pub(crate) fn pointed_into(result: &str, order: &[String]) -> Vec<String> {
     for group in groups.iter() {
         for name in group.iter() {
             let name = *name;
-            if !nikaia_std::list::contains(&named, &name) { named.push(name.to_string()); }
+            if !nikaia_std::list::contains(&named, &name) { named.push(nikaia_std::block::Text::from(name.to_string())); }
         }
     }
     let mut borrows: Vec<String> = vec![];
-    for name in order.iter() { if nikaia_std::list::contains(&named, &name) { borrows.push(name.to_string()); } }
-    for name in named.iter() { if !nikaia_std::list::contains(&borrows, &name) { borrows.push(name.to_string()); } }
+    for name in order.iter() { if nikaia_std::list::contains(&named, &name) { borrows.push(nikaia_std::block::Text::from(name.to_string())); } }
+    for name in named.iter() { if !nikaia_std::list::contains(&borrows, &name) { borrows.push(nikaia_std::block::Text::from(name.to_string())); } }
     borrows
 }
 
-pub(crate) fn a_bound(name: &str, traits: Vec<String>) -> (String, Vec<String>) { (name.to_string(), traits) }
+pub(crate) fn a_bound(name: &str, traits: Vec<String>) -> (String, Vec<String>) { (nikaia_std::block::Text::from(name.to_string()), traits) }
 
 pub(crate) fn a_receiver() -> String {
     let receiver: String = String::from("self");
@@ -1006,7 +1012,7 @@ pub(crate) fn from_char(written: &str, front: i64) -> String {
 }
 
 pub(crate) fn after_prefix(written: &str, prefix: &str) -> Option<String> {
-    if !written.starts_with(prefix) { return None; }
+    if !written.starts_with(AsRef::<str>::as_ref(prefix)) { return None; }
     let p: Vec<scalar> = nikaia_std::list::chars(prefix.chars());
     Some(from_char(written, p.len() as i64))
 }
@@ -1018,9 +1024,9 @@ pub(crate) fn without_last(written: &str, last: scalar) -> String {
     slice(&c, 0, end)
 }
 
-pub(crate) fn a_param(name: &str, ty: Ty) -> (String, Ty) { (name.to_string(), ty) }
+pub(crate) fn a_param(name: &str, ty: Ty) -> (String, Ty) { (nikaia_std::block::Text::from(name.to_string()), ty) }
 
-pub(crate) fn trimmed(written: &str) -> String { written.trim().to_string() }
+pub(crate) fn trimmed(written: &str) -> String { nikaia_std::block::Text::from(written.trim().to_string()) }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spelled {
@@ -1061,7 +1067,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
         if k == 0 && !is_named(nikaia_std::index::get(&parameters, 0)) {
             written_parameters.push(receiver(nikaia_std::index::get(&parameters, 0), key, mutates));
             mutates_said = mutates;
-        } else { written_parameters.push((*nikaia_std::index::get(&parameters, (k) as usize)).to_string()); }
+        } else { written_parameters.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parameters, (k) as usize)).to_string())); }
     }
     let mut borrows_said = false;
     if !borrows.is_empty() && !word_starts(&result, "ref").is_empty() {
@@ -1078,8 +1084,8 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
     }
     for variable in variables(&format!("{}{}", body, result)) {
         if !nikaia_std::list::contains(&seen, &variable) {
-            seen.push(variable.to_string());
-            declared.push(variable.to_string());
+            seen.push(nikaia_std::block::Text::from(variable.to_string()));
+            declared.push(nikaia_std::block::Text::from(variable.to_string()));
         }
     }
     let mut before: String = String::from("");
@@ -1090,7 +1096,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
     Spelled { text: without_dollars(&format!("{}({}){}", before, body, result)), borrows_said, mutates_said }
 }
 
-pub(crate) fn as_written(text: &str) -> Spelled { Spelled { text: text.to_string(), borrows_said: false, mutates_said: false } }
+pub(crate) fn as_written(text: &str) -> Spelled { Spelled { text: nikaia_std::block::Text::from(text.to_string()), borrows_said: false, mutates_said: false } }
 
 pub(crate) fn receiver(written: &str, key: &str, mutates: bool) -> String {
     let has_owner = owner_of(key).is_some();
@@ -1189,7 +1195,7 @@ pub(crate) fn without_dollars(text: &str) -> String {
     out
 }
 
-pub(crate) fn trimmed_start(written: &str) -> String { written.trim_start().to_string() }
+pub(crate) fn trimmed_start(written: &str) -> String { nikaia_std::block::Text::from(written.trim_start().to_string()) }
 
 pub(crate) fn is_word_char(c: scalar) -> bool { is_lower(c) || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' }
 

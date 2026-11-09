@@ -11,6 +11,8 @@
 //! and an index; it is walked *as* a `Seq` by a `for` and is not one.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -99,7 +101,7 @@ fn a_sequence_binds_through_its_item() {
         &Ty::parse("Seq[String] throws"),
         &mut bound,
     );
-    assert_eq!(bound.get("T").map(|t| t.text()), Some("String".to_string()));
+    assert_eq!(bound.get("T").map(|t| t.text()), Some("String".to_text()));
 
     // The two words are not compared: they are what a step may do, and an entry
     // writes the ones its own steps have rather than a demand on the receiver.
@@ -109,7 +111,7 @@ fn a_sequence_binds_through_its_item() {
         &Ty::parse("Par[i64] sync"),
         &mut bound,
     );
-    assert_eq!(bound.get("T").map(|t| t.text()), Some("i64".to_string()));
+    assert_eq!(bound.get("T").map(|t| t.text()), Some("i64".to_text()));
 }
 
 /// **Neither word is in the surface type grammar** (D4).
@@ -399,7 +401,7 @@ fn the_corpus_has_no_more_unanswered_method_calls_than_it_had() {
         let json_own = Ledger::infer_package(&[&json_parsed], &read);
         read.absorb(Some("json"), json_own.clone());
         own.absorb(Some("json"), json_own);
-        let packages: BTreeSet<String> = BTreeSet::from(["json".to_string()]);
+        let packages: BTreeSet<String> = BTreeSet::from(["json".to_text()]);
         for (at, (_, parsed)) in tools.iter().enumerate() {
             let beside: Vec<&nikaia::parser::Parsed> = tools
                 .iter()
@@ -450,7 +452,7 @@ fn no_loose_program_in_the_repository_is_refused() {
         let Ok(parsed) = parse_to_ast(&source) else {
             continue;
         };
-        let name = path.display().to_string();
+        let name = path.display().to_text();
         // `fortunes.nika` is the one program that is meant not to build: it
         // reaches for an `http` package the project does not declare, which is
         // ADR-277's step 4 and nothing to do with this.

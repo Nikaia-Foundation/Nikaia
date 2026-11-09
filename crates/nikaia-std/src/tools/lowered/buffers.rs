@@ -129,14 +129,14 @@ pub(crate) fn open_scope(walk: &mut BufferWalk) { walk.frames.push(vec![]); }
 
 pub(crate) fn close_scope(walk: &mut BufferWalk) {
     if walk.frames.is_empty() { return; }
-    let names = (*nikaia_std::index::get(&walk.frames, nikaia_std::index::at(walk.frames.len() as i64 - 1))).to_owned();
+    let names = (*nikaia_std::index::get(&walk.frames, nikaia_std::index::at(walk.frames.len() as i64 - 1))).copy_owned();
     for name in names.iter() {
         let mut stack = match match *nikaia_std::index::get(&walk.locals, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !stack.is_empty() { stack.pop(); }
-        walk.locals.insert(name.to_string(), stack);
+        walk.locals.insert(nikaia_std::block::Text::from(name.to_string()), stack);
     }
     walk.frames.pop();
 }
@@ -155,24 +155,24 @@ pub(crate) fn set_local(name: &str, local: Local, walk: &mut BufferWalk) {
     if stack.is_empty() { return; }
     let last = stack.len() as i64 - 1;
     { let __nikaia_stored = local; nikaia_std::index::set(&mut stack, nikaia_std::index::at(last), __nikaia_stored); }
-    walk.locals.insert(name.to_string(), stack);
+    walk.locals.insert(nikaia_std::block::Text::from(name.to_string()), stack);
 }
 
 pub(crate) fn bind_local(name: String, local: Local, walk: &mut BufferWalk) {
-    walk.last_seen.insert(name.to_string(), local.clone());
+    walk.last_seen.insert(nikaia_std::block::Text::from(name.to_string()), local.clone());
     let mut stack: Vec<Local> = nikaia_std::index::or(match *nikaia_std::index::get(&walk.locals, &name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || vec![].into());
     stack.push(local);
-    walk.locals.insert(name.to_string(), stack);
+    walk.locals.insert(nikaia_std::block::Text::from(name.to_string()), stack);
     if !walk.frames.is_empty() {
         let last = walk.frames.len() as i64 - 1;
         walk.frames[nikaia_std::index::at(last)].push(name);
     }
 }
 
-pub(crate) fn a_local(at: i64, path: &[(i64, bool)], origins: collections::BTreeSet<(i64, String)>, ty: Option<Type>, buffer: bool, text: bool) -> Local { Local { at, path: path.to_owned(), origins, ty, parameter: false, keeps: false, buffer, text, number: false, parts: vec![] } }
+pub(crate) fn a_local(at: i64, path: &[(i64, bool)], origins: collections::BTreeSet<(i64, String)>, ty: Option<Type>, buffer: bool, text: bool) -> Local { Local { at, path: path.copy_owned(), origins, ty, parameter: false, keeps: false, buffer, text, number: false, parts: vec![] } }
 
 pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String) -> Vec<BufferPlan> {
     let mut out: Vec<BufferPlan> = vec![];
@@ -180,8 +180,8 @@ pub fn buffer_plans(program: &Program, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '
         match &item.node {
             Item::Fn { .. } => { out.push(match plan_of(&item.node, None, ask, holes_of, unaliased) { Some(__nikaia_value) => __nikaia_value, None => continue }); },
             Item::Impl { target, methods, .. } => {
-                let owner = ask.names.resolve(target.name).to_string();
-                for method in methods.iter() { out.push(match plan_of(&method.node, Some(owner.to_string()), ask, holes_of, unaliased) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
+                let owner = nikaia_std::block::Text::from(ask.names.resolve(target.name).to_string());
+                for method in methods.iter() { out.push(match plan_of(&method.node, Some(nikaia_std::block::Text::from(owner.to_string())), ask, holes_of, unaliased) { Some(__nikaia_value) => __nikaia_value, None => continue }); }
             },
             _ => { },
         }
@@ -206,7 +206,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
     open_scope(&mut walk);
     for arg in args.iter() {
         let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false, number: false, parts: vec![] };
-        bind_local(ask.names.resolve(arg.name).to_string(), parameter, &mut walk);
+        bind_local(nikaia_std::block::Text::from(ask.names.resolve(arg.name).to_string()), parameter, &mut walk);
     }
     if receiver.is_some() {
         let subject = match receiver { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -273,7 +273,7 @@ pub(crate) fn late_puts(walk: &BufferWalk, plan: &mut BufferPlan) {
             if bound != at || !plan.reputs.contains_key(&statement) { continue; }
             if statement <= changed.last { plan.reputs.remove(&statement); } else { reassigned = true; }
         }
-        plan.late_puts.insert(at, LatePut { after: changed.after, name: changed.name.to_string(), reassigned });
+        plan.late_puts.insert(at, LatePut { after: changed.after, name: nikaia_std::block::Text::from(changed.name.to_string()), reassigned });
     }
 }
 
@@ -283,7 +283,7 @@ pub(crate) fn note_change(root: &str, at: i64, walk: &mut BufferWalk) {
     let depth = local.path.len() as i64;
     let mut after = at;
     if (walk.path.len() as i64) > depth { after = nikaia_std::index::get(&walk.path, nikaia_std::index::at(depth)).0; }
-    walk.mutated.insert(local.at, Mutated { after, last: at, name: root.to_string() });
+    walk.mutated.insert(local.at, Mutated { after, last: at, name: nikaia_std::block::Text::from(root.to_string()) });
 }
 
 pub(crate) fn carries_maybe(ty: Option<&Type>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
@@ -347,7 +347,7 @@ pub(crate) fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
             open_scope(walk);
             for name in bindings.iter() {
                 let name = *name;
-                bind_local(ask.names.resolve(name).to_string(), a_local(at, &walk.path, origins.to_owned(), None, false, false), walk);
+                bind_local(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), a_local(at, &walk.path, origins.copy_owned(), None, false, false), walk);
             }
             for inner in body.stmts.iter() {
                 walk.statement = inner.span.start as i64;
@@ -389,8 +389,8 @@ pub(crate) fn shed(root: &str, walk: &mut BufferWalk) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || vec![].into());
-    paths.push(walk.path.to_owned());
-    walk.sheds.insert(root.to_string(), paths);
+    paths.push(walk.path.copy_owned());
+    walk.sheds.insert(nikaia_std::block::Text::from(root.to_string()), paths);
 }
 
 pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, walk: &mut BufferWalk) {
@@ -402,14 +402,14 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
     match value {
         Expr::Variable(moved, _) => {
             let moved = *moved;
-            let bound = local_of(&ask.names.resolve(moved).to_string(), &walk);
+            let bound = local_of(&nikaia_std::block::Text::from(ask.names.resolve(moved).to_string()), &walk);
             if bound.is_some() && nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.buffer), || false) { given_up_inside(nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0), ask, walk); }
         },
         _ => { },
     }
     if names.len() == 1 {
         let from = taken_from(ask.names, value);
-        if from.is_some() { walk.taken.insert(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), nikaia_std::index::or(from, || "".into())); }
+        if from.is_some() { walk.taken.insert(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), nikaia_std::index::or(from, || "".into())); }
     }
     let text = ty.is_none() && (names.len() == 1 && copies_text(value, ask, &walk) || names.len() == 2 && cuts_text(value, ask, &walk));
     let is_buffer = a_named_buffer(&made) || is_the_buffer(value, ask, &walk);
@@ -418,10 +418,10 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
         Buffer::Named(ref buffer) => {
             origins_of(value, ask, holes_of, unaliased, walk);
             let no_callee: String = String::from("");
-            let id = (at, no_callee.to_string());
+            let id = (at, nikaia_std::block::Text::from(no_callee.to_string()));
             if !walk.sources.contains_key(&id) {
-                let source = Source::Buffer { at, name: ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), ty: buffer.to_string(), span: span.clone() };
-                walk.sources.insert(id, Sourced { source, path: walk.path.to_owned() });
+                let source = Source::Buffer { at, name: nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), ty: nikaia_std::block::Text::from(buffer.to_string()), span: span.clone() };
+                walk.sources.insert(id, Sourced { source, path: walk.path.copy_owned() });
             }
             origins.insert((at, no_callee));
         },
@@ -433,11 +433,11 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
                     let no_callee: String = String::from("");
                     let id = (at, no_callee);
                     if !walk.sources.contains_key(&id) {
-                        let source = Source::Buffer { at, name: ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), ty: nikaia_std::index::or(match held.as_ref() {
+                        let source = Source::Buffer { at, name: nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), ty: nikaia_std::index::or(match held.as_ref() {
                             Some(__nikaia_it) => Some(__nikaia_it.clone()),
                             None => None,
                         }, || "".into()), span: span.clone() };
-                        walk.sources.insert(id, Sourced { source, path: walk.path.to_owned() });
+                        walk.sources.insert(id, Sourced { source, path: walk.path.copy_owned() });
                     }
                     walk.holders.insert(at, nikaia_std::index::or(held, || "".into()));
                 }
@@ -454,13 +454,13 @@ pub(crate) fn let_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_, '_
     }
     for bound in names.iter() {
         let bound = *bound;
-        let mut local = a_local(at, &walk.path, origins.to_owned(), match ty {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        let mut local = a_local(at, &walk.path, origins.copy_owned(), match ty {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         }, is_buffer, text);
         local.number = number;
-        local.parts = parts.to_owned();
-        bind_local(ask.names.resolve(bound).to_string(), local, walk);
+        local.parts = parts.copy_owned();
+        bind_local(nikaia_std::block::Text::from(ask.names.resolve(bound).to_string()), local, walk);
     }
 }
 
@@ -524,7 +524,7 @@ pub(crate) fn struct_made_by(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     if a_struct_of_views(result, ask) { return None; }
     let name = match result {
         Ty::Named { name, args, .. } => match args.is_empty() {
-            true => name.to_string(),
+            true => nikaia_std::block::Text::from(name.to_string()),
             false => return None,
         },
         _ => return None,
@@ -551,7 +551,7 @@ pub(crate) fn text_field_of_a_call(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_,
         if AsRef::<str>::as_ref(&(one.name)) == AsRef::<str>::as_ref(&(field)) {
             return match &one.ty {
                 Ty::Named { name, .. } => match a_viewed_buffer(name) {
-                    true => Some(name.to_string()),
+                    true => Some(nikaia_std::block::Text::from(name.to_string())),
                     false => None,
                 },
                 _ => None,
@@ -741,7 +741,7 @@ pub(crate) fn is_the_buffer(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
 
 pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
     let name = match expr {
-        Expr::StructLit { name, .. } => { let name = *name; ask.names.resolve(name).to_string() },
+        Expr::StructLit { name, .. } => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
         Expr::Variable(name, _) => { let name = *name; match written_type_of(ask.names.resolve(name), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None } },
         _ => return None,
     };
@@ -752,7 +752,7 @@ pub(crate) fn struct_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_,
 pub(crate) fn written_type_of(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> Option<String> {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(ask.names.resolve(ty.name).to_string())
+    Some(nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string()))
 }
 
 pub(crate) fn a_variant(callee: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
@@ -784,21 +784,21 @@ pub(crate) fn flow_into(root: &str, origins: &collections::BTreeSet<(i64, String
     if origins.is_empty() { return; }
     let mut local = match local_of(root, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     if local.parameter {
-        if local.keeps { escape_all(&origins, &Escape::Param(root.to_string()), walk); }
+        if local.keeps { escape_all(&origins, &Escape::Param(nikaia_std::block::Text::from(root.to_string())), walk); }
         return;
     }
     for origin in origins.iter() {
         let found = match *nikaia_std::index::get(&walk.sources, origin) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let path = found.path.to_owned();
+        let path = found.path.copy_owned();
         let around = (local.path.len() as i64) <= path.len() as i64 && a_prefix(&local.path, &path);
-        if around && local.at < origin.0 { escape(origin.clone(), Escape::Outer(root.to_string()), walk); }
+        if around && local.at < origin.0 { escape(origin.clone(), Escape::Outer(nikaia_std::block::Text::from(root.to_string())), walk); }
     }
     local.origins.extend(origins.iter().cloned());
     set_local(root, local, walk);
 }
 
 pub(crate) fn given_up_inside(bound_at: i64, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &mut BufferWalk) {
-    let viewer = match *nikaia_std::index::get(&ask.given_up, &bound_at) { Some(__nikaia_value) => __nikaia_value, None => return }.to_string();
+    let viewer = nikaia_std::block::Text::from(match *nikaia_std::index::get(&ask.given_up, &bound_at) { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
     let no_callee: String = String::from("");
     let id = (bound_at, no_callee);
     if !walk.sources.contains_key(&id) { return; }
@@ -907,14 +907,14 @@ pub(crate) fn capture(name: &str, local: &Local, walk: &mut BufferWalk) {
         None => None,
     }, || (local.at.into(), collections::BTreeSet::new().into()));
     held.1.extend(local.origins.iter().cloned());
-    walk.captured.insert(name.to_string(), held);
+    walk.captured.insert(nikaia_std::block::Text::from(name.to_string()), held);
 }
 
 pub(crate) fn task_names(body: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for one in seen_in_expression(body, ask.names, &name_as_it_is, &holes_of, &no_root, true) {
         match one {
-            Seen::Name(ref name) => { out.insert(name.to_string()); },
+            Seen::Name(ref name) => { out.insert(nikaia_std::block::Text::from(name.to_string())); },
             _ => { },
         }
     }
@@ -1032,7 +1032,7 @@ pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &Buffe
         let of = moved_origins(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, holes_of, unaliased, walk);
         put_into(root, k, &of, walk);
         let named = struct_of(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, &walk);
-        if named.is_some() { walk.struct_puts.insert(root.to_string(), nikaia_std::index::or(named, || "".into())); }
+        if named.is_some() { walk.struct_puts.insert(nikaia_std::block::Text::from(root.to_string()), nikaia_std::index::or(named, || "".into())); }
         all.extend(of.iter().cloned());
     }
     flow_into(root, &all, walk);
@@ -1080,11 +1080,11 @@ pub(crate) fn moved_tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, 
 
 pub(crate) fn by_arg_of(puts: Option<&PutsAt>) -> collections::BTreeMap<i64, collections::BTreeSet<(i64, String)>> {
     let found = match puts { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeMap::new() };
-    found.by_arg.to_owned()
+    found.by_arg.copy_owned()
 }
 
 pub(crate) fn put_into(root: &str, at: i64, of: &collections::BTreeSet<(i64, String)>, walk: &mut BufferWalk) {
-    let key = (walk.statement, root.to_string());
+    let key = (walk.statement, nikaia_std::block::Text::from(root.to_string()));
     let mut by_arg: collections::BTreeMap<i64, collections::BTreeSet<(i64, String)>> = by_arg_of(*nikaia_std::index::get(&walk.puts_into, &key));
     let mut here: collections::BTreeSet<(i64, String)> = nikaia_std::index::or(match *nikaia_std::index::get(&by_arg, &at) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -1197,7 +1197,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
 
 pub(crate) fn origins_of_local(name: &str, walk: &BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeSet::new() };
-    local.origins.to_owned()
+    local.origins.copy_owned()
 }
 
 pub(crate) fn a_buffer_local(name: &str, walk: &BufferWalk) -> bool {
@@ -1218,8 +1218,8 @@ pub(crate) fn items_origins(items: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, 
 
 pub(crate) fn method_origins(call: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, unaliased: &dyn Fn(&str) -> String, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
     let (receiver, method, args) = match call {
-        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, ask.names.resolve(method).to_string(), args) },
-        Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, ask.names.resolve(method).to_string(), args) },
+        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, nikaia_std::block::Text::from(ask.names.resolve(method).to_string()), args) },
+        Expr::SafeMethod { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, nikaia_std::block::Text::from(ask.names.resolve(method).to_string()), args) },
         _ => return collections::BTreeSet::new(),
     };
     if drops_entries(&method) {
@@ -1282,7 +1282,7 @@ pub(crate) fn sources_of_a_method(contract: &FnContract, into: &mut collections:
         let mut at: i64 = 0;
         for (name, _) in signature.params.iter() {
             let dotted = format!("{}.", name);
-            if b == name || b.starts_with(&dotted) {
+            if b == name || b.starts_with(&*dotted) {
                 into.insert(at - 1);
                 found = true;
             }
@@ -1350,7 +1350,7 @@ pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_
     let mut position: i64 = 0;
     for (name, _) in signature.params.iter() {
         let dotted = format!("{}.", name);
-        for b in contract.borrows.iter() { if b == name || b.starts_with(&dotted) { out.insert(position); } }
+        for b in contract.borrows.iter() { if b == name || b.starts_with(&*dotted) { out.insert(position); } }
         position += 1;
     }
     if out.is_empty() { out.insert(-1); }
@@ -1365,7 +1365,7 @@ pub(crate) fn answered_by(contract: &FnContract, named: &str, args: &[Expr], ask
             let at = parameter_index(contract, &held.position);
             if at < 0 || at >= args.len() as i64 { continue; }
             let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(at))) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            flow_into(&root, &source.to_owned(), walk);
+            flow_into(&root, &source.copy_owned(), walk);
         }
         for held in contract.views.iter() {
             if held.position == RESULT_POSITION && held.state == State::Tethered {
@@ -1407,8 +1407,8 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
         if !made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(k))) || !lends_in(contract, k, &copying) || buffers_view_call(nikaia_std::index::get(&args, nikaia_std::index::at(k)), ask, unaliased) { continue; }
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
-            let source = Source::Argument { at: walk.statement, callee: named.to_string(), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
-            walk.sources.insert(id.clone(), Sourced { source, path: walk.path.to_owned() });
+            let source = Source::Argument { at: walk.statement, callee: nikaia_std::block::Text::from(named.to_string()), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
+            walk.sources.insert(id.clone(), Sourced { source, path: walk.path.copy_owned() });
         }
         out.insert(id);
     }
@@ -1426,8 +1426,8 @@ pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr]
         let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(place))) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
-            let source = Source::Argument { at: walk.statement, callee: named.to_string(), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
-            walk.sources.insert(id.clone(), Sourced { source, path: walk.path.to_owned() });
+            let source = Source::Argument { at: walk.statement, callee: nikaia_std::block::Text::from(named.to_string()), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
+            walk.sources.insert(id.clone(), Sourced { source, path: walk.path.copy_owned() });
         }
         let mut origins: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
         origins.insert(id);
@@ -1521,10 +1521,10 @@ pub(crate) fn tail_origins(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_
 }
 
 pub(crate) fn call_source(callee: &str, walk: &mut BufferWalk) -> collections::BTreeSet<(i64, String)> {
-    let id = (walk.statement, callee.to_string());
+    let id = (walk.statement, nikaia_std::block::Text::from(callee.to_string()));
     if !walk.sources.contains_key(&id) {
-        let source = Source::Call { at: walk.statement, callee: callee.to_string(), span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
-        walk.sources.insert(id.clone(), Sourced { source, path: walk.path.to_owned() });
+        let source = Source::Call { at: walk.statement, callee: nikaia_std::block::Text::from(callee.to_string()), span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
+        walk.sources.insert(id.clone(), Sourced { source, path: walk.path.copy_owned() });
     }
     let mut one: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     one.insert(id);
@@ -1550,18 +1550,18 @@ pub(crate) fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferA
         let mut widest: i64 = 1;
         for (_, statements) in by_arg.iter() { if (statements.len() as i64) > widest { widest = statements.len() as i64; } }
         let width = nikaia_std::index::or(*nikaia_std::index::get(&plan.widths, &place.1), || 1);
-        if widest > width { plan.widths.insert(place.1.to_string(), widest); } else { plan.widths.insert(place.1.to_string(), width); }
+        if widest > width { plan.widths.insert(nikaia_std::block::Text::from(place.1.to_string()), widest); } else { plan.widths.insert(nikaia_std::block::Text::from(place.1.to_string()), width); }
     }
     for keeper in plan.element_keepers.iter() {
         let written = keeper_type(keeper, walk);
         let names_one = struct_of_views_maybe((written).as_ref(), ask);
         if names_one || walk.struct_puts.contains_key(keeper) {
-            plan.struct_keepers.insert(keeper.to_string());
+            plan.struct_keepers.insert(nikaia_std::block::Text::from(keeper.to_string()));
             let named = keeper_struct(keeper, (written).as_ref(), walk, ask);
-            if named.is_some() { plan.keeper_structs.insert(keeper.to_string(), nikaia_std::index::or(named, || "".into())); }
+            if named.is_some() { plan.keeper_structs.insert(nikaia_std::block::Text::from(keeper.to_string()), nikaia_std::index::or(named, || "".into())); }
         }
     }
-    for (local, from) in walk.taken.iter() { if plan.struct_keepers.contains(from) { plan.held_locals.insert(local.to_string()); } }
+    for (local, from) in walk.taken.iter() { if plan.struct_keepers.contains(from) { plan.held_locals.insert(nikaia_std::block::Text::from(local.to_string())); } }
     element_refusals(walk, ask, &mut plan);
     plan
 }
@@ -1614,11 +1614,11 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
             Escape::Returned => { leaves = true; },
             Escape::Param(_) => { leaves = true; },
             Escape::Task => { task = true; },
-            Escape::Outer(name) => { outer.push(name.to_string()); },
+            Escape::Outer(name) => { outer.push(nikaia_std::block::Text::from(name.to_string())); },
         }
     }
     let mut shedding: Vec<String> = vec![];
-    for keeper in outer.iter() { if sheds_across(keeper, path, walk) { shedding.push(keeper.to_string()); } }
+    for keeper in outer.iter() { if sheds_across(keeper, path, walk) { shedding.push(nikaia_std::block::Text::from(keeper.to_string())); } }
     if task && leaves {
         plan.refusals.push(source_refusal(source, "is passed to a task and also returned from this function.", "The task may outlive the caller, or the caller the task, so neither can be the one that keeps the data alive.", "Give the task a copy with `.clone()`, or pass the task only what it needs and return the rest."));
         return;
@@ -1658,20 +1658,20 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
         },
         Source::Call { at, callee, .. } => {
             let at = *at;
-            plan.calls.insert((at.clone(), callee.to_string()), keep.clone());
+            plan.calls.insert((at.clone(), nikaia_std::block::Text::from(callee.to_string())), keep.clone());
         },
         Source::Argument { at, callee, index, .. } => {
             let at = *at; let index = *index;
             plan.calls.insert((at.clone(), format!("{}#{}", callee, index)), keep.clone());
         },
     }
-    if task { for (name, held) in walk.captured.iter() { if held.1.contains(&id) { plan.tethered.insert(name.to_string(), held.0); } } }
+    if task { for (name, held) in walk.captured.iter() { if held.1.contains(&id) { plan.tethered.insert(nikaia_std::block::Text::from(name.to_string()), held.0); } } }
 }
 
 pub(crate) fn sheds_across(keeper: &str, path: &[(i64, bool)], walk: &BufferWalk) -> bool {
     let sheds = match *nikaia_std::index::get(&walk.sheds, keeper) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let declared: Vec<(i64, bool)> = nikaia_std::index::or(match (*nikaia_std::index::get(&walk.last_seen, keeper)).as_ref().map(|__nikaia_it| &__nikaia_it.path) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, || vec![].into());
     for around in path.iter() {
@@ -1739,7 +1739,7 @@ pub(crate) fn source_refusal(source: &Source, what: &str, why: &str, help: &str)
         Source::Argument { span, .. } => span.clone(),
     };
     let named = capitalised(&source_named(source));
-    refusal("NK2304", span, format!("{} {}", named, what), vec![why.to_string()], help.to_string())
+    refusal("NK2304", span, format!("{} {}", named, what), vec![nikaia_std::block::Text::from(why.to_string())], nikaia_std::block::Text::from(help.to_string()))
 }
 
 pub(crate) fn element_refusals(walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, plan: &mut BufferPlan) {
@@ -1773,7 +1773,7 @@ pub(crate) fn element_refusal(keeper: &str, why: &str, help: &str, plan: &Buffer
             break;
         }
     }
-    refusal("NK2304", span, format!("`{}` keeps views of data read inside a loop and removes entries as it goes, but {}.", keeper, why), vec![String::from("Each view keeps its own data alive here, so that data read for entries that were removed can be freed during the loop.")], help.to_string())
+    refusal("NK2304", span, format!("`{}` keeps views of data read inside a loop and removes entries as it goes, but {}.", keeper, why), vec![String::from("Each view keeps its own data alive here, so that data read for entries that were removed can be freed during the loop.")], nikaia_std::block::Text::from(help.to_string()))
 }
 
 pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> UntetheredWalk {
@@ -1783,7 +1783,7 @@ pub(crate) fn untethered_returns(function: &str, ret_type: Option<&Type>, body: 
     let bare = untethered_view(written, ask);
     let text_fields = untethered_fields(written, ask, true);
     if !bare && fields.is_empty() && text_fields.is_empty() { return walk; }
-    let asked = UntetheredAsk { function: function.to_string(), bare, struct_name: ask.names.resolve(written.name).to_string(), fields, text_fields };
+    let asked = UntetheredAsk { function: nikaia_std::block::Text::from(function.to_string()), bare, struct_name: nikaia_std::block::Text::from(ask.names.resolve(written.name).to_string()), fields, text_fields };
     untethered_block(body, &asked, ask, &mut walk);
     if !body.stmts.is_empty() {
         let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
@@ -1832,12 +1832,12 @@ pub(crate) fn untethered_text_view(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_
 pub(crate) fn untethered_fields(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, text: bool) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     if ty.is_view || ty.is_tuple { return out; }
-    let wanted = ask.names.resolve(ty.name).to_string();
+    let wanted = nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string());
     for item in ask.items.iter() {
         match &item.node {
             Item::Struct { name, fields, .. } => {
                 let name = *name;
-                if ask.names.resolve(name) == wanted { for field in fields.iter() { if !text && untethered_view(&field.ty, ask) || text && untethered_text_view(&field.ty, ask) { out.insert(ask.names.resolve(field.name).to_string()); } } }
+                if ask.names.resolve(name) == wanted { for field in fields.iter() { if !text && untethered_view(&field.ty, ask) || text && untethered_text_view(&field.ty, ask) { out.insert(nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string())); } } }
             },
             _ => { },
         }
@@ -1850,7 +1850,7 @@ pub(crate) fn untethered_block(block: &Block, asked: &UntetheredAsk, ask: &Buffe
         match &stmt.node {
             Stmt::Let { names, value, ty, .. } => {
                 untethered_expr(value, &stmt.span, asked, ask, walk);
-                if names.len() == 1 { untethered_let(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string(), value, (ty).as_ref(), stmt.span, asked, ask, walk); }
+                if names.len() == 1 { untethered_let(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), value, (ty).as_ref(), stmt.span, asked, ask, walk); }
             },
             Stmt::Return(value) => {
                 let returned = match value { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -1889,8 +1889,8 @@ pub(crate) fn untethered_let(name: String, value: &Expr, ty: Option<&Type>, span
     walk.lets.remove(&name);
     walk.lists.remove(&name);
     if untethered_made_list(value, ty, ask) {
-        walk.lets.insert(name.to_string(), Source::Buffer { at: span.start as i64, name: name.to_string(), ty: String::from(""), span: span.clone() });
-        walk.lists.insert(name.to_string());
+        walk.lets.insert(nikaia_std::block::Text::from(name.to_string()), Source::Buffer { at: span.start as i64, name: nikaia_std::block::Text::from(name.to_string()), ty: String::from(""), span: span.clone() });
+        walk.lists.insert(nikaia_std::block::Text::from(name.to_string()));
     }
     let owned = match value {
         Expr::ListLit { .. } => true,
@@ -1902,8 +1902,8 @@ pub(crate) fn untethered_let(name: String, value: &Expr, ty: Option<&Type>, span
     };
     if owned {
         let carried = untethered_struct(value, asked, ask, &walk);
-        if carried.is_some() { walk.carrying.insert(name.to_string(), nikaia_std::index::or(carried, || "".into())); }
-        walk.lets.insert(name.to_string(), Source::Buffer { at: span.start as i64, name: name.to_string(), ty: String::from(""), span });
+        if carried.is_some() { walk.carrying.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(carried, || "".into())); }
+        walk.lets.insert(nikaia_std::block::Text::from(name.to_string()), Source::Buffer { at: span.start as i64, name: nikaia_std::block::Text::from(name.to_string()), ty: String::from(""), span });
         walk.owned.insert(name);
         return;
     }
@@ -1922,7 +1922,7 @@ pub(crate) fn untethered_text_root(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_,
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match base {
             Expr::Variable(name, _) => {
                 let name = *name;
-                let named = ask.names.resolve(name).to_string();
+                let named = nikaia_std::block::Text::from(ask.names.resolve(name).to_string());
                 if a_range(index) || !walk.lists.contains(&named) { return None; }
                 Some(named)
             },
@@ -1951,7 +1951,7 @@ pub(crate) fn untethered_root(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     match expr {
         Expr::Variable(name, _) => {
             let name = *name;
-            let named = ask.names.resolve(name).to_string();
+            let named = nikaia_std::block::Text::from(ask.names.resolve(name).to_string());
             Some(nikaia_std::index::or(match *nikaia_std::index::get(&walk.views, &named) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -1974,19 +1974,19 @@ pub(crate) fn untethered_struct(value: &Expr, asked: &UntetheredAsk, ask: &Buffe
     };
     if asked.fields.is_empty() && asked.text_fields.is_empty() || ask.names.resolve(name) != asked.struct_name { return None; }
     for field in fields.iter() {
-        let named = ask.names.resolve(field.name).to_string();
+        let named = nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string());
         if asked.text_fields.contains(&named) && field.value.is_some() {
             let text_root = untethered_text_root(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, ask, walk);
             if text_root.is_some() { return std::convert::identity(text_root); }
         }
     }
     for field in fields.iter() {
-        let named = ask.names.resolve(field.name).to_string();
+        let named = nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string());
         if !asked.fields.contains(&named) { continue; }
         let mut root: Option<String> = Some(nikaia_std::index::or(match *nikaia_std::index::get(&walk.views, &named) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || named.to_string().into()));
+        }, || nikaia_std::block::Text::from(named.to_string()).into()));
         if field.value.is_some() { root = untethered_root(match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue }, ask, walk); }
         let found = match root { Some(__nikaia_value) => __nikaia_value, None => continue };
         if walk.owned.contains(&found) { return Some(found); }

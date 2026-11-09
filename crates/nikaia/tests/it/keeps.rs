@@ -17,6 +17,8 @@
 use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 /// What the ledger says one function keeps, after the inference.
@@ -456,7 +458,7 @@ fn a_parameter_that_leaves_by_any_way_out_is_kept() {
          }",
             "pick"
         )
-        .contains(&"name".to_string())
+        .contains(&"name".to_text())
     );
 }
 
@@ -587,8 +589,8 @@ fn main() {
     note(log, \"a\")
 }
 ";
-    assert_eq!(keeps(source, "Log::add"), vec!["line".to_string()]);
-    assert_eq!(keeps(source, "note"), vec!["line".to_string()]);
+    assert_eq!(keeps(source, "Log::add"), vec!["line".to_text()]);
+    assert_eq!(keeps(source, "note"), vec!["line".to_text()]);
 }
 
 /// **A trait's method keeps what it takes by value**: a call through a bound
@@ -616,7 +618,7 @@ fn lowered_and_run(purpose: &str, source: &str) -> Result<String, String> {
         .expect("the nikaia binary runs");
     if !lowered.status.success() {
         std::fs::remove_dir_all(&dir).ok();
-        return Err(String::from_utf8_lossy(&lowered.stderr).to_string());
+        return Err(String::from_utf8_lossy(&lowered.stderr).to_text());
     }
     let binary = dir.join("program");
     let compiled = common::compile(
@@ -631,7 +633,7 @@ fn lowered_and_run(purpose: &str, source: &str) -> Result<String, String> {
     let out = Command::new(&binary).output().expect("run it");
     assert!(out.status.success(), "{purpose} failed");
     std::fs::remove_dir_all(&dir).ok();
-    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    Ok(String::from_utf8_lossy(&out.stdout).to_text())
 }
 
 /// Issue #697's probe: `shout` hands `v` to `tag`, whose result points into it,
@@ -746,5 +748,5 @@ fn read(reader: ref mut Reader, step: fn(i64) -> i64 sync) -> i64 {
     return reader.quoted(step)
 }
 ";
-    assert!(!keeps(source, "read").contains(&"step".to_string()));
+    assert!(!keeps(source, "read").contains(&"step".to_text()));
 }

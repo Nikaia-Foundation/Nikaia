@@ -134,7 +134,7 @@ impl SvSat {
     pub(crate) fn decision_level(&self) -> i64 { self.limits.len() as i64 }
     pub(crate) fn add_input(&mut self, lits: &[u32], id: u32) {
         if self.refuted { return; }
-        let mut sorted = lits.to_owned();
+        let mut sorted = lits.copy_owned();
         sorted.sort();
         let mut kept: Vec<u32> = vec![];
         let mut hints: Vec<u32> = vec![];
@@ -161,7 +161,7 @@ impl SvSat {
         let mut entry = id;
         if changed {
             hints.push(id);
-            entry = self.book.log.learn(kept.to_owned(), hints);
+            entry = self.book.log.learn(kept.copy_owned(), hints);
             self.stats.learned += 1;
         }
         if kept.is_empty() {
@@ -460,7 +460,7 @@ impl SvSat {
     pub(crate) fn learn_conflict(&mut self, conflict: i64) {
         let learned = self.analyze(conflict);
         self.backjump(learned.level);
-        let id = self.book.log.learn(learned.lits.to_owned(), learned.hints);
+        let id = self.book.log.learn(learned.lits.copy_owned(), learned.hints);
         self.stats.learned += 1;
         if learned.lits.len() == 1 { self.assign_unit(*nikaia_std::index::get(&learned.lits, 0), id); } else {
             let first = *nikaia_std::index::get(&learned.lits, 0);

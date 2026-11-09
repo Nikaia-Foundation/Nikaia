@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/parser/mod.rs
 use crate::ast;
 use anyhow::Result;
@@ -195,7 +197,7 @@ fn number_prefix(bytes: &[u8]) -> String {
         }
         end += 1;
     }
-    String::from_utf8_lossy(&bytes[..end]).into_owned()
+    String::from_utf8_lossy(&bytes[..end])
 }
 
 /// **What may not follow a float's digits**
@@ -400,7 +402,7 @@ impl Parsed {
     /// nodes of their own, and every reader of one template reads the same
     /// ones ([ADR-340](../../../docs/specification/adr/adr-340.md) D1, D2).
     pub fn hole(&self, site: u32, text: &str) -> Result<ast::Expr> {
-        let key = (site, text.to_string());
+        let key = (site, text.to_text());
         if let Some(expr) = self.holes.lock().expect("a hole parse panicked").get(&key) {
             return Ok(expr.clone());
         }
@@ -700,12 +702,12 @@ fn stops_at_char(input: &str) -> i64 {
 fn failure_of(error: &ParseError, source: &str) -> nikaia_std::tools::parse_errors::Failure {
     nikaia_std::tools::parse_errors::Failure {
         offset: char_of(source, error.offset),
-        expected: error.expected.clone(),
-        also: error.also.clone(),
+        expected: error.expected.iter().map(String::from).collect(),
+        also: error.also.iter().map(String::from).collect(),
         has_found: error.found.is_some(),
-        found: error.found.clone().unwrap_or_default(),
+        found: error.found.as_ref().map(String::from).unwrap_or_default(),
         has_message: error.message.is_some(),
-        message: error.message.clone().unwrap_or_default(),
+        message: error.message.as_ref().map(String::from).unwrap_or_default(),
     }
 }
 
@@ -783,7 +785,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         let finding = nikaia_std::tools::parse_findings::parse_findings_at(
             at as i64,
             String::new(),
-            "The parser stopped here, before the end of the file.".to_string(),
+            "The parser stopped here, before the end of the file.".to_text(),
             Vec::new(),
             None,
         );
@@ -827,7 +829,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         next_id: std::sync::Mutex::new(after_ids),
         expr_spans,
         comments,
-        dumped_source: crate::check::accepted_dump_dir().map(|_| input.to_string()),
+        dumped_source: crate::check::accepted_dump_dir().map(|_| input.to_text()),
     };
     // ADR-grammar-2 D1: a rule that takes types becomes one rule per list of
     // type arguments, and each call of it the call of its copy.
@@ -896,6 +898,8 @@ fn refused(refusal: nikaia_std::tools::parse_findings::ParseFindingsRefusal) -> 
 
 grammar! {
     grammar CompilerGrammar {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
         use crate::ast::*;
         use winnow::ascii::{digit1, multispace1};
 
@@ -982,7 +986,7 @@ grammar! {
         // UPPERCASE: a lexical rule, or the implicit whitespace would eat the
         // spaces inside the literal.
         rule STRING -> String =
-            "\"" parts:STR_CHAR* "\"" -> { parts.concat() }
+            "\"" parts:STR_CHAR* "\"" -> { parts.into_iter().collect() }
 
         rule STR_CHAR -> String =
             "\\" c:any -> {
@@ -990,7 +994,7 @@ grammar! {
                 s.push(c);
                 s
             }
-          | not("\"") c:any -> { c.to_string() }
+          | not("\"") c:any -> { c.to_text() }
 
         // The explicit form, for the leading and trailing positions where there
         // is no preceding token for the implicit `WS` to follow.
@@ -1853,7 +1857,7 @@ grammar! {
           // (`NK1135` stays silent, and the type it names is unknown).
           | n:number_lit -> {
                 Type {
-                    name: _state.intern(&n.0.to_string()),
+                    name: _state.intern(&n.0.to_text()),
                     generics: Vec::new(),
                     is_view: false,
                     is_tuple: false,
@@ -4134,13 +4138,13 @@ grammar! {
                         target: grammar,
                         package: Some(first),
                         context: None,
-                        content: body.to_string(), id: NodeId::parsed()
+                        content: body.to_text(), id: NodeId::parsed()
                     },
                     None => Expr::Dsl {
                         target: first,
                         package: None,
                         context: None,
-                        content: body.to_string(), id: NodeId::parsed()
+                        content: body.to_text(), id: NodeId::parsed()
                     },
                 }
             }
@@ -4829,7 +4833,7 @@ grammar! {
         // Text as written: an escape whole, and `{{` and `}}` doubled - the
         // body is transcribed into a format string, which spells them so.
         rule F_TEXT -> String =
-            s:text(F_TEXT_CHAR+) -> { s.to_string() }
+            s:text(F_TEXT_CHAR+) -> { s.to_text() }
 
         // `\u{…}` first: its braces belong to the escape, not to a hole
         // (Part I 2.5).
@@ -4849,7 +4853,7 @@ grammar! {
             "{" e:expr WS spec:F_SPEC? "}" -> {
                 crate::ast::FPart::Hole {
                     expr: e,
-                    spec: spec.map(str::to_string),
+                    spec: spec.map(str::to_text),
                     at: crate::ast::offset(_span.start),
                 }
             }
@@ -4906,7 +4910,7 @@ grammar! {
         // A line break ends the attempt, so a stray `'` does not swallow the
         // file up to the next one.
         rule CHAR -> String =
-            "'" parts:CHAR_BODY+ "'" -> { parts.concat() }
+            "'" parts:CHAR_BODY+ "'" -> { parts.into_iter().collect() }
 
         rule CHAR_BODY -> String =
             "\\" c:any -> {
@@ -4914,7 +4918,7 @@ grammar! {
                 s.push(c);
                 s
             }
-          | not("'") not("\n") c:any -> { c.to_string() }
+          | not("'") not("\n") c:any -> { c.to_text() }
 
         rule char_lit -> Expr =
             c:CHAR -> { Expr::LitChar(c, NodeId::parsed()) }
@@ -4930,20 +4934,20 @@ grammar! {
         // ([ADR-291](../../../../docs/specification/adr/adr-291.md)), so a
         // separator in it would be a separator in a name.
         rule digits -> String =
-            d:digit1 -> { d.to_string() }
+            d:digit1 -> { d.to_text() }
 
         // A run of decimal digits with D1's separator in it, and the separator
         // is not in what comes back (D3). What `FLOAT` counts in: `1_000.5` is
         // a number and `1_000` beside `.5` is two.
         rule DIGITS -> String =
             head:digit1 rest:DIGIT_GROUP* -> {
-                let mut all = head.to_string();
+                let mut all = head.to_text();
                 for group in rest {
                     all.push_str(&group);
                 }
                 all
             }
 
-        rule DIGIT_GROUP -> String = "_" d:digit1 -> { d.to_string() }
+        rule DIGIT_GROUP -> String = "_" d:digit1 -> { d.to_text() }
     }
 }

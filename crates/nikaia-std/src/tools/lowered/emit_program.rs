@@ -12,14 +12,14 @@ impl EmitState {
             let shape = nikaia_std::index::or(self.walks_a_shape(world, &item.node), || "".into());
             if shape != "" {
                 let mut copies: Vec<String> = vec![];
-                for ((written, on), _) in self.facts.unrolled.iter() { if *written == shape { copies.push(on.to_string()); } }
+                for ((written, on), _) in self.facts.unrolled.iter() { if *written == shape { copies.push(nikaia_std::block::Text::from(on.to_string())); } }
                 for on in copies.iter() {
                     let walked = nikaia_std::index::or(match self.facts.walks_fields.get(&shape) {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
-                    }, || self.walked_parameter(world, &item.node).to_string().into());
+                    }, || nikaia_std::block::Text::from(self.walked_parameter(world, &item.node).to_string()).into());
                     walk.slotted = emit_slot_in(world, &item.node) >= 0 || !emit_values_name(world, &item.node, &walked);
-                    walk.specialising = Some(EmitPair { first: walked, second: on.to_string() });
+                    walk.specialising = Some(EmitPair { first: walked, second: nikaia_std::block::Text::from(on.to_string()) });
                     let st = out.mark();
                     host.refuse_unwritten_item(item)?;
                     self.emit_item(world, walk, out, host, item)?;
@@ -53,24 +53,24 @@ impl EmitState {
             Item::Fn { name, args, .. } => {
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                world.words.resolve(held).to_string()
+                nikaia_std::block::Text::from(world.words.resolve(held).to_string())
             },
             _ => return Ok(()),
         };
         let parameter: String = match &item.node {
-            Item::Fn { args, .. } => emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)).name).to_string(),
+            Item::Fn { args, .. } => nikaia_std::block::Text::from(emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)).name).to_string()),
             _ => return Ok(()),
         };
         let mut copies: Vec<(String, Vec<FieldContract>)> = vec![];
-        for ((written, on), fields) in self.facts.field_copies.iter() { if *written == name { copies.push((on.to_string(), fields.to_owned())); } }
+        for ((written, on), fields) in self.facts.field_copies.iter() { if *written == name { copies.push((nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); } }
         for (on, fields) in copies.iter() {
             for field in fields.iter() {
-                walk.specialising = Some(EmitPair { first: String::from(""), second: on.to_string() });
-                walk.field_copy = Some(EmitPair { first: parameter.to_string(), second: field.name.to_string() });
-                walk.at_field = Some(EmitPair { first: parameter.to_string(), second: field.name.to_string() });
-                walk.field_names.insert(parameter.to_string(), field.name.to_string());
-                walk.field_types.insert(parameter.to_string(), check_reflect_written(&field.ty));
-                walk.field_owners.insert(parameter.to_string(), on.to_string());
+                walk.specialising = Some(EmitPair { first: String::from(""), second: nikaia_std::block::Text::from(on.to_string()) });
+                walk.field_copy = Some(EmitPair { first: nikaia_std::block::Text::from(parameter.to_string()), second: nikaia_std::block::Text::from(field.name.to_string()) });
+                walk.at_field = Some(EmitPair { first: nikaia_std::block::Text::from(parameter.to_string()), second: nikaia_std::block::Text::from(field.name.to_string()) });
+                walk.field_names.insert(nikaia_std::block::Text::from(parameter.to_string()), nikaia_std::block::Text::from(field.name.to_string()));
+                walk.field_types.insert(nikaia_std::block::Text::from(parameter.to_string()), check_reflect_written(&field.ty));
+                walk.field_owners.insert(nikaia_std::block::Text::from(parameter.to_string()), nikaia_std::block::Text::from(on.to_string()));
                 let st = out.mark();
                 host.refuse_unwritten_item(item)?;
                 self.emit_item(world, walk, out, host, item)?;
@@ -116,8 +116,8 @@ impl EmitState {
                 generics.push(format!("P{}", i));
                 fields.push(format!("    pub {}: P{},", *nikaia_std::index::get(&parameters, (i) as usize), i));
             }
-            let listed = generics.join(", ");
-            let body = fields.join("\n");
+            let listed = nikaia_std::block::Text::from(generics.join(", "));
+            let body = nikaia_std::block::Text::from(fields.join("\n"));
             out.push(&format!("// ADR-296 D5: the parameters of a `dsl … {{ … }} eod` statement, as a type.\n#[derive(Debug, Clone, Copy, PartialEq)]\n#[allow(non_camel_case_types, dead_code)]\npub struct {}<{}> {{\n{}\n}}\n\n", name, listed, body));
         }
     }
@@ -145,11 +145,11 @@ impl EmitState {
                 types.push(format!("Vec<{}>", element));
                 passing.push(String::from("&{}"));
             } else if ty.starts_with('&') && !ty.starts_with("&mut ") {
-                types.push(nikaia_std::index::or(ty.strip_prefix('&'), || "").to_string());
+                types.push(nikaia_std::block::Text::from(nikaia_std::index::or(ty.strip_prefix('&'), || "").to_string()));
                 passing.push(String::from("&{}"));
             } else {
-                let mut owned = ty.to_string();
-                while owned.starts_with("&mut ") { owned = nikaia_std::index::or(owned.strip_prefix("&mut "), || "").to_string(); }
+                let mut owned = nikaia_std::block::Text::from(ty.to_string());
+                while owned.starts_with("&mut ") { owned = nikaia_std::block::Text::from(nikaia_std::index::or(owned.strip_prefix("&mut "), || "").to_string()); }
                 types.push(owned);
                 passing.push(String::from("{}"));
             }
@@ -164,13 +164,13 @@ impl EmitState {
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
     if parts.len() < 2 { return String::from("_"); }
-    let mut ty = (*nikaia_std::index::get(&parts, 1)).to_string();
+    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
     for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *nikaia_std::index::get(&parts, (i) as usize)); }
     ty
 }
 
 pub(crate) fn emit_program_allocator() -> String {
     let lines: Vec<&'static str> = vec!["", "struct NikaiaHeap;", "// SAFETY: every call is the system allocator's; a free that is skipped leaves", "// the block allocated until the process ends, which is always sound.", "unsafe impl std::alloc::GlobalAlloc for NikaiaHeap {", "    #[inline]", "    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }", "    }", "    #[inline]", "    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&std::alloc::System, layout) }", "    }", "    #[inline]", "    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {", "        if nikaia_std::rt::exit::frees() {", "            unsafe { std::alloc::GlobalAlloc::dealloc(&std::alloc::System, ptr, layout) }", "        }", "    }", "    #[inline]", "    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::realloc(&std::alloc::System, ptr, layout, size) }", "    }", "}", "#[global_allocator]", "static NIKAIA_HEAP: NikaiaHeap = NikaiaHeap;", ""];
-    lines.join("\n")
+    nikaia_std::block::Text::from(lines.join("\n"))
 }
 

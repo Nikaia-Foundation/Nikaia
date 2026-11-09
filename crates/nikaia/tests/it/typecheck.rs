@@ -7,6 +7,8 @@
 //! that the guard is not passing because the checker is asleep.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 
 use nikaia::check::{self, Finding, Severity};
@@ -37,7 +39,7 @@ fn one(source: &str) -> (String, String) {
         "expected exactly one finding, got {:#?}",
         found.iter().map(|f| &f.message).collect::<Vec<_>>()
     );
-    (found[0].code.to_string(), found[0].message.clone())
+    (found[0].code.to_text(), found[0].message.clone())
 }
 
 // --- the guard ---------------------------------------------------------------
@@ -84,7 +86,7 @@ fn no_program_in_the_repository_has_a_type_error() {
             let source = std::fs::read_to_string(&path).expect("read the program");
             let parsed = parse_to_ast(&source)
                 .unwrap_or_else(|e| panic!("{} does not parse: {e}", path.display()));
-            let name = path.display().to_string();
+            let name = path.display().to_text();
             // **`fortunes.nika` is written at specification level**
             // (`examples.rs`'s `SPECIFICATION_LEVEL`): its `env::var` names a
             // `std::env` that does not exist, which is `NK1181` since #488 and
@@ -1519,7 +1521,7 @@ fn main() { f(gone) }",
             .unwrap_or_else(|| panic!("no NK1117 for {source}: {found:#?}"));
         assert!(
             it.message
-                .contains(&format!("`{name}` isn't declared anywhere")),
+                .contains(&*format!("`{name}` isn't declared anywhere")),
             "{it:#?}"
         );
         assert_eq!(
@@ -1985,7 +1987,7 @@ fn under(source: &str, code: &str) -> (String, usize) {
         .unwrap_or_else(|| panic!("no {code}: {found:#?}"));
     let (start, end) = (finding.span.start as usize, finding.span.end as usize);
     let line = source[..start].matches('\n').count() + 1;
-    (source[start..end].to_string(), line)
+    (source[start..end].to_text(), line)
 }
 
 /// The arm, and not the `return match v {` it stands in (#107).
@@ -1993,7 +1995,7 @@ fn under(source: &str, code: &str) -> (String, usize) {
 fn a_refused_arm_is_pointed_at() {
     let source = "enum Val {\n    Int(i64),\n    Text(String),\n}\n\nfn f(v: ref Val) -> String {\n    \
                   return match v {\n        Val::Int(n) => f\"{n}\",\n        Val::Text(t) => t,\n    }\n}\n";
-    assert_eq!(under(source, "NK1104"), ("t".to_string(), 9));
+    assert_eq!(under(source, "NK1104"), ("t".to_text(), 9));
 }
 
 /// The other arm shapes of #596 point at the arm too (#107).
@@ -2038,7 +2040,7 @@ fn every_refused_arm_shape_is_pointed_at() {
 #[test]
 fn a_refused_number_literal_is_pointed_at() {
     let source = "fn f(c: bool) -> i64 {\n    let y: String = if c { \"a\" } else { 1 }\n    return y.len()\n}\n";
-    assert_eq!(under(source, "NK1103"), ("1".to_string(), 2));
+    assert_eq!(under(source, "NK1103"), ("1".to_text(), 2));
 }
 
 /// A loop body's value is never used: its tail `if` asks no common type of its

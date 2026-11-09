@@ -67,7 +67,7 @@ pub fn proofs_where(path: &std::path::Path, source: &str) -> ProofsWhere {
         if b == 10 { breaks.push(at); }
         at += 1;
     }
-    ProofsWhere { file: Some(nikaia_std::fs::path::clone(&(path))), source: source.to_string(), breaks }
+    ProofsWhere { file: Some(nikaia_std::fs::path::clone(&(path))), source: nikaia_std::block::Text::from(source.to_string()), breaks }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,10 +109,10 @@ pub fn proofs_shown(place: &(Option<String>, Option<i64>, Option<String>), root:
     };
     if path.is_some() {
         let prefix = format!("{}/", nikaia_std::fs::path::text_of(&(root)));
-        let shown: String = nikaia_std::index::or(match path.as_ref().unwrap().strip_prefix(&prefix) {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+        let shown: String = nikaia_std::index::or(match path.as_ref().unwrap().strip_prefix(&*prefix) {
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
-        }, || path.as_ref().unwrap().to_string().into());
+        }, || nikaia_std::block::Text::from(path.as_ref().unwrap().to_string()).into());
         let line = place.1;
         if line.is_some() { file = Some(format!("{}:{}", shown, line.unwrap())); } else { file = Some(shown); }
     }
@@ -199,7 +199,7 @@ pub(crate) fn proofs_known(t: &mut ProofsThread, written: &str) -> Option<Proofs
     let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let entry = match book.entries.get(&held.key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if *entry != held.entry { return None; }
-    book.asked.insert(held.key.to_string());
+    book.asked.insert(nikaia_std::block::Text::from(held.key.to_string()));
     Some(held.asked.clone())
 }
 
@@ -218,7 +218,7 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
     let mut recorded: Option<ProofsEntry> = None;
     {
         let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return ProofsAsked::Unknown };
-        book.asked.insert(key.to_string());
+        book.asked.insert(nikaia_std::block::Text::from(key.to_string()));
         recorded = match book.entries.get(&key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -227,7 +227,7 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
     if recorded.is_some() {
         let asked = proofs_read(&normal, recorded.as_ref().unwrap());
         if asked.is_some() {
-            t.known.insert(written.to_string(), ProofsKnown { key: key.to_string(), entry: recorded.as_ref().unwrap().clone(), asked: asked.as_ref().unwrap().clone() });
+            t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: recorded.as_ref().unwrap().clone(), asked: asked.as_ref().unwrap().clone() });
             proofs_dump(&normal, asked.as_ref().unwrap());
             return asked.unwrap();
         }
@@ -238,7 +238,7 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &TermArena, facts: &[i64], goal: 
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
-    if entry.is_some() { t.known.insert(written.to_string(), ProofsKnown { key: key.to_string(), entry: entry.as_ref().unwrap().clone(), asked: found.asked.clone() }); }
+    if entry.is_some() { t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: entry.as_ref().unwrap().clone(), asked: found.asked.clone() }); }
     let place = proofs_here(&t);
     let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return found.asked };
     book.searched += 1;
@@ -283,9 +283,9 @@ pub(crate) fn proofs_dump(normal: &LgNormal, asked: &ProofsAsked) { nikaia_std::
         _ => "",
     };
     let script = lg_smtlib_write(&normal.arena, &normal.facts, normal.goal);
-    let mut text = script.to_string();
+    let mut text = nikaia_std::block::Text::from(script.to_string());
     let logic = "(set-logic QF_LIA)\n";
-    let rest = script.strip_prefix(logic);
+    let rest = script.strip_prefix(AsRef::<str>::as_ref(logic));
     if status != "" && rest.is_some() { text = format!("{}(set-info :status {})\n{}", logic, status, rest.as_ref().unwrap()); }
     let key = hash::sha256_hex(&normal.text().bytes().collect::<Vec<_>>());
     match fs::create_dir(std::path::Path::new(&(dir)), &fs::Root::Anywhere, true) {
@@ -343,7 +343,7 @@ pub(crate) fn proofs_search(normal: &LgNormal) -> ProofsSearch {
             if !lg_verify_model(&normal.arena, &normal.facts, normal.goal, model) { return ProofsSearch { asked: ProofsAsked::Unknown, entry: None }; }
             return ProofsSearch { asked: ProofsAsked::Refuted(normal.named(model)), entry: Some(ProofsEntry::Refuted(lg_model_text(model))) };
         },
-        LgAnswer::Unknown { .. } => { return ProofsSearch { asked: ProofsAsked::Unknown, entry: Some(ProofsEntry::Unknown(PROOFS_SOLVER.to_string())) }; },
+        LgAnswer::Unknown { .. } => { return ProofsSearch { asked: ProofsAsked::Unknown, entry: Some(ProofsEntry::Unknown(nikaia_std::block::Text::from(PROOFS_SOLVER.to_string()))) }; },
     }
 }
 
@@ -353,9 +353,9 @@ pub fn proofs_invariants_here(t: &ProofsThread) -> collections::BTreeMap<i64, St
     let book = match t.book.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
     let file = format!("{}:", proofs_file_of(book, path));
     for (place, parts) in book.invariants.iter() {
-        let rest = match place.strip_prefix(&file) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let rest = match place.strip_prefix(&*file) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let at = match proofs_byte_of(rest, &t.at.source) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        out.insert(at, parts.to_string());
+        out.insert(at, nikaia_std::block::Text::from(parts.to_string()));
     }
     out
 }
@@ -365,7 +365,7 @@ pub fn proofs_record_at(t: &mut ProofsThread, used: &collections::BTreeMap<i64, 
         Some(__nikaia_it) => Some(nikaia_std::fs::path::clone(&(__nikaia_it))),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    let source = t.at.source.to_string();
+    let source = nikaia_std::block::Text::from(t.at.source.to_string());
     let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return };
     let root = match book.root.as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::clone(&(__nikaia_it))),
@@ -375,20 +375,20 @@ pub fn proofs_record_at(t: &mut ProofsThread, used: &collections::BTreeMap<i64, 
     let file = proofs_file_of(book, &path);
     for (at, parts) in used.iter() {
         let place = format!("{}:{}{}", file, proofs_place_of(*at, &source), kind);
-        book.invariants.insert(place.to_string(), parts.to_string());
+        book.invariants.insert(nikaia_std::block::Text::from(place.to_string()), nikaia_std::block::Text::from(parts.to_string()));
         book.used.insert(place);
     }
 }
 
 pub fn proofs_asked_so_far(t: &ProofsThread) -> ProofsSoFar {
     let book = match t.book.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return ProofsSoFar { asked: collections::BTreeSet::new(), used: collections::BTreeSet::new() } };
-    ProofsSoFar { asked: book.asked.to_owned(), used: book.used.to_owned() }
+    ProofsSoFar { asked: book.asked.copy_owned(), used: book.used.copy_owned() }
 }
 
 pub fn proofs_ask_again_from(t: &mut ProofsThread, before: &ProofsSoFar) {
     let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return };
-    book.asked = before.asked.to_owned();
-    book.used = before.used.to_owned();
+    book.asked = before.asked.copy_owned();
+    book.used = before.used.copy_owned();
 }
 
 pub fn proofs_place_of(at: i64, source: &str) -> String {
@@ -475,10 +475,10 @@ pub async fn proofs_book_read(root: &std::path::Path) -> ProofsBook {
     }) {
         if line.kind == "invariant" {
             let pair = match line.body.split_once(" ") { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if hash::sha256_hex(&pair.0.bytes().collect::<Vec<_>>()) == line.key { book.invariants.insert(pair.0.to_string(), pair.1.to_string()); }
+            if hash::sha256_hex(&pair.0.bytes().collect::<Vec<_>>()) == line.key { book.invariants.insert(nikaia_std::block::Text::from(pair.0.to_string()), nikaia_std::block::Text::from(pair.1.to_string())); }
             continue;
         }
-        if line.kind == "proved" && line.body.starts_with(SV_LOG_PREFIX) { book.entries.insert(line.key.to_string(), ProofsEntry::ProvedLog(line.body.to_string())); } else if line.kind == "proved" { book.entries.insert(line.key.to_string(), ProofsEntry::Proved(line.body.to_string())); } else if line.kind == "refuted" { book.entries.insert(line.key.to_string(), ProofsEntry::Refuted(line.body.to_string())); } else { book.entries.insert(line.key.to_string(), ProofsEntry::Unknown(line.body.to_string())); }
+        if line.kind == "proved" && line.body.starts_with(AsRef::<str>::as_ref(SV_LOG_PREFIX)) { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::ProvedLog(nikaia_std::block::Text::from(line.body.to_string()))); } else if line.kind == "proved" { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::Proved(nikaia_std::block::Text::from(line.body.to_string()))); } else if line.kind == "refuted" { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::Refuted(nikaia_std::block::Text::from(line.body.to_string()))); } else { book.entries.insert(nikaia_std::block::Text::from(line.key.to_string()), ProofsEntry::Unknown(nikaia_std::block::Text::from(line.body.to_string()))); }
     }
     book
 }
@@ -488,15 +488,15 @@ pub fn proofs_book_render(book: &ProofsBook) -> PbRendered {
     for (key, entry) in book.entries.iter() {
         if !book.asked.contains(key) { continue; }
         let line = match entry {
-            ProofsEntry::Proved(text) => PbLine { key: key.to_string(), kind: String::from("proved"), body: text.to_string() },
-            ProofsEntry::ProvedLog(text) => PbLine { key: key.to_string(), kind: String::from("proved"), body: text.to_string() },
-            ProofsEntry::Refuted(text) => PbLine { key: key.to_string(), kind: String::from("refuted"), body: text.to_string() },
-            ProofsEntry::Unknown(solver) => PbLine { key: key.to_string(), kind: String::from("unknown"), body: solver.to_string() },
+            ProofsEntry::Proved(text) => PbLine { key: nikaia_std::block::Text::from(key.to_string()), kind: String::from("proved"), body: nikaia_std::block::Text::from(text.to_string()) },
+            ProofsEntry::ProvedLog(text) => PbLine { key: nikaia_std::block::Text::from(key.to_string()), kind: String::from("proved"), body: nikaia_std::block::Text::from(text.to_string()) },
+            ProofsEntry::Refuted(text) => PbLine { key: nikaia_std::block::Text::from(key.to_string()), kind: String::from("refuted"), body: nikaia_std::block::Text::from(text.to_string()) },
+            ProofsEntry::Unknown(solver) => PbLine { key: nikaia_std::block::Text::from(key.to_string()), kind: String::from("unknown"), body: nikaia_std::block::Text::from(solver.to_string()) },
         };
         lines.push(line);
     }
     for (place, parts) in book.invariants.iter() { if book.used.contains(place) { lines.push(PbLine { key: hash::sha256_hex(&place.bytes().collect::<Vec<_>>()), kind: String::from("invariant"), body: format!("{} {}", place, parts) }); } }
-    lines.sort_by_key(|line| { line.key.to_string() });
+    lines.sort_by_key(|line| { nikaia_std::block::Text::from(line.key.to_string()) });
     pb_render(&lines, PROOFS_LONG)
 }
 

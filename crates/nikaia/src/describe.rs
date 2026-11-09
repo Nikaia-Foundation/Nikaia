@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/describe.rs
 //
 // `nikaia describe <crate>` — a draft ledger for a Rust crate's boundary
@@ -215,7 +217,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
     for (relative, text) in &sources.files {
         hashes.insert(
             relative.clone(),
-            orchestrator::cache::sha256_hex(text.as_bytes()),
+            String::from(orchestrator::cache::sha256_hex(text.as_bytes())),
         );
         // **Read by the grammar, offered by `tools/surface.nika`** (ADR-290
         // D3-D4): this drives the two and hands the items between them.
@@ -231,7 +233,7 @@ pub fn draft(root: &Path, crate_word: &str) -> Result<(Ledger, Described)> {
     // D10). The header is this file's.
     let drafted = describe::drafted(&surface, crate_word, &wanted);
     let mut ledger = Ledger::empty();
-    ledger.inference = "described-from-signatures".to_string();
+    ledger.inference = "described-from-signatures".to_text();
     ledger.sources = hashes;
     ledger.functions = drafted.functions;
     ledger.types = drafted.types;
@@ -349,13 +351,7 @@ fn without_dots(path: &Path) -> PathBuf {
 fn cargo_version(crate_root: &Path) -> Option<String> {
     let text = std::fs::read_to_string(crate_root.join("Cargo.toml")).ok()?;
     let document: toml::Value = toml::from_str(&text).ok()?;
-    Some(
-        document
-            .get("package")?
-            .get("version")?
-            .as_str()?
-            .to_string(),
-    )
+    Some(document.get("package")?.get("version")?.as_str()?.to_text())
 }
 
 /// The names of this crate every `.nika` of the project writes, without the

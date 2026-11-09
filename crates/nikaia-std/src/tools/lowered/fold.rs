@@ -93,7 +93,7 @@ pub(crate) fn combined(op: &BinaryOp, lhs: &Expr, rhs: &Expr, name_is: &dyn Fn(w
         other => return other,
     };
     if !a.pinned.is_empty() && !b.pinned.is_empty() && a.pinned != b.pinned { return Folded::Nothing; }
-    let pinned = if a.pinned.is_empty() { b.pinned.to_string() } else { a.pinned.to_string() };
+    let pinned = if a.pinned.is_empty() { nikaia_std::block::Text::from(b.pinned.to_string()) } else { nikaia_std::block::Text::from(a.pinned.to_string()) };
     if !pinned.is_empty() && (shifts_literals(lhs) || shifts_literals(rhs)) { return Folded::Nothing; }
     let x = a.value;
     let y = b.value;

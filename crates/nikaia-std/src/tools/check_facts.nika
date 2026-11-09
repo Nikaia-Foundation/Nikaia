@@ -251,6 +251,15 @@ pub struct CheckFacts {
     pub copied_reads: collections::BTreeSet[i64],
     pub text_in_lists: collections::BTreeSet[i64],
     pub owned_patterns: collections::BTreeSet[i64],
+    /// **A view of text handed to a pattern of `str`** (#490), by the
+    /// argument: on the block types it may be a `&Text`, which Rust's
+    /// `Pattern` does not take, so it is lent as the `str` it holds.
+    pub view_patterns: collections::BTreeSet[i64],
+    /// **The lists of views a statement is the last use of** (#490), by the
+    /// statement's start: the emitter drops each right after it, since a
+    /// block's `List` holds what it views to its scope's end
+    /// (`check_core_view_lists_end`).
+    pub view_list_drops: collections::BTreeMap[i64, Vec[String]],
     pub counted: collections::BTreeSet[i64],
     pub lent_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
     /// **The parts an arm keeps in place out of a field of a `mut`
@@ -661,6 +670,8 @@ impl CheckFacts {
             copied_reads: collections::BTreeSet(),
             text_in_lists: collections::BTreeSet(),
             owned_patterns: collections::BTreeSet(),
+            view_patterns: collections::BTreeSet(),
+            view_list_drops: collections::BTreeMap(),
             counted: collections::BTreeSet(),
             lent_bindings: collections::BTreeMap(),
             in_place_bindings: collections::BTreeMap(),

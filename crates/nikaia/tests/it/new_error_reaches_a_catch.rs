@@ -20,6 +20,8 @@
 //! left of that spelling is a **grammar** rule's entry, which is
 //! issue #179 and a question on `open-decisions.md`.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 
 use nikaia::assets::Reads;
@@ -33,12 +35,7 @@ fn findings(source: &str, newly: &[(&str, &[&str])]) -> Vec<Finding> {
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
     let newly: Newly = newly
         .iter()
-        .map(|(name, errors)| {
-            (
-                name.to_string(),
-                errors.iter().map(|e| e.to_string()).collect(),
-            )
-        })
+        .map(|(name, errors)| (name.to_text(), errors.iter().map(|e| e.to_text()).collect()))
         .collect();
     check::check_against(
         &parsed,

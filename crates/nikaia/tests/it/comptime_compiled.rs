@@ -16,6 +16,8 @@ use nikaia::assets::Reads;
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -764,7 +766,7 @@ fn a_check_with_no_workshop_refuses_a_comptime_that_calls() {
         vec![
             "This check has no place to compile build-time code in, and a value that runs \
              code is computed only by compiling it and running it."
-                .to_string()
+                .to_text()
         ]
     );
     // An initialiser of literals alone is still folded (D1's last paragraph).

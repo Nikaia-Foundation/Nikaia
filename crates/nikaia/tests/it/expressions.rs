@@ -4,6 +4,8 @@
 use nikaia::ast::{Expr, Item, Stmt};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -43,7 +45,7 @@ fn a_range_is_an_expression() {
     let refused =
         parse_to_ast("fn main() { for i in 0..=5 { } }").expect_err("`..=` does not parse");
     assert!(
-        refused.to_string().contains("Nikaia has no `..=`"),
+        refused.to_text().contains("Nikaia has no `..=`"),
         "{refused}"
     );
     let help = nikaia::diagnostics::refused_finding(&refused)
@@ -85,13 +87,13 @@ fn a_postfix_reparenthesises_what_binds_looser() {
     let emitted = emit(
         "fn f(a: i32, b: i32, xs: Vec[i32]) {\n\
          let c = (a as f64).sqrt()\n\
-         let d = (a + b).to_string()\n\
+         let d = (a + b).to_text()\n\
          let e = (a - b).abs()\n\
          let g = (a + b) as f64\n\
          }",
     );
     assert!(emitted.contains("(a as f64).sqrt()"), "{emitted}");
-    assert!(emitted.contains("(a + b).to_string()"), "{emitted}");
+    assert!(emitted.contains("(a + b).to_text()"), "{emitted}");
     assert!(emitted.contains("(a - b).abs()"), "{emitted}");
     assert!(emitted.contains("(a + b) as f64"), "{emitted}");
 }
@@ -127,7 +129,7 @@ fn a_float_may_carry_an_exponent() {
     for literal in ["1.5e5", "1.5e-4", "1.5e+4", "2e3", "2e-3"] {
         let emitted = emit(&format!("fn main() {{ let a = {literal} }}"));
         assert!(
-            emitted.contains(&format!("let a = {literal};")),
+            emitted.contains(&*format!("let a = {literal};")),
             "{literal}: {emitted}"
         );
     }

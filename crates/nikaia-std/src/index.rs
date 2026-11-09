@@ -850,6 +850,12 @@ impl<'a> Or<&'a str> for &'a Option<crate::block::Text> {
     }
 }
 
+impl<'a, T> Or<&'a [T]> for Option<&'a crate::block::List<T>> {
+    fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
+        self.map(|list| &list[..]).unwrap_or_else(fallback)
+    }
+}
+
 impl<'a, T> Or<&'a [T]> for &'a Option<crate::block::List<T>> {
     fn or(self, fallback: impl FnOnce() -> &'a [T]) -> &'a [T] {
         self.as_deref().unwrap_or_else(fallback)

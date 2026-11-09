@@ -18,6 +18,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -191,7 +193,7 @@ fn a_std_type_with_no_constructor_is_refused_here() {
                   }\n";
     let refused = parse_to_ast(source)
         .expect_err("NK1252 refuses it")
-        .to_string();
+        .to_text();
     assert!(refused.contains("NK1252"), "{refused}");
     assert!(refused.contains("io::IoError::NotFound"), "{refused}");
 }

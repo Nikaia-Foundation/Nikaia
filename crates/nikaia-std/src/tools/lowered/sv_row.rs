@@ -94,7 +94,7 @@ pub(crate) fn sv_row_reduced(r: SvRow) -> SvRow {
     let ks_gcd = match sv_content(&r.ks) { Some(__nikaia_value) => __nikaia_value, None => return r };
     let g = match sv_gcd(ks_gcd, r.constant) { Some(__nikaia_value) => __nikaia_value, None => return r };
     if g <= 1 { return r; }
-    let mut out = SvRow { cols: r.cols.to_owned(), ks: vec![], constant: r.constant / g };
+    let mut out = SvRow { cols: r.cols.copy_owned(), ks: vec![], constant: r.constant / g };
     for k in r.ks.iter() {
         let k = nikaia_std::num::value(k);
         out.ks.push(k / g);
@@ -105,7 +105,7 @@ pub(crate) fn sv_row_reduced(r: SvRow) -> SvRow {
 pub(crate) fn sv_row_tightened(r: &SvRow) -> SvRow {
     let g = match sv_row_content(r) { Some(__nikaia_value) => __nikaia_value, None => return r.clone() };
     if g <= 1 { return r.clone(); }
-    let mut out = SvRow { cols: r.cols.to_owned(), ks: vec![], constant: nikaia_std::index::or(sv_ceil_div(r.constant, g), || r.constant.into()) };
+    let mut out = SvRow { cols: r.cols.copy_owned(), ks: vec![], constant: nikaia_std::index::or(sv_ceil_div(r.constant, g), || r.constant.into()) };
     for k in r.ks.iter() {
         let k = nikaia_std::num::value(k);
         out.ks.push(k / g);
@@ -185,8 +185,8 @@ impl SvVars {
         let known: Option<u32> = self.index.get(name).copied();
         if known.is_some() { return std::convert::identity(known); }
         let n = match u32::try_from(self.names.len() as i64).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        self.names.push(name.to_string());
-        self.index.insert(name.to_string(), n);
+        self.names.push(nikaia_std::block::Text::from(name.to_string()));
+        self.index.insert(nikaia_std::block::Text::from(name.to_string()), n);
         Some(n)
     }
 }

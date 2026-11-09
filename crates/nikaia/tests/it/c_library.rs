@@ -8,6 +8,8 @@
 //! the library until `shutdown` and `init` have run.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -1385,5 +1387,5 @@ fn run_c(root: &Path, made: &Path, name: &str, source: &str) -> String {
         .output()
         .expect("the caller runs");
     assert!(ran.status.success(), "{}", said(&ran));
-    String::from_utf8_lossy(&ran.stdout).into_owned()
+    String::from_utf8_lossy(&ran.stdout)
 }

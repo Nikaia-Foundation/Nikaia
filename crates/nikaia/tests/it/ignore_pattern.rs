@@ -13,6 +13,8 @@
 //! issue #209 found it; D2 refuses it.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -213,7 +215,7 @@ fn an_ignored_argument_earns_no_warning_from_rustc() {
             binary.to_str().expect("utf-8 path"),
         ],
     );
-    let said = String::from_utf8_lossy(&compiled.stderr).into_owned();
+    let said = String::from_utf8_lossy(&compiled.stderr);
     assert!(
         compiled.status.success(),
         "the emitted Rust did not compile:\n{said}\n--- emitted ---\n{rust}"

@@ -51,10 +51,10 @@ impl nikaia_std::error::Joined for __NikaiaThrows_ProjectMembersRefusal__io_IoEr
 }
 impl __NikaiaThrows_ProjectMembersRefusal__io_IoError {
     #[allow(dead_code)]
-    pub(crate) fn message(&self) -> String { self.to_string() }
+    pub(crate) fn message(&self) -> String { self.to_string().into() }
 }
 impl nikaia_std::error::Full for __NikaiaThrows_ProjectMembersRefusal__io_IoError {
-    fn full(&self) -> String {
+    fn full(&self) -> std::string::String {
         match self {
             __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => e.full(),
             __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => e.full(),
@@ -93,7 +93,7 @@ pub(crate) async fn project_members_taken_in<H: ProjectMembersHost>(manifest: &P
     let mut out: Vec<(String, fs::Path)> = vec![];
     for (name, _) in project_members_official().iter() {
         if !used.contains(nikaia_std::index::as_text(&name)) || nikaia_std::list::contains(&manifest.keys, &name) || nikaia_std::list::contains(&manifest.foreign, &name) || project_members_holds_sources(&nikaia_std::fs::path::join(&(src), std::path::Path::new(&(name)))) { continue; }
-        out.push((name.to_string(), nikaia_std::fs::path::join(&(host.shipped()), std::path::Path::new(&(name)))));
+        out.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::fs::path::join(&(host.shipped()), std::path::Path::new(&(name)))));
     }
     out
 }
@@ -146,7 +146,7 @@ impl ProjectMembersRefusal {
     pub(crate) fn message(&self) -> String {
         match self {
             ProjectMembersRefusal::Manifest => String::from("a manifest did not read"),
-            ProjectMembersRefusal::Refused(why) => why.to_string(),
+            ProjectMembersRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
             ProjectMembersRefusal::Unreadable { what, why } => format!("{}: {}", what, why),
         }
     }
@@ -176,7 +176,7 @@ pub(crate) async fn project_members_packages_in<H: ProjectMembersHost>(manifest:
     let located = project_members_located(manifest, root, fetched, host).await?;
     let mut seen: collections::HashMap<fs::Path, String> = collections::HashMap::<_, _>::default();
     let mut here: collections::HashMap<fs::Path, String> = collections::HashMap::<_, _>::default();
-    for (name, path) in located.iter() { here.insert(project_members_canonical(&nikaia_std::fs::path::join(&(root), &path)), name.to_string()); }
+    for (name, path) in located.iter() { here.insert(project_members_canonical(&nikaia_std::fs::path::join(&(root), &path)), nikaia_std::block::Text::from(name.to_string())); }
     for (name, path) in located.iter() {
         let root = project_members_canonical(&nikaia_std::fs::path::join(&(root), &path));
         let first = seen.get(&root);
@@ -184,13 +184,13 @@ pub(crate) async fn project_members_packages_in<H: ProjectMembersHost>(manifest:
             Some(first) => { return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}` and `{}` are the same package: both are {}.\nThe same path is the same package, so two names for it would be two copies of every type it declares - name it once.", name, first, nikaia_std::fs::path::display(&(root)))), &"project_members_packages_in").into()); },
             None => { },
         }
-        seen.insert(nikaia_std::fs::path::clone(&(root)), name.to_string());
+        seen.insert(nikaia_std::fs::path::clone(&(root)), nikaia_std::block::Text::from(name.to_string()));
         let dependency = match host.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_packages_in").into()) };
         if announce && dependency.has_build { nikaia_std::io::eprintln(format_args!("note: `{}`'s own `[build]` is ignored: a package is built with the settings of the program that uses it.", name))?; }
-        let mut reachable: collections::BTreeSet<String> = dependency.keys.iter().map(|x| { x.to_string() }).collect();
+        let mut reachable: collections::BTreeSet<String> = dependency.keys.iter().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect();
         reachable.extend(dependency.foreign.iter().cloned());
-        reachable.extend(project_members_taken_in(&dependency, &root, host).await.iter().map(|pair| { pair.0.to_string() }));
-        out.push(ProjectMembersDependency { name: name.to_string(), renames: project_members_renames_in(&dependency, &root, &here, fetched, host).await?, root, reachable });
+        reachable.extend(project_members_taken_in(&dependency, &root, host).await.iter().map(|pair| { nikaia_std::block::Text::from(pair.0.to_string()) }));
+        out.push(ProjectMembersDependency { name: nikaia_std::block::Text::from(name.to_string()), renames: project_members_renames_in(&dependency, &root, &here, fetched, host).await?, root, reachable });
     }
     Ok(out)
 }
@@ -200,13 +200,13 @@ pub(crate) async fn project_members_renames_in<H: ProjectMembersHost>(dependency
     for (key, path) in project_members_located(dependency, dependency_root, fetched, host).await?.iter() {
         let at = project_members_canonical(&nikaia_std::fs::path::join(&(dependency_root), &path));
         let canonical: String = match here.get(&at) {
-            Some(ours) => ours.to_string(),
+            Some(ours) => nikaia_std::block::Text::from(ours.to_string()),
             None => {
                 let read = match host.manifest_at(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_renames_in")) };
-                nikaia_std::index::or(read.name, || key.to_string().into())
+                nikaia_std::index::or(read.name, || nikaia_std::block::Text::from(key.to_string()).into())
             },
         };
-        if AsRef::<str>::as_ref(&(canonical)) != AsRef::<str>::as_ref(&(key)) { out.insert(key.to_string(), canonical); }
+        if AsRef::<str>::as_ref(&(canonical)) != AsRef::<str>::as_ref(&(key)) { out.insert(nikaia_std::block::Text::from(key.to_string()), canonical); }
     }
     Ok(out)
 }
@@ -268,7 +268,7 @@ pub async fn project_members_members_of<H: ProjectMembersHost>(entry_manifest: &
         }
         seen.insert(nikaia_std::fs::path::clone(&(root)), out.len() as i64);
         let found_as: Option<String> = match fetched.iter().find(|&pair| { nikaia_std::fs::path::same(&(project_members_canonical(pair.1)), &(root)) }).map(|__nikaia_it| __nikaia_it.0) {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
         };
         out.push(ProjectMembersMember { name, entry: project_members_crate_root_of(&root)?, root, dependencies, fetched: found_as });
@@ -283,17 +283,17 @@ pub fn project_members_fetched_text(members: &[ProjectMembersMember]) -> String 
         let named = match m.fetched.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(format!("{}={}", named, nikaia_std::fs::path::display(&(m.root))))
     }).collect::<Vec<_>>();
-    lines.join("\n")
+    nikaia_std::block::Text::from(lines.join("\n"))
 }
 
 pub(crate) async fn project_members_located<H: ProjectMembersHost>(manifest: &ProjectMembersManifest, root: &std::path::Path, fetched: &collections::BTreeMap<String, fs::Path>, host: &H) -> Result<Vec<(String, fs::Path)>, nikaia_std::error::Thrown<ProjectMembersRefusal>> {
-    let mut out: Vec<(String, fs::Path)> = manifest.paths.to_owned();
+    let mut out: Vec<(String, fs::Path)> = manifest.paths.copy_owned();
     out.extend(project_members_taken_in(manifest, root, host).await);
     for (key, entry) in manifest.versions.iter() {
         let named = format!("nikaia_{}", key);
         let at = match fetched.get(&named) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}` is a Nikaia package by version, and Cargo found no crate `{}` for it in {}/nikaia.toml's resolution.\nA package's own packages by version are found through its published `Cargo.toml`: it has to name `{}` there.", key, named, nikaia_std::fs::path::display(&(root)), named)), &"project_members_located")) };
         project_members_a_nikaia_package(&key, &named, &at)?;
-        out.push((key.to_string(), nikaia_std::fs::path::clone(&(at))));
+        out.push((nikaia_std::block::Text::from(key.to_string()), nikaia_std::fs::path::clone(&(at))));
     }
     out.sort();
     Ok(out)
@@ -314,7 +314,7 @@ pub(crate) fn project_members_a_nikaia_package(key: &str, named: &str, at: &std:
     }) { missing.push("no `.nika` sources in `src/`"); }
     if !project_tests_is_file(&nikaia_std::fs::path::join(&(at), std::path::Path::new(&("nikaia.contracts")))) { missing.push("no `nikaia.contracts`"); }
     if missing.is_empty() { return Ok(()); }
-    let said = missing.join(", ");
+    let said = nikaia_std::block::Text::from(missing.join(", "));
     return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Refused(format!("`{}`, the crate Cargo found for `{}`, is not a Nikaia package: it has {} ({}).\nA Nikaia package on crates.io carries its `nikaia.toml`, its `src/*.nika` and its `nikaia.contracts`. Depend on another version, or on the package by path.", named, key, said, nikaia_std::fs::path::display(&(at)))), &"project_members_a_nikaia_package"));
 }
 
@@ -325,7 +325,7 @@ pub async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &Projec
         Some(ref handed) => {
             for line in handed.lines() {
                 let parts: Vec<&str> = line.splitn(2, '=').map(|part| { part }).collect::<Vec<_>>();
-                if parts.len() == 2 { out.insert((*nikaia_std::index::get(&parts, 0)).to_string(), cargo_json_path((*nikaia_std::index::get(&parts, 1)).to_string())); }
+                if parts.len() == 2 { out.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()), cargo_json_path(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string()))); }
             }
             return Ok(out);
         },
@@ -337,7 +337,7 @@ pub async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &Projec
         let (read, at) = queue.remove(0);
         if seen.contains(&at) { continue; }
         seen.insert(nikaia_std::fs::path::clone(&(at)));
-        for (_, entry) in read.versions.iter() { entries.insert(entry.to_string()); }
+        for (_, entry) in read.versions.iter() { entries.insert(nikaia_std::block::Text::from(entry.to_string())); }
         for (_, path) in read.paths.iter() {
             let dir = project_members_canonical(&nikaia_std::fs::path::join(&(at), &path));
             let below = match host.manifest_at(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("nikaia.toml")))) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectMembersRefusal::Manifest, &"project_members_fetched_of")) };
@@ -463,18 +463,18 @@ pub(crate) fn project_members_crates_beneath<M: ProjectMembersHost>(root: &std::
 pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembersForeignHost>(root: &std::path::Path, manifests: &M, host: &H) -> ProjectMembersForeign {
     let manifest = manifests.manifest_at(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml"))));
     let foreign: Vec<String> = nikaia_std::index::or(match manifest.as_ref().map(|__nikaia_it| &__nikaia_it.foreign) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, || vec![].into());
-    let declared: collections::BTreeSet<String> = foreign.iter().map(|x| { x.to_string() }).collect();
+    let declared: collections::BTreeSet<String> = foreign.iter().map(|x| { nikaia_std::block::Text::from(x.to_string()) }).collect();
     let mut described: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut descriptions = host.empty_ledger();
     let mut moved: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for name in declared.iter() {
         let ledger = match project_members_description_at(root, name, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        described.insert(name.to_string());
+        described.insert(nikaia_std::block::Text::from(name.to_string()));
         let differing = project_members_sources_that_moved(root, name, &ledger, host).await;
-        if !differing.is_empty() { moved.insert(name.to_string(), differing); }
+        if !differing.is_empty() { moved.insert(nikaia_std::block::Text::from(name.to_string()), differing); }
         descriptions = host.absorb(descriptions, ledger);
     }
     let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -485,7 +485,7 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
 
 impl ProjectMembersForeign {
     pub fn packages(&self, modules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
-        let mut out = modules.to_owned();
+        let mut out = modules.copy_owned();
         out.extend(self.described.iter().cloned());
         out.extend(self.declared.iter().cloned());
         out.extend(self.beneath.iter().cloned());
@@ -495,7 +495,7 @@ impl ProjectMembersForeign {
 
 pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, ledger: &Ledger, host: &H) -> Vec<String> {
     if ledger.sources.is_empty() { return vec![]; }
-    let crate_root = match host.crate_root(root, name.to_string()) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let crate_root = match host.crate_root(root, nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<String> = vec![];
     for (file, recorded) in ledger.sources.iter() {
         let bytes = match fs::read(&nikaia_std::fs::path::join(&(crate_root), std::path::Path::new(&(file))), &fs::Root::Anywhere).await {
@@ -504,7 +504,7 @@ pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignH
         };
         let mut read: Vec<u8> = vec![];
         for b in bytes.iter().copied() { read.push(b); }
-        if hash::sha256_hex(&read) != *recorded { out.push(file.to_string()); }
+        if hash::sha256_hex(&read) != *recorded { out.push(nikaia_std::block::Text::from(file.to_string())); }
     }
     out
 }

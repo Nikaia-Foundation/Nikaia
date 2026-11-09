@@ -61,7 +61,7 @@ pub fn assigned_in_expr(expr: &Expr, words: &winnow_grammar::InternerContext) ->
 // this was written - see `contracts::sync`.
 pub fn untracked_in(body: &Block, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> collections::BTreeSet<String> {
     let mut found = tally();
-    tally_block(body, &Ask::Untracked(readers.to_owned()), false, words, &mut found);
+    tally_block(body, &Ask::Untracked(readers.copy_owned()), false, words, &mut found);
     found.names
 }
 
@@ -80,8 +80,8 @@ pub fn filled_once(body: &Block, pinned: &collections::BTreeSet<String>, words: 
         let count = nikaia_std::num::value(count);
         if count != 1 || pinned.contains(list) { continue; }
         let mut changes = tally();
-        tally_block(body, &Ask::Changes(list.to_string(), collections::BTreeSet::new()), false, words, &mut changes);
-        if changes.count == 1 && !rebinds(body, list, words) { once.push(list.to_string()); }
+        tally_block(body, &Ask::Changes(nikaia_std::block::Text::from(list.to_string()), collections::BTreeSet::new()), false, words, &mut changes);
+        if changes.count == 1 && !rebinds(body, list, words) { once.push(nikaia_std::block::Text::from(list.to_string())); }
     }
     once
 }
@@ -103,7 +103,7 @@ pub(crate) fn pushed_onto(stmt: &Stmt, words: &winnow_grammar::InternerContext) 
 
 pub(crate) fn variable_text(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
         _ => None,
     }
 }
@@ -112,7 +112,7 @@ pub(crate) fn variable_text(expr: &Expr, words: &winnow_grammar::InternerContext
 // this was written - see `contracts::sync`.
 pub(crate) fn body_callee_text(func: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
         Expr::Path(segments, _) => {
             let mut joined: String = String::from("");
             for segment in segments.iter() {
@@ -130,7 +130,7 @@ pub(crate) fn assigned_root(target: &Expr, words: &winnow_grammar::InternerConte
     match target {
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); assigned_root(base, words) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); assigned_root(base, words) },
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
         _ => None,
     }
 }
@@ -438,19 +438,19 @@ pub(crate) fn tally_expr(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
 
 pub fn changes_length_in_statement(stmt: &Stmt, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
     let mut changes = tally();
-    tally_statement(stmt, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
+    tally_statement(stmt, &Ask::Changes(nikaia_std::block::Text::from(list.to_string()), readers.copy_owned()), false, words, &mut changes);
     changes.count > 0
 }
 
 pub fn changes_length_in_expr(expr: &Expr, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
     let mut changes = tally();
-    tally_expr(expr, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
+    tally_expr(expr, &Ask::Changes(nikaia_std::block::Text::from(list.to_string()), readers.copy_owned()), false, words, &mut changes);
     changes.count > 0
 }
 
 pub fn changes_length_in(body: &Block, list: &str, readers: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
     let mut changes = tally();
-    tally_block(body, &Ask::Changes(list.to_string(), readers.to_owned()), false, words, &mut changes);
+    tally_block(body, &Ask::Changes(nikaia_std::block::Text::from(list.to_string()), readers.copy_owned()), false, words, &mut changes);
     changes.count > 0
 }
 

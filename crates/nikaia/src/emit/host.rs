@@ -19,6 +19,8 @@
 //! same `Refused` the Rust side raises, with its position.
 
 use anyhow::Result;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::tools::emit_host::EmitHost;
 use nikaia_std::tools::emit_kinds::EmitRefused;
 use nikaia_std::tools::emit_seeds::EmitSeedsShape;
@@ -65,13 +67,13 @@ impl Emitter<'_> {
             }
             link = each.source();
         }
-        Err(crate::diagnostics::refuse(error.to_string()))
+        Err(crate::diagnostics::refuse(error.to_text()))
     }
 
     /// An error raised by Rust code under a crossing: kept whole, with a marker
     /// in its place for the Nikaia frames to carry up.
     fn stash(&self, error: anyhow::Error) -> Box<dyn std::error::Error> {
-        let message = error.to_string();
+        let message = error.to_text();
         *self.failed.borrow_mut() = Some(error);
         Box::new(EmitRefused { message, at: None })
     }
@@ -96,7 +98,7 @@ impl EmitHost for Emitter<'_> {
     fn known_nonnegative(&self, body: &Block) -> Option<Vec<String>> {
         self.nonnegative_bodies
             .get(&(std::ptr::from_ref(body) as usize))
-            .map(|known| known.iter().map(|s| self.text(*s).to_string()).collect())
+            .map(|known| known.iter().map(|s| self.text(*s).to_text()).collect())
     }
 
     fn ty_named(
@@ -182,7 +184,7 @@ impl EmitHost for Emitter<'_> {
     }
 
     fn set_main_params(&self, params: &[String]) {
-        *self.main_params.borrow_mut() = params.to_vec();
+        *self.main_params.borrow_mut() = Vec::from(params);
     }
 
     fn main_params(&self) -> Vec<String> {

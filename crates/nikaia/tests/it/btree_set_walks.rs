@@ -3,6 +3,8 @@
 //! with `nikaia run`, with an empty set beside it, and its output compared.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn run(purpose: &str, body: &str) -> String {
     let dir = common::scratch_dir(purpose);
@@ -23,7 +25,7 @@ fn run(purpose: &str, body: &str) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).into_owned()
+    String::from_utf8_lossy(&run.stdout)
 }
 
 #[test]

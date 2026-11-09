@@ -5,6 +5,8 @@
 //! `ty_counted` for the type, `emit_core_operand` for the cast, and
 //! `emit_core_index_expr` for the index - 500 deep, and must still lower.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 fn lowers(source: &str, name: &str) {

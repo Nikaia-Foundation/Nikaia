@@ -38,7 +38,7 @@ pub enum ComptimeBundleFailed {
 impl ComptimeBundleFailed {
     pub(crate) fn message(&self) -> String {
         match self {
-            ComptimeBundleFailed::Said(text) => text.to_string(),
+            ComptimeBundleFailed::Said(text) => nikaia_std::block::Text::from(text.to_string()),
         }
     }
 }
@@ -95,7 +95,7 @@ pub fn comptime_bundle_artifacts(messages: &str, named: &[String]) -> ComptimeBu
     ComptimeBundleArtifacts { dylib, rlibs }
 }
 
-pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { name.to_string() }).collect::<Vec<_>>() }
+pub(crate) fn comptime_bundle_named() -> Vec<String> { COMPTIME_BUNDLE_NAMED.iter().map(|name| { nikaia_std::block::Text::from(name.to_string()) }).collect::<Vec<_>>() }
 
 pub(crate) fn comptime_bundle_digest(text: &str) -> String {
     let bytes: Vec<u8> = text.bytes().collect::<Vec<_>>();
@@ -165,7 +165,7 @@ pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Opti
     let libdir: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 3));
     let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple10572| {
         let (name, rlib) = __nikaia_tuple10572;
-        (name.to_string(), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
+        (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
     }).collect::<Vec<_>>();
     if (rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return None; }
     let stamp = match comptime_bundle_stamp_of(&dylib, &rlibs) {
@@ -181,12 +181,12 @@ pub(crate) fn comptime_bundle_path(text: nikaia_std::either_text::EitherText<'_>
 }
 
 pub(crate) fn comptime_bundle_bundle_text<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> (String, String) {
-    let mut manifest = cr_bundle_manifest(&host.runtime_dependencies(&comptime_bundle_named().join(" ")));
+    let mut manifest = cr_bundle_manifest(&host.runtime_dependencies(&nikaia_std::block::Text::from(comptime_bundle_named().join(" "))));
     let source = match flavour {
         ComptimeBundleFlavour::BuildTime => cr_bundle_source(),
         ComptimeBundleFlavour::Run => {
             manifest.push_str(COMPTIME_BUNDLE_RUN_PROFILE);
-            COMPTIME_BUNDLE_RUN_SOURCE.to_string()
+            nikaia_std::block::Text::from(COMPTIME_BUNDLE_RUN_SOURCE.to_string())
         },
     };
     (manifest, source)
@@ -213,7 +213,7 @@ pub(crate) fn comptime_bundle_stamp_of(dylib: &std::path::Path, rlibs: &[(String
         };
         lines.push(format!("{}:{}:{}", nikaia_std::fs::path::display(&(file)), meta.len() as i64, meta.modified().in_nanos()));
     }
-    Ok(lines.join("\n"))
+    Ok(nikaia_std::block::Text::from(lines.join("\n")))
 }
 
 pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &ComptimeBundleFlavour, host: &H) -> Result<ComptimeBundle, nikaia_std::error::Thrown<ComptimeBundleFailed>> {
@@ -327,7 +327,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
     };
     comptime_bundle_tidy(&binary, &dir, &scratch);
     if ran.success {
-        let answer = ran.stdout.trim().to_string();
+        let answer = nikaia_std::block::Text::from(ran.stdout.trim().to_string());
         match comptime_bundle_write_if_changed(&answered, &answer, &host.unique_beside(&answered)).await {
             Ok(_) => {},
             Err(error) => {
@@ -337,7 +337,7 @@ pub async fn comptime_bundle_run<H: ComptimeBundleHost>(at: &std::path::Path, bu
         };
         return Ok(answer);
     }
-    let mut said = ran.stderr.trim().to_string();
+    let mut said = nikaia_std::block::Text::from(ran.stderr.trim().to_string());
     if said.is_empty() { said = format!("it ended without saying why ({})", ran.status); }
     if said.contains("the program stopped") || said.contains("nikaia-build-time:") {
         match comptime_bundle_write_if_changed(&stopped, &said, &host.unique_beside(&stopped)).await {

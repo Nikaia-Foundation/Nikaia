@@ -27,6 +27,8 @@
 //! rather than merely discouraged.
 
 use crate::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -192,7 +194,7 @@ pub fn native_cpu(triple: &str) -> Result<String> {
     let said = rustc_cpus(triple, &["--print", "cfg", "-C", "target-cpu=native"])?;
     let key = sysroot_cache::sysroot_native_cpu(&said);
     if let Ok(mut held) = ASKED.lock() {
-        held.insert(triple.to_string(), key.clone());
+        held.insert(triple.to_text(), key.clone());
     }
     Ok(key)
 }
@@ -212,7 +214,7 @@ fn rustc_cpus(triple: &str, more: &[&str]) -> Result<String> {
             String::from_utf8_lossy(&out.stderr).trim()
         );
     }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    Ok(String::from_utf8_lossy(&out.stdout))
 }
 
 /// What the machine's codegen table asked for, as a key dimension.
@@ -234,9 +236,9 @@ impl Codegen {
     pub fn new(table: &BTreeMap<String, toml::Value>, panic: &str) -> Codegen {
         let mut rendered: BTreeMap<String, String> = table
             .iter()
-            .map(|(key, value)| (key.clone(), value.to_string()))
+            .map(|(key, value)| (key.clone(), value.to_text()))
             .collect();
-        rendered.insert("panic".to_string(), panic.to_string());
+        rendered.insert("panic".to_text(), panic.to_text());
         Codegen { table: rendered }
     }
 
@@ -346,7 +348,7 @@ fn every_refusal(path: &Path, source: &str, refusals: &[&crate::check::Finding])
         }
     }
     nikaia_std::tools::sysroot_package::sysroot_package_every_refusal(
-        &path.display().to_string(),
+        &path.display().to_text(),
         source,
         refusals,
         &Render,
@@ -360,7 +362,7 @@ fn sync_refusals(
     source: &str,
     pauses: &[crate::contracts::sync::Violation],
 ) -> String {
-    let shown = path.display().to_string();
+    let shown = path.display().to_text();
     pauses
         .iter()
         .map(|pause| crate::diagnostics::render_sync_violation(pause, &shown, source))
@@ -454,7 +456,7 @@ fn dependency_ledgers(
 /// The files `lower-std` keys a package on: its own, its dependencies'
 /// manifest and every file of each dependency.
 fn tools_inputs(dir: &Path, paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
-    let mut inputs = paths.to_vec();
+    let mut inputs = Vec::from(paths);
     let dependencies = tools_dependencies(dir)?;
     if !dependencies.is_empty() {
         inputs.push(dir.join(TOOLS_DEPENDENCIES));
@@ -526,7 +528,7 @@ fn read_tools_package(
         let source =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         sizes.push(source.len());
-        texts.push(source);
+        texts.push(String::from(source));
     }
     // **Each file parsed on its own thread** (#1277): a parse reads only its
     // text and makes its own interner; the largest first, the answers in file
@@ -552,6 +554,7 @@ fn read_tools_package(
         .map(|(path, (parsed, text))| (path.as_path(), parsed, text.as_str()))
         .collect();
     crate::modules::declared_once(&files)?;
+    drop(files);
     Ok((sizes, texts, parsed))
 }
 
@@ -641,7 +644,7 @@ pub fn bounds_tools(
             .map(|(_, other)| other)
             .collect();
         let checked = check_tools_file(&parsed[at], &beside, &own, &library, &packages);
-        let path = paths[at].display().to_string();
+        let path = paths[at].display().to_text();
         let refused = checked
             .findings
             .iter()
@@ -691,7 +694,7 @@ pub fn bounds_tools(
     // order whatever the order of the work.
     let mut order: Vec<usize> = (0..paths.len()).collect();
     order.sort_by_key(|at| std::cmp::Reverse(sizes[*at]));
-    Ok(in_parallel(&order, None, report_one).concat())
+    Ok(in_parallel(&order, None, report_one).into_iter().collect())
 }
 
 /// The same with the per-file cache of [`LoweredBefore`]: `reused` counts the
@@ -750,7 +753,7 @@ fn lower_package(
             .iter()
             .map(|path| {
                 let name = path.file_name().unwrap_or_default();
-                name.to_string_lossy().into_owned()
+                name.to_string_lossy().to_text()
             })
             .collect();
         let bodiless: Vec<String> = texts
@@ -777,7 +780,7 @@ fn lower_package(
             std::borrow::Cow::Borrowed(texts[at].as_str())
         } else {
             let names: Vec<&str> = only_tests.iter().map(String::as_str).collect();
-            std::borrow::Cow::Owned(format!(
+            std::borrow::Cow::Owned(std::format!(
                 "{}\n// only tests reach: {}",
                 texts[at],
                 names.join(" ")
@@ -920,7 +923,7 @@ fn lower_package(
             path.file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
-                .into_owned()
+                .to_text()
         })
         .collect();
     let views: Vec<_> = parsed
@@ -1057,7 +1060,7 @@ impl Phases {
     fn add(&mut self, phase: &str, spent: std::time::Duration) {
         match self.totals.iter_mut().find(|(name, _)| name == phase) {
             Some((_, total)) => *total += spent,
-            None => self.totals.push((phase.to_string(), spent)),
+            None => self.totals.push((phase.to_text(), spent)),
         }
     }
 
@@ -1077,8 +1080,7 @@ impl Phases {
             .unwrap_or_default();
         for (phase, spent) in [("check", checking), ("emit", emitting)] {
             self.add(phase, spent);
-            self.files
-                .push((phase.to_string(), name.to_string(), spent));
+            self.files.push((phase.to_text(), name.to_text(), spent));
         }
     }
 
@@ -1303,7 +1305,7 @@ impl LoweredBefore {
 
     /// A cache read and written as the compiler `compiler`.
     fn with_compiler(compiler: &str) -> LoweredBefore {
-        let compiler = Some(compiler.to_string());
+        let compiler = Some(compiler.to_text());
         LoweredBefore {
             root: Layout::user_cache_dir().join("lower-std"),
             compiler,
@@ -1324,7 +1326,7 @@ impl LoweredBefore {
         block_on(sysroot_cache::sysroot_lowered_get(
             &self.root,
             self.compiler.is_some(),
-            key.map(str::to_string),
+            key.map(str::to_text),
             &Host,
         ))
     }
@@ -1374,6 +1376,8 @@ fn listed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{format, vec};
 
     /// #667: the key is the compiler's identity plus the files' names and
     /// text; it holds no binary bytes and no checkout path.
@@ -1479,7 +1483,7 @@ mod tests {
         let sysroot = Sysroot::new("/nowhere");
         let plain = Codegen::new(&BTreeMap::new(), "unwind");
         let tuned = Codegen::new(
-            &BTreeMap::from([("opt-level".to_string(), toml::Value::Integer(3))]),
+            &BTreeMap::from([("opt-level".to_text(), toml::Value::Integer(3))]),
             "unwind",
         );
         assert_ne!(

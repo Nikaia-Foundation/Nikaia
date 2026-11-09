@@ -9,6 +9,8 @@
 //! (#821, `scripts/move_tests.nika`).
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 /// What the program prints, and the Rust it was lowered to.
@@ -39,7 +41,7 @@ fn printed_and_lowered(purpose: &str, source: &str) -> (String, String) {
     assert!(out.status.success(), "{purpose} did not run");
     let rust = std::fs::read_to_string(dir.join("p.rs")).expect("read the lowering");
     std::fs::remove_dir_all(&dir).ok();
-    (String::from_utf8_lossy(&out.stdout).into_owned(), rust)
+    (String::from_utf8_lossy(&out.stdout), String::from(rust))
 }
 
 /// #560: `Wrapped(x, at)` is the constructor of a struct another file of the

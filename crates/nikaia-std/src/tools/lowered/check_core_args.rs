@@ -21,7 +21,7 @@ pub(crate) fn check_core_args_keepers(state: &CheckState, callee: Option<&FnCont
         if i == at {
             let impls = match state.call_keepers.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return general };
             if impls.is_empty() { return general; }
-            return format!("{}, which keeps `{}` for the trait method's column (ADR-277 D17),", impls.join(", "), name);
+            return format!("{}, which keeps `{}` for the trait method's column (ADR-277 D17),", nikaia_std::block::Text::from(impls.join(", ")), name);
         }
         i += 1;
     }
@@ -103,7 +103,7 @@ pub(crate) fn check_core_args_lambda_says_mut(state: &mut CheckState, world: &Ch
     for p in params.iter() {
         let p = *p;
         if ((at) as usize) < given.len() && lent_mut(nikaia_std::index::get(&given, (at) as usize)).is_some() && !mutable.contains(&p) {
-            let name = world.words.resolve(p).to_string();
+            let name = nikaia_std::block::Text::from(world.words.resolve(p).to_string());
             let wanted = code.text();
             let position: i64 = at + 1;
             state.findings.push(check_refusal("NK1102", &check_span_at(world, arg, span), format!("This lambda takes `{}` without `mut`, but `{}` lends parameter {} as `mut`.", name, wanted, position), vec![String::from("`fn(S)` and `fn(mut S)` are different types: the code a `fn(mut S)` stands for changes that argument in place.")], Some(format!("Write `mut {}`.", name))));
@@ -155,13 +155,13 @@ pub(crate) fn check_core_args_lambda<H: CheckHost>(state: &mut CheckState, world
                         None => None,
                     }, || Ty::Unknown);
                     if !written.is_unknown() {
-                        let returned: Vec<CheckLambdaReturn> = state.flow.last_lambda_returns.to_owned();
+                        let returned: Vec<CheckLambdaReturn> = state.flow.last_lambda_returns.copy_owned();
                         for one in returned.iter() { for value in one.value.iter() { state.text_literal(world, &written, value, true); } }
                     }
                     let mut out: Option<Ty> = None;
                     let walked = check_core_args_walked(&written, &came_to);
                     if walked.is_some() { out = std::convert::identity(walked); } else if !written.is_unknown() && !check_core_args_open_option(&written) { out = Some(written); } else if !came_to.is_unknown() { out = Some(came_to); } else if !written.is_unknown() { out = Some(written); }
-                    return Ty::Fn { params: given.to_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };
+                    return Ty::Fn { params: given.copy_owned(), result: Box::new(out), is_sync: !pauses, can_throw: fails };
                 },
                 _ => { },
             }
@@ -264,7 +264,7 @@ pub(crate) fn check_core_args_optional_code(ty: &Ty) -> bool {
 
 pub(crate) fn check_core_args_slot(callee: Option<&FnContract>, at: i64) -> bool {
     let signature: Signature = match match callee.as_ref().and_then(|__nikaia_it| __nikaia_it.signature.as_ref()) {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return false };
     at < signature.params.len() as i64 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).0 == ""
@@ -329,10 +329,10 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
         Ty::Fn { params: given, result, .. } => {
             let result = nikaia_std::boxed::open(result);
             back = nikaia_std::index::or(match result {
-                Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
             }, || Ty::Tuple(vec![]));
-            params = given.to_owned();
+            params = given.copy_owned();
         },
         _ => { return; },
     }
@@ -349,9 +349,9 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
     if back != Ty::Tuple(vec![]) {
         if back.fits(acc) { return; }
         let written = back.text();
-        let mut have = nikaia_std::index::or(written.strip_prefix("ref "), || "").to_string();
+        let mut have = nikaia_std::block::Text::from(nikaia_std::index::or(written.strip_prefix("ref "), || "").to_string());
         if have == "" { have = written; }
-        state.findings.push(check_refusal("NK1102", &at, format!("`{}` expects `{}` to hand back `{}` or nothing, but it hands back `{}`.", owner, role, wanted, have), vec![String::from("A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).")], Some(format!("Hand back the `{}`, or change it in place and hand back nothing.", wanted).to_string())));
+        state.findings.push(check_refusal("NK1102", &at, format!("`{}` expects `{}` to hand back `{}` or nothing, but it hands back `{}`.", owner, role, wanted, have), vec![String::from("A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).")], Some(nikaia_std::block::Text::from(format!("Hand back the `{}`, or change it in place and hand back nothing.", wanted).to_string()))));
         return;
     }
     let mut lent = false;
@@ -365,7 +365,7 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
         let mut changes = false;
         if signature.takes_a_receiver() { changes = contract.mutates; } else if !signature.params.is_empty() { changes = nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, 0).0); }
         if !changes {
-            state.findings.push(check_refusal("NK1102", &at, format!("`{}` expects `{}` to hand back `{}`, or to change its first argument in place, but `{}` does neither.", owner, role, wanted, key), vec![String::from("A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).")], Some(format!("Hand back the `{}`, or take the first parameter as `mut`.", wanted).to_string())));
+            state.findings.push(check_refusal("NK1102", &at, format!("`{}` expects `{}` to hand back `{}`, or to change its first argument in place, but `{}` does neither.", owner, role, wanted, key), vec![String::from("A fold's step and merge either hand back the accumulator or change their first argument in place and hand back nothing; the result type says which (ADR-372 D9).")], Some(nikaia_std::block::Text::from(format!("Hand back the `{}`, or take the first parameter as `mut`.", wanted).to_string()))));
             return;
         }
         if params.len() > 1 { lent = (*nikaia_std::index::get(&params, 1)).is_a_view(); }
@@ -385,14 +385,14 @@ pub fn check_core_fold_form(state: &mut CheckState, world: &CheckWorld<'_, '_, '
 
 pub(crate) fn check_core_fold_form_key(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &Expr) -> String {
     match part {
-        Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
         Expr::Path(segments, _) => {
             let mut names: Vec<String> = vec![];
             for segment in segments.iter() {
                 let segment = *segment;
-                names.push(world.words.resolve(segment).to_string());
+                names.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
             }
-            names.join("::")
+            nikaia_std::block::Text::from(names.join("::"))
         },
         _ => String::from(""),
     }
@@ -432,7 +432,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
             let mut view: Ty = inside.clone();
             if !writing {
                 match inside {
-                    Ty::Named { ref name, ref args, .. } => { view = Ty::Named { name: name.to_string(), args: args.to_owned(), view: true }; },
+                    Ty::Named { ref name, ref args, .. } => { view = Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.copy_owned(), view: true }; },
                     _ => { },
                 }
             }
@@ -458,7 +458,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
     state.flow.at_a_write_door = outer_door;
     state.inside_a_door = outer_inside;
     if writing { return Ty::Tuple(vec![]); }
-    Ty::Named { name: SEEN.to_string(), args: vec![Ty::Unknown], view: false }
+    Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![Ty::Unknown], view: false }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -497,7 +497,7 @@ pub(crate) fn check_core_args_an_integer(name: &str) -> bool { name == "u8" || n
 
 pub(crate) fn check_core_args_plain_name(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { name.to_string() } else { String::from("") } },
+        Ty::Named { name, args, view } => { let view = *view; if !view && args.is_empty() { nikaia_std::block::Text::from(name.to_string()) } else { String::from("") } },
         _ => String::from(""),
     }
 }
@@ -607,10 +607,10 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
         k += 1;
         let shape = element_kind(item, &found);
         if shape.is_some() {
-            let kind: String = nikaia_std::index::or(shape.as_deref(), || "").to_string();
+            let kind: String = nikaia_std::block::Text::from(nikaia_std::index::or(shape.as_deref(), || "").to_string());
             if !has_kind {
                 has_kind = true;
-                first_kind = kind.to_string();
+                first_kind = nikaia_std::block::Text::from(kind.to_string());
                 first_written = found.text();
             } else if first_kind != kind && !said {
                 said = true;
@@ -627,7 +627,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
         if a != "" && b != "" && !is_a_literal(item) {
             let common = common_integer(&a, &b);
             if common.is_some() {
-                let name: String = nikaia_std::index::or(common.as_deref(), || "").to_string();
+                let name: String = nikaia_std::block::Text::from(nikaia_std::index::or(common.as_deref(), || "").to_string());
                 agreed = Ty::Named { name, args: vec![], view: false };
                 continue;
             }
@@ -635,7 +635,7 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
         if !found.fits(&agreed) && !said {
             said = true;
             let first = agreed.clone();
-            let kind: String = nikaia_std::index::or(element_kind(item, &first), || "a value".into()).to_string();
+            let kind: String = nikaia_std::block::Text::from(nikaia_std::index::or(element_kind(item, &first), || "a value".into()).to_string());
             state.a_list_whose_elements_disagree(&kind, &first.text(), "a value", &found, span);
         }
     }
@@ -658,11 +658,11 @@ pub fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, world: &Che
     if common != "" && check_core_args_an_integer(&common) {
         let mut m: i64 = 0;
         for item in items.iter() {
-            let own = (*nikaia_std::index::get(&integers, (m) as usize)).to_string();
+            let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&integers, (m) as usize)).to_string());
             m += 1;
             if own != "" && own != common && !is_a_literal(item) {
-                let met: String = nikaia_std::index::or(common_integer(&own, &common), || "".into()).to_string();
-                if met == common { state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Widen(common.to_string())); }
+                let met: String = nikaia_std::block::Text::from(nikaia_std::index::or(common_integer(&own, &common), || "".into()).to_string());
+                if met == common { state.facts.wrapped.insert(id_of(item) as i64, FactWrap::Widen(nikaia_std::block::Text::from(common.to_string()))); }
             }
         }
     }
@@ -694,8 +694,8 @@ pub fn check_core_list_repeat<H: CheckHost>(state: &mut CheckState, world: &Chec
 // this was written - see `contracts::sync`.
 pub fn check_core_args_a_field_called(state: &mut CheckState, current: &str, key: &str) {
     let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(current), || CheckMethodCalls::empty());
-    calls.fields_called.insert(key.to_string());
-    state.methods.insert(current.to_string(), calls);
+    calls.fields_called.insert(nikaia_std::block::Text::from(key.to_string()));
+    state.methods.insert(nikaia_std::block::Text::from(current.to_string()), calls);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -704,7 +704,7 @@ pub fn check_core_args_code_said(state: &mut CheckState, current: &str, pauses: 
     let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(current), || CheckMethodCalls::empty());
     calls.code_pauses = calls.code_pauses || pauses;
     calls.code_fails = calls.code_fails || fails;
-    state.methods.insert(current.to_string(), calls);
+    state.methods.insert(nikaia_std::block::Text::from(current.to_string()), calls);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -740,7 +740,7 @@ pub fn check_core_a_called_field<H: CheckHost>(state: &mut CheckState, world: &C
                     if world.own.code_throws.contains_key(&key) {
                         let set = match *nikaia_std::index::get(&world.own.code_throws, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
                         let mut contract = FnContract::empty();
-                        contract.fails_with = set.to_owned();
+                        contract.fails_with = set.copy_owned();
                         state.may_fail_here(world, host, &key, &contract, span);
                     }
                 },
@@ -775,11 +775,11 @@ pub(crate) fn check_core_args_declared_nulls(item: &Expr, found: &Ty, declared: 
         _ => return found.clone(),
     };
     let wants: Vec<Ty> = match element {
-        Ty::Tuple(ref parts) => parts.to_owned(),
+        Ty::Tuple(ref parts) => parts.copy_owned(),
         _ => return found.clone(),
     };
     let each: Vec<Ty> = match found {
-        Ty::Tuple(parts) => parts.to_owned(),
+        Ty::Tuple(parts) => parts.copy_owned(),
         _ => return found.clone(),
     };
     match item {
@@ -803,7 +803,7 @@ pub(crate) fn check_core_args_declared_nulls(item: &Expr, found: &Ty, declared: 
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_args_tuple_texts(state: &mut CheckState, parts: &[Expr], found: &Ty, texts_at: &[bool]) -> Ty {
     let each: Vec<Ty> = match found {
-        Ty::Tuple(each) => each.to_owned(),
+        Ty::Tuple(each) => each.copy_owned(),
         _ => return found.clone(),
     };
     if (each.len() as i64) != parts.len() as i64 { return found.clone(); }
@@ -824,7 +824,7 @@ pub(crate) fn check_core_args_tuple_texts(state: &mut CheckState, parts: &[Expr]
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_core_fold_option(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, value: &Expr, found: &Ty, span: &Span) {
-    let written = world.words.resolve(name).to_string();
+    let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
     let at = check_span_at(world, value, span);
     let mut wanted: &'static str = "i64";
     if written == "order" { wanted = "par::Order"; } else if written != "limit" && written != "piece" {
@@ -834,11 +834,11 @@ pub fn check_core_fold_option(state: &mut CheckState, world: &CheckWorld<'_, '_,
         return;
     }
     if found.is_unknown() { return; }
-    let expected = Ty::Named { name: wanted.to_string(), args: vec![], view: false };
+    let expected = Ty::Named { name: nikaia_std::block::Text::from(wanted.to_string()), args: vec![], view: false };
     if found.fits(&expected) { return; }
     let written_ty = found.text();
-    let mut have = nikaia_std::index::or(written_ty.strip_prefix("ref "), || "").to_string();
+    let mut have = nikaia_std::block::Text::from(nikaia_std::index::or(written_ty.strip_prefix("ref "), || "").to_string());
     if have == "" { have = written_ty; }
-    state.findings.push(check_refusal("NK1102", &at, format!("`par_fold`'s option `{}:` expects `{}`, but it is handed `{}`.", written, wanted, have), vec![String::from("`order:` says how the pieces' results are merged; `limit:` and `piece:` tune how many fold at once and how large a piece is.")], Some(format!("Hand `{}:` a `{}`.", written, wanted).to_string())));
+    state.findings.push(check_refusal("NK1102", &at, format!("`par_fold`'s option `{}:` expects `{}`, but it is handed `{}`.", written, wanted, have), vec![String::from("`order:` says how the pieces' results are merged; `limit:` and `piece:` tune how many fold at once and how large a piece is.")], Some(nikaia_std::block::Text::from(format!("Hand `{}:` a `{}`.", written, wanted).to_string()))));
 }
 

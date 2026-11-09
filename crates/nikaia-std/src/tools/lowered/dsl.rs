@@ -48,7 +48,7 @@ pub fn is_deferred(target: &str, body: &str) -> bool { target != TEMPLATE && !pa
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn type_name(parameters: &[String]) -> String {
-    let mut names = parameters.to_owned();
+    let mut names = parameters.copy_owned();
     names.sort();
     let joined = joined_by(&names, "_");
     format!("NikaiaDslParams_{}", joined)
@@ -101,7 +101,7 @@ pub(crate) fn a_driver(item: &Item, words: &winnow_grammar::InternerContext, nam
             let name = *name; let spread = *spread;
             if spread.is_some() {
                 let named = match name { Some(__nikaia_value) => __nikaia_value, None => return };
-                names.push(words.resolve(named).to_string());
+                names.push(nikaia_std::block::Text::from(words.resolve(named).to_string()));
             }
         },
         _ => { },
@@ -136,7 +136,7 @@ pub(crate) fn checked_body(body: &Block, words: &winnow_grammar::InternerContext
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
                 if names.len() != 1 { continue; }
-                let text = words.resolve(*nikaia_std::index::get(&names, 0)).to_string();
+                let text = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string());
                 let deferred = deferred_parameters(value, words);
                 if deferred.is_some() { bound.insert(text, nikaia_std::index::or(deferred, || vec![].into())); } else { bound.remove(&text); }
             },
@@ -299,7 +299,7 @@ pub(crate) fn statements_in(expr: &Expr, words: &winnow_grammar::InternerContext
     }
 }
 
-pub(crate) fn a_statement(target: &str, content: &str) -> (String, String) { (target.to_string(), content.to_string()) }
+pub(crate) fn a_statement(target: &str, content: &str) -> (String, String) { (nikaia_std::block::Text::from(target.to_string()), nikaia_std::block::Text::from(content.to_string())) }
 
 pub(crate) fn a_call(expr: &Expr, span: &Span, words: &winnow_grammar::InternerContext, bound: &collections::BTreeMap<String, Vec<String>>, takers: &[String], found: &mut Vec<Finding>) {
     match expr {
@@ -323,14 +323,14 @@ pub(crate) fn a_call(expr: &Expr, span: &Span, words: &winnow_grammar::InternerC
 
 pub(crate) fn callee_name(func: &Expr, words: &winnow_grammar::InternerContext) -> String {
     match func {
-        Expr::Variable(name, _) => { let name = *name; words.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
         _ => String::from(""),
     }
 }
 
 pub(crate) fn bound_subject(subject: &Expr, words: &winnow_grammar::InternerContext, bound: &collections::BTreeMap<String, Vec<String>>) -> Option<String> {
     match subject {
-        Expr::Variable(name, _) => { let name = *name; if bound.contains_key(words.resolve(name)) { Some(words.resolve(name).to_string()) } else { None } },
+        Expr::Variable(name, _) => { let name = *name; if bound.contains_key(words.resolve(name)) { Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) } else { None } },
         _ => None,
     }
 }
@@ -348,8 +348,8 @@ pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<
     let name = match subject { Some(__nikaia_value) => __nikaia_value, None => return };
     let declared = match *nikaia_std::index::get(&bound, name) { Some(__nikaia_value) => __nikaia_value, None => return };
     if callee.is_empty() || !nikaia_std::list::contains(&takers, &callee) {
-        let shown: String = if callee.is_empty() { String::from("this call") } else { callee.to_string() };
-        let first: String = if !passed.is_empty() { (*nikaia_std::index::get(&passed, 0)).to_string() } else { String::from("") };
+        let shown: String = if callee.is_empty() { String::from("this call") } else { nikaia_std::block::Text::from(callee.to_string()) };
+        let first: String = if !passed.is_empty() { nikaia_std::block::Text::from((*nikaia_std::index::get(&passed, 0)).to_string()) } else { String::from("") };
         let reached = parameter_list(&passed);
         found.push(refusal("NK1109", span.clone(), format!("`{}` has no option called `{}`.", shown, first), vec![format!("`{}` is a `dsl` statement, and its parameters go to a driver: a function declared with `...args: Self::dsl`. Nothing in this file declares `{}` that way, so {} would reach nothing.", name, shown, reached)], format!("Hand `{}` to a driver, a method declared `run(ref self, statement: ref String; ...args: Self::dsl)`, and pass the parameters there: `driver.run({}; {}: …)`.", name, name, first)));
         return;
@@ -370,12 +370,12 @@ pub(crate) fn a_parameter_call(callee: &str, passed: &[String], subject: Option<
 
 pub(crate) fn option_names(config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<String> {
     let mut passed: Vec<String> = vec![];
-    for setting in config.iter() { passed.push(words.resolve(setting.name).to_string()); }
+    for setting in config.iter() { passed.push(nikaia_std::block::Text::from(words.resolve(setting.name).to_string())); }
     passed
 }
 
 pub(crate) fn nearest_parameter(name: &str, declared: &[String]) -> Option<String> {
-    for candidate in declared.iter() { if one_edit_apart(name, candidate) { return Some(candidate.to_string()); } }
+    for candidate in declared.iter() { if one_edit_apart(name, candidate) { return Some(nikaia_std::block::Text::from(candidate.to_string())); } }
     None
 }
 
@@ -383,7 +383,7 @@ pub(crate) fn parameter_list(names: &[String]) -> String {
     let mut out: String = String::from("");
     for k in 0..names.len() as i64 {
         if k > 0 { out.push_str(", "); }
-        let one = (*nikaia_std::index::get(&names, (k) as usize)).to_string();
+        let one = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (k) as usize)).to_string());
         out.push_str(&format!("`:{}`", one));
     }
     out

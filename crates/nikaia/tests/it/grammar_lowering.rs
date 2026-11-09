@@ -13,6 +13,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const FIXTURE: &str = include_str!("../fixtures/measurements.nika");
 const EXPECTED: &str = include_str!("../fixtures/measurements_expected.rs");
@@ -832,7 +834,7 @@ fn a_pub_grammar_is_entered_from_another_package() {
         for (package, source, manifest) in [
             (
                 "lib",
-                lib.to_string(),
+                lib.to_text(),
                 "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
             ),
             (
@@ -851,8 +853,8 @@ fn a_pub_grammar_is_entered_from_another_package() {
             .output()
             .expect("the nikaia binary runs");
         (
-            String::from_utf8_lossy(&ran.stdout).to_string(),
-            String::from_utf8_lossy(&ran.stderr).to_string(),
+            String::from_utf8_lossy(&ran.stdout).to_text(),
+            String::from_utf8_lossy(&ran.stderr).to_text(),
         )
     };
     let (out, err) = run("lib::Nums::number");

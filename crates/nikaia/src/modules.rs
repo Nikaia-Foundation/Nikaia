@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/modules.rs
 //
 // A program is more than one file, and **a package is a directory**
@@ -148,14 +150,14 @@ impl ModulesHost for Parsing {
                 Some(kept.len() as i64 - 1)
             }
             Err(error) => {
-                let shown_as = path.display().to_string();
+                let shown_as = path.display().to_text();
                 let refused = match crate::diagnostics::refused_finding(&error) {
                     Some(finding) => {
                         crate::diagnostics::collect_finding(&shown_as, finding);
                         crate::diagnostics::refuse(
                             crate::diagnostics::render_finding(finding, &shown_as, source)
                                 .trim_end()
-                                .to_string(),
+                                .to_text(),
                         )
                     }
                     None => {
@@ -264,7 +266,7 @@ pub(crate) fn declared_once(files: &[(&Path, &Parsed, &str)]) -> Result<()> {
     // In Nikaia (`tools/modules.nika`, ADR-294, #125).
     let paths: Vec<String> = files
         .iter()
-        .map(|(path, _, _)| path.display().to_string())
+        .map(|(path, _, _)| path.display().to_text())
         .collect();
     let declared: Vec<Vec<(String, Span)>> = files
         .iter()
@@ -292,7 +294,7 @@ fn a_finding(
     crate::diagnostics::refuse(
         crate::diagnostics::render_finding(&finding, path, source)
             .trim_end()
-            .to_string(),
+            .to_text(),
     )
 }
 
@@ -384,8 +386,8 @@ fn package_ledger_checked(
             &|expr: &crate::ast::Expr| crate::emit::literal_expressions(&unit.parsed, expr),
         );
         let file = unit.path.file_name().map_or_else(
-            || unit.path.display().to_string(),
-            |name| name.to_string_lossy().into_owned(),
+            || unit.path.display().to_text(),
+            |name| name.to_string_lossy().to_text(),
         );
         nikaia_std::tools::trust::mark_trusted(&mut own, &calls, &file, &unit.source);
     }
@@ -666,7 +668,7 @@ impl Program {
                     let unit = &units[*at];
                     crate::diagnostics::render_finding(
                         finding,
-                        &unit.path.display().to_string(),
+                        &unit.path.display().to_text(),
                         &unit.source,
                     )
                 })
@@ -713,7 +715,7 @@ impl Program {
         let paths: Vec<String> = self
             .units
             .iter()
-            .map(|u| u.path.display().to_string())
+            .map(|u| u.path.display().to_text())
             .collect();
         nikaia_std::tools::modules::shown_paths(&paths, self.entry_shown_as.as_deref())
     }
@@ -742,7 +744,7 @@ impl Program {
                 let unit = &self.units[unit as usize];
                 crate::diagnostics::render_finding(
                     finding,
-                    &unit.path.display().to_string(),
+                    &unit.path.display().to_text(),
                     &unit.source,
                 )
             },
@@ -1044,7 +1046,7 @@ impl collecting::ModulesEmitHost for EmitHost<'_> {
                 crate::diagnostics::refuse(crate::diagnostics::render_refusal(
                     &message,
                     byte,
-                    &unit.path.display().to_string(),
+                    &unit.path.display().to_text(),
                     &unit.source,
                 ))
             }
@@ -1125,6 +1127,7 @@ fn with_tests_as_functions(mut units: Vec<Unit>) -> Result<(Vec<Unit>, Vec<TestC
         let mut read: Vec<&Parsed> = own[1..].iter().map(|&at| &units[at].parsed).collect();
         read.push(&parsed);
         let beside = crate::text_tiers::beside_fields(&read);
+        drop(read);
         crate::text_tiers::refine_with(&mut parsed, &beside);
     }
     let interner = &parsed.interner;

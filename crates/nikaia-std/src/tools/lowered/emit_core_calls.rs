@@ -27,10 +27,10 @@ pub(crate) fn emit_call_owner(function: &str) -> Option<String> {
     let mut n: i64 = 0;
     for part in parts.iter() {
         let part = *part;
-        if n < parts.len() as i64 - 1 { owner.push(part.to_string()); }
+        if n < parts.len() as i64 - 1 { owner.push(nikaia_std::block::Text::from(part.to_string())); }
         n += 1;
     }
-    Some(owner.join("::"))
+    Some(nikaia_std::block::Text::from(owner.join("::")))
 }
 
 pub(crate) fn emit_call_option_named(world: &EmitWorld<'_, '_, '_, '_>, config: &[ConfigArg], wanted: &str) -> Vec<Expr> {
@@ -117,11 +117,11 @@ pub(crate) fn emit_call_named(world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr
 impl EmitWalk {
     pub(crate) fn specialised_to(&self) -> Option<String> {
         let pair = match self.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(pair.second.to_string())
+        Some(nikaia_std::block::Text::from(pair.second.to_string()))
     }
     pub(crate) fn specialised_on(&self) -> Option<String> {
         let pair = match self.specialising.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
-        Some(pair.first.to_string())
+        Some(nikaia_std::block::Text::from(pair.first.to_string()))
     }
 }
 
@@ -203,7 +203,7 @@ impl EmitState {
                         let mut texts: Vec<String> = vec![];
                         if contract.is_some() {
                             let held = match contract { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                            texts = held.attributes.to_owned();
+                            texts = held.attributes.copy_owned();
                         }
                         out.push(&self.attributes_read(world, &member, args, &texts));
                         return Ok(());
@@ -226,7 +226,7 @@ impl EmitState {
         if callee.is_some() {
             let mut written: Vec<String> = vec![];
             for arg in args.iter() { written.push(host.written(arg)); }
-            let key = (nikaia_std::index::or(callee, || "".into()), written.join(", "));
+            let key = (nikaia_std::index::or(callee, || "".into()), nikaia_std::block::Text::from(written.join(", ")));
             if self.facts.reaches.contains_key(&key) {
                 let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 match reach.clone() {
@@ -266,14 +266,14 @@ impl EmitState {
         if !self.facts.entries.contains_key(&callee) { return false; }
         let mut written: Vec<String> = vec![];
         for arg in args.iter() { written.push(host.written(arg)); }
-        let key = (callee, written.join(", "));
+        let key = (callee, nikaia_std::block::Text::from(written.join(", ")));
         let reach = match self.facts.reaches.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         matches!(reach.clone(), CallReach::Proved)
     }
     pub(crate) fn emit_call_required(&self, qualified: &str) -> Option<String> {
         let contract = match self.own_contracts.functions.get(qualified) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if contract.requires.is_empty() { return None; }
-        Some(qualified.to_string())
+        Some(nikaia_std::block::Text::from(qualified.to_string()))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -604,7 +604,7 @@ impl EmitState {
         }
         if self.facts.path_methods.contains_key(&on_node) {
             let known_text = match self.facts.path_methods.get(&on_node) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return Ok(()) };
-            let mut written = name.to_string();
+            let mut written = nikaia_std::block::Text::from(name.to_string());
             if name == "to_text" && known_text { written = String::from("text_of"); }
             out.push(&format!("nikaia_std::fs::path::{}(&(", written));
             if receiver.is_none() { out.push("__nikaia_it"); } else {
@@ -664,6 +664,8 @@ impl EmitState {
         if receiver.is_some() && lent_pattern && self.facts.owned_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let lend = if self.on_block_types() { "&*" } else { "&" };
+            let made = name == "replace";
+            if made { out.push(&block_text_open(self.on_block_types())); }
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
             out.push(&format!(".{}({}", name, lend));
             self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
@@ -672,6 +674,15 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow, scope)?;
             }
             out.push(")");
+            if made { out.push(&block_text_close(self.on_block_types())); }
+            return Ok(());
+        }
+        if receiver.is_some() && args.len() == 1 && self.on_block_types() && self.facts.view_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
+            let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
+            out.push(&format!(".{}(AsRef::<str>::as_ref(", name));
+            self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+            out.push("))");
             return Ok(());
         }
         if receiver.is_some() && lent_pattern && self.on_block_types() && nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
@@ -685,6 +696,8 @@ impl EmitState {
             match lent {
                 Some(text_arg) => {
                     let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                    let made = name == "replace";
+                    if made { out.push(&block_text_open(true)); }
                     self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
                     out.push(&format!(".{}(&*", name));
                     self.emit_core_nested(world, walk, out, host, text_arg, 255, depth, flow, scope)?;
@@ -693,6 +706,7 @@ impl EmitState {
                         self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow, scope)?;
                     }
                     out.push(")");
+                    if made { out.push(&block_text_close(true)); }
                     return Ok(());
                 },
                 None => { },
@@ -756,7 +770,7 @@ impl EmitState {
             copies = self.facts.owned_copies.contains(&node_key(on));
             byte_copy = self.facts.byte_copies.contains(&node_key(on));
         }
-        let mut written = name.to_string();
+        let mut written = nikaia_std::block::Text::from(name.to_string());
         if name == "drain" && args.is_empty() { written = String::from("into_iter"); } else if name == "clone" && args.is_empty() && byte_copy { written = String::from("copy_of"); } else if name == "clone" && args.is_empty() && copies {
             written = String::from("to_owned");
             if self.on_block_types() { written = String::from("copy_owned"); }
@@ -896,7 +910,7 @@ impl EmitState {
         let takes = self.takes_a_handle(world, &nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || name.to_string().into()));
+        }, || nikaia_std::block::Text::from(name.to_string()).into()));
         self.emit_call_hold(world, walk, host, receiver, scope, &flow);
         walk.method_callee = match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -979,7 +993,7 @@ impl EmitState {
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
         let root = match root_of(world.words, on) { Some(__nikaia_value) => __nikaia_value, None => return };
         let plan = match self.keep_plans.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => match self.keep_plans.get(&walk.keep_function) { Some(__nikaia_value) => __nikaia_value, None => return } };
-        let holds = match plan.holds.get(&(flow.statement, root.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let holds = match plan.holds.get(&(flow.statement, nikaia_std::block::Text::from(root.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return };
         let width = nikaia_std::index::or(plan.widths.get(&root), || 1);
         let mut by_arg: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
         for (arg, buffers) in holds.iter() {
@@ -1115,10 +1129,10 @@ impl EmitState {
         let found = self.field_contract(world, owner, field);
         if found.is_some() {
             let held = match found { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-            return held.attributes.to_owned();
+            return held.attributes.copy_owned();
         }
         let contract = match self.type_contract(world, owner) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-        for variant in contract.variants.iter() { if variant.name == field { return variant.attributes.to_owned(); } }
+        for variant in contract.variants.iter() { if variant.name == field { return variant.attributes.copy_owned(); } }
         vec![]
     }
 }
@@ -1133,11 +1147,11 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple83940| {
-        let (i, word) = __nikaia_tuple83940;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple85148| {
+        let (i, word) = __nikaia_tuple85148;
         format!("__nikaia_tuple.{}.{}()", i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }
-    format!("({})", copies.join(", "))
+    format!("({})", nikaia_std::block::Text::from(copies.join(", ")))
 }
 

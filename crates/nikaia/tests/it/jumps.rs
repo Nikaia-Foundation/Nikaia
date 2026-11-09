@@ -17,6 +17,8 @@ use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -41,7 +43,7 @@ fn one(source: &str) -> (String, String) {
         "expected exactly one finding, got {:#?}",
         found.iter().map(|f| &f.message).collect::<Vec<_>>()
     );
-    (found[0].code.to_string(), found[0].message.clone())
+    (found[0].code.to_text(), found[0].message.clone())
 }
 
 // --- how they are lowered ------------------------------------------------
@@ -280,7 +282,7 @@ fn a_jump_the_checker_walk_misses_is_still_not_emitted() {
         emit_program(&parsed, Build::default()).expect_err("a jump with no loop is not emitted");
     assert!(
         refused
-            .to_string()
+            .to_text()
             .contains("only works inside a loop, and there's none here"),
         "{refused}"
     );
@@ -413,17 +415,12 @@ fn a_head_parses_what_a_body_parses() {
         let body = body
             .lines()
             .find_map(|l| l.trim().strip_prefix("let x = "))
-            .map(|l| l.trim_end_matches(';').to_string())
+            .map(|l| l.trim_end_matches(';').to_text())
             .unwrap_or_else(|| panic!("no `let` in:\n{body}"));
         let head = head
             .lines()
             .find_map(|l| l.trim().strip_prefix("if "))
-            .map(|l| {
-                l.split(" { return 1")
-                    .next()
-                    .unwrap_or_default()
-                    .to_string()
-            })
+            .map(|l| l.split(" { return 1").next().unwrap_or_default().to_text())
             .unwrap_or_else(|| panic!("no `if` in:\n{head}"));
         assert_eq!(body, head, "`{expression}` parses differently in a head");
     }

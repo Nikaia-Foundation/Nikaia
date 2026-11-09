@@ -13,7 +13,7 @@ pub enum CheckDeclared {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn declared_binding(&mut self, id: i64, span: &Span, name: &str) { self.facts.bound_at.insert(id, (span.clone(), name.to_string())); }
+    pub fn declared_binding(&mut self, id: i64, span: &Span, name: &str) { self.facts.bound_at.insert(id, (span.clone(), nikaia_std::block::Text::from(name.to_string()))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn declared_use(&mut self, expr: &Expr, what: CheckDeclared) { self.facts.declared.insert(node_key(expr), what); }
@@ -32,11 +32,11 @@ impl CheckState {
         match resolve_call(world, name) {
             None => { },
             Some(ref resolved) => {
-                self.declared_use(func, CheckDeclared::Function(resolved.key.to_string()));
+                self.declared_use(func, CheckDeclared::Function(nikaia_std::block::Text::from(resolved.key.to_string())));
                 return;
             },
         }
-        if self.structs.contains_key(name) { self.declared_use(func, CheckDeclared::Type(name.to_string())); }
+        if self.structs.contains_key(name) { self.declared_use(func, CheckDeclared::Type(nikaia_std::block::Text::from(name.to_string()))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -57,15 +57,15 @@ impl CheckState {
         if self.declared_a_variant(expr, name) { return; }
         match resolve_call(world, name) {
             None => { },
-            Some(ref resolved) => { self.declared_use(expr, CheckDeclared::Function(resolved.key.to_string())); },
+            Some(ref resolved) => { self.declared_use(expr, CheckDeclared::Function(nikaia_std::block::Text::from(resolved.key.to_string()))); },
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn declared_a_variant(&mut self, expr: &Expr, name: &str) -> bool {
         let at = match nikaia_std::search::rfind(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let owner = nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string();
-        let member = nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string();
+        let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
+        let member = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
         if !self.is_variant(&owner, &member) { return false; }
         self.declared_use(expr, CheckDeclared::Variant(owner, member));
         true
@@ -92,7 +92,7 @@ pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64,
     match found {
         CheckDeclared::Binding(id) => {
             let at = match *nikaia_std::index::get(&facts.bound_at, &id) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Some((here_at, at.0.clone(), at.1.to_string()))
+            Some((here_at, at.0.clone(), nikaia_std::block::Text::from(at.1.to_string())))
         },
         CheckDeclared::Function(ref key) => {
             let (owner, parts) = site_split(units, &package, key);
@@ -111,26 +111,26 @@ pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64,
 
 pub(crate) fn site_named(place: Option<(i64, Span)>, name: &str) -> Option<(i64, Span, String)> {
     let found = match place { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some((found.0, found.1.clone(), name.to_string()))
+    Some((found.0, found.1.clone(), nikaia_std::block::Text::from(name.to_string())))
 }
 
 pub(crate) fn site_package_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> String {
     match unit.package {
         None => String::from(""),
-        Some(named) => named.to_string(),
+        Some(named) => nikaia_std::block::Text::from(named.to_string()),
     }
 }
 
 pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, name: &'r str) -> (nikaia_std::either_text::EitherText<'r>, Vec<nikaia_std::either_text::EitherText<'r>>) {
     let parts: Vec<nikaia_std::either_text::EitherText<'_>> = name.split("::").map(|part| { part }).either_items().collect::<Vec<_>>();
     if parts.len() >= 2 {
-        let head = (*nikaia_std::index::get(&parts, 0)).to_string();
+        let head = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
         if units.iter().any(|unit| { site_package_of(unit) == head }) {
-            let rest: Vec<nikaia_std::either_text::EitherText<'_>> = parts.iter().skip(1).map(|part| { part.to_string() }).either_items().collect::<Vec<_>>();
+            let rest: Vec<nikaia_std::either_text::EitherText<'_>> = parts.iter().skip(1).map(|part| { nikaia_std::block::Text::from(part.to_string()) }).either_items().collect::<Vec<_>>();
             return (head.into_either(), rest);
         }
     }
-    (package.to_string().into_either(), parts)
+    (nikaia_std::block::Text::from(package.to_string()).into_either(), parts)
 }
 
 pub(crate) fn site_typed(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, ty: &str, member: &str, what: i64) -> Option<(i64, Span)> {

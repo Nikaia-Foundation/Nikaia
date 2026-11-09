@@ -88,8 +88,8 @@ pub fn vc_analyse(ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &im
 
 pub(crate) fn vc_index(methods: &mut collections::BTreeMap<String, Vec<(bool, String)>>, key: &str, own: bool) {
     if !key.contains("::") { return; }
-    let name = nikaia_std::index::or(key.rsplit("::").next(), || "").to_string();
-    methods.entry(String::from(name)).or_insert(vec![]).push((own, key.to_string()));
+    let name = nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string());
+    methods.entry(String::from(name)).or_insert(vec![]).push((own, nikaia_std::block::Text::from(key.to_string())));
 }
 
 pub fn vc_coalesced(facts: &CheckFacts) -> collections::BTreeSet<i64> {
@@ -131,7 +131,7 @@ pub(crate) fn vc_rooted(expr: &Expr, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_,
 
 pub(crate) fn vc_path_of(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> String {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name).to_string() },
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; format!("{}.{}", vc_path_of(base, ask), ask.names.resolve(name)) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); vc_path_of(base, ask) },
         Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); vc_path_of(base, ask) },
@@ -142,7 +142,7 @@ pub(crate) fn vc_path_of(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_
 
 pub(crate) fn vc_through(root: &str, part: String, outer: &[VcView]) -> (collections::BTreeSet<String>, collections::BTreeSet<String>) {
     let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
-    roots.insert(root.to_string());
+    roots.insert(nikaia_std::block::Text::from(root.to_string()));
     let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
     parts.insert(part);
     let at = vc_last_named(outer, root);
@@ -180,9 +180,9 @@ pub(crate) fn vc_watches(view: &VcView, root: &str, path: &str) -> bool {
     if view.used.is_none() || !view.roots.contains(root) { return false; }
     let mut read = false;
     for part in view.parts.iter() {
-        if part != root && !part.starts_with(&format!("{}.", root)) { continue; }
+        if part != root && !part.starts_with(&*format!("{}.", root)) { continue; }
         read = true;
-        if part == path || part.starts_with(&format!("{}.", path)) || path.starts_with(&format!("{}.", part)) { return true; }
+        if part == path || part.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", part)) { return true; }
     }
     !read
 }
@@ -228,7 +228,7 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
                 roots.push(root_of(ask.names, arg));
                 names.push(vc_variable(arg, ask));
             }
-            out.push(VcCall { method: true, callee: Some(ask.names.resolve(method).to_string()), root: root_of(ask.names, receiver), path: vc_path_of(receiver, ask), roots, names, lent_and_read: vec![] });
+            out.push(VcCall { method: true, callee: Some(nikaia_std::block::Text::from(ask.names.resolve(method).to_string())), root: root_of(ask.names, receiver), path: vc_path_of(receiver, ask), roots, names, lent_and_read: vec![] });
         },
         Expr::Call { func, args, .. } => {
             let func = nikaia_std::boxed::open(func);
@@ -247,7 +247,7 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
                 for j in i + 1..args.len() as i64 {
                     let bound_ahead = made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(j))) && !emit_arg_is_closure(nikaia_std::index::get(&args, nikaia_std::index::at(j)));
                     if !bound_ahead && vc_reads_path(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &path, ask, &holes_of) {
-                        lent_and_read.push(root.to_string());
+                        lent_and_read.push(nikaia_std::block::Text::from(root.to_string()));
                         break;
                     }
                 }
@@ -262,7 +262,7 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
 
 pub(crate) fn vc_variable(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
     match expr {
-        Expr::Variable(name, _) => { let name = *name; Some(ask.names.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(ask.names.resolve(name).to_string())) },
         _ => None,
     }
 }
@@ -373,7 +373,7 @@ pub(crate) fn vc_reads_path(expr: &Expr, path: &str, ask: &VcAsk<'_, '_, '_, '_,
     let place = matches!(expr, Expr::Variable(_, _) | Expr::Field { .. } | Expr::SafeField { .. } | Expr::Index { .. });
     let read = vc_path_of(expr, ask);
     if place && read != "" && !read.starts_with('.') {
-        if read == path || read.starts_with(&format!("{}.", path)) || path.starts_with(&format!("{}.", read)) { return true; }
+        if read == path || read.starts_with(&*format!("{}.", path)) || path.starts_with(&*format!("{}.", read)) { return true; }
         match expr {
             Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); return vc_reads_path(index, path, ask, holes_of); },
             _ => { return false; },
@@ -428,7 +428,7 @@ pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAs
         if !call.method { continue; }
         let root = match call.root.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let method = match call.callee.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if vc_methods_all(method, true, ask, &walk) { changed.push((root.to_string(), call.path.to_string())); }
+        if vc_methods_all(method, true, ask, &walk) { changed.push((nikaia_std::block::Text::from(root.to_string()), nikaia_std::block::Text::from(call.path.to_string()))); }
     }
     for (root, path) in changed.iter() { if vc_any_watches(views, root, path) { vc_refuse(root, at, views, walk); } }
     let mut handed: Vec<(String, String)> = vec![];
@@ -437,14 +437,14 @@ pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAs
         if call.method {
             for index in 0..call.names.len() as i64 {
                 let name = match nikaia_std::index::get(&call.names, nikaia_std::index::at(index)).as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-                if vc_method_keeps(callee, index, ask, &walk) { handed.push((name.to_string(), callee.to_string())); }
+                if vc_method_keeps(callee, index, ask, &walk) { handed.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(callee.to_string()))); }
             }
             continue;
         }
         let contract = match *nikaia_std::index::get(&ask.own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => continue } };
         for index in 0..call.names.len() as i64 {
             let name = match nikaia_std::index::get(&call.names, nikaia_std::index::at(index)).as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if vc_owns(contract, index) { handed.push((name.to_string(), callee.to_string())); }
+            if vc_owns(contract, index) { handed.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(callee.to_string()))); }
         }
     }
     for (root, callee) in handed.iter() { if vc_first_viewing(views, root) >= 0 { vc_refuse_hand_over(root, callee, at, views, walk); } }
@@ -457,7 +457,7 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             let held = vc_last_named(outer, ask.names.resolve(other));
             if held < 0 { return None; }
             let mut view = (*nikaia_std::index::get(&outer, nikaia_std::index::at(held))).clone();
-            view.name = name.to_string();
+            view.name = nikaia_std::block::Text::from(name.to_string());
             view.made = at.clone();
             return Some(view);
         },
@@ -489,16 +489,16 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
                 let index = vc_param_index(signature, borrowed);
                 if index < 0 || index >= args.len() as i64 { continue; }
                 let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(index))) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                way_out.insert(root.to_string(), vc_returning(&callee, borrowed, ask));
+                way_out.insert(nikaia_std::block::Text::from(root.to_string()), vc_returning(&callee, borrowed, ask));
                 let path = vc_path_of(nikaia_std::index::get(&args, nikaia_std::index::at(index)), ask);
-                if path == "" { parts.insert(root.to_string()); } else { parts.insert(path); }
+                if path == "" { parts.insert(nikaia_std::block::Text::from(root.to_string())); } else { parts.insert(path); }
                 roots.insert(root);
             }
             if roots.is_empty() { return None; }
             let mut shown: Vec<String> = vec![];
             for arg in args.iter() { shown.push(nikaia_std::index::or(root_of(ask.names, arg), || "..".into())); }
-            let written = shown.join(", ");
-            return Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(callee.to_string()), shown, help: None, looped: false, exclusive: false });
+            let written = nikaia_std::block::Text::from(shown.join(", "));
+            return Some(VcView { name: nikaia_std::block::Text::from(name.to_string()), roots, parts, made: at.clone(), from: format!("`{}` is made here by `{}`", name, callee), way_out, used: None, call: Some(format!("{}({})", callee, written)), callee: Some(nikaia_std::block::Text::from(callee.to_string())), shown, help: None, looped: false, exclusive: false });
         },
         _ => return None,
     }
@@ -513,19 +513,19 @@ pub(crate) fn vc_loop_view(iter: &Expr, at: &Span, ask: &VcAsk<'_, '_, '_, '_, '
     let root = match root_of(ask.names, iter) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let path = vc_path_of(iter, ask);
     let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
-    roots.insert(root.to_string());
+    roots.insert(nikaia_std::block::Text::from(root.to_string()));
     let mut parts: collections::BTreeSet<String> = collections::BTreeSet::new();
-    parts.insert(path.to_string());
+    parts.insert(nikaia_std::block::Text::from(path.to_string()));
     let help = format!("Collect what the loop wants to add in a list of its own and add it after the loop with `{}.extend(more)`, or walk `0..<n` with `let n = {}.len()` before the loop.", path, path);
     let viewed = ask.mut_viewed.contains(&(id_of(iter) as i64));
     let from = if viewed { format!("`{}` is lent to this loop, and each element is a mutable view of it", path) } else { format!("`{}` is lent to this loop", path) };
-    Some(VcView { name: path.to_string(), roots, parts, made: at.clone(), from, way_out: collections::BTreeMap::new(), used: Some(at.clone()), call: None, callee: None, shown: vec![], help: Some(help), looped: true, exclusive: viewed })
+    Some(VcView { name: nikaia_std::block::Text::from(path.to_string()), roots, parts, made: at.clone(), from, way_out: collections::BTreeMap::new(), used: Some(at.clone()), call: None, callee: None, shown: vec![], help: Some(help), looped: true, exclusive: viewed })
 }
 
 pub(crate) fn vc_place_view(at: &Span, name: &str, place: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
     let root = match root_of(ask.names, place) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let (roots, parts) = vc_through(&root, vc_path_of(place, ask), outer);
-    Some(VcView { name: name.to_string(), roots, parts, made: at.clone(), from: format!("`{}` is a view into `{}`", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, callee: None, shown: vec![], help: None, looped: false, exclusive: false })
+    Some(VcView { name: nikaia_std::block::Text::from(name.to_string()), roots, parts, made: at.clone(), from: format!("`{}` is a view into `{}`", name, root), way_out: collections::BTreeMap::new(), used: None, call: None, callee: None, shown: vec![], help: None, looped: false, exclusive: false })
 }
 
 pub(crate) fn vc_mut_view(at: &Span, name: &str, place: &Expr, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> Option<VcView> {
@@ -588,7 +588,7 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
     for entry in contract.stores.iter() {
         let pieces: Vec<&str> = entry.split(':').collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
-        let place = (*nikaia_std::index::get(&pieces, 0)).to_string();
+        let place = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string()); ::core::mem::drop(pieces);
         let source = match nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(place.len() as i64 + 1..entry.len() as i64)).text() {
             Ok(value) => value,
             Err(_error) => { continue; },
@@ -599,10 +599,10 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
         let holder = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(held_at))) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(source_at))) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
-        roots.insert(root.to_string());
+        roots.insert(nikaia_std::block::Text::from(root.to_string()));
         let mut way_out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
-        way_out.insert(root.to_string(), format!("`{}` keeps views of what it was given as `{}` in `{}`.", callee, source, place));
-        out.push(VcView { name: holder.to_string(), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` keeps a view of `{}` in `{}` here", callee, root, holder), way_out, used: None, call: None, callee: None, shown: vec![], help: Some(format!("Use `{}` before this change, or hand `{}` a copy: `{}.clone()`.", holder, callee, root)), looped: false, exclusive: false });
+        way_out.insert(nikaia_std::block::Text::from(root.to_string()), format!("`{}` keeps views of what it was given as `{}` in `{}`.", callee, source, place));
+        out.push(VcView { name: nikaia_std::block::Text::from(holder.to_string()), roots, parts: collections::BTreeSet::new(), made: at.clone(), from: format!("`{}` keeps a view of `{}` in `{}` here", callee, root, holder), way_out, used: None, call: None, callee: None, shown: vec![], help: Some(format!("Use `{}` before this change, or hand `{}` a copy: `{}.clone()`.", holder, callee, root)), looped: false, exclusive: false });
     }
     out
 }
@@ -643,13 +643,13 @@ pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_
 }
 
 pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
-    let mut views: Vec<VcView> = outer.to_owned();
+    let mut views: Vec<VcView> = outer.copy_owned();
     let own_from = views.len() as i64;
     let mut declared: collections::BTreeMap<String, (i64, bool)> = collections::BTreeMap::new();
     for j in 0..block.stmts.len() as i64 {
         let stmt = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j));
         for v in own_from..views.len() as i64 {
-            let name = nikaia_std::index::get(&views, nikaia_std::index::at(v)).name.to_string();
+            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&views, nikaia_std::index::at(v)).name.to_string());
             views[nikaia_std::index::at(v)].used = vc_used_after(block, j + 1, &name, ask, &holes_of);
         }
         let looping = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
@@ -674,18 +674,18 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
             Stmt::Let { names, value, mutable, .. } => {
                 let mutable = *mutable;
                 if names.len() == 1 {
-                    let name = ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string();
+                    let name = nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string());
                     vc_let(&name, value, &at, &mut views, ask, walk);
-                    walk.lets.insert(name.to_string(), at.start as i64);
+                    walk.lets.insert(nikaia_std::block::Text::from(name.to_string()), at.start as i64);
                     declared.insert(name, (at.start as i64, mutable));
                 }
             },
             _ => { },
         }
-        let mut inner_views = views.to_owned();
+        let mut inner_views = views.copy_owned();
         if looping {
             for view in inner_views.iter_mut() {
-                let name = (*view).name.to_string();
+                let name = nikaia_std::block::Text::from((*view).name.to_string());
                 if (*view).used.is_none() && vc_mentions_stmt(&stmt.node, &name, ask, &holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, &holes_of), || at.clone().into())); }
             }
         }
@@ -738,7 +738,7 @@ pub(crate) fn vc_assign(block: &Block, j: i64, target: &Expr, whole: bool, at: &
         walk.give_ups.rebound.insert(at.start as i64, changed);
     } else if whole && viewer >= 0 && walk.lets.contains_key(&root) {
         let bound = nikaia_std::index::or(*nikaia_std::index::get(&walk.lets, &root), || 0);
-        walk.give_ups.kept.insert(bound, nikaia_std::index::get(&views, nikaia_std::index::at(viewer)).name.to_string());
+        walk.give_ups.kept.insert(bound, nikaia_std::block::Text::from(nikaia_std::index::get(&views, nikaia_std::index::at(viewer)).name.to_string()));
     }
     if whole { for view in views.iter_mut() { (*view).roots.remove(&root); } }
 }
@@ -765,8 +765,8 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
         if node >= 0 && ask.viewed.contains(&node) { continue; }
         for view in views.iter_mut() {
             if (*view).roots.contains(&moved) {
-                (*view).roots.insert(name.to_string());
-                (*view).parts.insert(part.to_string());
+                (*view).roots.insert(nikaia_std::block::Text::from(name.to_string()));
+                (*view).parts.insert(nikaia_std::block::Text::from(part.to_string()));
             }
         }
     }
@@ -774,14 +774,14 @@ pub(crate) fn vc_let(name: &str, value: &Expr, at: &Span, views: &mut Vec<VcView
     let mut viewer: Option<String> = None;
     for view in views.iter_mut() {
         if (*view).roots.contains(&other) {
-            (*view).roots.insert(name.to_string());
-            if (*view).used.is_some() && viewer.is_none() { viewer = Some((*view).name.to_string()); }
+            (*view).roots.insert(nikaia_std::block::Text::from(name.to_string()));
+            if (*view).used.is_some() && viewer.is_none() { viewer = Some(nikaia_std::block::Text::from((*view).name.to_string())); }
         }
     }
     let first = match viewer { Some(__nikaia_value) => __nikaia_value, None => return };
     if walk.lets.contains_key(&other) {
         let bound = nikaia_std::index::or(*nikaia_std::index::get(&walk.lets, &other), || 0);
-        walk.give_ups.kept.insert(bound, first.to_string());
+        walk.give_ups.kept.insert(bound, nikaia_std::block::Text::from(first.to_string()));
     }
 }
 
@@ -790,9 +790,9 @@ pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '
     match value {
         Expr::StructLit { fields, .. } => {
             for field in fields.iter() {
-                let label = ask.names.resolve(field.name).to_string();
+                let label = nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string());
                 match &field.value {
-                    None => { out.push((label.to_string(), format!("{}.{}", name, label), -1)); },
+                    None => { out.push((nikaia_std::block::Text::from(label.to_string()), format!("{}.{}", name, label), -1)); },
                     Some(given) => {
                         let item = given;
                         out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, format!("{}.{}", name, label), node_key(item)));
@@ -800,8 +800,8 @@ pub(crate) fn vc_moved_parts(name: &str, value: &Expr, ask: &VcAsk<'_, '_, '_, '
                 }
             }
         },
-        Expr::Tuple(items, _) => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, name.to_string(), node_key(item))); } },
-        Expr::ListLit { items, .. } => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, name.to_string(), node_key(item))); } },
+        Expr::Tuple(items, _) => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
+        Expr::ListLit { items, .. } => { for item in items.iter() { out.push((match vc_variable(item, ask) { Some(__nikaia_value) => __nikaia_value, None => continue }, nikaia_std::block::Text::from(name.to_string()), node_key(item))); } },
         _ => { },
     }
     out
@@ -812,7 +812,7 @@ pub(crate) fn vc_literal_moves(value: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_,
     match value {
         Expr::StructLit { name, fields, .. } => {
             let name = *name;
-            let of = ask.names.resolve(name).to_string();
+            let of = nikaia_std::block::Text::from(ask.names.resolve(name).to_string());
             for field in fields.iter() {
                 let given = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let moved = match vc_variable(given, ask) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -837,9 +837,9 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
     if held < 0 { return false; }
     let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
     if view.used.is_none() { return false; }
-    let viewer = view.name.to_string();
-    let position = refusal.position.to_string();
-    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` must hold text of its own", position), true), vc_label(view.made.clone(), &viewer, view.from.to_string(), false)];
+    let viewer = nikaia_std::block::Text::from(view.name.to_string());
+    let position = nikaia_std::block::Text::from(refusal.position.to_string());
+    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` must hold text of its own", position), true), vc_label(view.made.clone(), &viewer, nikaia_std::block::Text::from(view.from.to_string()), false)];
     match &refusal.forced {
         None => { },
         Some(forced) => {
@@ -854,7 +854,7 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
     let mut notes: Vec<String> = vec![];
     match *nikaia_std::index::get(&view.way_out, root) {
         None => { },
-        Some(way) => { notes.push(way.to_string()); },
+        Some(way) => { notes.push(nikaia_std::block::Text::from(way.to_string())); },
     }
     let close = if head.ends_with('(') { ")" } else { ", .. }" };
     let part = vc_part_of(head);
@@ -865,8 +865,8 @@ pub(crate) fn vc_refuse_move(root: &str, name: &str, head: &str, refusal: &TierR
             None => { },
             Some(callee) => {
                 let mut given: Vec<String> = vec![];
-                for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { shown.to_string() }); }
-                help.push_str(&format!(", then `{}({})`", callee, given.join(", ")));
+                for shown in view.shown.iter() { given.push(if shown == root { format!("{}.{}", name, part) } else { nikaia_std::block::Text::from(shown.to_string()) }); }
+                help.push_str(&format!(", then `{}({})`", callee, nikaia_std::block::Text::from(given.join(", "))));
             },
         }
     }
@@ -882,13 +882,13 @@ pub(crate) fn vc_part_of(head: &str) -> &str {
     nikaia_std::index::or((*nikaia_std::index::get(&words, 2)).strip_suffix(':'), || "")
 }
 
-pub(crate) fn vc_label(span: Span, word: &str, text: String, main: bool) -> CheckLabel { CheckLabel { span, word: word.to_string(), text, main } }
+pub(crate) fn vc_label(span: Span, word: &str, text: String, main: bool) -> CheckLabel { CheckLabel { span, word: nikaia_std::block::Text::from(word.to_string()), text, main } }
 
 pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[VcView], walk: &mut VcWalk) {
     let held = vc_last_viewing(views, root);
     if held < 0 { return; }
     let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
-    let name = view.name.to_string();
+    let name = nikaia_std::block::Text::from(view.name.to_string());
     let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` keeps `{}` and may change or discard it", callee, root), true), vc_label(view.made.clone(), &name, format!("`{}` may be the text of `{}`", name, root), false)];
     match view.used {
         None => { },
@@ -897,7 +897,7 @@ pub(crate) fn vc_refuse_hand_over(root: &str, callee: &str, at: &Span, views: &[
     let mut notes: Vec<String> = vec![];
     match *nikaia_std::index::get(&view.way_out, root) {
         None => { },
-        Some(way) => { notes.push(way.to_string()); },
+        Some(way) => { notes.push(nikaia_std::block::Text::from(way.to_string())); },
     }
     let mut help = format!("Use `{}` first, or hand `{}` a copy: `{}({}.clone())`.", name, callee, callee, root);
     match &view.call {
@@ -911,12 +911,12 @@ pub(crate) fn vc_refuse(root: &str, at: &Span, views: &[VcView], walk: &mut VcWa
     let held = vc_last_viewing(views, root);
     if held < 0 { return; }
     let view = nikaia_std::index::get(&views, nikaia_std::index::at(held));
-    let name = view.name.to_string();
-    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` changes here", root), true), vc_label(view.made.clone(), &name, view.from.to_string(), false)];
+    let name = nikaia_std::block::Text::from(view.name.to_string());
+    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` changes here", root), true), vc_label(view.made.clone(), &name, nikaia_std::block::Text::from(view.from.to_string()), false)];
     if view.looped {
         let looped_help: String = match &view.help {
             None => String::from(""),
-            Some(written) => written.to_string(),
+            Some(written) => nikaia_std::block::Text::from(written.to_string()),
         };
         walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is changed here, inside the loop that lends it.", root), notes: vec![], help: Some(looped_help), warning: false, labels });
         return;
@@ -928,23 +928,23 @@ pub(crate) fn vc_refuse(root: &str, at: &Span, views: &[VcView], walk: &mut VcWa
     let mut notes: Vec<String> = vec![];
     match *nikaia_std::index::get(&view.way_out, root) {
         None => { },
-        Some(way) => { notes.push(way.to_string()); },
+        Some(way) => { notes.push(nikaia_std::block::Text::from(way.to_string())); },
     }
     let help: String = match &view.help {
         None => format!("Use `{}` before this change, or take a copy of it with `{}.clone()` before the change.", name, name),
-        Some(written) => written.to_string(),
+        Some(written) => nikaia_std::block::Text::from(written.to_string()),
     };
     walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is changed here, but `{}` may point into its data and is used later.", root, name), notes, help: Some(help), warning: false, labels });
 }
 
 pub(crate) fn vc_refuse_read(root: &str, at: &Span, view: &VcView, walk: &mut VcWalk) {
-    let name = view.name.to_string();
+    let name = nikaia_std::block::Text::from(view.name.to_string());
     if view.looped {
-        let labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` is read here", root), true), vc_label(view.made.clone(), &name, view.from.to_string(), false)];
+        let labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` is read here", root), true), vc_label(view.made.clone(), &name, nikaia_std::block::Text::from(view.from.to_string()), false)];
         walk.findings.push(Finding { code: String::from("NK2305"), span: at.clone(), message: format!("`{}` is read here, inside the loop whose element is a mutable view of it.", root), notes: vec![], help: Some(format!("Read what you need into a name before the loop, or write the index loop: `for i in 0..<{}.len()`.", name)), warning: false, labels });
         return;
     }
-    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` is read here", root), true), vc_label(view.made.clone(), &name, view.from.to_string(), false)];
+    let mut labels: Vec<CheckLabel> = vec![vc_label(at.clone(), root, format!("`{}` is read here", root), true), vc_label(view.made.clone(), &name, nikaia_std::block::Text::from(view.from.to_string()), false)];
     match view.used {
         None => { },
         Some(used) => { labels.push(vc_label(used.clone(), &name, format!("`{}` is used here, after the read", name), false)); },

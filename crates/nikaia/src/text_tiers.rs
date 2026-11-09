@@ -42,6 +42,8 @@
 //! Run once, right after parsing, so that the checker, every derived column,
 //! the ledger and the emitter all read one answer off the types.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::{Block, Expr, Item, Stmt};
@@ -108,6 +110,7 @@ pub struct BesideFields {
 pub fn refine_package(files: &mut [&mut Parsed]) {
     let read: Vec<&Parsed> = files.iter().map(|parsed| &**parsed).collect();
     let beside = beside_fields(&read);
+    drop(read);
     for parsed in files.iter_mut() {
         refine_with(parsed, &beside);
     }

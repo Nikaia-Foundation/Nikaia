@@ -11,6 +11,8 @@
 //! runtime is invisible from a Nikaia program.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -58,7 +60,7 @@ fn lower(dir: &Path, source: &str, flags: &[&str]) -> String {
         "lowering failed:\n{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read_to_string(&output).expect("the emitted Rust")
+    String::from(std::fs::read_to_string(&output).expect("the emitted Rust"))
 }
 
 fn build(dir: &Path, source: &str, flags: &[&str]) -> PathBuf {
@@ -99,7 +101,7 @@ fn a_program_binds_a_socket_and_both_ends_talk() {
             "at `{switch}`: {}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let printed = String::from_utf8_lossy(&out.stdout).into_owned();
+        let printed = String::from_utf8_lossy(&out.stdout);
         assert!(printed.contains("bound true"), "at `{switch}`: {printed}");
         assert!(
             printed.contains("server read 4"),
@@ -187,7 +189,7 @@ fn main() throws {
 /// A port nobody is listening on, which the server is then told to take.
 fn free_address() -> String {
     let probe = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
-    let address = probe.local_addr().expect("its address").to_string();
+    let address = probe.local_addr().expect("its address").to_text();
     drop(probe);
     address
 }

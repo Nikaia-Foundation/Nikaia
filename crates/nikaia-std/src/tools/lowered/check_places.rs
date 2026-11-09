@@ -6,7 +6,7 @@
 pub fn members_named(members: &[Ty]) -> String {
     let mut names: Vec<String> = vec![];
     for member in members.iter() { names.push(format!("`{}`", member.text())); }
-    names.join(", ")
+    nikaia_std::block::Text::from(names.join(", "))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -14,8 +14,8 @@ pub fn members_named(members: &[Ty]) -> String {
 pub fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
     for one in wanted.iter() {
         let text = one.1.text();
-        let mut bare: String = text.to_string();
-        if text.starts_with("ref ") { bare = nikaia_std::index::or(text.strip_prefix("ref "), || "").to_string(); }
+        let mut bare: String = nikaia_std::block::Text::from(text.to_string());
+        if text.starts_with("ref ") { bare = nikaia_std::block::Text::from(nikaia_std::index::or(text.strip_prefix("ref "), || "").to_string()); }
         if one.0 == "root" && bare == "fs::Root" { return String::from(". The root is either `fs::Root::Dir(store)`, which keeps the path inside `store`, or `fs::Root::Anywhere`, which checks nothing and says so where a reviewer will look"); }
     }
     String::from("")
@@ -24,7 +24,7 @@ pub fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn no_door(&mut self, written: &str, shape: &str, wanted: &str, span: &Span) { self.findings.push(check_refusal("NK1124", span, format!("Write `{}` like this: `{}`.", written, shape), vec![wanted.to_string()], None)); }
+    pub fn no_door(&mut self, written: &str, shape: &str, wanted: &str, span: &Span) { self.findings.push(check_refusal("NK1124", span, format!("Write `{}` like this: `{}`.", written, shape), vec![nikaia_std::block::Text::from(wanted.to_string())], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
@@ -34,7 +34,7 @@ impl CheckState {
         let mut reaches_a_lock = !contract.touches_known;
         for touch in contract.touches.iter() { if touch.names_a_lock() { reaches_a_lock = true; } }
         if reaches_a_lock { return result; }
-        Ty::Named { name: SEEN.to_string(), args: vec![result.unseen()], view: false }
+        Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![result.unseen()], view: false }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -42,7 +42,7 @@ impl CheckState {
         let mut does: &'static str = "starts the innermost loop's next turn";
         if word == "break" { does = "leaves the innermost loop around it"; }
         if self.flow.barrier.is_some() {
-            let what = nikaia_std::index::or(self.flow.barrier.as_deref(), || "").to_string();
+            let what = nikaia_std::block::Text::from(nikaia_std::index::or(self.flow.barrier.as_deref(), || "").to_string());
             self.findings.push(check_refusal("NK1132", span, format!("`{}` {}, but the nearest loop is outside this {}.", word, does, what), vec![format!("{} runs as a function of its own, and `{}` can't jump out of a function.", with_article(&what), word)], Some(format!("Decide inside the {} and act on the answer outside it: return a `bool` and test it in the loop.", what))));
             return;
         }
@@ -72,7 +72,7 @@ impl CheckState {
                 let order = match *nikaia_std::index::get(&self.struct_parameters, name) { Some(__nikaia_value) => __nikaia_value, None => return bound };
                 let mut at: i64 = 0;
                 while at < order.len() as i64 && at < args.len() as i64 {
-                    if !(*nikaia_std::index::get(&args, nikaia_std::index::at(at))).is_unknown() { bound.insert((*nikaia_std::index::get(&order, nikaia_std::index::at(at))).to_string(), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
+                    if !(*nikaia_std::index::get(&args, nikaia_std::index::at(at))).is_unknown() { bound.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&order, nikaia_std::index::at(at))).to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
                     at = at + 1;
                 }
             },
@@ -99,7 +99,7 @@ impl CheckState {
         match root {
             Expr::Variable(name, _) => {
                 let name = *name;
-                let word = world.words.resolve(name).to_string();
+                let word = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 let local = match self.binding(&word) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 !local.lent && !local.ty.is_a_view() && !self.lent_here(&word)
             },
@@ -114,7 +114,7 @@ impl CheckState {
             Ty::Var { name, view } => {
                 let view = *view;
                 if view { return false; }
-                name.to_string()
+                nikaia_std::block::Text::from(name.to_string())
             },
             _ => return false,
         };
@@ -122,7 +122,7 @@ impl CheckState {
         let mark = format!("${}", name);
         let mut other: i64 = 0;
         while other < wanted.len() as i64 {
-            if other != at && nikaia_std::index::get(&wanted, nikaia_std::index::at(other)).1.text().contains(&mark) { return false; }
+            if other != at && nikaia_std::index::get(&wanted, nikaia_std::index::at(other)).1.text().contains(AsRef::<str>::as_ref(&mark)) { return false; }
             other = other + 1;
         }
         true

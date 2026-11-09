@@ -20,6 +20,14 @@ pub struct Text {
 }
 
 impl Text {
+    /// **The text form of text is the text** (ADR-282 D8): a copy, a
+    /// block's own, where `ToString` would answer Rust's `String`.
+    #[inline]
+    #[allow(clippy::inherent_to_string_shadow_display)]
+    pub fn to_string(&self) -> Text {
+        self.clone()
+    }
+
     /// A new, empty text placed at `place`.
     #[inline]
     pub const fn new_in(place: Place) -> Text {
@@ -123,6 +131,12 @@ impl Text {
             Ok(_) => Ok(Text { bytes }),
             Err(e) => Err(e),
         }
+    }
+
+    /// `bytes` as text, each run that is not UTF-8 written as U+FFFD,
+    /// outside every block (D9), as `String::from_utf8_lossy` reads it.
+    pub fn from_utf8_lossy(bytes: &[u8]) -> Text {
+        Text::from(&*std::string::String::from_utf8_lossy(bytes))
     }
 
     /// Drop every byte, keeping the room.
@@ -437,6 +451,47 @@ impl From<Text> for String {
         let bytes: Vec<u8> = text.bytes.into();
         // SAFETY: the bytes are the text's, UTF-8.
         unsafe { String::from_utf8_unchecked(bytes) }
+    }
+}
+
+/// **A path made of text** takes the text's memory as Rust's `String` does
+/// (D8): `PathBuf::from(text)`.
+impl From<Text> for std::path::PathBuf {
+    #[inline]
+    fn from(text: Text) -> std::path::PathBuf {
+        std::path::PathBuf::from(String::from(text))
+    }
+}
+
+/// A copy toward Rust's `String`, for an API that wants one.
+impl From<&Text> for String {
+    #[inline]
+    fn from(text: &Text) -> String {
+        String::from(text.as_str())
+    }
+}
+
+/// An operating system's text, as `OsString::from(String)` makes one (D8).
+impl From<Text> for std::ffi::OsString {
+    #[inline]
+    fn from(text: Text) -> std::ffi::OsString {
+        std::ffi::OsString::from(String::from(text))
+    }
+}
+
+/// **An error that is text**, as `Box<dyn Error>` takes a `String`.
+impl From<Text> for Box<dyn std::error::Error> {
+    #[inline]
+    fn from(text: Text) -> Box<dyn std::error::Error> {
+        Box::from(String::from(text))
+    }
+}
+
+/// An error that is text, to be sent to another thread.
+impl From<Text> for Box<dyn std::error::Error + Send + Sync> {
+    #[inline]
+    fn from(text: Text) -> Box<dyn std::error::Error + Send + Sync> {
+        Box::from(String::from(text))
     }
 }
 

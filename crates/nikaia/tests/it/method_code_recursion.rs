@@ -3,6 +3,8 @@
 //! to the recursive call more than once.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::emit::{Build, emit_program};

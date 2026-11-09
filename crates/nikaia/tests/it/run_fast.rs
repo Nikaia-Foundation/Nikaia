@@ -5,6 +5,8 @@
 //! dependency still takes Cargo's path.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -111,7 +113,7 @@ fn an_overflow_aborts_as_the_cargo_build_does() {
         "fn grow(n: i32) -> i32 {\n    return n * 2\n}\n\n\
          fn main() throws {\n    println(\"before\")\n    println(f\"{grow(2000000000)}\")\n}\n",
     );
-    let project = dir.to_string_lossy().to_string();
+    let project = dir.to_string_lossy().to_text();
 
     let ran = nikaia(&["run", "--project", &project], &dir);
     assert!(fast_binary(&dir, "grow").is_file(), "{}", said(&ran));
@@ -159,7 +161,7 @@ fn a_program_with_a_rust_dependency_takes_cargos_path() {
         "fn main() throws {\n    println(\"through cargo\")\n}\n",
     )
     .expect("entry");
-    let project = dir.join("app").to_string_lossy().to_string();
+    let project = dir.join("app").to_string_lossy().to_text();
 
     let ran = nikaia(&["run", "--project", &project], &dir);
     assert!(ran.status.success(), "{}", said(&ran));
@@ -188,7 +190,7 @@ fn a_backend_error_is_still_said_in_nikaias_words() {
         "[package]\nname = \"refused\"\nversion = \"0.1.0\"\n",
         "fn main() throws {\n    let n: i64 = 1\n    let unused = n + 1\n    println(f\"{n}\")\n}\n",
     );
-    let project = dir.to_string_lossy().to_string();
+    let project = dir.to_string_lossy().to_text();
     let rustc = rustc_denying_warnings(&dir, "refused");
 
     let ran = Command::new(env!("CARGO_BIN_EXE_nikaia"))

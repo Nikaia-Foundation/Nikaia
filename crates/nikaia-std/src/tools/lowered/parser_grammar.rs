@@ -23,6 +23,8 @@ pub enum PgKind {
 
 grammar! {
     grammar ParserGrammar {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
         use super::__nikaia_same_line_ParserGrammar as __nikaia_same_line;
         state ::nikaia_std::grammar::LineBreaks;
         extern rule __nikaia_same_line -> ();
@@ -55,15 +57,15 @@ grammar! {
           | n:DIGITS
             -> { PgKind::Digits(n) }
           | w:text(RESERVED)
-            -> { PgKind::Reserved(w.to_string()) }
+            -> { PgKind::Reserved(nikaia_std::block::Text::from(w.to_string())) }
           | w:text(KEYWORD)
-            -> { PgKind::Keyword(w.to_string()) }
+            -> { PgKind::Keyword(nikaia_std::block::Text::from(w.to_string())) }
           | UNDERSCORE
             -> { PgKind::Underscore }
           | w:text(NAME)
-            -> { PgKind::Name(w.to_string()) }
+            -> { PgKind::Name(nikaia_std::block::Text::from(w.to_string())) }
           | c:text(any)
-            -> { PgKind::Other(c.to_string()) }
+            -> { PgKind::Other(nikaia_std::block::Text::from(c.to_string())) }
 
         rule WSE =
             multispace1
@@ -91,11 +93,11 @@ grammar! {
 
         rule DOC_LINE -> String =
             "///" not("/") body:until(line_ending)
-            -> { nikaia_std::index::or(body.strip_prefix(' '), || std::convert::AsRef::<str>::as_ref(body)).to_string() }
+            -> { nikaia_std::block::Text::from(nikaia_std::index::or(body.strip_prefix(' '), || std::convert::AsRef::<str>::as_ref(body)).to_string()) }
 
         rule docs -> String =
             lines:DOC_LINE+
-            -> { lines.join("\n") }
+            -> { nikaia_std::block::Text::from(lines.join("\n")) }
 
         rule KEYWORD =
             KW_AS
@@ -523,7 +525,7 @@ grammar! {
 
         rule STRING -> String =
             "\"" parts:STR_CHAR* "\""
-            -> { parts.join("") }
+            -> { nikaia_std::block::Text::from(parts.join("")) }
 
         rule STR_CHAR -> String =
             "\\" c:any
@@ -533,7 +535,7 @@ grammar! {
 
         rule CHAR -> String =
             "'" parts:CHAR_BODY+ "'"
-            -> { parts.join("") }
+            -> { nikaia_std::block::Text::from(parts.join("")) }
 
         rule CHAR_BODY -> String =
             "\\" c:any
@@ -543,11 +545,11 @@ grammar! {
 
         rule DIGITS -> String =
             head:digit+ rest:DIGIT_GROUP*
-            -> { format!("{}{}", head, rest.join("")) }
+            -> { format!("{}{}", head, nikaia_std::block::Text::from(rest.join(""))) }
 
         rule DIGIT_GROUP -> String =
             "_" d:digit+
-            -> { d.to_string() }
+            -> { nikaia_std::block::Text::from(d.to_string()) }
 
         rule EXPONENT -> String =
             "e" "-" d:digit+
@@ -597,7 +599,7 @@ grammar! {
 
         rule F_TEXT -> String =
             s:text(F_TEXT_CHAR+)
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         rule F_TEXT_CHAR =
             "\\u{" (not("}") any)* "}"
@@ -613,7 +615,7 @@ grammar! {
 
         rule F_SPEC -> String =
             ":" s:text((not("}") any)*)
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         pub rule exponent -> String =
             e:EXPONENT eof
@@ -621,11 +623,11 @@ grammar! {
 
         pub rule segment -> String =
             s:text(SEGMENT) eof
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         pub rule g_builtin -> String =
             s:text(G_BUILTIN) eof
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         pub rule f_text -> String =
             t:F_TEXT eof
@@ -667,6 +669,8 @@ where
 grammar! {
     grammar ParserGrammarOverBytes {
         input bytes;
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
         use super::__nikaia_same_line_ParserGrammarOverBytes as __nikaia_same_line;
         state ::nikaia_std::grammar::LineBreaks;
         extern rule __nikaia_same_line -> ();
@@ -699,15 +703,15 @@ grammar! {
           | n:DIGITS
             -> { PgKind::Digits(n) }
           | w:text(RESERVED)
-            -> { PgKind::Reserved(w.to_string()) }
+            -> { PgKind::Reserved(nikaia_std::block::Text::from(w.to_string())) }
           | w:text(KEYWORD)
-            -> { PgKind::Keyword(w.to_string()) }
+            -> { PgKind::Keyword(nikaia_std::block::Text::from(w.to_string())) }
           | UNDERSCORE
             -> { PgKind::Underscore }
           | w:text(NAME)
-            -> { PgKind::Name(w.to_string()) }
+            -> { PgKind::Name(nikaia_std::block::Text::from(w.to_string())) }
           | c:text(any)
-            -> { PgKind::Other(c.to_string()) }
+            -> { PgKind::Other(nikaia_std::block::Text::from(c.to_string())) }
 
         rule WSE =
             multispace1
@@ -735,11 +739,11 @@ grammar! {
 
         rule DOC_LINE -> String =
             "///" not("/") body:text(until(line_ending))
-            -> { nikaia_std::index::or(body.strip_prefix(' '), || std::convert::AsRef::<str>::as_ref(body)).to_string() }
+            -> { nikaia_std::block::Text::from(nikaia_std::index::or(body.strip_prefix(' '), || std::convert::AsRef::<str>::as_ref(body)).to_string()) }
 
         rule docs -> String =
             lines:DOC_LINE+
-            -> { lines.join("\n") }
+            -> { nikaia_std::block::Text::from(lines.join("\n")) }
 
         rule KEYWORD =
             KW_AS
@@ -1167,7 +1171,7 @@ grammar! {
 
         rule STRING -> String =
             "\"" parts:STR_CHAR* "\""
-            -> { parts.join("") }
+            -> { nikaia_std::block::Text::from(parts.join("")) }
 
         rule STR_CHAR -> String =
             "\\" c:any
@@ -1177,7 +1181,7 @@ grammar! {
 
         rule CHAR -> String =
             "'" parts:CHAR_BODY+ "'"
-            -> { parts.join("") }
+            -> { nikaia_std::block::Text::from(parts.join("")) }
 
         rule CHAR_BODY -> String =
             "\\" c:any
@@ -1187,11 +1191,11 @@ grammar! {
 
         rule DIGITS -> String =
             head:digit+ rest:DIGIT_GROUP*
-            -> { format!("{}{}", head, rest.join("")) }
+            -> { format!("{}{}", head, nikaia_std::block::Text::from(rest.join(""))) }
 
         rule DIGIT_GROUP -> String =
             "_" d:digit+
-            -> { d.to_string() }
+            -> { nikaia_std::block::Text::from(d.to_string()) }
 
         rule EXPONENT -> String =
             "e" "-" d:digit+
@@ -1241,7 +1245,7 @@ grammar! {
 
         rule F_TEXT -> String =
             s:text(F_TEXT_CHAR+)
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         rule F_TEXT_CHAR =
             "\\u{" (not("}") any)* "}"
@@ -1257,7 +1261,7 @@ grammar! {
 
         rule F_SPEC -> String =
             ":" s:text((not("}") any)*)
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         pub rule exponent -> String =
             e:EXPONENT eof
@@ -1265,11 +1269,11 @@ grammar! {
 
         pub rule segment -> String =
             s:text(SEGMENT) eof
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         pub rule g_builtin -> String =
             s:text(G_BUILTIN) eof
-            -> { s.to_string() }
+            -> { nikaia_std::block::Text::from(s.to_string()) }
 
         pub rule f_text -> String =
             t:F_TEXT eof
@@ -1315,7 +1319,7 @@ pub(crate) struct PgNumberRefused {
 }
 
 impl PgNumberRefused {
-    pub(crate) fn message(&self) -> String { self.message.to_string() }
+    pub(crate) fn message(&self) -> String { nikaia_std::block::Text::from(self.message.to_string()) }
 }
 impl std::fmt::Display for PgNumberRefused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1350,7 +1354,7 @@ pub(crate) fn pg_number_consumed(n: &Number) -> i64 {
 pub(crate) fn pg_number_taken(n: &Number) -> Result<(u64, bool), nikaia_std::error::Thrown<PgNumberRefused>> {
     Ok(match n {
         Number::Taken { magnitude, negative, .. } => { let magnitude = *magnitude; let negative = *negative; (magnitude, negative) },
-        Number::Refused { message, .. } => return Err(nikaia_std::error::throwing(PgNumberRefused { message: message.to_string() }, &"pg_number_taken")),
+        Number::Refused { message, .. } => return Err(nikaia_std::error::throwing(PgNumberRefused { message: nikaia_std::block::Text::from(message.to_string()) }, &"pg_number_taken")),
         Number::Not => return Err(nikaia_std::error::throwing(PgNumberRefused { message: String::from("digits") }, &"pg_number_taken")),
     })
 }
@@ -1375,7 +1379,7 @@ pub fn pg_render(source: &str) -> String {
         let b = if t.broke { "\\n" } else { "" };
         parts.push(format!("{}{}@{}", b, pg_kind_text(&t.kind), t.start));
     }
-    parts.join(" | ")
+    nikaia_std::block::Text::from(parts.join(" | "))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1418,7 +1422,7 @@ pub(crate) fn pg_kind_text(kind: &PgKind) -> String {
         PgKind::Str(t) => format!("str {}", t),
         PgKind::Char(t) => format!("char {}", t),
         PgKind::Digits(t) => format!("digits {}", t),
-        PgKind::Doc(d) => format!("doc {}", d.replace("\n", "\\n")),
+        PgKind::Doc(d) => format!("doc {}", nikaia_std::block::Text::from(d.replace("\n", "\\n"))),
         PgKind::Other(c) => format!("other {}", c),
     }
 }

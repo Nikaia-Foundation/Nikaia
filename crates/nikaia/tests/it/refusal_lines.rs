@@ -12,6 +12,8 @@
 //! checker's sake ([ADR-288](../../../docs/specification/adr/adr-288.md)), and
 //! it is the same number.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -28,7 +30,7 @@ fn nikaia(source: &str, name: &str) -> String {
         .expect("the compiler runs");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(!out.status.success(), "this source is refused");
-    String::from_utf8_lossy(&out.stderr).into_owned()
+    String::from_utf8_lossy(&out.stderr)
 }
 
 fn a_file(name: &str) -> PathBuf {
@@ -58,7 +60,7 @@ fn a_pausing_lambda_is_refused_on_its_line() {
     assert!(said.contains("-->"), "{said}");
     assert!(said.contains('^'), "a caret under it:\n{said}");
     assert!(
-        said.contains(&a_file("pausing").display().to_string()),
+        said.contains(&*a_file("pausing").display().to_text()),
         "and the file:\n{said}"
     );
 }
@@ -234,7 +236,7 @@ fn a_template_refusal_names_its_statement() {
 
 fn said_about(said: &str, message: &str, line: usize) -> bool {
     assert!(said.contains(message), "{said}");
-    assert!(said.contains(&format!(":{line}:")), "line {line}:\n{said}");
+    assert!(said.contains(&*format!(":{line}:")), "line {line}:\n{said}");
     assert!(said.contains('^'), "a caret:\n{said}");
     true
 }

@@ -7,6 +7,8 @@
 //! C.1](../../../docs/specification/30-nikaia-tooling.md)'s class, and the one
 //! `NK1117` was built to report rather than hand to `rustc`.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::LedgerOps;
 use nikaia::emit::{Build, emit_program};
@@ -24,7 +26,7 @@ fn refused(body: &str) -> String {
     let source = format!("fn main() {{\n{body}\n}}\n");
     match parse_to_ast(&source) {
         Ok(_) => panic!("this parses, and should not: {source}"),
-        Err(e) => e.to_string(),
+        Err(e) => e.to_text(),
     }
 }
 

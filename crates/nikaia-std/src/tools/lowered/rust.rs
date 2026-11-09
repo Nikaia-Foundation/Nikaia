@@ -60,6 +60,8 @@ pub enum Called<'a> {
 
 grammar! {
     grammar Rust {
+        collect nikaia_std::block::List;
+        use nikaia_std::block::names::{format, vec};
 
         rule WSE =
             multispace1

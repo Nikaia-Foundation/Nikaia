@@ -11,6 +11,8 @@
 //! the whole corpus and read, and being wrong costs a wrong line in a file
 //! rather than a wrong program.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::tether::State;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -114,7 +116,7 @@ fn text_a_body_owns_is_a_buffer() {
         "struct Entry { pub name: ref String }\n\
          \n\
          pub fn owned(seed: i64) -> Vec[Entry] {\n\
-         \x20   let text = seed.to_string()\n\
+         \x20   let text = seed.to_text()\n\
          \x20   return [Entry { name: text.trim() }]\n\
          }\n\
          \n\

@@ -6,6 +6,8 @@
 //! files, run at both settings of `user_parallelism`.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use std::process::Command;
 
@@ -707,7 +709,7 @@ fn an_owned_pattern_to_strip_prefix_is_lent() {
 fn codes(source: &str) -> Vec<String> {
     findings(source)
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 

@@ -12,6 +12,8 @@
 //! that is `tests/language/src/dsl_parameters.nika`.
 
 use nikaia::contracts::LedgerOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 
 use nikaia::check::Severity;
@@ -22,7 +24,9 @@ fn fixture(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(name);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    String::from(
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())),
+    )
 }
 
 fn emit(source: &str) -> String {
@@ -159,7 +163,7 @@ fn a_missing_parameter_is_an_error_against_the_nika_source() {
     let rendered = nikaia::diagnostics::render_finding(missing, "statement.nika", &source);
     assert!(rendered.starts_with("error[NK1112]: "), "{rendered}");
     assert!(
-        rendered.contains(&format!("--> statement.nika:{line}:")),
+        rendered.contains(&*format!("--> statement.nika:{line}:")),
         "{rendered}"
     );
     assert!(

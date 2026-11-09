@@ -18,6 +18,8 @@
 //! `foreign_of` reads files and a ledger handed in by a test would prove
 //! nothing about the wiring.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -305,7 +307,7 @@ fn the_library_a_build_reads_is_std_and_the_descriptions() {
     assert!(library.functions.contains_key("io::lines"));
     assert_eq!(
         foreign.described,
-        BTreeSet::from(["fremd".to_string()]),
+        BTreeSet::from(["fremd".to_text()]),
         "the set the refusal reads is unchanged by the entries"
     );
     let _ = std::fs::remove_dir_all(&root);

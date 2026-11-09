@@ -43,9 +43,9 @@ pub struct Output {
     /// Whether the program says it succeeded: an exit code of `0`.
     pub ok: bool,
     /// Everything it wrote to standard output.
-    pub stdout: String,
+    pub stdout: crate::block::Text,
     /// Everything it wrote to standard error.
-    pub stderr: String,
+    pub stderr: crate::block::Text,
     /// From just before it started to just after it was waited for, on the
     /// monotonic clock.
     pub elapsed: Duration,
@@ -228,16 +228,24 @@ fn started(
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     program: &str,
-    args: Vec<String>,
+    args: crate::block::List<crate::block::Text>,
     dir: &str,
-    env: Vec<(String, String)>,
-    env_remove: Vec<String>,
+    env: crate::block::List<(crate::block::Text, crate::block::Text)>,
+    env_remove: crate::block::List<crate::block::Text>,
     env_clear: bool,
     within: Option<Duration>,
     stdin: Input,
     stdout: Stream,
     stderr: Stream,
 ) -> Result<Output, IoError> {
+    // Toward the operating system's process the program's lists cross as
+    // Rust's (D8): the same memory, outside every block.
+    let args: Vec<String> = args.into_iter().map(String::from).collect();
+    let env: Vec<(String, String)> = env
+        .into_iter()
+        .map(|(name, value)| (String::from(name), String::from(value)))
+        .collect();
+    let env_remove: Vec<String> = env_remove.into_iter().map(String::from).collect();
     let invalid = invalid_entries(&env, &env_remove);
     if !invalid.is_empty() {
         return Err(IoError::Other(format!(
@@ -281,8 +289,8 @@ pub async fn run(
     Ok(Output {
         code: status.code().map(i64::from).unwrap_or(-1),
         ok: status.success(),
-        stdout,
-        stderr,
+        stdout: crate::block::Text::from(stdout),
+        stderr: crate::block::Text::from(stderr),
         elapsed: finished.elapsed,
         user_time: finished.waited.user_time,
         system_time: finished.waited.system_time,
@@ -569,8 +577,8 @@ impl Child {
         Ok(Output {
             code: code_of(status),
             ok: status.success(),
-            stdout: String::from_utf8_lossy(&stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            stdout: crate::block::Text::from(String::from_utf8_lossy(&stdout).into_owned()),
+            stderr: crate::block::Text::from(String::from_utf8_lossy(&stderr).into_owned()),
             elapsed,
             user_time: waited.map_or(Duration::ZERO, |w| w.user_time),
             system_time: waited.map_or(Duration::ZERO, |w| w.system_time),

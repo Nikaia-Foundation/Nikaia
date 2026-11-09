@@ -28,6 +28,8 @@
 //! [ADR-310](../../../docs/specification/adr/adr-310.md) already bounds. What
 //! is new here is neither the permission nor the input.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
@@ -146,14 +148,14 @@ impl Workshop {
         // `comptime`, so what reaches here is one inside a body.
         {
             let mut running = self.running.lock().map_err(|_| Wall::DidNotBuild {
-                detail: "the workshop's lock was poisoned".to_string(),
+                detail: "the workshop's lock was poisoned".to_text(),
             })?;
             if let Some(outer) = running.first() {
                 return Err(Wall::InsideAnother {
                     outer: outer.clone(),
                 });
             }
-            running.push(ask.grammar.to_string());
+            running.push(ask.grammar.to_text());
         }
         let host = Host {
             parsed,
@@ -213,7 +215,7 @@ struct Host<'a> {
 impl GrammarRunHost for Host<'_> {
     fn driver(&self) -> Result<String, Box<dyn std::error::Error>> {
         driver(self.parsed, self.ask).map_err(|wall| {
-            let message = wall.to_string();
+            let message = wall.to_text();
             *self.refused.borrow_mut() = Some(wall);
             message.into()
         })
@@ -307,7 +309,7 @@ fn driver(parsed: &Parsed, ask: &Ask<'_>) -> Result<String, Wall> {
     .map_err(|thrown| match nikaia_std::error::holds::<Wall>(&*thrown) {
         true => nikaia_std::error::opened::<Wall>(thrown),
         false => Wall::DidNotBuild {
-            detail: thrown.to_string(),
+            detail: thrown.to_text(),
         },
     })
 }

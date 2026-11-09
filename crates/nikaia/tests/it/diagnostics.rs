@@ -10,6 +10,8 @@ use crate::common;
 use nikaia::diagnostics::{self, Diagnostic};
 use nikaia::emit::{Build, Lowered, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const BROKEN: &str = include_str!("../fixtures/broken_frame.nika");
 /// Self-contained on purpose: it declares every name it uses, so what it
@@ -44,7 +46,7 @@ fn compile(rust: &str) -> String {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
-    String::from_utf8(output.stderr).expect("rustc writes utf-8")
+    String::from_utf8(output.stderr.into()).expect("rustc writes utf-8")
 }
 
 fn errors_for(source: &str) -> Vec<Diagnostic> {
@@ -490,21 +492,21 @@ fn a_finding_is_laid_out_in_characters() {
     let finding = nikaia::check::Finding {
         severity: nikaia::check::Severity::Error,
         span: nikaia::ast::Span::new(changed, changed + "grüße += 1".len()),
-        code: "NK1139".to_string(),
-        message: "you're changing `grüße`, but it wasn't declared as mutable".to_string(),
-        notes: vec!["a name is fixed unless it says `mut`".to_string()],
-        help: Some("add `mut` where it's declared".to_string()),
+        code: "NK1139".to_text(),
+        message: "you're changing `grüße`, but it wasn't declared as mutable".to_text(),
+        notes: vec!["a name is fixed unless it says `mut`".to_text()],
+        help: Some("add `mut` where it's declared".to_text()),
         labels: vec![
             nikaia::check::Label {
                 span: nikaia::ast::Span::new(declared, declared + "let grüße = 0".len()),
-                word: "grüße".to_string(),
-                text: "declared here without `mut`".to_string(),
+                word: "grüße".to_text(),
+                text: "declared here without `mut`".to_text(),
                 main: false,
             },
             nikaia::check::Label {
                 span: nikaia::ast::Span::new(changed, changed + "grüße += 1".len()),
-                word: "grüße".to_string(),
-                text: "changed here".to_string(),
+                word: "grüße".to_text(),
+                text: "changed here".to_text(),
                 main: true,
             },
         ],

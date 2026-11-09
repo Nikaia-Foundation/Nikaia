@@ -11,6 +11,8 @@
 //! across a file boundary - was the file = module model that decision replaced.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -70,7 +72,7 @@ fn run(entry: &Path, build: Build) -> String {
         "the program failed:\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    String::from_utf8_lossy(&ran.stdout).to_string()
+    String::from_utf8_lossy(&ran.stdout).to_text()
 }
 
 const UTILS: &str = "\
@@ -205,7 +207,7 @@ fn the_ledger_is_one_file_with_one_namespace_in_it() {
     let rendered = program.contracts.render();
 
     for key in ["double", "answer", "secret", "main"] {
-        assert!(rendered.contains(&format!("[fn.\"{key}\"]")), "{rendered}");
+        assert!(rendered.contains(&*format!("[fn.\"{key}\"]")), "{rendered}");
     }
     assert!(
         !rendered.contains("utils::"),
@@ -729,7 +731,7 @@ fn a_use_that_brings_a_name_in_says_to_write_the_prefix() {
         let finding = nikaia::diagnostics::refused_finding(&error)
             .unwrap_or_else(|| panic!("a parse error carries its finding: {error:#}"));
         let message = nikaia::diagnostics::render_finding(finding, "app.nika", source);
-        assert!(message.contains(&format!("error: {says}")), "{message}");
+        assert!(message.contains(&*format!("error: {says}")), "{message}");
         assert!(
             message.contains("= help: Write `use http`"),
             "and what to write: {message}"

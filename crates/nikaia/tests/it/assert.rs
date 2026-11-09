@@ -6,6 +6,8 @@
 //! here at both settings of `user_parallelism`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::{Command, Output};
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
@@ -102,8 +104,8 @@ fn outcome_with(purpose: &str, source: &str, flags: &[&str]) -> (bool, String, S
         let out = run_with(purpose, source, parallel, flags);
         seen.push((
             out.status.success(),
-            String::from_utf8_lossy(&out.stdout).to_string(),
-            String::from_utf8_lossy(&out.stderr).to_string(),
+            String::from_utf8_lossy(&out.stdout).to_text(),
+            String::from_utf8_lossy(&out.stderr).to_text(),
         ));
     }
     assert_eq!(seen[0], seen[1], "{purpose}: the two settings disagree");
@@ -351,7 +353,7 @@ fn asserts_reports_every_claim() {
         .args(["lower", "claims.nika", "--output", "claims.rs", "--asserts"])
         .output()
         .expect("the nikaia binary runs");
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_text();
     assert!(
         out.status.success(),
         "{}",
@@ -476,7 +478,7 @@ fn asserts_report(name: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    String::from_utf8_lossy(&out.stdout)
 }
 
 /// **The owner's program with a parameter** (ADR-359 D1, D2): `b` is

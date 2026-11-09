@@ -8,6 +8,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn codes(source: &str) -> Vec<String> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -16,7 +18,7 @@ fn codes(source: &str) -> Vec<String> {
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
         .into_iter()
-        .map(|f| f.code.to_string())
+        .map(|f| f.code.to_text())
         .collect()
 }
 
@@ -39,13 +41,13 @@ fn an_impl_on_a_type_the_program_does_not_declare_is_refused() {
          \n\
          fn main() { let d = 5.seconds().doubled() }\n";
     assert!(
-        codes(duration).contains(&"NK1209".to_string()),
+        codes(duration).contains(&"NK1209".to_text()),
         "{:?}",
         codes(duration)
     );
     let text = "impl String {\n    fn shout(self) -> String { return self }\n}\n\nfn main() {}\n";
     assert!(
-        codes(text).contains(&"NK1209".to_string()),
+        codes(text).contains(&"NK1209".to_text()),
         "{:?}",
         codes(text)
     );
@@ -63,7 +65,7 @@ fn an_impl_of_the_programs_own_type_or_trait_is_not() {
          \n\
          fn main() {}\n";
     assert!(
-        !codes(own).contains(&"NK1209".to_string()),
+        !codes(own).contains(&"NK1209".to_text()),
         "{:?}",
         codes(own)
     );
@@ -77,7 +79,7 @@ fn an_impl_of_the_programs_own_type_or_trait_is_not() {
          \n\
          fn main() {}\n";
     assert!(
-        !codes(traited).contains(&"NK1209".to_string()),
+        !codes(traited).contains(&"NK1209".to_text()),
         "{:?}",
         codes(traited)
     );

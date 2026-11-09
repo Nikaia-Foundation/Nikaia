@@ -17,6 +17,8 @@ use nikaia::check::Finding;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -104,7 +106,7 @@ fn fs_read_hands_back_bytes() {
         .as_ref()
         .and_then(|s| s.result.as_ref())
         .expect("it has a result");
-    assert_eq!(result.to_string(), "Bytes");
+    assert_eq!(result.to_text(), "Bytes");
 }
 
 /// **And a program may write down what it holds**: the result of `fs::read` is
@@ -272,7 +274,7 @@ fn the_corpus_needs_no_tether() {
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
-                .to_string();
+                .to_text();
             if path.is_dir() {
                 if !matches!(name.as_str(), "target" | ".git" | "vendor" | "node_modules") {
                     walk.push(path);
@@ -392,7 +394,7 @@ fn every_read_of_a_bytes_is_callable_on_a_cut() {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    let out = String::from_utf8_lossy(&run.stdout).to_string();
+    let out = String::from_utf8_lossy(&run.stdout).to_text();
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines.len(), 13, "{out}");
     assert_eq!(

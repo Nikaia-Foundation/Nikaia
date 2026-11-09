@@ -95,7 +95,7 @@ pub(crate) fn linear_form(term: i64, term_of: &dyn Fn(i64) -> SolverTerm) -> Opt
         SolverTerm::Int(n) => Some(Form { vars: collections::BTreeMap::new(), k: n }),
         SolverTerm::Var(ref name) => {
             let mut vars: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-            vars.insert(name.to_string(), 1);
+            vars.insert(nikaia_std::block::Text::from(name.to_string()), 1);
             Some(Form { vars, k: 0 })
         },
         SolverTerm::Add(a, b) => {
@@ -124,13 +124,13 @@ pub(crate) fn linear_form(term: i64, term_of: &dyn Fn(i64) -> SolverTerm) -> Opt
 }
 
 pub(crate) fn sum(left: &Form, right: &Form, sign: i64) -> Option<Form> {
-    let mut vars = left.vars.to_owned();
+    let mut vars = left.vars.copy_owned();
     for (name, c) in right.vars.iter() {
         let c = nikaia_std::num::value(c);
         let before = nikaia_std::index::or(vars.get(name), || 0);
         let by = match c.checked_mul(sign) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let after = match before.checked_add(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        vars.insert(name.to_string(), after);
+        vars.insert(nikaia_std::block::Text::from(name.to_string()), after);
     }
     let by = match right.k.checked_mul(sign) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let k = match left.k.checked_add(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -142,7 +142,7 @@ pub(crate) fn scaled(form: &Form, by: i64) -> Option<Form> {
     for (name, c) in form.vars.iter() {
         let c = nikaia_std::num::value(c);
         let times = match c.checked_mul(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        vars.insert(name.to_string(), times);
+        vars.insert(nikaia_std::block::Text::from(name.to_string()), times);
     }
     let k = match form.k.checked_mul(by) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(Form { vars, k })
@@ -150,7 +150,7 @@ pub(crate) fn scaled(form: &Form, by: i64) -> Option<Form> {
 
 pub(crate) fn shifted(form: &Form, n: i64) -> Option<Form> {
     let k = match form.k.checked_add(n) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(Form { vars: form.vars.to_owned(), k })
+    Some(Form { vars: form.vars.copy_owned(), k })
 }
 
 pub(crate) fn atoms(fact: i64, term_of: &dyn Fn(i64) -> SolverTerm, out: &mut Vec<Form>) {
@@ -229,7 +229,7 @@ pub(crate) fn propagate(facts: &[i64], term_of: &impl Fn(i64) -> SolverTerm) -> 
                         changed = true;
                     }
                 }
-                known.insert(x.to_string(), entry);
+                known.insert(nikaia_std::block::Text::from(x.to_string()), entry);
             }
         }
         if !changed { break; }

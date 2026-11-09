@@ -12,6 +12,8 @@
 //! three.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -65,7 +67,7 @@ fn lower(dir: &Path, flags: &[&str]) -> String {
         String::from_utf8_lossy(&run.stdout),
         String::from_utf8_lossy(&run.stderr)
     );
-    std::fs::read_to_string(&output).expect("the emitted Rust")
+    String::from(std::fs::read_to_string(&output).expect("the emitted Rust"))
 }
 
 /// `user-parallelism = "yes"` in the manifest is what makes the pair overlap.

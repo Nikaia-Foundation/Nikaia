@@ -15,7 +15,7 @@ pub fn allowlist_entries(text: &str) -> collections::BTreeSet<String> {
     for line in text.lines() {
         let parts: Vec<&str> = line.split('#').collect::<Vec<_>>();
         let entry = (*nikaia_std::index::get(&parts, 0)).trim();
-        if !entry.is_empty() { out.insert(entry.to_string()); }
+        if !entry.is_empty() { out.insert(nikaia_std::block::Text::from(entry.to_string())); }
     }
     out
 }
@@ -28,7 +28,7 @@ pub fn leaves_the_root(path: &str) -> bool {
 
 pub fn unused_entries(allowed: &collections::BTreeSet<String>, taken: &collections::BTreeMap<String, String>) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for entry in allowed.iter() { if !taken.contains_key(entry) { out.push(entry.to_string()); } }
+    for entry in allowed.iter() { if !taken.contains_key(entry) { out.push(nikaia_std::block::Text::from(entry.to_string())); } }
     out
 }
 

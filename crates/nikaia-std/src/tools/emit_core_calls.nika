@@ -980,6 +980,11 @@ impl EmitState {
         if receiver != null && lent_pattern && self.facts.owned_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
             let lend = if self.on_block_types() { "&*" } else { "&" }
+            // `replace` answers Rust's `String`, made a block's text.
+            let made = name == "replace"
+            if made {
+                out.push(block_text_open(self.on_block_types()))
+            }
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
             out.push(f".{name}({lend}")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
@@ -988,6 +993,20 @@ impl EmitState {
                 self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
             out.push(")")
+            if made {
+                out.push(block_text_close(self.on_block_types()))
+            }
+            return
+        }
+        // **A view of text handed to a pattern of `str`** (#490,
+        // `view_patterns`): on the block types it may be a `&Text`, lent
+        // as the `str` it holds.
+        if receiver != null && args.len() == 1 && self.on_block_types() && self.facts.view_patterns.contains(node_key(args[0])) {
+            let text = receiver ?? return
+            self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
+            out.push(f".{name}(AsRef::<str>::as_ref(")
+            self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+            out.push("))")
             return
         }
         // **A text lent with `ref` to a pattern of `str`** (#490): on the
@@ -1001,6 +1020,10 @@ impl EmitState {
             match lent {
                 text_arg => {
                     let text = receiver ?? return
+                    let made = name == "replace"
+                    if made {
+                        out.push(block_text_open(true))
+                    }
                     self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
                     out.push(f".{name}(&*")
                     self.emit_core_nested(world, walk, out, host, text_arg, 255, depth, flow, scope)
@@ -1009,6 +1032,9 @@ impl EmitState {
                         self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
                     }
                     out.push(")")
+                    if made {
+                        out.push(block_text_close(true))
+                    }
                     return
                 },
                 null => {},

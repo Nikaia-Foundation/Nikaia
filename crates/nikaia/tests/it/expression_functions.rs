@@ -9,6 +9,8 @@ use nikaia::bounds::{BoundsChecks, OverflowChecks};
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn report(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -29,7 +31,7 @@ fn report(source: &str) -> String {
 
 fn proved(out: &str, site: &str) -> bool {
     out.lines()
-        .find(|l| l.contains(&format!("  {site}  ")))
+        .find(|l| l.contains(&*format!("  {site}  ")))
         .unwrap_or_else(|| panic!("no line for `{site}`:\n{out}"))
         .ends_with("proved")
 }

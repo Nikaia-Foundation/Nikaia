@@ -179,8 +179,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_pattern_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg]) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let called = emit_text(world, name);
-        out.push(&called.to_string());
-        let found: Option<GrammarRule> = match walk.grammar_values.get(&called.to_string()) {
+        out.push(&nikaia_std::block::Text::from(called.to_string()));
+        let found: Option<GrammarRule> = match walk.grammar_values.get(&nikaia_std::block::Text::from(called.to_string())) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
@@ -263,7 +263,7 @@ impl EmitState {
         let over_bytes = walk.grammar_bytes && (called == "until" || called == "text");
         if generics.is_empty() && !args.is_empty() && (called == "bytes" || over_bytes) {
             let wrap = called == "until";
-            let written = if called == "bytes" && !walk.grammar_bytes { String::from("text") } else { called.to_string() };
+            let written = if called == "bytes" && !walk.grammar_bytes { String::from("text") } else { nikaia_std::block::Text::from(called.to_string()) };
             if wrap { out.push("text(until("); } else {
                 out.push(&written);
                 out.push("(");
@@ -279,11 +279,11 @@ impl EmitState {
             return Ok(());
         }
         let raw_any = walk.grammar_raw && called == "any" && args.is_empty();
-        out.push(&if raw_any { String::from("byte") } else { called.to_string() });
+        out.push(&if raw_any { String::from("byte") } else { nikaia_std::block::Text::from(called.to_string()) });
         if !generics.is_empty() {
             let mut params: Vec<String> = vec![];
             for g in generics.iter() { params.push(host.ty_named(walk, g)?); }
-            out.push(&format!("<{}>", params.join(", ")));
+            out.push(&format!("<{}>", nikaia_std::block::Text::from(params.join(", "))));
         }
         if args.len() == 1 && called == "intern" && emit_groups_parts(&nikaia_std::index::get(&args, 0).node) {
             out.push("(text(");

@@ -46,8 +46,27 @@ pub mod names {
     pub use super::CopyOwned;
     pub use super::List as Vec;
     pub use super::Text as String;
+    pub use super::ToText;
     pub use crate::__nikaia_list as vec;
     pub use crate::__nikaia_text as format;
+}
+
+/// **The text form of a value as a block's text** (#490): what
+/// `ToString::to_string` is in the compiler's own Rust, which is on the
+/// block types (`names`), where `to_string` would answer Rust's `String`.
+/// Outside every block (D9).
+pub trait ToText {
+    /// The value written with `Display`, into a new [`Text`].
+    fn to_text(&self) -> Text;
+}
+
+impl<T: std::fmt::Display + ?Sized> ToText for T {
+    fn to_text(&self) -> Text {
+        use std::fmt::Write as _;
+        let mut text = Text::new();
+        let _ = write!(text, "{self}");
+        text
+    }
 }
 
 /// **A copy of a lent list or text that is a block's own** (#490): what

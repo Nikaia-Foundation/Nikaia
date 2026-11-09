@@ -5,7 +5,7 @@ pub(crate) fn reach_pausing_keys(contracts: &Ledger) -> collections::BTreeSet<St
     let mut pausing: collections::BTreeSet<String> = collections::BTreeSet::new();
     for key in contracts.functions.keys() {
         let contract = match contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !contract.sync_claim.is_sync() { pausing.insert(key.to_string()); }
+        if !contract.sync_claim.is_sync() { pausing.insert(nikaia_std::block::Text::from(key.to_string())); }
     }
     pausing
 }
@@ -22,7 +22,7 @@ pub fn reach_running_index(contracts: &Ledger) -> ReachIndex {
     let mut running: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in contracts.functions.keys() {
         let contract = match contracts.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if reach_runs_code(contract) { running.insert(name.to_string()); }
+        if reach_runs_code(contract) { running.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     reach_index_of(running)
 }
@@ -32,7 +32,7 @@ pub(crate) fn reach_index_of(keys: collections::BTreeSet<String>) -> ReachIndex 
     for key in keys.iter() {
         let last = reach_last_segment(key);
         let mut found = reach_keys_for(&by_last, &last);
-        found.push(key.to_string());
+        found.push(nikaia_std::block::Text::from(key.to_string()));
         by_last.insert(last, found);
     }
     ReachIndex { keys, by_last }
@@ -47,10 +47,10 @@ pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collecti
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                graph.insert(words.resolve(held).to_string(), reach_edges_of(words, aliases, &index.keys, &index.by_last, body));
+                graph.insert(nikaia_std::block::Text::from(words.resolve(held).to_string()), reach_edges_of(words, aliases, &index.keys, &index.by_last, body));
             },
             Item::Impl { target, methods, .. } => {
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, body, .. } => {
@@ -70,18 +70,18 @@ pub fn pausing_edges(words: &winnow_grammar::InternerContext, aliases: &collecti
 
 pub fn pausing_reach(graph: &collections::BTreeMap<String, collections::BTreeSet<String>>, contracts: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let pausing = reach_pausing_keys(contracts);
-    let mut reaches = graph.to_owned();
+    let mut reaches = graph.copy_owned();
     loop {
         let mut changed = false;
         for key in graph.keys() {
             let mut entry: collections::BTreeSet<String> = reach_set_for(&reaches, key);
             let before = entry.len() as i64;
-            for next in entry.to_owned() {
+            for next in entry.copy_owned() {
                 let more = match reaches.get(&next) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 entry.extend(more.iter().cloned());
             }
             if (entry.len() as i64) != before { changed = true; }
-            reaches.insert(key.to_string(), entry);
+            reaches.insert(nikaia_std::block::Text::from(key.to_string()), entry);
         }
         if !changed { break; }
     }
@@ -90,19 +90,19 @@ pub fn pausing_reach(graph: &collections::BTreeMap<String, collections::BTreeSet
         if !pausing.contains(key) { continue; }
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         for reached in reach_set_for(&reaches, key) { if pausing.contains(&reached) { seen.insert(reached); } }
-        kept.insert(key.to_string(), seen);
+        kept.insert(nikaia_std::block::Text::from(key.to_string()), seen);
     }
     kept
 }
 
 pub(crate) fn reach_method_name(words: &winnow_grammar::InternerContext, name: Option<winnow_grammar::Symbol>) -> String {
     let held = match name { Some(__nikaia_value) => __nikaia_value, None => return String::from("new") };
-    words.resolve(held).to_string()
+    nikaia_std::block::Text::from(words.resolve(held).to_string())
 }
 
 pub(crate) fn reach_last_segment(key: &str) -> String {
-    let mut last: String = key.to_string();
-    for part in key.split("::") { last = part.to_string(); }
+    let mut last: String = nikaia_std::block::Text::from(key.to_string());
+    for part in key.split("::") { last = nikaia_std::block::Text::from(part.to_string()); }
     last
 }
 
@@ -113,20 +113,20 @@ pub(crate) fn reach_edges_of(words: &winnow_grammar::InternerContext, aliases: &
             Expr::Call { func, .. } => {
                 let func = nikaia_std::boxed::open(func);
                 match func {
-                    Expr::Variable(name, _) => { let name = *name; reach_note(aliases, pausing, by_last, &words.resolve(name).to_string(), &mut out); },
+                    Expr::Variable(name, _) => { let name = *name; reach_note(aliases, pausing, by_last, &nikaia_std::block::Text::from(words.resolve(name).to_string()), &mut out); },
                     Expr::Path(segments, _) => {
                         let mut joined: Vec<String> = vec![];
                         for segment in segments.iter() {
                             let segment = *segment;
-                            joined.push(words.resolve(segment).to_string());
+                            joined.push(nikaia_std::block::Text::from(words.resolve(segment).to_string()));
                         }
-                        reach_note(aliases, pausing, by_last, &joined.join("::"), &mut out);
+                        reach_note(aliases, pausing, by_last, &nikaia_std::block::Text::from(joined.join("::")), &mut out);
                     },
                     _ => { },
                 }
             },
-            Expr::MethodCall { method, .. } => { let method = *method; reach_note(aliases, pausing, by_last, &words.resolve(method).to_string(), &mut out); },
-            Expr::SafeMethod { method, .. } => { let method = *method; reach_note(aliases, pausing, by_last, &words.resolve(method).to_string(), &mut out); },
+            Expr::MethodCall { method, .. } => { let method = *method; reach_note(aliases, pausing, by_last, &nikaia_std::block::Text::from(words.resolve(method).to_string()), &mut out); },
+            Expr::SafeMethod { method, .. } => { let method = *method; reach_note(aliases, pausing, by_last, &nikaia_std::block::Text::from(words.resolve(method).to_string()), &mut out); },
             _ => { },
         }
     }
@@ -145,12 +145,12 @@ pub(crate) fn reach_note(aliases: &collections::BTreeMap<String, String>, pausin
 
 pub(crate) fn reach_keys_for(by_last: &collections::BTreeMap<String, Vec<String>>, last: &str) -> Vec<String> {
     let found = match by_last.get(last) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    found.to_owned()
+    found.copy_owned()
 }
 
 pub(crate) fn reach_set_for(reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, key: &str) -> collections::BTreeSet<String> {
     let found = match reaches.get(key) { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeSet::new() };
-    found.to_owned()
+    found.copy_owned()
 }
 
 pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, items: &[Spanned<Item>], index: &ReachIndex) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
@@ -160,13 +160,13 @@ pub fn code_cycle_edges(words: &winnow_grammar::InternerContext, aliases: &colle
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let fn_name = words.resolve(held).to_string();
+                let fn_name = nikaia_std::block::Text::from(words.resolve(held).to_string());
                 if index.keys.contains(&fn_name) { graph.insert(fn_name, reach_edges_of(words, aliases, &index.keys, &index.by_last, body)); }
             },
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 if trait_name.is_some() { continue; }
-                let owner = words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(words.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, body, .. } => {
@@ -193,10 +193,10 @@ pub fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections::BTreeS
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut at: i64 = 0;
     while ((at) as usize) < pending.len() {
-        let next = (*nikaia_std::index::get(&pending, (at) as usize)).to_string();
+        let next = nikaia_std::block::Text::from((*nikaia_std::index::get(&pending, (at) as usize)).to_string());
         at += 1;
         if next == key { return true; }
-        if seen.insert(next.to_string()) { for then in reach_set_for(graph, &next) { pending.push(then); } }
+        if seen.insert(nikaia_std::block::Text::from(next.to_string())) { for then in reach_set_for(graph, &next) { pending.push(then); } }
     }
     false
 }

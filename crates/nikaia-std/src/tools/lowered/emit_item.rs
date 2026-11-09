@@ -92,11 +92,11 @@ pub(crate) fn emit_item_receiver(given: Option<&Receiver>) -> String {
 impl EmitState {
     pub(crate) fn emit_item_carries(&self, at: i64) -> collections::BTreeSet<String> {
         let found = match self.carries_input.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeSet::new() };
-        found.to_owned()
+        found.copy_owned()
     }
     pub(crate) fn emit_item_slots(&self, name: &str) -> Vec<String> {
         let found = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-        found.to_owned()
+        found.copy_owned()
     }
     pub(crate) fn emit_item_comptime(&self, at: i64) -> Option<(String, String)> {
         let found = match self.facts.comptime_values.get(&at) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -127,7 +127,7 @@ impl EmitState {
         let carries = self.emit_item_carries(i64::from(method.span.start));
         let st = out.mark();
         out.push("    ");
-        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, Some(&target.to_string()), declared_by, bridged)?;
+        self.emit_function(world, walk, out, host, method, 1, lifetimes, &carries, Some(&nikaia_std::block::Text::from(target.to_string())), declared_by, bridged)?;
         out.record(&method.span, st);
         Ok(())
     }
@@ -160,7 +160,7 @@ impl EmitState {
                                 parts.push(self.boxed_ty(&enum_name, &member, lowered));
                                 i += 1;
                             }
-                            out.push(&format!("    {}({}),\n", vname, parts.join(", ")));
+                            out.push(&format!("    {}({}),\n", vname, nikaia_std::block::Text::from(parts.join(", "))));
                         },
                         VariantFields::Named(fields) => {
                             let mut parts: Vec<String> = vec![];
@@ -169,7 +169,7 @@ impl EmitState {
                                 let lowered = self.emit_item_ty(world, walk, host, &f.ty, &EmitLifetimes::Named);
                                 parts.push(format!("{}: {}", escaped_name(&emit_text(world, f.name)), self.boxed_ty(&enum_name, &member, lowered)));
                             }
-                            out.push(&format!("    {} {{ {} }},\n", vname, parts.join(", ")));
+                            out.push(&format!("    {} {{ {} }},\n", vname, nikaia_std::block::Text::from(parts.join(", "))));
                         },
                     }
                 }
@@ -182,7 +182,7 @@ impl EmitState {
                 if seeded { emit_seeds_declare_type(&mut walk.place, 0); }
                 let mut derives = self.derives(world, name);
                 let by_hand = seeded && generics.is_empty() && !self.borrowing.contains(&text) && derives.contains("PartialEq");
-                if by_hand { derives = derives.replace(", PartialEq", "").replace(", Eq", ""); }
+                if by_hand { derives = nikaia_std::block::Text::from(nikaia_std::block::Text::from(derives.replace(", PartialEq", "")).replace(", Eq", "")); }
                 out.push(&derives);
                 if is_extern { out.push("#[repr(C)]\n"); }
                 let vis = if is_public { "pub " } else { "" };
@@ -233,7 +233,7 @@ impl EmitState {
                         same.push(format!("self.{} == other.{}", n, n));
                     }
                     let mut compared: String = String::from("true");
-                    if !same.is_empty() { compared = same.join(" && "); }
+                    if !same.is_empty() { compared = nikaia_std::block::Text::from(same.join(" && ")); }
                     out.push(&format!("impl{} PartialEq for {}{} {{\n    fn eq(&self, other: &Self) -> bool {{ {} }}\n}}\n", declares, me, applied, compared));
                     if self.facts.compares_totally.contains(&text) { out.push(&format!("impl{} Eq for {}{} {{}}\n", declares, me, applied)); }
                 }
@@ -271,7 +271,7 @@ impl EmitState {
                     out.push(&format!("#[allow(unused_imports)]\nuse nikaia_std::{};\n", *nikaia_std::index::get(&segments, 1)));
                     return Ok(());
                 }
-                let joined = segments.join("::");
+                let joined = nikaia_std::block::Text::from(segments.join("::"));
                 if alias.is_some() { out.push(&format!("// use {} as {}\n", joined, emit_item_text_of(world, std::convert::identity(alias)))); } else { out.push(&format!("// use {}\n", joined)); }
             },
             Item::Comptime { name, public, .. } => {
@@ -330,7 +330,7 @@ impl EmitState {
         let generics = impl_parameters(world.words, target, &declared);
         let mut head_parts: Vec<String> = vec![];
         if borrows { head_parts.push(String::from("'a")); }
-        for g in generics.iter() { head_parts.push(g.to_string()); }
+        for g in generics.iter() { head_parts.push(nikaia_std::block::Text::from(g.to_string())); }
         let mut target_parts: Vec<String> = vec![];
         if borrows { target_parts.push(self.lifetime_args(&target_name, "'a")); }
         for g in target.generics.iter() { target_parts.push(self.emit_item_ty(world, walk, host, g, &EmitLifetimes::Elided)); }
@@ -371,7 +371,7 @@ impl EmitState {
             emit_seeds_enter(&mut walk.place, &target_name, &emit_seeds_applied(0, hidden));
         }
         let mut declared_by: Option<String> = None;
-        if has_trait { declared_by = Some(trait_text.to_string()); }
+        if has_trait { declared_by = Some(nikaia_std::block::Text::from(trait_text.to_string())); }
         let mut wider: Vec<Option<TraitMethod>> = vec![];
         let mut any_wider = false;
         for method in methods.iter() {
@@ -429,7 +429,7 @@ impl EmitState {
         if !foreign {
             for source in method.ret_from.iter() {
                 let source = *source;
-                from_names.push(emit_text(world, source).to_string());
+                from_names.push(nikaia_std::block::Text::from(emit_text(world, source).to_string()));
             }
         }
         let mut shares_a_lifetime = false;
@@ -482,7 +482,7 @@ impl EmitState {
                 None => { },
             }
         }
-        let mut outcome = returned.to_string();
+        let mut outcome = nikaia_std::block::Text::from(returned.to_string());
         if method.can_throw { outcome = format!("Result<{}, Box<dyn std::error::Error>>", returned); }
         let mut ret: String = String::from("");
         if !is_sync {
@@ -492,7 +492,7 @@ impl EmitState {
         let mut generics: Vec<String> = vec![];
         if shares_a_lifetime { generics.push(String::from("'r")); }
         for g in method.generics.iter() { generics.push(emit_bounded(world, g)); }
-        out.push(&format!("fn {}{}({}){};\n", escaped_name(&emit_text(world, method.name)), emit_angled(&generics), params.join(", "), ret));
+        out.push(&format!("fn {}{}({}){};\n", escaped_name(&emit_text(world, method.name)), emit_angled(&generics), nikaia_std::block::Text::from(params.join(", ")), ret));
         walk.floor = false;
         Ok(())
     }
@@ -544,14 +544,14 @@ impl EmitState {
         let mut written = EmitOut::empty();
         self.emit_trait_method(world, walk, &mut written, host, trait_name, declared, declared.is_sync, false)?;
         let trimmed = written.buf.trim_end();
-        let signature = nikaia_std::index::or(trimmed.strip_suffix(';'), || std::convert::AsRef::<str>::as_ref(trimmed)).to_string();
+        let signature = nikaia_std::block::Text::from(nikaia_std::index::or(trimmed.strip_suffix(';'), || std::convert::AsRef::<str>::as_ref(trimmed)).to_string());
         let mut passed: Vec<String> = vec![];
         if declared.receiver.is_some() { passed.push(String::from("self")); }
         for a in declared.args.iter() { passed.push(escaped_name(&emit_text(world, a.name))); }
         for o in declared.config.iter() { passed.push(escaped_name(&emit_text(world, o.name))); }
         let awaited = if call_pauses(&self.own_contracts, &format!("{}::{}", target, name)) { ".await" } else { "" };
-        let called = format!("Self::{}({}){}", escaped_name(&name), passed.join(", "), awaited);
-        let mut body = called.to_string();
+        let called = format!("Self::{}({}){}", escaped_name(&name), nikaia_std::block::Text::from(passed.join(", ")), awaited);
+        let mut body = nikaia_std::block::Text::from(called.to_string());
         if declared.can_throw && !own_throws { body = format!("Ok({})", called); }
         if !declared.is_sync { body = format!("async move {{ {} }}", body); }
         out.push(&format!("{} {{ {} }}\n", signature, body));

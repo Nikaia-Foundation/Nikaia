@@ -20,6 +20,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 const DECLARED: &str = "extern {\n    fn getpid() -> i32\n}\n";
 

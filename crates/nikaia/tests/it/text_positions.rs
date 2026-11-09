@@ -5,6 +5,8 @@
 //! `NK1214`, and a cut inside a scalar stops the program in the language's words.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The status, the standard output and the standard error of `nikaia <verb>`.
 fn nikaia(name: &str, verb: &str, source: &str) -> (bool, String, String) {
@@ -19,8 +21,8 @@ fn nikaia(name: &str, verb: &str, source: &str) -> (bool, String, String) {
     let _ = std::fs::remove_dir_all(&dir);
     (
         run.status.success(),
-        String::from_utf8_lossy(&run.stdout).into_owned(),
-        String::from_utf8_lossy(&run.stderr).into_owned(),
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr),
     )
 }
 

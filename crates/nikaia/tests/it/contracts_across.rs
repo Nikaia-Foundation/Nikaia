@@ -6,6 +6,8 @@
 //! breaking direction is said to its author.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -162,7 +164,7 @@ fn a_contract_changed_in_the_breaking_direction_is_said() {
         .replace("assert(whole > 0)", "assert(whole > 1)")
         .replace("    assert(n >= 0)", "    assert(n >= 0 - 1)");
     std::fs::write(lib.join("src/main.nika"), stronger).expect("the change");
-    let changed = String::from_utf8_lossy(&nikaia(&lib, &["build"]).stderr).to_string();
+    let changed = String::from_utf8_lossy(&nikaia(&lib, &["build"]).stderr).to_text();
     assert!(
         changed.contains(
             "warning[NK1208]: `percent` asks more of its callers than the committed ledger says."
@@ -171,12 +173,12 @@ fn a_contract_changed_in_the_breaking_direction_is_said() {
                 .contains("warning[NK1208]: `clamp` promises less than the committed ledger says."),
         "{changed}"
     );
-    let again = String::from_utf8_lossy(&nikaia(&lib, &["build"]).stderr).to_string();
+    let again = String::from_utf8_lossy(&nikaia(&lib, &["build"]).stderr).to_text();
     assert!(!again.contains("NK1208"), "{again}");
 
     // Back the other way: weaker requires, stronger ensures - nothing to say.
     std::fs::write(lib.join("src/main.nika"), LIB).expect("the change back");
-    let back = String::from_utf8_lossy(&nikaia(&lib, &["build"]).stderr).to_string();
+    let back = String::from_utf8_lossy(&nikaia(&lib, &["build"]).stderr).to_text();
     assert!(!back.contains("NK1208"), "{back}");
     std::fs::remove_dir_all(&dir).ok();
 }

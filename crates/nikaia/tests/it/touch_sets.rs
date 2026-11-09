@@ -19,6 +19,8 @@ use nikaia::contracts::order::{self, Accounted};
 use nikaia::contracts::touch::TouchOps;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The control this whole file needs: two reads of two files, which meet on
 /// nothing. Without a pair that *does* overlap, every assertion below would
@@ -106,14 +108,14 @@ fn why_with(source: &str, library: Option<Ledger>) -> String {
             (refused, other) | (other, refused) if !matches!(refused, Accounted::Operation(_)) => {
                 let named = match other {
                     Accounted::Operation(operation) => operation.callee.clone(),
-                    _ => "…".to_string(),
+                    _ => "…".to_text(),
                 };
                 format!("in order  {named} - {}", refused.why())
             }
             _ => continue,
         });
     }
-    out.join("\n")
+    String::from(out.join("\n"))
 }
 
 /// The same, against `std`'s ledger.
@@ -575,7 +577,7 @@ fn a_lambdas_own_effects_are_not_in_the_statements_touch_set() {
     );
 
     for source in [trailing, bare] {
-        for ledger in [nikaia::contracts::STD.to_string(), permissive.clone()] {
+        for ledger in [nikaia::contracts::STD.to_text(), permissive.clone()] {
             let library = nikaia::contracts::Ledger::parse(&ledger).expect("the ledger parses");
             let reason = why_with(source, Some(library.clone()));
             assert!(

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/ty.rs
 //
 // The type language the checker reasons in, and the one the ledger records.
@@ -124,7 +126,7 @@ impl TyOps for Ty {
     /// doors is visible: the value a `set` is given carries where it came from.
     fn seen(inner: Ty) -> Ty {
         Ty::Named {
-            name: SEEN.to_string(),
+            name: SEEN.to_text(),
             args: vec![inner],
             view: false,
         }

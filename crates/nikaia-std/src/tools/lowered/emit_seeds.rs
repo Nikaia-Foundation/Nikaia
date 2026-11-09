@@ -29,14 +29,14 @@ impl EmitSeedsTables {
         out
     }
     pub fn count(&self, words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
-        let name = words.resolve(ty.name).to_string();
+        let name = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
         let mut sum: i64 = 0;
         if (*ty.code).is_none() && !ty.is_tuple { if emit_seeds_is_map(&name) { sum = 1; } else { sum = self.arity(&name); } }
         for g in ty.generics.iter() { sum += self.count(words, g); }
         sum
     }
     pub fn distinct(&self, words: &winnow_grammar::InternerContext, ty: &Type, seen: &mut collections::BTreeSet<String>) -> i64 {
-        let name = words.resolve(ty.name).to_string();
+        let name = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
         let mut own: i64 = 0;
         if (*ty.code).is_none() && !ty.is_tuple { if emit_seeds_is_map(&name) { own = 1; } else { own = self.arity(&name); } }
         if own > 0 {
@@ -49,7 +49,7 @@ impl EmitSeedsTables {
         sum
     }
     pub fn mentions_a_struct(&self, words: &winnow_grammar::InternerContext, ty: &Type) -> bool {
-        let name = words.resolve(ty.name).to_string();
+        let name = nikaia_std::block::Text::from(words.resolve(ty.name).to_string());
         if !ty.is_tuple && (*ty.code).is_none() && !emit_seeds_is_map(&name) && self.arity(&name) > 0 { return true; }
         for g in ty.generics.iter() { if self.mentions_a_struct(words, g) { return true; } }
         false
@@ -61,14 +61,14 @@ impl EmitSeedsTables {
     }
     pub fn count_types(&mut self, declared: &[EmitSeedsDeclared]) {
         self.types = collections::BTreeMap::new();
-        for d in declared.iter() { if !self.excluded.contains(&d.name) { self.types.insert(d.name.to_string(), 0); } }
+        for d in declared.iter() { if !self.excluded.contains(&d.name) { self.types.insert(nikaia_std::block::Text::from(d.name.to_string()), 0); } }
         for _ in 0..8 {
             let mut changed = false;
             for d in declared.iter() {
                 if self.excluded.contains(&d.name) { continue; }
                 let n = self.count_words(&d.words);
                 if nikaia_std::index::or(self.types.get(&d.name), || -1) != n {
-                    self.types.insert(d.name.to_string(), n);
+                    self.types.insert(nikaia_std::block::Text::from(d.name.to_string()), n);
                     changed = true;
                 }
             }
@@ -77,7 +77,7 @@ impl EmitSeedsTables {
         let mut kept: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for (name, n) in self.types.iter() {
             let n = nikaia_std::num::value(n);
-            if n > 0 { kept.insert(name.to_string(), n); }
+            if n > 0 { kept.insert(nikaia_std::block::Text::from(name.to_string()), n); }
         }
         self.types = kept;
     }
@@ -90,7 +90,7 @@ impl EmitSeedsTables {
             let mut changed = false;
             for b in bodies.iter() {
                 if !self.fixed.contains(&b.name) && self.hands(&b.calls, &b.held) {
-                    self.fixed.insert(b.name.to_string());
+                    self.fixed.insert(nikaia_std::block::Text::from(b.name.to_string()));
                     self.functions = true;
                     changed = true;
                 }
@@ -102,7 +102,7 @@ impl EmitSeedsTables {
         let mut out: Vec<String> = vec![];
         for i in impls.iter() {
             if self.arity(&i.name) == 0 || nikaia_std::list::contains(&out, &i.name) { continue; }
-            if self.hands(&i.calls, &i.held) { out.push(i.name.to_string()); }
+            if self.hands(&i.calls, &i.held) { out.push(nikaia_std::block::Text::from(i.name.to_string())); }
         }
         out
     }
@@ -145,13 +145,13 @@ pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '
         for (key, conflict, _, _) in host.analysed(&tables) {
             if !conflict { continue; }
             let at = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let target = nikaia_std::index::get(&key, nikaia_std::index::at(0..at)).to_string();
+            let target = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..at)).to_string());
             if tables.arity(&target) > 0 && !nikaia_std::list::contains(&bad, &target) { bad.push(target); }
         }
         if bad.is_empty() { break; }
         for name in bad.iter() {
-            tables.excluded.insert(name.to_string());
-            tables.barriers.insert(name.to_string());
+            tables.excluded.insert(nikaia_std::block::Text::from(name.to_string()));
+            tables.barriers.insert(nikaia_std::block::Text::from(name.to_string()));
         }
         tables.count_types(&declared);
         emit_seeds_read_barriers(&mut tables, units);
@@ -164,8 +164,8 @@ pub fn emit_seeds_fill_calls(tables: &mut EmitSeedsTables, units: &[ParsedView<'
     let mut fixes: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (key, _, own, fixed) in analysed.iter() {
         let own = nikaia_std::num::value(own);let fixed = nikaia_std::num::value(fixed);
-        owns.insert(key.to_string(), own);
-        fixes.insert(key.to_string(), fixed);
+        owns.insert(nikaia_std::block::Text::from(key.to_string()), own);
+        fixes.insert(nikaia_std::block::Text::from(key.to_string()), fixed);
     }
     for unit in units.iter() {
         for item in unit.items.iter() {
@@ -436,19 +436,19 @@ pub(crate) fn emit_seeds_root(unit: &ParsedView<'_, '_, '_, '_, '_, '_>, e: &Exp
 }
 
 pub fn emit_seeds_words(words: &winnow_grammar::InternerContext, ty: &Type, out: &mut Vec<String>) {
-    if (*ty.code).is_none() && !ty.is_tuple { out.push(words.resolve(ty.name).to_string()); }
+    if (*ty.code).is_none() && !ty.is_tuple { out.push(nikaia_std::block::Text::from(words.resolve(ty.name).to_string())); }
     for g in ty.generics.iter() { emit_seeds_words(words, g, out); }
 }
 
 pub fn emit_seeds_bare(words: &winnow_grammar::InternerContext, ty: &Type) -> i64 {
     let mut sum: i64 = 0;
-    if (*ty.code).is_none() && !ty.is_tuple && emit_seeds_is_map(&words.resolve(ty.name).to_string()) { sum = 1; }
+    if (*ty.code).is_none() && !ty.is_tuple && emit_seeds_is_map(&nikaia_std::block::Text::from(words.resolve(ty.name).to_string())) { sum = 1; }
     for g in ty.generics.iter() { sum += emit_seeds_bare(words, g); }
     sum
 }
 
 pub fn emit_seeds_key(words: &winnow_grammar::InternerContext, ty: &Type, top: bool) -> String {
-    let word = emit_seeds_last(&words.resolve(ty.name).to_string());
+    let word = emit_seeds_last(&nikaia_std::block::Text::from(words.resolve(ty.name).to_string()));
     let name = match &*word {
         "TrustedMap" => "HashMap",
         "TrustedSet" => "HashSet",
@@ -519,7 +519,7 @@ pub fn emit_seeds_declare_fn(place: &mut EmitSeedsPlace, base: i64, groups: &[i6
         if j >= 0 { { let __nikaia_stored = format!("__S{}", j); nikaia_std::index::set(&mut names, nikaia_std::index::at(*nikaia_std::index::get(&groups, (at) as usize)), __nikaia_stored); } }
     }
     place.has_shape = true;
-    place.groups = groups.to_owned();
+    place.groups = groups.copy_owned();
     place.at = start;
     place.names = names;
 }
@@ -543,8 +543,8 @@ pub fn emit_seeds_finish(place: &mut EmitSeedsPlace, base: i64) -> i64 {
 }
 
 pub fn emit_seeds_enter(place: &mut EmitSeedsPlace, target: &str, params: &[String]) {
-    place.within_target = Some(target.to_string());
-    place.within_params = params.to_owned();
+    place.within_target = Some(nikaia_std::block::Text::from(target.to_string()));
+    place.within_params = params.copy_owned();
 }
 
 pub fn emit_seeds_leave(place: &mut EmitSeedsPlace) {
@@ -570,7 +570,7 @@ pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld
             let in_seeded_impl = emit_seeds_within(&walk.place);
             let has_owner = owner_target.is_some();
             let target: String = nikaia_std::index::or(match owner_target {
-                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
             }, || "".into());
             let mut base: i64 = 0;
@@ -587,7 +587,7 @@ pub fn emit_seeds_begin<H: EmitHost>(tables: &EmitSeedsTables, world: &EmitWorld
             if seeded {
                 let mut shape: Option<EmitSeedsShape> = None;
                 if is_public {
-                    let key: String = if has_owner { format!("{}::{}", target, own_name) } else { own_name.to_string() };
+                    let key: String = if has_owner { format!("{}::{}", target, own_name) } else { nikaia_std::block::Text::from(own_name.to_string()) };
                     shape = host.seeds_shape(&key);
                 }
                 match shape {
@@ -611,7 +611,7 @@ pub fn emit_seeds_end(walk: &mut EmitWalk, seeded: bool, base: i64) -> EmitSeeds
 pub fn emit_seeds_seeded(tables: &EmitSeedsTables, walk: &mut EmitWalk, trusted: bool, written: String) -> String {
     let floor = walk.floor;
     let mut text = written;
-    if floor { text = text.replace("TrustedMap", "HashMap").replace("TrustedSet", "HashSet"); }
+    if floor { text = nikaia_std::block::Text::from(nikaia_std::block::Text::from(text.replace("TrustedMap", "HashMap")).replace("TrustedSet", "HashSet")); }
     if tables.is_empty() { return text; }
     emit_seeds_write(&text, &mut walk.place, trusted && !floor, tables)
 }
@@ -626,7 +626,7 @@ pub(crate) fn emit_seeds_position(place: &mut EmitSeedsPlace) -> String {
         { let __nikaia_stored = format!("__S{}", place.next); nikaia_std::index::set(&mut place.names, nikaia_std::index::at(group), __nikaia_stored); }
         place.next += 1;
     }
-    (*nikaia_std::index::get(&place.names, nikaia_std::index::at(group))).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&place.names, nikaia_std::index::at(group))).to_string())
 }
 
 pub(crate) fn emit_seeds_own(place: &mut EmitSeedsPlace) -> String {
@@ -773,14 +773,14 @@ pub(crate) fn emit_seeds_mention(run: &mut EmitSeedsRun, path: &str, place: &mut
     }
     let before = run.out.len() as i64;
     let mut added: Vec<String> = vec![];
-    let mut name = path.to_string();
+    let mut name = nikaia_std::block::Text::from(path.to_string());
     if map {
         if place.declaring {
             added.push(emit_seeds_own(place));
             name = emit_seeds_renamed(path);
         }
     } else if hit {
-        added = place.within_params.to_owned();
+        added = place.within_params.copy_owned();
         if place.has_shape { for _step in 0..k { let skipped = emit_seeds_position(place); } }
     } else if place.declaring && place.has_shape { for _step in 0..k { added.push(emit_seeds_own(place)); } } else if place.declaring {
         for step in 0..k { added.push(format!("__S{}", place.next + step)); }

@@ -13,6 +13,8 @@ use nikaia::ast::{Expr, Item, MatchPattern, Stmt};
 use nikaia::contracts::LedgerOps;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -199,7 +201,7 @@ let s = "n is {n}" }"#,
 fn an_f_string_is_a_string_even_with_no_hole_in_it() {
     let emitted = emit(r#"fn main() { let s = f"no holes here" }"#);
     assert!(
-        emitted.contains(r#""no holes here".to_string()"#),
+        emitted.contains(r#""no holes here".to_text()"#),
         "{emitted}"
     );
 }
@@ -658,7 +660,7 @@ fn printed(purpose: &str, source: &str) -> String {
         .expect("run the program");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(ran.status.success(), "{purpose}: {ran:?}");
-    String::from_utf8_lossy(&ran.stdout).to_string()
+    String::from_utf8_lossy(&ran.stdout).to_text()
 }
 
 /// **What has a text form still runs** (#638): an error, whose text is its

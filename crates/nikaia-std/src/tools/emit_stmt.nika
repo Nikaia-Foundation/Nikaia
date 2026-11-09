@@ -167,6 +167,15 @@ impl EmitState {
         self.emit_stmt_block_plain(world, walk, out, host, block, depth, flow, scope, tail, opening)
     }
 
+    /// **A list of views ends at its last use** (#490, `view_list_drops`):
+    /// a block's `List` would hold what it views to the end of the scope, so
+    /// each list the statement at `start` used last is dropped after it.
+    pub fn emit_view_list_drops(ref self, mut out: EmitOut, start: i64) {
+        for ended in self.facts.view_list_drops.get(start)?.clone() ?? [] {
+            out.push(f" ::core::mem::drop({ended});")
+        }
+    }
+
     /// A block as it is written, with no settle point after it.
     pub fn emit_stmt_block_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, block: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope, tail: EmitTail, opening: String?) sync throws {
         if block.stmts.len() == 0 {
@@ -296,6 +305,7 @@ impl EmitState {
                 out.push(" };")
             }
             out.push(self.emit_stmt_late_puts(walk, scope.function, block.stmts[i].span.start as i64))
+            self.emit_view_list_drops(out, block.stmts[i].span.start as i64)
             out.push("\n")
             pos += 1
         }

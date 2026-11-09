@@ -4,6 +4,8 @@
 //! sources leaves the file as it was.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::Command;
 
@@ -123,7 +125,7 @@ fn locked_fails_on_a_file_that_does_not_answer_the_questions() {
     };
     std::fs::write(dir.join("nikaia.proofs"), &missing).expect("rewritten");
     let refused = build(&["build", "--no-cache", "--locked"]);
-    let stderr = String::from_utf8_lossy(&refused.stderr).to_string();
+    let stderr = String::from_utf8_lossy(&refused.stderr).to_text();
     assert!(!refused.status.success(), "{stderr}");
     assert!(stderr.contains("commit `nikaia.proofs`"), "{stderr}");
     // D22: the message names where the question was asked.
@@ -154,7 +156,7 @@ fn keys(file: &Path) -> std::collections::BTreeSet<String> {
         .unwrap_or_default()
         .lines()
         .filter(|line| !line.starts_with('#'))
-        .filter_map(|line| line.split(' ').next().map(str::to_string))
+        .filter_map(|line| line.split(' ').next().map(str::to_text))
         .collect()
 }
 
@@ -251,7 +253,7 @@ fn an_edited_proof_file_is_a_new_build() {
         .lines()
         .find(|l| !l.starts_with('#'))
         .expect("an entry")
-        .to_string();
+        .to_text();
     let without: String = whole
         .lines()
         .filter(|l| *l != taken)

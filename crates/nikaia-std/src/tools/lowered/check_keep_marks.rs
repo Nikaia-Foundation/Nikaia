@@ -12,7 +12,7 @@ pub fn keep_marks_check(view: &ParsedView<'_, '_, '_, '_, '_, '_>, beside: &[Par
                 let trait_name = *trait_name;
                 let target_name = view.text(target.name);
                 match trait_name {
-                    None => { for method in methods.iter() { keep_marks_of_body(view, method, Some(&target_name.to_string()), own, library, &indexes, resolved, holes_of, opted, &mut out); } },
+                    None => { for method in methods.iter() { keep_marks_of_body(view, method, Some(&nikaia_std::block::Text::from(target_name.to_string())), own, library, &indexes, resolved, holes_of, opted, &mut out); } },
                     Some(t) => {
                         let owner = view.text(t);
                         for method in methods.iter() { keep_marks_against_trait(view, method, &owner, &traits, &mut out); }
@@ -127,7 +127,7 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
             let is_extern = *is_extern;
             if is_extern || args.is_empty() { return; }
             let found = match keeps_uses_of(view, &item.node, (match target {
-                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
             }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
             let contract = match *nikaia_std::index::get(&own.functions, &found.key) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -139,7 +139,7 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_>, item
                 let a_copy = !arg.ty.is_view && !arg.mutable && keeps_a_copy_type(&written_ty(view.words, view.aliases, &arg.ty), &copies);
                 if kept && !arg.keep && opted && !a_copy {
                     let at = nikaia_std::index::or(keep_marks_keeping_statement(view, item, (match target {
-                        Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }).as_deref(), &parameter, own, library, &indexes, resolved, holes_of), || arg.span.clone().into());
                     out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-3 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(format!("Write `keep {}` in the signature of `{}`.", parameter, found.key))));
@@ -164,15 +164,15 @@ pub(crate) fn keep_marks_keeping_statement(view: &ParsedView<'_, '_, '_, '_, '_,
             let mut stmts: Vec<Spanned<Stmt>> = vec![];
             for stmt in body.stmts.iter() {
                 stmts.push(stmt.clone());
-                let prefix = Item::Fn { name, generics: generics.to_owned(), receiver: match receiver {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                let prefix = Item::Fn { name, generics: generics.copy_owned(), receiver: match receiver {
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
-                }, args: args.to_owned(), config: config.to_owned(), spread, ret_type: match ret_type {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                }, args: args.copy_owned(), config: config.copy_owned(), spread, ret_type: match ret_type {
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
-                }, body: Block { stmts: stmts.to_owned() }, is_sync, sync_by: sync_by.to_owned(), is_public, can_throw, is_extern, ret_from: ret_from.to_owned() };
+                }, body: Block { stmts: stmts.copy_owned() }, is_sync, sync_by: sync_by.copy_owned(), is_public, can_throw, is_extern, ret_from: ret_from.copy_owned() };
                 let found = match keeps_uses_of(view, &prefix, (match target {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                    Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                     None => None,
                 }).as_deref(), own, library, &indexes, resolved, holes_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if found.uses.kept.contains(parameter) || found.uses.passed.iter().any(|passed| { passed.parameter == parameter && keeps_its(&passed.callee, passed.at, &settling, own, library) }) { return Some(stmt.span.clone()); }

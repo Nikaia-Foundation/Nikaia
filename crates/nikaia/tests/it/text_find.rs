@@ -3,6 +3,8 @@
 //! search rather than the language below's `str::find`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn ran(purpose: &str, source: &str) -> String {
     let dir = common::scratch_dir(purpose);
@@ -19,7 +21,7 @@ fn ran(purpose: &str, source: &str) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).to_string()
+    String::from_utf8_lossy(&run.stdout).to_text()
 }
 
 /// From the start, from a position, nothing past the last match - and a

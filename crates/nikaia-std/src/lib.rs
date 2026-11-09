@@ -122,6 +122,7 @@ pub mod text {
 /// half and never the compiler's. Unpublished: `std.contracts` does not list
 /// it, and `std`'s Rust (`http1.rs`) is its only caller.
 #[doc(hidden)]
+#[allow(clippy::cmp_owned)]
 pub mod runtime {
     include!("runtime/lowered.rs");
 
@@ -261,6 +262,7 @@ pub mod runtime {
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
 #[allow(
+    clippy::cmp_owned,
     clippy::result_large_err,
     clippy::no_effect,
     clippy::eq_op,
@@ -428,6 +430,8 @@ pub mod tools {
     #[cfg(test)]
     mod paths_tests {
         use super::*;
+        #[allow(unused_imports)]
+        use crate::block::names::{String, ToText, Vec, format, vec};
 
         fn one(name: &str, alias: &str) -> Option<Named> {
             Some(Named {
@@ -503,9 +507,11 @@ pub mod tools {
     #[cfg(test)]
     mod crossing_tests {
         use super::*;
+        #[allow(unused_imports)]
+        use crate::block::names::{String, ToText, Vec, format, vec};
 
         fn texts(all: &[&str]) -> Vec<String> {
-            all.iter().map(|s| s.to_string()).collect()
+            all.iter().map(|s| s.to_text()).collect()
         }
 
         /// `Rc` never crosses, plain data does, and anything else - a view,
@@ -554,17 +560,17 @@ pub mod tools {
         #[test]
         fn the_shortest_way_to_a_thread_is_named() {
             let mut calls = std::collections::BTreeMap::new();
-            calls.insert("a::run".to_string(), texts(&["helper", "slow"]));
-            calls.insert("a::helper".to_string(), texts(&["tokio::spawn"]));
-            calls.insert("a::slow".to_string(), texts(&["a::slower"]));
-            calls.insert("a::slower".to_string(), texts(&["std::thread::spawn"]));
-            calls.insert("a::loops".to_string(), texts(&["a::loops"]));
+            calls.insert("a::run".to_text(), texts(&["helper", "slow"]));
+            calls.insert("a::helper".to_text(), texts(&["tokio::spawn"]));
+            calls.insert("a::slow".to_text(), texts(&["a::slower"]));
+            calls.insert("a::slower".to_text(), texts(&["std::thread::spawn"]));
+            calls.insert("a::loops".to_text(), texts(&["a::loops"]));
             assert_eq!(
                 reaches_a_thread("a::run", &calls),
                 Some(texts(&["a::helper", "tokio::spawn"]))
             );
             assert_eq!(reaches_a_thread("a::loops", &calls), None);
-            calls.insert("b::helper".to_string(), Vec::new());
+            calls.insert("b::helper".to_text(), Vec::new());
             assert_eq!(the_crates_own("helper", &calls), None);
         }
     }
@@ -574,9 +580,11 @@ pub mod tools {
     #[cfg(test)]
     mod signature_tests {
         use super::*;
+        #[allow(unused_imports)]
+        use crate::block::names::{String, ToText, Vec, format, vec};
 
         fn texts(all: &[&str]) -> Vec<String> {
-            all.iter().map(|s| s.to_string()).collect()
+            all.iter().map(|s| s.to_text()).collect()
         }
 
         /// A view is not kept, a value is; the crate's own type is named
@@ -584,18 +592,18 @@ pub mod tools {
         #[test]
         fn a_rust_type_reads_as_the_ledgers() {
             let types: std::collections::BTreeSet<String> =
-                ["Conn".to_string()].into_iter().collect();
+                ["Conn".to_text()].into_iter().collect();
             let params = texts(&["T"]);
             let mut mentioned = std::collections::BTreeSet::new();
             let mut said = |t: &str| {
                 let out = translate(t, "db", &params, &types, &mut mentioned);
                 (text(&out.ty), out.kept)
             };
-            assert_eq!(said("&str"), ("ref String".to_string(), false));
-            assert_eq!(said("Vec<Conn>"), ("Vec[db::Conn]".to_string(), true));
-            assert_eq!(said("Option<T>"), ("$T?".to_string(), true));
-            assert_eq!(said("u8"), ("u8".to_string(), false));
-            assert_eq!(said("&mut u8"), ("?".to_string(), false));
+            assert_eq!(said("&str"), ("ref String".to_text(), false));
+            assert_eq!(said("Vec<Conn>"), ("Vec[db::Conn]".to_text(), true));
+            assert_eq!(said("Option<T>"), ("$T?".to_text(), true));
+            assert_eq!(said("u8"), ("u8".to_text(), false));
+            assert_eq!(said("&mut u8"), ("?".to_text(), false));
             assert!(said("other::Thing").1);
             assert!(mentioned.contains("Conn"));
         }
@@ -605,7 +613,7 @@ pub mod tools {
         #[test]
         fn a_result_names_what_it_throws() {
             let types: std::collections::BTreeSet<String> =
-                ["Error".to_string()].into_iter().collect();
+                ["Error".to_text()].into_iter().collect();
             let mut mentioned = std::collections::BTreeSet::new();
             let own = result_of(
                 "Result<u8, Error>",
@@ -669,7 +677,9 @@ pub mod tools {
     /// The error is [`crate::grammar::ParseError`], already rendered: a
     /// headline, the line with a caret under it, and what else was possible
     /// there.
-    pub fn file(text: &str) -> Result<Vec<RustItem<'_>>, crate::grammar::ParseError> {
+    pub fn file(
+        text: &str,
+    ) -> Result<crate::block::List<RustItem<'_>>, crate::grammar::ParseError> {
         use winnow::Parser;
         let mut stream = winnow_grammar::ParseInput::<()> {
             state: winnow_grammar::ParseContext::<()>::default(),

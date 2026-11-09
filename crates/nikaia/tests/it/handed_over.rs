@@ -13,6 +13,8 @@
 //! the lowering writes.
 use crate::common;
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::LedgerOps;
 use std::process::Command;
@@ -350,7 +352,7 @@ fn insert_keeps_its_key() {
 
 // --- ADR-282: one word for a copy ------------------------------------------------
 
-/// **`.to_owned()` is refused, naming `.clone()`**: the language below needs
+/// **`.to_text()` is refused, naming `.clone()`**: the language below needs
 /// the second word because its `.clone()` of a reference copies the
 /// reference; this one has no reference to copy.
 #[test]
@@ -358,7 +360,7 @@ fn a_copy_has_one_word() {
     let found = findings(
         "fn main() throws {\n\
          \x20   let name: String = \"a\"\n\
-         \x20   let copy = name.to_owned()\n\
+         \x20   let copy = name.to_text()\n\
          \x20   println(copy)\n\
          }\n",
     );
@@ -371,12 +373,12 @@ fn a_copy_has_one_word() {
         "{:?}",
         found[0].help
     );
-    // `.to_string()` is the text form of a value, for every type, and stays.
+    // `.to_text()` is the text form of a value, for every type, and stays.
     assert_eq!(
         codes_of(&findings(
             "fn main() throws {\n\
              \x20   let n = 3\n\
-             \x20   let a = n.to_string()\n\
+             \x20   let a = n.to_text()\n\
              \x20   let b = \"x\"\n\
              \x20   println(f\"{a}{b}\")\n\
              }\n"
@@ -394,17 +396,17 @@ fn the_text_form_of_text_is_the_text() {
         "fn main() throws {\n\
          \x20   let a = \"x\"\n\
          \x20   let n = 3\n\
-         \x20   println(f\"{a}{n.to_string()}\")\n\
+         \x20   println(f\"{a}{n.to_text()}\")\n\
          }\n",
         Build::default(),
     );
     assert!(rust.contains("let a = \"x\";"), "{rust}");
-    assert!(rust.contains("n.to_string()"), "{rust}");
+    assert!(rust.contains("n.to_text()"), "{rust}");
     let refused = findings(
         "struct P { name: String }\n\n\
          fn main() throws {\n\
          \x20   let v = \"x\"\n\
-         \x20   let p = P { name: v.to_string() }\n\
+         \x20   let p = P { name: v.to_text() }\n\
          \x20   println(p.name)\n\
          }\n",
     );

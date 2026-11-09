@@ -6,6 +6,8 @@
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
 use nikaia::prove::Held;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// How each `assert` is held, in the order they stand.
 fn held(source: &str) -> Vec<Held> {

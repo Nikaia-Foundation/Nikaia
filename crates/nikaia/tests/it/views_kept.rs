@@ -7,6 +7,8 @@
 use crate::common;
 use nikaia::contracts::LedgerOps;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -232,7 +234,7 @@ fn run_735(name: &str, source: &str) -> (String, String) {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    (String::from_utf8_lossy(&run.stdout).into_owned(), lowered)
+    (String::from_utf8_lossy(&run.stdout), String::from(lowered))
 }
 
 /// #735 (1): a parameter only used as a map's key is no source of the result,

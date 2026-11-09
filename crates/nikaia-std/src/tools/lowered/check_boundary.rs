@@ -14,7 +14,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_declared_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Ty], view: bool) -> Option<String> {
-        if !view && args.is_empty() && (self.fields_of(world, name).is_some() || self.enums.contains_key(name)) { return Some(name.to_string()); }
+        if !view && args.is_empty() && (self.fields_of(world, name).is_some() || self.enums.contains_key(name)) { return Some(nikaia_std::block::Text::from(name.to_string())); }
         if !view && name == "Array" && args.len() == 2 {
             return match nikaia_std::index::get(&args, 1) {
                 Ty::Count(n) => { let n = *n; self.a_run_of(world, nikaia_std::index::get(&args, 0), "[", &format!("; {}]", n)) },
@@ -35,7 +35,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn unwritable_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Vec<String> {
         let name = match ty {
-            Ty::Named { name, .. } => name.to_string(),
+            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return vec![],
         };
         let fields = match self.fields_of(world, &name) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
@@ -46,7 +46,7 @@ impl CheckState {
                 continue;
             }
             if self.names_a_struct(world, &field.ty) && self.unwritable_field(world, &field.ty).is_empty() { continue; }
-            return vec![field.name.to_string(), field.ty.text()];
+            return vec![nikaia_std::block::Text::from(field.name.to_string()), field.ty.text()];
         }
         vec![]
     }
@@ -149,7 +149,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn rooted_at(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &Expr) -> Option<String> {
         match place {
-            Expr::Variable(name, _) => { let name = *name; Some(world.words.resolve(name).to_string()) },
+            Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },
             Expr::SafeField { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.rooted_at(world, base) },
@@ -179,7 +179,7 @@ impl CheckState {
             _ => return false,
         };
         let name = match receiver {
-            Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
         };
         let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -206,7 +206,7 @@ impl CheckState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         let contract = match world.own.functions.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let mut sources: Vec<String> = contract.borrows.to_owned();
+        let mut sources: Vec<String> = contract.borrows.copy_owned();
         for named in written_from_of(world, &key) { sources.push(named); }
         match value {
             Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); match func {
@@ -250,7 +250,7 @@ impl CheckState {
     pub fn a_mut_parameter_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Expr) -> Option<String> {
         let path = match dotted_path(world, subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-        let found = match self.binding(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let found = match self.binding(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }; ::core::mem::drop(parts);
         if found.changing { return Some(path); }
         None
     }
@@ -273,15 +273,15 @@ pub(crate) fn written_from_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ke
         match &item.node {
             Item::Fn { name, ret_from, .. } => {
                 let name = *name;
-                if written_from_names(world, name, None, key) { return ret_from.iter().map(|source| { world.words.resolve(*source).to_string() }).collect::<Vec<_>>(); }
+                if written_from_names(world, name, None, key) { return ret_from.iter().map(|source| { nikaia_std::block::Text::from(world.words.resolve(*source).to_string()) }).collect::<Vec<_>>(); }
             },
             Item::Impl { target, methods, .. } => {
-                let owner = world.words.resolve(target.name).to_string();
+                let owner = nikaia_std::block::Text::from(world.words.resolve(target.name).to_string());
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, ret_from, .. } => {
                             let name = *name;
-                            if written_from_names(world, name, Some(&owner.to_string()), key) { return ret_from.iter().map(|source| { world.words.resolve(*source).to_string() }).collect::<Vec<_>>(); }
+                            if written_from_names(world, name, Some(&nikaia_std::block::Text::from(owner.to_string())), key) { return ret_from.iter().map(|source| { nikaia_std::block::Text::from(world.words.resolve(*source).to_string()) }).collect::<Vec<_>>(); }
                         },
                         _ => { },
                     }
@@ -297,7 +297,7 @@ pub(crate) fn written_from_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ke
 // this was written - see `contracts::sync`.
 pub(crate) fn written_from_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, owner: Option<&str>, key: &str) -> bool {
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
-    let own = world.words.resolve(symbol).to_string();
+    let own = nikaia_std::block::Text::from(world.words.resolve(symbol).to_string());
     let held = match owner { Some(__nikaia_value) => __nikaia_value, None => return own == key };
     format!("{}::{}", held, own) == key
 }

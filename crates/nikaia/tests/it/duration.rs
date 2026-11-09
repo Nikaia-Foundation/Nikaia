@@ -20,6 +20,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -61,10 +63,7 @@ fn output(purpose: &str, source: &str) -> (String, std::time::Duration) {
         String::from_utf8_lossy(&ran.stderr)
     );
     let _ = std::fs::remove_dir_all(&dir);
-    (
-        String::from_utf8_lossy(&ran.stdout).trim().to_string(),
-        took,
-    )
+    (String::from_utf8_lossy(&ran.stdout).trim().to_text(), took)
 }
 
 /// **D2: five names, and they are methods on the integer** — which is the
@@ -90,7 +89,7 @@ fn the_five_names_are_methods_on_an_integer() {
             findings(&source)
         );
         assert!(
-            lowered(&source).contains(&format!("let span = 5i32.{name}();")),
+            lowered(&source).contains(&*format!("let span = 5i32.{name}();")),
             "{name}\n{}",
             lowered(&source)
         );

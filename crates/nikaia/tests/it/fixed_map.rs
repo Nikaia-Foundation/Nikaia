@@ -15,6 +15,8 @@
 //! `tests/build-time/src/fixed_map.nika`; this file keeps the shape of the table
 //! in the generated file, the refusals, and the two hashes side by side.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check::{self, Finding};
 use nikaia::contracts::{Ledger, LedgerOps, STD};

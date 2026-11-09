@@ -20,6 +20,8 @@ use nikaia::contracts::ty::TyOps;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -274,7 +276,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -581,7 +583,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -617,7 +619,7 @@ fn returned_text_is_copied_by_std() {
                   \n\
                   fn main() throws {\n\
                   \x20   let raw = unsafe { getenv(\"HOME\\0\") }\n\
-                  \x20   let home = raw.to_string()\n\
+                  \x20   let home = raw.to_text()\n\
                   \x20   println(home)\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
@@ -634,9 +636,9 @@ fn returned_text_is_copied_by_std() {
         rust.contains("foreign::CStr::from_c(\"getenv\", getenv("),
         "{rust}"
     );
-    assert!(rust.contains("let home = raw.to_string()?;"), "{rust}");
+    assert!(rust.contains("let home = raw.to_text()?;"), "{rust}");
     assert!(
-        !rust.contains("unsafe { raw.to_string()"),
+        !rust.contains("unsafe { raw.to_text()"),
         "the `unsafe` is `std`'s and not the program's:\n{rust}"
     );
 }
@@ -653,7 +655,7 @@ fn the_copy_is_a_call_that_can_fail() {
          \n\
          fn main() {\n\
          \x20   let raw = unsafe { getenv(\"HOME\\0\") }\n\
-         \x20   let text = raw.to_string()\n\
+         \x20   let text = raw.to_text()\n\
          \x20   println(text) catch { return }\n\
          }\n",
     )
@@ -680,7 +682,7 @@ extern {
 
 fn main() throws {
     let raw = unsafe { getenv("PATH\0") }
-    let path = raw.to_string()
+    let path = raw.to_text()
     println(f"{path.len() > 0}")
 }
 "#,
@@ -690,7 +692,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"
@@ -718,7 +720,7 @@ fn a_handle_may_be_absent() {
                   \n\
                   fn main() throws {\n\
                   \x20   let home = unsafe { getenv(\"HOME\\0\") }\n\
-                  \x20   println(home?.to_string() ?? \"none\")\n\
+                  \x20   println(home?.to_text() ?? \"none\")\n\
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
@@ -830,7 +832,7 @@ fn the_copy_fails_in_one_way() {
     // D1 it has a name for it.** The doc below has always said *the same
     // failure `fs::read_to_string` has*, and a set of one that says which is
     // stronger evidence for *one way* than a `"?"` ever was.
-    assert_eq!(copy.fails_with, vec!["io::IoError".to_string()]);
+    assert_eq!(copy.fails_with, vec!["io::IoError".to_text()]);
 }
 
 /// **Measured where it matters: the nullable runs, both ways.**
@@ -850,10 +852,10 @@ extern {
 
 fn main() throws {
     let home = unsafe { getenv("HOME\0") }
-    let found = home?.to_string() ?? "none"
+    let found = home?.to_text() ?? "none"
     println(f"{found.len() > 0}")
     let nope = unsafe { getenv("NIKAIA_NOT_SET\0") }
-    println(nope?.to_string() ?? "none")
+    println(nope?.to_text() ?? "none")
 }
 "#,
     );
@@ -862,7 +864,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"

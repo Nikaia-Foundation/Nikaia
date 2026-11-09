@@ -15,6 +15,8 @@
 //! `tests/language/src/stored_views.nika`.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 
 use nikaia::check::{self, Finding};
@@ -80,7 +82,7 @@ fn no_program_in_the_repository_keeps_a_naked_view() {
             // asked this question.
             let parsed = parse_to_ast(&source)
                 .unwrap_or_else(|e| panic!("{} does not parse: {e}", path.display()));
-            let name = path.display().to_string();
+            let name = path.display().to_text();
             let own = Ledger::infer(&parsed);
             let library = Ledger::parse(STD).expect("std's shipped ledger parses");
             for finding in nikaia::views::check(&parsed, &own, &library) {

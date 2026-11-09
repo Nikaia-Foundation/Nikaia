@@ -25,11 +25,11 @@ pub struct ProveWalked {
 }
 
 pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerContext, values: &collections::BTreeMap<i64, (String, String)>, whole_lets: &collections::BTreeMap<i64, String>, method_callees: &collections::BTreeMap<i64, String>) -> ProveComptimes {
-    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.to_owned(), method_callees: method_callees.to_owned() };
+    let mut found = ProveComptimes { by_name: collections::BTreeMap::new(), at: collections::BTreeMap::new(), whole_lets: whole_lets.copy_owned(), method_callees: method_callees.copy_owned() };
     for (at, (below, written)) in values.iter() {
         let at = nikaia_std::num::value(at);
         if !prove_whole(below) { continue; }
-        let value = match text::parse_i64(&written.trim().replace('_', "")) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let value = match text::parse_i64(&nikaia_std::block::Text::from(written.trim().replace('_', ""))) { Some(__nikaia_value) => __nikaia_value, None => continue };
         found.at.insert(at, value);
     }
     for item in program.items.iter() {
@@ -37,7 +37,7 @@ pub fn prove_comptimes_of(program: &Program, words: &winnow_grammar::InternerCon
             Item::Comptime { name, .. } => {
                 let name = *name;
                 let value = match found.at.remove(&(item.span.start as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                found.by_name.insert(words.resolve(name).to_string(), value);
+                found.by_name.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), value);
             },
             _ => { },
         }
@@ -51,7 +51,7 @@ pub(crate) fn prove_whole(below: &str) -> bool { nikaia_std::list::contains(&vec
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, comptimes: &ProveComptimes, run: &Option<nikaia_std::func::Kept<dyn Fn(&Expr, &str, &[i64]) -> ProveClaimRun + '_>>, asked_so_far: &impl Fn() -> ProofsSoFar, invariants_here: &impl Fn() -> collections::BTreeMap<i64, String>, ask_again_from: &impl Fn(&ProofsSoFar), record: &impl Fn(&collections::BTreeMap<i64, String>), searched: &impl Fn(&ProverState), counted: &impl Fn(&ProverState), ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProveWalked {
-    let mut pinned = comptimes.by_name.to_owned();
+    let mut pinned = comptimes.by_name.copy_owned();
     let mut not_run: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut stopped: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut answered: collections::BTreeMap<(String, Vec<i64>), ProveClaimRun> = collections::BTreeMap::new();
@@ -64,20 +64,20 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
         for _ in 0..2 {
             if walked.walk.state.loops_used == recorded { break; }
             ask_again_from(&before);
-            recorded = walked.walk.state.loops_used.to_owned();
+            recorded = walked.walk.state.loops_used.copy_owned();
             walked = prove_walked(program, words, own, library, claims, prove_state(&pinned, comptimes, &not_run, &stopped, &recorded), ask, model, escape, holes_of, unaliased, written_of, condition);
             searched(&walked.walk.state);
         }
         record(&walked.walk.state.loops_used);
         counted(&walked.walk.state);
         round += 1;
-        let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(|call| { call.to_string() }).collect::<Vec<_>>();
+        let wanted: Vec<String> = walked.walk.state.wanted.iter().filter(|&call| { !pinned.contains_key(call) && !not_run.contains_key(call) && !stopped.contains_key(call) }).map(|call| { nikaia_std::block::Text::from(call.to_string()) }).collect::<Vec<_>>();
         if wanted.is_empty() || round > PROVE_RUN_ROUNDS || run.is_none() { return walked; }
         for call in wanted.iter() {
             let site = match walked.walk.state.call_sites.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let called = match walked.walk.state.call_args.get(call) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let (callee, args) = called;
-            let key = (callee.to_string(), args.to_owned());
+            let key = (nikaia_std::block::Text::from(callee.to_string()), args.copy_owned());
             let came = match answered.get(&key) {
                 None => {
                     let fresh = run.as_ref().unwrap()(&site, &callee, &args);
@@ -87,9 +87,9 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
                 Some(known) => known.clone(),
             };
             match came {
-                ProveClaimRun::Value(value) => { pinned.insert(call.to_string(), value); },
-                ProveClaimRun::NotRun(why) => { not_run.insert(call.to_string(), why); },
-                ProveClaimRun::Stopped(said) => { stopped.insert(call.to_string(), said); },
+                ProveClaimRun::Value(value) => { pinned.insert(nikaia_std::block::Text::from(call.to_string()), value); },
+                ProveClaimRun::NotRun(why) => { not_run.insert(nikaia_std::block::Text::from(call.to_string()), why); },
+                ProveClaimRun::Stopped(said) => { stopped.insert(nikaia_std::block::Text::from(call.to_string()), said); },
             }
         }
     }
@@ -97,13 +97,13 @@ pub fn prove_rounds(program: &Program, words: &winnow_grammar::InternerContext, 
 
 pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes: &ProveComptimes, not_run: &collections::BTreeMap<String, String>, stopped: &collections::BTreeMap<String, String>, recorded: &collections::BTreeMap<i64, String>) -> ProverState {
     let mut state = ProverState::fresh();
-    state.pinned = pinned.to_owned();
-    state.comptime_at = comptimes.at.to_owned();
-    state.whole_lets = comptimes.whole_lets.to_owned();
-    state.method_callees = comptimes.method_callees.to_owned();
-    state.not_run = not_run.to_owned();
-    state.stopped = stopped.to_owned();
-    state.loops_recorded = recorded.to_owned();
+    state.pinned = pinned.copy_owned();
+    state.comptime_at = comptimes.at.copy_owned();
+    state.whole_lets = comptimes.whole_lets.copy_owned();
+    state.method_callees = comptimes.method_callees.copy_owned();
+    state.not_run = not_run.copy_owned();
+    state.stopped = stopped.copy_owned();
+    state.loops_recorded = recorded.copy_owned();
     state
 }
 
@@ -111,7 +111,7 @@ pub(crate) fn prove_state(pinned: &collections::BTreeMap<String, i64>, comptimes
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prove_walked(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, claims: &collections::BTreeSet<(i64, i64)>, state: ProverState, ask: &impl Fn(&TermArena, &[i64], i64) -> SolverAnswer, model: &impl Fn(&TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &impl Fn(&str) -> String, holes_of: &impl Fn(&Expr) -> Vec<Expr>, unaliased: &impl Fn(&str) -> String, written_of: &impl Fn(&Expr) -> String, condition: &impl Fn(&str, &collections::BTreeSet<String>) -> Vec<SolverTerm>) -> ProveWalked {
-    let mut walk = ProverWalk { state, arena: TermArena::empty(), held: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), findings: vec![], claims: claims.to_owned(), std_claims: collections::BTreeMap::new() };
+    let mut walk = ProverWalk { state, arena: TermArena::empty(), held: collections::BTreeMap::new(), reaches: collections::BTreeMap::new(), findings: vec![], claims: claims.copy_owned(), std_claims: collections::BTreeMap::new() };
     let answers = prover_passes(&mut walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition);
     ProveWalked { walk, answers }
 }
@@ -155,8 +155,8 @@ pub fn prove_with_published(own: &Ledger, published: &collections::BTreeMap<Stri
     let mut ledger = own.clone();
     for (key, found) in published.iter() {
         let contract = match ledger.functions.get_mut(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        for ensured in found.ensures.iter() { contract.ensures.push(ensured.to_string()); }
-        for required in found.requires.iter() { if !nikaia_std::list::contains(&contract.requires, &required) { contract.requires.push(required.to_string()); } }
+        for ensured in found.ensures.iter() { contract.ensures.push(nikaia_std::block::Text::from(ensured.to_string())); }
+        for required in found.requires.iter() { if !nikaia_std::list::contains(&contract.requires, &required) { contract.requires.push(nikaia_std::block::Text::from(required.to_string())); } }
     }
     ledger
 }

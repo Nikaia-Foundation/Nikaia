@@ -14,6 +14,8 @@
 //! text of one written type and puts the parameters in. A type's text is one
 //! well-formed run of paths and angle brackets, which is all it has to be.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 
 use crate::ast::Type;
@@ -132,7 +134,7 @@ impl Seeds {
     /// fills an ordinary mention with.
     pub fn write(&self, text: &str, place: &mut EmitSeedsPlace, fast: bool) -> String {
         if self.is_empty() && !place.declaring {
-            return text.to_string();
+            return text.to_text();
         }
         emit_seeds_write(text, place, fast, &self.tables)
     }

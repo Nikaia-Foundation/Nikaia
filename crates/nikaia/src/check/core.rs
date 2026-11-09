@@ -14,6 +14,8 @@
 //! crossing). The one state of a walk is made on the heap (`hollow`).
 
 use super::*;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::tools::check_narrow::CheckNarrowing;
 use std::ops::{Deref, DerefMut};
 

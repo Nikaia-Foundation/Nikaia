@@ -5,6 +5,8 @@
 //! inside that is read without its check.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -36,8 +38,8 @@ fn run_at(name: &str, cpu: &str, source: &str) -> (bool, String, String) {
     let _ = std::fs::remove_dir_all(&dir);
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
     )
 }
 
@@ -60,7 +62,7 @@ fn tool(name: &str, command: &str, source: &str, options: &[&str]) -> (String, S
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         ),
-        rust,
+        String::from(rust),
     )
 }
 

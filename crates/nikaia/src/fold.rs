@@ -28,6 +28,8 @@
 //! polarity both callers are held to (Part III, C.4): the compiler may fail to
 //! refuse a program `rustc` will, and may never refuse one that is right.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use winnow_grammar::Symbol;
 
 use crate::ast::Expr;

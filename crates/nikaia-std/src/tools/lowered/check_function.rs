@@ -70,7 +70,7 @@ impl CheckState {
                     for arg in args.iter() {
                         if walked.is_none() && file.text(arg.name) == "" && arg.ty.generics.is_empty() {
                             let written = file.text(arg.ty.name);
-                            for g in generics.iter() { if file.text(g.name) == written { walked = Some(written.to_string()); } }
+                            for g in generics.iter() { if file.text(g.name) == written { walked = Some(nikaia_std::block::Text::from(written.to_string())); } }
                         }
                     }
                     for g in generics.iter() {
@@ -79,10 +79,10 @@ impl CheckState {
                         for b in g.bounds.iter() {
                             let b = *b;
                             let member = match check_function_shape_member(&file.text(b)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            if check_function_walks_the_fields_of(file, body, &parameter, &member) { walked = Some(parameter.to_string()); }
+                            if check_function_walks_the_fields_of(file, body, &parameter, &member) { walked = Some(nikaia_std::block::Text::from(parameter.to_string())); }
                         }
                     }
-                    for g in generics.iter() { if walked.is_none() && check_function_reflects_on(file, body, &file.text(g.name)) { walked = Some(file.text(g.name).to_string()); } }
+                    for g in generics.iter() { if walked.is_none() && check_function_reflects_on(file, body, &file.text(g.name)) { walked = Some(nikaia_std::block::Text::from(file.text(g.name).to_string())); } }
                     let parameter = match walked { Some(__nikaia_value) => __nikaia_value, None => continue };
                     self.walks_fields.insert(file.text(called), parameter);
                 },
@@ -207,25 +207,25 @@ pub fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_>, body
     let mut both: collections::BTreeSet<String> = collections::BTreeSet::new();
     check_function_fielded_in(here, body, &mut fielded, &mut both);
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for name in fielded.iter() { if grown.contains(name) || both.contains(name) { out.insert(name.to_string()); } }
+    for name in fielded.iter() { if grown.contains(name) || both.contains(name) { out.insert(nikaia_std::block::Text::from(name.to_string())); } }
     out
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
-    let named = world.words.resolve(gram.name).to_string();
+    let named = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
     let mut results: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
     for rule in gram.rules.iter() {
-        rules.insert(world.words.resolve(rule.name).to_string());
+        rules.insert(nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string()));
         let written: Option<Type> = match rule.ret_type.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
         if written.is_some() {
             let one = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
-            results.insert(world.words.resolve(rule.name).to_string(), host.type_of(&one));
+            results.insert(nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string()), host.type_of(&one));
         }
     }
     state.rule_results = results;
@@ -261,11 +261,11 @@ pub fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &Chec
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-            state.inside_an_action = Some(world.words.resolve(rule.name).to_string());
-            state.grammar_values(world, host, gram, &alt.pattern, &rules, values.to_owned());
-            let mut frame = values.to_owned();
+            state.inside_an_action = Some(nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string()));
+            state.grammar_values(world, host, gram, &alt.pattern, &rules, values.copy_owned());
+            let mut frame = values.copy_owned();
             for bound in state.bindings_of(world, &alt.pattern.node, &rules) { frame.push(bound); }
-            state.scope.push(frame.to_owned());
+            state.scope.push(frame.copy_owned());
             check_defaults_folds_in(state, world, host, gram, &alt.pattern.node, &alt.pattern.span);
             state.scope.pop();
             match &alt.action {
@@ -288,7 +288,7 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
         None => None,
     };
     state.expected = match expected {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     };
     state.scope.push(frame);
@@ -297,7 +297,7 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
     state.scope.pop();
     if expected.is_some() && count > 0 {
         let wanted = nikaia_std::index::or(match expected {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         }, || Ty::Unknown);
         let at = nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).span;
@@ -397,7 +397,7 @@ pub(crate) fn check_function_lends(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 pub(crate) fn check_function_keeps(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<String> {
     let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    contract.keeps.to_owned()
+    contract.keeps.copy_owned()
 }
 
 pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<ConfigContract> {
@@ -416,16 +416,16 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         let mut ty = Ty::Unknown;
         if target.is_some() {
             ty = Ty::Named { name: nikaia_std::index::or(match target {
-                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
-            }, || "".into()), args: state.subject_arguments.to_owned(), view: nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) };
+            }, || "".into()), args: state.subject_arguments.copy_owned(), view: nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false) };
         }
         let id = state.a_new_binding();
         frame.push(CheckLocal::free(String::from("self"), ty, id));
     }
     let mut at: i64 = 0;
     for arg in args.iter() {
-        let name = world.words.resolve(arg.name).to_string();
+        let name = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
         state.nameable(&name, &arg.span, "a parameter");
         let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable;
@@ -448,7 +448,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
     for option in config.iter() { check_defaults_a_computed_default(state, world, host, option); }
     let lowered = check_function_options_lowered(world, key);
     for option in config.iter() {
-        let name = world.words.resolve(option.name).to_string();
+        let name = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
         let mut ty = host.type_of(&option.ty);
         for one in lowered.iter() { if one.name == name && one.ty.is_a_view() { ty = one.ty.clone(); } }
         let id = state.a_new_binding();
@@ -457,7 +457,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
     match spread {
         Some(sym) => {
             let id = state.a_new_binding();
-            let local = CheckLocal::free(world.words.resolve(sym).to_string(), Ty::Unknown, id);
+            let local = CheckLocal::free(nikaia_std::block::Text::from(world.words.resolve(sym).to_string()), Ty::Unknown, id);
             state.flow.unknown_bound.insert(local.id);
             frame.push(local);
         },
@@ -473,7 +473,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
     let mut tail_view = false;
     if expected.is_none() || body.stmts.is_empty() { return (false, false); }
     let want = nikaia_std::index::or(match expected {
-        Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, || Ty::Unknown);
     let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
@@ -538,9 +538,9 @@ pub fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &Ch
     let node = id_of(value) as i64;
     match wrap {
         FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
-        FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(into.to_string())); },
-        FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(into.to_string())); },
-        FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(into.to_string())); },
+        FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(nikaia_std::block::Text::from(into.to_string()))); },
+        FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(nikaia_std::block::Text::from(into.to_string()))); },
+        FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(nikaia_std::block::Text::from(into.to_string()))); },
         _ => { },
     }
 }
@@ -577,20 +577,20 @@ pub fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &Che
 pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, ret_type: Option<&Type>, body: &Block, can_throw: bool, is_sync: bool, sync_by: &[winnow_grammar::Symbol], is_extern: bool, at: &Span, target: Option<&str>) {
     let mut own_name: String = String::from("new");
     match name {
-        Some(sym) => { own_name = world.words.resolve(sym).to_string(); },
+        Some(sym) => { own_name = nikaia_std::block::Text::from(world.words.resolve(sym).to_string()); },
         None => { },
     }
     let key = if target.is_some() {
         format!("{}::{}", nikaia_std::index::or(match target {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
         }, || "".into()), own_name)
-    } else { own_name.to_string() };
+    } else { nikaia_std::block::Text::from(own_name.to_string()) };
     if !sync_by.is_empty() {
         let first = check_function_first_span(body);
         for named in sync_by.iter() {
             let named = *named;
-            state.a_lambda_the_promise_names(world, &key, &world.words.resolve(named).to_string(), args, &first);
+            state.a_lambda_the_promise_names(world, &key, &nikaia_std::block::Text::from(world.words.resolve(named).to_string()), args, &first);
         }
     }
     if !body.stmts.is_empty() { state.nameable(&own_name, &nikaia_std::index::get(&body.stmts, 0).span, "a function"); }
@@ -598,24 +598,24 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
-    state.current = Some(key.to_string());
+    state.current = Some(nikaia_std::block::Text::from(key.to_string()));
     let outer_sync: Option<String> = match state.inside_a_sync_function.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
-    if is_sync { state.inside_a_sync_function = Some(key.to_string()); } else { state.inside_a_sync_function = None; }
-    let mut declared: collections::BTreeMap<String, Vec<String>> = state.enclosing.to_owned();
+    if is_sync { state.inside_a_sync_function = Some(nikaia_std::block::Text::from(key.to_string())); } else { state.inside_a_sync_function = None; }
+    let mut declared: collections::BTreeMap<String, Vec<String>> = state.enclosing.copy_owned();
     for g in generics.iter() {
         let mut bounds: Vec<String> = vec![];
         for b in g.bounds.iter() {
             let b = *b;
-            bounds.push(world.words.resolve(b).to_string());
+            bounds.push(nikaia_std::block::Text::from(world.words.resolve(b).to_string()));
         }
-        declared.insert(world.words.resolve(g.name).to_string(), bounds);
+        declared.insert(nikaia_std::block::Text::from(world.words.resolve(g.name).to_string()), bounds);
     }
     let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new();
     parameters.insert(String::from("Self"));
-    let outer_declared = state.type_parameters.to_owned();
+    let outer_declared = state.type_parameters.copy_owned();
     state.type_parameters = declared;
     let outer_borrowing = state.borrowing_self;
     state.borrowing_self = nikaia_std::index::or(receiver.as_ref().map(|__nikaia_it| __nikaia_it.is_ref), || false);
@@ -645,7 +645,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.throwing = can_throw;
     let keeps: Vec<String> = check_function_keeps(world, &key);
     for arg in args.iter() {
-        let named = world.words.resolve(arg.name).to_string();
+        let named = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
         if nikaia_std::list::contains(&keeps, &named) {
             for local in frame.iter() {
                 if local.name == named {
@@ -658,25 +658,25 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     let mut run_code: collections::BTreeSet<String> = collections::BTreeSet::new();
     for local in frame.iter() {
         match &local.ty {
-            Ty::Fn { .. } => { if !nikaia_std::list::contains(&keeps, &local.name) { run_code.insert(local.name.to_string()); } },
+            Ty::Fn { .. } => { if !nikaia_std::list::contains(&keeps, &local.name) { run_code.insert(nikaia_std::block::Text::from(local.name.to_string())); } },
             _ => { },
         }
     }
-    let outer_run_code = state.run_code.to_owned();
+    let outer_run_code = state.run_code.copy_owned();
     state.run_code = run_code;
     state.scope.push(frame);
     let tail_span = check_function_last_span(body);
-    let outer_lists = state.flow.empty_lists.to_owned();
+    let outer_lists = state.flow.empty_lists.copy_owned();
     state.flow.empty_lists = collections::BTreeMap::new();
-    let outer_numbers = state.flow.open_numbers.to_owned();
+    let outer_numbers = state.flow.open_numbers.copy_owned();
     state.flow.open_numbers = collections::BTreeMap::new();
-    let outer_chars = state.flow.open_chars.to_owned();
+    let outer_chars = state.flow.open_chars.copy_owned();
     state.flow.open_chars = collections::BTreeMap::new();
-    let outer_bytes = state.flow.high_bytes.to_owned();
+    let outer_bytes = state.flow.high_bytes.copy_owned();
     state.flow.high_bytes = collections::BTreeMap::new();
-    let outer_grown = state.flow.grown_text.to_owned();
+    let outer_grown = state.flow.grown_text.copy_owned();
     state.flow.grown_text = check_function_grown_text(&world.here, body);
-    let outer_mixed = state.flow.mixed_text.to_owned();
+    let outer_mixed = state.flow.mixed_text.copy_owned();
     state.flow.mixed_text = check_function_mixed_text(&world.here, body, &state.flow.grown_text);
     let tail = check_core_block(state, world, host, body);
     state.flow.grown_text = outer_grown;
@@ -687,7 +687,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.open_chars = outer_chars;
     state.flow.high_bytes = outer_bytes;
     state.scope.pop();
-    let lists = state.flow.empty_lists.to_owned();
+    let lists = state.flow.empty_lists.copy_owned();
     state.flow.empty_lists = outer_lists;
     for (_, held) in lists.iter() { state.an_empty_list_with_no_element_type(&held.0, &held.1); }
     let ends = !a_body_never_ends(body);

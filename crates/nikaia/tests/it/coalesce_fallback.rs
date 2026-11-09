@@ -14,11 +14,13 @@
 //! `docs/README.md`'s list, so it stopped being a suspicion.
 
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// Everything a parse refusal says: its headline, and the notes and help the
 /// finding it carries adds under it.
 fn everything_said(refused: &anyhow::Error) -> String {
-    let mut said = refused.to_string();
+    let mut said = refused.to_text();
     if let Some(finding) = nikaia::diagnostics::refused_finding(refused) {
         for note in &finding.notes {
             said.push_str("\nnote: ");

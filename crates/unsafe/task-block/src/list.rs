@@ -421,10 +421,25 @@ impl<T: PartialEq<U>, U, const N: usize> PartialEq<[U; N]> for List<T> {
     }
 }
 
+impl<T: PartialEq<U>, U, const N: usize> PartialEq<&[U; N]> for List<T> {
+    #[inline]
+    fn eq(&self, other: &&[U; N]) -> bool {
+        self.as_slice() == *other
+    }
+}
+
 impl<T: PartialEq<U>, U> PartialEq<Vec<U>> for List<T> {
     #[inline]
     fn eq(&self, other: &Vec<U>) -> bool {
         self.as_slice() == other.as_slice()
+    }
+}
+
+/// A slice compared with a list, element by element, as with a `Vec`.
+impl<T: PartialEq<U>, U> PartialEq<List<U>> for [T] {
+    #[inline]
+    fn eq(&self, other: &List<U>) -> bool {
+        *self == **other
     }
 }
 

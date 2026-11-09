@@ -8,10 +8,10 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
             Item::Impl { trait_name, target, methods } => {
                 let trait_name = *trait_name;
                 let written_trait = match trait_name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let named = names.resolve(written_trait).to_string();
+                let named = nikaia_std::block::Text::from(names.resolve(written_trait).to_string());
                 for one in receivers(names, items, &named, methods) { found.push(one); }
                 if (named == "Eq" || named == "Ord") && !own.traits.contains_key(&named) {
-                    let target_text = names.resolve(target.name).to_string();
+                    let target_text = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                     for one in language_trait(names, own, &named, &target_text, methods, item.span.clone()) { found.push(one); }
                     continue;
                 }
@@ -20,15 +20,15 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || collections::BTreeSet::new().into());
-                let target_name = names.resolve(target.name).to_string();
+                let target_name = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
                 let mut given: Vec<String> = vec![];
                 for method in methods.iter() {
                     match &method.node {
                         Item::Fn { name, .. } => {
                             let name = *name;
                             let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            let written = names.resolve(symbol).to_string();
-                            given.push(written.to_string());
+                            let written = nikaia_std::block::Text::from(names.resolve(symbol).to_string());
+                            given.push(nikaia_std::block::Text::from(written.to_string()));
                             if !declared.contains(&written) {
                                 found.push(not_in_the_trait(&named, &target_name, &written, method.span.clone()));
                                 continue;
@@ -39,7 +39,7 @@ pub fn check_impls(names: &winnow_grammar::InternerContext, items: &[Spanned<Ite
                     }
                 }
                 let mut missing: Vec<String> = vec![];
-                for wanted in declared.iter() { if !nikaia_std::list::contains(&given, &wanted.to_string()) { missing.push(wanted.to_string()); } }
+                for wanted in declared.iter() { if !nikaia_std::list::contains(&given, &nikaia_std::block::Text::from(wanted.to_string())) { missing.push(nikaia_std::block::Text::from(wanted.to_string())); } }
                 if !missing.is_empty() { found.push(incomplete(&named, &target_name, &missing, item.span.clone())); }
             },
             _ => { },
@@ -58,14 +58,14 @@ pub(crate) fn language_trait(names: &winnow_grammar::InternerContext, own: &Ledg
             Item::Fn { name, .. } => {
                 let name = *name;
                 let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let written = names.resolve(symbol).to_string();
+                let written = nikaia_std::block::Text::from(names.resolve(symbol).to_string());
                 if written == wanted { given = true; } else { found.push(not_in_the_trait(trait_name, target, &written, method.span.clone())); }
             },
             _ => { },
         }
     }
     if !given {
-        let missing: Vec<String> = vec![wanted.to_string()];
+        let missing: Vec<String> = vec![nikaia_std::block::Text::from(wanted.to_string())];
         found.push(incomplete(trait_name, target, &missing, span.clone()));
     }
     let key = format!("{}::{}", target, wanted);
@@ -95,13 +95,13 @@ pub(crate) fn receivers(names: &winnow_grammar::InternerContext, items: &[Spanne
             Item::Fn { name, receiver, .. } => {
                 let name = *name;
                 let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let written = names.resolve(symbol).to_string();
+                let written = nikaia_std::block::Text::from(names.resolve(symbol).to_string());
                 let wanted = wanted_receiver(names, items, trait_name, &written);
                 if !wanted.known || same_receiver((match wanted.receiver.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }).as_ref(), (match receiver {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }).as_ref()) { continue; }
                 let theirs = receiver_text((match wanted.receiver.as_ref() {
@@ -109,7 +109,7 @@ pub(crate) fn receivers(names: &winnow_grammar::InternerContext, items: &[Spanne
                     None => None,
                 }).as_ref());
                 let ours = receiver_text((match receiver {
-                    Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
                 }).as_ref());
                 let notes: Vec<String> = vec![String::from("Callers go through the trait, so they pass the value the way the trait declares.")];

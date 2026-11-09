@@ -15,6 +15,8 @@
 //! run at both settings of `user_parallelism`; every refusal is asked of the
 //! checker here.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::LedgerOps;
 

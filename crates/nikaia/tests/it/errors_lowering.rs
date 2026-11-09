@@ -14,6 +14,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The ledger this source produces, rendered the way it is committed.
 fn ledger_for(source: &str) -> String {

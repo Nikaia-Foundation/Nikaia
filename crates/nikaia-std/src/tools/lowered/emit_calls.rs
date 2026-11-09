@@ -5,15 +5,15 @@ pub fn call_written_name(words: &winnow_grammar::InternerContext, func: &Expr) -
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
-            return Some(words.resolve(name).to_string());
+            return Some(nikaia_std::block::Text::from(words.resolve(name).to_string()));
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = vec![];
             for segment in segments.iter() {
                 let segment = *segment;
-                parts.push(words.resolve(segment).to_string());
+                parts.push(nikaia_std::block::Text::from(words.resolve(segment).to_string()));
             }
-            return Some(parts.join("::"));
+            return Some(nikaia_std::block::Text::from(parts.join("::")));
         },
         _ => { },
     }
@@ -32,7 +32,7 @@ pub fn call_pausing_key(words: &winnow_grammar::InternerContext, aliases: &colle
 pub(crate) fn call_pausing_when(ledger: &Ledger, key: &str) -> Option<String> {
     let contract = match ledger.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if contract.sync_claim.is_sync() { return None; }
-    Some(key.to_string())
+    Some(nikaia_std::block::Text::from(key.to_string()))
 }
 
 pub fn call_library_pauses(library: &Ledger, key: &str) -> Option<String> { call_pausing_when(library, key) }
@@ -98,25 +98,25 @@ pub fn call_joined_throws(words: &winnow_grammar::InternerContext, aliases: &col
         set.extend(errors.iter().cloned());
     }
     let mut out: Vec<String> = vec![];
-    for error in set.iter() { out.push(error.to_string()); }
+    for error in set.iter() { out.push(nikaia_std::block::Text::from(error.to_string())); }
     out
 }
 
 pub(crate) fn call_throws_of(ledger: &Ledger, name: &str) -> Option<Vec<String>> {
     let contract = match ledger.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(contract.fails_with.to_owned())
+    Some(contract.fails_with.copy_owned())
 }
 
 pub fn call_returns_either(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], function: &str) -> bool {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
-    let own = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
+    let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
     let mut wanted: String = String::from("");
     let mut qualified = false;
     if parts.len() > 1 {
         qualified = true;
         let mut before: Vec<String> = vec![];
-        for at in 0..parts.len() as i64 - 1 { before.push((*nikaia_std::index::get(&parts, (at) as usize)).to_string()); }
-        wanted = before.join("::");
+        for at in 0..parts.len() as i64 - 1 { before.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (at) as usize)).to_string())); }
+        wanted = nikaia_std::block::Text::from(before.join("::"));
     }
     for item in items.iter() {
         match &item.node {

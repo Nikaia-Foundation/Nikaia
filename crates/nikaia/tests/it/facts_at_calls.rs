@@ -6,6 +6,8 @@
 //! `^` of two values inside `-2^m..<2^m` stays inside it.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -37,13 +39,13 @@ fn lowered(purpose: &str, source: &str) -> (String, String) {
     let rust = std::fs::read_to_string(dir.join("main.rs")).expect("the lowered program");
     let ledger = std::fs::read_to_string(dir.join("nikaia.contracts")).expect("the ledger");
     let _ = std::fs::remove_dir_all(&dir);
-    (rust, ledger)
+    (String::from(rust), String::from(ledger))
 }
 
 /// The body of the lowered function `name`, up to its end.
 fn body<'a>(rust: &'a str, name: &str) -> &'a str {
     let at = rust
-        .find(&format!("fn {name}("))
+        .find(&*format!("fn {name}("))
         .unwrap_or_else(|| panic!("{name}: {rust}"));
     let rest = &rust[at..];
     &rest[..rest

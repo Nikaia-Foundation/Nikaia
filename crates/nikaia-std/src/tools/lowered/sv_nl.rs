@@ -17,13 +17,13 @@ pub fn sv_nl_engine(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudg
     let mut work: i64 = 0;
     for _ in 0..sv_nl_rounds() {
         let mut scratch = arena.clone();
-        let mut all = facts.to_owned();
+        let mut all = facts.copy_owned();
         for l in lemmas.iter() { all.push(match sv_lemma_formula(&mut scratch, defs, l) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
-        let run = match sv_smt_engine_set(&scratch, &all, goal, budget, theory.to_string(), reals, &settings.to_string()) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let run = match sv_smt_engine_set(&scratch, &all, goal, budget, nikaia_std::block::Text::from(theory.to_string()), reals, &nikaia_std::block::Text::from(settings.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
         work += run.work;
         let values = match run.driven {
             SvDriven::Answer(LgAnswer::Refuted { ref model }) => sv_nl_rats(model),
-            SvDriven::RealModel(ref v) => v.to_owned(),
+            SvDriven::RealModel(ref v) => v.copy_owned(),
             SvDriven::Proved(_, _) => { return Some(SvNlRun { run: sv_nl_worked(&run, work), lemmas, why: String::from("") }); },
             _ => {
                 let why: String = if !lemmas.is_empty() { String::from("budget") } else { String::from("") };
@@ -61,33 +61,33 @@ pub fn sv_nl_engine(arena: &TermArena, facts: &[i64], goal: i64, budget: &LgBudg
     Some(SvNlRun { run: sv_engine_unknown(LgUnknown::NoContradiction, work), lemmas, why: String::from("budget") })
 }
 
-pub(crate) fn sv_nl_worked(run: &SvEngineRun, work: i64) -> SvEngineRun { SvEngineRun { driven: run.driven.clone(), work, path: run.path.to_string(), carried: run.carried.to_owned(), stats: run.stats.clone() } }
+pub(crate) fn sv_nl_worked(run: &SvEngineRun, work: i64) -> SvEngineRun { SvEngineRun { driven: run.driven.clone(), work, path: nikaia_std::block::Text::from(run.path.to_string()), carried: run.carried.copy_owned(), stats: run.stats.clone() } }
 
 pub(crate) fn sv_nl_rats(model: &LgModel) -> collections::BTreeMap<String, SvRat> {
     let mut out: collections::BTreeMap<String, SvRat> = collections::BTreeMap::new();
     for (name, v) in model.values.iter() {
         let v = nikaia_std::num::value(v);
-        out.insert(name.to_string(), sv_int(v));
+        out.insert(nikaia_std::block::Text::from(name.to_string()), sv_int(v));
     }
     out
 }
 
 pub(crate) fn sv_nl_driven(reals: &collections::BTreeSet<String>, values: &collections::BTreeMap<String, SvRat>) -> Option<SvDriven> {
-    if !reals.is_empty() { return Some(SvDriven::RealModel(values.to_owned())); }
+    if !reals.is_empty() { return Some(SvDriven::RealModel(values.copy_owned())); }
     let mut ints: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (name, v) in values.iter() {
         let v = *v;
         if !sv_rat_is_int(&v) { return None; }
-        ints.insert(name.to_string(), v.num);
+        ints.insert(nikaia_std::block::Text::from(name.to_string()), v.num);
     }
     Some(SvDriven::Answer(LgAnswer::Refuted { model: LgModel { values: ints } }))
 }
 
 pub(crate) fn sv_nl_settled(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> Option<collections::BTreeMap<String, SvRat>> {
-    let mut out = values.to_owned();
+    let mut out = values.copy_owned();
     for t in defs.iter() {
         match sv_nl_value(t, &out) {
-            SvNlValue::Value(r) => { out.insert(t.name.to_string(), r.clone()); },
+            SvNlValue::Value(r) => { out.insert(nikaia_std::block::Text::from(t.name.to_string()), r.clone()); },
             SvNlValue::Free => { },
             SvNlValue::Overflow => { return None; },
         }
@@ -107,7 +107,7 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
     let settled = sv_nl_settled(defs, values);
     match settled {
         None => { },
-        Some(ref s) => { if sv_nl_answers(arena, facts, goal, reals, defs, s) { return Some(s.to_owned()); } },
+        Some(ref s) => { if sv_nl_answers(arena, facts, goal, reals, defs, s) { return Some(s.copy_owned()); } },
     }
     for t in defs.iter() {
         let v = sv_real_named(values, &t.name);
@@ -119,9 +119,9 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
             match sv_nl_root(&v) {
                 None => { },
                 Some(r) => {
-                    names.push(t.a.to_string());
+                    names.push(nikaia_std::block::Text::from(t.a.to_string()));
                     moved.push(r.clone());
-                    names.push(t.a.to_string());
+                    names.push(nikaia_std::block::Text::from(t.a.to_string()));
                     moved.push(nikaia_std::index::or(sv_rat_neg(&r), || r.clone().into()));
                 },
             }
@@ -130,7 +130,7 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
                 match sv_rat_div(&v, &a) {
                     None => { },
                     Some(r) => {
-                        names.push(t.b.to_string());
+                        names.push(nikaia_std::block::Text::from(t.b.to_string()));
                         moved.push(r.clone());
                     },
                 }
@@ -139,7 +139,7 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
                 match sv_rat_div(&v, &b) {
                     None => { },
                     Some(r) => {
-                        names.push(t.a.to_string());
+                        names.push(nikaia_std::block::Text::from(t.a.to_string()));
                         moved.push(r.clone());
                     },
                 }
@@ -148,14 +148,14 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
             match sv_rat_div(&a, &v) {
                 None => { },
                 Some(r) => {
-                    names.push(t.b.to_string());
+                    names.push(nikaia_std::block::Text::from(t.b.to_string()));
                     moved.push(r.clone());
                 },
             }
             match sv_rat_mul(&v, &b) {
                 None => { },
                 Some(r) => {
-                    names.push(t.a.to_string());
+                    names.push(nikaia_std::block::Text::from(t.a.to_string()));
                     moved.push(r.clone());
                 },
             }
@@ -167,16 +167,16 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
                 e += 1;
             }
             if p == 1 {
-                names.push(t.a.to_string());
+                names.push(nikaia_std::block::Text::from(t.a.to_string()));
                 moved.push(sv_int(e));
             }
         }
         for i in 0..names.len() as i64 {
-            let mut tried = values.to_owned();
-            tried.insert((*nikaia_std::index::get(&names, (i) as usize)).to_string(), (*nikaia_std::index::get(&moved, (i) as usize)).clone());
+            let mut tried = values.copy_owned();
+            tried.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (i) as usize)).to_string()), (*nikaia_std::index::get(&moved, (i) as usize)).clone());
             match sv_nl_settled(defs, &tried) {
                 None => { },
-                Some(ref s) => { if sv_nl_answers(arena, facts, goal, reals, defs, s) { return Some(s.to_owned()); } },
+                Some(ref s) => { if sv_nl_answers(arena, facts, goal, reals, defs, s) { return Some(s.copy_owned()); } },
             }
         }
     }

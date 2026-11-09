@@ -30,6 +30,8 @@
 //! list says exactly what is still broken.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -81,19 +83,19 @@ fn dumped(dir: &Path) -> Vec<Dumped> {
             .file_stem()
             .and_then(|s| s.to_str())
             .expect("utf-8 name")
-            .to_string();
+            .to_text();
         let Some((test, hash)) = stem.rsplit_once('-') else {
             continue;
         };
         by_hash
-            .entry(hash.to_string())
+            .entry(hash.to_text())
             .or_insert_with(|| Dumped {
-                hash: hash.to_string(),
+                hash: hash.to_text(),
                 tests: Vec::new(),
                 path: path.clone(),
             })
             .tests
-            .push(test.to_string());
+            .push(test.to_text());
     }
     let mut found: Vec<Dumped> = by_hash.into_values().collect();
     for program in &mut found {
@@ -141,7 +143,7 @@ fn first_error(stderr: &str) -> String {
         }
         out.push(line);
     }
-    out.join("\n")
+    String::from(out.join("\n"))
 }
 
 /// `rustc --emit=metadata` on `rust`, in a scratch directory of its own.
@@ -178,7 +180,7 @@ fn checked_and_lowered(path: &Path) -> Result<Option<String>, String> {
         .output()
         .expect("the nikaia binary runs");
     if !checked.status.success() {
-        return Err("`nikaia check` refuses it alone".to_string());
+        return Err("`nikaia check` refuses it alone".to_text());
     }
     let read =
         nikaia::modules::Program::read_one(path).map_err(|e| format!("does not read: {e:#}"))?;

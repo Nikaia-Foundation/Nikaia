@@ -22,6 +22,8 @@ use crate::common;
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -203,7 +205,7 @@ fn main() throws {
     std::fs::write(&file, &rust).expect("write the Rust");
     let binary = dir.join("program");
     let out = common::compile(&file, &["-o", binary.to_str().expect("utf-8 path")]);
-    let said = String::from_utf8_lossy(&out.stderr).into_owned();
+    let said = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success(),
         "the lowering compiles:\n{said}\n--- the Rust ---\n{rust}"

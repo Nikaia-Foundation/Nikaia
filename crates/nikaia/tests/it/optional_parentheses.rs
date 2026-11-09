@@ -7,6 +7,8 @@
 //! `init` is the function as a value, not a call.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::ast::Item;

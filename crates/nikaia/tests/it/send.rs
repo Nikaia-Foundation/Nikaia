@@ -41,6 +41,8 @@
 //! either code, and `examples/foreign-runtime/`'s handle over an `Rc<String>` is
 //! the type that needed it.
 
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -166,7 +168,7 @@ fn no_program_in_the_repository_has_a_crossing_refused() {
             continue;
         };
         let own = Ledger::infer(&parsed);
-        let name = path.display().to_string();
+        let name = path.display().to_text();
         for finding in check::check(&parsed, &own, &library)
             .findings
             .iter()
@@ -613,11 +615,11 @@ fn verdict_against_probe(source: &str) -> String {
         {
             let named = match other {
                 order::Accounted::Operation(operation) => operation.callee.clone(),
-                _ => "…".to_string(),
+                _ => "…".to_text(),
             };
             format!("in order  {named} - {}", refused.why())
         }
-        _ => "in order  … - nothing to compare".to_string(),
+        _ => "in order  … - nothing to compare".to_text(),
     }
 }
 
@@ -866,7 +868,7 @@ fn the_threads_column_survives_being_written_and_read_again() {
         let written = Ledger::parse(&entry(&format!("threads = {word}\n"))).expect("it parses");
         let rendered = written.render();
         assert!(
-            rendered.contains(&format!("threads = {word}")),
+            rendered.contains(&*format!("threads = {word}")),
             "the claim is written out: {rendered}"
         );
         let again = Ledger::parse(&rendered).expect("what it wrote parses");

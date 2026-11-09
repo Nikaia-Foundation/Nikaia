@@ -20,7 +20,7 @@ pub fn cargo_json_member(value: Option<&json::Value>, key: &str) -> Option<json:
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match present {
         json::Value::Object(members) => match members.iter().find(|&member| { member.key == key }).map(|__nikaia_it| &__nikaia_it.value) {
-            Some(__nikaia_it) => Some(__nikaia_it.to_owned()),
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         },
         _ => None,
@@ -30,7 +30,7 @@ pub fn cargo_json_member(value: Option<&json::Value>, key: &str) -> Option<json:
 pub fn cargo_json_text(value: Option<&json::Value>) -> Option<String> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match present {
-        json::Value::Str(text) => Some(text.to_string()),
+        json::Value::Str(text) => Some(nikaia_std::block::Text::from(text.to_string())),
         _ => None,
     }
 }
@@ -54,7 +54,7 @@ pub fn cargo_json_number(value: Option<&json::Value>) -> Option<i64> {
 pub fn cargo_json_items(value: Option<&json::Value>) -> Vec<json::Value> {
     let present = match value { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     match present {
-        json::Value::Array(items) => items.to_owned(),
+        json::Value::Array(items) => items.copy_owned(),
         _ => vec![],
     }
 }

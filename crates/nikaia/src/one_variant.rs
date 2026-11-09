@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/one_variant.rs
 //
 // **An enum with exactly one variant is written by its type's name**
@@ -31,12 +33,12 @@ impl Enums {
         for item in &parsed.program.items {
             if let Item::Enum { name, variants, .. } = &item.node {
                 own.insert(
-                    parsed.text(*name).to_string(),
+                    parsed.text(*name).to_text(),
                     variants
                         .iter()
                         .map(|v| {
                             (
-                                parsed.text(v.name).to_string(),
+                                parsed.text(v.name).to_text(),
                                 matches!(v.fields, crate::ast::VariantFields::Unit),
                             )
                         })
@@ -111,7 +113,7 @@ fn read(enums: &Enums, path: &[String]) -> Reading {
 
 fn texts(interner: &InternerContext, path: &[Symbol]) -> Vec<String> {
     path.iter()
-        .map(|s| interner.resolve(*s).to_string())
+        .map(|s| interner.resolve(*s).to_text())
         .collect()
 }
 
@@ -151,7 +153,7 @@ pub(crate) fn expand(parsed: &mut Parsed) -> anyhow::Result<()> {
     let finding = crate::check::Finding {
         severity: crate::check::Severity::Error,
         span,
-        code: "NK1252".to_string(),
+        code: "NK1252".to_text(),
         message: head.clone(),
         notes: Vec::new(),
         help: Some(help.clone()),
@@ -177,7 +179,7 @@ fn rewrite(
     match expr {
         Expr::Call { func, .. } => {
             let path = match &**func {
-                Expr::Variable(name, _) => vec![interner.resolve(*name).to_string()],
+                Expr::Variable(name, _) => vec![interner.resolve(*name).to_text()],
                 Expr::Path(segments, _) => texts(interner, segments),
                 _ => return,
             };
@@ -193,8 +195,8 @@ fn rewrite(
             }
         }
         Expr::StructLit { name, .. } => {
-            let text = interner.resolve(*name).to_string();
-            let path: Vec<String> = text.split("::").map(str::to_string).collect();
+            let text = interner.resolve(*name).to_text();
+            let path: Vec<String> = text.split("::").map(str::to_text).collect();
             match read(enums, &path) {
                 Reading::One(variant, _) => {
                     *name = interner.intern_string(&format!("{text}::{variant}"));
@@ -206,7 +208,7 @@ fn rewrite(
         // A unit variant at the value: `Done` is `Done::Only`. A path with
         // `::` (`m::Done`) is the same, read by its qualified name.
         Expr::Variable(name, _) => {
-            let path = vec![interner.resolve(*name).to_string()];
+            let path = vec![interner.resolve(*name).to_text()];
             if let Reading::One(variant, true) = read(enums, &path) {
                 let segments = vec![*name, interner.intern_string(&variant)];
                 *expr = Expr::Path(segments, crate::ast::NodeId::fresh());

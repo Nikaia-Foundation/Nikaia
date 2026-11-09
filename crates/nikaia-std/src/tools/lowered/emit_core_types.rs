@@ -44,7 +44,7 @@ impl EmitState {
     pub fn emit_core_ty(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: &EmitLifetimes) -> String { self.emit_core_ty_counted(world, walk, crossings, overlaps, ty, &lifetimes, &Count::Atomic) }
     #[allow(clippy::too_many_arguments)]
     pub fn emit_core_ty_counted(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, crossings: bool, overlaps: bool, ty: &Type, lifetimes: &EmitLifetimes, count: &Count) -> String {
-        let written = world.words.resolve(ty.name).to_string();
+        let written = nikaia_std::block::Text::from(world.words.resolve(ty.name).to_string());
         let name = if written == "int" { String::from("i64") } else { written };
         self.emit_core_ty_named(world, walk, crossings, overlaps, ty, &name, &lifetimes, &count)
     }
@@ -77,13 +77,13 @@ impl EmitState {
         if ty.is_tuple {
             let mut parts: Vec<String> = vec![];
             for part in ty.generics.iter() { parts.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, &lifetimes, &count)); }
-            if ty.is_nullable && ty.is_view { return format!("Option<{}({})>", lifetimes.reference(), parts.join(", ")); }
-            if ty.is_nullable { return format!("Option<({})>", parts.join(", ")); }
-            return format!("({})", parts.join(", "));
+            if ty.is_nullable && ty.is_view { return format!("Option<{}({})>", lifetimes.reference(), nikaia_std::block::Text::from(parts.join(", "))); }
+            if ty.is_nullable { return format!("Option<({})>", nikaia_std::block::Text::from(parts.join(", "))); }
+            return format!("({})", nikaia_std::block::Text::from(parts.join(", ")));
         }
-        let parameter = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string();
-        if walk.specialising.is_some() && ty.generics.is_empty() && (*ty.code).is_none() && name == parameter && (walk.slotted || self.copy_substitutes(&nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())) {
-            let on = nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string();
+        let parameter = nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string());
+        if walk.specialising.is_some() && ty.generics.is_empty() && (*ty.code).is_none() && name == parameter && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string()))) {
+            let on = nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string());
             let held = match walk.specialising.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
@@ -100,7 +100,7 @@ impl EmitState {
             walk.in_parameter = false;
             let written = self.emit_core_ty_named(world, walk, crossings, overlaps && !runs, &inner, name, &lifetimes, &count);
             if runs && written.ends_with('>') {
-                let open: String = nikaia_std::index::or(written.strip_suffix('>'), || "").to_string();
+                let open: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.strip_suffix('>'), || "").to_string());
                 return format!("Option<{} + '_>>", open);
             }
             return format!("Option<{}>", written);
@@ -128,21 +128,21 @@ impl EmitState {
                     let mut called: Vec<String> = vec![];
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &EmitLifetimes::Call, &count))); }
                     let inner = a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, result, &EmitLifetimes::Call, &count));
-                    let mut each = inner.to_string();
+                    let mut each = nikaia_std::block::Text::from(inner.to_string());
                     if code.can_throw { each = format!("Result<{}, Box<dyn std::error::Error>>", inner); }
                     if runs {
-                        if code.is_sync { return format!("impl for<'call> Fn({}) -> {}", called.join(", "), each); }
-                        return format!("impl for<'call> AsyncFn({}) -> {}", called.join(", "), each);
+                        if code.is_sync { return format!("impl for<'call> Fn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each); }
+                        return format!("impl for<'call> AsyncFn({}) -> {}", nikaia_std::block::Text::from(called.join(", ")), each);
                     }
                     if code.is_sync {
                         let mut crossing: &'static str = "";
                         if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
-                        return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}{}>", called.join(", "), each, crossing);
+                        return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}{}>", nikaia_std::block::Text::from(called.join(", ")), each, crossing);
                     }
                     let mut crossing: &'static str = "";
                     if overlaps { crossing = " + std::marker::Send + std::marker::Sync"; }
                     let future = emit_boxed_future_in(overlaps);
-                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", called.join(", "), future, each, crossing);
+                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", nikaia_std::block::Text::from(called.join(", ")), future, each, crossing);
                 }
             }
             if !runs {
@@ -159,21 +159,21 @@ impl EmitState {
                     let mut called: Vec<String> = vec![];
                     for part in ty.generics.iter() { called.push(a_list_read_as_a_slice(self.emit_code_part(world, walk, crossings, overlaps, part, &EmitLifetimes::Call, &count))); }
                     let future = emit_boxed_future_in(overlaps);
-                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", called.join(", "), future, outcome, crossing);
+                    return format!("nikaia_std::func::Kept<dyn for<'call> Fn({}) -> {}<'call, {}>{}>", nikaia_std::block::Text::from(called.join(", ")), future, outcome, crossing);
                 }
                 if !code.is_sync {
                     let future = emit_boxed_future(overlaps);
                     outcome = format!("{}<{}>", future, outcome);
                 }
-                return format!("nikaia_std::func::Kept<dyn Fn({}) -> {}{}>", elided.join(", "), outcome, crossing);
+                return format!("nikaia_std::func::Kept<dyn Fn({}) -> {}{}>", nikaia_std::block::Text::from(elided.join(", ")), outcome, crossing);
             }
             if code.is_sync {
                 let mut shape: String = format!(" -> {}", outcome);
                 if (*code.result).is_none() && !code.can_throw { shape = String::from(""); }
-                return format!("impl Fn({}){}", params.join(", "), shape);
+                return format!("impl Fn({}){}", nikaia_std::block::Text::from(params.join(", ")), shape);
             }
-            if walk.code_parameter_runs { return format!("impl AsyncFn({}) -> {}", params.join(", "), outcome); }
-            return format!("impl Fn({}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {}>>>", params.join(", "), outcome);
+            if walk.code_parameter_runs { return format!("impl AsyncFn({}) -> {}", nikaia_std::block::Text::from(params.join(", ")), outcome); }
+            return format!("impl Fn({}) -> std::pin::Pin<Box<dyn std::future::Future<Output = {}>>>", nikaia_std::block::Text::from(params.join(", ")), outcome);
         }
         if name == "Seen" && ty.generics.len() == 1 {
             let mut inner: Type = (*nikaia_std::index::get(&ty.generics, 0)).clone();
@@ -240,7 +240,7 @@ impl EmitState {
         let mut params: Vec<String> = vec![];
         if self.borrowing.contains(name) || self.tethered.contains(name) { params.push(self.lifetime_args(name, &lifetimes.params())); }
         for part in ty.generics.iter() { params.push(self.emit_core_ty_counted(world, walk, crossings, overlaps, part, &lifetimes, &count)); }
-        if !params.is_empty() { out.push_str(&format!("<{}>", params.join(", "))); }
+        if !params.is_empty() { out.push_str(&format!("<{}>", nikaia_std::block::Text::from(params.join(", ")))); }
         if self.cleaned_types.contains(name) {
             let wrapper = emit_cleaned(overlaps);
             return format!("{}<{}>", wrapper, out);
@@ -253,7 +253,7 @@ impl EmitState {
         let shortened = self.emit_core_ty(world, walk, crossings, overlaps, ty, &EmitLifetimes::Shortened);
         let needle = format!("type Of<'a> = {};", any);
         let mut found: i64 = -1;
-        for at in 0..walk.wrappers.len() as i64 { if found < 0 && (*nikaia_std::index::get(&walk.wrappers, (at) as usize)).contains(&needle) { found = at; } }
+        for at in 0..walk.wrappers.len() as i64 { if found < 0 && (*nikaia_std::index::get(&walk.wrappers, (at) as usize)).contains(AsRef::<str>::as_ref(&needle)) { found = at; } }
         if found >= 0 { return format!("__Tethered{}", found); }
         let n = walk.wrappers.len() as i64;
         let text = format!("/// A value that carries the keep its views point into (ADR-283 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{} {{\n    type Of<'a> = {};\n    fn shorten<'long: 's, 's>(x: &'s {}) -> &'s {} {{\n        x\n    }}\n}}\n", n, n, any, long, shortened);

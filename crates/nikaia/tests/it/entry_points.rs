@@ -4,6 +4,8 @@
 //! the build, so an entry point is `NK1238` here; a library build drops it
 //! (`project::check`, `tests/c_library.rs`).
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::check;
 use nikaia::contracts::{Ledger, LedgerOps, STD};

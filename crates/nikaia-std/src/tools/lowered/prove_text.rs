@@ -25,13 +25,13 @@ pub fn rust_of(id: i64, term_of: &dyn Fn(i64) -> SolverTerm, escape: &dyn Fn(&st
 }
 
 pub(crate) fn rust_joined(op: &str, parts: &[i64], empty: &str, term_of: &dyn Fn(i64) -> SolverTerm, escape: &dyn Fn(&str) -> String) -> String {
-    if parts.is_empty() { return empty.to_string(); }
+    if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
     let mut written: Vec<String> = vec![];
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         written.push(rust_of(part, &term_of, &escape));
     }
-    format!("({})", written.join(op))
+    format!("({})", nikaia_std::block::Text::from(written.join(op)))
 }
 
 pub fn rust_of_name(name: &str, escape: &impl Fn(&str) -> String) -> String {
@@ -82,7 +82,7 @@ pub(crate) fn term_joined(op: &str, parts: &[i64], r: i64, arrow: bool, term_of:
         let part = nikaia_std::num::value(part);
         written.push(term_inner(part, r + 1, arrow, &term_of));
     }
-    written.join(op)
+    nikaia_std::block::Text::from(written.join(op))
 }
 
 pub(crate) fn term_whole(id: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTerm) -> String {
@@ -91,7 +91,7 @@ pub(crate) fn term_whole(id: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTe
     match term {
         SolverTerm::Bool(b) => if b { String::from("true") } else { String::from("false") },
         SolverTerm::Int(n) => format!("{}", n),
-        SolverTerm::Var(ref name) => name.to_string(),
+        SolverTerm::Var(ref name) => nikaia_std::block::Text::from(name.to_string()),
         SolverTerm::Neg(a) => format!("-{}", term_inner(a, r, arrow, &term_of)),
         SolverTerm::Not(a) => format!("!{}", term_inner(a, r, arrow, &term_of)),
         SolverTerm::Add(a, b) => term_binary("+", a, b, r, arrow, &term_of),
@@ -125,7 +125,7 @@ pub fn shown(values: &collections::BTreeMap<String, i64>) -> String {
         let value = nikaia_std::num::value(value);
         said.push(format!("`{}` is {}", name, value));
     }
-    said.join(", ")
+    nikaia_std::block::Text::from(said.join(", "))
 }
 
 pub fn lowered_first(text: &str) -> String {
@@ -133,7 +133,7 @@ pub fn lowered_first(text: &str) -> String {
     if c.is_empty() { return String::from(""); }
     let mut head: String = String::from("");
     head.push(*nikaia_std::index::get(&c, 0));
-    let mut out = head.to_lowercase();
+    let mut out = nikaia_std::block::Text::from(head.to_lowercase());
     for k in 1..c.len() as i64 { out.push(*nikaia_std::index::get(&c, (k) as usize)); }
     out
 }

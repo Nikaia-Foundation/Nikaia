@@ -2480,8 +2480,97 @@ pub fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if ends_group != null {
         state.tasks_meet_on_nothing(world, block, ends_group ?? 0)
     }
+    check_core_view_lists_end(state, world, block)
     state.scope.pop()
     return tail
+}
+
+/// **A list of views ends at its last use** (#490, supervisor 2026-11-09): a
+/// block's `List` has no `#[may_dangle]` drop on stable Rust, so a list of
+/// views keeps what it views borrowed to the end of its scope, where Rust's
+/// `Vec` ended the borrow at the last use. Where a `let` of this block binds
+/// such a list and a later statement than its last use reads what its value
+/// was made of (moves, returns or writes it), the statement of the last use
+/// is recorded in `facts.view_list_drops`, and the emitter drops the list
+/// right after it. Asked before the block's names go, while the binding's
+/// type is still in scope; a name bound twice in the block is left alone.
+fn check_core_view_lists_end(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    let count = block.stmts.len() as i64
+    let mut at = 0
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                if names.len() == 1 {
+                    let name = f"{world.words.resolve(names[0])}"
+                    if check_core_view_list_bound_once(world, block, name) && check_core_a_list_of_views(state, name) {
+                        let mut last = at
+                        let mut sources: collections::BTreeSet[String] = collections::BTreeSet()
+                        names_in(value, world.words, sources)
+                        let mut later = at + 1
+                        while later < count {
+                            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                            names_in_statement(block.stmts[later].node, world.words, read)
+                            if read.contains(name) {
+                                last = later
+                            }
+                            later += 1
+                        }
+                        let mut needed = false
+                        later = last + 1
+                        while later < count {
+                            let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+                            names_in_statement(block.stmts[later].node, world.words, read)
+                            for source in sources {
+                                if read.contains(source) {
+                                    needed = true
+                                }
+                            }
+                            later += 1
+                        }
+                        if needed && !check_core_stmt_is_a_jump(block.stmts[last].node) {
+                            let key = block.stmts[last].span.start as i64
+                            let mut ended = state.facts.view_list_drops.get(key)?.clone() ?? []
+                            ended.push(name)
+                            state.facts.view_list_drops.insert(key, ended)
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// Whether one `let` of `block` binds `name`.
+fn check_core_view_list_bound_once(world: ref CheckWorld, block: ref Block, name: ref String) -> bool sync {
+    let mut seen = 0
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, .. } => {
+                for one in names {
+                    if world.words.resolve(one) == name {
+                        seen += 1
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return seen == 1
+}
+
+/// Whether `name` is bound, in this scope, to a list whose elements are
+/// views: `Vec[ref T]`.
+fn check_core_a_list_of_views(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return match found.ty {
+        Ty::Named { name, args, view } => !view && name == "Vec" && args.len() == 1 && match args[0] {
+            Ty::Named { view, .. } => view,
+            else => false,
+        },
+        else => false,
+    }
 }
 
 /// The group a block is, read before `check_async_block` takes the mark:

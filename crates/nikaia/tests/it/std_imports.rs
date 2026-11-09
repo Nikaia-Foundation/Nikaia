@@ -8,6 +8,8 @@
 //! already knows. A line that reads like an import and does nothing is what
 //! this closes.
 use nikaia::check::CodeOps;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 use nikaia::contracts::{Ledger, LedgerOps, STD};
 use nikaia::parser::parse_to_ast;
@@ -118,7 +120,7 @@ fn no_nika_source_in_the_tree_brings_a_name_in() {
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
-                .to_string();
+                .to_text();
             if path.is_dir() {
                 if !matches!(name.as_str(), "target" | ".git" | "vendor" | "node_modules") {
                     walk.push(path);

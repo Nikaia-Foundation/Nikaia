@@ -21,7 +21,7 @@ pub(crate) fn emit_holes_template_texts(words: &winnow_grammar::InternerContext,
         Expr::Dsl { target, package, content, .. } => {
             let package = *package; let target = *target;
             if is_deferred(&dsl_name(words, package, target), content) { return vec![]; }
-            let framed: String = content.trim().to_string();
+            let framed: String = nikaia_std::block::Text::from(content.trim().to_string());
             let segments = match split(&framed) {
                 Ok(value) => value,
                 Err(_error) => { return vec![]; },
@@ -52,13 +52,13 @@ pub fn emit_holes_literal_bound<H: EmitHolesHost>(host: &H, words: &winnow_gramm
     match literal {
         Expr::LitInterpolated { parts, .. } => {
             let none: Vec<(String, String)> = vec![];
-            for hole in emit_holes_interpolated(host, parts) { out.push((hole.clone(), none.to_owned())); }
+            for hole in emit_holes_interpolated(host, parts) { out.push((hole.clone(), none.copy_owned())); }
         },
         _ => {
             let site = id_of(literal);
             for (text, bound) in emit_holes_template_texts(words, literal) {
                 match host.hole(site, text) {
-                    EmitHole::Parsed(ref hole) => { out.push((hole.clone(), bound.to_owned())); },
+                    EmitHole::Parsed(ref hole) => { out.push((hole.clone(), bound.copy_owned())); },
                     EmitHole::Refused(_) => { },
                 }
             }
@@ -99,13 +99,13 @@ pub(crate) fn emit_holes_pick(words: &winnow_grammar::InternerContext, expr: &Ex
         Expr::Call { func, .. } => {
             let func = nikaia_std::boxed::open(func);
             match func {
-                Expr::Variable(name, _) => { let name = *name; return Some(words.resolve(name).to_string()); },
+                Expr::Variable(name, _) => { let name = *name; return Some(nikaia_std::block::Text::from(words.resolve(name).to_string())); },
                 _ => { },
             }
         },
         Expr::MethodCall { method, .. } => {
             let method = *method;
-            if kind == 2 { return Some(words.resolve(method).to_string()); }
+            if kind == 2 { return Some(nikaia_std::block::Text::from(words.resolve(method).to_string())); }
         },
         _ => { },
     }
@@ -171,8 +171,8 @@ pub(crate) fn emit_holes_ask_block<H: EmitHolesHost>(host: &H, words: &winnow_gr
     for expr in visited_in_block(body) {
         let site = id_of(expr);
         for (text, _) in emit_holes_template_texts(words, expr) {
-            match host.hole(site, text.to_string()) {
-                EmitHole::Refused(ref said) => { errors.insert((site as i64, text.to_string()), said.to_string()); },
+            match host.hole(site, nikaia_std::block::Text::from(text.to_string())) {
+                EmitHole::Refused(ref said) => { errors.insert((site as i64, nikaia_std::block::Text::from(text.to_string())), nikaia_std::block::Text::from(said.to_string())); },
                 EmitHole::Parsed(_) => { },
             }
         }
@@ -260,7 +260,7 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
                 emit_holes_fn_builds(host, words, &item.node, &mut waiting);
                 if name.is_some() {
                     let named = match name { Some(__nikaia_value) => __nikaia_value, None => return collections::BTreeSet::new() };
-                    free.insert(words.resolve(named).to_string(), at);
+                    free.insert(nikaia_std::block::Text::from(words.resolve(named).to_string()), at);
                 }
             },
             _ => { },
@@ -270,9 +270,9 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
     let mut built: collections::BTreeSet<String> = collections::BTreeSet::new();
     while !waiting.is_empty() {
         let name = match waiting.pop() { Some(__nikaia_value) => __nikaia_value, None => return built };
-        if free.contains_key(&name.to_string()) && !built.contains(&name.to_string()) {
-            built.insert(name.to_string());
-            let place = match free.get(&name.to_string()) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return built };
+        if free.contains_key(&nikaia_std::block::Text::from(name.to_string())) && !built.contains(&nikaia_std::block::Text::from(name.to_string())) {
+            built.insert(nikaia_std::block::Text::from(name.to_string()));
+            let place = match free.get(&nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return built };
             match &nikaia_std::index::get(&items, nikaia_std::index::at(place)).node {
                 Item::Fn { body, .. } => { emit_holes_names_block(host, words, body, 1, &mut waiting); },
                 _ => { },
@@ -306,8 +306,8 @@ impl EmitState {
             _ => {
                 let site = id_of(literal) as i64;
                 for (text, _) in emit_holes_template_texts(world.words, literal) {
-                    if self.template_holes.contains_key(&(site, text.to_string())) {
-                        let hole = match self.template_holes.get(&(site, text.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return out };
+                    if self.template_holes.contains_key(&(site, nikaia_std::block::Text::from(text.to_string()))) {
+                        let hole = match self.template_holes.get(&(site, nikaia_std::block::Text::from(text.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return out };
                         out.push(hole.clone());
                     }
                 }
@@ -340,7 +340,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_holes_read_in<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, host: &H, expr: &Expr, out: &mut Vec<String>) {
         match expr {
-            Expr::Variable(name, _) => { let name = *name; out.push(world.words.resolve(name).to_string()); },
+            Expr::Variable(name, _) => { let name = *name; out.push(nikaia_std::block::Text::from(world.words.resolve(name).to_string())); },
             _ => { },
         }
         if check_visit_has_holes(expr) { for hole in self.emit_holes_of(world, host, expr) { self.emit_holes_read_in(world, host, &hole, out); } }

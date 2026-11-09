@@ -36,15 +36,15 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
     match func {
         Expr::Variable(name, _) => {
             let name = *name;
-            return Some(world.words.resolve(name).to_string());
+            return Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
         },
         Expr::Path(segments, _) => {
             let mut parts: Vec<String> = vec![];
             for segment in segments.iter() {
                 let segment = *segment;
-                parts.push(world.words.resolve(segment).to_string());
+                parts.push(nikaia_std::block::Text::from(world.words.resolve(segment).to_string()));
             }
-            return Some(parts.join("::"));
+            return Some(nikaia_std::block::Text::from(parts.join("::")));
         },
         _ => { },
     }
@@ -54,7 +54,7 @@ pub(crate) fn emit_callee_text(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -
 pub fn integer_limit_below(path: &str) -> String {
     if path == "int::MIN" { return String::from("i64::MIN"); }
     if path == "int::MAX" { return String::from("i64::MAX"); }
-    path.to_string()
+    nikaia_std::block::Text::from(path.to_string())
 }
 
 impl EmitState {
@@ -264,7 +264,7 @@ impl EmitState {
 impl EmitState {
     pub fn path(&self, world: &EmitWorld<'_, '_, '_, '_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "scalar" && *nikaia_std::index::get(&segments, 1) == "from" { return String::from("nikaia_std::num::scalar_from"); }
-        if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "int" && (*nikaia_std::index::get(&segments, 1) == "MIN" || *nikaia_std::index::get(&segments, 1) == "MAX") { return integer_limit_below(&segments.join("::")); }
+        if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "int" && (*nikaia_std::index::get(&segments, 1) == "MIN" || *nikaia_std::index::get(&segments, 1) == "MAX") { return integer_limit_below(&nikaia_std::block::Text::from(segments.join("::"))); }
         if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
             if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
             let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));
@@ -273,7 +273,7 @@ impl EmitState {
         }
         let mut mapped: Vec<String> = vec![];
         for segment in segments.iter() { mapped.push(self.map_name(trusting, segment)); }
-        let joined = mapped.join("::");
+        let joined = nikaia_std::block::Text::from(mapped.join("::"));
         unaliased_in(world.aliases, &joined)
     }
     pub fn written_name(&self, world: &EmitWorld<'_, '_, '_, '_>, crossings: bool, trusting: bool, name: &str, count: &Count) -> String {
@@ -306,7 +306,7 @@ impl EmitState {
             return format!("None::<{}>", asked);
         }
         if !values.is_empty() {
-            let joined = values.join(", ");
+            let joined = nikaia_std::block::Text::from(values.join(", "));
             return format!("vec![{}]", joined);
         }
         format!("Vec::<{}>::new()", asked)
@@ -336,7 +336,7 @@ pub fn emit_bounded(world: &EmitWorld<'_, '_, '_, '_>, param: &GenericParam) -> 
         if !emit_is_a_shape_bound(world, &written) { bounds.push(written); }
     }
     if bounds.is_empty() { return name; }
-    let joined = bounds.join(" + ");
+    let joined = nikaia_std::block::Text::from(bounds.join(" + "));
     format!("{}: {}", name, joined)
 }
 

@@ -16,11 +16,11 @@ pub fn free_function(program: &Program, words: &winnow_grammar::InternerContext,
                 let can_throw = *can_throw; let name = *name;
                 if receiver.is_none() && named_as((name).as_ref(), words, wanted) {
                     let mut params: Vec<String> = vec![];
-                    for arg in args.iter() { params.push(words.resolve(arg.name).to_string()); }
+                    for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
                     let mut options: Vec<(String, Expr)> = vec![];
                     for option in config.iter() {
-                        params.push(words.resolve(option.name).to_string());
-                        options.push((words.resolve(option.name).to_string(), option.default.clone()));
+                        params.push(nikaia_std::block::Text::from(words.resolve(option.name).to_string()));
+                        options.push((nikaia_std::block::Text::from(words.resolve(option.name).to_string()), option.default.clone()));
                     }
                     return Some(FreeFunction { params, options, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
                 }
@@ -43,11 +43,11 @@ pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, ow
                                 let can_throw = *can_throw; let name = *name;
                                 if receiver.is_some() && named_as((name).as_ref(), words, wanted) {
                                     let mut params: Vec<String> = vec![];
-                                    for arg in args.iter() { params.push(words.resolve(arg.name).to_string()); }
+                                    for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
                                     let mut options: Vec<(String, Expr)> = vec![];
                                     for option in config.iter() {
-                                        params.push(words.resolve(option.name).to_string());
-                                        options.push((words.resolve(option.name).to_string(), option.default.clone()));
+                                        params.push(nikaia_std::block::Text::from(words.resolve(option.name).to_string()));
+                                        options.push((nikaia_std::block::Text::from(words.resolve(option.name).to_string()), option.default.clone()));
                                     }
                                     return Some(FreeFunction { params, options, can_throw, whole_result: whole_type((ret_type).as_ref(), words) });
                                 }
@@ -64,7 +64,7 @@ pub fn own_method(program: &Program, words: &winnow_grammar::InternerContext, ow
 }
 
 pub fn arguments_in_order(function: &FreeFunction, args: &[Expr], config: &[ConfigArg], words: &winnow_grammar::InternerContext) -> Vec<Expr> {
-    let mut all: Vec<Expr> = args.to_owned();
+    let mut all: Vec<Expr> = args.copy_owned();
     for (option, default) in function.options.iter() {
         let mut value = default.clone();
         for given in config.iter() { if words.resolve(given.name) == option { value = given.value.clone(); } }
@@ -109,7 +109,7 @@ pub(crate) fn fails_by_the_program(fails_with: &[String]) -> bool {
 pub(crate) fn thrower_named(call: &Expr, words: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> Option<String> {
     match call {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
-            Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+            Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
             Expr::Path(segments, _) => {
                 let mut joined: String = String::from("");
                 for segment in segments.iter() {
@@ -211,7 +211,7 @@ pub(crate) fn config_from_outside(config: &[ConfigArg], tainted: &collections::B
 
 pub(crate) fn outside_source_named(func: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match func {
-        Expr::Variable(name, _) => { let name = *name; Some(words.resolve(name).to_string()) },
+        Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
         Expr::Path(segments, _) => {
             let mut joined: String = String::from("");
             for segment in segments.iter() {
@@ -233,7 +233,7 @@ pub(crate) fn a_source_method(library: &Ledger, name: &str) -> bool {
             Some(__nikaia_it) => Some(__nikaia_it.takes_a_receiver()),
             None => None,
         }, || false);
-        if provenance == Provenance::Untrusted && a_method && key.ends_with(&tail) { return true; }
+        if provenance == Provenance::Untrusted && a_method && key.ends_with(&*tail) { return true; }
     }
     false
 }

@@ -8,6 +8,8 @@
 //! more than the program does would get wrong.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::Command;
 
 use nikaia::bounds::{BoundsChecks, OverflowChecks};
@@ -76,8 +78,8 @@ fn run(purpose: &str, source: &str, level: Level) -> (bool, String, String) {
     std::fs::remove_dir_all(&dir).ok();
     (
         out.status.success(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        String::from_utf8_lossy(&out.stdout).to_text(),
+        String::from_utf8_lossy(&out.stderr).to_text(),
     )
 }
 
@@ -436,7 +438,7 @@ fn the_overflow_option_is_read_and_a_wrong_level_is_refused() {
     assert_eq!(overflow, OverflowChecks::Removed);
     assert_eq!(optimizations("").unwrap().1, OverflowChecks::Kept);
     let basic = optimizations("remove-overflow-checks:basic").unwrap_err();
-    assert!(basic.to_string().contains("`on` or `off`"), "{basic}");
+    assert!(basic.to_text().contains("`on` or `off`"), "{basic}");
 }
 
 /// **A compound assignment is proved as the operation it is** (#387,
@@ -568,9 +570,9 @@ fn main() {
     let rust = lowered(source, Level::Aggressive);
     let body = |name: &str| {
         let at = rust
-            .find(&format!("fn {name}("))
+            .find(&*format!("fn {name}("))
             .expect("the function is lowered");
-        rust[at..].lines().next().unwrap_or_default().to_string()
+        rust[at..].lines().next().unwrap_or_default().to_text()
     };
     assert!(
         body("after").contains("nikaia_std::proven::add::<i64>("),
@@ -782,7 +784,7 @@ fn a_field_of_an_element_bounded_by_an_assume_is_proved() {
     let rust = lowered(&source, Level::Aggressive);
     for (name, _, proved) in &cases {
         let body = rust
-            .split(&format!("fn {name}("))
+            .split(&*format!("fn {name}("))
             .nth(1)
             .and_then(|rest| rest.split("\n    }").next())
             .unwrap_or_else(|| panic!("{name} is emitted: {rust}"));

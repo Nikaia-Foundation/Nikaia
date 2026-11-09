@@ -41,8 +41,8 @@ pub fn contains<T: AsRef<str>>(items: &[T], value: &str) -> bool {
 /// characters. `collect` over `Chars` asks for a quarter of that and grows,
 /// which was the largest single cost of reading a ledger in Nikaia (ADR-294
 /// step (c)).
-pub fn chars(text: std::str::Chars<'_>) -> Vec<char> {
-    let mut all = Vec::with_capacity(text.as_str().len());
+pub fn chars(text: std::str::Chars<'_>) -> crate::block::List<char> {
+    let mut all = crate::block::List::with_capacity(text.as_str().len());
     all.extend(text);
     all
 }

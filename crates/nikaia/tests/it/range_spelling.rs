@@ -10,6 +10,8 @@
 
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn emit(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -94,7 +96,7 @@ fn no_nika_source_in_the_tree_was_left_on_the_old_meaning() {
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
-                .to_string();
+                .to_text();
             if path.is_dir() {
                 if !matches!(name.as_str(), "target" | ".git" | "vendor" | "node_modules") {
                     walk.push(path);

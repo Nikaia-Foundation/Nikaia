@@ -8,7 +8,7 @@ impl CheckState {
         let bounds = match *nikaia_std::index::get(&self.type_parameters, parameter) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for bound in bounds.iter() {
             let methods = match *nikaia_std::index::get(&world.own.traits, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if methods.contains(member) { return Some(Ty::Named { name: bound.to_string(), args: vec![], view: false }); }
+            if methods.contains(member) { return Some(Ty::Named { name: nikaia_std::block::Text::from(bound.to_string()), args: vec![], view: false }); }
         }
         None
     }
@@ -83,7 +83,7 @@ impl CheckState {
             return false;
         }
         if seen.contains(name) { return true; }
-        seen.insert(name.to_string());
+        seen.insert(nikaia_std::block::Text::from(name.to_string()));
         if self.structs.contains_key(name) {
             let fields = match *nikaia_std::index::get(&self.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return false };
             for field in fields.iter() { if self.takes_space(&field.ty, seen) { return true; } }
@@ -143,8 +143,8 @@ impl CheckState {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() != 2 { return None; }
         let rules = match *nikaia_std::index::get(&self.grammars, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if !rules.contains(*nikaia_std::index::get(&parts, 1)) { return None; }
-        Some(name.to_string())
+        if !rules.contains(*nikaia_std::index::get(&parts, 1)) { return None; } ::core::mem::drop(parts);
+        Some(nikaia_std::block::Text::from(name.to_string()))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -204,21 +204,21 @@ impl CheckState {
             return a_nonempty(&contract.fields);
         }
         let suffix = format!("::{}", name);
-        for (entry_name, entry_value) in world.library.types.iter() { if entry_name == name || entry_name.ends_with(&suffix) { return a_nonempty(&entry_value.fields); } }
+        for (entry_name, entry_value) in world.library.types.iter() { if entry_name == name || entry_name.ends_with(AsRef::<str>::as_ref(&suffix)) { return a_nonempty(&entry_value.fields); } }
         None
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn iterates_fallibly(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
         let suffix = format!("::{}", name);
-        for (entry_name, entry_value) in world.own.types.iter() { if (entry_name == name || entry_name.ends_with(&suffix)) && entry_value.iterates_fallibly { return true; } }
-        for (entry_name, entry_value) in world.library.types.iter() { if (entry_name == name || entry_name.ends_with(&suffix)) && entry_value.iterates_fallibly { return true; } }
+        for (entry_name, entry_value) in world.own.types.iter() { if (entry_name == name || entry_name.ends_with(AsRef::<str>::as_ref(&suffix))) && entry_value.iterates_fallibly { return true; } }
+        for (entry_name, entry_value) in world.library.types.iter() { if (entry_name == name || entry_name.ends_with(AsRef::<str>::as_ref(&suffix))) && entry_value.iterates_fallibly { return true; } }
         false
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn function_as_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Ty> {
-        let mut key = name.to_string();
+        let mut key = nikaia_std::block::Text::from(name.to_string());
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { key = format!("{}::new", name); }
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -235,14 +235,14 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_nonempty(fields: &[FieldContract]) -> Option<Vec<FieldContract>> {
     if fields.is_empty() { return None; }
-    Some(fields.to_owned())
+    Some(fields.copy_owned())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn a_type_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()
+    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

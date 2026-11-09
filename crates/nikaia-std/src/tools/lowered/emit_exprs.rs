@@ -5,7 +5,7 @@ pub(crate) fn emit_candidates(ledger: &Ledger, method: &str) -> Vec<FnContract> 
     let suffix = format!("::{}", method);
     let mut out: Vec<FnContract> = vec![];
     for key in ledger.functions.keys() {
-        if !key.ends_with(&suffix) { continue; }
+        if !key.ends_with(AsRef::<str>::as_ref(&suffix)) { continue; }
         let contract = match ledger.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if emit_takes_self(contract) { out.push(contract.clone()); }
     }
@@ -59,7 +59,7 @@ pub(crate) fn emit_changes(contract: &FnContract, i: i64) -> bool {
     false
 }
 
-pub(crate) fn emit_two(before: &str, after: &str) -> (String, String) { (before.to_string(), after.to_string()) }
+pub(crate) fn emit_two(before: &str, after: &str) -> (String, String) { (nikaia_std::block::Text::from(before.to_string()), nikaia_std::block::Text::from(after.to_string())) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -166,7 +166,7 @@ impl EmitState {
             Item::Fn { name, .. } => {
                 let name = *name;
                 let held = match name { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let text = world.words.resolve(held).to_string();
+                let text = nikaia_std::block::Text::from(world.words.resolve(held).to_string());
                 if self.facts.walks_fields.contains_key(&text) { return Some(text); }
             },
             _ => { },
@@ -187,7 +187,7 @@ impl EmitState {
         }
     }
     pub(crate) fn method_emits_as_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr]) -> bool {
-        let name = world.words.resolve(method).to_string();
+        let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         truncating(&name).is_some() || is_length(&name, args) || self.is_counted(receiver, &name, args)
     }
     pub fn ends_in_a_cast(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr) -> bool {
@@ -211,15 +211,15 @@ impl EmitState {
             if name == "HashMap" { return String::from("TrustedMap"); }
             if name == "HashSet" { return String::from("TrustedSet"); }
         }
-        name.to_string()
+        nikaia_std::block::Text::from(name.to_string())
     }
     pub fn mapped_path(&self, trusting: bool, name: &str) -> String {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return self.map_name(trusting, name); }
-        let last = (*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string();
+        let last = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
         let mut module: Vec<String> = vec![];
-        for at in 0..parts.len() as i64 - 1 { module.push((*nikaia_std::index::get(&parts, (at) as usize)).to_string()); }
-        format!("{}::{}", module.join("::"), self.map_name(trusting, &last))
+        for at in 0..parts.len() as i64 - 1 { module.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (at) as usize)).to_string())); }
+        format!("{}::{}", nikaia_std::block::Text::from(module.join("::")), self.map_name(trusting, &last))
     }
 }
 

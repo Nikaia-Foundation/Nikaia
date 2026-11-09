@@ -55,7 +55,7 @@ pub(crate) fn the_types_meet_with_holes(a: &Ty, b: &Ty) -> Option<Ty> {
             let xv = *xv; let yv = *yv;
             if *x != *y || xv != yv || (xa.len() as i64) != ya.len() as i64 { return None; }
             let args = match the_parts_meet_with_holes(xa, ya) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            Ty::Named { name: x.to_string(), args, view: xv }
+            Ty::Named { name: nikaia_std::block::Text::from(x.to_string()), args, view: xv }
         },
         (Ty::Tuple(xs), Ty::Tuple(ys)) => {
             if (xs.len() as i64) != ys.len() as i64 { return None; }
@@ -210,7 +210,7 @@ pub fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span) -> Op
     let mut listed: String = String::from("");
     let mut index: i64 = 0;
     while index < shown.len() as i64 {
-        let one = (*nikaia_std::index::get(&shown, nikaia_std::index::at(index))).to_string();
+        let one = nikaia_std::block::Text::from((*nikaia_std::index::get(&shown, nikaia_std::index::at(index))).to_string());
         if index + 1 == shown.len() as i64 { listed = format!("{} and `{}`", listed, one); } else if index == 0 { listed = format!("`{}`", one); } else { listed = format!("{}, `{}`", listed, one); }
         index = index + 1;
     }

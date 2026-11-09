@@ -7,6 +7,8 @@
 //! whether the pieces run one after another or in parallel.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::process::{Command, Output};
 
 /// Runs `source` as `main.nika` beside `files`, at `parallel`.
@@ -31,7 +33,7 @@ fn printed(run: &Output) -> String {
         "{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    String::from_utf8_lossy(&run.stdout).trim().to_string()
+    String::from_utf8_lossy(&run.stdout).trim().to_text()
 }
 
 const READS: &str = "use std::fs\n\

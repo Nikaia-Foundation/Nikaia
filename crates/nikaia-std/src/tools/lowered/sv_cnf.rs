@@ -38,7 +38,7 @@ pub(crate) fn sv_cnf(arena: &TermArena, facts: &[i64], goal: i64, why: &mut LgWh
 }
 
 pub(crate) fn sv_cnf_sorted(arena: &TermArena, facts: &[i64], goal: i64, reals: &collections::BTreeSet<String>, why: &mut LgWhy) -> Option<SvCnf> {
-    let mut t = SvTseitin { atoms: vec![], definition: vec![], clauses: vec![], vars: sv_vars(), known: collections::BTreeMap::new(), defined: collections::BTreeMap::new(), definitions: 0, real_names: reals.to_owned() };
+    let mut t = SvTseitin { atoms: vec![], definition: vec![], clauses: vec![], vars: sv_vars(), known: collections::BTreeMap::new(), defined: collections::BTreeMap::new(), definitions: 0, real_names: reals.copy_owned() };
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
         match t.assert(arena, fact, true, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -200,7 +200,7 @@ impl SvTseitin {
         self.atoms.push(SvAtom { row: SvRow { cols: vec![col], ks: vec![1], constant: 0 }, rel: SvRel::Le });
         self.definition.push(true);
         let d = sv_lit(a, false);
-        let mut long = either.to_owned();
+        let mut long = either.copy_owned();
         long.push(d ^ 1u32);
         long.sort();
         self.clauses.push(long);

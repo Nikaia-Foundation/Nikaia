@@ -15,19 +15,19 @@ pub fn a_use_refused(names: &winnow_grammar::InternerContext, items: &[Spanned<I
     for item in items.iter() {
         let segments = use_segments(names, &item.node);
         if segments.is_empty() || *nikaia_std::index::get(&segments, 0) == "std" { continue; }
-        let first = (*nikaia_std::index::get(&segments, 0)).to_string();
+        let first = nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, 0)).to_string());
         if segments.len() > 1 {
-            let written = segments.join("::");
+            let written = nikaia_std::block::Text::from(segments.join("::"));
             return Some(refusal("NK1337", item.span.clone(), String::from("`use` takes a package name only, not a path into it."), vec![], format!("Write `use {}`, and `{}` where you need it.", first, written)));
         }
         let called = alias_of(names, &item.node);
-        if !called.is_empty() { named.push((first, called, item.span.clone())); } else { named.push((first.to_string(), first, item.span.clone())); }
+        if !called.is_empty() { named.push((first, called, item.span.clone())); } else { named.push((nikaia_std::block::Text::from(first.to_string()), first, item.span.clone())); }
     }
     let mut once: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (_, called, span) in named.iter() {
         let span = *span;
         if once.contains(called) { return Some(refusal("NK1338", span.clone(), format!("`{}` is used twice in this file.", called), vec![String::from("Two packages can't have the same name in one file.")], String::from("Write `use … as …` to give one of them another name."))); }
-        once.insert(called.to_string());
+        once.insert(nikaia_std::block::Text::from(called.to_string()));
     }
     for (package, _, span) in named.iter() {
         let span = *span;
@@ -45,7 +45,7 @@ pub(crate) fn use_segments(names: &winnow_grammar::InternerContext, item: &Item)
         Item::Import { path, .. } => {
             for segment in path.iter() {
                 let segment = *segment;
-                out.push(names.resolve(segment).to_string());
+                out.push(nikaia_std::block::Text::from(names.resolve(segment).to_string()));
             }
         },
         _ => { },
@@ -68,8 +68,8 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         let contract = match *nikaia_std::index::get(&contracts.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if of_a_dependency(key, theirs) || !contract.public || !no_sync(&contract.sync_claim) { continue; }
         let mut named: Vec<String> = vec![];
-        for lambda in lambdas.iter() { if !nikaia_std::list::contains(&contract.keeps, &lambda) { named.push(lambda.to_string()); } }
-        if (named.len() as i64) == lambdas.len() as i64 { through.push(format!("`{}` (`sync({})`)", key, named.join(", "))); }
+        for lambda in lambdas.iter() { if !nikaia_std::list::contains(&contract.keeps, &lambda) { named.push(nikaia_std::block::Text::from(lambda.to_string())); } }
+        if (named.len() as i64) == lambdas.len() as i64 { through.push(format!("`{}` (`sync({})`)", key, nikaia_std::block::Text::from(named.join(", ")))); }
     }
     let mut out: String = String::from("");
     if !never.is_empty() {
@@ -78,7 +78,7 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         let functions = if one { "1 pub function" } else { "pub functions" };
         let s = if one { "s" } else { "" };
         let es = if one { "es" } else { "" };
-        out.push_str(&format!("note: {}{} never pause{} and do{} not promise it: {}\n  help: write `sync` after the result, and callers in other packages can rely on it\n", count, functions, s, es, never.join(", ")));
+        out.push_str(&format!("note: {}{} never pause{} and do{} not promise it: {}\n  help: write `sync` after the result, and callers in other packages can rely on it\n", count, functions, s, es, nikaia_std::block::Text::from(never.join(", "))));
     }
     if !through.is_empty() {
         let one = through.len() == 1;
@@ -87,7 +87,7 @@ pub fn could_promise(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
         let s = if one { "s" } else { "" };
         let they = if one { "it is" } else { "they are" };
         let es = if one { "es" } else { "" };
-        out.push_str(&format!("note: {}{} pause{} only where the lambdas {} given do, and do{} not promise it: {}\n  help: write `sync(f)` after the result, naming those lambdas, and callers in other packages can rely on it\n", count, functions, s, they, es, through.join(", ")));
+        out.push_str(&format!("note: {}{} pause{} only where the lambdas {} given do, and do{} not promise it: {}\n  help: write `sync(f)` after the result, naming those lambdas, and callers in other packages can rely on it\n", count, functions, s, they, es, nikaia_std::block::Text::from(through.join(", "))));
     }
     out
 }
@@ -108,7 +108,7 @@ pub fn pause_path(chain: &[String]) -> String {
         steps.push(format!("`{}` calls `{}`", *nikaia_std::index::get(&chain, (k) as usize), *nikaia_std::index::get(&chain, (k + 1) as usize)));
         k += 1;
     }
-    steps.join(", which ")
+    nikaia_std::block::Text::from(steps.join(", which "))
 }
 
 pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &impl Fn(&CheckFinding, i64) -> String) -> String {
@@ -151,15 +151,15 @@ pub fn lost_sync_unplaced(message: &str, help: &str) -> String { format!("warnin
 pub fn declared_once(paths: &[String], declared: &[Vec<(String, Span)>]) -> Option<(i64, Finding)> {
     let mut seen: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for at in 0..paths.len() as i64 {
-        let path = (*nikaia_std::index::get(&paths, (at) as usize)).to_string();
+        let path = nikaia_std::block::Text::from((*nikaia_std::index::get(&paths, (at) as usize)).to_string());
         for (name, span) in (*nikaia_std::index::get(&declared, (at) as usize)).iter() {
             let span = *span;
             if seen.contains_key(name) {
-                let first = nikaia_std::index::or(*nikaia_std::index::get(&seen, name), || "").to_string();
+                let first = nikaia_std::block::Text::from(nikaia_std::index::or(*nikaia_std::index::get(&seen, name), || "").to_string());
                 if first == path { continue; }
                 return Some((at, refusal("NK1148", span.clone(), format!("`{}` is declared twice in this package: in {} and in {}.", name, first, path), vec![String::from("All files of a package share their names.")], String::from("Rename one of the two, or keep one declaration and use it from the other file."))));
             }
-            seen.insert(name.to_string(), path.to_string());
+            seen.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(path.to_string()));
         }
     }
     None
@@ -178,11 +178,11 @@ pub fn groups(packages: &[Option<String>]) -> Vec<(i64, i64)> {
 
 pub fn as_promised(ledger: &mut Ledger, another: &impl Fn(&str) -> bool) {
     let mut unpromised: Vec<String> = vec![];
-    for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(key.to_string()); } }
+    for (key, contract) in ledger.functions.iter() { if inferred_sync(&contract.sync_claim) && another(key) { unpromised.push(nikaia_std::block::Text::from(key.to_string())); } }
     for key in unpromised.iter() {
         let mut entry = match *nikaia_std::index::get(&ledger.functions, key) { Some(__nikaia_value) => __nikaia_value, None => continue }.clone();
         entry.sync_claim = Sync::Unpromised;
-        ledger.functions.insert(key.to_string(), entry);
+        ledger.functions.insert(nikaia_std::block::Text::from(key.to_string()), entry);
     }
 }
 
@@ -194,15 +194,15 @@ pub fn contracts_as_promised(contracts: &Ledger, theirs: &collections::BTreeMap<
 
 #[allow(clippy::too_many_arguments)]
 pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, described: &Ledger, packages: &[Option<String>], renames: &[collections::BTreeMap<String, String>], reaches: &collections::BTreeMap<String, collections::BTreeSet<String>>, their_renames: &collections::BTreeMap<String, collections::BTreeMap<String, String>>, package_ledger: &impl Fn(i64, i64) -> Ledger) -> collections::BTreeMap<String, Ledger> {
-    for (name, contract) in described.functions.iter() { if !library.functions.contains_key(name) { library.functions.insert(name.to_string(), contract.clone()); } }
-    for (name, contract) in described.types.iter() { if !library.types.contains_key(name) { library.types.insert(name.to_string(), contract.clone()); } }
+    for (name, contract) in described.functions.iter() { if !library.functions.contains_key(name) { library.functions.insert(nikaia_std::block::Text::from(name.to_string()), contract.clone()); } }
+    for (name, contract) in described.types.iter() { if !library.types.contains_key(name) { library.types.insert(nikaia_std::block::Text::from(name.to_string()), contract.clone()); } }
     let mut plain: collections::BTreeMap<String, Ledger> = collections::BTreeMap::new();
     for (from, to) in groups(packages) {
         let package = match match nikaia_std::index::get(&packages, nikaia_std::index::at(from)) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let module: Option<String> = Some(package.to_string());
+        let module: Option<String> = Some(nikaia_std::block::Text::from(package.to_string()));
         let own = package_ledger(from, to);
         let mut promised = own.clone();
         as_promised(&mut promised, &|key| { true });
@@ -223,21 +223,21 @@ pub fn dependency_ledgers(library: &mut Ledger, contracts: &mut Ledger, describe
             None => None,
         }, || collections::BTreeMap::new().into());
         for word in words.iter() {
-            let ours = nikaia_std::index::or(*nikaia_std::index::get(&renamed, word), || word).to_string();
+            let ours = nikaia_std::block::Text::from(nikaia_std::index::or(*nikaia_std::index::get(&renamed, word), || word).to_string());
             if ours == *package { continue; }
             let theirs = match *nikaia_std::index::get(&plain, &ours) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut promised = theirs.clone();
             as_promised(&mut promised, &|key| { true });
-            let module: Option<String> = Some(word.to_string());
+            let module: Option<String> = Some(nikaia_std::block::Text::from(word.to_string()));
             absorb_into(&mut seen_by_it, (module).as_deref(), &none, &promised);
         }
-        as_its_own.insert(package.to_string(), seen_by_it);
+        as_its_own.insert(nikaia_std::block::Text::from(package.to_string()), seen_by_it);
     }
     as_its_own
 }
 
 pub fn absorb_own(contracts: &mut Ledger, renames: &collections::BTreeMap<String, String>, own: &Ledger) {
-    contracts.sources = own.sources.to_owned();
+    contracts.sources = own.sources.copy_owned();
     let module: Option<String> = None;
     absorb_into(contracts, (module).as_deref(), renames, own);
 }
@@ -246,10 +246,10 @@ pub fn shown_paths(paths: &[String], shown_as: Option<&str>) -> Vec<String> {
     (nikaia_std::range::span(0, paths.len() as i64)).map(|at| {
         if at == 0 && shown_as.is_some() {
             nikaia_std::index::or(match shown_as {
-                Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+                Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                 None => None,
             }, || "".into())
-        } else { (*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_string() }
+        } else { nikaia_std::block::Text::from((*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_string()) }
     }).collect::<Vec<_>>()
 }
 
@@ -372,7 +372,7 @@ pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar:
                     at += 1;
                     continue;
                 } };
-                if receiver.is_none() && !is_public && !is_extern { candidates.insert(words.resolve(held).to_string(), at); }
+                if receiver.is_none() && !is_public && !is_extern { candidates.insert(nikaia_std::block::Text::from(words.resolve(held).to_string()), at); }
             },
             Item::Test { .. } => { tests.push(at); },
             _ => { },
@@ -380,12 +380,12 @@ pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar:
         at += 1;
     }
     if tests.is_empty() || candidates.is_empty() { return found; }
-    let source = (*nikaia_std::index::get(&texts, nikaia_std::index::at(own))).to_string();
+    let source = nikaia_std::block::Text::from((*nikaia_std::index::get(&texts, nikaia_std::index::at(own))).to_string());
     let mentions = modules_mentions_by_item(items, &source, &candidates);
     let mut reached: collections::BTreeSet<String> = collections::BTreeSet::new();
     for t in tests.iter() {
         let t = nikaia_std::num::value(t);
-        for name in (*nikaia_std::index::get(&mentions, nikaia_std::index::at(t))).iter() { reached.insert(name.to_string()); }
+        for name in (*nikaia_std::index::get(&mentions, nikaia_std::index::at(t))).iter() { reached.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
     modules_close_over(&mut reached, &candidates, &mentions);
     let mut live: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -397,7 +397,7 @@ pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar:
             let place = nikaia_std::num::value(place);
             if place == k { is_candidate = true; }
         }
-        if !is_test && !is_candidate { for name in each.iter() { live.insert(name.to_string()); } }
+        if !is_test && !is_candidate { for name in each.iter() { live.insert(nikaia_std::block::Text::from(name.to_string())); } }
         k += 1;
     }
     loop {
@@ -408,7 +408,7 @@ pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar:
             let mut j: i64 = 0;
             for text in texts.iter() {
                 if j != own && modules_calls_in(text, name) {
-                    named_beside.push(name.to_string());
+                    named_beside.push(nikaia_std::block::Text::from(name.to_string()));
                     break;
                 }
                 j += 1;
@@ -417,7 +417,7 @@ pub fn modules_only_tests_reach(items: &[Spanned<Item>], words: &winnow_grammar:
         if named_beside.is_empty() { break; }
         for name in named_beside.into_iter() { live.insert(name); }
     }
-    for name in reached.iter() { if candidates.contains_key(name) && !live.contains(name) { found.insert(name.to_string()); } }
+    for name in reached.iter() { if candidates.contains_key(name) && !live.contains(name) { found.insert(nikaia_std::block::Text::from(name.to_string())); } }
     found
 }
 
@@ -439,7 +439,7 @@ pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
         let c = b as i64;
         let in_word = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95;
         if !waiting.is_empty() && c != 32 {
-            if c == 40 { out.push((waiting.to_string(), waiting_at)); }
+            if c == 40 { out.push((nikaia_std::block::Text::from(waiting.to_string()), waiting_at)); }
             waiting = String::from("");
         }
         if in_word {
@@ -452,8 +452,8 @@ pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
         } else {
             if !word.is_empty() {
                 if before != 46 {
-                    if c == 40 { out.push((word.to_string(), start)); } else if c == 32 {
-                        waiting = word.to_string();
+                    if c == 40 { out.push((nikaia_std::block::Text::from(word.to_string()), start)); } else if c == 32 {
+                        waiting = nikaia_std::block::Text::from(word.to_string());
                         waiting_at = start;
                     }
                 }
@@ -471,7 +471,7 @@ pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, cand
         let mut added: Vec<String> = vec![];
         for name in names.iter() {
             let place = match candidates.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-            for other in (*nikaia_std::index::get(&mentions, nikaia_std::index::at(place))).iter() { if !names.contains(other) { added.push(other.to_string()); } }
+            for other in (*nikaia_std::index::get(&mentions, nikaia_std::index::at(place))).iter() { if !names.contains(other) { added.push(nikaia_std::block::Text::from(other.to_string())); } }
         }
         if added.is_empty() { return; }
         for name in added.into_iter() { names.insert(name); }
@@ -490,7 +490,7 @@ pub(crate) fn modules_note_word(items: &[Spanned<Item>], candidates: &collection
     let mut k: i64 = 0;
     for item in items.iter() {
         if start >= item.span.start as i64 && start < item.span.end as i64 {
-            out[nikaia_std::index::at(k)].insert(word.to_string());
+            out[nikaia_std::index::at(k)].insert(nikaia_std::block::Text::from(word.to_string()));
             return;
         }
         k += 1;
@@ -498,7 +498,7 @@ pub(crate) fn modules_note_word(items: &[Spanned<Item>], candidates: &collection
 }
 
 pub fn modules_mark_test_only(items: &mut Vec<Spanned<Item>>, only_tests: &collections::BTreeSet<String>, tests: i64, words: &winnow_grammar::InternerContext, intern: &impl Fn(&str) -> winnow_grammar::Symbol) {
-    let mut marks = only_tests.to_owned();
+    let mut marks = only_tests.copy_owned();
     for k in 0..tests { marks.insert(test_function(k)); }
     let mut kept: Vec<Spanned<Item>> = vec![];
     for item in items.drain(..) {
@@ -559,22 +559,22 @@ pub fn modules_names_in(names: &winnow_grammar::InternerContext, items: &[Spanne
 
 pub(crate) fn modules_note(names: &winnow_grammar::InternerContext, e: &Expr, out: &mut collections::BTreeSet<String>) {
     match e {
-        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string()); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string())); } },
         Expr::Variable(n, _) => {
             let n = *n;
-            out.insert(names.resolve(n).to_string());
+            out.insert(nikaia_std::block::Text::from(names.resolve(n).to_string()));
         },
         Expr::MethodCall { method, .. } => {
             let method = *method;
-            out.insert(names.resolve(method).to_string());
+            out.insert(nikaia_std::block::Text::from(names.resolve(method).to_string()));
         },
         Expr::SafeMethod { method, .. } => {
             let method = *method;
-            out.insert(names.resolve(method).to_string());
+            out.insert(nikaia_std::block::Text::from(names.resolve(method).to_string()));
         },
         Expr::StructLit { name, .. } => {
             let name = *name;
-            out.insert(names.resolve(name).to_string());
+            out.insert(nikaia_std::block::Text::from(names.resolve(name).to_string()));
         },
         Expr::LitInterpolated { parts, .. } => {
             for part in parts.iter() {
@@ -607,7 +607,7 @@ impl ModulesRefusal {
     pub(crate) fn message(&self) -> String {
         match self {
             ModulesRefusal::Parse => String::from("a file did not parse"),
-            ModulesRefusal::Refused(why) => why.to_string(),
+            ModulesRefusal::Refused(why) => nikaia_std::block::Text::from(why.to_string()),
             ModulesRefusal::Unreadable { what, why } => format!("{}: {}", what, why),
             ModulesRefusal::Found { path, finding, .. } => format!("{}: {}", path, finding.message),
         }
@@ -640,12 +640,12 @@ pub(crate) const MODULES_SRC: &str = "src";
 pub(crate) const MODULES_ENTRY: &str = "main.nika";
 
 pub fn modules_qualify(package: Option<&str>, name: &str) -> String {
-    let package = match package { Some(__nikaia_value) => __nikaia_value, None => return name.to_string() };
+    let package = match package { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
     format!("{}::{}", package, name)
 }
 
 pub async fn modules_collect_with<H: ModulesHost>(entry: &std::path::Path, dependencies: &[ProjectMembersDependency], open: &collections::BTreeMap<String, String>, host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
-    let mut names: collections::BTreeSet<String> = dependencies.iter().map(|d| { d.name.to_string() }).collect();
+    let mut names: collections::BTreeSet<String> = dependencies.iter().map(|d| { nikaia_std::block::Text::from(d.name.to_string()) }).collect();
     names.extend(modules_foreign_beside(entry, host));
     let mut units = modules_package_at(entry, None, &names, &collections::BTreeMap::new(), open, host).await?;
     units.extend(modules_dependency_units(dependencies, open, host).await?);
@@ -653,7 +653,7 @@ pub async fn modules_collect_with<H: ModulesHost>(entry: &std::path::Path, depen
 }
 
 pub async fn modules_collect_program_test<H: ModulesHost>(entry: &std::path::Path, dependencies: &[ProjectMembersDependency], open: &collections::BTreeMap<String, String>, host: &H) -> Result<Vec<ModulesUnit>, nikaia_std::error::Thrown<ModulesRefusal>> {
-    let names: collections::BTreeSet<String> = dependencies.iter().map(|d| { d.name.to_string() }).collect();
+    let names: collections::BTreeSet<String> = dependencies.iter().map(|d| { nikaia_std::block::Text::from(d.name.to_string()) }).collect();
     let mut units: Vec<ModulesUnit> = vec![modules_read_unit(entry, None, &names, &collections::BTreeMap::new(), &ModulesStanding::InProject, open, host).await?];
     units.extend(modules_dependency_units(dependencies, open, host).await?);
     Ok(units)
@@ -664,7 +664,7 @@ pub(crate) async fn modules_dependency_units<H: ModulesHost>(dependencies: &[Pro
     for dependency in dependencies.iter() {
         let src = nikaia_std::fs::path::join(&(dependency.root), std::path::Path::new(&(MODULES_SRC)));
         if !modules_is_dir(&src) { return Err(nikaia_std::error::throwing(ModulesRefusal::Refused(format!("`{}` is a dependency by path, but {} doesn't exist.\nA package is a directory with a `{}/` folder in it.", dependency.name, nikaia_std::fs::path::display(&(src)), MODULES_SRC)), &"modules_dependency_units")); }
-        let package: Option<String> = Some(dependency.name.to_string());
+        let package: Option<String> = Some(nikaia_std::block::Text::from(dependency.name.to_string()));
         units.extend(modules_package_at(&nikaia_std::fs::path::join(&(src), std::path::Path::new(&(MODULES_ENTRY))), (package).as_deref(), &dependency.reachable, &dependency.renames, open, host).await?);
     }
     Ok(units)
@@ -685,7 +685,7 @@ pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, 
             Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
             None => None,
         }, || "".into()) == "nika"
-    }).map(|name| { nikaia_std::fs::path::text_of(&(name)).to_string() }).collect();
+    }).map(|name| { nikaia_std::block::Text::from(nikaia_std::fs::path::text_of(&(name)).to_string()) }).collect();
     for key in open.keys() {
         let held: fs::Path = std::path::PathBuf::from(key);
         let parent = match nikaia_std::fs::path::parent(&(held)) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -697,20 +697,20 @@ pub(crate) async fn modules_package_at<H: ModulesHost>(entry: &std::path::Path, 
                 Some(__nikaia_it) => Some(nikaia_std::fs::path::text_of(&(__nikaia_it))),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => continue };
-            listed.insert(name.to_string());
+            listed.insert(nikaia_std::block::Text::from(name.to_string()));
         }
     }
     let beside: Vec<fs::Path> = listed.iter().filter(|&name| { AsRef::<str>::as_ref(&(name)) != AsRef::<str>::as_ref(&(entry_name)) }).map(|name| { nikaia_std::fs::path::join(&(base), std::path::Path::new(&(name))) }).collect::<Vec<_>>();
     let mut units: Vec<ModulesUnit> = vec![];
     if modules_is_file(entry) || open.contains_key(&nikaia_std::fs::path::display(&(entry))) {
         units.push(modules_read_unit(entry, match package {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
         }, reachable, renames, &ModulesStanding::InProject, open, host).await?);
     }
     for path in beside.iter() {
         units.push(modules_read_unit(path, match package {
-            Some(__nikaia_it) => Some(__nikaia_it.to_string()),
+            Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
         }, reachable, renames, &ModulesStanding::InProject, open, host).await?);
     }
@@ -735,21 +735,21 @@ pub(crate) async fn modules_read_unit<H: ModulesHost>(path: &std::path::Path, pa
             Ok(value) => value,
             Err(error) => { return Err(nikaia_std::error::throwing(ModulesRefusal::Unreadable { what: format!("cannot read {}", nikaia_std::fs::path::display(&(path))), why: format!("{}", error) }, &"modules_read_unit")) },
         },
-        Some(text) => text.to_string(),
+        Some(text) => nikaia_std::block::Text::from(text.to_string()),
     };
     let parsed = match host.parse_unit(path, &source, match package.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ModulesRefusal::Parse, &"modules_read_unit")) };
     modules_check_imports(parsed, path, &source, reachable, &standing, host)?;
-    Ok(ModulesUnit { path: nikaia_std::fs::path::clone(&(path)), source, parsed, package, renames: renames.to_owned() })
+    Ok(ModulesUnit { path: nikaia_std::fs::path::clone(&(path)), source, parsed, package, renames: renames.copy_owned() })
 }
 
 pub(crate) fn modules_one_namespace<H: ModulesHost>(units: &[ModulesUnit], host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
     let paths: Vec<String> = units.iter().map(|unit| { nikaia_std::fs::path::display(&(unit.path)) }).collect::<Vec<_>>();
     let declared: Vec<Vec<(String, Span)>> = units.iter().map(|unit| { host.declared(unit.parsed) }).collect::<Vec<_>>();
     let (at, finding) = match declared_once(&paths, &declared) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-    return Err(nikaia_std::error::throwing(ModulesRefusal::Found { path: (*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_string(), source: nikaia_std::index::get(&units, nikaia_std::index::at(at)).source.to_string(), finding }, &"modules_one_namespace"));
+    return Err(nikaia_std::error::throwing(ModulesRefusal::Found { path: nikaia_std::block::Text::from((*nikaia_std::index::get(&paths, nikaia_std::index::at(at))).to_string()), source: nikaia_std::block::Text::from(nikaia_std::index::get(&units, nikaia_std::index::at(at)).source.to_string()), finding }, &"modules_one_namespace"));
 }
 
 pub(crate) fn modules_check_imports<H: ModulesHost>(unit: i64, at: &std::path::Path, source: &str, reachable: &collections::BTreeSet<String>, standing: &ModulesStanding, host: &H) -> Result<(), nikaia_std::error::Thrown<ModulesRefusal>> {
@@ -758,7 +758,7 @@ pub(crate) fn modules_check_imports<H: ModulesHost>(unit: i64, at: &std::path::P
         ModulesStanding::InProject => false,
     };
     let finding = match host.use_refused(unit, at, reachable, alone) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-    return Err(nikaia_std::error::throwing(ModulesRefusal::Found { path: nikaia_std::fs::path::display(&(at)), source: source.to_string(), finding }, &"modules_check_imports"));
+    return Err(nikaia_std::error::throwing(ModulesRefusal::Found { path: nikaia_std::fs::path::display(&(at)), source: nikaia_std::block::Text::from(source.to_string()), finding }, &"modules_check_imports"));
 }
 
 pub fn modules_project_root(entry: &std::path::Path) -> Option<fs::Path> {
@@ -875,7 +875,7 @@ pub fn modules_emit_reading<H: ModulesEmitHost>(host: &H, packages: &[Option<Str
         }
         for name in names.iter() {
             let keyed = host.keyed_functions(name);
-            if keyed.iter().any(|key| { called.contains(&nikaia_std::index::or(key.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(key)).to_string()) }) {
+            if keyed.iter().any(|key| { called.contains(&nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || std::convert::AsRef::<str>::as_ref(key)).to_string())) }) {
                 provenance = Provenance::Untrusted;
                 break;
             }

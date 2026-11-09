@@ -20,6 +20,8 @@
 
 use nikaia::contracts::LedgerOps;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> Result<String, String> {
     let parsed = parse_to_ast(source).map_err(|e| format!("{e:#}"))?;

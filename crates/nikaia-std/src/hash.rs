@@ -311,7 +311,7 @@ fn crc32c_by_table(crc: u32, word: u64) -> u32 {
 /// out here rather than taken from `sha2`, for the reason `hash_bytes` copies
 /// rustc-hash: `std` is built into every program, and its dependency graph
 /// stays small (ADR-002 D4).
-pub fn sha256_hex(data: &[u8]) -> String {
+pub fn sha256_hex(data: &[u8]) -> crate::block::Text {
     let mut state = SHA256_START;
     let (blocks, rest) = data.as_chunks::<64>();
     for block in blocks {
@@ -329,7 +329,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
         sha256_block(&mut state, block);
     }
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(64);
+    let mut out = crate::block::Text::with_capacity(64);
     for word in state {
         for b in word.to_be_bytes() {
             out.push(DIGITS[(b >> 4) as usize] as char);

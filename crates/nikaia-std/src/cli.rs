@@ -16,9 +16,9 @@ impl Args {
     /// position is negative).
     // Not `Iterator::nth`: that one counts in `usize`.
     #[allow(clippy::should_implement_trait)]
-    pub fn nth(&mut self, at: i64) -> Option<String> {
+    pub fn nth(&mut self, at: i64) -> Option<crate::block::Text> {
         let at = usize::try_from(at).ok()?;
-        self.0.nth(at)
+        self.0.nth(at).map(crate::block::Text::from)
     }
 
     /// How many arguments are left to read, the program's name among them
@@ -33,11 +33,12 @@ impl Args {
     }
 }
 
+/// Each argument a block's text (#490), taking over Rust's `String` as it is.
 impl Iterator for Args {
-    type Item = String;
+    type Item = crate::block::Text;
 
-    fn next(&mut self) -> Option<String> {
-        self.0.next()
+    fn next(&mut self) -> Option<crate::block::Text> {
+        self.0.next().map(crate::block::Text::from)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

@@ -20,6 +20,8 @@ use crate::common;
 use nikaia::contracts::LedgerOps;
 use nikaia::emit::{Build, emit_program};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// The refusal, rendered as a reader with the file open sees it: its notes
 /// and help included.

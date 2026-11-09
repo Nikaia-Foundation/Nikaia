@@ -6,6 +6,8 @@
 use crate::common;
 use nikaia::emit::emit_program;
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 fn lowered(source: &str) -> String {
     let parsed = parse_to_ast(source).expect("the source parses");
@@ -17,9 +19,9 @@ fn lowered(source: &str) -> String {
 /// The two maps of one program, each by the line that makes it.
 fn the_map_made_by(rust: &str, name: &str) -> String {
     rust.lines()
-        .find(|l| l.contains(&format!("let mut {name}")))
+        .find(|l| l.contains(&*format!("let mut {name}")))
         .unwrap_or_else(|| panic!("no `{name}` in:\n{rust}"))
-        .to_string()
+        .to_text()
 }
 
 const BOTH: &str = "use std::net\n\
@@ -156,7 +158,7 @@ fn trust_report(dir: &Path) -> String {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    String::from_utf8_lossy(&out.stdout).to_string()
+    String::from_utf8_lossy(&out.stdout).to_text()
 }
 
 fn compiles(rust: &str, dir: &Path) {
@@ -228,7 +230,7 @@ fn a_socket_read_in_another_file_keys_the_entry_files_maps() {
         &[
             (
                 "main.nika",
-                &(READS_NOTHING.to_string() + &entry_calling("quiet")),
+                &(READS_NOTHING.to_text() + &entry_calling("quiet")),
             ),
             ("serve.nika", READS_A_SOCKET),
         ],
@@ -271,7 +273,7 @@ fn the_order_of_the_files_does_not_change_the_hasher() {
         &[
             (
                 "main.nika",
-                &(READS_NOTHING.to_string() + &entry_calling("quiet")),
+                &(READS_NOTHING.to_text() + &entry_calling("quiet")),
             ),
             ("aaa_serve.nika", READS_A_SOCKET),
         ],
@@ -297,7 +299,7 @@ fn a_package_that_reads_only_files_keeps_the_fast_map_in_every_file() {
         &[
             (
                 "main.nika",
-                &(READS_NOTHING.to_string()
+                &(READS_NOTHING.to_text()
                     + "fn main() throws {\n    println(f\"{quiet()} {counted()}\")\n}\n"),
             ),
             ("counts.nika", reads_a_file),
@@ -414,16 +416,16 @@ const TALLY_FILLED: &str = "pub fn tally_run() -> i64 {\n\
 
 fn tally_package(name: &str, names: [&str; 3], with_socket: bool) -> String {
     let mut files: Vec<(&str, String)> = vec![
-        (names[0], TALLY_DECLARED.to_string()),
-        (names[1], TALLY_BUILT.to_string()),
-        (names[2], TALLY_FILLED.to_string()),
+        (names[0], TALLY_DECLARED.to_text()),
+        (names[1], TALLY_BUILT.to_text()),
+        (names[2], TALLY_FILLED.to_text()),
         (
             "main.nika",
-            "fn main() throws {\n    println(f\"{tally_run()}\")\n}\n".to_string(),
+            "fn main() throws {\n    println(f\"{tally_run()}\")\n}\n".to_text(),
         ),
     ];
     if with_socket {
-        files.push(("serve.nika", READS_A_SOCKET.to_string()));
+        files.push(("serve.nika", READS_A_SOCKET.to_text()));
     }
     let borrowed: Vec<(&str, &str)> = files.iter().map(|(n, c)| (*n, c.as_str())).collect();
     let dir = project(name, &borrowed);
@@ -781,11 +783,11 @@ fn the_real_tools_package_lowers_the_same_read_backwards() {
     paths.sort();
     let forward = nikaia::sysroot::lower_tools_files(&paths, Default::default())
         .expect("forward")
-        .to_string();
+        .to_text();
     paths.reverse();
     let backward = nikaia::sysroot::lower_tools_files(&paths, Default::default())
         .expect("backward")
-        .to_string();
+        .to_text();
     assert!(sections(&forward) == sections(&backward));
 }
 
@@ -810,7 +812,7 @@ fn sections(rust: &str) -> Vec<String> {
     let mut parts: Vec<String> = rust
         .split("\n// --- ")
         .flat_map(|part| part.split("\npub mod "))
-        .map(|part| part.trim_end().to_string())
+        .map(|part| part.trim_end().to_text())
         .collect();
     parts.sort();
     parts

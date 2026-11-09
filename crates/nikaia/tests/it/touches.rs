@@ -10,6 +10,8 @@
 
 use nikaia::contracts::{Ledger, LedgerOps};
 use nikaia::parser::parse_to_ast;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 
 /// What the ledger says one function reaches, after the inference.
 fn touches(source: &str, name: &str) -> (bool, Vec<String>) {
@@ -46,7 +48,7 @@ fn what_a_callee_reaches_is_what_the_caller_reaches() {
         "twice",
     );
     assert!(known, "every step of it is described");
-    assert_eq!(found, vec!["stdout write".to_string()]);
+    assert_eq!(found, vec!["stdout write".to_text()]);
 }
 
 /// **A lock is a resource** ([ADR-288](../../../docs/specification/adr/adr-288.md)
@@ -63,14 +65,14 @@ fn a_door_reaches_a_lock() {
         "bump",
     );
     assert!(known, "{found:?}");
-    assert_eq!(found, vec!["lock write".to_string()]);
+    assert_eq!(found, vec!["lock write".to_text()]);
 
     // Reading one is a read, so two of them do not conflict.
     let (_, reading) = touches(
         "fn peek(k: SharedMut[i64]) -> i64 { return k.get() }",
         "peek",
     );
-    assert_eq!(reading, vec!["lock read".to_string()]);
+    assert_eq!(reading, vec!["lock read".to_text()]);
 }
 
 /// **And the print inside a door is now visible to the compiler**, which is what
@@ -85,7 +87,7 @@ fn a_print_inside_a_door_reaches_both() {
     assert!(known, "{found:?}");
     assert_eq!(
         found,
-        vec!["lock write".to_string(), "stdout write".to_string()]
+        vec!["lock write".to_text(), "stdout write".to_text()]
     );
 }
 

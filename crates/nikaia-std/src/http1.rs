@@ -304,7 +304,7 @@ fn parse(text: &str, size: i64) -> Result<Head, IoError> {
         headers: read
             .headers
             .into_iter()
-            .map(|header| (header.name, header.value.to_string()))
+            .map(|header| (String::from(header.name), header.value.to_string()))
             .collect(),
     })
 }

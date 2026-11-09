@@ -39,7 +39,7 @@ pub(crate) struct SvSum {
 }
 
 pub(crate) fn sv_check(query: &SvQuery, log: &[SvStep]) -> SvVerdict {
-    let mut replay = SvReplay { atoms: query.atoms.to_owned(), entries: vec![], columns: query.columns, reals: query.reals.to_owned(), refuted: false, value: vec![] };
+    let mut replay = SvReplay { atoms: query.atoms.copy_owned(), entries: vec![], columns: query.columns, reals: query.reals.copy_owned(), refuted: false, value: vec![] };
     for atom in query.atoms.iter() {
         let why = replay.row_known(&atom.row);
         if why != "" { return SvVerdict { ok: false, step: -1, reason: format!("a query atom: {}", why) }; }
@@ -103,7 +103,7 @@ impl SvReplay {
         if at >= query.clauses.len() as i64 { return format!("the query has no clause {}", c); }
         let why = self.lits_known(nikaia_std::index::get(&query.clauses, nikaia_std::index::at(at)));
         if why != "" { return why; }
-        self.add_clause((*nikaia_std::index::get(&query.clauses, nikaia_std::index::at(at))).to_owned())
+        self.add_clause((*nikaia_std::index::get(&query.clauses, nikaia_std::index::at(at))).copy_owned())
     }
     pub(crate) fn learn(&mut self, lits: &[u32], hints: &[u32]) -> String {
         let why = self.lits_known(lits);
@@ -116,7 +116,7 @@ impl SvReplay {
             { let __nikaia_stored = 0; nikaia_std::index::set(&mut self.value, nikaia_std::index::at((l / 2u32) as i64), __nikaia_stored); }
         }
         if unit != "" { return unit; }
-        self.add_clause(lits.to_owned())
+        self.add_clause(lits.copy_owned())
     }
     pub(crate) fn delete(&mut self, id: u32) -> String {
         let at = id as i64;
@@ -202,7 +202,7 @@ impl SvReplay {
             let negation = l ^ 1u32;
             if !lits.contains(&negation) { return format!("the clause leaves out the negation of literal {}", l); }
         }
-        self.add_clause(lits.to_owned())
+        self.add_clause(lits.copy_owned())
     }
     pub(crate) fn round(&mut self, id: u32, d: i64) -> String {
         if d == 0 { return String::from("a rounding by zero"); }
@@ -235,9 +235,9 @@ impl SvReplay {
                 }
             },
         }
-        let cols = if ks.is_empty() { vec![] } else { b.row.cols.to_owned() };
+        let cols = if ks.is_empty() { vec![] } else { b.row.cols.copy_owned() };
         let row = SvRow { cols, ks, constant };
-        self.entries.push(SvEntry::Bound(SvBound { row, rel, assumed: b.assumed.to_owned() }));
+        self.entries.push(SvEntry::Bound(SvBound { row, rel, assumed: b.assumed.copy_owned() }));
         String::from("")
     }
     pub(crate) fn split(&mut self, le: &SvRow, ge: &SvRow) -> String {

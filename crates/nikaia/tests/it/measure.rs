@@ -22,6 +22,8 @@
 //! about belongs in the output, not in an assertion.
 
 use crate::common;
+#[allow(unused_imports)]
+use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -122,7 +124,7 @@ fn optimized_std() -> &'static [String] {
                 .filter_map(|e| e.ok().map(|e| e.path()))
                 .filter(|p| {
                     let file = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-                    file.starts_with(&prefix) && file.ends_with(".rlib")
+                    file.starts_with(&*prefix) && file.ends_with(".rlib")
                 })
                 .collect();
             found.sort_by_key(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok());
@@ -130,9 +132,9 @@ fn optimized_std() -> &'static [String] {
                 .pop()
                 .unwrap_or_else(|| panic!("no {name} rlib in {}", deps.display()))
         };
-        let mut args = vec!["-L".to_string(), format!("dependency={}", deps.display())];
+        let mut args = vec!["-L".to_text(), format!("dependency={}", deps.display())];
         for name in ["nikaia_std", "winnow_grammar", "winnow"] {
-            args.push("--extern".to_string());
+            args.push("--extern".to_text());
             args.push(format!("{name}={}", newest(name).display()));
         }
         args
@@ -197,7 +199,7 @@ fn report(what: &str, workload: &str, runs: &[Run]) {
     let baseline = runs.first().expect("at least one run").instructions;
     for run in runs {
         let delta = if run.instructions == baseline {
-            "baseline".to_string()
+            "baseline".to_text()
         } else {
             let change = run.instructions as f64 / baseline as f64 - 1.0;
             format!("{:+.1}%", change * 100.0)
@@ -212,7 +214,7 @@ fn report(what: &str, workload: &str, runs: &[Run]) {
 }
 
 fn thousands(n: u64) -> String {
-    let digits = n.to_string();
+    let digits = n.to_text();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
         if i > 0 && (digits.len() - i).is_multiple_of(3) {
@@ -425,6 +427,7 @@ fn without_the_executor(rust: &str) -> String {
             "nikaia_std::rt::exec::block_on(__nikaia_main())",
             "__nikaia_main()",
         )
+        .into()
 }
 
 /// The emitted Rust with the one read made `std::fs::read_to_string`, as an
@@ -437,7 +440,7 @@ fn with_a_blocking_read(rust: &str) -> String {
         "\nasync fn blocking_read(path: &str) -> Result<String, io::IoError> {\n    \
          std::fs::read_to_string(path).map_err(|e| io::IoError::of(e, path))\n}\n",
     );
-    out
+    String::from(out)
 }
 
 /// Link-time optimisation across every crate, as `lto = true` asks Cargo for.
@@ -466,8 +469,10 @@ fn the_solver_kernels_lowered_against_rust_by_hand() {
             ..Build::default()
         },
     );
-    let by_hand = std::fs::read_to_string(repo_root().join("benches/solver-workload/kernels.rs"))
-        .expect("benches/solver-workload/kernels.rs");
+    let by_hand = String::from(
+        std::fs::read_to_string(repo_root().join("benches/solver-workload/kernels.rs"))
+            .expect("benches/solver-workload/kernels.rs"),
+    );
 
     // The same program: the same checksums from both, at a small size.
     let outputs: Vec<String> = [("nikaia", &nikaia), ("rust", &by_hand), ("proved", &proved)]
@@ -497,7 +502,7 @@ fn the_solver_kernels_lowered_against_rust_by_hand() {
                 .output()
                 .expect("run");
             let _ = std::fs::remove_dir_all(&dir);
-            String::from_utf8_lossy(&run.stdout).to_string()
+            String::from_utf8_lossy(&run.stdout).to_text()
         })
         .collect();
     assert_eq!(
