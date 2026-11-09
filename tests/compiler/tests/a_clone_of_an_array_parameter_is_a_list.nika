@@ -1,0 +1,15 @@
+// `xs.clone()` of `xs: Array[i64]` copies the run into a list, as of
+// `ref Array[i64]` (ADR-views-3 D11, ADR-282 D9, #1472).
+fn copied(xs: Array[i64]) -> Vec[i64] {
+	return xs.clone()
+}
+
+fn copied_ref(xs: ref Array[i64]) -> Vec[i64] {
+	return xs.clone()
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	println(copied(xs).len())
+	println(copied_ref(xs).len())
+}

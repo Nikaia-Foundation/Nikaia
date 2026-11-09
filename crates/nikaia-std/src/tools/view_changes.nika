@@ -63,6 +63,9 @@ pub struct VcAsk {
     /// The `let mut`s that bind a mutable view of an element or a field of a
     /// `mut` place, by the id of the value (`mut_view_reads`, #959, #962).
     pub mut_viewed: ref collections::BTreeSet[i64],
+    /// The calls of a text method whose result is a view of the text it is
+    /// called on, by the call's node (`receiver_views`, #1478).
+    pub receiver_views: ref collections::BTreeSet[i64],
 }
 
 struct VcView {
@@ -793,6 +796,48 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
             }
             let written = shown.join(", ")
             return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null, looped: false, exclusive: false }
+        }
+        // **A method of text that hands back a view of it** (ADR-views-3 D9,
+        // #1478): `let t = s.trim()` points into `s`, as a cut does.
+        Expr::MethodCall { receiver, .. } => {
+            if !ask.receiver_views.contains(id_of(value) as i64) {
+                return null
+            }
+            return vc_place_view(at, name, receiver, outer, ask)
+        }
+        // **A struct literal holds the views its fields are given** (#1478):
+        // `Line { text: s.trim(), at: n }` points into `s`. A field that
+        // keeps its text refuses a view (NK1106), so a view here stays one.
+        // The note on a callee's way out is the first field's.
+        Expr::StructLit { fields, .. } => {
+            let mut held: VcView? = null
+            for field in fields {
+                let mut part = match field.value {
+                    // `Line { text }` takes the variable `text`.
+                    null => {
+                        let named = vc_last_named(outer, ask.names.resolve(field.name))
+                        if named < 0 {
+                            continue
+                        }
+                        outer[named].clone()
+                    }
+                    given => vc_view_of(at, name, given ?? continue, outer, ask) ?? continue,
+                }
+                part.name = name.clone()
+                part.made = at.clone()
+                match held {
+                    null => {
+                        held = part
+                    }
+                    else => {
+                        let mut both = held ?? continue
+                        both.roots.extend(part.roots)
+                        both.parts.extend(part.parts)
+                        held = both
+                    }
+                }
+            }
+            return held
         }
         else => return null,
     }

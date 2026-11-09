@@ -240,10 +240,7 @@ pub(crate) fn check_core_method_run(on: &Ty) -> Option<Ty> {
             let item = nikaia_std::boxed::open(item); let slice = *slice;
             if slice { return Some(item.clone()); }
         },
-        Ty::Named { name, args, view } => {
-            let view = *view;
-            if view && name == ARRAY && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); }
-        },
+        Ty::Named { name, args, .. } => { if name == ARRAY && args.len() == 1 { return Some((*nikaia_std::index::get(&args, 0)).clone()); } },
         _ => { },
     }
     None
@@ -417,6 +414,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
         _ => false,
     };
     if text && (name == "find" || name == "rfind" || name == "replacen" || name == "split_at") { state.facts.text_finds.insert(id_of(receiver) as i64); }
+    if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {
         Ty::Named { ref name, ref args, .. } => args.len() == 1 && (name == "Vec" || name == "List" || name == "HashSet" || name == "BTreeSet" || name == "Set" || name == "collections::HashSet" || name == "collections::BTreeSet"),
         _ => false,
@@ -493,6 +491,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     if walk_item.is_some() {
         state.flow.open_items.insert(id_of(expr) as i64, nikaia_std::index::or(walk_item, || 0));
         let typed = state.open_number_typed(world, expr);
+        if name == "sum" && args.is_empty() { state.flow.open_sums.insert(id_of(receiver) as i64, nikaia_std::index::or(walk_item, || 0)); }
     }
     if state.flow.walk_lent { let lent = state.flow.lent_walks.insert(id_of(expr) as i64); }
     state.flow.walk_lent = false;

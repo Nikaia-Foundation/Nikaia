@@ -1906,7 +1906,7 @@ pub(crate) fn untethered_let(name: String, value: &Expr, ty: Option<&Type>, span
     let element_of = untethered_element(value, ask, &walk);
     if element_of.is_some() { walk.elements.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(element_of, || "".into())); }
     if !untethered_a_read(value) && untethered_owned_items(value, ty, ask) { walk.made.insert(nikaia_std::block::Text::from(name.to_string())); }
-    if untethered_made_list(value, ty, ask) || ty.is_none() && own_text_items_written(value) {
+    if untethered_made_list(value, ty, ask) || ty.is_none() && (own_text_items_written(value) || untethered_called_list(value, ask, true)) {
         walk.lets.insert(nikaia_std::block::Text::from(name.to_string()), Source::Buffer { at: span.start as i64, name: nikaia_std::block::Text::from(name.to_string()), ty: String::from(""), span: span.clone() });
         walk.lists.insert(nikaia_std::block::Text::from(name.to_string()));
     }
@@ -1953,11 +1953,16 @@ pub(crate) fn untethered_owned_items(value: &Expr, ty: Option<&Type>, ask: &Buff
         return untethered_owned_list(written, ask);
     }
     if own_text_items_written(value) { return true; }
+    untethered_called_list(value, ask, false)
+}
+
+pub(crate) fn untethered_called_list(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, sure: bool) -> bool {
     let called = match value {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
             _ => return false,
         } },
+        Expr::MethodCall { method, .. } => { let method = *method; return untethered_method_list(ask.names.resolve(method), ask, sure) },
         _ => return false,
     };
     for item in ask.items.iter() {
@@ -1973,6 +1978,34 @@ pub(crate) fn untethered_owned_items(value: &Expr, ty: Option<&Type>, ask: &Buff
         }
     }
     false
+}
+
+pub(crate) fn untethered_method_list(method: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>, sure: bool) -> bool {
+    let mut found: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for item in ask.items.iter() {
+        match &item.node {
+            Item::Impl { methods, .. } => {
+                for each in methods.iter() {
+                    match &each.node {
+                        Item::Fn { name, ret_type, .. } => {
+                            let name = *name;
+                            if name.is_some() && ask.names.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue }) == method {
+                                let owned = match ret_type {
+                                    None => false,
+                                    Some(returned) => untethered_owned_list(returned, ask),
+                                };
+                                found.push(owned);
+                            }
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    if sure { return found.len() == 1 && *nikaia_std::index::get(&found, 0); }
+    found.contains(&true)
 }
 
 pub(crate) fn untethered_owned_list(ty: &Type, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_>) -> bool {
@@ -2166,5 +2199,5 @@ pub(crate) fn untethered_unplaced(value: &Expr, at: &Span, asked: &UntetheredAsk
     }
 }
 
-pub(crate) fn untethered_refusal(list: &str, at: &Span) -> Finding { refusal("NK2304", at.clone(), format!("An element of `{}`, a list this function made, is handed back as text of its own, which the tether cannot lower.", list), vec![String::from("An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type or a list literal of text made there.")], format!("Hand back a copy of the element with `.clone()`, or declare the list's type: `let {}: Vec[String] = …`.", list)) }
+pub(crate) fn untethered_refusal(list: &str, at: &Span) -> Finding { refusal("NK2304", at.clone(), format!("An element of `{}`, a list this function made, is handed back as text of its own, which the tether cannot lower.", list), vec![String::from("An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type, a list literal of text made there, or a list a call hands back whose function or method its name alone finds.")], format!("Hand back a copy of the element with `.clone()`, or declare the list's type: `let {}: Vec[String] = …`.", list)) }
 

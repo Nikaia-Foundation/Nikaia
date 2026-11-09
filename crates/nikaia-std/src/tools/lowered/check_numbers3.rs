@@ -50,6 +50,18 @@ impl CheckState {
             members.push((at, number.clone()));
             groups.insert(head, members);
         }
+        let mut sums: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
+        for (receiver, number) in self.flow.open_sums.iter() {
+            let receiver = nikaia_std::num::value(receiver);let number = nikaia_std::num::value(number);
+            let head = self.open_root(number);
+            let mut receivers: Vec<i64> = nikaia_std::index::or(match *nikaia_std::index::get(&sums, &head) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || vec![].into());
+            receivers.push(receiver);
+            sums.insert(head, receivers);
+        }
+        self.flow.open_sums = collections::BTreeMap::new();
         self.flow.open_numbers = collections::BTreeMap::new();
         for (head_at, members) in groups.iter() {
             let head_at = nikaia_std::num::value(head_at);
@@ -137,6 +149,12 @@ impl CheckState {
             if held != "i32" && of_a_map { for member in members.iter() { for put in member.1.written.iter() { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, nikaia_std::block::Text::from(held.to_string())); } } } }
             if decided.is_some() || typed {
                 let ty = nikaia_std::block::Text::from(held.to_string());
+                if sums.contains_key(&head_at) {
+                    for receiver in nikaia_std::index::or(match *nikaia_std::index::get(&sums, &head_at) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || vec![].into()) { self.facts.summed.insert(receiver, nikaia_std::block::Text::from(ty.to_string())); }
+                }
                 for member in members.iter() {
                     let mut written: String = nikaia_std::block::Text::from(ty.to_string());
                     let mut level: i64 = 0;
@@ -144,7 +162,8 @@ impl CheckState {
                         written = format!("Vec<{}>", written);
                         level += 1;
                     }
-                    if !self.flow.open_map_parts.contains_key(&member.0) { self.facts.number_lets.insert(member.1.at.start as i64, written); }
+                    let in_place = self.flow.open_literal_lists.contains(&member.0);
+                    if !self.flow.open_map_parts.contains_key(&member.0) && !in_place { self.facts.number_lets.insert(member.1.at.start as i64, written); }
                     for site in member.1.sites.iter() {
                         let site = nikaia_std::num::value(site);
                         self.facts.arithmetic.insert(site, nikaia_std::block::Text::from(ty.to_string()));
@@ -152,7 +171,7 @@ impl CheckState {
                     for put in member.1.written.iter() {
                         let mut suffixed = put.2;
                         for literal in put.1.iter() { if !integer_fits(&literal.1, "i32") { suffixed = true; } }
-                        if ty != "i64" && suffixed { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, nikaia_std::block::Text::from(ty.to_string())); } }
+                        if ty != "i64" && suffixed || in_place { for literal in put.1.iter() { self.facts.unsigned_literals.insert(literal.0, nikaia_std::block::Text::from(ty.to_string())); } }
                     }
                 }
             }

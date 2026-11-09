@@ -637,6 +637,25 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn open_literal_receiver(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, span: &Span) {
+        let node = id_of(receiver) as i64;
+        if self.flow.open_walks.contains_key(&node) { return; }
+        match receiver {
+            Expr::ListLit { items, .. } => {
+                let mut all_numbers = !items.is_empty();
+                for item in items.iter() { if all_numbers && !self.number_shaped(world, item) { all_numbers = false; } }
+                if !all_numbers { return; }
+                let at = -node - 1;
+                self.flow.open_numbers.insert(at, CheckOpenNumber { name: String::from("[…]"), element: true, levels: 1, at: span.clone(), joined: at, asks: vec![], given: vec![], shifted: vec![], derived: vec![], written: vec![], casts: vec![], shifts: vec![], typed: false, sites: vec![] });
+                self.flow.open_literal_lists.insert(at);
+                for item in items.iter() { self.open_number_given(world, at, item, span); }
+                self.flow.open_walks.insert(node, at);
+            },
+            _ => { },
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn open_items_named(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol) -> Option<i64> {
         let local = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let element = match *nikaia_std::index::get(&self.flow.open_elements, &local.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };

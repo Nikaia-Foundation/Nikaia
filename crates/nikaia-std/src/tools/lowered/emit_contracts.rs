@@ -95,7 +95,7 @@ pub fn emit_contracts_state<H: EmitContractsHost, P: EmitHolesHost>(host: &H, pa
     state.sums_written = emit_sums_written(&state.sums, units, &state.sums_used_here(&world));
     let coalesced = vc_coalesced(&state.facts);
     let mut_viewed = vc_mut_viewed(&state.facts);
-    let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed };
+    let ask = VcAsk { names: words, items, own: &state.own_contracts, library, lent: &state.facts.lent_lets, coalesced: &coalesced, refused, viewed: nikaia_std::index::get(&units, 0).viewed_arms, mut_viewed: &mut_viewed, receiver_views: &state.facts.receiver_views };
     EmitContractsMade { give_ups: vc_analyse(&ask, &|e| { emit_holes_literal(parsed, words, e) }).give_ups, state, order_proofs }
 }
 

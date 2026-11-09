@@ -1,0 +1,37 @@
+// A plain parameter of a function type is lent, for any type (Part I §C,
+// ADR-views-3 D2, #1466): `read` reads the same list twice. One written
+// `keep` keeps: a function that keeps fits it, and so does one that lends.
+
+struct Held {
+    xs: Vec[i64],
+}
+
+fn total(xs: Vec[i64], read: fn(Vec[i64]) -> i64) -> i64 {
+    return read(xs) + read(xs)
+}
+
+fn count(xs: Vec[i64]) -> i64 {
+    return xs.len()
+}
+
+fn hold(keep xs: Vec[i64], make: fn(keep Vec[i64]) -> Held) -> Held {
+    return make(xs)
+}
+
+fn wrap(keep xs: Vec[i64]) -> Held {
+    return Held { xs: xs }
+}
+
+fn first_of(xs: Vec[i64]) -> Held {
+    return Held { xs: [xs[0]] }
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    println(total(xs, fn(v) { v.len() }))
+    println(total(xs, count))
+    println(xs.len())
+    println(hold(xs, fn(v) { Held { xs: v } }).xs.len())
+    println(hold([4, 5], wrap).xs.len())
+    println(hold([6, 7], first_of).xs[0])
+}

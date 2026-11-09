@@ -809,6 +809,40 @@ impl CheckState {
         }
     }
 
+    /// **A list written in numbers and walked in place has one open number
+    /// for its elements** (ADR-285 D34, #1485), as `let v = [1, 2]` has:
+    /// `[1, 2].iter()` hands on that number, so the walk copies its items.
+    /// No `let` stands where its type is written, so its literals carry it
+    /// (`open_literal_lists`); the entry is keyed below every byte, by the
+    /// literal's node.
+    pub fn open_literal_receiver(ref mut self, world: ref CheckWorld, receiver: ref Expr, span: ref Span) sync {
+        let node = id_of(receiver) as i64
+        if self.flow.open_walks.contains_key(node) {
+            return
+        }
+        match receiver {
+            Expr::ListLit { items, .. } => {
+                let mut all_numbers = items.len() > 0
+                for item in items {
+                    if all_numbers && !self.number_shaped(world, item) {
+                        all_numbers = false
+                    }
+                }
+                if !all_numbers {
+                    return
+                }
+                let at = -node - 1
+                self.flow.open_numbers.insert(at, CheckOpenNumber { name: "[…]", element: true, levels: 1, at: span.clone(), joined: at, asks: [], given: [], shifted: [], derived: [], written: [], casts: [], shifts: [], typed: false, sites: [] })
+                self.flow.open_literal_lists.insert(at)
+                for item in items {
+                    self.open_number_given(world, at, item, span)
+                }
+                self.flow.open_walks.insert(node, at)
+            },
+            else => {},
+        }
+    }
+
     fn open_items_named(ref self, world: ref CheckWorld, name: winnow_grammar::Symbol) -> i64? sync {
         let local = self.binding(world.words.resolve(name)) ?? return null
         let element = self.flow.open_elements[local.id] ?? return null

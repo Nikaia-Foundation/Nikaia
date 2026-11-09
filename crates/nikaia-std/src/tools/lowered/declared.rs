@@ -85,8 +85,10 @@ pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if at >= ty.generics.len() as i64 { return false; }
     if code_reads(code, at) { return true; }
+    if at < code.param_keeps.len() as i64 && *nikaia_std::index::get(&code.param_keeps, nikaia_std::index::at(at)) { return false; }
     let part = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at));
-    !part.is_view && !part.is_mut && !part.is_nullable && !part.is_tuple && !part.is_slice && (*part.code).is_none() && part.generics.is_empty() && names.resolve(part.name) == "String"
+    if part.is_view || part.is_mut || part.is_nullable || part.is_tuple || part.is_slice || (*part.code).is_some() { return false; }
+    !part.generics.is_empty() || names.resolve(part.name) == "String"
 }
 
 pub fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
@@ -107,13 +109,29 @@ pub fn code_reads(code: &Code, at: i64) -> bool {
     code.result_from.contains(&name)
 }
 
+pub(crate) fn self_named(ty: &Ty, owner: &Ty) -> Ty {
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if name == "Self" && args.is_empty() {
+                if view { return owner.as_a_view(); }
+                return owner.clone();
+            }
+            Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.iter().map(|a| { self_named(a, owner) }).collect::<Vec<_>>(), view }
+        },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { self_named(a, owner) }).collect::<Vec<_>>()),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(self_named(inner, owner))) },
+        _ => ty.clone(),
+    }
+}
+
 pub(crate) fn written_all(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, types: &[Type]) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
     for ty in types.iter() { out.push(written_ty(names, aliases, ty)); }
     out
 }
 
-pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>) -> Option<DeclaredFn> {
+pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>, itself: Option<&Ty>) -> Option<DeclaredFn> {
     let (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) = match item {
         Item::Fn { name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw, .. } => { let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) },
         _ => return None,
@@ -160,7 +178,12 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     #[allow(unused_mut)] let mut mutable: Vec<String> = vec![];
     for arg in args.iter() {
         let arg_name = nikaia_std::block::Text::from(names.resolve(arg.name).to_string());
-        params.push((nikaia_std::block::Text::from(arg_name.to_string()), written_ty(names, aliases, &arg.ty).parameterise(&parameters)));
+        let mut ty = written_ty(names, aliases, &arg.ty).parameterise(&parameters);
+        match itself {
+            None => { },
+            Some(owner) => { ty = self_named(&ty, owner); },
+        }
+        params.push((nikaia_std::block::Text::from(arg_name.to_string()), ty));
         if arg.mutable { mutable.push(arg_name); }
     }
     let mut bounds: Vec<(String, Vec<String>)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut mutable = mutable;

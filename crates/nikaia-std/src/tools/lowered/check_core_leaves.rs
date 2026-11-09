@@ -47,6 +47,19 @@ pub fn check_core_a_field_of_a_lent_place_handed_back<H: CheckHost>(state: &mut 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub fn check_core_lent_places_in_arms_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span) {
+    if !is_a_choice(value) || state.flow.expected_either { return; }
+    for leaf in state.value_leaves(world, value) {
+        if state.a_place_of_a_lent_parameter(world, leaf) {
+            let at = check_span_at(world, leaf, span);
+            check_core_a_field_of_a_borrowed_subject(state, world, host, leaf, &at, "handed back");
+            check_core_a_field_of_a_lent_place_handed_back(state, world, host, leaf, &at);
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub fn check_core_a_lent_place_passed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, keeps: bool, span: &Span) { check_core_a_lent_place_given_away(state, world, host, value, span, false, keeps); }
 
 impl CheckState {
@@ -612,7 +625,7 @@ pub fn check_core_returns<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     }
     if !lending && value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
-        if state.lent_arms_handed_back(world, given, check_function_is_nullable(&expected)) { found = view_of_type(&found); }
+        if state.lent_arms_handed_back(world, given, check_function_is_nullable(&expected)) { found = view_of_type(&found); } else { check_core_lent_places_in_arms_handed_back(state, world, host, given, span); }
     }
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };

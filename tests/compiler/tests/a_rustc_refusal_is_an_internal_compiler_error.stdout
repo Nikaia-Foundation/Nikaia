@@ -1,17 +1,17 @@
 -- run: exit 101
 error[NK1343]: Internal compiler error.
-  --> refused.nika:5:5
+  --> refused.nika:3:5
 -- check: exit 0
 Checked refused.nika
 -- check --rustc: exit 101
 error[NK1343]: Internal compiler error.
-  --> refused.nika:5:5
+  --> refused.nika:3:5
 -- test, expected stdout: exit 1
 program "refused" (tests/refused.nika) ... FAILED
 error[NK1343]: Internal compiler error.
-  --> tests/refused.nika:5:5
+  --> tests/refused.nika:3:5
 -- test --bless-stderr: exit 1
 program "refused" (tests/refused.nika) ... FAILED (the program does not compile, so it is not blessed)
 error[NK1343]: Internal compiler error.
-  --> tests/refused.nika:5:5
+  --> tests/refused.nika:3:5
 refused.stderr: []

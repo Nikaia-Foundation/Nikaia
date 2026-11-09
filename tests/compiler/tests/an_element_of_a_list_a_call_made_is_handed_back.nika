@@ -1,0 +1,71 @@
+// An element of a list a call handed back, a list of text of its own, handed
+// back: the caller owns the list, which moves into its caller's keep, and the
+// element is a view of it (#1481, ADR-283 D23).
+struct Word {
+	name: String,
+	rank: i64,
+}
+
+struct Maker {
+	tag: String,
+}
+
+impl Maker {
+	fn words(self, a: String) -> Vec[String] {
+		let xs: Vec[String] = [a + self.tag]
+		return xs
+	}
+}
+
+fn words(a: String) -> Vec[String] {
+	let xs: Vec[String] = [a + " 0", a + " 1"]
+	return xs
+}
+
+fn first(a: String) -> String {
+	let xs = words(a)
+	return xs[0]
+}
+
+fn last(a: String) -> String {
+	let xs = words(a)
+	xs[1]
+}
+
+fn through_a_let(a: String) -> String {
+	let xs = words(a)
+	let e = xs[0]
+	return e
+}
+
+fn in_a_field(a: String) -> Word {
+	let xs = words(a)
+	return Word { name: xs[1], rank: 1 }
+}
+
+fn arms(a: String, first: bool) -> String {
+	let xs = words(a)
+	if first { xs[0] } else { xs[1] }
+}
+
+fn grown(a: String) -> String {
+	let mut xs = words(a)
+	xs.push(a + " 2")
+	return xs[2]
+}
+
+fn by_method(m: Maker, a: String) -> String {
+	let xs = m.words(a)
+	return xs[0]
+}
+
+fn main() throws {
+	println(first("a"))
+	println(last("b"))
+	println(through_a_let("c"))
+	println(in_a_field("d").name)
+	println(arms("e", true))
+	println(arms("e", false))
+	println(grown("f"))
+	println(by_method(Maker { tag: "!" }, "g"))
+}

@@ -1,0 +1,16 @@
+// #1462: a number handed where the receiver binds a type no integer is.
+// A literal or an open number read as `?` and fit, and rustc refused the
+// generated file (NK1343).
+use std::collections
+
+fn main() throws {
+    let mut m: collections::HashMap[String, i64] = collections::HashMap()
+    m.insert(5, 7)
+    let n = 12
+    let mut v: Vec[String] = Vec()
+    v.push(n)
+    let mut s: collections::BTreeSet[bool] = collections::BTreeSet()
+    s.insert(3)
+    let found = m.contains_key(4)
+    println(f"{m.len()} {v.len()} {s.len()} {found}")
+}

@@ -1,0 +1,9 @@
+// The elements of a list literal walked in place are typed by their uses
+// (ADR-285 D34, #1485): `300` handed to a map of `u8` keys does not fit.
+use std::collections
+
+fn main() throws {
+	let mut m: collections::HashMap[u8, i64] = collections::HashMap()
+	[1, 300].iter().for_each(fn(x) { m.insert(x, 1) })
+	println(m.len())
+}

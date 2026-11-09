@@ -1,0 +1,66 @@
+// `Self` in an `impl` method's parameter is the type the `impl` is for, as
+// the receiver is (#1448): `x.same(y)` passes an `N` where `Self` is asked.
+
+trait Same {
+    fn same(self, other: Self) -> bool
+}
+
+struct N {
+    name: String
+}
+
+impl Same for N {
+    fn same(self, other: Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl N {
+    fn like(self, other: Self) -> bool {
+        self.name == other.name
+    }
+
+    fn any_of(self, others: Vec[Self]) -> bool {
+        for o in others {
+            if o.name == self.name {
+                return true
+            }
+        }
+        return false
+    }
+
+    fn maybe(self, other: Self?) -> bool {
+        let o = other ?? return false
+        return o.name == self.name
+    }
+}
+
+struct Box[T] {
+    item: T
+}
+
+impl Box[T] {
+    fn first(self, _other: Self) -> T {
+        self.item
+    }
+}
+
+fn make(s: String) -> N {
+    let mut g = String()
+    g.push_str(s)
+    N { name: g }
+}
+
+fn main() throws {
+    let x = make("a")
+    println(x.same(make("a")))
+    println(x.same(make("b")))
+    let y = make("a")
+    println(x.like(y))
+    println(y.name)
+    println(x.any_of([make("c"), make("a")]))
+    println(x.maybe(null))
+    println(x.maybe(make("a")))
+    let b = Box { item: 3 }
+    println(b.first(Box { item: 4 }))
+}

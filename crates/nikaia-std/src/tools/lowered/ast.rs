@@ -220,6 +220,7 @@ pub struct Code {
     pub can_throw: bool,
     pub param_names: Vec<Option<winnow_grammar::Symbol>>,
     pub result_from: Vec<winnow_grammar::Symbol>,
+    pub param_keeps: Vec<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

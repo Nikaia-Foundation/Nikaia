@@ -331,6 +331,7 @@ pub(crate) fn buffer_plans(
         &Default::default(),
         &Default::default(),
         &Default::default(),
+        &Default::default(),
     )
     .1
     .kept

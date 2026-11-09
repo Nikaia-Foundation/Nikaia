@@ -189,8 +189,11 @@ impl CheckState {
             _ => return false,
         };
         let found = match self.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
-        let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if held.kind != CheckKind::Let { return false; }
+        let a_mut_let = found.without_mut.is_none() && found.written_mut && found.view_of == "" && !found.lent;
+        if !a_mut_let {
+            let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
+            if held.kind != CheckKind::Let { return false; }
+        }
         let (list, args, view) = match found.ty {
             Ty::Named { ref name, args, view } => (a_type_base(name), args, view),
             _ => return false,

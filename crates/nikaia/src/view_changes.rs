@@ -26,6 +26,7 @@ pub fn analyse(
     lent: &BTreeSet<i64>,
     coalesced: &BTreeSet<i64>,
     mut_viewed: &BTreeSet<i64>,
+    receiver_views: &BTreeSet<i64>,
 ) -> (Vec<Finding>, GiveUps) {
     use nikaia_std::tools::view_changes::{VcAsk, vc_analyse};
     let ask = VcAsk {
@@ -36,6 +37,7 @@ pub fn analyse(
         lent,
         coalesced,
         mut_viewed,
+        receiver_views,
         refused: &parsed.refused_moves,
         viewed: &parsed.viewed_arms,
     };

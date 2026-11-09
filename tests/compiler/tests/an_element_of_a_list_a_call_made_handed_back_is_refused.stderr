@@ -1,9 +1,9 @@
 error[NK2304]: An element of `xs`, a list this function made, is handed back as text of its own, which the tether cannot lower.
-   --> tests/an_element_of_a_list_a_call_made_handed_back_is_refused.nika:11:2
+   --> tests/an_element_of_a_list_a_call_made_handed_back_is_refused.nika:30:2
     |
- 11 | 	return xs[0]
+ 30 | 	return xs[0]
     |  ^^^^^^^^^^^^
     |
-    = note: An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type or a list literal of text made there.
+    = note: An element is handed back as a view, with its list moved into the caller's keep, only out of a list declared with its type, a list literal of text made there, or a list a call hands back whose function or method its name alone finds.
     = help: Hand back a copy of the element with `.clone()`, or declare the list's type: `let xs: Vec[String] = …`.
 1 buffer whose views have no one place to live

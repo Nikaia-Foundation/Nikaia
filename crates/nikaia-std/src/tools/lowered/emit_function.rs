@@ -513,7 +513,8 @@ impl EmitState {
                             let mut borrows_from_something = receiver.is_some();
                             let mut index: i64 = 0;
                             for each in args.iter() {
-                                if self.carries_a_view(world, &each.ty) || self.emit_fn_lowered_as_a_view(world, &key, recv, index, each) { borrows_from_something = true; }
+                                let lasting_text = each.ty.is_view && each.ty.lasting;
+                                if !lasting_text && (self.carries_a_view(world, &each.ty) || self.emit_fn_lowered_as_a_view(world, &key, recv, index, each)) { borrows_from_something = true; }
                                 index += 1;
                             }
                             let widens = emit_is_elided(&lifetimes) && !answers_a_trait && self.carries_a_view(world, ty) && (!borrows_from_something || nothing_borrowed);

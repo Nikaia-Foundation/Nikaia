@@ -496,6 +496,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
                     check_core_a_field_of_a_lent_place_handed_back(state, world, host, value, &at);
                 }
                 tail_view = state.lent_arms_handed_back(world, value, check_function_is_nullable(&want));
+                if !tail_lent && !tail_view { check_core_lent_places_in_arms_handed_back(state, world, host, value, &at); }
             }
             state.number_asked(world, value, &want, &at, true);
         },

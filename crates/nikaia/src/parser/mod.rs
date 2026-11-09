@@ -1920,8 +1920,14 @@ grammar! {
           // type. `from` is greedy as the trailing words are.
           | KW_FN "(" params:code_params? ")" result:result_with_from?
             s:kw_sync? t:kw_throws? -> {
-                let (param_names, generics): (Vec<Option<Symbol>>, Vec<Type>) =
-                    params.unwrap_or_default().into_iter().unzip();
+                let mut param_names = Vec::new();
+                let mut generics = Vec::new();
+                let mut param_keeps = Vec::new();
+                for (name, ty, keeps) in params.unwrap_or_default() {
+                    param_names.push(name);
+                    generics.push(ty);
+                    param_keeps.push(keeps);
+                }
                 let (result, result_from) = result.unwrap_or_default();
                 Type {
                     name: _state.intern("fn"),
@@ -1935,6 +1941,7 @@ grammar! {
                         can_throw: t.is_some(),
                         param_names,
                         result_from,
+                        param_keeps,
                     })),
                     count: None,
                     is_mut: false,
@@ -1999,22 +2006,27 @@ grammar! {
         // parameters*; #1134): `fn(mut S)` lends the argument at each call as a
         // `mut` parameter of a named function is lent. The word is recorded
         // as `is_mut` without `is_view`, which no other position writes.
-        rule code_params -> Vec<(Option<Symbol>, Type)> =
+        // `fn(keep r: Row)` keeps what it is handed (Part I §C, #1466); a
+        // plain parameter is lent (ADR-views-3 D2). `keep` is no reserved
+        // word: `fn(keep: i64)` names a parameter `keep`, so the plain arm
+        // follows.
+        rule code_params -> Vec<(Option<Symbol>, Type, bool)> =
             head:code_param tail:code_param_tail* -> {
                 let mut params = vec![head];
                 params.extend(tail);
                 params
             }
 
-        rule code_param_tail -> (Option<Symbol>, Type) = "," t:code_param -> { t }
+        rule code_param_tail -> (Option<Symbol>, Type, bool) = "," t:code_param -> { t }
 
-        rule code_param -> (Option<Symbol>, Type) =
-            m:kw_mut? n:code_param_name? t:type_ref -> {
+        rule code_param -> (Option<Symbol>, Type, bool) =
+            KW_KEEP n:code_param_name? t:type_ref -> { (n, t, true) }
+          | m:kw_mut? n:code_param_name? t:type_ref -> {
                 let mut t = t;
                 if m.is_some() {
                     t.is_mut = true;
                 }
-                (n, t)
+                (n, t, false)
             }
 
         // `s:` in `fn(s: String)` (ADR-views-3 D14). The `not(":")` keeps a

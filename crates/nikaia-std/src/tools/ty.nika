@@ -2052,7 +2052,7 @@ pub fn qualify(ty: ref Ty, module: ref String, declared: ref collections::BTreeS
         Ty::Named { name, args, view } => Ty::Named { name: qualified_name(name, module, declared), args: qualified_each(args, module, declared), view: view },
         Ty::Tuple(parts) => Ty::Tuple(qualified_each(parts, module, declared)),
         Ty::Fn { params, result, is_sync, can_throw } => Ty::Fn { params: qualified_each(params, module, declared), result: qualified_result(result, module, declared), is_sync: is_sync, can_throw: can_throw },
-        // **Inside an option, a pointer and a sequence too** (#1505): a
+        // **Inside an option, a pointer and a sequence too** (#1505, #1417): a
         // package's `-> Item?` or `@stream` entry's `Seq[Item]` names its type
         // as the package does, and a caller's walk reads `a::Item`.
         Ty::Nullable(inner) => Ty::Nullable(qualify(inner, module, declared)),
