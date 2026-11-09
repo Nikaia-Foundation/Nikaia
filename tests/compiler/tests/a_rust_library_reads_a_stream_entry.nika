@@ -52,6 +52,7 @@ fn main() throws {
     let mut env: Vec[(String, String)] = []
     env.push(("CARGO_TARGET_DIR", f"{repo}/target/nikaia-project-tests/rust-library-user"))
     env.push(("CARGO_NET_OFFLINE", "true"))
+    env.push(("CARGO_TERM_COLOR", "never"))
     let made = f"{tmp}/lines/target/rust-library/nikaia_lines"
     let toml = fs::read_to_string(f"{tmp}/lines/nikaia.toml", fs::Root::Anywhere)
     let whole = (toml.split("[features]").next() ?? "").clone()
