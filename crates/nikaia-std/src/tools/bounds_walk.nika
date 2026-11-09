@@ -310,6 +310,11 @@ struct BoundsWalk {
 	checking: bool,
 	checked_results: collections::BTreeSet[i64],
 	rule_failed: collections::BTreeSet[i64],
+	/// **The value a builder builds** (`rules_builder`, ADR-306 D25): its
+	/// `length` rules are asked for where it is handed back and before each
+	/// method of its type is called on it, not given; empty in any other
+	/// body.
+	rule_built: collections::BTreeSet[String],
 	/// **The postcondition this walk looks for** (ADR-306 D23): the name of
 	/// each list parameter by position, empty for any other and when the
 	/// walk looks for none; whether the function returns a list (`each`).
@@ -685,6 +690,7 @@ fn bounding_new(
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
+		rule_built: collections::BTreeSet(),
 		lists: collections::BTreeSet(),
 		return_params: [],
 		return_each: false,
@@ -6743,8 +6749,10 @@ fn bounding_method_call(
 		)
 	}
 	if frame != null {
-		bounding_by_frame(walk, facts, frame ?? nothing_changed(), receiver, args, words)
-		rules_after_call(walk, facts, call, path_of(receiver, words), context)
+		let known = frame ?? nothing_changed()
+		bounding_by_frame(walk, facts, known, receiver, args, words)
+		let written = frame_at_call(known, receiver_path, frame_handed(args, words))
+		rules_after_call(walk, facts, call, path_of(receiver, words), context, false, written)
 		return
 	}
 	// **A method on an element may change it** and, the index not being
@@ -6793,7 +6801,7 @@ fn bounding_method_call(
 			bounding_forget(walk, facts, text)
 		}
 	}
-	rules_after_call(walk, facts, call, path_of(receiver, words), context)
+	rules_after_call(walk, facts, call, path_of(receiver, words), context, true, nothing_changed())
 }
 
 /// A method on a name: what it does to the name's length.
