@@ -221,14 +221,16 @@ pub(crate) fn print_error(error: std::io::Error, what: &str) -> IoError {
 ///
 /// Reading it a second time yields what the operating system says, which is
 /// nothing.
-pub async fn read_to_string() -> Result<String, IoError> {
+pub async fn read_to_string() -> Result<crate::block::Text, IoError> {
     let bytes = crate::rt::io::stdin_whole()
         .await
         .map_err(|e| IoError::of(e, STDIN))?;
     // The same failure `std`'s own `read_to_string` reports, under the name
     // this library gives it: a stream that is not text is `NotText` and not a
-    // lossy string.
-    String::from_utf8(bytes).map_err(|_| IoError::NotText(STDIN.to_string()))
+    // lossy string. The checked text is a block's, the same memory (#490).
+    String::from_utf8(bytes)
+        .map(crate::block::Text::from)
+        .map_err(|_| IoError::NotText(STDIN.to_string()))
 }
 
 /// All of standard input, as bytes.

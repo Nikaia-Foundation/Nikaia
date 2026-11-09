@@ -136,7 +136,11 @@ impl Text {
     /// `bytes` as text, each run that is not UTF-8 written as U+FFFD,
     /// outside every block (D9), as `String::from_utf8_lossy` reads it.
     pub fn from_utf8_lossy(bytes: &[u8]) -> Text {
-        Text::from(&*std::string::String::from_utf8_lossy(bytes))
+        match std::string::String::from_utf8_lossy(bytes) {
+            std::borrow::Cow::Borrowed(text) => Text::from(text),
+            // Taken over as it is (D8): the replaced text is `std`'s already.
+            std::borrow::Cow::Owned(text) => Text::from(text),
+        }
     }
 
     /// Drop every byte, keeping the room.
@@ -318,6 +322,16 @@ impl AsRef<std::path::Path> for Text {
 impl AsRef<[u8]> for Text {
     #[inline]
     fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+/// **A block's text is a buffer views are cut from**, as a `String` is: a
+/// keep holds it and finds its views in it again by address (#490).
+#[cfg(feature = "tether")]
+impl tether::Viewed for Text {
+    #[inline]
+    fn bytes(&self) -> &[u8] {
         self.as_bytes()
     }
 }

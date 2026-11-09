@@ -394,3 +394,17 @@ impl IntoMember<Option<String>> for Option<&str> {
         self.map(str::to_owned)
     }
 }
+
+/// The same into a block's text, which a grammar's `String` field is on the
+/// block types (#490).
+impl IntoMember<crate::block::Text> for &str {
+    fn into_member(self) -> crate::block::Text {
+        crate::block::Text::from(self)
+    }
+}
+
+impl IntoMember<Option<crate::block::Text>> for Option<&str> {
+    fn into_member(self) -> Option<crate::block::Text> {
+        self.map(crate::block::Text::from)
+    }
+}

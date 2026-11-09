@@ -86,7 +86,7 @@ pub enum Input {
     /// The caller's own standard input, shared with the child.
     Inherited,
     /// This text, written on a thread of its own, then closed.
-    Text(String),
+    Text(crate::block::Text),
 }
 
 impl Stream {
@@ -272,6 +272,12 @@ pub async fn run(
         )
     });
     let dir = dir.to_string();
+    // The input text goes to the thread beside the task, so it crosses as
+    // Rust's (D8): a block's text never leaves its task (D9).
+    let stdin = match stdin {
+        Input::Text(text) => Input::Text(crate::block::Text::from(String::from(text))),
+        other => other,
+    };
     let streams = Streams {
         stdin,
         stdout,
@@ -472,7 +478,10 @@ fn drained<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle
 /// own. `program` is looked for on the caller's `PATH` as `run` looks for it
 /// (ADR-243 D6). It fails with `IoError::NotFound(program)` where nothing is
 /// there and `IoError::PermissionDenied(program)` where it may not be run.
-pub fn spawn(program: &str, args: Vec<String>) -> Result<Child, IoError> {
+pub fn spawn(
+    program: &str,
+    args: crate::block::List<crate::block::Text>,
+) -> Result<Child, IoError> {
     let named = program.to_string();
     let found = found_on_path(
         program,

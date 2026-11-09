@@ -838,6 +838,8 @@ name = "task-block"
 version = "0.1.0"
 dependencies = [
  "allocator-api2",
+ "rayon",
+ "tether",
  "winnow-grammar",
 ]
 

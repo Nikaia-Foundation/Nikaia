@@ -17,21 +17,114 @@ use allocator_api2::vec::Vec as PlacedVec;
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::mem::ManuallyDrop;
+use std::marker::PhantomData;
+use std::mem::{ManuallyDrop, MaybeUninit};
 use std::ops::{Deref, DerefMut, RangeBounds};
 
 /// **A list whose growth may be refused** (D4), placed by its handle.
+///
+/// **Dropped as `Vec` is** (#490): the elements may hold views that end
+/// before the list does, the way `std`'s `Vec<&str>` declared before the text
+/// its views are cut from may. `Vec` says so with `#[may_dangle]`, which
+/// stable Rust does not have; here the list's own type has no `Drop` at all.
+/// What it holds sits in [`Held`], which knows nothing of `T` and drops it
+/// through the function it was made with, so Rust's drop check asks of `T`
+/// only what `PhantomData<T>` asks: that dropping a `T` is sound then.
 pub struct List<T> {
-    items: PlacedVec<T, Place>,
+    held: Held,
+    _items: PhantomData<T>,
+}
+
+/// The bytes of an `allocator-api2` `Vec<T, Place>`, whatever `T`: a
+/// pointer, a capacity, a length and the handle.
+type Room = MaybeUninit<[usize; 4]>;
+
+/// **A list's `Vec`, held without its element type**: its bytes, and the
+/// function that drops it as the `Vec<T, Place>` it is.
+struct Held {
+    room: Room,
+    drop: unsafe fn(*mut Room),
+}
+
+impl Drop for Held {
+    #[inline]
+    fn drop(&mut self) {
+        // SAFETY: `drop` is `dropped::<T>` for the `T` whose `Vec` `room`
+        // holds (`List::of`), and nothing reads `room` after this.
+        unsafe { (self.drop)(&mut self.room) }
+    }
+}
+
+/// Drops the `Vec<T, Place>` at `room`.
+///
+/// # Safety
+///
+/// `room` holds a `Vec<T, Place>`, which is not used again.
+unsafe fn dropped<T>(room: *mut Room) {
+    // SAFETY: the caller's.
+    unsafe { std::ptr::drop_in_place(room.cast::<PlacedVec<T, Place>>()) }
+}
+
+/// A `Vec<T, Place>` written into a [`Room`], in a `const fn`.
+union Pun<T> {
+    items: ManuallyDrop<PlacedVec<T, Place>>,
+    room: Room,
 }
 
 impl<T> List<T> {
+    /// The list that holds `items`.
+    #[inline(always)]
+    const fn of(items: PlacedVec<T, Place>) -> List<T> {
+        const {
+            assert!(
+                size_of::<PlacedVec<T, Place>>() <= size_of::<Room>()
+                    && align_of::<PlacedVec<T, Place>>() <= align_of::<Room>()
+            )
+        };
+        List {
+            held: Held {
+                // SAFETY: the `Vec` fits the room and its alignment (checked
+                // above); `MaybeUninit` takes its bytes as they are, padding
+                // and the pointer's provenance included.
+                room: unsafe {
+                    Pun {
+                        items: ManuallyDrop::new(items),
+                    }
+                    .room
+                },
+                drop: dropped::<T>,
+            },
+            _items: PhantomData,
+        }
+    }
+
+    /// Its `Vec`.
+    #[inline(always)]
+    fn items(&self) -> &PlacedVec<T, Place> {
+        // SAFETY: `room` holds a `Vec<T, Place>` (`List::of`), aligned for it.
+        unsafe { &*self.held.room.as_ptr().cast::<PlacedVec<T, Place>>() }
+    }
+
+    /// Its `Vec`, to change.
+    #[inline(always)]
+    fn items_mut(&mut self) -> &mut PlacedVec<T, Place> {
+        // SAFETY: as `items`, through the list's own unique borrow.
+        unsafe { &mut *self.held.room.as_mut_ptr().cast::<PlacedVec<T, Place>>() }
+    }
+
+    /// Its `Vec`, taken out.
+    #[inline(always)]
+    fn into_items(self) -> PlacedVec<T, Place> {
+        let list = ManuallyDrop::new(self);
+        // SAFETY: `room` holds a `Vec<T, Place>`, read once: the list is
+        // never dropped, so the `Vec` has one owner.
+        unsafe { std::ptr::read(list.held.room.as_ptr().cast::<PlacedVec<T, Place>>()) }
+    }
+
     /// A new, empty list placed at `place`.
     #[inline]
     pub const fn new_in(place: Place) -> List<T> {
-        List {
-            items: PlacedVec::new_in(place),
-        }
+        List::of(PlacedVec::new_in(place))
     }
 
     /// A new, empty list outside every block (D9: where the compiler
@@ -58,20 +151,21 @@ impl<T> List<T> {
     /// Where the list lives.
     #[inline]
     pub fn place(&self) -> Place {
-        *self.items.allocator()
+        *self.items().allocator()
     }
 
     /// How many elements it has room for.
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.items.capacity()
+        self.items().capacity()
     }
 
     /// Room for `more` elements, the list growing as `Vec` grows, or the
     /// task ends (D6).
     #[inline]
     pub fn reserve(&mut self, more: usize) {
-        if self.items.capacity() - self.items.len() < more && self.items.try_reserve(more).is_err()
+        if self.items_mut().capacity() - self.items_mut().len() < more
+            && self.items_mut().try_reserve(more).is_err()
         {
             full()
         }
@@ -80,8 +174,8 @@ impl<T> List<T> {
     /// Room for exactly `more` elements, or the task ends (D6).
     #[inline]
     pub fn reserve_exact(&mut self, more: usize) {
-        if self.items.capacity() - self.items.len() < more
-            && self.items.try_reserve_exact(more).is_err()
+        if self.items_mut().capacity() - self.items_mut().len() < more
+            && self.items_mut().try_reserve_exact(more).is_err()
         {
             full()
         }
@@ -93,77 +187,79 @@ impl<T> List<T> {
         &mut self,
         more: usize,
     ) -> Result<(), allocator_api2::collections::TryReserveError> {
-        self.items.try_reserve(more)
+        self.items_mut().try_reserve(more)
     }
 
     /// Push `item`, ending the task where the block refuses (D6).
     #[inline]
     pub fn push(&mut self, item: T) {
-        if self.items.len() == self.items.capacity() && self.items.try_reserve(1).is_err() {
+        if self.items_mut().len() == self.items_mut().capacity()
+            && self.items_mut().try_reserve(1).is_err()
+        {
             full()
         }
-        self.items.push(item);
+        self.items_mut().push(item);
     }
 
     /// The last element, taken out.
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
-        self.items.pop()
+        self.items_mut().pop()
     }
 
     /// Put `item` at `at`, moving the rest one on.
     #[inline]
     pub fn insert(&mut self, at: usize, item: T) {
         self.reserve(1);
-        self.items.insert(at, item);
+        self.items_mut().insert(at, item);
     }
 
     /// Take out the element at `at`, moving the rest one back.
     #[inline]
     pub fn remove(&mut self, at: usize) -> T {
-        self.items.remove(at)
+        self.items_mut().remove(at)
     }
 
     /// Take out the element at `at`, the last taking its place.
     #[inline]
     pub fn swap_remove(&mut self, at: usize) -> T {
-        self.items.swap_remove(at)
+        self.items_mut().swap_remove(at)
     }
 
     /// Keep the first `len` elements.
     #[inline]
     pub fn truncate(&mut self, len: usize) {
-        self.items.truncate(len);
+        self.items_mut().truncate(len);
     }
 
     /// Drop every element, keeping the room.
     #[inline]
     pub fn clear(&mut self) {
-        self.items.clear();
+        self.items_mut().clear();
     }
 
     /// Keep the elements `keep` says yes to.
     #[inline]
     pub fn retain(&mut self, keep: impl FnMut(&T) -> bool) {
-        self.items.retain(keep);
+        self.items_mut().retain(keep);
     }
 
     /// Keep the elements `keep` says yes to, each lent to it to change.
     #[inline]
     pub fn retain_mut(&mut self, keep: impl FnMut(&mut T) -> bool) {
-        self.items.retain_mut(keep);
+        self.items_mut().retain_mut(keep);
     }
 
     /// Drop each element `same` finds equal to the one before it.
     #[inline]
     pub fn dedup_by(&mut self, same: impl FnMut(&mut T, &mut T) -> bool) {
-        self.items.dedup_by(same);
+        self.items_mut().dedup_by(same);
     }
 
     /// Drop each element whose key equals the one before it.
     #[inline]
     pub fn dedup_by_key<K: PartialEq>(&mut self, key: impl FnMut(&mut T) -> K) {
-        self.items.dedup_by_key(key);
+        self.items_mut().dedup_by_key(key);
     }
 
     /// Take out the elements of `range`, as an iterator.
@@ -172,14 +268,14 @@ impl<T> List<T> {
         &mut self,
         range: R,
     ) -> allocator_api2::vec::Drain<'_, T, Place> {
-        self.items.drain(range)
+        self.items_mut().drain(range)
     }
 
     /// Move every element of `other` to the end.
     #[inline]
     pub fn append(&mut self, other: &mut List<T>) {
         self.reserve(other.len());
-        self.items.append(&mut other.items);
+        self.items_mut().append(other.items_mut());
     }
 
     /// The elements from `at` on, as a new list in the same place.
@@ -190,7 +286,7 @@ impl<T> List<T> {
             "`at` split index (is {at}) should be <= len"
         );
         let mut tail = List::with_capacity_in(self.len() - at, self.place());
-        tail.items.extend(self.items.drain(at..));
+        tail.items_mut().extend(self.items_mut().drain(at..));
         tail
     }
 
@@ -200,31 +296,31 @@ impl<T> List<T> {
         if len > self.len() {
             self.reserve(len - self.len());
         }
-        self.items.resize_with(len, make);
+        self.items_mut().resize_with(len, make);
     }
 
     /// Give back the room it does not use.
     #[inline]
     pub fn shrink_to_fit(&mut self) {
-        self.items.shrink_to_fit();
+        self.items_mut().shrink_to_fit();
     }
 
     /// Its elements.
     #[inline]
     pub fn as_slice(&self) -> &[T] {
-        &self.items
+        self.items()
     }
 
     /// Its elements, to change.
     #[inline]
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        &mut self.items
+        self.items_mut()
     }
 
     /// Its first element's address.
     #[inline]
     pub fn as_mut_ptr(&mut self) -> *mut T {
-        self.items.as_mut_ptr()
+        self.items_mut().as_mut_ptr()
     }
 
     /// Set the length (`Vec::set_len`).
@@ -236,7 +332,7 @@ impl<T> List<T> {
     #[inline]
     pub unsafe fn set_len(&mut self, len: usize) {
         // SAFETY: the caller's.
-        unsafe { self.items.set_len(len) }
+        unsafe { self.items_mut().set_len(len) }
     }
 
     /// The elements of `run`, one clone each, after one reservation.
@@ -247,7 +343,7 @@ impl<T> List<T> {
     {
         self.reserve(run.len());
         for item in run {
-            self.items.push(item.clone());
+            self.items_mut().push(item.clone());
         }
     }
 
@@ -260,7 +356,7 @@ impl<T> List<T> {
         if len > self.len() {
             self.reserve(len - self.len());
         }
-        self.items.resize(len, item);
+        self.items_mut().resize(len, item);
     }
 
     /// Drop each element equal to the one before it.
@@ -269,7 +365,7 @@ impl<T> List<T> {
     where
         T: PartialEq,
     {
-        self.items.dedup();
+        self.items_mut().dedup();
     }
 
     /// A list built from `items`, placed at `place`.
@@ -296,9 +392,9 @@ impl<T> List<T> {
     /// too), or no memory at all.
     #[inline]
     pub fn is_outside(&self) -> bool {
-        self.items.capacity() == 0
+        self.items().capacity() == 0
             || size_of::<T>() == 0
-            || !self.place().holds(self.items.as_ptr().cast_mut().cast())
+            || !self.place().holds(self.items().as_ptr().cast_mut().cast())
     }
 }
 
@@ -309,17 +405,17 @@ impl<T: Copy> List<T> {
     #[inline]
     pub fn extend_copied(&mut self, run: &[T]) {
         self.reserve(run.len());
-        let len = self.items.len();
+        let len = self.items_mut().len();
         // SAFETY: `reserve` left room for `run.len()` more, and a `Copy`
         // element has nothing to drop; a list and a run it is extended from
         // are two values, so they do not overlap.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 run.as_ptr(),
-                self.items.as_mut_ptr().add(len),
+                self.items_mut().as_mut_ptr().add(len),
                 run.len(),
             );
-            self.items.set_len(len + run.len());
+            self.items_mut().set_len(len + run.len());
         }
     }
 }
@@ -336,14 +432,14 @@ impl<T> Deref for List<T> {
 
     #[inline]
     fn deref(&self) -> &[T] {
-        &self.items
+        self.items()
     }
 }
 
 impl<T> DerefMut for List<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut [T] {
-        &mut self.items
+        self.items_mut()
     }
 }
 
@@ -509,7 +605,19 @@ impl<T> winnow_grammar::Collect<T> for List<T> {
     }
     #[inline(always)]
     fn len(&self) -> usize {
-        self.items.len()
+        self.items().len()
+    }
+}
+
+/// **A parallel walk collects into a list** as into a `Vec` (#490): the
+/// `Vec` rayon builds, taken over as it is (D8), outside every block (D9).
+#[cfg(feature = "rayon")]
+impl<T: Send> rayon::iter::FromParallelIterator<T> for List<T> {
+    #[inline]
+    fn from_par_iter<I: rayon::iter::IntoParallelIterator<Item = T>>(items: I) -> List<T> {
+        List::from(rayon::iter::ParallelIterator::collect::<Vec<T>>(
+            items.into_par_iter(),
+        ))
     }
 }
 
@@ -519,7 +627,7 @@ impl<T> IntoIterator for List<T> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.items.into_iter()
+        self.into_items().into_iter()
     }
 }
 
@@ -529,7 +637,7 @@ impl<'a, T> IntoIterator for &'a List<T> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.items.iter()
+        self.items().iter()
     }
 }
 
@@ -539,7 +647,7 @@ impl<'a, T> IntoIterator for &'a mut List<T> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        self.items.iter_mut()
+        self.items_mut().iter_mut()
     }
 }
 
@@ -581,14 +689,12 @@ impl<T> From<Vec<T>> for List<T> {
     fn from(vec: Vec<T>) -> List<T> {
         let mut vec = ManuallyDrop::new(vec);
         let (ptr, len, room) = (vec.as_mut_ptr(), vec.len(), vec.capacity());
-        List {
-            // SAFETY: `std`'s `Vec` allocated `ptr` with its global allocator
-            // for `room` elements (or not at all, for no room or a size of
-            // nothing, which `allocator-api2`'s `Vec` treats alike);
-            // `Place::Outside` frees with that same allocator, and the `Vec`
-            // is never dropped.
-            items: unsafe { PlacedVec::from_raw_parts_in(ptr, len, room, Place::Outside) },
-        }
+        // SAFETY: `std`'s `Vec` allocated `ptr` with its global allocator
+        // for `room` elements (or not at all, for no room or a size of
+        // nothing, which `allocator-api2`'s `Vec` treats alike);
+        // `Place::Outside` frees with that same allocator, and the `Vec` is
+        // never dropped.
+        List::of(unsafe { PlacedVec::from_raw_parts_in(ptr, len, room, Place::Outside) })
     }
 }
 
@@ -599,7 +705,7 @@ impl<T> From<List<T>> for Vec<T> {
     #[inline]
     fn from(list: List<T>) -> Vec<T> {
         let outside = list.is_outside();
-        let (ptr, len, room, place) = list.items.into_raw_parts_with_alloc();
+        let (ptr, len, room, place) = list.into_items().into_raw_parts_with_alloc();
         if outside {
             // SAFETY: the memory is the global allocator's, for `room`
             // elements (or none), which `std`'s `Vec` frees with the same

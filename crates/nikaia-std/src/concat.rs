@@ -171,6 +171,47 @@ text_plus! {
     &crate::block::Text, &str;
     &crate::block::Text, crate::block::Text;
     &crate::block::Text, &crate::block::Text;
+    &crate::block::Text, String;
+    &String, crate::block::Text;
+    &String, &crate::block::Text;
+    &crate::block::Text, &String;
+}
+
+/// **Rust's `String` beside a block's text** (#490): what the language below
+/// builds (`c.to_string()`, a `replace`) joined to a program's text is the
+/// block's text, an owned left side keeping its buffer.
+impl Plus<String> for crate::block::Text {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(mut self, rhs: String) -> crate::block::Text {
+        self.push_str(&rhs);
+        self
+    }
+}
+
+impl Plus<&String> for crate::block::Text {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(mut self, rhs: &String) -> crate::block::Text {
+        self.push_str(rhs);
+        self
+    }
+}
+
+impl Plus<crate::block::Text> for String {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(self, rhs: crate::block::Text) -> crate::block::Text {
+        crate::block::Text::from(self).plus(rhs)
+    }
+}
+
+impl Plus<&crate::block::Text> for String {
+    type Out = crate::block::Text;
+    #[inline]
+    fn plus(self, rhs: &crate::block::Text) -> crate::block::Text {
+        crate::block::Text::from(self).plus(rhs)
+    }
 }
 
 impl Plus<&str> for crate::block::Text {
