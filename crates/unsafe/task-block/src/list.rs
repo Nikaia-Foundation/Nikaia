@@ -658,6 +658,17 @@ impl<T: Clone> From<&[T]> for List<T> {
 impl<T, const N: usize> From<[T; N]> for List<T> {
     #[inline]
     fn from(items: [T; N]) -> List<T> {
+        List::from_array(items)
+    }
+}
+
+impl<T> List<T> {
+    /// A list of `items`, outside every block: what `vec![a, b]` is on the
+    /// block types. An inherent function and not `From::from`, so that the
+    /// expected element type reaches the items (a `Kept` closure is coerced
+    /// to `Kept<dyn Fn>` there, as in `vec!`).
+    #[inline]
+    pub fn from_array<const N: usize>(items: [T; N]) -> List<T> {
         List::from_iter_in(items, Place::Outside)
     }
 }

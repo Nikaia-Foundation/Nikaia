@@ -114,7 +114,7 @@ macro_rules! __nikaia_list {
         $crate::block::List::from_elem($item, $n)
     };
     ($($item:expr),+ $(,)?) => {
-        $crate::block::List::from([$($item),+])
+        $crate::block::List::from_array([$($item),+])
     };
 }
 
