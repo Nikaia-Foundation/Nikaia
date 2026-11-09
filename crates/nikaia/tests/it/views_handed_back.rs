@@ -108,9 +108,11 @@ fn main() throws {
     assert_eq!(found[0].code, "NK1104");
     assert_eq!(
         found[0].help.as_deref(),
-        Some("Write `ref` in front of it to pass a view of it.")
+        Some(
+            "Write `String` without `ref` in the declaration: text of its own is lent wherever a view suffices."
+        )
     );
-    let followed = refused.replace("return s", "return ref s");
+    let followed = refused.replace("-> ref String", "-> String");
     assert!(findings(&followed).is_empty(), "{followed}");
 }
 

@@ -25,7 +25,7 @@ pub fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state: &mut 
     if read && is_text_type(&ty) { return; }
     let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.text())];
     let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field);
-    if what == "handed back" { help = format!("Declare the result `ref {}` to return a view of it, write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", ty.text(), field); }
+    if what == "handed back" { help = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value. A result that is a view of `self` on every way out is handed back as it is, with no mark.", field); }
     let mut message: String = format!("You can't give away `self.{}` here: this method only borrows `self`.", field);
     if state.changing_self { message = format!("You can't give away `self.{}` here: this method takes `mut self`, which changes `self` in place but doesn't own it.", field); }
     state.findings.push(check_refusal("NK1131", span, message, notes, Some(help)));
@@ -215,9 +215,9 @@ pub(crate) fn check_core_a_lent_place_given_away<H: CheckHost>(state: &mut Check
     let nullable = matches!(ty, Ty::Nullable(_));
     if element && nullable { return; }
     if state.a_text_bytes_view(world, value) { return; }
-    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
-    let mut help: String = format!("Declare the result `ref {}` to return a view of it, or write `{}.clone()` for a copy.", ty.text(), path);
-    if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or declare the parameter `ref {}` if it only reads it.", path, ty.text()); }
+    let notes: Vec<String> = vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), and `{}` is a `{}`. Giving it away would take a piece out of something this function doesn't own.", root, path, ty.text())];
+    let mut help: String = format!("Write `{}.clone()` for a copy. A result that is a view of a parameter on every way out is handed back as it is, with no mark.", path);
+    if !handed_back { help = format!("Write `{}.clone()` to pass a copy, or take the parameter without `keep` if the function called only reads it.", path); }
     state.findings.push(check_refusal("NK1131", span, format!("You can't give away `{}` here: `{}` is only borrowed.", path, root), notes, Some(help)));
 }
 

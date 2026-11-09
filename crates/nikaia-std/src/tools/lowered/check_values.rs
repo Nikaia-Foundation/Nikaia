@@ -114,7 +114,7 @@ impl CheckState {
             self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but this method takes `mut self`: it changes `self` in place and doesn't own it.", path, to), vec![String::from("`self` belongs to the caller. A part handed to something that keeps it is taken out and given back by assigning it, but not inside a lambda, and not where its type has no empty value or stand-in."), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
             return;
         }
-        self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", path, to, root), vec![format!("`{}` belongs to whoever lent it (a `ref` parameter, a `for` over a list, a `let` over a place), so you can't give a part of it away.", root), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
+        self.findings.push(check_refusal("NK2106", span, format!("`{}` is {}, but `{}` is only borrowed here.", path, to, root), vec![format!("`{}` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), so you can't give a part of it away.", root), String::from("Nikaia never makes a copy behind your back.")], Some(format!("Hand over a copy: `{}.clone()`.", path))));
     }
 }
 

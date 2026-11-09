@@ -40,10 +40,11 @@ impl CheckState {
     /// work out by reading the body.
     pub fn a_constant_that_owns_memory(ref mut self, bound: ref String, held: ref Ty, computed: ref BuildValue, holder: ref String, span: ref Span) sync {
         let mut owns: String = "a `String`"
-        let mut fixed: String = "`ref String`"
+        let mut fixed: String = "a `String`, as a view"
         // **Text is the case with no length in it**, which is why the way out is
-        // shorter: `ref String` says the whole thing.
-        let mut way_out: String = "Declare it as `ref String`: the text is built into the program, and the program holds a view of it."
+        // shorter: a `comptime` `String` is a view of the text the build
+        // fixed (ADR-views-3 D15, #1403), with no `ref` to write.
+        let mut way_out: String = "Declare it as `String`: the text is built into the program, and a `comptime` `String` is a view of it."
         match computed {
             BuildValue::List(items) => {
                 let mut element: String = "T"

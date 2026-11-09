@@ -28,5 +28,5 @@ error[NK1104]: You're returning `Number`, but the function is declared to return
  55 |         return b
     |                ^
     |
-    = help: Make it a `ref Number`, or change the declaration to `Number`.
+    = help: Make it a view of a `Number` that something else keeps, or change the declaration to `Number`.
 1 type error, 3 views kept past the call that was given it

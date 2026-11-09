@@ -4,7 +4,7 @@ error[NK1102]: This limit is `ref String`, but `limit:` takes an `i64`.
  12 | 	let x = async(admission: Plain { n: 1 }, limit: "two") {
     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = help: Make it an `i64`, or change the declaration to `ref String`.
+    = help: Make it an `i64`.
 error[NK1164]: `admission:` needs a `task::Admission` here, but `Plain` isn't one.
    --> tests/async_admission_not_a_strategy.nika:12:2
     |
