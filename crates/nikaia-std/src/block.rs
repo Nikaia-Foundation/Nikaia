@@ -123,7 +123,11 @@ macro_rules! __nikaia_list {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __nikaia_text {
-    ($($part:tt)*) => {
-        $crate::block::format($crate::block::Place::Outside, ::std::format_args!($($part)*))
-    };
+    // In a block of its own, as `std`'s `format!` is: the arguments
+    // `format_args!` borrows end there, so a `format!` handed to a call that
+    // is awaited keeps no `!Send` temporary across the await.
+    ($($part:tt)*) => {{
+        let text = $crate::block::format($crate::block::Place::Outside, ::std::format_args!($($part)*));
+        text
+    }};
 }

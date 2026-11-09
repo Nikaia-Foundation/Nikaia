@@ -201,7 +201,7 @@ let s = "n is {n}" }"#,
 fn an_f_string_is_a_string_even_with_no_hole_in_it() {
     let emitted = emit(r#"fn main() { let s = f"no holes here" }"#);
     assert!(
-        emitted.contains(r#""no holes here".to_text()"#),
+        emitted.contains(r#"nikaia_std::block::Text::from("no holes here")"#),
         "{emitted}"
     );
 }

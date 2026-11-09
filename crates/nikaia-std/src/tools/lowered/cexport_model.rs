@@ -528,7 +528,7 @@ pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
             if c == '<' || c == '(' || c == '[' { depth += 1; } else if c == '>' && previous == '-' { depth += 0; } else if c == '>' || c == ')' || c == ']' { depth -= 1; }
             if c == ',' && depth == 0 {
                 names.push(nikaia_std::block::Text::from(current.trim().to_string()));
-                current = nikaia_std::block::Text::from("".to_string());
+                current = nikaia_std::block::Text::from("");
             } else { current.push(c); }
             previous = c;
         }

@@ -393,6 +393,19 @@ impl EmitState {
             out.push(scalar.clone())
             return
         }
+        // **Text of its own handed to a described Rust crate is Rust's
+        // `String`** (ADR-327 D8, #490): the crate's traits are for `std`'s
+        // text, not a block's (`describe<T: Describe>(value: T)` with
+        // `Describe` for `String`), and toward Rust text crosses as it is.
+        if self.described.functions.contains_key(callee) && self.facts.owned_texts.contains(node_key(arg)) {
+            match arg {
+                Expr::LitStr { text, .. } => {
+                    out.push(f"std::string::String::from(\"{text}\")")
+                    return
+                },
+                else => {}
+            }
+        }
         // **`entry`'s key built into the map's text** (#676).
         if self.facts.owned_entry_keys.contains(node_key(arg)) {
             out.push("String::from(")

@@ -254,6 +254,15 @@ impl EmitState {
             out.push(&nikaia_std::block::Text::from(scalar.to_string()));
             return Ok(());
         }
+        if self.described.functions.contains_key(callee) && self.facts.owned_texts.contains(&node_key(arg)) {
+            match arg {
+                Expr::LitStr { text, .. } => {
+                    out.push(&format!("std::string::String::from(\"{}\")", text));
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
         if self.facts.owned_entry_keys.contains(&node_key(arg)) {
             out.push("String::from(");
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;

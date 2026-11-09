@@ -54,7 +54,7 @@ impl __NikaiaThrows_LspRefusal__io_IoError {
     pub(crate) fn message(&self) -> String { self.to_string().into() }
 }
 impl nikaia_std::error::Full for __NikaiaThrows_LspRefusal__io_IoError {
-    fn full(&self) -> std::string::String {
+    fn full(&self) -> String {
         match self {
             __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(e) => e.full(),
             __NikaiaThrows_LspRefusal__io_IoError::io_IoError(e) => e.full(),

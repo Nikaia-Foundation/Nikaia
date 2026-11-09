@@ -28,7 +28,7 @@ pub enum Form {
 }
 
 /// `text` in the normalisation form `form`, as new text.
-pub fn normalized(text: &str, form: Form) -> String {
+pub fn normalized(text: &str, form: Form) -> crate::block::Text {
     use unicode_normalization::UnicodeNormalization;
     match form {
         Form::Nfc => text.nfc().collect(),
@@ -41,11 +41,11 @@ pub fn normalized(text: &str, form: Form) -> String {
 /// `s.normalized(form)`: what `normalized` makes of the text, as a method.
 pub trait TextNormalized {
     /// The text in the normalisation form `form`, as new text.
-    fn normalized(&self, form: Form) -> String;
+    fn normalized(&self, form: Form) -> crate::block::Text;
 }
 
 impl TextNormalized for str {
-    fn normalized(&self, form: Form) -> String {
+    fn normalized(&self, form: Form) -> crate::block::Text {
         normalized(self, form)
     }
 }

@@ -461,7 +461,7 @@ pub(crate) fn cx_node_back(out: &CxOut, ctx: &CxCtx, constructor: bool, owner: &
             let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_string());
             (format!("{}_{}", prefix, ty), cx_node_absent(&format!("result = nk_out_{}(env, &out);", ty)))
         },
-        CxOut::Choice(which) => { let which = *which; (format!("{}_{}", prefix, nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(which)).name), nikaia_std::block::Text::from("result = nk_from_i32(env, (int32_t)out);".to_string())) },
+        CxOut::Choice(which) => { let which = *which; (format!("{}_{}", prefix, nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(which)).name), nikaia_std::block::Text::from("result = nk_from_i32(env, (int32_t)out);")) },
         CxOut::Record(which) => {
             let which = *which;
             let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name.to_string());
@@ -479,7 +479,7 @@ pub(crate) fn cx_node_back(out: &CxOut, ctx: &CxCtx, constructor: bool, owner: &
             let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(which)).name.to_string());
             (format!("{}_{} *", prefix, ty), format!("if (out) {{\n        result = nk_made_{}(env, out);\n    }} else {{\n        napi_get_null(env, &result);\n    }}", ty))
         },
-        _ => (nikaia_std::block::Text::from("".to_string()), nikaia_std::block::Text::from("".to_string())),
+        _ => (nikaia_std::block::Text::from(""), nikaia_std::block::Text::from("")),
     }
 }
 
@@ -490,7 +490,7 @@ pub(crate) fn cx_node_pair(part: &CxPart, ctx: &CxCtx, what: &str, place: &str) 
         CxPart::Value(shape) => (format!("if (!nk_{}(env, one, \"{}\", &{})) return false;", cx_node_scalar(shape), what, place), format!("nk_from_{}(env, {})", cx_node_scalar(shape), place)),
         CxPart::Choice(_) => (format!("{{ int c = 0; if (!nk_choice(env, one, \"{}\", &c)) return false; {} = c; }}", what, place), format!("nk_from_i32(env, (int32_t){})", place)),
         CxPart::Record(which) => { let which = *which; (format!("if (!nk_in_{}(env, one, \"{}\", &{})) return false;", nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name, what, place), format!("nk_out_{}(env, &{})", nikaia_std::index::get(&ctx.records, nikaia_std::index::at(which)).name, place)) },
-        CxPart::Array(_, _) => (nikaia_std::block::Text::from("".to_string()), nikaia_std::block::Text::from("".to_string())),
+        CxPart::Array(_, _) => (nikaia_std::block::Text::from(""), nikaia_std::block::Text::from("")),
     }
 }
 

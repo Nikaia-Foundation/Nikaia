@@ -345,18 +345,18 @@ pub(crate) fn bt_interpolated<H: BtHost>(parts: &[FPart], host: &H, state: &mut 
         } else if c == '{' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '{' {
             at += 1;
             bt_flush(&chunk, &mut out, host)?;
-            chunk = nikaia_std::block::Text::from("".to_string());
+            chunk = nikaia_std::block::Text::from("");
             out.push('{');
         } else if c == '}' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '}' {
             at += 1;
             bt_flush(&chunk, &mut out, host)?;
-            chunk = nikaia_std::block::Text::from("".to_string());
+            chunk = nikaia_std::block::Text::from("");
             out.push('}');
         } else if c == '{' {
             if ((at) as usize) >= chars.len() || *nikaia_std::index::get(&chars, (at) as usize) != '}' { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
             at += 1;
             bt_flush(&chunk, &mut out, host)?;
-            chunk = nikaia_std::block::Text::from("".to_string());
+            chunk = nikaia_std::block::Text::from("");
             if ((taken) as usize) >= values.len() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_interpolated")); }
             match (*nikaia_std::index::get(&values, (taken) as usize)).clone() {
                 BuildValue::Int(n) => { out.push_str(&integer_text(&n)); },

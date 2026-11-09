@@ -928,7 +928,7 @@ pub(crate) fn loop_term_word(arena: &TermArena, id: i64) -> String {
         SolverTerm::And(ref parts) => format!("and({})", loop_list_word(arena, parts)),
         SolverTerm::Or(ref parts) => format!("or({})", loop_list_word(arena, parts)),
         SolverTerm::Not(a) => format!("not({})", loop_term_word(arena, a)),
-        _ => nikaia_std::block::Text::from("?".to_string()),
+        _ => nikaia_std::block::Text::from("?"),
     }
 }
 

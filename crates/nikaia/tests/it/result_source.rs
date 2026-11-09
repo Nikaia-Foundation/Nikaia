@@ -1216,7 +1216,10 @@ fn a_reassigned_argument_may_be_changed_afterwards() {
     );
     assert!(changed_under(&source).is_empty());
     let rust = lowered(&source);
-    assert!(rust.contains("let mut y = \"re\""), "{rust}");
+    assert!(
+        rust.contains("let mut y = nikaia_std::block::Text::from(\"re\")"),
+        "{rust}"
+    );
     compiled("a_reassigned_argument_may_be_changed_afterwards", &source);
 }
 

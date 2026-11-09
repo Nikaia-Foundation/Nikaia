@@ -611,6 +611,16 @@ impl<T> winnow_grammar::Collect<T> for List<T> {
 
 /// **A parallel walk collects into a list** as into a `Vec` (#490): the
 /// `Vec` rayon builds, taken over as it is (D8), outside every block (D9).
+/// **A list of views is carried into a keep's handles** element by element,
+/// as `Vec`'s is (#490: a task holding a list of a struct of views).
+#[cfg(feature = "tether")]
+impl<'a, T: tether::Rebase<'a>> tether::Rebase<'a> for List<T> {
+    type At = List<T::At>;
+    fn rebase<const N: usize>(self, keeps: &tether::Keeps<'a, N>) -> List<T::At> {
+        self.into_iter().map(|value| value.rebase(keeps)).collect()
+    }
+}
+
 #[cfg(feature = "rayon")]
 impl<T: Send> rayon::iter::FromParallelIterator<T> for List<T> {
     #[inline]
@@ -722,6 +732,16 @@ impl<T> From<List<T>> for Vec<T> {
             drop(PlacedVec::from_raw_parts_in(ptr, 0, room, place));
         }
         vec
+    }
+}
+
+/// **A list of exactly `N` is an array**, as a `Vec` of `N` is (#490: a C
+/// library's fixed array field read back from a list); a list of another
+/// length is handed back as the error.
+impl<T, const N: usize> TryFrom<List<T>> for [T; N] {
+    type Error = List<T>;
+    fn try_from(list: List<T>) -> Result<[T; N], List<T>> {
+        <[T; N]>::try_from(Vec::from(list)).map_err(List::from)
     }
 }
 

@@ -128,7 +128,7 @@ impl Buffer {
     /// **Owned**, and the copy is not an oversight: this is the body, and a body
     /// goes into a request a handler is given, which owns it. The view this
     /// could hand back instead would be copied there anyway.
-    pub fn text_from(&self, at: i64) -> Result<String, IoError> {
+    pub fn text_from(&self, at: i64) -> Result<crate::block::Text, IoError> {
         let at = at.max(0) as usize;
         if at > self.bytes.len() {
             return Err(IoError::Other(
@@ -136,7 +136,7 @@ impl Buffer {
             ));
         }
         match std::str::from_utf8(&self.bytes[at..]) {
-            Ok(text) => Ok(text.to_string()),
+            Ok(text) => Ok(crate::block::Text::from(text)),
             Err(_) => Err(IoError::Other("400 a request body that is not text".into())),
         }
     }

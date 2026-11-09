@@ -471,12 +471,12 @@ pub(crate) fn cx_python_back(out: &CxOut, ctx: &CxCtx) -> (String, String) {
     match out {
         CxOut::Value(shape) => (cx_python_scalar(shape), cx_python_value(shape)),
         CxOut::AbsentValue(shape) => (cx_python_scalar(shape), format!("{} if present.value else None", cx_python_value(shape))),
-        CxOut::AbsentRecord(at) => { let at = *at; (nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()), nikaia_std::block::Text::from("out if present.value else None".to_string())) },
-        CxOut::Choice(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_int".to_string()), format!("{}(out.value)", nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(at)).name)) },
-        CxOut::Record(at) => { let at = *at; (nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()), nikaia_std::block::Text::from("out".to_string())) },
-        CxOut::Handle(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_void_p".to_string()), format!("{}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
-        CxOut::AbsentHandle(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_void_p".to_string()), format!("None if not out.value else {}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
-        _ => (nikaia_std::block::Text::from("".to_string()), nikaia_std::block::Text::from("".to_string())),
+        CxOut::AbsentRecord(at) => { let at = *at; (nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()), nikaia_std::block::Text::from("out if present.value else None")) },
+        CxOut::Choice(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_int"), format!("{}(out.value)", nikaia_std::index::get(&ctx.plains, nikaia_std::index::at(at)).name)) },
+        CxOut::Record(at) => { let at = *at; (nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(at)).name.to_string()), nikaia_std::block::Text::from("out")) },
+        CxOut::Handle(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_void_p"), format!("{}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
+        CxOut::AbsentHandle(at) => { let at = *at; (nikaia_std::block::Text::from("ctypes.c_void_p"), format!("None if not out.value else {}._from(out.value)", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(at)).name)) },
+        _ => (nikaia_std::block::Text::from(""), nikaia_std::block::Text::from("")),
     }
 }
 

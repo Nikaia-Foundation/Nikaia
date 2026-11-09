@@ -281,10 +281,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn composed(&self, text: &str) -> String {
-        String::from(nikaia_std::text::normalized(
-            text,
-            nikaia_std::text::Form::Nfc,
-        ))
+        nikaia_std::text::normalized(text, nikaia_std::text::Form::Nfc)
     }
 
     fn read(&self, path: &str) -> BtRead {

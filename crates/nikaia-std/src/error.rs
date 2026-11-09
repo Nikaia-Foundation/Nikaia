@@ -220,8 +220,8 @@ impl Raised {
     /// This is what `error.full()` reaches. It is deliberately not what
     /// `{error}` prints - the short form is the one you get without thinking,
     /// and it is the one that is safe in front of a stranger.
-    pub fn full(&self) -> String {
-        self.long(true)
+    pub fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(self.long(true))
     }
 
     /// The long form, with the note about a missing trace said once - at the
@@ -248,7 +248,7 @@ impl Raised {
         for later in self.tail.secondary() {
             let long = match later.downcast_ref::<Raised>() {
                 Some(raised) => raised.long(false),
-                None => later.full(),
+                None => String::from(later.full()),
             };
             out.push_str(&indented(&long));
         }
@@ -359,8 +359,8 @@ impl<E: fmt::Display> Thrown<E> {
     /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D8). An outage
     /// that took two of three loads down reads as two failures, the second
     /// under the first, rather than as one with the rest gone.
-    pub fn full(&self) -> String {
-        self.long(true)
+    pub fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(self.long(true))
     }
 
     /// The long form, told whether to say anything about the trace.
@@ -421,7 +421,7 @@ impl<E> Site<E> {
     /// holds rather than from one value - **the failures that joined it
     /// included** ([ADR-280](../../../docs/specification/adr/adr-280.md) D10),
     /// which the handler's half used to leave out.
-    pub fn full_of(&self, error: &E) -> String
+    pub fn full_of(&self, error: &E) -> crate::block::Text
     where
         E: fmt::Display,
     {
@@ -432,7 +432,7 @@ impl<E> Site<E> {
         for later in self.tail.others() {
             out.push_str(&indented(&later.long_form()));
         }
-        out
+        crate::block::Text::from(out)
     }
 
     /// `throw error`: put the error back in the channel, in the envelope it
@@ -646,15 +646,17 @@ impl Joined for Box<dyn Error> {
 /// A `catch` binds the failure channel's type, which is a box. An error that
 /// came through `raise` can say where it was raised; one that came from a
 /// library below can only say what it is, and says so rather than pretending.
+///
+/// It answers a block's text (#490), the `String` of a program.
 pub trait Full {
-    fn full(&self) -> String;
+    fn full(&self) -> crate::block::Text;
 }
 
 impl Full for Box<dyn Error> {
-    fn full(&self) -> String {
+    fn full(&self) -> crate::block::Text {
         match self.downcast_ref::<Raised>() {
             Some(raised) => raised.full(),
-            None => format!("{self}\n{BELOW}"),
+            None => crate::block::Text::from(format!("{self}\n{BELOW}")),
         }
     }
 }
@@ -675,32 +677,32 @@ const BELOW: &str = "  (raised below Nikaia; no site recorded)";
 /// not overlap the one above. One line per library error type that can be a
 /// channel, and there are two.
 impl Full for crate::io::IoError {
-    fn full(&self) -> String {
-        format!("{self}\n{BELOW}")
+    fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(format!("{self}\n{BELOW}"))
     }
 }
 
 impl Full for crate::lock::Overtaken {
-    fn full(&self) -> String {
-        format!("{self}\n{BELOW}")
+    fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(format!("{self}\n{BELOW}"))
     }
 }
 
 impl Full for crate::process::Exit {
-    fn full(&self) -> String {
-        format!("{self}\n{BELOW}")
+    fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(format!("{self}\n{BELOW}"))
     }
 }
 
 impl Full for crate::regex::Error {
-    fn full(&self) -> String {
-        format!("{self}\n{BELOW}")
+    fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(format!("{self}\n{BELOW}"))
     }
 }
 
 impl Full for crate::grammar::ParseError {
-    fn full(&self) -> String {
-        format!("{self}\n{BELOW}")
+    fn full(&self) -> crate::block::Text {
+        crate::block::Text::from(format!("{self}\n{BELOW}"))
     }
 }
 

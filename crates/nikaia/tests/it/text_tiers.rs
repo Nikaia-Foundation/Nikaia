@@ -707,7 +707,9 @@ fn a_value_handed_over_inside_a_hole_is_handed_over_there() {
         "{rust}"
     );
     assert!(
-        rust.contains("vec![text.trim().into_either(), \"x\".to_text().into_either()]"),
+        rust.contains(
+            "vec![text.trim().into_either(), nikaia_std::block::Text::from(\"x\").into_either()]"
+        ),
         "{rust}"
     );
 }

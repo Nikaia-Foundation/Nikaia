@@ -2541,7 +2541,7 @@ pub(crate) fn rsrc_function_type(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Ty
         };
         if views == 0 && buffered(unit, asked, (answer).as_ref()) {
             let message: String = String::from("A function type that takes no view and hands one back doesn't say whose data the result points into.");
-            let note = nikaia_std::block::Text::from("Whoever calls through it has to keep the data the result points into unchanged, and the type has nothing to point at.".to_string());
+            let note = nikaia_std::block::Text::from("Whoever calls through it has to keep the data the result points into unchanged, and the type has nothing to point at.");
             let help: String = String::from("Take the view it hands back as a parameter, or hand back a copy: declare `-> String`.");
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
             return;

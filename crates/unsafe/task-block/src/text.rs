@@ -336,6 +336,17 @@ impl tether::Viewed for Text {
     }
 }
 
+/// **Owned text has no view to carry**: carried into a keep's handles as it
+/// is, as `String` is (#490).
+#[cfg(feature = "tether")]
+impl<'a> tether::Rebase<'a> for Text {
+    type At = Text;
+    #[inline]
+    fn rebase<const N: usize>(self, _keeps: &tether::Keeps<'a, N>) -> Text {
+        self
+    }
+}
+
 /// **A clone is built outside** (D9), as the map's is; [`Text::clone_in`]
 /// places it.
 impl Clone for Text {
@@ -435,6 +446,15 @@ impl From<&String> for Text {
     #[inline]
     fn from(s: &String) -> Text {
         Text::from_str_in(s, Place::Outside)
+    }
+}
+
+/// A copy of a text, outside every block, as `String::from(&String)` is
+/// (#490: `names.first().map(String::from)`).
+impl From<&Text> for Text {
+    #[inline]
+    fn from(s: &Text) -> Text {
+        Text::from_str_in(s.as_str(), Place::Outside)
     }
 }
 

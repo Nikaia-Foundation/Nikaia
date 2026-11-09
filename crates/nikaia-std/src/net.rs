@@ -107,10 +107,10 @@ impl Listener {
 
     /// The address this is bound to, which is what a caller that asked for port
     /// `0` needs to know.
-    pub fn address(&self) -> String {
+    pub fn address(&self) -> crate::block::Text {
         match self.inner.local_addr() {
-            Ok(at) => at.to_string(),
-            Err(_) => String::new(),
+            Ok(at) => crate::block::Text::from(at.to_string()),
+            Err(_) => crate::block::Text::new(),
         }
     }
 }
@@ -158,10 +158,10 @@ impl Connection {
     }
 
     /// Who is on the other end.
-    pub fn peer(&self) -> String {
+    pub fn peer(&self) -> crate::block::Text {
         match self.inner.peer_addr() {
-            Ok(at) => at.to_string(),
-            Err(_) => String::new(),
+            Ok(at) => crate::block::Text::from(at.to_string()),
+            Err(_) => crate::block::Text::new(),
         }
     }
 

@@ -10,12 +10,12 @@ pub fn cx_converted(part: &CxPart, records: &[CxRecord], plains: &[CxPlain], of:
             let inner = nikaia_std::block::Text::from(nikaia_std::index::get(&records, nikaia_std::index::at(at)).name.to_string());
             (format!("__nikaia_c_{}", inner), format!("{}.into_nikaia()", of), format!("__nikaia_c_{}::from_nikaia({})", inner, of))
         },
-        CxPart::Array(_, _) => (nikaia_std::block::Text::from("".to_string()), nikaia_std::block::Text::from("".to_string()), nikaia_std::block::Text::from("".to_string())),
+        CxPart::Array(_, _) => (nikaia_std::block::Text::from(""), nikaia_std::block::Text::from(""), nikaia_std::block::Text::from("")),
     }
 }
 
 pub(crate) fn cx_converted_value(shape: &CxByValue, of: &str) -> (String, String, String) {
-    if shape.scalar { return (nikaia_std::block::Text::from("u32".to_string()), format!("char::from_u32({})", of), format!("{} as u32", of)); }
+    if shape.scalar { return (nikaia_std::block::Text::from("u32"), format!("char::from_u32({})", of), format!("{} as u32", of)); }
     (nikaia_std::block::Text::from(shape.rust.to_string()), format!("Some({})", of), nikaia_std::block::Text::from(of.to_string()))
 }
 
@@ -28,7 +28,7 @@ pub(crate) fn cx_converted_choice(plain: &CxPlain, of: &str) -> (String, String,
         outward.push(format!("{}::{} => {},", plain.name, variant, number));
         number += 1;
     }
-    (nikaia_std::block::Text::from("std::ffi::c_int".to_string()), format!("match {} {{ {} _ => None }}", of, nikaia_std::block::Text::from(inward.join(" "))), format!("match {} {{ {} }}", of, nikaia_std::block::Text::from(outward.join(" "))))
+    (nikaia_std::block::Text::from("std::ffi::c_int"), format!("match {} {{ {} _ => None }}", of, nikaia_std::block::Text::from(inward.join(" "))), format!("match {} {{ {} }}", of, nikaia_std::block::Text::from(outward.join(" "))))
 }
 
 pub(crate) fn cx_field_mirror(part: &CxPart, records: &[CxRecord], plains: &[CxPlain], read: &str, made_from: &str) -> (String, String, String) {

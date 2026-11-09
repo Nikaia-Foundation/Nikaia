@@ -178,7 +178,7 @@ impl CheckState {
         let mut blanks: Vec<&'static str> = vec![];
         while (blanks.len() as i64) < declared { blanks.push("_"); }
         let shape = nikaia_std::block::Text::from(blanks.join(", "));
-        self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s), but the variant carries {}.", key, written, declared), vec![nikaia_std::block::Text::from("A pattern names every part of a positional variant, in order; `_` ignores one.".to_string())], Some(format!("Write `{}({})` and bind the parts you need.", key, shape))));
+        self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s), but the variant carries {}.", key, written, declared), vec![nikaia_std::block::Text::from("A pattern names every part of a positional variant, in order; `_` ignores one.")], Some(format!("Write `{}({})` and bind the parts you need.", key, shape))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

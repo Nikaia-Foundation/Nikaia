@@ -920,6 +920,17 @@ or_tuple! {
     [B] (a: String => &'a str = a.as_str(), b: B => B = *b, c: String => &'a str = c.as_str());
     [A] (a: A => A = *a, b: String => &'a str = b.as_str(), c: String => &'a str = c.as_str());
     [] (a: String => &'a str = a.as_str(), b: String => &'a str = b.as_str(), c: String => &'a str = c.as_str());
+    // The same over a block's text (#490), the `String` of a program.
+    [B] (a: crate::block::Text => &'a str = a.as_str(), b: B => B = *b);
+    [A] (a: A => A = *a, b: crate::block::Text => &'a str = b.as_str());
+    [] (a: crate::block::Text => &'a str = a.as_str(), b: crate::block::Text => &'a str = b.as_str());
+    [B, C] (a: crate::block::Text => &'a str = a.as_str(), b: B => B = *b, c: C => C = *c);
+    [A, C] (a: A => A = *a, b: crate::block::Text => &'a str = b.as_str(), c: C => C = *c);
+    [A, B] (a: A => A = *a, b: B => B = *b, c: crate::block::Text => &'a str = c.as_str());
+    [C] (a: crate::block::Text => &'a str = a.as_str(), b: crate::block::Text => &'a str = b.as_str(), c: C => C = *c);
+    [B] (a: crate::block::Text => &'a str = a.as_str(), b: B => B = *b, c: crate::block::Text => &'a str = c.as_str());
+    [A] (a: A => A = *a, b: crate::block::Text => &'a str = b.as_str(), c: crate::block::Text => &'a str = c.as_str());
+    [] (a: crate::block::Text => &'a str = a.as_str(), b: crate::block::Text => &'a str = b.as_str(), c: crate::block::Text => &'a str = c.as_str());
 }
 
 /// The emitted spelling: `nikaia_std::index::or(value, || fallback)`.

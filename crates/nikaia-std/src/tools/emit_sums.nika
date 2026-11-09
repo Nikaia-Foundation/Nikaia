@@ -286,15 +286,14 @@ impl EmitState {
             }
             // `error.message()` on an error, one of several (ADR-280 D30).
             // On the block types (#490) `String` is a block's text, and
-            // `Full` is `std`'s, which answers Rust's own.
+            // so is what `Full` answers.
             let block_types = self.on_block_types()
             let into = if block_types { ".into()" } else { "" }
-            let full_text = if block_types { "std::string::String" } else { "String" }
             out.push(f"impl{decl} {name}{params} {{\n    #[allow(dead_code)]\n    fn message(&self) -> String {{ self.to_string(){into} }}\n}}\n")
             // The long form asks the member (D2): a member the program declares
             // carries its envelope and therefore its site, and a library's says
             // there is none.
-            out.push(f"impl{decl} nikaia_std::error::Full for {name}{params} {{\n    fn full(&self) -> {full_text} {{\n        match self {{\n")
+            out.push(f"impl{decl} nikaia_std::error::Full for {name}{params} {{\n    fn full(&self) -> String {{\n        match self {{\n")
             for member in members {
                 let variant = sum_variant(member)
                 let mut held: String = "nikaia_std::error::Full::full(e)"
