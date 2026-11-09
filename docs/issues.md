@@ -71,6 +71,9 @@ it, like the checks in `docs/supervisor.md`.
   no body); the sites list goes into the issue by file and line (#1453).
   A site that needs several mechanisms is counted under the one built last,
   so that a group's count is what falls when its item is built (#1470).
+  An item that promises every listed site proved has traced each site
+  (`--bounds-trace`) for all the facts it needs; a site that also needs a
+  fact the walk lacks (`a.min(n)`) is listed under that gap (#1496).
   A site in a method of a type with field rules (ADR-306 D21, D28) has a
   probe reduced from the real code: the function and every `ref mut self`
   method of its type, with stub types, kept as the acceptance check; a
@@ -112,6 +115,9 @@ it, like the checks in `docs/supervisor.md`.
   item goes into the issue (a comment, or the *To build* list ticked), not
   only into a report or a commit. An item found wrong is corrected in the
   issue before the next run.
+  A section that says where the work stands (a branch, uncommitted files)
+  is checked against `git log` and `git branch -r` before each run (#1470:
+  it named a stale branch and files already committed).
 
 ## How a run judges its issue
 
