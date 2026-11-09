@@ -16,6 +16,11 @@
 // **A task's body is not the function's** (D35): the expression of `async e`
 // and the lambda of a `spawn` run as a task, whose panic ends that task and
 // reaches the function as `task::Crashed`, a failure, never as a panic.
+//
+// **Whether a body builds a list in its task's block** (ADR-327 D13, the
+// ledger's `places`) is walked beside it: the same calls, the same tasks
+// left out, a placed literal the site. A task that reaches one can end with
+// `task::OverBudget`.
 
 use std::collections
 
@@ -36,15 +41,20 @@ pub struct PanicFacts {
     pub proven_indices: collections::BTreeSet[i64],
     pub proven_arithmetic: collections::BTreeSet[i64],
     pub proven_negations: collections::BTreeSet[i64],
+    /// The list literals the checker placed in the task's block
+    /// (`check_core_place_in_block`, ADR-327 D9), by node: what `places`
+    /// asks (D13).
+    pub placed: collections::BTreeSet[i64],
 }
 
 /// What one body reaches: a site that panics, a call nobody can see into,
-/// a check the walk was not asked about yet, and the functions of this
-/// package it calls.
+/// a check the walk was not asked about yet, a list placed in its task's
+/// block (ADR-327 D13), and the functions of this package it calls.
 pub struct PanicReach {
     pub sure: bool,
     pub unknown: bool,
     pub checks: bool,
+    pub places: bool,
     pub calls: collections::BTreeSet[String],
 }
 
@@ -115,6 +125,37 @@ pub fn panics_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::
     return answers
 }
 
+/// **Whether each function builds a list in its task's block** (ADR-327
+/// D13): its own reach, or a callee's answer, of this package by the graph
+/// and of a library by its ledger (absorbed on the walk). A call nobody can
+/// see into does not count: no list of ours is placed through it.
+pub fn places_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeSet[String] {
+    let mut placing: collections::BTreeSet[String] = collections::BTreeSet()
+    for (name, reach) in graph.reaches {
+        if reach.places {
+            placing.insert(name.clone())
+        }
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for (name, reach) in graph.reaches {
+            if placing.contains(name) {
+                continue
+            }
+            for callee in reach.calls {
+                let theirs = if graph.reaches.contains_key(callee) { placing.contains(callee) } else { own.functions[callee]?.places ?? false }
+                if theirs {
+                    placing.insert(name.clone())
+                    changed = true
+                    break
+                }
+            }
+        }
+    }
+    return placing
+}
+
 /// Whether a unit's checks are worth asking the bounds walk about: one of
 /// its functions answers `No` with its checks left out, and has some.
 pub fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BTreeMap[String, Panics], walked: ref Vec[String]) -> bool {
@@ -134,7 +175,7 @@ pub fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BT
 /// check left in (`facts.checked`, nothing proved): the task's own sites are
 /// counted where the build could keep them, its callees as the ledger says.
 pub fn panics_of_task(task: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger) -> bool {
-    let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet() }
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet() }
     match task {
         // A lambda written as the task is run, not stored: its body is it.
         Expr::Closure { body, .. } => panics_block(body, items, names, holes_of, facts, own, library, reach),
@@ -152,6 +193,26 @@ pub fn panics_of_task(task: ref Expr, items: ref Vec[Spanned[Item]], names: ref 
     return false
 }
 
+/// **Whether a task can end over its budget** (ADR-327 D13): the
+/// expression of `async e`, run as the task, places a list in its block, or
+/// calls a function that does.
+pub fn places_of_task(task: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger) -> bool {
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet() }
+    match task {
+        Expr::Closure { body, .. } => panics_block(body, items, names, holes_of, facts, own, library, reach),
+        else => panics_expr(task, items, names, holes_of, facts, own, library, reach),
+    }
+    if reach.places {
+        return true
+    }
+    for callee in reach.calls {
+        if own.functions[callee]?.places ?? false {
+            return true
+        }
+    }
+    return false
+}
+
 fn panics_own(reach: ref PanicReach) -> Panics {
     if reach.sure {
         return Panics::Yes
@@ -163,7 +224,7 @@ fn panics_own(reach: ref PanicReach) -> Panics {
 }
 
 fn panics_function(key: ref String, body: ref Block, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut graph: PanicsGraph) {
-    let mut reach = PanicReach { sure: false, unknown: false, checks: false, calls: collections::BTreeSet() }
+    let mut reach = PanicReach { sure: false, unknown: false, checks: false, places: false, calls: collections::BTreeSet() }
     panics_block(body, items, names, holes_of, facts, own, library, reach)
     panics_methods(graph.methods[key], own, library, reach)
     graph.reaches.insert(key.clone(), reach)
@@ -182,6 +243,9 @@ fn panics_methods(resolved: ref MethodsCalled?, own: ref Ledger, library: ref Le
             reach.calls.insert(callee.clone())
         } else {
             panics_absorb(library.functions[callee]?.panics?.clone() ?? Panics::Unknown, reach)
+            if library.functions[callee]?.places ?? false {
+                reach.places = true
+            }
         }
     }
 }
@@ -276,6 +340,10 @@ fn panics_division(divisor: ref Expr, mut reach: PanicReach) {
 }
 
 fn panics_expr(expr: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, facts: ref PanicFacts, own: ref Ledger, library: ref Ledger, mut reach: PanicReach) {
+    // **A list built in the task's block** (ADR-327 D13).
+    if facts.placed.contains(node_key(expr)) {
+        reach.places = true
+    }
     match expr {
         // **A task runs elsewhere** (D35): its panic reaches this function as
         // `task::Crashed`, a failure; only a deadline is read here.
@@ -387,7 +455,12 @@ fn panics_call(expr: ref Expr, func: ref Expr, items: ref Vec[Spanned[Item]], na
         Callee::Own(name) => {
             reach.calls.insert(name.clone())
         }
-        Callee::Library { key, .. } => panics_absorb(library.functions[key]?.panics?.clone() ?? Panics::Unknown, reach),
+        Callee::Library { key, .. } => {
+            panics_absorb(library.functions[key]?.panics?.clone() ?? Panics::Unknown, reach)
+            if library.functions[key]?.places ?? false {
+                reach.places = true
+            }
+        }
         Callee::Opaque(_) => {
             reach.unknown = true
         }

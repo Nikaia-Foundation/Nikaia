@@ -873,6 +873,8 @@ fn check_core_async_one_at_a_time(limit: ref Expr?) -> bool sync {
 /// does (`NK2605`). One that cannot adds nothing, so a `catch` that could
 /// only take its crash has nothing to handle (`NK1134`). Its own sites
 /// count with every check left in; its callees answer what the ledger says.
+/// One with a site placed in its block also fails with `task::OverBudget`
+/// (ADR-327 D13).
 fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, task: ref Expr, span: ref Span) {
     let facts = PanicFacts {
         checked: true,
@@ -883,11 +885,17 @@ fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckW
         proven_indices: collections::BTreeSet(),
         proven_arithmetic: collections::BTreeSet(),
         proven_negations: collections::BTreeSet(),
+        placed: state.facts.placed_in_block.clone(),
+    }
+    let function = state.current?.clone() ?? ""
+    // **A task that builds in its block can run over its budget** (ADR-327
+    // D13): it fails with `task::OverBudget` where it is waited for.
+    if places_of_task(task, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library) {
+        check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
     }
     if !panics_of_task(task, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library) {
         return
     }
-    let function = state.current?.clone() ?? ""
     check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
 }
 

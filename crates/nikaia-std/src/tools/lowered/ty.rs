@@ -739,6 +739,7 @@ pub struct FnContract {
     pub mutates: bool,
     pub touches_a_lock: Lock,
     pub panics: Panics,
+    pub places: bool,
     pub threads: Threads,
     pub views: Vec<Held>,
     pub sharing: Vec<Class>,
@@ -754,7 +755,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

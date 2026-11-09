@@ -763,7 +763,7 @@ impl EmitState {
         let inside = flow.handling(named);
         let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
         let mut opening: Option<String> = None;
-        if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
+        if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed && fallback { opening = Some(String::from("let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());")); } else if boxed { opening = Some(String::from("let error: Box<dyn std::error::Error> = error.into();")); }
         if dropped { out.push(&format!(" {{\n{}Ok(_) => {{}},\n", pad)); } else if self.facts.nullable_catches.contains(&node_key(guarded_expr)) { out.push(&format!(" {{\n{}Ok(value) => Some(value),\n", pad)); } else if self.facts.owned_catches.contains(&node_key(guarded_expr)) {
             let copy = if self.on_block_types() { "copy_owned" } else { "to_owned" };
             out.push(&format!(" {{\n{}Ok(value) => value.{}(),\n", pad, copy));

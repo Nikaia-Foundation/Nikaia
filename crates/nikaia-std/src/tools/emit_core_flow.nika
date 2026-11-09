@@ -1166,6 +1166,10 @@ impl EmitState {
         let mut opening: String? = null
         if named {
             opening = "let (error, __nikaia_site) = error.split();"
+        } else if boxed && fallback {
+            // **A task over its block is handed as `task::OverBudget`**
+            // (ADR-327 D13), and not as the crash that carried it.
+            opening = "let error: Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());"
         } else if boxed {
             // A handle whose body cannot fail hands `Crashed` or `Late` bare.
             opening = "let error: Box<dyn std::error::Error> = error.into();"

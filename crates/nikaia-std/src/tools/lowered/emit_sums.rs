@@ -73,6 +73,10 @@ impl EmitState {
         if self.borrows_named(world, member) { return sum_member_type(kind, member, params, self.is_std); }
         sum_member_type(kind, member, "", self.is_std)
     }
+    pub fn sum_member_value(&self, world: &EmitWorld<'_, '_, '_, '_>, member: &str, value: &str) -> String {
+        if self.name_of_error(world, member) == 0 { return nikaia_std::block::Text::from(value.to_string()); }
+        format!("nikaia_std::error::Thrown::from({})", value)
+    }
     pub fn write_error_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, out: &mut EmitOut) {
         if !self.entry { return; }
         for (members, name) in self.sums.iter() {
@@ -93,9 +97,22 @@ impl EmitState {
                 out.push(&format!("    {}({}),\n", variant, held));
             }
             out.push("}\n");
+            let mut over = false;
+            let mut crash_member = false;
+            for member in members.iter() {
+                if member == "task::OverBudget" { over = true; }
+                if member == "task::Crashed" { crash_member = true; }
+            }
+            if over {
+                let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget");
+                let crash = self.sum_member_value(world, "task::Crashed", "error");
+                let rest = if crash_member { format!("{}::{}({})", name, sum_variant("task::Crashed"), crash) } else { String::from("std::panic::resume_unwind(Box::new(error.to_string()))") };
+                out.push(&format!("impl{} From<nikaia_std::task::Crashed> for {}{} {{\n    fn from(error: nikaia_std::task::Crashed) -> {}{} {{\n        if error.over_budget() {{\n            return {}::{}({});\n        }}\n        {}\n    }}\n}}\n", decl, name, params, name, params, name, sum_variant("task::OverBudget"), budget, rest));
+            }
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
+                if over && member == "task::Crashed" { continue; }
                 out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
                 if self.name_of_error(world, member) == 2 {
                     let bare = library_error_path(member, self.is_std);

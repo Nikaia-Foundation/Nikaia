@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1371] — 2026-11-09
+
+**Memory budget: a full block ends its task with task::OverBudget**
+- A task whose block is full ends with `task::OverBudget` (ADR-327 D13): only a task that places memory in its block adds it to the throw set, and unhandled it is NK2605; the async form hands it to its waiter, a group child fails alone, and a crash it carried is handed as `OverBudget`, not `Crashed`. Part of #490.
+
 ## [0.0.1370] — 2026-11-09
 
 **Memory budget: lists that stay in their task live in its block**

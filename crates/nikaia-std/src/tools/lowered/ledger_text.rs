@@ -127,6 +127,7 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         Panics::Yes => { out.push_str("panics = true\n"); },
         Panics::Unknown => { },
     }
+    if contract.places { out.push_str("places = true\n"); }
     match contract.threads {
         Threads::Undecided => { },
         Threads::May => { out.push_str("threads = true\n"); },
