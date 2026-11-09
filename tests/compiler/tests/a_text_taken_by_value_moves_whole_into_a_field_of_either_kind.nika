@@ -1,0 +1,41 @@
+// A text parameter taken by value and given whole to a struct field that
+// holds text of either kind (a view of the input where a grammar keeps it,
+// owned text where a function makes it, ADR-282 D12) moves in as the field's
+// own text: the struct holds no view of it, so the function may hand the
+// struct back (#1515).
+struct Piece {
+    value: String,
+}
+
+enum Value {
+    Str(Piece),
+    Nothing,
+}
+
+struct Node {
+    raw: String,
+    value: Value,
+}
+
+grammar Words {
+    rule WS = "" -> { }
+    rule Word -> Piece = w:text(("a" | "b" | "c" | "d")+) " "? -> { Piece { value: w } }
+    entry rule doc -> Vec[Piece] = ws:Word* eof -> { ws }
+}
+
+fn made(t: String) -> Node {
+    return Node { raw: "", value: Value::Str(Piece { value: t }) }
+}
+
+fn main() throws {
+    let text = "ab cd"
+    let mut pieces = Words::doc(text)
+    let node = made(f"x{pieces.len()}")
+    match node.value {
+        Value::Str(p) => pieces.push(p)
+        Value::Nothing => {}
+    }
+    for p in pieces.iter() {
+        println(p.value)
+    }
+}

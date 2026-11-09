@@ -2473,17 +2473,46 @@ fn rsrc_struct_fields(unit: ref Unit, asked: ref Asked, here: ref Here, known: r
         } else {
             more = rsrc_maybe(unit, asked, here, known, own_buffer, field.value, flow)
         }
+        // **A parameter taken by value, given whole to a field of text of
+        // either kind** (ADR-282 D12, #1515), moves in as the field's own
+        // text: the struct holds no view of it, as `=a` for a result.
+        let mut whole = true
+        if field.value != null {
+            whole = rsrc_bare_variable(field.value)
+        }
         let mut owning = false
+        let mut either_whole = false
         for (written, ty) in declared {
             if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) {
                 owning = true
             }
+            if written == named && ty.either && rsrc_plain_text(asked, ty) && whole {
+                either_whole = true
+            }
+        }
+        if either_whole {
+            let mut kept = rsrc_none()
+            for entry in more {
+                if !entry.starts_with("!") && !entry.starts_with("=") {
+                    kept.insert(entry.clone())
+                }
+            }
+            more = kept
         }
         if !owning {
             rsrc_join(out, rsrc_under(named, more))
         }
     }
     return out
+}
+
+// Whether `value` is a name and nothing else.
+fn rsrc_bare_variable(value: ref Expr?) -> bool {
+    let given = value ?? return false
+    return match given {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
 }
 
 fn rsrc_fields(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collections::BTreeMap[String, ResultSrcKnown], own_buffer: fn(ref Expr) -> bool sync, fields: ref Vec[FieldInit], mut flow: ResultSrcFlow) -> collections::BTreeSet[String] {
