@@ -1,0 +1,9 @@
+bounds in tests/a_text_option_parameter_read_through_coalesce_in_a_loop_is_lent.nika: 0 indexes, 0 proved; 8 operations, 0 proved
+    13  n += k.len() + x            checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    13  k.len() + x                 checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    23  n += k.len() + x            checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    23  k.len() + x                 checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    31  n += (key ?? "").len() + x  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    31  (key ?? "").len() + x       checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
+    41  n += measure(k) + x         checked: a call's result, which the walk knows nothing of (#382)
+    41  measure(k) + x              checked: a call's result, which the walk knows nothing of (#382)

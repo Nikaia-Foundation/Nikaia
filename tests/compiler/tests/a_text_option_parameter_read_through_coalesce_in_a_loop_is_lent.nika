@@ -1,0 +1,55 @@
+// A `String?` parameter read through `??` inside a loop is lent, not handed
+// over, so each turn reads it again (ADR-279 D5, ADR-views-3 D2; #1458).
+
+fn measure(s: String) -> i64 {
+    s.len()
+}
+
+fn guarded(key: String?, xs: Vec[i64]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        if key != null {
+            let k = key ?? ""
+            n += k.len() + x
+        }
+    }
+    return n
+}
+
+fn unguarded(key: String?, xs: Vec[i64]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        let k = key ?? ""
+        n += k.len() + x
+    }
+    return n
+}
+
+fn in_place(key: String?, xs: Vec[i64]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        n += (key ?? "").len() + x
+    }
+    return n
+}
+
+fn handed_on(key: String?, xs: Vec[i64]) -> i64 {
+    let mut n = 0
+    for x in xs {
+        if key != null {
+            let k = key ?? ""
+            n += measure(k) + x
+        }
+    }
+    return n
+}
+
+fn main() throws {
+    println(guarded(f"a{1}", [1, 2]))
+    println(unguarded(f"a{1}", [1, 2]))
+    println(unguarded(null, [1, 2]))
+    println(in_place(f"b{22}", [1, 2]))
+    let shared = f"c{3}"
+    println(handed_on(shared, [1, 2]))
+    println(handed_on(shared, [3]))
+}
