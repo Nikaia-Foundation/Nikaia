@@ -174,4 +174,8 @@ together with the specification section and an example test.
 * A `let x: V? = m.get(k)` or `m[k]` is typed `ref V?` by #297's `of_a_map` block in `check_core_stmt.nika`; a value-typed read must be exempted there. (issue-1460)
 * New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
 * A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
+* A new `nikaia` flag must be declared in clap in `crates/nikaia/src/main.rs` (Rust); a development aid read deep inside can be kept in a static `OnceLock` set there, instead of passing it through every caller. (issue-1495)
+* Every turn fact of a loop names that loop's `#turn` variable, so "facts connected to the goal" through shared names takes in every list the loop grows; weight a name by how many facts name it. (issue-1500)
+* `lower-std --bounds` writes nothing and reads no cache, so the old and new binaries can measure the same tree in parallel and be diffed site by site. (issue-1500)
+* Code that runs for every question of the bounds walk must not loop over string-keyed maps; give the names integer ids first, or `lower-std` grows from minutes to tens of minutes. (issue-1500)
 
