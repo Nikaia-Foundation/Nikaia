@@ -194,6 +194,24 @@ pub fn code_reads(code: ref Code, at: i64) -> bool {
     return code.result_from.contains(name)
 }
 
+/// `ty` with every `Self` in it read as `owner`, the type of the `impl`.
+fn self_named(ty: ref Ty, owner: ref Ty) -> Ty {
+    return match ty {
+        Ty::Named { name, args, view } => {
+            if name == "Self" && args.len() == 0 {
+                if view {
+                    return owner.as_a_view()
+                }
+                return owner.clone()
+            }
+            Ty::Named { name: name.clone(), args: args.iter().map(fn(a) { self_named(a, owner) }).collect(), view: view }
+        },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(fn(a) { self_named(a, owner) }).collect()),
+        Ty::Nullable(inner) => Ty::Nullable(self_named(inner, owner)),
+        else => ty.clone(),
+    }
+}
+
 fn written_all(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], types: ref Vec[Type]) -> Vec[Ty] {
     let mut out: Vec[Ty] = []
     for ty in types {
@@ -204,8 +222,9 @@ fn written_all(names: ref winnow_grammar::InternerContext, aliases: ref collecti
 
 /// **One function's entry**, named as a caller would reach it: `Type::method`
 /// in an `impl`, and the anonymous constructor (Kap 4.2) as `Type::new`.
-/// `outer` is the `impl`'s own generic parameters.
-pub fn declared_function(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], item: ref Item, target: String?, outer: ref collections::BTreeSet[String]) -> DeclaredFn? {
+/// `outer` is the `impl`'s own generic parameters, and `itself` the type the
+/// `impl` is for, as written there: what `Self` stands for.
+pub fn declared_function(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], item: ref Item, target: String?, outer: ref collections::BTreeSet[String], itself: ref Ty?) -> DeclaredFn? {
     let (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) = match item {
         Item::Fn { name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw, .. } => (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw),
         else => return null,
@@ -262,7 +281,16 @@ pub fn declared_function(names: ref winnow_grammar::InternerContext, aliases: re
     let mut mutable: Vec[String] = []
     for arg in args {
         let arg_name = names.resolve(arg.name).clone()
-        params.push((arg_name.clone(), written_ty(names, aliases, arg.ty).parameterise(parameters)))
+        let mut ty = written_ty(names, aliases, arg.ty).parameterise(parameters)
+        // `other: Self` in an `impl` is the type it is for, as the receiver
+        // is (Part I 4.7, #1448).
+        match itself {
+            null => {},
+            owner => {
+                ty = self_named(ty, owner)
+            },
+        }
+        params.push((arg_name.clone(), ty))
         // `mut out: Vec[i64]` is the claim that the caller's value changes.
         if arg.mutable {
             mutable.push(arg_name)

@@ -214,20 +214,21 @@ pub fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], borrowing: &[
         for (i, item) in view.items.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             match &item.node {
                 Item::Fn { .. } => {
-                    let entry = match declared_function(view.words, view.aliases, &item.node, None, &collections::BTreeSet::new()) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let entry = match declared_function(view.words, view.aliases, &item.node, None, &collections::BTreeSet::new(), None) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     computed_defaults(&mut defaults, &entry.key, u, i, None, view, &item.node);
                     ledger.functions.insert(entry.key, entry.contract);
                 },
                 Item::Impl { trait_name, target, methods } => {
                     let trait_name = *trait_name;
                     let outer: collections::BTreeSet<String> = impl_parameters(view.words, target, &declared).iter().cloned().collect();
+                    let itself = written_ty(view.words, view.aliases, target).parameterise(&outer);
                     let target = view.text(target.name);
                     match trait_name {
                         None => { },
                         Some(name) => { ledger.implementations.entry(String::from(view.text(name))).or_default().insert(target.to_string()); },
                     }
                     for (m, method) in methods.iter().enumerate().map(|(at, item)| (at as i64, item)) {
-                        let entry = match declared_function(view.words, view.aliases, &method.node, Some(&target), &outer) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let entry = match declared_function(view.words, view.aliases, &method.node, Some(&target), &outer, Some(&itself)) { Some(__nikaia_value) => __nikaia_value, None => continue };
                         computed_defaults(&mut defaults, &entry.key, u, i, Some(m), view, &method.node);
                         ledger.functions.insert(entry.key, entry.contract);
                     }

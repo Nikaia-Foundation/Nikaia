@@ -107,13 +107,29 @@ pub fn code_reads(code: &Code, at: i64) -> bool {
     code.result_from.contains(&name)
 }
 
+pub(crate) fn self_named(ty: &Ty, owner: &Ty) -> Ty {
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if name == "Self" && args.is_empty() {
+                if view { return owner.as_a_view(); }
+                return owner.clone();
+            }
+            Ty::Named { name: name.to_string(), args: args.iter().map(|a| { self_named(a, owner) }).collect::<Vec<_>>(), view }
+        },
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { self_named(a, owner) }).collect::<Vec<_>>()),
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(Box::new(self_named(inner, owner))) },
+        _ => ty.clone(),
+    }
+}
+
 pub(crate) fn written_all(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, types: &[Type]) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
     for ty in types.iter() { out.push(written_ty(names, aliases, ty)); }
     out
 }
 
-pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>) -> Option<DeclaredFn> {
+pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, item: &Item, target: Option<&str>, outer: &collections::BTreeSet<String>, itself: Option<&Ty>) -> Option<DeclaredFn> {
     let (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) = match item {
         Item::Fn { name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw, .. } => { let can_throw = *can_throw; let is_public = *is_public; let is_sync = *is_sync; let name = *name; (name, generics, receiver, args, config, ret_type, is_sync, sync_by, is_public, can_throw) },
         _ => return None,
@@ -160,7 +176,12 @@ pub fn declared_function(names: &winnow_grammar::InternerContext, aliases: &coll
     let mut mutable: Vec<String> = vec![];
     for arg in args.iter() {
         let arg_name = names.resolve(arg.name).to_string();
-        params.push((arg_name.to_string(), written_ty(names, aliases, &arg.ty).parameterise(&parameters)));
+        let mut ty = written_ty(names, aliases, &arg.ty).parameterise(&parameters);
+        match itself {
+            None => { },
+            Some(owner) => { ty = self_named(&ty, owner); },
+        }
+        params.push((arg_name.to_string(), ty));
         if arg.mutable { mutable.push(arg_name); }
     }
     let mut bounds: Vec<(String, Vec<String>)> = vec![];

@@ -335,7 +335,7 @@ pub fn declare_items(units: ref Vec[ParsedView], borrowing: ref Vec[collections:
         for (i, item) in view.items.iter().enumerate() {
             match item.node {
                 Item::Fn { .. } => {
-                    let entry = declared_function(view.words, view.aliases, item.node, null, collections::BTreeSet()) ?? continue
+                    let entry = declared_function(view.words, view.aliases, item.node, null, collections::BTreeSet(), null) ?? continue
                     computed_defaults(defaults, entry.key, u, i, null, view, item.node)
                     ledger.functions.insert(entry.key, entry.contract)
                 },
@@ -343,6 +343,7 @@ pub fn declare_items(units: ref Vec[ParsedView], borrowing: ref Vec[collections:
                     // `impl Stack[T]` puts `T` in scope for every method in it,
                     // so it is a name that stands for a type there too.
                     let outer: collections::BTreeSet[String] = impl_parameters(view.words, target, declared).iter().cloned().collect()
+                    let itself = written_ty(view.words, view.aliases, target).parameterise(outer)
                     let target = view.text(target.name)
                     // ADR-295 D15: `impl Speaks for Dog` is the claim that a
                     // `Dog` may stand where a `Speaks` is asked for, and it
@@ -354,7 +355,7 @@ pub fn declare_items(units: ref Vec[ParsedView], borrowing: ref Vec[collections:
                         },
                     }
                     for (m, method) in methods.iter().enumerate() {
-                        let entry = declared_function(view.words, view.aliases, method.node, target, outer) ?? continue
+                        let entry = declared_function(view.words, view.aliases, method.node, target, outer, itself) ?? continue
                         computed_defaults(defaults, entry.key, u, i, m, view, method.node)
                         ledger.functions.insert(entry.key, entry.contract)
                     }
