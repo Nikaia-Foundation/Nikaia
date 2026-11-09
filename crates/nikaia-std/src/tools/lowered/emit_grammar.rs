@@ -423,17 +423,35 @@ impl EmitState {
             _ => vec![pattern.clone()],
         };
         let mut folds = 0;
-        for part in parts.iter() { if stream_item(&part.node).is_some() { folds += 1; } }
-        if folds != 1 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate this `@stream` entry yet: its body holds one `item*`, a call of a rule repeated, and the engine reads only that form one item at a time (`list(item, sep)`, `item+` and counted repeats wait for a fold of their own in winnow-grammar)."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
+        for part in parts.iter() { if stream_fold(world, &part.node).is_some() { folds += 1; } }
+        if folds != 1 { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
         out.push("        #[stream(each)]\n");
         out.push(&format!("        pub rule {}{} -> usize{} =\n          ", rule_name, taken, label));
         for i in 0..parts.len() as i64 {
             if i > 0 { out.push(" "); }
-            match stream_item(&nikaia_std::index::get(&parts, (i) as usize).node) {
-                Some(ref inner) => {
+            match stream_fold(world, &nikaia_std::index::get(&parts, (i) as usize).node) {
+                Some(ref fold) => {
+                    if fold.counted { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate a `@stream` entry whose repetition is counted by a value (`item{n}`) yet: write the bounds as integers, `item{2,5}`."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
+                    match fold.max {
+                        Some(most) => { if most < 1 || most < fold.min { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("This `@stream` entry's repetition matches no item: its upper bound is 0 or below its lower one."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); } },
+                        None => { },
+                    }
                     out.push("__wg_n:fold(");
-                    self.emit_pattern(world, walk, out, host, inner)?;
-                    out.push(&format!(", || 0usize, |n: usize, _item: {}| n + 1)", item));
+                    self.emit_pattern(world, walk, out, host, &fold.item)?;
+                    out.push(&format!(", || 0usize, |n: usize, _item: {}| n + 1", item));
+                    match fold.sep {
+                        Some(ref sep) => {
+                            out.push(", sep = ");
+                            self.emit_pattern(world, walk, out, host, sep)?;
+                        },
+                        None => { },
+                    }
+                    if fold.min > 0 { out.push(&format!(", min = {}", fold.min)); }
+                    match fold.max {
+                        Some(most) => { out.push(&format!(", max = {}", most)); },
+                        None => { },
+                    }
+                    out.push(")");
                 },
                 None => { self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (i) as usize))?; },
             }
@@ -454,16 +472,49 @@ pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format
 
 pub(crate) fn emit_stream_grammar_module(book: &str) -> String { format!("__nikaia_grammar_{}", book) }
 
-pub(crate) fn stream_item(pattern: &Pattern) -> Option<Spanned<Pattern>> {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct StreamFold {
+    pub(crate) item: Spanned<Pattern>,
+    pub(crate) sep: Option<Spanned<Pattern>>,
+    pub(crate) min: i64,
+    pub(crate) max: Option<i64>,
+    pub(crate) counted: bool,
+}
+
+pub(crate) fn stream_fold(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern) -> Option<StreamFold> {
     match pattern {
-        Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); match rep {
-            Repeat::Star => match &pat.node {
-                Pattern::Ref { .. } => Some(pat.clone()),
-                _ => None,
-            },
-            _ => None,
-        } },
-        _ => None,
+        Pattern::Repeat { pat, rep } => {
+            let pat = nikaia_std::boxed::open(pat);
+            if stream_item(&pat.node) {
+                match rep {
+                    Repeat::Star => { return Some(StreamFold { item: pat.clone(), sep: None, min: 0, max: None, counted: false }); },
+                    Repeat::Plus => { return Some(StreamFold { item: pat.clone(), sep: None, min: 1, max: None, counted: false }); },
+                    Repeat::Exactly(n) => { let n = *n; return Some(StreamFold { item: pat.clone(), sep: None, min: n as i64, max: Some(n as i64), counted: false }); },
+                    Repeat::AtLeast(n) => { let n = *n; return Some(StreamFold { item: pat.clone(), sep: None, min: n as i64, max: None, counted: false }); },
+                    Repeat::Between(low, high) => { let high = *high; let low = *low; return Some(StreamFold { item: pat.clone(), sep: None, min: low as i64, max: Some(high as i64), counted: false }); },
+                    Repeat::Optional => { },
+                }
+            }
+        },
+        Pattern::Counted { pat, .. } => {
+            let pat = nikaia_std::boxed::open(pat);
+            if stream_item(&pat.node) { return Some(StreamFold { item: pat.clone(), sep: None, min: 0, max: None, counted: true }); }
+        },
+        Pattern::Ref { name, generics, args } => {
+            let name = *name;
+            if emit_text(world, name) == "list" && generics.is_empty() && args.len() == 2 && stream_item(&nikaia_std::index::get(&args, 0).node) { return Some(StreamFold { item: (*nikaia_std::index::get(&args, 0)).clone(), sep: Some((*nikaia_std::index::get(&args, 1)).clone()), min: 0, max: None, counted: false }); }
+        },
+        _ => { },
+    }
+    None
+}
+
+pub(crate) fn stream_item(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ref { .. } => true,
+        Pattern::Call { .. } => true,
+        Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); stream_item(&inner.node) },
+        _ => false,
     }
 }
 
