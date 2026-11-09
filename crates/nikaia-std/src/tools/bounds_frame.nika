@@ -60,6 +60,7 @@ pub fn bounds_around(
 		fields: collections::BTreeSet(),
 		field_writers: collections::BTreeSet(),
 		field_bounds: collections::BTreeMap(),
+		returning: collections::BTreeSet(),
 	}
 	for item in program.items {
 		match item.node {
@@ -152,10 +153,13 @@ fn frame_context(
 		text_classes: collections::BTreeMap(),
 		around: around,
 		whole_fields: collections::BTreeSet(),
+		whole_loops: collections::BTreeSet(),
+		whole_parts: collections::BTreeMap(),
 		array_lengths: collections::BTreeMap(),
 		through_loops: false,
 		decided: collections::BTreeMap(),
 		list_indices: collections::BTreeSet(),
+		returns: collections::BTreeMap(),
 	}
 }
 
@@ -646,9 +650,12 @@ fn fields_declared(
 					let mut fits = here && generics.is_empty() && !is_extern
 						&& field.default == null && field.attributes.is_empty()
 					let list = words.resolve(ty.name)
-					fits = fits && (list == "Vec" || list == "List") && ty.generics.len() == 1
+					// A map's values are held as a list's (ADR-306 D24).
+					let map_name: String = (list.split("::").last() ?? "").clone()
+					let map = (map_name == "BTreeMap" || map_name == "HashMap") && ty.generics.len() == 2
+					fits = fits && (((list == "Vec" || list == "List") && ty.generics.len() == 1) || map)
 					if fits {
-						let inner = ref ty.generics[0]
+						let inner = ref ty.generics[ty.generics.len() - 1]
 						fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name))
 					}
 					let was = scan.live.get(name) ?? true

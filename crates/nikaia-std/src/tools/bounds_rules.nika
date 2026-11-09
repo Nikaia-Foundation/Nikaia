@@ -811,9 +811,12 @@ fn rules_give(mut walk: BoundsWalk, mut facts: BoundsFacts, root: ref String, ow
             bounding_push(walk, facts, a_floor)
             bounding_push(walk, facts, b_floor)
         } else if rule.kind == "index" {
+            // Of every value of `a`: nothing where `a` is empty (#1483).
             let each = walk.arena.var(bounding_element_of(f"{root}.{rule.a}"))
-            let low = walk.arena.ge(each, zero)
-            let high = walk.arena.lt(each, b)
+            let low_each = walk.arena.ge(each, zero)
+            let high_each = walk.arena.lt(each, b)
+            let low = bounding_each_guarded(walk, low_each)
+            let high = bounding_each_guarded(walk, high_each)
             bounding_push(walk, facts, low)
             bounding_push(walk, facts, high)
             bounding_push(walk, facts, b_floor)
@@ -862,7 +865,11 @@ fn rules_called(walk: ref BoundsWalk, call: ref Expr, context: ref BoundsContext
 /// (ADR-375 D5, #1330): they hold of `name`.
 fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext) {
     let base = match value {
-        Expr::Index { base, .. } => base,
+        Expr::Index { base, index, .. } => match index {
+            // A cut is no element, and an empty one reads none.
+            Expr::Range { .. } => return,
+            else => base,
+        },
         else => return,
     }
     let list = path_of(base, words) ?? return
@@ -880,6 +887,10 @@ fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref S
         return
     }
     facts.ints.insert(name.clone())
+    // The read stopped the program where `list` is empty, so the facts of
+    // every element, guarded by its emptiness, hold of `name` (#1483).
+    let present = bounding_each_present(walk, list)
+    bounding_push(walk, facts, present)
     for fact in stated {
         bounding_push(walk, facts, fact)
     }
@@ -901,7 +912,10 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
     let zero = walk.arena.int(0)
     let low = walk.arena.ge(each, zero)
     let high = walk.arena.lt(each, len)
-    let goal = walk.arena.and([low, high])
+    let inside = walk.arena.and([low, high])
+    // The inner read stops the program where `list` is empty, so the outer
+    // one needs its position only where it is not (#1483).
+    let goal = bounding_each_guarded(walk, inside)
     return bounding_proves(walk, facts, goal, ask)
 }
 
@@ -910,6 +924,8 @@ fn rules_element_inside(mut walk: BoundsWalk, len: i64, index: ref Expr, facts: 
 /// again; a `result` rule of the method checked must hold of what a
 /// `return` hands back.
 fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?, throwing: bool, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) {
+    // What the function is found to return (ADR-306 D23).
+    bounding_returned(walk, facts, returned, throwing, context, program, words, ask)
     if !walk.checking || !walk.rule_roots.contains_key("self") {
         return
     }
@@ -956,7 +972,9 @@ fn rules_position(mut walk: BoundsWalk, facts: ref BoundsFacts, value: ref Expr,
     let len = walk.arena.var(length_of(f"self.{b}"))
     let low = walk.arena.ge(v, zero)
     let high = walk.arena.lt(v, len)
-    let goal = walk.arena.and([low, high])
+    let inside = walk.arena.and([low, high])
+    // An element read stops the program where its list is empty (#1483).
+    let goal = if read != null { bounding_each_guarded(walk, inside) } else { inside }
     return bounding_proves(walk, facts, goal, ask)
 }
 
@@ -1073,8 +1091,10 @@ fn rules_elements_kept(mut walk: BoundsWalk, mut facts: BoundsFacts, list: ref S
             let zero = walk.arena.int(0)
             let b = walk.arena.var(length_of(f"{root}.{rule.b}"))
             let each = walk.arena.var(bounding_element_of(of))
-            let low = walk.arena.ge(each, zero)
-            let high = walk.arena.lt(each, b)
+            let low_each = walk.arena.ge(each, zero)
+            let high_each = walk.arena.lt(each, b)
+            let low = bounding_each_guarded(walk, low_each)
+            let high = bounding_each_guarded(walk, high_each)
             bounding_push(walk, facts, low)
             bounding_push(walk, facts, high)
         }

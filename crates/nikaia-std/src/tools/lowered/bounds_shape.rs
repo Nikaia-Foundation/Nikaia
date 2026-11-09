@@ -23,6 +23,7 @@ pub struct Around {
     pub fields: collections::BTreeSet<String>,
     pub field_writers: collections::BTreeSet<i64>,
     pub field_bounds: collections::BTreeMap<String, Range>,
+    pub returning: collections::BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,10 +39,11 @@ pub(crate) struct ShapeSeen {
     pub(crate) bound: collections::BTreeMap<String, i64>,
     pub(crate) shape: BodyShape,
     pub(crate) lost: collections::BTreeSet<String>,
+    pub(crate) returning: collections::BTreeSet<String>,
 }
 
 pub fn shape_of(args: &[FnArg], body: &Block, pinned: &collections::BTreeSet<String>, around: &Around, words: &winnow_grammar::InternerContext) -> BodyShape {
-    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.to_owned() }, lost: collections::BTreeSet::new() };
+    let mut seen = ShapeSeen { bound: collections::BTreeMap::new(), shape: BodyShape { constants: collections::BTreeMap::new(), unsigned: collections::BTreeSet::new(), roots: collections::BTreeSet::new(), aliases: collections::BTreeMap::new(), bound: collections::BTreeSet::new(), twice: collections::BTreeSet::new(), fields: around.fields.to_owned() }, lost: collections::BTreeSet::new(), returning: around.returning.to_owned() };
     for arg in args.iter() { bind_name(words.resolve(arg.name), &mut seen); }
     look_block(body, &Look::Bound, false, around, words, &mut seen);
     for (name, times) in seen.bound.iter() {
@@ -197,7 +199,36 @@ pub(crate) fn read_let(name: &str, mutable: bool, ty: Option<&Type>, value: &Exp
         let n = literal_count(value);
         if n.is_some() { seen.shape.constants.insert(name.to_string(), nikaia_std::index::or(n, || 0)); }
     }
-    if is_list_literal(value) { seen.shape.roots.insert(name.to_string()); }
+    if is_list_literal(value) || is_empty_map(value, words) || returning_call(value, &seen.returning, words) { seen.shape.roots.insert(name.to_string()); }
+}
+
+pub(crate) fn returning_call(expr: &Expr, returning: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
+            Expr::Variable(name, _) => { let name = *name; returning.contains(words.resolve(name)) },
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+pub fn is_empty_map(expr: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    match expr {
+        Expr::Call { func, args, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if !args.is_empty() { return false; }
+            let last = match func {
+                Expr::Path(segments, _) => {
+                    if segments.is_empty() { return false; }
+                    words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string()
+                },
+                Expr::Variable(n, _) => { let n = *n; words.resolve(n).to_string() },
+                _ => return false,
+            };
+            last == "BTreeMap" || last == "HashMap"
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn read_alias(name: &str, value: &Expr, words: &winnow_grammar::InternerContext, seen: &mut ShapeSeen) {

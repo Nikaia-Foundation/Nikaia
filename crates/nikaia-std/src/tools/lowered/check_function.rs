@@ -427,13 +427,14 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
     for arg in args.iter() {
         let name = world.words.resolve(arg.name).to_string();
         state.nameable(&name, &arg.span, "a parameter");
-        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
+        let plain_text = world.words.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && (!arg.ty.is_view || arg.ty.either) && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable;
         let plain_option = arg.ty.is_nullable && !arg.ty.is_view && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable;
         let type_parameter = arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && (*arg.ty.code).is_none() && !arg.mutable && state.type_parameters.contains_key(world.words.resolve(arg.ty.name));
         let mut ty = Ty::Unknown;
         if (plain_text || plain_option || type_parameter) && check_function_lends(world, key, at + offset) {
             let mut viewed = arg.ty.clone();
             viewed.is_view = true;
+            viewed.either = false;
             ty = check_walked_declared(state, world, &viewed, &arg.span);
         } else { ty = check_walked_declared(state, world, &arg.ty, &arg.span); }
         check_reflected_field_kept(state, world, &arg.ty, &arg.span, true);

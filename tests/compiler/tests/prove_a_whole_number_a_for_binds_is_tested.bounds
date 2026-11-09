@@ -1,0 +1,6 @@
+bounds in tests/prove_a_whole_number_a_for_binds_is_tested.nika: 4 indexes, 3 proved; 1 operations, 0 proved
+    13  n += args[k].len()  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    13  args[k]             proved
+    22  args[k]             proved
+    37  args[k]             proved
+    46  args[k]             checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)

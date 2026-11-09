@@ -223,6 +223,23 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub fn a_mut_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let signature = match match contract.signature.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if !nikaia_std::list::contains(&signature.mutable, &name) { return false; }
+        let mut first: i64 = 0;
+        while first < self.scope.len() as i64 && !check_fields_holds(nikaia_std::index::get(&self.scope, nikaia_std::index::at(first)), name) { first = first + 1; }
+        self.frame_holding(name) == first
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         let name = match given {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name).to_string() },

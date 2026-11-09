@@ -1,0 +1,8 @@
+bounds in tests/prove_a_found_bound_is_a_length.nika: 2 indexes, 1 proved; 5 operations, 4 proved
+    19  k + 1      proved
+    28  tokens[k]  proved
+    36  k + 2      proved
+    45  k + 3      proved
+    61  k + 2      checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a call's result (ADR-306 D24)
+    62  k + 1      proved
+    71  found[0]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

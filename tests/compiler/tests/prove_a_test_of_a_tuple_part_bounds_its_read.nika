@@ -1,0 +1,48 @@
+// **A test of a name a `for` binds out of a tuple bounds a read with it**
+// (ADR-306 D7): each name bound to a whole number - a part of a tuple, a
+// map's key or value, a part of a nested pattern - is a number of the walk,
+// as the one name of `for u in us` is. A read without the test keeps its
+// check.
+use std::collections
+
+pub fn rows(rows: Vec[(String, i64)], xs: Vec[i64]) -> i64 sync {
+	let mut sum = 0
+	for (name, u) in rows {
+		if u < 0 || u >= xs.len() {
+			continue
+		}
+		sum += xs[u] + name.len()
+	}
+	return sum
+}
+
+pub fn entries(at: collections::BTreeMap[i64, (i64, i64)], xs: Vec[i64]) -> i64 sync {
+	let mut sum = 0
+	for (key, (unit, line)) in at {
+		if unit >= 0 && unit < xs.len() {
+			sum += xs[unit]
+		}
+		if key >= 0 && key < xs.len() {
+			sum += xs[key]
+		}
+		sum += line
+	}
+	return sum
+}
+
+pub fn untested(rows: Vec[(i64, i64)], xs: Vec[i64]) -> i64 sync {
+	let mut sum = 0
+	for (a, u) in rows {
+		if a >= 0 && a < xs.len() {
+			sum += xs[u]
+		}
+	}
+	return sum
+}
+
+fn main() throws {
+	let mut at: collections::BTreeMap[i64, (i64, i64)] = collections::BTreeMap()
+	at.insert(1, (0, 4))
+	let total = rows([("ab", 1)], [5, 6]) + entries(at, [5, 6]) + untested([(0, 1)], [5, 6])
+	println(f"{total}")
+}

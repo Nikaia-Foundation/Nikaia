@@ -34,6 +34,8 @@ together with the specification section and an example test.
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
   to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
   views syntax and cannot serve.
+* A rebuild while `nikaia test` runs fails tests at random: rerun the failed
+  ones alone before calling them failures. (issue-1414)
 * **The checkout is shared.** A file another agent has modified: stage only
   your hunks (`git diff FILE > $S/p.diff`, delete theirs from the copy, `git
   apply --cached`, check with `git diff --cached FILE`; `git add -p` is
@@ -138,10 +140,13 @@ together with the specification section and an example test.
 * the bounds walk's loop candidates never read a `for`'s binding, and the prover proposes only for a `while`; past a `for`, bound a counter by its turns (D13), not by an invariant over the counter. (issue-1383)
 * pre-push shows `badges red` / `version red` (self-hosted.svg) on `develop` with nothing staged; it was red before this run, and the badges are the supervisor's. (issue-1383)
 * A brief that needs a new NK code without naming a reserved one is blocked at once; search `docs/supervisor.md` and the brief for an NK block before planning. (issue-1318)
-* `scripts/probe.nika` snippets that print need `fn main() throws`, or every `print` is NK2605. (issue-1318)
+* A probe or test program whose `main` calls `print`/`println` needs `fn main() throws` (ADR-392): a probe otherwise stops at NK2605 before the defect shows, and `nikaia test --bless` writes an empty `.stdout` and a stray `.stderr`. (issue-1318, issue-1445, issue-1449, issue-1453)
+* `docs/briefs/` is untracked: `Fixes #N` goes on the last code commit, not on a brief or report. (issue-1453)
+* A debrief or report an issue cites may be missing from `docs/briefs/`; read `git log --grep='#N'` instead. (issue-1470)
 * "file NNN" in a `Found:` of the #1254 runs means `tests/accepted/NNN_*.nika` migrated by dropping `ref` from its parameters; reproduce on that file, not only on the reduced probe. (issue-1334)
 * Running two `nikaia test` processes on `tests/compiler` at the same time can make `migrate_views3_reads_package_tests_with_the_package` fail with "cannot read TMP/json/tests"; it also fails alone on develop, so it is not your change. (issue-1334)
 * A checker change that makes a tools file fail to check must be lowered with the old binary first (`$OLD lower-std`), or the change never reaches `lowered/`. (issue-1388)
+* `container_of` in `tiers.nika` returns null for `ref` types, so the tiers pass does not follow a `ref Vec[...]` parameter, and its `String`s stay `String` below (`lent_whole`). (issue-1449)
 * Run the issue's probe on develop first: a probe made only of Copy fields can pass there and hide the defect. (issue-1342)
 * The first `lower-std` with the old binary resets lowered files a broken build left behind; after a failed build, restart the cycle from the old binary, not the new one. (issue-1344)
 * The checker types `b[a..<c]` on a `Bytes` as an owned `Bytes` (ADR-320 D7), but the emitter writes a `&[u8]`; the fact `bytes_cuts` marks such a cut. (issue-1345)

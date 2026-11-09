@@ -1,0 +1,89 @@
+// **What each element of a list a callee returns holds bounds a read in
+// its caller** (ADR-306 D24, #1453): the range D7 finds of the values of
+// every list the callee returns - a `for` over the call and an element of a
+// `let` bound to it read within it. A recursive callee takes the range as
+// assumed, then proved; one whose values grow with each call, and one that
+// returns a value nothing bounds, keep their checks.
+
+pub fn digits(n: i64) -> Vec[i64] sync {
+	let mut out: Vec[i64] = []
+	for k in 0..<10 {
+		if k < n {
+			out.push(k)
+		}
+	}
+	return out
+}
+
+pub fn positions(text: String) -> Vec[i64] sync {
+	let c: Vec[scalar] = text.chars().collect()
+	let mut out: Vec[i64] = []
+	for k in 0..<c.len() {
+		if c[k] == 'r' {
+			out.push(k)
+		}
+	}
+	return out
+}
+
+pub fn remainders(n: i64) -> Vec[i64] sync {
+	let none: Vec[i64] = []
+	if n <= 0 {
+		return none
+	}
+	let mut out = remainders(n - 1)
+	if n > 2 {
+		out.push(2)
+	} else {
+		out.push(1)
+	}
+	return out
+}
+
+pub fn growing(n: i64) -> Vec[i64] sync {
+	let first: Vec[i64] = [0]
+	if n <= 0 {
+		return first
+	}
+	let mut out = growing(n - 1)
+	let last = out[out.len() - 1]
+	out.push(last + 1)
+	return out
+}
+
+pub fn given(xs: ref Vec[i64]) -> Vec[i64] sync {
+	let mut out: Vec[i64] = []
+	for x in xs {
+		out.push(x)
+	}
+	return out
+}
+
+pub fn reads(xs: ref Vec[i64]) -> i64 sync {
+	let ten = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	let mut sum = 0
+	for d in digits(7) {
+		sum = ten[d]
+	}
+	let held = digits(4)
+	if held.len() > 2 {
+		sum = sum + ten[held[2]]
+	}
+	for at in positions("ref r") {
+		sum = at + 3
+	}
+	for r in remainders(5) {
+		sum = ten[r]
+	}
+	for g in growing(3) {
+		sum = ten[g]
+	}
+	for x in given(xs) {
+		sum = ten[x]
+	}
+	return sum
+}
+
+fn main() throws {
+	println(f"{reads([1, 2])}")
+}

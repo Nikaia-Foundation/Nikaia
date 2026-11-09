@@ -283,6 +283,23 @@ impl CheckState {
         return lends_in_own(contract, at, [world.library])
     }
 
+    /// **A name that is a `mut` parameter of the function walked** (ADR-094
+    /// D3), while its innermost binding is the parameter's own (#1023): the
+    /// caller's value, changed in place.
+    pub fn a_mut_parameter(ref self, world: ref CheckWorld, name: ref String) -> bool sync {
+        let key = self.current ?? return false
+        let contract = world.own.functions[key]?.clone() ?? return false
+        let signature = contract.signature?.clone() ?? return false
+        if !signature.mutable.contains(name) {
+            return false
+        }
+        let mut first = 0
+        while first < self.scope.len() && !check_fields_holds(self.scope[first], name) {
+            first = first + 1
+        }
+        return self.frame_holding(name) == first
+    }
+
     /// **A name that is a parameter this function owns** (#665): one the
     /// contract does not lend (its body keeps it), that is not `mut`, `self`
     /// or a view - a part of it may be moved out.

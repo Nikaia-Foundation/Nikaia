@@ -1,0 +1,19 @@
+// **A part of a `mut` parameter given away is refused** (ADR-094 D3): the
+// parameter is the caller's value, changed in place, so `return w.xs` would
+// take a piece out of it. It was accepted, and Rust refused what it became
+// (NK1343, "cannot move out of `w.xs` which is behind a mutable reference").
+
+struct W {
+	xs: Vec[i64],
+}
+
+fn take(mut w: W) -> Vec[i64] {
+	w.xs.push(1)
+	return w.xs
+}
+
+fn main() throws {
+	let mut w = W { xs: [] }
+	let got = take(w)
+	println(f"{got.len()} {w.xs.len()}")
+}

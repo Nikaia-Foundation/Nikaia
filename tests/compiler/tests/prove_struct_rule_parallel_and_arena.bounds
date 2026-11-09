@@ -11,6 +11,6 @@ bounds in tests/prove_struct_rule_parallel_and_arena.nika: 9 indexes, 7 proved; 
     94  self.ks[i]                 checked: the length of another list, which bounds the loop and not this index (#388)
     95  i += 1                     proved
    109  self.nodes.len() - 1       proved
-   125  self.nodes[self.links[i]]  checked: a value read out of a list, of which the walk knows no fact (#797, #798)
+   125  self.nodes[self.links[i]]  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
    125  self.links[i]              proved
   derived  follow_held: 0 <= i, i <= self.links.len(), i <= self.nodes.len(), proved at the calls on lines 140

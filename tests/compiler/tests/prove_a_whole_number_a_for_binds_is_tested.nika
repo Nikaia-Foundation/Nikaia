@@ -1,0 +1,57 @@
+// **A `for` over whole numbers binds a number of the bounds walk** (ADR-306
+// D7, #1414): every test of the binding in the body is a fact, over a list,
+// a set or a `continue` that leaves the turn. An untested one keeps its
+// check.
+use std::collections
+
+pub fn skipped(args: ref Vec[String], below: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for k in below {
+		if k < 0 || k >= args.len() {
+			continue
+		}
+		n += args[k].len()
+	}
+	return n
+}
+
+pub fn tested(args: ref Vec[String], below: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for k in below {
+		if k >= 0 && k < args.len() {
+			n = args[k].len()
+		}
+	}
+	return n
+}
+
+pub fn over_a_set(args: ref Vec[String], below: ref collections::BTreeSet[i64]) -> i64 sync {
+	let mut n = 0
+	for k in below {
+		if k < 0 {
+			continue
+		}
+		if k >= args.len() {
+			continue
+		}
+		n = args[k].len()
+	}
+	return n
+}
+
+pub fn untested(args: ref Vec[String], below: ref Vec[i64]) -> i64 sync {
+	let mut n = 0
+	for k in below {
+		if k >= 0 {
+			n = args[k].len()
+		}
+	}
+	return n
+}
+
+fn main() throws {
+	let mut set: collections::BTreeSet[i64] = collections::BTreeSet()
+	set.insert(1)
+	set.insert(7)
+	println(f"{skipped(["a", "bb"], [1, -1, 5])} {tested(["a"], [0, 3])} {over_a_set(["a", "bb"], set)} {untested(["abc"], [0])}")
+}
