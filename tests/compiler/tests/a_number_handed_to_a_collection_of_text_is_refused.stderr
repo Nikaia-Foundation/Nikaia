@@ -1,0 +1,33 @@
+error[NK1102]: `collections::HashMap::insert` expects `String` here, but you're passing a number.
+  --> tests/a_number_handed_to_a_collection_of_text_is_refused.nika:8:14
+   |
+ 8 |     m.insert(5, 7)
+   |              ^
+   |
+   = note: A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.
+   = help: Make it a `String`, or give the number to a place that holds one.
+error[NK1102]: `Vec::push` expects `String` here, but you're passing a number.
+   --> tests/a_number_handed_to_a_collection_of_text_is_refused.nika:11:12
+    |
+ 11 |     v.push(n)
+    |            ^
+    |
+    = note: A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.
+    = help: Make it a `String`, or give the number to a place that holds one.
+error[NK1102]: `collections::BTreeSet::insert` expects `bool` here, but you're passing a number.
+   --> tests/a_number_handed_to_a_collection_of_text_is_refused.nika:13:14
+    |
+ 13 |     s.insert(3)
+    |              ^
+    |
+    = note: A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.
+    = help: Make it a `bool`, or give the number to a place that holds one.
+error[NK1102]: `collections::HashMap::contains_key` expects `String` here, but you're passing a number.
+   --> tests/a_number_handed_to_a_collection_of_text_is_refused.nika:14:32
+    |
+ 14 |     let found = m.contains_key(4)
+    |                                ^
+    |
+    = note: A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.
+    = help: Make it a `String`, or give the number to a place that holds one.
+4 type errors

@@ -784,6 +784,14 @@ pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &Chec
     }, || Ty::Unknown));
     state.number_asked(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), &want, span, true);
     let have: Ty = check_core_call_on_written(nikaia_std::index::get(&found, nikaia_std::index::at(at)));
+    if have.is_unknown() && !want.is_unknown() && state.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(at))) && state.no_integer_is(world, &want) {
+        let wanted = want.text();
+        let number_at = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);
+        let message: String = format!("`{}` expects `{}` here, but you're passing a number.", key, wanted);
+        let help: String = format!("Make it a `{}`, or give the number to a place that holds one.", wanted);
+        state.findings.push(check_refusal("NK1102", &number_at, message, vec![String::from("A number nothing typed takes the type its uses ask for, and this one asks for a type that is not a number.")], Some(help)));
+        return;
+    }
     if check_core_call_on_may_fit(&have, &want) { return; }
     let at_span = check_span_at(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), span);
     state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: at_span, code: String::from("NK1102"), message: format!("`{}` expects `{}` here, but you're passing `{}`.", key, want.text(), have.text()), notes: vec![], help: Some(way_out_of_a_mismatch(&have, &want)), labels: vec![] });
