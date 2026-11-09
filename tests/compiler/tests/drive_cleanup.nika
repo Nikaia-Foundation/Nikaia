@@ -1,0 +1,51 @@
+// scripts/drive.nika --cleanup (#1521): in a scratch directory, the cleanup
+// removes target/debug and target/nikaia-example-tests and, in the temp
+// directory, the sandbox of a `nikaia test` run whose process is gone, and
+// keeps one of a live process (pid 1) and what is not a sandbox. The free
+// figure is faked, so the CLEANUP line reads the same on every machine; with
+// it faked low, a dry run shows the cleanup and the stop before an agent.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let paths = ["target/debug", "target/nikaia-example-tests", "tmp/nikaia-test-999999999-0", "tmp/nikaia-test-1-0", "tmp/other"]
+    for path in paths { process::run("mkdir", ["-p", f"{tmp}/{path}/inner"]) }
+    let env: Vec[(String, String)] = [("TMPDIR", f"{tmp}/tmp"), ("HOME", tmp.clone()), ("NIKAIA_DRIVE_FREE_MB", "9000")]
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--cleanup"]; dir: tmp.clone(), env: env)
+    println(f"exit {out.code}")
+    println(out.stdout.trim())
+    for path in paths {
+        let there = fs::exists(f"{tmp}/{path}", fs::Root::Anywhere)
+        println(f"{path}: {there}")
+    }
+    // Before an agent (a dry run of a NEXT line): under 6 GB free the cleanup
+    // runs at once; still under 3 GB after it, the driver escalates.
+    fs::write(f"{tmp}/b1.md", fs::Root::Anywhere, "x\n")
+    fs::write(f"{tmp}/lines", fs::Root::Anywhere, f"CI aaaa1111 green\nNEXT {tmp}/b1.md builder sonnet 80 12\n")
+    for free in ["5000", "2000"] {
+        let faked: Vec[(String, String)] = [("HOME", tmp.clone()), ("NIKAIA_DRIVE_FREE_MB", free.clone())]
+        let dry = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.clone(), "--lines", f"{tmp}/lines", "--dry-run"]; dir: repo.clone(), env: faked, env_remove: ["NIKAIA_SUITE_DIR"])
+        println(f"== {free} MB free (exit {dry.code})")
+        for line in dry.stdout.trim().split("\n") {
+            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(line.replace(tmp, "T").replace("target/release/nikaia", "target/fast/nikaia")) }
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}
