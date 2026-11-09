@@ -7,6 +7,7 @@ pub struct BoundsRule {
     pub kind: String,
     pub a: String,
     pub b: String,
+    pub times: i64,
 }
 
 pub(crate) fn rules_rounds() -> i64 { 8 }
@@ -133,16 +134,17 @@ pub fn rules_candidates(program: &Program, context: &BoundsContext, words: &winn
                     None => None,
                 }, || vec![].into());
                 let outside = dropped.contains(&format!("{}.{}#len", owner, a)) || dropped.contains(&format!("{}.{}#len", owner, b));
-                if AsRef::<str>::as_ref(&(a)) < AsRef::<str>::as_ref(&(b)) && !outside && rules_together(&methods, a, b) && rules_built_equal(&shapes_a, &shapes_b) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("length"), a: a.to_string(), b: b.to_string() }); }
+                if AsRef::<str>::as_ref(&(a)) < AsRef::<str>::as_ref(&(b)) && !outside && rules_together(&methods, a, b) && rules_built_equal(&shapes_a, &shapes_b) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("length"), a: a.to_string(), b: b.to_string(), times: 1 }); }
+                if a != b && !outside && rules_together(&methods, a, b) && rules_built_times(&shapes_a, &shapes_b, 2) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("length"), a: a.to_string(), b: b.to_string(), times: 2 }); }
                 if whole.contains(&format!("{}.{}", owner, a)) && !dropped.contains(&format!("{}.{}[]", owner, a)) && shapes_a.iter().all(|s| { AsRef::<str>::as_ref(&(s)) == AsRef::<str>::as_ref(&("n:0")) }) {
-                    out.push(BoundsRule { owner: owner.to_string(), kind: String::from("index"), a: a.to_string(), b: b.to_string() });
-                    for (of, m) in results.iter() { if of == owner && !rules_has(&out, owner, "result", m, b) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("result"), a: m.to_string(), b: b.to_string() }); } }
+                    out.push(BoundsRule { owner: owner.to_string(), kind: String::from("index"), a: a.to_string(), b: b.to_string(), times: 1 });
+                    for (of, m) in results.iter() { if of == owner && !rules_has(&out, owner, "result", m, b) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("result"), a: m.to_string(), b: b.to_string(), times: 1 }); } }
                 }
                 let inner_shapes = nikaia_std::index::or(match built.get(&format!("{}.{}[]", owner, a)) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || vec![].into());
-                if a != b && nested.contains(&format!("{}.{}", owner, a)) && !dropped.contains(&format!("{}.{}[]", owner, a)) && inner_shapes.iter().all(|s| { AsRef::<str>::as_ref(&(s)) == AsRef::<str>::as_ref(&("empty")) }) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("inner"), a: a.to_string(), b: b.to_string() }); }
+                if a != b && nested.contains(&format!("{}.{}", owner, a)) && !dropped.contains(&format!("{}.{}[]", owner, a)) && inner_shapes.iter().all(|s| { AsRef::<str>::as_ref(&(s)) == AsRef::<str>::as_ref(&("empty")) }) { out.push(BoundsRule { owner: owner.to_string(), kind: String::from("inner"), a: a.to_string(), b: b.to_string(), times: 1 }); }
             }
         }
     }
@@ -164,6 +166,14 @@ pub(crate) fn rules_built_equal(a: &[String], b: &[String]) -> bool {
     for at in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (at) as usize) != *nikaia_std::index::get(&b, (at) as usize) || *nikaia_std::index::get(&a, (at) as usize) == "other" { return false; } }
     true
 }
+
+pub(crate) fn rules_built_times(a: &[String], b: &[String], times: i64) -> bool {
+    if (a.len() as i64) != b.len() as i64 { return false; }
+    for at in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (at) as usize) == "other" || *nikaia_std::index::get(&b, (at) as usize) == "other" || *nikaia_std::index::get(&a, (at) as usize) != format!("n:{}", times * rules_shape_length(nikaia_std::index::get(&b, (at) as usize))) { return false; } }
+    true
+}
+
+pub(crate) fn rules_shape_length(shape: &str) -> i64 { nikaia_std::index::or(text::parse_i64(nikaia_std::index::or(shape.strip_prefix("n:"), || "")), || -1) }
 
 pub(crate) fn rules_inner_shape(value: Option<&Expr>) -> String {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return String::from("other") };
@@ -679,7 +689,8 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
         let b_floor = walk.arena.ge(b, zero);
         if rule.kind == "length" {
             let a = walk.arena.var(&length_of(&format!("{}.{}", root, rule.a)));
-            let same = walk.arena.equal(a, b);
+            let multiple = rules_times(walk, rule.times, b);
+            let same = walk.arena.equal(a, multiple);
             let a_floor = walk.arena.ge(a, zero);
             bounding_push(&walk, facts, same);
             bounding_push(&walk, facts, a_floor);
@@ -698,6 +709,12 @@ pub(crate) fn rules_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, root: &
             bounding_push(&walk, facts, b_floor);
         } else { bounding_push(&walk, facts, b_floor); }
     }
+}
+
+pub(crate) fn rules_times(walk: &mut BoundsWalk, times: i64, b: i64) -> i64 {
+    if times == 1 { return b; }
+    let k = walk.arena.int(times);
+    walk.arena.mul(k, b)
 }
 
 pub(crate) fn rules_values_of(list: &str, kind: &str) -> String {
@@ -823,7 +840,8 @@ pub(crate) fn rules_exit(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: O
 pub(crate) fn rules_same_length(walk: &mut BoundsWalk, facts: &BoundsFacts, rule: &BoundsRule, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool {
     let a = walk.arena.var(&length_of(&format!("self.{}", rule.a)));
     let b = walk.arena.var(&length_of(&format!("self.{}", rule.b)));
-    let goal = walk.arena.equal(a, b);
+    let multiple = rules_times(walk, rule.times, b);
+    let goal = walk.arena.equal(a, multiple);
     let proved = bounding_proves(&walk, facts, goal, ask);
     bounding_traced(walk, facts, goal, proved);
     proved
