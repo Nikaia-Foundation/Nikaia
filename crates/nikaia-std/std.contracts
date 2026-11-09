@@ -3041,7 +3041,7 @@ signature = "[V](self: Entry[V], value: ?) -> ref V"
 pub = true
 panics = false
 sync = "sync(f)"
-signature = "[V](self: Entry[V], f: fn()) -> ref V"
+signature = "[V](self: Entry[V], f: fn() -> V) -> ref V"
 
 # The same as `or_insert_with(fn { V() })`: the value that is there, putting in
 # first the one `V()` makes where there is none ([ADR-384](../../docs/specification/adr/adr-384.md) D1).
@@ -3594,9 +3594,9 @@ pub = true
 panics = false
 sync = "sync(f)"
 touches = []
-# The element type survives a filter, which is the one place a `Seq` entry says
-# more than `?`.
-signature = "[T](self: Seq[T], f: fn(T)) -> Seq[T] ends"
+# The element type survives a filter. Its function says yes or no: a function
+# type without a result would hand back nothing (#1395).
+signature = "[T](self: Seq[T], f: fn(T) -> bool) -> Seq[T] ends"
 
 # --- Reductions and searches over a sequence (self-hosting, LANGUAGE).
 # Each is the language below's own iterator method; the ones that
@@ -4194,7 +4194,7 @@ panics = true
 touches = ["lock read"]
 sync = "sync(f)"
 locks = true
-signature = "[T](self: ref Locked[T], f: fn(ref T)) -> ?"
+signature = "[T, R](self: ref Locked[T], f: fn(ref T) -> R) -> R"
 
 # **Where locked data changes** (D2). The old value goes in by value and the new
 # one comes back, so no handle into the inside ever exists - and `old` is an
@@ -4210,9 +4210,8 @@ pub = true
 panics = true
 touches = ["lock write"]
 sync = "sync(f)"
-# `fn(T)` and not `fn(T) -> T`: this ledger's type language has no result on a
-# lambda, which is a limit of the ledger rather than of the door. What it is read
-# for here is the arity and the `sync` column.
+# `fn(T)`: the block changes the value in place and hands back nothing, as a
+# function type without a result does in a declaration (#1395).
 locks = true
 signature = "[T](self: ref Locked[T], f: fn(T))"
 
@@ -4295,7 +4294,7 @@ panics = true
 touches = ["lock read"]
 sync = "sync(f)"
 locks = true
-signature = "[T](self: ref SharedMut[T], f: fn(ref T)) -> ?"
+signature = "[T, R](self: ref SharedMut[T], f: fn(ref T) -> R) -> R"
 
 # Change what this value holds: the old one goes in and the new one comes back.
 #

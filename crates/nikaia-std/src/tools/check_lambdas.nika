@@ -278,6 +278,48 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1104", at, f"This lambda returns `{name}`, which it captures, but `{wanted}` returns text of its own.", ["A lambda may run more than once, so what it captures stays with it and is not given away."], f"Hand back a copy with `{name}.clone()`."))
     }
+
+    /// **`NK1104`: a lambda's last value and its `return`s are what its
+    /// function type hands back** (#1395), as a named function's are against
+    /// its declared result: `run(fn { "x" })` where `run` takes
+    /// `fn() -> i64` is refused here, not by `rustc`. Asked only where the
+    /// result is wholly known; text against text is the views check's
+    /// (`a_lambda_hands_back_text_it_does_not_own`).
+    pub fn a_lambdas_result_is_its_types(ref mut self, world: ref CheckWorld, code: ref Ty, body: ref Block, tail: ref Ty, span: ref Span) sync {
+        let result: Ty = match code {
+            Ty::Fn { result, .. } => result?.clone() ?? return,
+            else => return,
+        }
+        if !wholly_known(result) || body.stmts.len() == 0 || a_body_never_ends(body) {
+            return
+        }
+        let wanted = code.text()
+        let last = tail_value_of(body)
+        if last != null {
+            let value = last ?? return
+            self.a_lambda_value_is_its_types(world, result, wanted, value, tail, check_span_at(world, value, span))
+        }
+        let returned: Vec[CheckLambdaReturn] = self.flow.last_lambda_returns.clone()
+        for one in returned {
+            for value in one.value {
+                self.a_lambda_value_is_its_types(world, result, wanted, value, one.ty, one.at)
+            }
+        }
+    }
+
+    fn a_lambda_value_is_its_types(ref mut self, world: ref CheckWorld, result: ref Ty, wanted: ref String, value: ref Expr, ty: ref Ty, at: ref Span) sync {
+        let text_wanted = result == a_string_type() || lambda_a_text_view(result)
+        let mut found: Ty = ty.clone()
+        // Static text is text wherever text is wanted (ADR-282 D4).
+        if a_text_literal_expr(value) {
+            found = a_string_type()
+        }
+        if text_wanted && (found == a_string_type() || lambda_a_text_view(found)) {
+            return
+        }
+        found = number_where_no_number_is(result, value) ?? found
+        self.expect_type(world, found, result, at, "returns", fn(was, want) { f"This lambda returns `{was}`, but `{wanted}` returns `{want}`." })
+    }
 }
 
 /// A view of text, `ref String` however the compiler names it.
