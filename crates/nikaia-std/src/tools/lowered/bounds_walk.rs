@@ -144,6 +144,8 @@ pub(crate) fn solvable() -> i64 { 4611686018427387904i64 }
 
 pub(crate) fn most_facts() -> i64 { 48 }
 
+pub(crate) fn most_held() -> i64 { 256 }
+
 pub(crate) fn call_depth() -> i64 { 4 }
 
 pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![] } }
@@ -587,7 +589,8 @@ pub(crate) fn bounding_traced(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: 
     for rule in walk.rules.iter() { rules.push(if rule.times == 1 { format!("{}: {} {} {}", rule.owner, rule.kind, rule.a, rule.b) } else { format!("{}: {} {} {}*{}", rule.owner, rule.kind, rule.a, rule.times, rule.b) }); }
     let held = if known.is_empty() { String::from("none") } else { known.join(", ") };
     let found = if rules.is_empty() { String::from("none") } else { rules.join(", ") };
-    ({ let __nikaia_arg1 = format!("  goal {}: {}\n    facts ({}, {} evicted by the cap of {}): {}\n    rules: {}", walk.arena.text(goal), verdict, known.len() as i64, facts.evicted, most_facts(), held, found); bounding_trace_row(walk, __nikaia_arg1) });
+    let connected = bounding_nearest(&walk, facts, goal, facts.facts.len() as i64).iter().copied().filter(|&taken| { taken }).count() as i64;
+    ({ let __nikaia_arg1 = format!("  goal {}: {}\n    facts ({} asked; {} connected of {} held, {} evicted by the cap of {}): {}\n    rules: {}", walk.arena.text(goal), verdict, known.len() as i64, connected, facts.facts.len() as i64, facts.evicted, most_held(), held, found); bounding_trace_row(walk, __nikaia_arg1) });
 }
 
 pub(crate) fn bounding_trace_row(walk: &mut BoundsWalk, row: String) { if !nikaia_std::list::contains(&walk.proven.trace, &row) { walk.proven.trace.push(row); } }
@@ -612,12 +615,94 @@ pub(crate) struct BoundsMissed {
 
 pub(crate) fn bounding_proves(walk: &BoundsWalk, facts: &BoundsFacts, goal: i64, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> bool { ask(&walk.arena, &bounding_known(walk, facts, goal), goal) }
 
+pub(crate) fn bounding_nearest(walk: &BoundsWalk, facts: &BoundsFacts, asked: i64, most: i64) -> Vec<bool> {
+    let mut ways: Vec<collections::BTreeSet<String>> = vec![];
+    for fact in facts.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        walk.arena.variables(fact, &mut own);
+        ways.push(own);
+    }
+    let held = ways.len() as i64;
+    for (_, axiom) in walk.axioms.iter() {
+        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for fact in axiom.iter() {
+            let fact = nikaia_std::num::value(fact);
+            walk.arena.variables(fact, &mut own);
+        }
+        if own.len() > 1 { ways.push(own); }
+    }
+    for (each, fact) in walk.rule_facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        own.insert(each.to_string());
+        walk.arena.variables(fact, &mut own);
+        if own.len() > 1 { ways.push(own); }
+    }
+    let mut ids: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut readers: Vec<Vec<i64>> = vec![];
+    for k in 0..ways.len() as i64 {
+        for name in (*nikaia_std::index::get(&ways, nikaia_std::index::at(k))).iter() {
+            let id = nikaia_std::index::or(ids.get(name), || (readers.len() as i64).into());
+            if id == readers.len() as i64 {
+                ids.insert(name.to_string(), id);
+                readers.push(vec![]);
+            }
+            readers[nikaia_std::index::at(id)].push(k);
+        }
+    }
+    let mut near: Vec<i64> = vec![];
+    let mut taken: Vec<bool> = vec![];
+    for own in ways.iter() {
+        near.push(if own.is_empty() { 0 } else { -1 });
+        taken.push(false);
+    }
+    let mut reached: Vec<bool> = vec![];
+    for _ in readers.iter() { reached.push(false); }
+    let mut goal: collections::BTreeSet<String> = collections::BTreeSet::new();
+    walk.arena.variables(asked, &mut goal);
+    for name in goal.iter() {
+        let id = match ids.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
+        { let __nikaia_stored = true; nikaia_std::index::set(&mut reached, nikaia_std::index::at(id), __nikaia_stored); }
+        let through = (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).len() as i64;
+        for k in (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).iter() {
+            let k = nikaia_std::num::value(k);
+            if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *nikaia_std::index::get(&near, nikaia_std::index::at(k)) { { let __nikaia_stored = through; nikaia_std::index::set(&mut near, nikaia_std::index::at(k), __nikaia_stored); } }
+        }
+    }
+    let mut count: i64 = 0;
+    while count < most {
+        let mut best: i64 = -1;
+        for k in 0..ways.len() as i64 { if !*nikaia_std::index::get(&taken, nikaia_std::index::at(k)) && *nikaia_std::index::get(&near, nikaia_std::index::at(k)) >= 0 && (best < 0 || *nikaia_std::index::get(&near, nikaia_std::index::at(k)) <= *nikaia_std::index::get(&near, nikaia_std::index::at(best))) { best = k; } }
+        if best < 0 { break; }
+        { let __nikaia_stored = true; nikaia_std::index::set(&mut taken, nikaia_std::index::at(best), __nikaia_stored); }
+        if best < held { count += 1; }
+        for name in (*nikaia_std::index::get(&ways, nikaia_std::index::at(best))).iter() {
+            let id = match ids.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
+            if *nikaia_std::index::get(&reached, nikaia_std::index::at(id)) { continue; }
+            { let __nikaia_stored = true; nikaia_std::index::set(&mut reached, nikaia_std::index::at(id), __nikaia_stored); }
+            let through = *nikaia_std::index::get(&near, nikaia_std::index::at(best)) + (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).len() as i64;
+            for k in (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).iter() {
+                let k = nikaia_std::num::value(k);
+                if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *nikaia_std::index::get(&near, nikaia_std::index::at(k)) { { let __nikaia_stored = through; nikaia_std::index::set(&mut near, nikaia_std::index::at(k), __nikaia_stored); } }
+            }
+        }
+    }
+    let mut out: Vec<bool> = vec![];
+    for k in 0..held { out.push(*nikaia_std::index::get(&taken, nikaia_std::index::at(k))); }
+    out
+}
+
 pub(crate) fn bounding_known(walk: &BoundsWalk, facts: &BoundsFacts, asked: i64) -> Vec<i64> {
-    let mut all = facts.facts.to_owned();
+    let mut all: Vec<i64> = vec![];
+    if (facts.facts.len() as i64) <= most_facts() { all = facts.facts.to_owned(); } else {
+        let asking = bounding_nearest(walk, facts, asked, most_facts());
+        for k in 0..facts.facts.len() as i64 { if *nikaia_std::index::get(&asking, (k) as usize) { all.push(*nikaia_std::index::get(&facts.facts, (k) as usize)); } }
+    }
     if !walk.rule_facts.is_empty() {
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(asked, &mut read);
-        for fact in facts.facts.iter() {
+        for fact in all.iter() {
             let fact = nikaia_std::num::value(fact);
             walk.arena.variables(fact, &mut read);
         }
@@ -1046,7 +1131,7 @@ pub(crate) fn bounding_push(walk: &BoundsWalk, facts: &mut BoundsFacts, fact: i6
     walk.arena.variables(fact, &mut read);
     for name in read.iter() { if walk.pinned.contains(&path_root(name)) { return; } }
     facts.facts.push(fact);
-    if (facts.facts.len() as i64) > most_facts() {
+    if (facts.facts.len() as i64) > most_held() {
         facts.facts.remove(0);
         facts.evicted += 1;
     }

@@ -1,11 +1,11 @@
 bounds trace 3:
   goal i >= 0 && i < xs.len(): proved
-    facts (5, 0 evicted by the cap of 48): xs.len() >= 0, 0 <= i, i >= 0 && i < xs.len(), xs.len() >= 0, xs.len() <= 1152921504606846976
+    facts (5 asked; 3 connected of 3 held, 0 evicted by the cap of 256): xs.len() >= 0, 0 <= i, i >= 0 && i < xs.len(), xs.len() >= 0, xs.len() <= 1152921504606846976
     rules: none
   read xs[…]: proved
 bounds trace main.nika:5:
   goal 0 >= 0 && 0 < xs.len(): open
-    facts (5, 0 evicted by the cap of 48): xs.len() >= 0, 0 <= i, i >= 0 → !(i < xs.len()), xs.len() >= 0, xs.len() <= 1152921504606846976
+    facts (5 asked; 3 connected of 3 held, 0 evicted by the cap of 256): xs.len() >= 0, 0 <= i, i >= 0 → !(i < xs.len()), xs.len() >= 0, xs.len() <= 1152921504606846976
     rules: none
   read xs[…]: checked
 other.nika:5: the report alone

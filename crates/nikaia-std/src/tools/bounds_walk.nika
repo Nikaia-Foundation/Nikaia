@@ -167,7 +167,7 @@ struct BoundsFacts {
 	/// Names that are whole numbers here.
 	ints: collections::BTreeSet[String],
 	facts: Vec[i64],
-	/// How many facts the `most_facts()` cap dropped here, for
+	/// How many facts the `most_held()` cap dropped here, for
 	/// `--bounds-trace` (#1495).
 	evicted: i64,
 }
@@ -350,10 +350,17 @@ fn solvable() -> i64 {
 	return 4611686018427387904
 }
 
-/// How many facts a point keeps: the newest, so that a long body costs the
-/// solver what a short one does.
+/// How many facts a question is asked with (ADR-306 D30): the newest of
+/// those connected to its goal, so that a long body costs the solver what a
+/// short one does.
 fn most_facts() -> i64 {
 	return 48
+}
+
+/// How many facts a point keeps (ADR-306 D30): the newest; each question
+/// takes from them the facts nearest its goal (`bounding_nearest`).
+fn most_held() -> i64 {
+	return 256
 }
 
 /// How deep a call to an expression function is followed into another: far
@@ -1130,7 +1137,8 @@ fn bounding_tracing(walk: ref BoundsWalk) -> bool {
 
 /// **A goal as `--bounds-trace` shows it** (#1495): the goal and whether it
 /// was proved, every fact the question was asked with (`bounding_known`,
-/// the rule facts among them), how many the `most_facts()` cap dropped, and
+/// the rule facts among them), how many facts were connected to it and held
+/// (ADR-306 D30), how many the `most_held()` cap dropped, and
 /// the rules of the types the body uses.
 fn bounding_traced(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64, proved: bool) {
 	if !bounding_tracing(walk) {
@@ -1147,7 +1155,8 @@ fn bounding_traced(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64, prov
 	}
 	let held = if known.is_empty() { "none" } else { known.join(", ") }
 	let found = if rules.is_empty() { "none" } else { rules.join(", ") }
-	bounding_trace_row(walk, f"  goal {walk.arena.text(goal)}: {verdict}\n    facts ({known.len()}, {facts.evicted} evicted by the cap of {most_facts()}): {held}\n    rules: {found}")
+	let connected = bounding_nearest(walk, facts, goal, facts.facts.len()).iter().filter(fn(taken) { taken }).count()
+	bounding_trace_row(walk, f"  goal {walk.arena.text(goal)}: {verdict}\n    facts ({known.len()} asked; {connected} connected of {facts.facts.len()} held, {facts.evicted} evicted by the cap of {most_held()}): {held}\n    rules: {found}")
 }
 
 /// One row of `--bounds-trace`, once however often a loop is walked again.
@@ -1196,13 +1205,131 @@ fn bounding_proves(
 	return ask(walk.arena, bounding_known(walk, facts, goal), goal)
 }
 
-/// The facts and what the ledgers ensure of the values the walk named.
+/// **Which facts held a question about `asked` takes** (ADR-306 D30), by
+/// their position: at most `most` of those connected to the goal, the
+/// nearest first. A fact is reached through a name it shares with the goal
+/// or with a fact reached before, and the way through a name is as long as
+/// the number of facts that name it: a name every turn fact reads (a loop's
+/// `#turn`) joins everything and tells little, so the narrow ways are
+/// followed first. Of one distance the newest is taken. A fact that names
+/// nothing (a contradiction) is nearest of all. What the ledgers ensure
+/// (`axioms`) and the rule facts of a named element are ways between names
+/// too, though they are not among the facts taken.
+fn bounding_nearest(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64, most: i64) -> Vec[bool] {
+	let mut ways: Vec[collections::BTreeSet[String]] = []
+	for fact in facts.facts {
+		let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(fact, own)
+		ways.push(own)
+	}
+	let held = ways.len()
+	for (_, axiom) in walk.axioms {
+		let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+		for fact in axiom {
+			walk.arena.variables(fact, own)
+		}
+		if own.len() > 1 {
+			ways.push(own)
+		}
+	}
+	for (each, fact) in walk.rule_facts {
+		let mut own: collections::BTreeSet[String] = collections::BTreeSet()
+		own.insert(each.clone())
+		walk.arena.variables(fact, own)
+		if own.len() > 1 {
+			ways.push(own)
+		}
+	}
+	let mut ids: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	let mut readers: Vec[Vec[i64]] = []
+	for k in 0..<ways.len() {
+		for name in ways[k] {
+			let id = ids.get(name) ?? readers.len()
+			if id == readers.len() {
+				ids.insert(name.clone(), id)
+				readers.push([])
+			}
+			readers[id].push(k)
+		}
+	}
+	let mut near: Vec[i64] = []
+	let mut taken: Vec[bool] = []
+	for own in ways {
+		near.push(if own.is_empty() { 0 } else { -1 })
+		taken.push(false)
+	}
+	let mut reached: Vec[bool] = []
+	for _ in readers {
+		reached.push(false)
+	}
+	let mut goal: collections::BTreeSet[String] = collections::BTreeSet()
+	walk.arena.variables(asked, goal)
+	for name in goal {
+		let id = ids.get(name) ?? continue
+		reached[id] = true
+		let through = readers[id].len()
+		for k in readers[id] {
+			if near[k] < 0 || through < near[k] {
+				near[k] = through
+			}
+		}
+	}
+	let mut count = 0
+	while count < most {
+		let mut best = -1
+		for k in 0..<ways.len() {
+			if !taken[k] && near[k] >= 0 && (best < 0 || near[k] <= near[best]) {
+				best = k
+			}
+		}
+		if best < 0 {
+			break
+		}
+		taken[best] = true
+		if best < held {
+			count += 1
+		}
+		for name in ways[best] {
+			let id = ids.get(name) ?? continue
+			if reached[id] {
+				continue
+			}
+			reached[id] = true
+			let through = near[best] + readers[id].len()
+			for k in readers[id] {
+				if near[k] < 0 || through < near[k] {
+					near[k] = through
+				}
+			}
+		}
+	}
+	let mut out: Vec[bool] = []
+	for k in 0..<held {
+		out.push(taken[k])
+	}
+	return out
+}
+
+/// The facts a question is asked with (ADR-306 D30): every fact held
+/// where they are no more than `most_facts()`, else the nearest
+/// `most_facts()` to its goal (`bounding_nearest`), in the order they hold;
+/// and what the ledgers ensure of the values the walk named.
 fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64) -> Vec[i64] {
-	let mut all = facts.facts.clone()
+	let mut all: Vec[i64] = []
+	if facts.facts.len() <= most_facts() {
+		all = facts.facts.clone()
+	} else {
+		let asking = bounding_nearest(walk, facts, asked, most_facts())
+		for k in 0..<facts.facts.len() {
+			if asking[k] {
+				all.push(facts.facts[k])
+			}
+		}
+	}
 	if !walk.rule_facts.is_empty() {
 		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
 		walk.arena.variables(asked, read)
-		for fact in facts.facts {
+		for fact in all {
 			walk.arena.variables(fact, read)
 		}
 		for (each, fact) in walk.rule_facts {
@@ -1923,7 +2050,7 @@ fn bounding_push(walk: ref BoundsWalk, mut facts: BoundsFacts, fact: i64) {
 		}
 	}
 	facts.facts.push(fact)
-	if facts.facts.len() > most_facts() {
+	if facts.facts.len() > most_held() {
 		facts.facts.remove(0)
 		facts.evicted += 1
 	}
