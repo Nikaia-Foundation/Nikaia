@@ -90,6 +90,9 @@ it, like the checks in `docs/supervisor.md`.
   is its own issue, linked.
   It names the limits the work will run into: a cap the code keeps (the
   walk's 48 facts, `most_facts()`), a set that is silently trimmed (#1470).
+  A change to a pass every build runs (the bounds walk runs in each
+  `lower-std`) names the time before it, on one named file, as a limit
+  (#1470: a rule that made the walk 4.5 times slower stopped the run).
 * **I12. What was ruled out**: approaches tried and dropped, and why, so the
   builder does not try them again. Empty when nothing was tried.
 
