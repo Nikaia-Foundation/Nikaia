@@ -260,11 +260,16 @@ fn main() throws {
         "a handle handed on by value is duplicated:\n{rust}"
     );
     // Two borrows and one lent handle, and not one step of the count between
-    // them. D1's correction is exactly this line.
+    // them. D1's correction is exactly this line. The handle stored in the
+    // `Pool` literal inside `keep` is the second duplicate (#1411).
     assert_eq!(
         rust.matches(".clone()").count(),
-        1,
-        "only the by-value handover duplicates:\n{rust}"
+        2,
+        "only the by-value handover and the stored handle duplicate:\n{rust}"
+    );
+    assert!(
+        rust.contains("db: db.clone()"),
+        "a handle stored in a field is duplicated:\n{rust}"
     );
     assert!(
         rust.contains("serve(&db)") && rust.contains("peek(&db)"),
