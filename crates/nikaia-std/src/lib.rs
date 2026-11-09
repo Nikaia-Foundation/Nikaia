@@ -122,7 +122,6 @@ pub mod text {
 /// half and never the compiler's. Unpublished: `std.contracts` does not list
 /// it, and `std`'s Rust (`http1.rs`) is its only caller.
 #[doc(hidden)]
-#[allow(clippy::cmp_owned)]
 pub mod runtime {
     include!("runtime/lowered.rs");
 
@@ -262,7 +261,6 @@ pub mod runtime {
 /// in place, and Nikaia has no `Box` to write around a large one
 /// (`modules.nika`'s `ModulesRefusal::Found`, which carries a `Finding`, #1364).
 #[allow(
-    clippy::cmp_owned,
     clippy::result_large_err,
     clippy::no_effect,
     clippy::eq_op,

@@ -677,12 +677,21 @@ impl EmitState {
             if made { out.push(&block_text_close(self.on_block_types())); }
             return Ok(());
         }
-        if receiver.is_some() && args.len() == 1 && self.on_block_types() && self.facts.view_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
+        if receiver.is_some() && lent_pattern && self.on_block_types() && self.facts.view_patterns.contains(&node_key(nikaia_std::index::get(&args, 0))) {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let made = name == "replace";
+            if made { out.push(&block_text_open(true)); }
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)?;
             out.push(&format!(".{}(AsRef::<str>::as_ref(", name));
             self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
-            out.push("))");
+            out.push(")");
+            if args.len() == 2 {
+                out.push(", AsRef::<str>::as_ref(&(");
+                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow, scope)?;
+                out.push("))");
+            }
+            out.push(")");
+            if made { out.push(&block_text_close(true)); }
             return Ok(());
         }
         if receiver.is_some() && lent_pattern && self.on_block_types() && nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
@@ -871,7 +880,7 @@ impl EmitState {
         let timed = self.facts.timed_ends.contains(&on_node);
         if timed { out.push("nikaia_std::par::ended("); }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
-        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(&written, args.len() as i64) && emit_callee_is_std_text((*nikaia_std::index::get(&self.facts.method_callees, &on_node)).map(std::ops::Deref::deref)) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node);
+        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(&written, args.len() as i64) && emit_callee_is_std_text((*nikaia_std::index::get(&self.facts.method_callees, &on_node)).map(std::ops::Deref::deref)) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node) && walk.compared_receiver != on_node;
         if rust_text { out.push(&block_text_open(self.on_block_types())); }
         if kind == 1 {
             out.push(&format!("nikaia_std::seq::{}(", entry));
@@ -1146,10 +1155,15 @@ pub(crate) fn emit_pure_place(expr: &Expr) -> bool {
     }
 }
 
+pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
+    if word == "to_string" { return format!("{}__nikaia_tuple.{}.to_string(){}", block_text_open(true), i, block_text_close(true)); }
+    format!("__nikaia_tuple.{}.{}()", i, word)
+}
+
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple85148| {
-        let (i, word) = __nikaia_tuple85148;
-        format!("__nikaia_tuple.{}.{}()", i, word)
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple86081| {
+        let (i, word) = __nikaia_tuple86081;
+        emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }
     format!("({})", nikaia_std::block::Text::from(copies.join(", ")))

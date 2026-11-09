@@ -36,6 +36,13 @@ pub(crate) fn emit_flow_compared(op: &BinaryOp) -> &'static str {
     }
 }
 
+pub(crate) fn emit_flow_called_on(node: &Expr) -> i64 {
+    match node {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); node_key(receiver) },
+        _ => -1,
+    }
+}
+
 pub(crate) fn emit_flow_is_cut(node: &Expr) -> bool {
     match node {
         Expr::Index { index, .. } => { let index = nikaia_std::boxed::open(index); matches!(index, Expr::Range { .. }) },
@@ -425,11 +432,18 @@ impl EmitState {
         if deref_left { out.push("*"); }
         let cast_before_a_shift = op == BinaryOp::Shl && self.ends_in_a_cast(world, lhs) && !emit_flow_is_binary_below(lhs, here) || !deref_left && emit_flow_a_jumping_coalesce(world, lhs);
         if cast_before_a_shift { out.push("("); }
+        let equality = op == BinaryOp::Eq || op == BinaryOp::Ne;
+        let around = walk.compared_receiver;
+        if equality && !deref_left { walk.compared_receiver = emit_flow_called_on(lhs); }
         self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)?;
+        walk.compared_receiver = around;
         if cast_before_a_shift { out.push(")"); }
         out.push(&format!(" {} ", symbol));
-        if self.facts.compared_views.contains(&(site, String::from("rhs"))) { out.push("*"); }
+        let deref_right = self.facts.compared_views.contains(&(site, String::from("rhs")));
+        if deref_right { out.push("*"); }
+        if equality && !deref_right { walk.compared_receiver = emit_flow_called_on(rhs); }
         self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)?;
+        walk.compared_receiver = around;
         Ok(())
     }
     pub(crate) fn emit_flow_a_declared_variant(&self, world: &EmitWorld<'_, '_, '_, '_>, fallback: &Expr) -> bool {

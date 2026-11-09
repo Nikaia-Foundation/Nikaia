@@ -577,7 +577,7 @@ pub fn features_kept(rust: &str, features: &[ManifestFeature], package: &str, ch
 pub(crate) fn features_reader_path(name: &str) -> Option<String> {
     let prefix = "__nikaia_reader_";
     if !name.starts_with(AsRef::<str>::as_ref(prefix)) { return None; }
-    let rest = nikaia_std::block::Text::from(name.replace(prefix, ""));
+    let rest = nikaia_std::block::Text::from(name.replace(AsRef::<str>::as_ref(prefix), AsRef::<str>::as_ref(&(""))));
     let book = nikaia_std::index::or(rest.split("__").next(), || "");
     let rule = match rest.splitn(2, "__").nth(1) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(format!("{}::{}", book, rule))

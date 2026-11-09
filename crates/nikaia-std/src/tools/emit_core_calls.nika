@@ -1000,13 +1000,27 @@ impl EmitState {
         }
         // **A view of text handed to a pattern of `str`** (#490,
         // `view_patterns`): on the block types it may be a `&Text`, lent
-        // as the `str` it holds.
-        if receiver != null && args.len() == 1 && self.on_block_types() && self.facts.view_patterns.contains(node_key(args[0])) {
+        // as the `str` it holds, and so is `replace`'s replacement, whatever
+        // text it is.
+        if receiver != null && lent_pattern && self.on_block_types() && self.facts.view_patterns.contains(node_key(args[0])) {
             let text = receiver ?? return
+            let made = name == "replace"
+            if made {
+                out.push(block_text_open(true))
+            }
             self.emit_core_postfix_base(world, walk, out, host, text, depth, flow, scope)
             out.push(f".{name}(AsRef::<str>::as_ref(")
             self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
-            out.push("))")
+            out.push(")")
+            if args.len() == 2 {
+                out.push(", AsRef::<str>::as_ref(&(")
+                self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
+                out.push("))")
+            }
+            out.push(")")
+            if made {
+                out.push(block_text_close(true))
+            }
             return
         }
         // **A text lent with `ref` to a pattern of `str`** (#490): on the
@@ -1305,7 +1319,8 @@ impl EmitState {
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
         // **On the block types, Rust's `String` answer is made a block's
         // text** (#490): around the plain call, which is all these are.
-        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(written, args.len()) && emit_callee_is_std_text(self.facts.method_callees[on_node]) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node)
+        // Not where the call is only compared (`compared_receiver`).
+        let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(written, args.len()) && emit_callee_is_std_text(self.facts.method_callees[on_node]) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node) && walk.compared_receiver != on_node
         if rust_text {
             out.push(block_text_open(self.on_block_types()))
         }
@@ -1732,9 +1747,17 @@ fn emit_pure_place(expr: ref Expr) -> bool {
 
 /// The copy of a tuple bound as `__nikaia_tuple`, part by part with the words
 /// the checker chose (`tuple_copies`, ADR-293 D24, #1184): `(t.0.to_string(),
-/// t.1.clone())`.
+/// t.1.clone())`. Rust's `String` a `to_string` answers is made a block's
+/// text (#490).
+fn emit_tuple_part_copy(i: i64, word: ref String) -> String {
+    if word == "to_string" {
+        return f"{block_text_open(true)}__nikaia_tuple.{i}.to_string(){block_text_close(true)}"
+    }
+    return f"__nikaia_tuple.{i}.{word}()"
+}
+
 pub fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
-    let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { f"__nikaia_tuple.{i}.{word}()" }).collect()
+    let copies: Vec[String] = parts.iter().enumerate().map(fn((i, word)) { emit_tuple_part_copy(i, word) }).collect()
     if copies.len() == 1 {
         return f"({copies[0]},)"
     }

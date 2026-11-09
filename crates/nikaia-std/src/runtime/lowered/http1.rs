@@ -115,7 +115,7 @@ pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
             let n = nikaia_std::index::or(text::parse_i64(value), || -1);
             if n < 0 { return refused("400 a content-length that is not a count"); }
             length = n;
-        } else if name == "connection" { keep_alive = nikaia_std::block::Text::from(value.to_lowercase()) == "keep-alive"; } else if name == "transfer-encoding" { return refused("400 a transfer-encoding this does not speak"); }
+        } else if name == "connection" { keep_alive = value.to_lowercase() == "keep-alive"; } else if name == "transfer-encoding" { return refused("400 a transfer-encoding this does not speak"); }
         headers.push(Header { name, value });
     }
     Read { refused: "", method, target, length, keep_alive, headers }

@@ -584,7 +584,10 @@ impl CheckState {
     pub(crate) fn a_lent_part_is_a_reference_already(&mut self, named: &collections::BTreeSet<i64>) {
         for node in named.iter() {
             let node = nikaia_std::num::value(node);
-            self.facts.owned_patterns.remove(&node);
+            if self.facts.owned_patterns.contains(&node) {
+                self.facts.owned_patterns.remove(&node);
+                self.facts.view_patterns.insert(node);
+            }
         }
         self.facts.views_handed_on.extend(named);
     }

@@ -55,6 +55,15 @@ fn emit_flow_compared(op: BinaryOp) -> String {
     }
 }
 
+/// The receiver of a method call, by its node, which `compared_receiver`
+/// names; `-1` for any other expression.
+fn emit_flow_called_on(node: ref Expr) -> i64 {
+    return match node {
+        Expr::MethodCall { receiver, .. } => node_key(receiver),
+        else => -1,
+    }
+}
+
 /// Whether an expression is a cut, `x[i..<j]`.
 fn emit_flow_is_cut(node: ref Expr) -> bool {
     return match node {
@@ -662,15 +671,28 @@ impl EmitState {
         if cast_before_a_shift {
             out.push("(")
         }
+        // **Text a side makes only to be compared is compared as Rust's**
+        // (#490): `x.replace(..) != y` needs no block's text around it.
+        let equality = op == BinaryOp::Eq || op == BinaryOp::Ne
+        let around = walk.compared_receiver
+        if equality && !deref_left {
+            walk.compared_receiver = emit_flow_called_on(lhs)
+        }
         self.emit_core_nested(world, walk, out, host, lhs, here, depth, wide, scope)
+        walk.compared_receiver = around
         if cast_before_a_shift {
             out.push(")")
         }
         out.push(f" {symbol} ")
-        if self.facts.compared_views.contains((site, "rhs")) {
+        let deref_right = self.facts.compared_views.contains((site, "rhs"))
+        if deref_right {
             out.push("*")
         }
+        if equality && !deref_right {
+            walk.compared_receiver = emit_flow_called_on(rhs)
+        }
         self.emit_core_nested(world, walk, out, host, rhs, here + 1, depth, wide, scope)
+        walk.compared_receiver = around
     }
 
     /// Whether a declared type or a constructor of one stands as the fallback of

@@ -100,7 +100,7 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
 
 pub fn describe_rust_dependency(manifest: &ManifestFile, crate_word: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
     for (key, declared) in manifest.dependencies.iter() {
-        if nikaia_std::block::Text::from(key.replace('-', "_")) != crate_word { continue; }
+        if key.replace('-', "_") != crate_word { continue; }
         match declared.shape {
             DependencyShape::Rust => { return Ok(nikaia_std::block::Text::from(key.to_string())); },
             _ => { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is a Nikaia package, not a Rust crate. `nikaia describe` is for `[dependencies]` entries with `type = \"rust\"`.", key)), &"describe_rust_dependency")); },
