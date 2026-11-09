@@ -28,7 +28,10 @@ pub struct Node {
 	pub start: u32,
 	pub end: u32,
 	pub anchor: String?,
-	pub tag: String?,
+	// The tag, read through `tag()`: as written in the parsed tree (a view of
+	// the input), resolved by `load` (text of its own where a `%TAG` prefix
+	// is joined to the suffix), so it holds either kind (ADR-282 D22).
+	tag: String?,
 	// True for a flow sequence or mapping (`[a]`, `{a: b}`, the single pair
 	// `[a: b]`), false for everything else.
 	pub flow: bool,
@@ -1731,14 +1734,19 @@ struct Loader {
 	expanded: i64,
 	limit: i64,
 	alias_nodes: i64,
+	directives: Vec[Dir],
 }
 
 // The stream's documents as a program reads them (D6): one root `Node` each,
 // every alias replaced by a copy of the resolved node of the most recent
 // anchor of its name before it in the same document (the structure copied,
 // the strings still views of the input), a key given twice in one mapping an
-// error, and `<<` an ordinary key. Anchors and tags stay on the nodes. The
-// nodes the aliases produce in a document may not exceed ten times its own
+// error, and `<<` an ordinary key. Anchors stay on the nodes; each tag is
+// resolved by its document's `%TAG` directives (YAML 1.2.2 6.8.2, 6.9.1), as
+// the events give it (`resolved`): `!e!foo` under `%TAG !e! tag:example.com,2000:`
+// is `tag:example.com,2000:foo`, `!!str` is `tag:yaml.org,2002:str`, a local
+// `!x` and the non-specific `!` stay. The handles are presentation and are not
+// kept. The nodes the aliases produce in a document may not exceed ten times its own
 // nodes plus `limits.alias_nodes`, checked before each copy (D8).
 pub fn load(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] sync throws {
 	let alias_nodes = limits.alias_nodes
@@ -1751,6 +1759,7 @@ pub fn load(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Node] sy
 			expanded: 0,
 			limit: 10 * nodes_in(d.root) + alias_nodes,
 			alias_nodes: alias_nodes,
+			directives: d.directives,
 		}
 		out.push(ld.resolved(d.root, input))
 	}
@@ -1804,7 +1813,7 @@ impl Loader {
 			start: n.start,
 			end: n.end,
 			anchor: n.anchor,
-			tag: n.tag,
+			tag: resolved(self.directives, n.tag),
 			flow: n.flow,
 			raw: n.raw,
 			style: n.style,
@@ -2149,7 +2158,7 @@ fn marker(kind: EventKind, start: u32, end: u32, explicit: bool) -> Event sync {
 // document (YAML 1.2.2 6.8.2, D7): a shorthand's handle replaced by the prefix
 // a `%TAG` directive gives it, else `!!` by `tag:yaml.org,2002:` and the
 // primary `!` kept, and the suffix's `%xx` decoded (`uri_decoded`); a
-// verbatim `!<t>` is `t`, the non-specific `!` stays. A named handle no
+// verbatim `!<t>` is `t`, its `%xx` decoded as libyaml does, the non-specific `!` stays. A named handle no
 // directive declares is refused while parsing.
 fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
 	let s = match t {
@@ -2163,7 +2172,7 @@ fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
 	let inner = rest.strip_prefix("<") ?? ""
 	let verbatim = inner.strip_suffix(">")
 	if verbatim != null {
-		return verbatim.clone()
+		return uri_decoded(verbatim ?? "")
 	}
 	let mut handle = "!"
 	if rest.starts_with("!") {
@@ -2696,7 +2705,9 @@ pub fn writer() -> Writer sync {
 }
 
 // The stream of `nodes`, one document each, `---` between them, as `load`
-// reads it back.
+// reads it back. Tags are resolved ones, as `load` gives them: a tag the
+// default handles (`!`, `!!`) do not abbreviate is written verbatim,
+// `!<tag:example.com,2000:foo>`.
 pub fn write(nodes: ref Vec[Node]) -> String sync {
 	let mut w = writer()
 	let mut out = String()
@@ -2705,6 +2716,17 @@ pub fn write(nodes: ref Vec[Node]) -> String sync {
 	}
 	out.push_str(w.end())
 	return out
+}
+
+// A node's tag (YAML 1.2.2 6.9.1): in the parsed tree as written (`!!str`,
+// `!e!foo`, `!<t>`), in `load`'s tree resolved (`tag:yaml.org,2002:str`,
+// `tag:example.com,2000:foo`, `t`); a local `!x` and the non-specific `!`
+// stay as they are. Null for an untagged node.
+pub fn tag(n: ref Node) -> String? sync {
+	return match n.tag {
+		null => null
+		t => t.clone()
+	}
 }
 
 // A string node a program builds to write it, `t` its value: `Plain`, so
@@ -2829,7 +2851,8 @@ impl Writer {
 		self.indent = self.indents.pop() ?? -1
 	}
 
-	// An anchor's and a tag's text, as written before a node.
+	// An anchor's and a tag's text, as written before a node; the tag is a
+	// resolved one, as `load` gives it, written by `tag_written`.
 	fn properties(ref mut self, n: ref Node) sync {
 		let anchor = n.anchor
 		if anchor != null {
@@ -2838,12 +2861,11 @@ impl Writer {
 			self.whitespace = false
 			self.indention = false
 		}
-		let tag = n.tag
-		if tag != null {
+		if n.tag != null {
 			if !self.whitespace {
 				self.put(' ')
 			}
-			self.put_text(tag ?? "")
+			self.put_text(tag_written(n.tag ?? ""))
 			self.whitespace = false
 			self.indention = false
 		}
@@ -3122,12 +3144,24 @@ fn simple_key(n: ref Node) -> bool sync {
 
 // A tag's length as libyaml counts it: a verbatim `!<t>` without its
 // brackets.
-fn tag_length(tag: String?) -> i64 sync {
-	let t = tag ?? ""
+fn tag_length(tag: ref String?) -> i64 sync {
+	if tag == null {
+		return 0
+	}
+	let t = tag_written(tag ?? "")
 	if t.starts_with("!<") {
 		return t.len() as i64 - 3
 	}
 	return t.len() as i64
+}
+
+// A resolved tag as a node's property: the non-specific `!` as itself, any
+// other by `written_tag`.
+fn tag_written(tag: ref String) -> String sync {
+	if tag == "!" {
+		return "!"
+	}
+	return written_tag(tag)
 }
 
 // A tag as libyaml writes it: `!x` for a local tag `x` or `!x`, `!!x` for

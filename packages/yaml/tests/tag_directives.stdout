@@ -1,0 +1,34 @@
+# %TAG !e! tag:example.com,2000:app/\n---\n!e!foo "bar"\n
+  parsed !e!foo
+  loaded tag:example.com,2000:app/foo
+  wrote  !<tag:example.com,2000:app/foo> "bar"\n
+  same   true
+# %TAG !! tag:example.com,2000:app/\n---\n!!int 1 - 3 # Interval, not integer\n
+  parsed !!int
+  loaded tag:example.com,2000:app/int
+  wrote  !<tag:example.com,2000:app/int> 1 - 3\n
+  same   true
+# %TAG ! tag:example.com,2000:local/\n--- !x [!!str a]\n--- !x [!!str a]\n
+  parsed !x [!!str] | !x [!!str]
+  loaded tag:example.com,2000:local/x [tag:yaml.org,2002:str] | !x [tag:yaml.org,2002:str]
+  wrote  !<tag:example.com,2000:local/x>\n- !!str a\n--- !x\n- !!str a\n
+  same   true
+# - !!str a\n- !local b\n- !<tag:yaml.org,2002:int> 1\n- !<!bar> c\n- !<tag:v> d\n- ! e\n
+  parsed - [!!str, !local, !<tag:yaml.org,2002:int>, !<!bar>, !<tag:v>, !]
+  loaded - [tag:yaml.org,2002:str, !local, tag:yaml.org,2002:int, !bar, tag:v, !]
+  wrote  - !!str a\n- !local b\n- !!int 1\n- !bar c\n- !<tag:v> d\n- ! e\n
+  same   true
+# %TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 a\n- !!x%2Fy b\n- !l%C3%A9 c\n
+  parsed - [!e!tag%21, !!x%2Fy, !l%C3%A9]
+  loaded - [tag:example.com,2000:app/tag!, tag:yaml.org,2002:x/y, !lé]
+  wrote  - !<tag:example.com,2000:app/tag%21> a\n- !!x/y b\n- !l%C3%A9 c\n
+  same   true
+# %TAG !e! tag:e:\n--- !e!m\n!e!k v: !e!s [x]\n
+  parsed !e!m {!e!k: !e!s [-]}
+  loaded tag:e:m {tag:e:k: tag:e:s [-]}
+  wrote  !<tag:e:m>\n!<tag:e:k> v: !<tag:e:s>\n- x\n
+  same   true
+# --- !e!foo bar\n
+  error 1:11: expected a tag handle a %TAG directive declares; found unexpected token ` `
+# %TAG !e! tag:a:\n--- !e!x 1\n--- !e!y 2\n
+  error 3:9: expected a tag handle a %TAG directive declares; found unexpected token ` `

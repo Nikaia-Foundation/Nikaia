@@ -9,7 +9,7 @@ fn props(n: ref yaml::Node) -> String {
 		null => ""
 		x => f"&{x} "
 	}
-	let t = match n.tag {
+	let t = match yaml::tag(n) {
 		null => ""
 		x => f"{x} "
 	}
