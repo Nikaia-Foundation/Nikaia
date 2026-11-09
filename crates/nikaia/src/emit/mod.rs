@@ -84,10 +84,10 @@ pub struct Build {
     /// ([ADR-348](../../docs/specification/adr/adr-348.md) D1): what `main`
     /// still holds at its end is not freed.
     pub skip_free_at_exit: bool,
-    /// `--optimization=prove-through-loops:on`
-    /// ([ADR-361](../../docs/specification/adr/adr-361.md) D10): a check a
-    /// loop leaves open is asked once more through the loop's invariant. It
-    /// changes what is proved, never what a program means.
+    /// **A check a loop leaves open is asked once more through the loop's
+    /// invariant** ([ADR-361](../../docs/specification/adr/adr-361.md) D10),
+    /// in every build (D14): `true` wherever a build is made. It changes what
+    /// is proved, never what a program means.
     pub prove_through_loops: bool,
     /// **Code run while the program is built counts its steps**
     /// ([ADR-321](../../docs/specification/adr/adr-321.md) D7): every function
@@ -128,7 +128,7 @@ impl Default for Build {
             bounds: crate::bounds::BoundsChecks::Kept,
             overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
-            prove_through_loops: false,
+            prove_through_loops: true,
             counts_steps: false,
             leaves_values: false,
             called_from_c: false,
@@ -152,7 +152,7 @@ impl Build {
             bounds: crate::bounds::BoundsChecks::Kept,
             overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
-            prove_through_loops: false,
+            prove_through_loops: true,
             counts_steps: false,
             leaves_values: false,
             called_from_c: false,

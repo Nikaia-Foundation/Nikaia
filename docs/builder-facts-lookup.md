@@ -277,8 +277,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **A list field that a free function such as `main` writes is dropped from the rule candidates**, so a rule test fills its lists only through `ref mut self` methods. (issue-1483)
 * **Derived entry claims (ADR-391) key on the first non-`self` parameter**, so a method that takes only `self` gets none. (issue-1483)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
-  measured with `lower-std --bounds --asserts [--optimization
-  prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
+  measured with `lower-std --bounds --asserts > R` and `nikaia run scripts/proved.nika -- R`,
   before and after on the same tree. Where the walk stops:
   `docs/formal-verification.md` §2.
   The two can differ: `check --bounds FILE` proved a site D23 reaches that

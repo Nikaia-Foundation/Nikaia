@@ -59,9 +59,8 @@ pub struct Cli {
     /// the compiler proved inside without its check, and
     /// `remove-overflow-checks:on` a `+`, `-` or `*` it proved stays inside its
     /// type; what is proved does not depend on them, and a check nothing
-    /// proves stays either way. `prove-through-loops:on` asks a check a loop
-    /// leaves open once more through the loop's invariant (ADR-361 D10).
-    /// `skip-free-at-exit:on` leaves what `main` holds at its end to the
+    /// proves stays either way; every build asks a check a loop leaves open
+    /// through the loop's invariant (ADR-361 D14). `skip-free-at-exit:on` leaves what `main` holds at its end to the
     /// operating system. All are `off` by default.
     ///
     /// May be given more than once; overrides `nikaia.toml`'s

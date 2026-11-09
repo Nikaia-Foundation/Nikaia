@@ -1,10 +1,10 @@
-//! **`prove-through-loops:on`** (ADR-361 D10, #767): an index's or an
-//! overflow's check that reads a name a loop changes, and that ADR-306's walk
-//! leaves open, is asked once more through the loop's invariant - found from
-//! the facts the loop is reached with, and checked where the loop is reached
-//! and at every end of a turn and every `break`. Under `off`, the default,
-//! nothing is asked through a loop; either way a check that is not proved
-//! stays, and the program stops where it stops with every optimization `off`.
+//! **Every build proves through loops** (ADR-361 D10, D14, #767, #1473): an
+//! index's or an overflow's check that reads a name a loop changes, and that
+//! ADR-306's walk leaves open, is asked once more through the loop's
+//! invariant - found from the facts the loop is reached with, and checked
+//! where the loop is reached and at every end of a turn and every `break`. A
+//! check that is not proved stays, and the program stops where it stops with
+//! every optimization `off`.
 
 use crate::common;
 use std::path::Path;
@@ -46,8 +46,7 @@ fn main() throws {
 }
 ";
 
-const ALL_ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on,prove-through-loops:on";
-const WALK_ONLY: &str = "remove-bounds-checks:on,remove-overflow-checks:on";
+const ALL_ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on";
 
 fn nikaia(dir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_nikaia"))
@@ -81,23 +80,14 @@ fn body<'a>(rust: &'a str, name: &str) -> &'a str {
     &rest[..rest.find("\n}").expect("its end")]
 }
 
-/// D10's example lowers with neither its index's nor its addition's check
-/// under `on`, and with both under `off`.
+/// D10's example lowers with neither its index's nor its addition's check,
+/// in every build (D14).
 #[test]
 fn a_slot_carried_through_a_loop_is_proved_inside_its_table() {
     let on = lowered("through-loops-on", ALL_ON);
     let probe = body(&on, "probe");
     assert!(!probe.contains("index::get"), "{probe}");
     assert!(probe.contains("proven::add::<i64>(at, 1)"), "{probe}");
-    let off = lowered("through-loops-off", WALK_ONLY);
-    let probe = body(&off, "probe");
-    assert!(probe.contains("nikaia_std::index::get(&xs"), "{probe}");
-    // ADR-306 D23: past the checked read, `at` is inside the list, so its `+ 1` is proved
-    // by the walk alone; the index's check is what stays.
-    assert!(
-        probe.contains("proven::add::<i64>(at, 1) } & 16383"),
-        "{probe}"
-    );
 }
 
 /// A loop whose bound really fails keeps its checks under `on`, and the
@@ -211,9 +201,9 @@ fn lower_reads_the_projects_optimization() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The word is `on` or `off`, as every optimization's is.
+/// The word is refused, naming the decision that removed it (D14).
 #[test]
-fn prove_through_loops_is_on_or_off() {
+fn prove_through_loops_is_refused() {
     let dir = common::scratch_dir("through-loops-word");
     std::fs::write(dir.join("main.nika"), PROBED).expect("the source");
     let out = nikaia(
@@ -222,16 +212,13 @@ fn prove_through_loops_is_on_or_off() {
             "lower",
             "main.nika",
             "--optimization",
-            "prove-through-loops:always",
+            "prove-through-loops:on",
         ],
     );
     let _ = std::fs::remove_dir_all(&dir);
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("`prove-through-loops` is `on` or `off`, not `always`"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("ADR-361 D14"), "{stderr}");
 }
 
 /// What `nikaia --bounds lower` reports of `source` with every optimization on.

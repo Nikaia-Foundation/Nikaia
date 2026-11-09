@@ -1,3 +1,7 @@
 agreeing files: passes
 a changed line: fails true, names it true
 a stray file: refused true
+a .loops.bounds beside its program: exit 1
+Error: tests/counter.loops.bounds: a test program has one `--bounds` expectation, `counter.bounds`, since every build asks a check through its loop (ADR-361 D14): move what it holds into `counter.bounds` and delete it
+a .loops.bounds alone: exit 1
+Error: tests/y.loops.bounds: a test program has one `--bounds` expectation, `y.bounds`, since every build asks a check through its loop (ADR-361 D14): move what it holds into `y.bounds` and delete it

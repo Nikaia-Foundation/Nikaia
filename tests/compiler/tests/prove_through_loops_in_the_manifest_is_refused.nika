@@ -1,0 +1,27 @@
+// Every build asks a check a loop leaves open through the loop (ADR-361 D14,
+// #1473): the word `prove-through-loops` that once chose it is refused, in
+// `[build] optimization` and on the command line alike, naming the decision.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"loops\"\nversion = \"0.1.0\"\n\n[build]\noptimization = \"remove-bounds-checks:on,prove-through-loops:on\"\n")
+    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"never\")\n}\n")
+    let out = process::run(nikaia, ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    println(out.stderr.trim().replace(tmp, "TMP"))
+    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"loops\"\nversion = \"0.1.0\"\n")
+    let flag = process::run(nikaia, ["check", "--optimization", "prove-through-loops:off", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {flag.code}")
+    println(flag.stderr.trim().replace(tmp, "TMP"))
+    process::run("rm", ["-rf", tmp])
+}

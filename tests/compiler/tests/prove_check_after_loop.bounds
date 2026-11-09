@@ -1,7 +1,7 @@
-bounds in tests/prove_check_after_loop.nika: 13 indexes, 11 proved; 4 operations, 4 proved
+bounds in tests/prove_check_after_loop.nika: 13 indexes, 13 proved; 4 operations, 4 proved
     14  a[j]      proved
     15  i + 1     proved
-    18  a[i]      checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    18  a[i]      proved
     25  a[hi]     proved
     28  a[j]      proved
     29  a[i]      proved
@@ -9,7 +9,7 @@ bounds in tests/prove_check_after_loop.nika: 13 indexes, 11 proved; 4 operations
     30  a[j]      proved
     31  a[j]      proved
     32  i + 1     proved
-    35  a[i]      checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    35  a[i]      proved
     36  a[i]      proved
     36  a[hi]     proved
     37  a[hi]     proved

@@ -41,14 +41,12 @@ benches/brc/brc.sh 200000     # quicker
   optimisation.**
 * **Two modes for `1brc.nika` and `fast.nika`.** `fast-unsafe.nika` is
   counted optimized only: what it is for is its assumes believed.
-  * **Nikaia safe**: only `prove-through-loops` on, which changes what is
-    proved and nothing that is written. Every index and overflow check is
-    kept, proved ones included, and
+  * **Nikaia safe**: no optimization on; what is proved is the same in
+    every build (ADR-361 D14). Every index and overflow check is kept, proved ones included, and
     the emitted Rust holds no `unsafe` at all (ADR-378), so every guarantee
     of safe Rust holds for it, as for any safe Rust program over its `std`.
   * **Nikaia optimized**: every `optimization` on (`remove-bounds-checks`,
-    `remove-overflow-checks`, `prove-through-loops`, which asks a check a
-    loop leaves open through the loop's invariant, `skip-free-at-exit`). A
+    `remove-overflow-checks`, `skip-free-at-exit`). A
     check the compiler proved is written without it, in `unsafe` Rust
     (`nikaia_std::proven`, ADR-306 D18); an `assume` is believed, as
     `core::hint::assert_unchecked`; the memory `main` holds at its end is

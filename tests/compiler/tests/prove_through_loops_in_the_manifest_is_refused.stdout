@@ -1,0 +1,4 @@
+exit 1
+Error: there is no optimization `prove-through-loops` any more: every build asks a check a loop leaves open through the loop (ADR-361 D14). Remove `prove-through-loops:on`
+exit 1
+Error: there is no optimization `prove-through-loops` any more: every build asks a check a loop leaves open through the loop (ADR-361 D14). Remove `prove-through-loops:off`
