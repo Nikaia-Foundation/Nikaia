@@ -544,7 +544,7 @@ impl CheckState {
             else => {},
         }
         self.a_narrowed_read_given_up(value)
-        if self.an_element_taken_out(world, value, ty, to, span) {
+        if self.an_element_taken_out(world, value, ty, to, span) || self.an_element_given_away(world, value, ty, to, span) {
             return
         }
         let at = self.flow.read_index.get((node_key(value), read_at)) ?? return
