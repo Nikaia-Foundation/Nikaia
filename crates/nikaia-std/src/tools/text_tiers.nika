@@ -720,6 +720,9 @@ struct TierWalk {
     /// The arms that are a parameter of the function they stand in, in a
     /// choice that does not leave it (#716), by their nodes.
     late_params: collections::BTreeSet[i64],
+    /// The names a `let`'s literal takes as they are, by their nodes
+    /// (ADR-views-3 D5, #1490): see `TierLateFound`.
+    late_lent: collections::BTreeSet[i64],
     /// The `String` parameters that keep their text: handed as they are into
     /// a place that is not a parameter, or to one that keeps it (#716).
     keeping: collections::BTreeSet[String],
@@ -4102,6 +4105,10 @@ struct TierLateFound {
     /// Those among them only a view made later out of their holder keeps
     /// (#948).
     held: collections::BTreeSet[i64],
+    /// The names a `let`'s literal takes as they are, by their nodes
+    /// (ADR-views-3 D5, #1490): one read whole out of a position is a view
+    /// there, read again or not.
+    lent: collections::BTreeSet[i64],
 }
 
 /// One binding of a name: its serial, and the loops around it.
@@ -4174,12 +4181,18 @@ struct TierLate {
     /// statement's end, so handing such a binding over later in the
     /// statement is a read before it, not its last.
     temporaries: collections::BTreeSet[String],
+    /// The names built as they are into a literal a `let` binds, by their
+    /// nodes (ADR-views-3 D5, last paragraph, #1490): the literal lends them.
+    lendable: collections::BTreeSet[i64],
+    /// Those among them `late_moved` met outside a `return`, a lambda or a
+    /// `spawn`.
+    lent: collections::BTreeSet[i64],
 }
 
 /// The arms that are a name still read after their choice, or in a later turn
 /// of a loop around the choice but not around the name, by their nodes.
 fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk) -> TierLateFound {
-    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet(), temporaries: collections::BTreeSet() }
+    let mut late = TierLate { bound: collections::BTreeMap(), frames: [], serial: 0, loops: 0, leaving: 0, leaves: [], pending: [], found: collections::BTreeSet(), args: collections::BTreeSet(), params: collections::BTreeSet(), params_from: 0, params_upto: 0, branch_args: [], branches: 0, viewing: collections::BTreeSet(), viewing_methods: collections::BTreeSet(), variants: collections::BTreeSet(), views: collections::BTreeMap(), viewers: collections::BTreeMap(), moved: collections::BTreeMap(), changing_methods: collections::BTreeSet(), text_fields: collections::BTreeSet(), held: collections::BTreeMap(), held_moves: collections::BTreeSet(), temporaries: collections::BTreeSet(), lendable: collections::BTreeSet(), lent: collections::BTreeSet() }
     for (key, function) in declared.fns {
         let result = function.result ?? continue
         if late_holds_text(result, declared, ask, 0) {
@@ -4227,7 +4240,7 @@ fn late_arms(program: ref Program, declared: ref TextDeclared, ask: ref TierAsk)
             }
         }
     }
-    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone(), moved: moved, held: held }
+    return TierLateFound { arms: late.found.clone(), args: late.args.clone(), params: late.params.clone(), moved: moved, held: held, lent: late.lent.clone() }
 }
 
 fn late_function(item: ref Item, ask: ref TierAsk, mut late: TierLate) {
@@ -4406,6 +4419,7 @@ fn late_stmt(stmt: ref Stmt, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
         Stmt::Let { names, value, .. } => {
             let sources = late_sources(value, ask, late)
             let alias = late_alias(value, ask, late)
+            late_lendable(value, ask, late)
             late_expr(value, false, ask, late)
             for name in names {
                 late_bind(ask.names.resolve(name).clone(), late)
@@ -4934,6 +4948,46 @@ fn late_held_view(name: ref String, value: ref Expr, ask: ref TierAsk, mut late:
     }
 }
 
+/// **A literal a `let` binds lends the names built into it** (ADR-views-3
+/// D5, last paragraph, #1490): a struct literal, a list or a variant's
+/// value, and the literals nested in them, take a local as a call argument
+/// does. Where the name is read again, `late_moved` makes the part a view of
+/// it; a literal handed straight to a call or handed back keeps what it is
+/// given. A tuple's parts share one kind here, so a number read again would
+/// make its text part a view: tuples wait for parts of their own.
+fn late_lendable(value: ref Expr, ask: ref TierAsk, mut late: TierLate) {
+    match value {
+        Expr::StructLit { fields, .. } => {
+            for field in fields {
+                late_lendable_part(field.value ?? continue, ask, late)
+            }
+        }
+        Expr::ListLit { items, .. } => {
+            for item in items {
+                late_lendable_part(item, ask, late)
+            }
+        }
+        Expr::Call { func, args, .. } => {
+            let callee = tier_callee(func, ask) ?? return
+            if late.variants.contains(callee) {
+                for arg in args {
+                    late_lendable_part(arg, ask, late)
+                }
+            }
+        }
+        else => {}
+    }
+}
+
+fn late_lendable_part(part: ref Expr, ask: ref TierAsk, mut late: TierLate) {
+    match part {
+        Expr::Variable(_, _) => {
+            late.lendable.insert(node_key(part))
+        }
+        else => late_lendable(part, ask, late),
+    }
+}
+
 /// **A name moved as it is into a literal while a view of it is still used
 /// is a view of it** (ADR-views-3 D9): the literal is a variable of the function,
 /// and moving the text would end the view read next. A declared position it
@@ -4947,6 +5001,20 @@ fn late_moved(value: ref Expr, position: (String, String)?, ask: ref TierAsk, mu
         else => return,
     }
     let key = late_key(word, late) ?? return
+    // **A name a `let`'s literal lends is a view of it where it is read
+    // again** (D5, #1490): the arm waits for that read.
+    if late.lendable.contains(node_key(value)) {
+        late.lent.insert(node_key(value))
+        late_defer(TierLateArm { at: node_key(value), name: word.clone(), serial: late_serial(word, late), loops: late.loops, argument: false }, late)
+        match position {
+            null => {}
+            found => {
+                if !late.moved.contains_key(node_key(value)) {
+                    late.moved.insert(node_key(value), found.clone())
+                }
+            }
+        }
+    }
     let held = late.viewers[key]?.clone() ?? return
     for viewer in held {
         if late_serial(viewer.0, late) == viewer.1 {
@@ -5037,7 +5105,7 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             let kinds = kinds_of_local(ask.names.resolve(name), walk)
             // **An arm that is a name still read later is a view of it**
             // (ADR-282 D7, D13, #712): moving it would end what is read next.
-            let late = walk.late.contains(node_key(expr)) || tier_arm_read(node_key(expr), walk)
+            let late = walk.late.contains(node_key(expr)) || tier_arm_read(node_key(expr), walk) || tier_lent_view(expr, ask, walk)
             if late {
                 count_arm_use(expr, ask, walk)
             }
@@ -5297,6 +5365,21 @@ fn name_kinds(name: ref String, walk: ref TierWalk) -> Kinds {
         return still_kinds()
     }
     return owned_kinds()
+}
+
+/// **A name read whole out of a position, taken as it is by a `let`'s
+/// literal, is lent to it** (ADR-views-3 D5, #1490): it is a view there, so
+/// the literal cannot take it, read again or not.
+fn tier_lent_view(expr: ref Expr, ask: ref TierAsk, walk: ref TierWalk) -> bool {
+    if !walk.late_lent.contains(node_key(expr)) {
+        return false
+    }
+    let name = match expr {
+        Expr::Variable(name, _) => ask.names.resolve(name),
+        else => return false,
+    }
+    let local = tier_local(name, walk) ?? return false
+    return local.from != null && !local.made
 }
 
 fn kinds_of_local(name: ref String, walk: ref TierWalk) -> Kinds {
@@ -7107,11 +7190,12 @@ fn tier_word(tier: Tier) -> String {
 pub fn text_tiers(program: ref Program, ask: ref TierAsk) -> TextTiers {
     let declared = declared_of(program, ask.names)
     let text = string_type(declared, ask.names)
-    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false }
+    let mut walk = TierWalk { declared: declared, tiers: collections::BTreeMap(), flows: no_flows(), locals: collections::BTreeMap(), frames: [], result: null, in_hole: false, hole_text: -1, lent_self: false, adopted: collections::BTreeMap(), demoted: collections::BTreeSet(), handed_back: -1, unlent: collections::BTreeSet(), read_here: false, tail_back: false, ties: collections::BTreeMap(), late: collections::BTreeSet(), late_args: collections::BTreeSet(), late_params: collections::BTreeSet(), late_lent: collections::BTreeSet(), keeping: collections::BTreeSet(), kept_into: collections::BTreeSet(), param_arms: collections::BTreeSet(), reads: no_reads(), function: "", stmt: Span { start: 0, end: 0 }, tuple_items: collections::BTreeMap(), closure_owns: false }
     let found = late_arms(program, walk.declared, ask)
     walk.late = found.arms
     walk.late_args = found.args
     walk.late_params = found.params
+    walk.late_lent = found.lent
     // **A later round walks again only the units that read a decision that
     // changed** (#727): a unit's walk depends on nothing else that moves.
     let units = tier_units(program)
