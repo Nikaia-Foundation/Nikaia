@@ -400,11 +400,43 @@ impl EmitState {
         };
         if streamed {
             let rule = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-            if !rule.args.is_empty() || !rule.config.is_empty() || table.is_some() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("The compiler can't translate a call of `@stream` entry `{}` that hands it values or a table yet.", rule_name), at: Some(flow.statement) }, &"emit_core_grammar_entry")); }
             out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*");
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
-            out.push(").to_vec(); let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), |__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", lowered, rule_name));
+            out.push(").to_vec(); ");
+            let mut handed = String::new();
+            for i in 0..rule.args.len() as i64 {
+                out.push(&format!("let __wg_value{} = ", i));
+                if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&values, (i) as usize), depth, flow, scope)?; }
+                out.push("; ");
+                handed.push_str(&format!("__wg_value{}, ", i));
+            }
+            let mut j = 0;
+            for option in rule.config.iter() {
+                out.push(&format!("let __wg_option{} = ", j));
+                let mut given = false;
+                for c in config.iter() {
+                    if !given && c.name == option.name {
+                        self.emit_expr(world, walk, out, host, &c.value, depth, flow, scope)?;
+                        given = true;
+                    }
+                }
+                if !given { self.emit_expr(world, walk, out, host, &option.default, depth, flow, scope)?; }
+                out.push("; ");
+                handed.push_str(&format!("__wg_option{}, ", j));
+                j += 1;
+            }
+            let mut context = "winnow_grammar::ParseContext::<()>::default()";
+            match table {
+                None => { },
+                Some(ref words) => {
+                    out.push("let __wg_words = winnow_grammar::InternerContext::clone(&");
+                    self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+                    out.push("); ");
+                    context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)";
+                },
+            }
+            out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
+            out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(&__wg_source[..], &mut {}, winnow_grammar::rt::Reading::default(), {}|__wg_item: &_| match __wg_tx.send(Ok(__wg_item.clone())) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}); ", lowered, rule_name, context, handed));
             out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render(&__wg_source[..])))); } }); __wg_rx.into_iter() })");
             out.push(&format!("{}", question));
             return Ok(());

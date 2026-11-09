@@ -1,0 +1,58 @@
+// An `@stream` entry takes the values its rule declares after its input, an
+// option by name or by its default, and the caller's `words:` table, as a
+// sequential entry does (ADR-grammar-1 D2, ADR-388 D1, ADR-grammar-2 D7,
+// #1509): they are taken before the reader starts and move to it.
+
+use std::winnow_grammar
+
+struct Item {
+	word: String,
+}
+
+pub struct Limits {
+	pub most: i64,
+}
+
+grammar Counted {
+	@stream entry rule items(n: i64) -> Item = item{n}
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+grammar Optioned {
+	@stream entry rule items(lim: Limits; least: i64 = 1) -> Item = item{least, lim.most} until("!") "!"
+	rule item -> Item = w:until(";") ";" -> { Item { word: w.clone() } }
+}
+
+grammar Interned {
+	@stream entry rule names -> winnow_grammar::Symbol = name+
+	rule name -> winnow_grammar::Symbol = n:ident ";" -> { n }
+}
+
+fn least_two(text: String) -> i64 throws {
+	let mut seen = 0
+	for it in Optioned::items(text, Limits { most: 3 }; least: 2) {
+		println(f"least two: {it.word}")
+		seen += 1
+	}
+	return seen
+}
+
+fn main() throws {
+	let n = 2
+	for it in Counted::items("a;b;c;", n + 1) {
+		println(it.word)
+	}
+	for it in Optioned::items("x;y;z;!", Limits { most: 2 }) {
+		println(f"most two: {it.word}")
+	}
+	let seen = least_two("x;!") catch {
+		println(f"short: {error}")
+		-1
+	}
+	println(seen)
+	println(least_two("x;y;!"))
+	let words = winnow_grammar::InternerContext()
+	for s in Interned::names(Bytes("ab;cd;".bytes().collect()); words: words) {
+		println(words.resolve(s))
+	}
+}
