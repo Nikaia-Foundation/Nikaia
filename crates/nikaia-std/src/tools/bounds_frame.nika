@@ -56,6 +56,7 @@ pub fn bounds_around(
 		changing_receivers: collections::BTreeSet(),
 		frames: collections::BTreeMap(),
 		rules: [],
+		held: collections::BTreeMap(),
 		derived: no_derived(),
 		fields: collections::BTreeSet(),
 		field_writers: collections::BTreeSet(),

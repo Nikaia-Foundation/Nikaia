@@ -554,9 +554,20 @@ pub(crate) fn rules_settle(walk: &mut BoundsWalk, args: &[FnArg], body: &Block, 
     let mut owners: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (_, of) in roots.iter() { owners.insert(of.to_string()); }
     let mut held: Vec<BoundsRule> = vec![];
-    for of in owners.iter() { for rule in rules_holding(of, context, program, words, ask) { held.push(rule); } }
+    for of in owners.iter() {
+        held.extend(nikaia_std::index::or(match context.around.held.get(of) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || rules_holding(of, context, program, words, ask).into()));
+    }
     walk.rules = held;
     walk.rule_roots = roots;
+}
+
+pub(crate) fn rules_held_all(context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Vec<BoundsRule>> {
+    let mut out: collections::BTreeMap<String, Vec<BoundsRule>> = collections::BTreeMap::new();
+    for rule in context.around.rules.iter() { if !out.contains_key(&rule.owner) { out.insert(rule.owner.to_string(), rules_holding(&rule.owner, context, program, words, ask)); } }
+    out
 }
 
 pub(crate) fn rules_owner_of(program: &Program, body: &Block, words: &winnow_grammar::InternerContext) -> String {
@@ -827,7 +838,7 @@ pub(crate) fn rules_exit(walk: &mut BoundsWalk, facts: &BoundsFacts, returned: O
     bounding_returned(walk, facts, returned, throwing, context, program, words, ask);
     if !walk.checking || !walk.rule_roots.contains_key("self") { return; }
     for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
-        if rule.kind == "length" { if !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing {
+        if rule.kind == "length" { if !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } } else if walk.checked_results.contains(&at) && !throwing {
             if returned.is_none() {
                 walk.rule_failed.insert(at);
                 continue;
@@ -903,7 +914,7 @@ pub(crate) fn rules_element_write(walk: &mut BoundsWalk, facts: &BoundsFacts, ta
     for (root, owner) in walk.rule_roots.to_owned() {
         for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let a = format!("{}.{}", root, rule.a);
-            if rule.owner != owner { continue; }
+            if rule.owner != owner || walk.rule_failed.contains(&at) { continue; }
             if rule.kind == "index" && nikaia_std::index::or(list.as_deref(), || "") == a || rule.kind == "inner" && nikaia_std::index::or(inner.as_deref(), || "") == a { if op.is_some() || !rules_position(walk, facts, value, &root, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); } } else if rule.kind == "inner" && nikaia_std::index::or(list.as_deref(), || "") == a { if op.is_some() || !rules_positions(walk, facts, value, &root, &rule.b, context, program, words, ask) { walk.rule_failed.insert(at); } }
         }
     }
@@ -953,7 +964,7 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into()) {
-        for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "length" && !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } }
+        for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) { if rule.kind == "length" && !walk.rule_failed.contains(&at) && !rules_same_length(walk, facts, rule, ask) { walk.rule_failed.insert(at); } }
         return;
     }
     if !on.is_empty() && on != "self" && walk.rule_roots.contains_key(on) && typed == nikaia_std::index::or(match walk.rule_roots.get(on) {
@@ -966,7 +977,7 @@ pub(crate) fn rules_at_call(walk: &mut BoundsWalk, call: &Expr, receiver: Option
     };
     for (root, owner) in walk.rule_roots.to_owned() {
         for (at, rule) in walk.rules.to_owned().iter().enumerate().map(|(at, item)| (at as i64, item)) {
-            if rule.owner != owner { continue; }
+            if rule.owner != owner || walk.rule_failed.contains(&at) { continue; }
             let a = format!("{}.{}", root, rule.a);
             let b = format!("{}.{}", root, rule.b);
             if rule.kind == "index" && on == a && rule.a == rule.b {

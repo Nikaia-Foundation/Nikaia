@@ -233,9 +233,14 @@ pub fn bounds_fields(context: &mut BoundsContext, program: &Program, words: &win
             _ => { },
         }
     }
-    for _round in 0..2 { context.around.field_bounds = fields_round(&context, &bodies, program, words, ask); }
+    for _round in 0..2 {
+        context.around.held = rules_held_all(&context, program, words, ask);
+        context.around.field_bounds = fields_round(&context, &bodies, program, words, ask);
+    }
     for _round in 0..4 {
+        context.around.held = rules_held_all(&context, program, words, ask);
         let found = fields_round(&context, &bodies, program, words, ask);
+        context.around.held = collections::BTreeMap::new();
         let before = context.around.field_bounds.len() as i64;
         let mut kept: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
         for (key, bound) in context.around.field_bounds.iter() {

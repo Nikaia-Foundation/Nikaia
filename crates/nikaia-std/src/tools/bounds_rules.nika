@@ -747,12 +747,22 @@ fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, con
     }
     let mut held: Vec[BoundsRule] = []
     for of in owners {
-        for rule in rules_holding(of, context, program, words, ask) {
-            held.push(rule)
-        }
+        held.extend(context.around.held.get(of)?.clone() ?? rules_holding(of, context, program, words, ask))
     }
     walk.rules = held
     walk.rule_roots = roots
+}
+
+/// **The rules that hold of each type with candidates** (`rules_holding`),
+/// for the bodies of one round that walk with the same context.
+fn rules_held_all(context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync) -> collections::BTreeMap[String, Vec[BoundsRule]] {
+    let mut out: collections::BTreeMap[String, Vec[BoundsRule]] = collections::BTreeMap()
+    for rule in context.around.rules {
+        if !out.contains_key(rule.owner) {
+            out.insert(rule.owner.clone(), rules_holding(rule.owner, context, program, words, ask))
+        }
+    }
+    return out
 }
 
 /// The type whose method `body` is, where it takes `self`; empty for any
@@ -1136,7 +1146,7 @@ fn rules_exit(mut walk: BoundsWalk, facts: ref BoundsFacts, returned: ref Expr?,
     }
     for (at, rule) in walk.rules.clone().iter().enumerate() {
         if rule.kind == "length" {
-            if !rules_same_length(walk, facts, rule, ask) {
+            if !walk.rule_failed.contains(at) && !rules_same_length(walk, facts, rule, ask) {
                 walk.rule_failed.insert(at)
             }
         } else if walk.checked_results.contains(at) && !throwing {
@@ -1235,7 +1245,7 @@ fn rules_element_write(mut walk: BoundsWalk, facts: ref BoundsFacts, target: ref
     for (root, owner) in walk.rule_roots.clone() {
         for (at, rule) in walk.rules.clone().iter().enumerate() {
             let a = f"{root}.{rule.a}"
-            if rule.owner != owner {
+            if rule.owner != owner || walk.rule_failed.contains(at) {
                 continue
             }
             // A value of `a`, or of an inner list of it (ADR-306 D28).
@@ -1321,7 +1331,7 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
     let typed = context.std_receivers.get(node_key(call))?.clone() ?? ""
     if on == "self" && walk.rule_roots.contains_key("self") && typed == (walk.rule_roots.get("self")?.clone() ?? "") {
         for (at, rule) in walk.rules.clone().iter().enumerate() {
-            if rule.kind == "length" && !rules_same_length(walk, facts, rule, ask) {
+            if rule.kind == "length" && !walk.rule_failed.contains(at) && !rules_same_length(walk, facts, rule, ask) {
                 walk.rule_failed.insert(at)
             }
         }
@@ -1339,7 +1349,7 @@ fn rules_at_call(mut walk: BoundsWalk, call: ref Expr, receiver: ref String?, me
     }
     for (root, owner) in walk.rule_roots.clone() {
         for (at, rule) in walk.rules.clone().iter().enumerate() {
-            if rule.owner != owner {
+            if rule.owner != owner || walk.rule_failed.contains(at) {
                 continue
             }
             let a = f"{root}.{rule.a}"

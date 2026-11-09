@@ -549,11 +549,16 @@ pub fn bounds_fields(
 			else => {},
 		}
 	}
+	// The rules that hold depend on the context alone, not on the body
+	// walked: found once a round, not once a body.
 	for _round in 0..<2 {
+		context.around.held = rules_held_all(context, program, words, ask)
 		context.around.field_bounds = fields_round(context, bodies, program, words, ask)
 	}
 	for _round in 0..<4 {
+		context.around.held = rules_held_all(context, program, words, ask)
 		let found = fields_round(context, bodies, program, words, ask)
+		context.around.held = collections::BTreeMap()
 		let before = context.around.field_bounds.len()
 		let mut kept: collections::BTreeMap[String, Range] = collections::BTreeMap()
 		for (key, bound) in context.around.field_bounds {
