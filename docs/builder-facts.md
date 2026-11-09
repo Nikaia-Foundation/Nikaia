@@ -180,4 +180,7 @@ together with the specification section and an example test.
 * Before planning, also probe the inherent-impl and concrete-type variants of an issue's trait or generic probe: a trait method's by-value data parameter is seeded as kept in `keeps.nika` `trait_keeps` (pending #1012 step 3), so NK2105 there is not your defect. (issue-1448)
 * An impl method's contract is built by `declared_function` (`declared.nika`) from `ledger_items.nika`; a generic impl is written `impl Box[T]`, never `impl[T] Box[T]`. (issue-1448)
 * Views-3 D12 (returned parameter is a view) is built only for text; a struct or generic `T` result still keeps its argument (`fn second<T>(x: &T, y: T) -> T`). (issue-1448)
+* A report written through `cat > R <<EOF` runs every backticked snippet in it; quote the delimiter (`<<'EOF'`) and expand the paths separately. (issue-1458)
+* Limit `git log --grep=N` with `-400` or a date range: the unbounded form can pass the 120 s tool timeout in this repository. (issue-1458)
+* When an issue's probe already passes on develop, find the fixing commit with `git log -400 --oneline | grep` on the topic, pin the probe in a test program, and report fails-before as not done. (issue-1458)
 
