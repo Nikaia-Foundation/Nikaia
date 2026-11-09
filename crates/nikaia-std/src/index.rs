@@ -520,20 +520,6 @@ impl<V> Get<&crate::either_text::EitherText<'_>> for std::collections::BTreeMap<
     }
 }
 
-/// **A key read out of a map whose key type the checker could not pin**
-/// (0.0.235): what `index::key(k)` wraps.
-///
-/// A map's read wants `&Q` where the map's key borrows as `Q`, and the key in
-/// the brackets may be a number (lent here) or already a view (passed
-/// through) - which one, the emitter cannot say, because nothing in the source
-/// pinned the map's key type. [`AsKey`] answers it by the key's own type.
-pub struct Key<T>(T);
-
-/// Wrap a key for [`Key`]'s read.
-pub fn key<T: AsKey>(key: T) -> Key<T> {
-    Key(key)
-}
-
 /// What a key is looked up as.
 pub trait AsKey {
     type Q: ?Sized;
@@ -561,39 +547,6 @@ impl<T: ?Sized> AsKey for &T {
     type Q = T;
     fn as_key(&self) -> &T {
         self
-    }
-}
-
-impl<K, T, V, S> Get<Key<T>> for crate::hash::HashMap<K, V, S>
-where
-    T: AsKey,
-    K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<T::Q>,
-    T::Q: std::cmp::Eq + std::hash::Hash,
-    S: std::hash::BuildHasher,
-{
-    type Out<'a>
-        = Found<'a, V>
-    where
-        Self: 'a;
-
-    fn get(&self, key: Key<T>) -> Found<'_, V> {
-        Found(crate::hash::HashMap::get(self, key.0.as_key()))
-    }
-}
-
-impl<K, T, V> Get<Key<T>> for std::collections::BTreeMap<K, V>
-where
-    T: AsKey,
-    K: Ord + std::borrow::Borrow<T::Q>,
-    T::Q: Ord,
-{
-    type Out<'a>
-        = Found<'a, V>
-    where
-        Self: 'a;
-
-    fn get(&self, key: Key<T>) -> Found<'_, V> {
-        Found(std::collections::BTreeMap::get(self, key.0.as_key()))
     }
 }
 
@@ -653,39 +606,6 @@ where
 
     fn get_mut(&mut self, key: &Q) -> Option<&mut V> {
         std::collections::BTreeMap::get_mut(self, key)
-    }
-}
-
-impl<K, T, V, S> GetMut<Key<T>> for crate::hash::HashMap<K, V, S>
-where
-    T: AsKey,
-    K: std::cmp::Eq + std::hash::Hash + std::borrow::Borrow<T::Q>,
-    T::Q: std::cmp::Eq + std::hash::Hash,
-    S: std::hash::BuildHasher,
-{
-    type Out<'a>
-        = Option<&'a mut V>
-    where
-        Self: 'a;
-
-    fn get_mut(&mut self, key: Key<T>) -> Option<&mut V> {
-        crate::hash::HashMap::get_mut(self, key.0.as_key())
-    }
-}
-
-impl<K, T, V> GetMut<Key<T>> for std::collections::BTreeMap<K, V>
-where
-    T: AsKey,
-    K: Ord + std::borrow::Borrow<T::Q>,
-    T::Q: Ord,
-{
-    type Out<'a>
-        = Option<&'a mut V>
-    where
-        Self: 'a;
-
-    fn get_mut(&mut self, key: Key<T>) -> Option<&mut V> {
-        std::collections::BTreeMap::get_mut(self, key.0.as_key())
     }
 }
 
