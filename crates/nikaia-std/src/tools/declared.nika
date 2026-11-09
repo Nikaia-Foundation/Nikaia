@@ -147,9 +147,12 @@ pub fn code_as_read(names: ref winnow_grammar::InternerContext, ty: ref Type) ->
 }
 
 /// **Whether a function type lends its parameter at `at` as a view**
-/// (ADR-views-3 D2, D14): one its `from` names, or plain text, which a
-/// function type cannot keep (only a written `keep` keeps, and a function
-/// type writes none).
+/// (ADR-views-3 D2, D14): one its `from` names, or a plain one, unless it
+/// writes `keep` (Part I §C, #1466). Lent is what a read cannot copy: text,
+/// and a type with arguments (`Vec[i64]`, `collections::HashMap[K, V]`). A
+/// bare name may be a payloadless enum or a ledger copy, which a read copies
+/// and a lend would not change; this function cannot tell them from a struct,
+/// so a bare name other than `String` stays as written.
 pub fn code_lends_at(names: ref winnow_grammar::InternerContext, ty: ref Type, at: i64) -> bool {
     let code = ty.code ?? return false
     if at >= ty.generics.len() {
@@ -158,8 +161,14 @@ pub fn code_lends_at(names: ref winnow_grammar::InternerContext, ty: ref Type, a
     if code_reads(code, at) {
         return true
     }
+    if at < code.param_keeps.len() && code.param_keeps[at] {
+        return false
+    }
     let part = ty.generics[at]
-    return !part.is_view && !part.is_mut && !part.is_nullable && !part.is_tuple && !part.is_slice && part.code == null && part.generics.is_empty() && names.resolve(part.name) == "String"
+    if part.is_view || part.is_mut || part.is_nullable || part.is_tuple || part.is_slice || part.code != null {
+        return false
+    }
+    return !part.generics.is_empty() || names.resolve(part.name) == "String"
 }
 
 /// Whether `code_as_read` changes a function type: it writes `from`, or

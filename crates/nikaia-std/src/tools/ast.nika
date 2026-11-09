@@ -1042,6 +1042,9 @@ pub struct Code {
     /// `-> String from s`: the parameters the result's views point into
     /// (D8, D14); a name that is no parameter is `NK1335`.
     pub result_from: Vec[winnow_grammar::Symbol],
+    /// `fn(keep r: Row)`: which parameters the code keeps, in `generics'`
+    /// order (Part I §C, ADR-views-3 D2, #1466). A plain parameter is lent.
+    pub param_keeps: Vec[bool],
 }
 
 /// One variant of an enum (Kap 4.4).

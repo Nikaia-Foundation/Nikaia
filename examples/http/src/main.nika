@@ -255,7 +255,7 @@ pub fn status_line(status: i32) -> String {
 // with no `async` or `await`.
 pub fn listen(
     at: String,
-    handler: fn(Request) -> Response;
+    handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
     head_wait: i64 = 10,
@@ -285,7 +285,7 @@ pub fn listen(
 // call site writes nothing extra.
 fn answer(
     mut connection: net::Connection,
-    handler: fn(Request) -> Response;
+    handler: fn(keep Request) -> Response;
     body_cap: i64 = 1048576,
     head_cap: i64 = 16384,
     head_wait: i64 = 10

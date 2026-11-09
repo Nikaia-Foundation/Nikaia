@@ -1,0 +1,9 @@
+error[NK1102]: `total` expects `make` to be `fn(ref Vec[i64]) -> Held`, but you're passing `fn(Vec[i64]) -> Held sync`.
+   --> tests/a_function_that_keeps_does_not_fit_a_function_type_that_lends.nika:18:24
+    |
+ 18 |     println(total([1], wrap))
+    |                        ^^^^
+    |
+    = note: It's declared as `total(xs: Vec[i64], make: fn(ref Vec[i64]) -> Held) -> i64`.
+    = help: Make it a `fn(ref Vec[i64]) -> Held`, or change the declaration to `fn(Vec[i64]) -> Held sync`.
+1 type error

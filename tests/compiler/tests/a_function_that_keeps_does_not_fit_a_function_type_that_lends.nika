@@ -1,0 +1,19 @@
+// A function that keeps its parameter does not fit a function type whose
+// parameter is plain: that parameter is lent (Part I §C, ADR-views-3 D2,
+// #1466). Written `fn(keep Vec[i64]) -> Held`, it fits.
+
+struct Held {
+    xs: Vec[i64],
+}
+
+fn total(xs: Vec[i64], make: fn(Vec[i64]) -> Held) -> i64 {
+    return make(xs).xs.len()
+}
+
+fn wrap(keep xs: Vec[i64]) -> Held {
+    return Held { xs: xs }
+}
+
+fn main() throws {
+    println(total([1], wrap))
+}

@@ -112,7 +112,7 @@ fn comptime_turn_function(turn: ref ComptimeTurn, returns: ref Type, intern: fn(
     let kept = intern("__nikaia_turned")
     let local = intern(turn.local)
     let t = intern("T")
-    let nowhere: fn(Stmt) -> Spanned[Stmt] sync = fn(node) { Spanned { node: node, span: Span::nowhere(), doc: null, attributes: [] } }
+    let nowhere: fn(keep Stmt) -> Spanned[Stmt] sync = fn(node) { Spanned { node: node, span: Span::nowhere(), doc: null, attributes: [] } }
     let push = Expr::MethodCall { receiver: Expr::Variable(kept, fresh_id()), method: intern("push"), args: [turn.value.clone()], config: [], id: fresh_id() }
     let at_field = Expr::Binary { op: BinaryOp::Eq, lhs: Expr::Field { base: Expr::Variable(local, fresh_id()), name: intern("name"), id: fresh_id() }, rhs: Expr::LitStr { text: turn.field.clone(), id: fresh_id() }, span: Span::nowhere(), grouped: false, id: fresh_id() }
     let pick = Expr::If { cond: at_field, then_branch: Block { stmts: [nowhere(Stmt::Expr(push))] }, else_branch: null, id: fresh_id() }

@@ -85,8 +85,10 @@ pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if at >= ty.generics.len() as i64 { return false; }
     if code_reads(code, at) { return true; }
+    if at < code.param_keeps.len() as i64 && *nikaia_std::index::get(&code.param_keeps, nikaia_std::index::at(at)) { return false; }
     let part = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at));
-    !part.is_view && !part.is_mut && !part.is_nullable && !part.is_tuple && !part.is_slice && (*part.code).is_none() && part.generics.is_empty() && names.resolve(part.name) == "String"
+    if part.is_view || part.is_mut || part.is_nullable || part.is_tuple || part.is_slice || (*part.code).is_some() { return false; }
+    !part.generics.is_empty() || names.resolve(part.name) == "String"
 }
 
 pub fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
