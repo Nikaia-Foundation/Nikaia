@@ -1,0 +1,36 @@
+// #1425, ADR-282 D22, D29, ADR-083: a published function keeps one kind of
+// text at its result, text of its own beside text it made, so an arm of a
+// tail `if` or `match`, or of a `return`ed one, that reads a field of a
+// borrowed parameter or of `self` gives it away: NK1131, as `return h.name`
+// is (was an internal compiler error, rustc "cannot move out").
+struct H { name: String }
+
+fn own(s: String) -> String { return s + "!" }
+
+pub fn by_if(h: ref H, c: bool) -> String { if c { h.name } else { own(h.name) } }
+
+pub fn by_match(h: ref H, c: bool) -> String {
+    match c {
+        true => h.name,
+        false => own(h.name),
+    }
+}
+
+pub fn by_return(h: ref H, c: bool) -> String {
+    return if c { h.name } else { own(h.name) }
+}
+
+pub fn by_element(v: ref Vec[String], c: bool) -> String { if c { v[0] } else { own(v[0]) } }
+
+impl H {
+    pub fn by_self(self, c: bool) -> String { if c { self.name } else { own(self.name) } }
+}
+
+fn main() throws {
+    let h = H { name: "a" }
+    println(by_if(h, true))
+    println(by_match(h, true))
+    println(by_return(h, true))
+    println(by_element(["b"], true))
+    println(h.by_self(true))
+}
