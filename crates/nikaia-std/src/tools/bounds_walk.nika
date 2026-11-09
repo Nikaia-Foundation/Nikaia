@@ -288,6 +288,12 @@ struct BoundsWalk {
 	/// `bounds_rules.nika`), and the values they hold of, by their type.
 	rules: Vec[BoundsRule],
 	rule_roots: collections::BTreeMap[String, String],
+	/// What the `index` and `inner` rules say of every element, by the
+	/// element it names (`self.col[].each()`): they hold at every point
+	/// (each write is checked where it stands), so they stand beside the
+	/// facts, not among the newest `most_facts()`, and join a question that
+	/// names that element (`bounding_known`).
+	rule_facts: Vec[(String, i64)],
 	/// Whether this walk checks `rules` in a method: the index of each rule
 	/// the method is not proved to keep goes into `rule_failed`; the
 	/// `result` rules of the method are `checked_results`.
@@ -650,6 +656,7 @@ fn bounding_new(
 		typed: collections::BTreeMap(),
 		rules: [],
 		rule_roots: collections::BTreeMap(),
+		rule_facts: [],
 		checking: false,
 		checked_results: collections::BTreeSet(),
 		rule_failed: collections::BTreeSet(),
@@ -754,7 +761,7 @@ fn bounding_pass(
 	bounding_derived_entry(walk, facts, args, context)
 	// **The rules between list fields** (ADR-369 D4), of `self` and of each
 	// parameter of a type that has them.
-	rules_given(walk, facts)
+	rules_given(walk, facts, args, words)
 	let leaves = bounding_block(walk, body, facts, context, program, words, ask)
 	if !leaves {
 		// What the body ends with is what it hands back.
@@ -1135,12 +1142,24 @@ fn bounding_proves(
 	goal: i64,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
-	return ask(walk.arena, bounding_known(walk, facts), goal)
+	return ask(walk.arena, bounding_known(walk, facts, goal), goal)
 }
 
 /// The facts and what the ledgers ensure of the values the walk named.
-fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts) -> Vec[i64] {
+fn bounding_known(walk: ref BoundsWalk, facts: ref BoundsFacts, asked: i64) -> Vec[i64] {
 	let mut all = facts.facts.clone()
+	if !walk.rule_facts.is_empty() {
+		let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+		walk.arena.variables(asked, read)
+		for fact in facts.facts {
+			walk.arena.variables(fact, read)
+		}
+		for (each, fact) in walk.rule_facts {
+			if read.contains(each) {
+				all.push(fact)
+			}
+		}
+	}
 	for (name, axiom) in walk.axioms {
 		if !walk.unsized_names.contains(name) {
 			for fact in axiom {
@@ -1170,7 +1189,7 @@ fn bounding_term(
 	if known != null {
 		return Range::exactly(known ?? 0)
 	}
-	let guess = candidate(term, bounding_known(walk, facts), fn(at) { walk.arena.at(at) })
+	let guess = candidate(term, bounding_known(walk, facts, term), fn(at) { walk.arena.at(at) })
 	let mut confirmed = Range::open()
 	if guess.hi != null {
 		let hi = guess.hi ?? 0
@@ -1966,6 +1985,17 @@ fn bounding_element_written(
 		Expr::Index { base, index, .. } => {
 			let list = path_of(base, words)
 			if list == null {
+				// An element of an element of a list (`t.col[c][i]`): every
+				// element of that list (ADR-306 D28).
+				match base {
+					Expr::Index { base: outer, .. } => {
+						let of = path_of(outer, words)
+						if of != null {
+							return ((of ?? "").clone(), "", "")
+						}
+					},
+					else => {},
+				}
 				let root = bounding_root_of(base, words) ?? return null
 				return (root, "", "")
 			}
@@ -2118,7 +2148,6 @@ fn bounding_after_change(mut walk: BoundsWalk, mut facts: BoundsFacts, changed: 
 	for place in changed.elements {
 		bounding_forget_element(walk, facts, place, false)
 	}
-	rules_elements_kept(walk, facts, "")
 }
 
 /// **`expr` as a linear term**, where it is one.
@@ -3537,7 +3566,6 @@ fn bounding_stmt(
 				},
 				else => {},
 			}
-			rules_element_kept(walk, facts, target, words)
 			return false
 		},
 		Stmt::For { .. } => {
@@ -5178,7 +5206,7 @@ fn bounding_let(
 			bounding_bounded(walk, facts, name, value_range ?? Range::open())
 		}
 	}
-	bounding_built(walk, facts, name, value)
+	bounding_built(walk, facts, name, value, words)
 	if walk.shape.roots.contains(name) {
 		match value {
 			Expr::ListLit { items, .. } => {
@@ -5450,7 +5478,15 @@ fn bounding_for(
 		let only = words.resolve(bindings[0]).clone()
 		let item = walk.arena.var(only)
 		let mut stated = bounding_each(walk, iter, item, facts, context, program, words)
-		let held = bounding_variable(iter, words)
+		// An inner list of a field (`t.col[c]`, its `.clone()`) is named
+		// by its list's `t.col[]` (ADR-306 D28).
+		let mut held = bounding_variable(iter, words)
+		if held == null {
+			let outer = rules_inner_of(iter, words)
+			if outer != null {
+				held = f"{outer ?? ""}[]"
+			}
+		}
 		if held != null {
 			let element = bounding_element_of(held ?? "")
 			let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
@@ -5458,6 +5494,12 @@ fn bounding_for(
 			let mut of_every = false
 			for fact in facts.facts {
 				if walk.arena.mentions(fact, element) {
+					stated.push(walk.arena.substitute(fact, given))
+					of_every = true
+				}
+			}
+			for (each, fact) in walk.rule_facts.clone() {
+				if each == element {
 					stated.push(walk.arena.substitute(fact, given))
 					of_every = true
 				}
@@ -5660,7 +5702,7 @@ fn bounding_assign(
 			walk.fall_failed.insert(name.clone())
 		}
 		bounding_forget(walk, facts, name)
-		bounding_built(walk, facts, name, value)
+		bounding_built(walk, facts, name, value, words)
 		return
 	}
 	let value_lin = bounding_lin(walk, value, facts, context, program, words)
@@ -5734,7 +5776,7 @@ fn bounding_is_op(op: ref BinaryOp?, wanted: BinaryOp) -> bool {
 }
 
 /// What is known of `name`'s length from the value it was given.
-fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr) {
+fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String, value: ref Expr, words: ref winnow_grammar::InternerContext) {
 	match value {
 		Expr::ListLit { items, .. } => {
 			let length = length_of(name)
@@ -5742,6 +5784,27 @@ fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 			let n = walk.arena.int(items.len())
 			let fact = walk.arena.equal(len, n)
 			bounding_push(walk, facts, fact)
+		},
+		// **A copy is as long as what it copies** (ADR-306 D4).
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "clone" {
+				return
+			}
+			let from = path_of(receiver, words) ?? return
+			if path_within(from, name) || path_within(name, from) {
+				return
+			}
+			let len = walk.arena.var(length_of(name))
+			let copied = walk.arena.var(length_of(from))
+			let fact = walk.arena.equal(len, copied)
+			bounding_push(walk, facts, fact)
+		},
+		// Each list field of a literal, as its value is built.
+		Expr::StructLit { fields, .. } => {
+			for field in fields {
+				let given = field.value ?? continue
+				bounding_built(walk, facts, f"{name}.{words.resolve(field.name)}", given, words)
+			}
 		},
 		else => {},
 	}
@@ -6307,7 +6370,8 @@ fn bounding_method_call(
 	if walk.checking {
 		let mut handed: Vec[String] = []
 		if context.around.changing_receivers.contains(method) {
-			handed.push(path_of(receiver, words) ?? "self")
+			// An inner list (`t.col[c]`) is part of its list (ADR-306 D28).
+			handed.push(path_of(receiver, words) ?? rules_inner_of(receiver, words) ?? "self")
 		}
 		if context.around.changing_methods.contains(method) {
 			for arg in args {
