@@ -34,6 +34,10 @@ together with the specification section and an example test.
   (`$S/old/nikaia`): script tests check the basename and otherwise fall back
   to `target/fast/nikaia` (b42). `target/release/nikaia` is older than the
   views syntax and cannot serve.
+  The copy may predate HEAD (another session built it from another tree,
+  and its mtime is when you copied it): when a fails-before result surprises,
+  build the before binary from HEAD's own sources first; a stale copy cost
+  a run 30 turns chasing a regression HEAD never had. (issue-1483)
 * A rebuild while `nikaia test` runs fails tests at random: rerun the failed
   ones alone before calling them failures. (issue-1414)
 * **The checkout is shared.** A file another agent has modified: stage only
@@ -163,4 +167,9 @@ together with the specification section and an example test.
 * The tier pass runs without checker types, so a rule there must not mark lists whose items are already views (split/map) as owned. (issue-1368)
 * Changing a help's wording re-records many `.stderr` files and the `lsp_diagnostics*.stdout` files; grep `tests/compiler` for the old phrase before building. (issue-1403)
 * A probe of ownership needs a `String` made by a call (`fn make()` with `push_str`), because a literal-filled `String` is tiered to `&str` and hides NK1343. (issue-1404)
+* `nikaia test` run with a scratch copy of the binary fails `migrate_views3_reads_package_tests_with_the_package` (No such file); rerun it with `target/fast/nikaia` before calling it a failure. (issue-1460)
+* "Copied at a read" is `a_word_by_its_kind` (numbers, bool, char, scalar, payloadless enums, ledger `copies`); `a_copy_by_value` covers only the first four, and a copy-out keyed on it misses `Symbol` and enums. (issue-1460)
+* A `let x: V? = m.get(k)` or `m[k]` is typed `ref V?` by #297's `of_a_map` block in `check_core_stmt.nika`; a value-typed read must be exempted there. (issue-1460)
+* New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
+* A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
 
