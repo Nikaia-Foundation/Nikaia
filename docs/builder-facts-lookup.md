@@ -338,6 +338,7 @@ build that way; **[gap #N]** stops the slice (`Result: blocked`); **[defect
 * A trailing `;` does not drop a value and `let _ = x` is NK1144, so a value can't be discarded explicitly; a body's last value is dropped only where the function type hands back nothing. (issue-1321)
 * `let mut s = ""` and then assigning an owned `String` is NK1105; start it as `String()`. (issue-539)
 * A `for` over a list literal of strings binds views, so pushing the loop variable into a struct field needs `.clone()` (NK1106). (issue-1404)
+* A `T?` is matched with `x => …` and `null => …`: `if let` and `Some(x)` are refused (NK2704), so write probes that way. (issue-1417)
 #N]**: fix it or wait; **[works]**: use it, do not copy an old way around.
 
 * [design: ADR-382 D6] no `if let`: `x ?? default`, `match`, or `starts_with`

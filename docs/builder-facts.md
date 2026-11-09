@@ -172,4 +172,7 @@ together with the specification section and an example test.
 * A `let x: V? = m.get(k)` or `m[k]` is typed `ref V?` by #297's `of_a_map` block in `check_core_stmt.nika`; a value-typed read must be exempted there. (issue-1460)
 * New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
 * A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
+* Checker facts (`check_facts.nika`) are pure Nikaia with no Rust mirror: a new field needs only its declaration and its initializer there. (issue-1411)
+* A defect that shows only when the call crosses packages is often a type `qualify` (`ty.nika`) leaves unqualified, so a dependency's `H` never matches the caller's `lib::H`; check that before the lend logic. (issue-1417)
+* A cross-package probe or test copies the `mktemp` two-package setup of `tests/compiler/tests/dependency_struct_in_a_hole.nika` and runs `run` in `{tmp}/app`. (issue-1417)
 
