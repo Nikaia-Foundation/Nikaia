@@ -1,0 +1,36 @@
+// scripts/drive.nika --time-up: the time limit after which the driver starts
+// no new agent (NIKAIA_DRIVE_LIMIT_MIN, default 105 minutes, counted from
+// NIKAIA_DRIVE_STARTED where a restart set it).
+use std::fs
+use std::process
+use std::text
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn case(nikaia: String, repo: String, name: String, ago: i64, limit: String) throws {
+    let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
+    let started = f"{now - ago}"
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--time-up"]; dir: repo, env: [("NIKAIA_DRIVE_STARTED", started), ("NIKAIA_DRIVE_LIMIT_MIN", limit)])
+    println(f"{name}: {out.stdout.trim()}")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    case(nikaia.clone(), repo.clone(), "a minute in", 60, "")
+    case(nikaia.clone(), repo.clone(), "an hour and 50 in", 6600, "")
+    case(nikaia.clone(), repo.clone(), "limit 0", 60, "0")
+    case(nikaia.clone(), repo.clone(), "limit 120, an hour and 50 in", 6600, "120")
+}

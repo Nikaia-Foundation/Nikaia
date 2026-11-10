@@ -26,7 +26,8 @@
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
-// `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`.
+// `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
+// `--time-up` (drive_time_up: `up` or `not up`).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -55,6 +56,15 @@
 //                                 for RED) and starts the driver again
 //
 // Output: one line per agent run (`builder done ...`).
+// Time limit: the background task that runs the driver is ended after 2 h,
+// the agent it runs with it. So after NIKAIA_DRIVE_LIMIT_MIN minutes (default
+// 105) the driver starts no new agent: before a builder, and before a QA for a
+// red suite, it ends with `STOP drive: time limit after <n> min`, exit 4, for
+// the supervisor to start it again. A suite still running on CI (or a red one
+// not yet handed to QA) is not lost: its files stay in target/suite.lock with
+// target/suite.lock/handover, and the next run takes the lock over (`SUITE
+// <sha8> taken over from the last run`, drive_adopt). The minutes count from
+// the first start; a RESTART passes it on in NIKAIA_DRIVE_STARTED.
 // Escalation: one final line, exit 2, on an OWNER line, an ESCALATE of
 // agent.nika, a stop line (above), `--max` agent runs (default 8), a merge
 // conflict on a rejected push, a suite still red after 2 QA rounds. A RED line
@@ -217,13 +227,68 @@ fn drive_restart(exe: String) throws {
 		again.push(args[i].clone())
 		i += 1
 	}
+	let started = f"{drive_now() - drive_elapsed()}"
 	let ran = process::run(
 		exe,
 		again; stdout: process::Stream::Inherited,
 		stderr: process::Stream::Inherited,
+		env: [("NIKAIA_DRIVE_STARTED", started)],
 	)
 	if ran.code < 0 { process::exit(3) }
 	process::exit(ran.code)
+}
+
+// Seconds since 1970.
+fn drive_now() -> i64 throws {
+	return text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
+}
+
+// Seconds since this driver first started: NIKAIA_DRIVE_STARTED where a
+// RESTART set it, else the age of this process.
+fn drive_elapsed() -> i64 throws {
+	let started = text::parse_i64(env::var("NIKAIA_DRIVE_STARTED") ?? "") ?? 0
+	if started > 0 { return drive_now() - started }
+	let age = process::run("ps", ["-o", "etimes=", "-p", drive_pid()]).stdout.trim().clone()
+	return text::parse_i64(age) ?? 0
+}
+
+// Whether the time limit (NIKAIA_DRIVE_LIMIT_MIN, default 105 minutes) is up.
+fn drive_time_up() -> bool throws {
+	let limit = text::parse_i64(env::var("NIKAIA_DRIVE_LIMIT_MIN") ?? "") ?? 105
+	return drive_elapsed() >= limit * 60
+}
+
+// Ends the run at the time limit, before an agent starts: a suite this driver
+// started is left to the next run (target/suite.lock/handover), else the
+// lock is released. Exit 4.
+fn drive_time_stop() throws {
+	let minutes = drive_elapsed() / 60
+	let testing = drive_testing()
+	if testing != "" {
+		fs::write(drive_lock_dir() + "/handover", fs::Root::Anywhere, testing + "\n")
+		let sha = testing.split(" ").collect()[0].clone()
+		println(f"STOP drive: time limit after {minutes} min, suite {drive_short(sha)} left to the next run")
+	} else {
+		drive_unlock()
+		println(f"STOP drive: time limit after {minutes} min")
+	}
+	process::exit(4)
+}
+
+// At the start: a lock a run ended by the time limit handed over
+// (target/suite.lock/handover, its owner gone) becomes this driver's.
+fn drive_adopt() throws {
+	let handover = drive_lock_dir() + "/handover"
+	if !fs::exists(handover, fs::Root::Anywhere) { return }
+	let owner = drive_read(drive_lock_dir() + "/owner").trim()
+	let words = owner.split(" ").collect()
+	if words.len() < 2 { return }
+	if process::run("kill", ["-0", words[0].trim().clone()]).ok { return }
+	let lane = words[1].trim().clone()
+	fs::write(drive_lock_dir() + "/owner", fs::Root::Anywhere, f"{drive_pid()} {lane}\n")
+	process::run("rm", ["-f", handover])
+	let sha = drive_testing().split(" ").collect()[0].clone()
+	println(f"SUITE {drive_short(sha)} taken over from the last run")
 }
 
 // The suite lock of this checkout (drive_suite).
@@ -265,6 +330,7 @@ fn drive_lock(dir: String) throws {
 		let owner = drive_read(drive_lock_dir() + "/owner").trim()
 		let pid = owner.split(" ").collect()[0]
 		if pid == "" { blank += 1 }
+		if pid == me { return }
 		let live = if pid == "" { blank <= 2 } else { process::run("kill", ["-0", pid.clone()]).ok }
 		if !live {
 			process::run("rm", ["-rf", drive_lock_dir()])
@@ -1012,9 +1078,11 @@ fn drive_settle(exe: String, dir: String) throws {
 			println(f"SUITE {drive_short(sha)} waiting")
 			while !fs::exists(exit, fs::Root::Anywhere) { process::run("sleep", ["10"]) }
 		}
-		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
 		let out = drive_read(f"{dir}/suite.log")
 		let steps = drive_red_steps(out)
+		// A red suite goes to QA in the next run where the time is up.
+		if steps != "" && drive_time_up() { drive_time_stop() }
+		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
 		if steps == "" {
 			println(f"SUITE {drive_short(sha)} green")
 			let how = drive_push(sha)
@@ -1557,6 +1625,7 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		dry,
 		"a batch's suite that has finished (target/suite.lock/exit-<sha>): handle it (drive_settle) first; one still running: go on, CI runs it",
 	)
+	if !dry && drive_time_up() { drive_time_stop() }
 	drive_disk(exe.clone(), dry)
 	drive_post_brief(dry, brief)
 	drive_wip_start(dry, brief)
@@ -2200,6 +2269,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 	let path = "docs/briefs/focus.txt"
 	let bugs = "docs/briefs/bugs"
 	let own = drive_read("scripts/drive.nika")
+	if !dry { drive_adopt() }
 	let mut runs: i64 = 0
 	let mut skipped: String = " "
 	let mut briefs: Vec[String] = []
@@ -2423,6 +2493,10 @@ fn main() throws {
 	// The badges step alone (#1348), in the repository it runs in.
 	if args.len() == 2 && args[1] == "--badges" {
 		drive_badges()
+		return
+	}
+	if args.len() == 2 && args[1] == "--time-up" {
+		if drive_time_up() { println("up") } else { println("not up") }
 		return
 	}
 	if args.len() == 3 && args[1] == "--blocks" {

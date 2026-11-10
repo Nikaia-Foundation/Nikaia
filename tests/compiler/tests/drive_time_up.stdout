@@ -1,0 +1,4 @@
+a minute in: not up
+an hour and 50 in: up
+limit 0: up
+limit 120, an hour and 50 in: not up
