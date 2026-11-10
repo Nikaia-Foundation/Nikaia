@@ -205,6 +205,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * An open number with no `let` to write its type on (map parts, list literals walked in place) has its type written as a suffix on every literal; skip `number_lets` for it, or the emitter has nowhere to put the type. (issue-1485)
 * A tuple literal's parts share one text kind in the tiers, so lending one part changes the kind of the others (it changed the `buffers.rs` map key to `EitherText`). (issue-1490)
 * A local's `from` is set for a call result too; to test "this local views another", add `!local.made`. (issue-1490)
+* In the text-tier walk, a rule that reads `walk.adopted` must insert into `walk.reads.adopted` without a condition, or the round that adopts never walks the unit again. (issue-1501)
+* `names_in` counted a struct-literal field label as a read of a local of that name. This is fixed in ba1ec3be; a stray `let v = v;` in lowered output points at this kind of false read. (issue-1501)
 
 ### Grammar
 
