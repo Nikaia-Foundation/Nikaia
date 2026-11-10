@@ -109,7 +109,7 @@ fn stds_nikaia_half_lowers_the_same_at_both_switches() {
     // which is correct at one thread too.
     for package in [sysroot.tools_dir(), sysroot.runtime_dir()] {
         let at = sysroot::tools_lowered_path(&package);
-        let drifted = sysroot::lower_tools_at(&package, concurrent)
+        let drifted = sysroot::lower_tools_at(&package, sysroot::tools_build())
             .expect("the package lowers at `yes`")
             .drift(&package);
         assert!(
