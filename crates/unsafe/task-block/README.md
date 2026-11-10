@@ -1,8 +1,8 @@
 # task-block
 
 A task's memory block ([ADR-327](../../../docs/specification/adr/adr-327.md)
-D4, D5, D10, D12; #490 step 3): 16 pages of 4 KiB, each counting what it
-holds, and the lists and text whose growth the block may refuse. One
+D4, D5, D10, D12, D15; #490 step 3): a chain of segments up to the task's
+budget, each 16 pages of 4 KiB counting what it holds, and the lists and text whose growth the block may refuse. One
 dependency, `allocator-api2` (`Vec<T, A>` on stable Rust); the features
 `collect`, `tether` and `rayon` add the traits of `winnow-grammar`, `tether`
 and `rayon` that `nikaia-std` asks of a list or a text.
@@ -56,9 +56,12 @@ push(&mut xs, 7);                   // a full block ends the task, here
 | :--- | :--- | :--- |
 | `impl Send for Block` | a block's raw pointer crosses threads with its task | the block's memory is reached only through `CURRENT`, while the task that owns the block is polled; between polls nothing points into it |
 | `Block::take`, `take_slow`, `run` | `start.add(at)` | `at + size` is checked to lie inside the page, or the run's pages are free and inside the block's `BLOCK` bytes |
-| `Block::first` | `std::alloc::alloc(MEMORY)` | `MEMORY` has a non-zero size; a null answer is a refusal |
+| `segment` (from `Block::first`, `next`) | `std::alloc::alloc(MEMORY)` | `MEMORY` has a non-zero size; a null answer is a refusal |
+| `Block::next`, `whole`, `chained`, `in_chain`, `give_chained`, `budget_running` | the block's `chain` (`UnsafeCell`) as `&mut` or `&` | a block is reached only by the one thread that polls its task (`CURRENT`); each borrow ends inside the function, before `take` is called again, and no other borrow of the chain lives meanwhile |
+| `Block::whole` | `std::alloc::alloc(run_layout(n))` | the layout has a non-zero size; a null answer is a refusal |
+| `Block::give_chained`, `Drop for Block` | `dealloc(start, run_layout(n))` | a run is kept with the count it was allocated with, and is given back once: by its one allocation's free, or with the block |
 | `Block::grow` | `copy_nonoverlapping(ptr, moved, old)` | both are live cuts of at least `old` bytes, and two live cuts never share a byte: a cut's bytes return to a page only when its count frees the page |
-| `Drop for Block`, `Drop for Spares` | `dealloc(memory, MEMORY)` | `memory` came from `alloc(MEMORY)` and nothing points into it any more: the task is over (its `Entered` is gone), or it is a spare |
+| `hand_back` (from `Drop for Block`, `give_chained`), `Drop for Spares` | `dealloc(memory, MEMORY)` | `memory` came from `alloc(MEMORY)` and nothing points into it any more: the task is over (its `Entered` is gone), its segment holds nothing (every page's count is nothing), or it is a spare |
 | `current` | `CURRENT`'s pointer as `&Block` | it is set only by `enter` from a live `&Block` and reset when that `Entered` is dropped, which the block's owner holds for the poll |
 | `Drop for Housed` | `ManuallyDrop::drop(&mut self.value)` | the value is dropped once, in the `Housed`'s own drop, with its block in place, and nothing reads it after; the block is dropped after it, as a field |
 | `answered` | `NonNull::new_unchecked` | a block's cut is `start.add(at)` of a non-null `start` |
@@ -86,5 +89,6 @@ The tests run the block's paths under both of Miri's aliasing models: a list
 outside any task, a cut in the block and one outside, a megabyte allocated a
 kilobyte at a time under the 64 KiB block (D10), runs of pages given back, a
 full block that refuses and a freed one that takes again, growth in place and
-by a move, a task polled inside another, a block reused by the next task, an
+by a move, segments chained up to a budget and a run of all 16 pages in a
+fresh one (D15), a task polled inside another, a block reused by the next task, an
 alignment past a page, and text.

@@ -27,7 +27,7 @@
 //! *compiler* put together — went with the automatic grouping itself
 //! (ADR-292 D1).
 
-mod gate;
+pub(crate) mod gate;
 mod group;
 
 pub use gate::{
@@ -369,7 +369,7 @@ impl<T: 'static> TaskHandle<T> {
             slot: slot.clone(),
             asked: asked.clone(),
             queues: crate::cleanup::Queues::default(),
-            block: crate::block::Block::default(),
+            block: crate::block::for_a_task(),
         });
         TaskHandle { slot, asked }
     }
@@ -449,7 +449,7 @@ impl<T: Send + 'static> TaskHandle<T> {
             slot: slot.clone(),
             asked: asked.clone(),
             queues: crate::cleanup::SendQueues::default(),
-            block: crate::block::Block::default(),
+            block: crate::block::for_a_task(),
         });
         TaskHandle { slot, asked }
     }

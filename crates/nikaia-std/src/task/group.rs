@@ -204,7 +204,7 @@ fn run_now<T, E>(
     let mut outcome = None;
     // **The task's own block** (ADR-327 D5): its lists live there, and a
     // full one ends it alone (ADR-async-5 D19).
-    let block = crate::block::Block::default();
+    let block = crate::block::for_a_task();
     let entered = crate::block::enter(&block);
     let caught = caught(|| outcome = Some(body()));
     drop(entered);
@@ -255,7 +255,7 @@ impl<F: std::future::Future> InBlock<F> {
     fn new() -> InBlock<F> {
         InBlock {
             running: None,
-            block: crate::block::Block::default(),
+            block: crate::block::for_a_task(),
         }
     }
 

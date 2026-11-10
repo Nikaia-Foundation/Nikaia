@@ -1,0 +1,43 @@
+// A block is a chain of segments up to the task's budget (ADR-327 D15): a
+// task that holds more than one segment of 64 KiB, within its budget, runs on,
+// in small lists and in one larger than a segment; so does `main`, in its own
+// block (D14).
+struct Roomy {}
+
+impl task::Admission for Roomy {
+    fn decide(mut self, _load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 1048576 }
+    }
+}
+
+fn hold() -> i64 {
+    let mut lists: Vec[Vec[i64]] = []
+    for n in 0..<40 {
+        let mut xs: Vec[i64] = []
+        for i in 0..<500 {
+            xs.push(i + n)
+        }
+        lists.push(xs)
+    }
+    let mut large: Vec[i64] = []
+    for i in 0..<20000 {
+        large.push(i)
+    }
+    let mut total = large.len()
+    for xs in lists {
+        total += xs.len()
+    }
+    return total
+}
+
+fn main() throws {
+    let a = async(admission: Roomy {}) hold() catch {
+        match error {
+            task::OverBudget => println(f"over budget: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    let b = async hold() catch { -1 }
+    println(f"held: {a}, with the default strategy: {b}, in main: {hold()}")
+}

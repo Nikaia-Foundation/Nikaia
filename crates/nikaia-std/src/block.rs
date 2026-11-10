@@ -29,8 +29,80 @@
 
 pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
-    BLOCK, Block, Entered, Housed, List, Place, Text, enter, extend, full, list, push, reserve,
+    BLOCK, Block, Entered, Housed, List, Place, Text, enter, extend, full, held, list, push,
+    reserve,
 };
+
+use std::cell::Cell;
+use std::sync::atomic::{AtomicI64, Ordering};
+
+thread_local! {
+    /// **The budget of the next task this thread starts** (ADR-327 D15), as
+    /// the decision that admitted it gave it; `-1` where none did.
+    static NEXT: Cell<i64> = const { Cell::new(-1) };
+    /// Task blocks made on this thread since the program's budget was last
+    /// decided here.
+    static BEAT: Cell<u32> = const { Cell::new(0) };
+}
+
+/// **The program's budget** (ADR-327 D7, D15): what a task gets that no
+/// decision of its own admitted, `std`'s strategy deciding it before `main`
+/// runs and again on the beat. Unbounded until the first decision.
+static PROGRAM: AtomicI64 = AtomicI64::new(i64::MAX);
+
+/// How many task blocks a thread makes between two decisions of the
+/// program's budget.
+const BEAT_EVERY: u32 = 1024;
+
+/// A budget in bytes as a block takes it.
+fn bytes(budget: i64) -> usize {
+    usize::try_from(budget.max(0)).unwrap_or(usize::MAX)
+}
+
+/// **A decision admitted the next task with `budget` bytes** (ADR-327 D15):
+/// the next task block this thread makes takes it.
+pub(crate) fn granted(budget: i64) {
+    NEXT.with(|next| next.set(budget.max(0)));
+}
+
+/// The running task's block takes the decision's budget (a detached task,
+/// whose strategy is asked inside it before its body runs).
+pub(crate) fn budget_running(budget: i64) {
+    task_block::budget_running(bytes(budget));
+}
+
+/// **The program's budget, decided now by `std`'s strategy** (ADR-327 D14,
+/// D15): before `main` runs, its block's, and on the beat.
+pub fn decide_program() -> i64 {
+    let tasks = i64::try_from(held() / BLOCK).unwrap_or(i64::MAX);
+    let decision = crate::task::Adaptive().decide(crate::task::gate::load_of(tasks, 1));
+    PROGRAM.store(decision.budget, Ordering::Relaxed);
+    decision.budget
+}
+
+/// **`main`'s block** (ADR-327 D14): the first decision's budget, taken
+/// before `main` runs.
+pub fn for_main() -> Block {
+    Block::with_budget(bytes(decide_program()))
+}
+
+/// **A new task's block** (ADR-327 D15): the budget of the decision that
+/// admitted the task, else the program's. The task keeps it until it ends.
+pub fn for_a_task() -> Block {
+    let next = NEXT.with(|next| next.replace(-1));
+    if next >= 0 {
+        return Block::with_budget(bytes(next));
+    }
+    let beat = BEAT.with(|beat| {
+        let now = beat.get().wrapping_add(1);
+        beat.set(now);
+        now
+    });
+    if beat.is_multiple_of(BEAT_EVERY) {
+        decide_program();
+    }
+    Block::with_budget(bytes(PROGRAM.load(Ordering::Relaxed)))
+}
 
 /// **A map whose table may be refused**: `std`'s own map
 /// ([`crate::map::HashMap`]), whose table is placed by its handle and grows

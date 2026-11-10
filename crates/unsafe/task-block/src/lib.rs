@@ -30,6 +30,14 @@
 //! That is why every growth of [`List`] and [`Text`] goes through
 //! `try_reserve`: a plain `push` would abort the process on a refusal.
 //!
+//! **A block is a chain of segments up to the task's budget** (D15): a full
+//! segment is followed by the next while the segments held stay within the
+//! budget the strategy gave the task when it started, a segment emptied whole
+//! is given back, and more than a segment takes a run of whole segments,
+//! counted as many. The hot path inside the current segment is the one of a
+//! single block; the chain is reached only where it is full, and a free only
+//! where its pointer is not in the current segment.
+//!
 //! The pages are the measured prototype's (`benches/taskblock/src/pages.rs`,
 //! 0.0.1366: -38.5 % instructions against `malloc` on short tasks, -38.7 % on
 //! one long task).
@@ -37,11 +45,12 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use allocator_api2::alloc::{AllocError, Allocator, Global, Layout};
-use std::cell::Cell;
+use std::cell::{Cell, UnsafeCell};
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// The block's size: what a task may hold. Fixed until the strategy sizes it
-/// (D7, #490 step 8).
+/// A segment's size (D12, D15): a block is a chain of them up to the task's
+/// budget.
 pub const BLOCK: usize = 64 * 1024;
 
 /// A page's size.
@@ -85,6 +94,138 @@ pub struct Block {
     /// What each page holds: allocations started in it; a run's pages beyond
     /// its first are counted in its first.
     held: [Cell<u32>; PAGES],
+    /// The segments beyond the current one, and the budget (D15). Touched only
+    /// where the current segment is full, or a free is not in it.
+    chain: UnsafeCell<Chain>,
+}
+
+/// **A block's other segments** (D15): reached only on the cold paths.
+struct Chain {
+    /// How many segments the block may hold, the current one included.
+    budget: usize,
+    /// Segments held beyond the current one: the parked ones and the runs.
+    extra: usize,
+    /// Segments that were current once and hold something still.
+    parked: Vec<Parked>,
+    /// Runs of whole segments, one allocation each: where it starts and how
+    /// many segments it is.
+    runs: Vec<(*mut u8, usize)>,
+}
+
+/// **A segment that is not the current one**: the fields of [`Block`]'s
+/// current segment, kept while another is cut from.
+struct Parked {
+    start: *mut u8,
+    free: u32,
+    current: usize,
+    offset: usize,
+    last: usize,
+    held: [u32; PAGES],
+}
+
+impl Parked {
+    /// Whether `ptr` is in this segment.
+    fn ours(&self, ptr: *mut u8) -> bool {
+        ptr >= self.start && ptr.addr() < self.start.addr() + BLOCK
+    }
+
+    /// Room for `pages`: a free run, the current page counted where it
+    /// holds nothing.
+    fn has_room(&self, pages: usize) -> bool {
+        let idle = if self.held[self.current] == 0 {
+            1 << self.current
+        } else {
+            0
+        };
+        fit(self.free | idle, pages).is_some()
+    }
+
+    /// Give back an allocation of `size` bytes at `ptr`, as [`Block::give`]
+    /// does in the current segment. Whether the segment holds nothing now.
+    fn give(&mut self, ptr: *mut u8, size: usize) -> bool {
+        let page = (ptr.addr() - self.start.addr()) / PAGE;
+        self.held[page] -= 1;
+        if self.held[page] == 0 {
+            if size > PAGE {
+                self.free |= run_bits(size.div_ceil(PAGE)) << page;
+            } else if page == self.current {
+                self.offset = 0;
+                self.last = usize::MAX;
+            } else {
+                self.free |= 1 << page;
+            }
+        }
+        self.free | (1 << self.current) == ALL && self.held[self.current] == 0
+    }
+}
+
+/// Where a run of `pages` free pages starts in `free`.
+fn fit(free: u32, pages: usize) -> Option<usize> {
+    if pages > PAGES {
+        return None;
+    }
+    let want = run_bits(pages);
+    (0..=PAGES - pages).find(|&p| (free >> p) & want == want)
+}
+
+/// **Segments taken from the system and not given back**, by every block and
+/// every thread's spares: what the tasks hold, for `task::Load` (D15). Counted
+/// only where a segment comes from the system or goes back to it, so a task
+/// served from a spare does not touch it.
+static SEGMENTS: AtomicUsize = AtomicUsize::new(0);
+
+/// **The bytes the tasks' blocks hold** (D15), spares included.
+pub fn held() -> usize {
+    SEGMENTS.load(Ordering::Relaxed) * BLOCK
+}
+
+/// A segment from the thread's spares or the system; null where the system
+/// refuses.
+fn segment() -> *mut u8 {
+    let spare = SPARE.try_with(|spare| {
+        let mut all = spare.0.get();
+        let found = all
+            .iter_mut()
+            .find(|p| !p.is_null())
+            .map(|p| std::mem::replace(p, std::ptr::null_mut()));
+        spare.0.set(all);
+        found
+    });
+    match spare.ok().flatten() {
+        Some(memory) => memory,
+        None => {
+            // SAFETY: `MEMORY` has a size.
+            let memory = unsafe { std::alloc::alloc(MEMORY) };
+            if !memory.is_null() {
+                SEGMENTS.fetch_add(1, Ordering::Relaxed);
+            }
+            memory
+        }
+    }
+}
+
+/// Hand a segment back, to the thread's spares or the system.
+fn hand_back(memory: *mut u8) {
+    let kept = SPARE.try_with(|spare| {
+        let mut all = spare.0.get();
+        let slot = all.iter_mut().find(|p| p.is_null());
+        let kept = slot.map(|p| *p = memory).is_some();
+        spare.0.set(all);
+        kept
+    });
+    if kept != Ok(true) {
+        // SAFETY: `memory` was allocated with `MEMORY`.
+        unsafe { std::alloc::dealloc(memory, MEMORY) };
+        SEGMENTS.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// The layout of a run of `segments` whole segments.
+fn run_layout(segments: usize) -> std::alloc::Layout {
+    match std::alloc::Layout::from_size_align(segments * BLOCK, PAGE) {
+        Ok(layout) => layout,
+        Err(_) => MEMORY,
+    }
 }
 
 // SAFETY: the block's memory is the task's alone, and the task, which may move
@@ -93,7 +234,17 @@ pub struct Block {
 unsafe impl Send for Block {}
 
 impl Default for Block {
+    /// A block of one segment: a shared value's, or a task's without a
+    /// strategy's budget.
     fn default() -> Block {
+        Block::with_budget(BLOCK)
+    }
+}
+
+impl Block {
+    /// **A block that may hold `bytes`** (D15): as many whole segments, one at
+    /// least.
+    pub fn with_budget(bytes: usize) -> Block {
         Block {
             start: Cell::new(std::ptr::null_mut()),
             free: Cell::new(0),
@@ -101,6 +252,12 @@ impl Default for Block {
             offset: Cell::new(0),
             last: Cell::new(usize::MAX),
             held: [const { Cell::new(0) }; PAGES],
+            chain: UnsafeCell::new(Chain {
+                budget: (bytes / BLOCK).max(1),
+                extra: 0,
+                parked: Vec::new(),
+                runs: Vec::new(),
+            }),
         }
     }
 }
@@ -126,6 +283,7 @@ impl Drop for Spares {
                 // SAFETY: a spare was allocated with `MEMORY`, and nothing
                 // holds it.
                 unsafe { std::alloc::dealloc(memory, MEMORY) };
+                SEGMENTS.fetch_sub(1, Ordering::Relaxed);
             }
         }
     }
@@ -186,21 +344,7 @@ impl Block {
     /// from a spare block or the system.
     #[cold]
     fn first(&self, size: usize, align: usize) -> Option<*mut u8> {
-        let spare = SPARE.try_with(|spare| {
-            let mut all = spare.0.get();
-            let found = all
-                .iter_mut()
-                .find(|p| !p.is_null())
-                .map(|p| std::mem::replace(p, std::ptr::null_mut()));
-            spare.0.set(all);
-            found
-        });
-        let spare = spare.ok().flatten();
-        let memory = match spare {
-            Some(memory) => memory,
-            // SAFETY: `MEMORY` has a size.
-            None => unsafe { std::alloc::alloc(MEMORY) },
-        };
+        let memory = segment();
         if memory.is_null() {
             return None;
         }
@@ -230,8 +374,9 @@ impl Block {
         let free = self.free.get();
         if free == 0 {
             // Nothing to cut from: the old page, which holds something, stays
-            // current, so its last free starts it over.
-            return None;
+            // current, so its last free starts it over; the next segment
+            // serves, where the budget has room.
+            return self.next(1, size, align);
         }
         let page = free.trailing_zeros() as usize;
         self.free.set(free & !(1 << page));
@@ -249,18 +394,165 @@ impl Block {
     #[cold]
     fn run(&self, pages: usize) -> Option<*mut u8> {
         if pages > PAGES {
-            return None;
+            return self.whole(pages.div_ceil(PAGES));
         }
-        let free = self.free.get();
-        let want = run_bits(pages);
-        let first = (0..=PAGES - pages).find(|&p| (free >> p) & want == want)?;
-        self.free.set(free & !(want << first));
+        // The current page counts where it holds nothing, or a run of every
+        // page would never fit a fresh segment, whose first page is current.
+        let current = self.current.get();
+        let idle = self.held[current].get() == 0;
+        let mut free = self.free.get();
+        if idle {
+            free |= 1 << current;
+        }
+        let Some(first) = fit(free, pages) else {
+            return self.next(pages, pages * PAGE, PAGE);
+        };
+        let taken = run_bits(pages) << first;
+        let mut left = free & !taken;
+        if idle && taken & (1 << current) != 0 {
+            // The run took the current page: its first page is current now,
+            // full, so the next cut takes a free page.
+            self.current.set(first);
+            self.offset.set(PAGE);
+            self.last.set(usize::MAX);
+        } else if idle {
+            left &= !(1 << current);
+        }
+        self.free.set(left);
         self.held[first].set(1);
         // SAFETY: the run is inside the block.
         Some(unsafe { self.start.get().add(first * PAGE) })
     }
 
-    /// Give back an allocation of `size` bytes at `ptr`.
+    /// **The next segment** (D15), for a cut of `size` bytes that needs
+    /// `pages` pages and the current segment has no room for: a parked one
+    /// with room, else a new one where the budget allows it; it becomes the
+    /// current one and the current one is parked.
+    #[cold]
+    #[inline(never)]
+    fn next(&self, pages: usize, size: usize, align: usize) -> Option<*mut u8> {
+        {
+            // SAFETY: the chain is reached only through its block, by the one
+            // thread that polls the task, and no other borrow of it lives.
+            let chain = unsafe { &mut *self.chain.get() };
+            let index = match chain.parked.iter().position(|p| p.has_room(pages)) {
+                Some(index) => index,
+                None => {
+                    if 1 + chain.extra >= chain.budget {
+                        return None;
+                    }
+                    let memory = segment();
+                    if memory.is_null() {
+                        return None;
+                    }
+                    chain.extra += 1;
+                    chain.parked.push(Parked {
+                        start: memory,
+                        free: ALL & !1,
+                        current: 0,
+                        offset: 0,
+                        last: usize::MAX,
+                        held: [0; PAGES],
+                    });
+                    chain.parked.len() - 1
+                }
+            };
+            self.swap(&mut chain.parked[index]);
+        }
+        self.take(size, align)
+    }
+
+    /// Exchange the current segment with a parked one.
+    fn swap(&self, parked: &mut Parked) {
+        parked.start = self.start.replace(parked.start);
+        parked.free = self.free.replace(parked.free);
+        parked.current = self.current.replace(parked.current);
+        parked.offset = self.offset.replace(parked.offset);
+        parked.last = self.last.replace(parked.last);
+        for (mine, theirs) in self.held.iter().zip(parked.held.iter_mut()) {
+            *theirs = mine.replace(*theirs);
+        }
+    }
+
+    /// **A run of `segments` whole segments** (D15), for more than a segment:
+    /// one allocation, counted as that many against the budget.
+    #[cold]
+    #[inline(never)]
+    fn whole(&self, segments: usize) -> Option<*mut u8> {
+        // SAFETY: as in `next`.
+        let chain = unsafe { &mut *self.chain.get() };
+        if 1 + chain.extra + segments > chain.budget {
+            return None;
+        }
+        // SAFETY: the layout has a size.
+        let memory = unsafe { std::alloc::alloc(run_layout(segments)) };
+        if memory.is_null() {
+            return None;
+        }
+        SEGMENTS.fetch_add(segments, Ordering::Relaxed);
+        chain.extra += segments;
+        chain.runs.push((memory, segments));
+        Some(memory)
+    }
+
+    /// Whether `ptr` is in a segment of the chain beyond the current one.
+    #[inline(always)]
+    fn chained(&self, ptr: *mut u8) -> bool {
+        // SAFETY: as in `next`; only read.
+        let extra = unsafe { (*self.chain.get()).extra };
+        extra != 0 && self.in_chain(ptr)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn in_chain(&self, ptr: *mut u8) -> bool {
+        // SAFETY: as in `next`; only read.
+        let chain = unsafe { &*self.chain.get() };
+        chain.parked.iter().any(|p| p.ours(ptr))
+            || chain
+                .runs
+                .iter()
+                .any(|&(start, n)| ptr >= start && ptr.addr() < start.addr() + n * BLOCK)
+    }
+
+    /// Give back an allocation in a segment beyond the current one: a run
+    /// goes back to the system, a parked segment emptied whole to the spares.
+    #[cold]
+    #[inline(never)]
+    fn give_chained(&self, ptr: *mut u8, size: usize) {
+        // SAFETY: as in `next`.
+        let chain = unsafe { &mut *self.chain.get() };
+        if let Some(at) = chain.runs.iter().position(|&(start, _)| start == ptr) {
+            let (start, segments) = chain.runs.swap_remove(at);
+            // SAFETY: the run was allocated with this layout.
+            unsafe { std::alloc::dealloc(start, run_layout(segments)) };
+            SEGMENTS.fetch_sub(segments, Ordering::Relaxed);
+            chain.extra -= segments;
+            return;
+        }
+        let Some(at) = chain.parked.iter().position(|p| p.ours(ptr)) else {
+            return;
+        };
+        if chain.parked[at].give(ptr, size) {
+            let emptied = chain.parked.swap_remove(at);
+            chain.extra -= 1;
+            hand_back(emptied.start);
+        }
+    }
+
+    /// Give back an allocation of `size` bytes at `ptr`, wherever in the
+    /// chain it is.
+    #[inline(always)]
+    fn give_any(&self, ptr: *mut u8, size: usize) {
+        if self.ours(ptr) {
+            self.give(ptr, size);
+        } else {
+            self.give_chained(ptr, size);
+        }
+    }
+
+    /// Give back an allocation of `size` bytes at `ptr`, in the current
+    /// segment.
     #[inline(always)]
     fn give(&self, ptr: *mut u8, size: usize) {
         let at = ptr.addr() - self.start.get().addr();
@@ -287,7 +579,7 @@ impl Block {
         }
     }
 
-    /// Whether `ptr` is in this block.
+    /// Whether `ptr` is in the current segment.
     #[inline(always)]
     fn ours(&self, ptr: *mut u8) -> bool {
         let start = self.start.get();
@@ -298,9 +590,10 @@ impl Block {
     /// it is the last cut and its page has room, else moved, with one copy.
     #[inline]
     fn grow(&self, ptr: *mut u8, old: usize, new: usize, align: usize) -> Option<*mut u8> {
-        let at = ptr.addr() - self.start.get().addr();
+        let at = ptr.addr().wrapping_sub(self.start.get().addr());
         let page = self.current.get();
-        if old <= PAGE
+        if self.ours(ptr)
+            && old <= PAGE
             && at == self.last.get()
             && at / PAGE == page
             && at + new <= (page + 1) * PAGE
@@ -312,29 +605,31 @@ impl Block {
         // SAFETY: both are live allocations of at least `old` bytes, and two
         // live allocations do not overlap.
         unsafe { std::ptr::copy_nonoverlapping(ptr, moved, old) };
-        self.give(ptr, old);
+        // The cut may have made another segment current.
+        self.give_any(ptr, old);
         Some(moved)
     }
 }
 
 /// **A task's block hands its memory back whole** when the task is over, to
-/// the thread's spares or the system.
+/// the thread's spares or the system, every segment of the chain.
 impl Drop for Block {
     fn drop(&mut self) {
         let memory = self.start.get();
         if memory.is_null() {
             return;
         }
-        let kept = SPARE.try_with(|spare| {
-            let mut all = spare.0.get();
-            let slot = all.iter_mut().find(|p| p.is_null());
-            let kept = slot.map(|p| *p = memory).is_some();
-            spare.0.set(all);
-            kept
-        });
-        if kept != Ok(true) {
-            // SAFETY: `memory` was allocated with `MEMORY`.
-            unsafe { std::alloc::dealloc(memory, MEMORY) };
+        hand_back(memory);
+        let chain = self.chain.get_mut();
+        if chain.extra != 0 {
+            for parked in chain.parked.drain(..) {
+                hand_back(parked.start);
+            }
+            for (start, segments) in chain.runs.drain(..) {
+                // SAFETY: the run was allocated with this layout.
+                unsafe { std::alloc::dealloc(start, run_layout(segments)) };
+                SEGMENTS.fetch_sub(segments, Ordering::Relaxed);
+            }
         }
     }
 }
@@ -358,6 +653,16 @@ impl Drop for Entered {
     #[inline]
     fn drop(&mut self) {
         CURRENT.with(|current| current.set(self.previous));
+    }
+}
+
+/// **The running task's block takes a budget of `bytes`** (D15), before its
+/// body runs: a detached task's strategy decides once its task is in place.
+pub fn budget_running(bytes: usize) {
+    if let Some(block) = current() {
+        // SAFETY: the chain is reached only through its block, by the thread
+        // that polls the task, and no other borrow of it lives here.
+        unsafe { (*block.chain.get()).budget = (bytes / BLOCK).max(1) };
     }
 }
 
@@ -409,13 +714,8 @@ impl Place {
     /// places.
     #[inline(always)]
     pub(crate) fn holds(self, ptr: *mut u8) -> bool {
-        self.block().is_some_and(|block| block.ours(ptr))
-    }
-
-    /// The running task's block where `ptr` is in it.
-    #[inline(always)]
-    fn holding<'a>(self, ptr: NonNull<u8>) -> Option<&'a Block> {
-        self.block().filter(|block| block.ours(ptr.as_ptr()))
+        self.block()
+            .is_some_and(|block| block.ours(ptr) || block.chained(ptr))
     }
 }
 
@@ -435,10 +735,12 @@ unsafe impl Allocator for Place {
 
     #[inline]
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        match self.holding(ptr) {
-            Some(block) => block.give(ptr.as_ptr(), layout.size()),
+        let at = ptr.as_ptr();
+        match self.block() {
+            Some(block) if block.ours(at) => block.give(at, layout.size()),
+            Some(block) if block.chained(at) => block.give_chained(at, layout.size()),
             // SAFETY: not a block's, so the global allocator's.
-            None => unsafe { Global.deallocate(ptr, layout) },
+            _ => unsafe { Global.deallocate(ptr, layout) },
         }
     }
 
@@ -449,7 +751,11 @@ unsafe impl Allocator for Place {
         old: Layout,
         new: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        let Some(block) = self.holding(ptr) else {
+        let at = ptr.as_ptr();
+        let Some(block) = self
+            .block()
+            .filter(|block| block.ours(at) || block.chained(at))
+        else {
             // SAFETY: not a block's, so the global allocator's, and the
             // caller keeps `grow`'s contract.
             return unsafe { Global.grow(ptr, old, new) };
@@ -466,7 +772,7 @@ unsafe impl Allocator for Place {
         unsafe {
             std::ptr::copy_nonoverlapping(ptr.as_ptr(), moved.as_ptr().cast::<u8>(), old.size())
         };
-        block.give(ptr.as_ptr(), old.size());
+        block.give_any(ptr.as_ptr(), old.size());
         Ok(moved)
     }
 }
@@ -742,6 +1048,63 @@ mod tests {
         let mut xs: List<Wide> = list(Place::Block);
         push(&mut xs, Wide(1));
         assert!(!in_block(xs.as_ptr()));
+    }
+
+    #[test]
+    fn a_block_follows_a_full_segment_with_the_next_within_its_budget() {
+        // D15: 30 chunks of 4000 bytes, two segments, under a budget
+        // of four, and a run of two segments; then all of it given back.
+        let block = Block::with_budget(4 * BLOCK);
+        let _in = enter(&block);
+        let mut held: List<List<u8>> = list(Place::Outside);
+        for turn in 0..30_u8 {
+            let mut chunk: List<u8> = list(Place::Block);
+            extend(&mut chunk, &[turn; 4000]);
+            assert!(Place::Block.holds(chunk.as_mut_ptr()));
+            push(&mut held, chunk);
+        }
+        assert!(
+            held.iter()
+                .enumerate()
+                .all(|(i, c)| c[..] == [i as u8; 4000])
+        );
+        let mut large: List<u8> = list(Place::Block);
+        reserve(&mut large, 100 * 1024);
+        assert!(Place::Block.holds(large.as_mut_ptr()));
+        let ended = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut more: List<u8> = list(Place::Block);
+            reserve(&mut more, 100 * 1024);
+        }));
+        assert!(ended.is_err(), "past the budget the task ends");
+        drop(large);
+        held.clear();
+        // SAFETY: only read, nothing else borrows the chain.
+        assert_eq!(unsafe { (*block.chain.get()).extra }, 0);
+    }
+
+    #[test]
+    fn a_run_of_every_page_takes_a_whole_segment() {
+        // D15: a list of exactly 64 KiB fits a segment whose current page
+        // holds nothing, in the first segment and in a next one; a small cut
+        // after it takes a page of its own, not one of the run's.
+        let block = Block::with_budget(4 * BLOCK);
+        let _in = enter(&block);
+        let mut first: List<u8> = list(Place::Block);
+        reserve(&mut first, BLOCK);
+        let mut small: List<u8> = list(Place::Block);
+        extend(&mut small, &[7; 100]);
+        let mut second: List<u8> = list(Place::Block);
+        reserve(&mut second, BLOCK);
+        extend(&mut first, &[1; BLOCK]);
+        extend(&mut second, &[2; BLOCK]);
+        assert!(Place::Block.holds(first.as_mut_ptr()) && Place::Block.holds(second.as_mut_ptr()));
+        assert!(small[..] == [7; 100] && first.iter().all(|&b| b == 1));
+        drop(first);
+        drop(second);
+        let mut again: List<u8> = list(Place::Block);
+        reserve(&mut again, BLOCK);
+        extend(&mut again, &[3; BLOCK]);
+        assert!(small[..] == [7; 100] && again.iter().all(|&b| b == 3));
     }
 
     #[test]
