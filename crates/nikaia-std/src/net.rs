@@ -135,6 +135,44 @@ impl Connection {
         }
     }
 
+    /// **[`Connection::read`] with a deadline on this one wait**
+    /// ([ADR-326](../../../docs/specification/adr/adr-326.md) D8): what a
+    /// protocol bounds a read by, `conn.read(within: d)` in Nikaia.
+    ///
+    /// Bytes already there come back however little time is left; where there
+    /// are none, the wait is the same readiness registration as `read`'s with
+    /// the time left on it, so the poller's own deadline ends it and no task or
+    /// timer is started per read, at either value of `user_parallelism`.
+    /// Running out is [`crate::task::TimedOut`], and the connection stays open.
+    pub async fn read_within(
+        &mut self,
+        within: crate::time::Duration,
+    ) -> Result<Bytes, ReadFailed> {
+        let deadline = std::time::Instant::now() + within;
+        let mut buffer = vec![0_u8; CHUNK];
+        loop {
+            match self.inner.read(&mut buffer) {
+                Ok(read) => {
+                    buffer.truncate(read);
+                    return Ok(Bytes::from(buffer));
+                }
+                Err(error) if would_block(&error) => {
+                    let left = deadline.saturating_duration_since(std::time::Instant::now());
+                    if left.is_zero() {
+                        return Err(ReadFailed::TimedOut(crate::task::TimedOut));
+                    }
+                    let ready = readiness::waiting(&self.inner, Interest::Readable, Some(left))
+                        .await
+                        .map_err(|error| IoError::of(error, "waiting for a socket"))?;
+                    if !ready {
+                        return Err(ReadFailed::TimedOut(crate::task::TimedOut));
+                    }
+                }
+                Err(error) => return Err(ReadFailed::Io(IoError::of(error, "a connection"))),
+            }
+        }
+    }
+
     /// All of `bytes`, awaiting room where there is none yet.
     ///
     /// **All of them**, because a partial write is not something a caller can
@@ -171,7 +209,8 @@ impl Connection {
 
 /// **Accept connections at `address` and run `handler` on each, in a task of
 /// its own** ([ADR-326](../../../docs/specification/adr/adr-326.md) D1): the
-/// one place a protocol accepts, and `http` is one of its users.
+/// one place a protocol accepts, and `http` is one of its users. It is
+/// `listen` followed by [`Listener::serve`] (D10).
 ///
 /// One thread runs every connection at `user_parallelism = no`, each giving the
 /// thread up where it waits; [`serve_on_pool`] is the same at `yes`, which the
@@ -182,34 +221,108 @@ impl Connection {
 /// **A descriptor ceiling pauses the accepting and never ends it** (D3): the
 /// system's queue holds the next connection until one closes.
 pub async fn serve(address: &str, handler: Handler) -> Result<(), IoError> {
-    let listener = listen(address).await?;
-    loop {
-        let Some(connection) = accepted(&listener).await? else {
-            continue;
-        };
-        let handler = handler.clone();
-        // **Started as a `spawn` is**, so a panic is caught at the task's edge
-        // and ends this connection alone (D4); nobody joins it.
-        crate::task::TaskHandle::start(async move { said(handler(connection).await) });
-    }
+    listen(address).await?.serve(handler, 0).await
 }
 
 /// [`serve`] where tasks run on threads (`user_parallelism = yes`): the
 /// handler and its futures cross one.
 pub async fn serve_on_pool(address: &str, handler: PoolHandler) -> Result<(), IoError> {
-    let listener = listen(address).await?;
-    loop {
-        let Some(connection) = accepted(&listener).await? else {
-            continue;
-        };
-        let handler = handler.clone();
-        crate::task::TaskHandle::start_on_pool(async move { said(handler(connection).await) });
+    listen(address).await?.serve_on_pool(handler, 0).await
+}
+
+impl Listener {
+    /// **[`serve`] on a listener already bound** (ADR-326 D10): a program that
+    /// must know the address before it serves - port `0`, the line a server
+    /// prints - binds first and serves this.
+    ///
+    /// `connections` (D5, a test's tool) counts accepted connections: after
+    /// that many it accepts no more and returns once they have all finished;
+    /// `0` serves until the program ends.
+    pub async fn serve(&self, handler: Handler, connections: i64) -> Result<(), IoError> {
+        let mut started = Vec::new();
+        while connections <= 0 || (started.len() as i64) < connections {
+            let Some(connection) = accepted(self).await? else {
+                continue;
+            };
+            let handler = handler.clone();
+            // **Started as a `spawn` is**, so a panic is caught at the task's
+            // edge and ends this connection alone (D4).
+            let task =
+                crate::task::TaskHandle::start(async move { said(handler(connection).await) });
+            // Only a counted server waits for its connections; one that serves
+            // until the program ends keeps no handle.
+            if connections > 0 {
+                started.push(task);
+            }
+        }
+        finished(started).await;
+        Ok(())
+    }
+
+    /// [`Listener::serve`] where tasks run on threads (`user_parallelism =
+    /// yes`).
+    pub async fn serve_on_pool(
+        &self,
+        handler: PoolHandler,
+        connections: i64,
+    ) -> Result<(), IoError> {
+        let mut started = Vec::new();
+        while connections <= 0 || (started.len() as i64) < connections {
+            let Some(connection) = accepted(self).await? else {
+                continue;
+            };
+            let handler = handler.clone();
+            let task =
+                crate::task::TaskHandle::start_on_pool(
+                    async move { said(handler(connection).await) },
+                );
+            if connections > 0 {
+                started.push(task);
+            }
+        }
+        finished(started).await;
+        Ok(())
+    }
+}
+
+/// **Every counted connection has ended**, one that panicked too: its panic
+/// was its own (D4), so what `join` says of it is not this call's to throw.
+async fn finished(started: Vec<crate::task::TaskHandle<()>>) {
+    for task in started {
+        let _ = task.join().await;
     }
 }
 
 /// What a handler ends with: nothing, or what it threw - the shape the emitter
 /// writes for a kept `fn(net::Connection) throws`.
 pub type Outcome = Result<(), Box<dyn std::error::Error>>;
+
+/// **What `read(within:)` fails with**: the socket's error, or the deadline
+/// that ran out first (ADR-326 D8). Two of `std`'s errors at once, as
+/// [`crate::task::Late`] is for `join(within:)`; a program's sum of both takes
+/// it apart, and a `catch` sees the one inside.
+#[derive(Debug)]
+pub enum ReadFailed {
+    Io(IoError),
+    TimedOut(crate::task::TimedOut),
+}
+
+impl From<IoError> for ReadFailed {
+    fn from(error: IoError) -> ReadFailed {
+        ReadFailed::Io(error)
+    }
+}
+
+impl std::fmt::Display for ReadFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadFailed::Io(e) => e.fmt(f),
+            ReadFailed::TimedOut(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ReadFailed {}
 
 /// [`serve`]'s handler at `user_parallelism = no`.
 pub type Handler = crate::func::Kept<dyn Fn(Connection) -> crate::func::Boxed<Outcome>>;

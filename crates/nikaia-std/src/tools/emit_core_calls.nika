@@ -1006,6 +1006,12 @@ impl EmitState {
         if name == "join" && args.len() == 0 {
             limit = emit_call_option_named(world, config, "within")
         }
+        // **A connection's `read(within: d)` is `read_within(d)`** (ADR-326 D8):
+        // the deadline is its one argument, and no task is involved.
+        let mut deadline: Vec[Expr] = []
+        if name == "read" && args.len() == 0 && (self.facts.method_callees[on_node]?.clone() ?? "") == "net::Connection::read(within)" {
+            deadline = emit_call_option_named(world, config, "within")
+        }
         // **The text form of text is the text** (ADR-282 D8): nothing is called,
         // and whether it is lent, built or handed over is decided around it as for
         // any other text.
@@ -1219,6 +1225,8 @@ impl EmitState {
             written = "set_after"
         } else if limit.len() > 0 {
             written = "join_within"
+        } else if deadline.len() > 0 {
+            written = "read_within"
         }
         // **A `Par`'s fold of three is `fold_merged`** (ADR-372 D2), at both
         // settings: the language below's `fold` takes two.
@@ -1414,6 +1422,12 @@ impl EmitState {
             if closes == "cleanup::close" && !self.method_pauses(on_node) {
                 out.push("_sync")
             }
+            // **A method that runs a kept function in tasks of its own has
+            // the pool's twin** where tasks run on threads (ADR-326 D10), as
+            // `net::serve` has.
+            if host.overlaps_user_code() && emit_call_on_the_pool(closes) {
+                out.push("_on_pool")
+            }
             if self.emit_call_method_proved(world, host, receiver, on_node, name, args, scope) {
                 out.push("__unchecked")
             }
@@ -1474,6 +1488,8 @@ impl EmitState {
             // Parenthesised exactly where a postfix would be: `&` binds tighter
             // than every binary operator.
             self.emit_core_postfix_base(world, walk, out, host, witness[0], depth, flow, scope)
+        } else if deadline.len() > 0 {
+            self.emit_expr(world, walk, out, host, deadline[0], depth, flow, scope)
         } else if limit.len() > 0 {
             self.emit_expr(world, walk, out, host, limit[0], depth, flow, scope)
             // **What a time-out does with the task** (ADR-async-5 D17):

@@ -131,7 +131,9 @@ pub fn read_head(written: Written) -> Read sync {
         return refused("400 a method this does not answer")
     }
     let mut length = 0
-    let mut keep_alive = false
+    // **HTTP/1.1 keeps a connection open unless it is told otherwise, HTTP/1.0
+    // only where it is told to** (ADR-326 D9).
+    let mut keep_alive = written.words[2] != "HTTP/1.0"
     let mut headers: Vec[Header] = []
     for field in written.fields {
         // A header's name does not care about case, and its value's
@@ -145,7 +147,12 @@ pub fn read_head(written: Written) -> Read sync {
             }
             length = n
         } else if name == "connection" {
-            keep_alive = value.to_lowercase() == "keep-alive"
+            let said = value.to_lowercase()
+            if said == "close" {
+                keep_alive = false
+            } else if said == "keep-alive" {
+                keep_alive = true
+            }
         } else if name == "transfer-encoding" {
             // **Refused and not ignored** (D5: no chunked). A server that
             // ignored this would read a chunk header as a body.

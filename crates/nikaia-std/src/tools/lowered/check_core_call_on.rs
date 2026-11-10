@@ -1141,7 +1141,8 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
 #[allow(clippy::too_many_arguments)]
 pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
-    let within = witness >= 0 && check_core_call_on_task_handle(&inner) && name == "join";
+    let read_within = witness >= 0 && check_core_method_connection(&inner) && name == "read";
+    let within = witness >= 0 && check_core_call_on_task_handle(&inner) && name == "join" || read_within;
     let door = witness >= 0 && locked_content_of(&inner).is_some() && name == "set";
     if witness >= 0 && !within && !door { check_core_expr(state, world, host, &nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value, span); }
     let timeout_at = check_core_method_on_timeout(world, &name, config, witness);
@@ -1156,7 +1157,7 @@ pub fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &Chec
     } else if within {
         given.push(nikaia_std::index::get(&config, nikaia_std::index::at(witness)).value.clone());
         written = String::from("join(within)");
-        if timeout_at >= 0 {
+        if read_within { written = String::from("read(within)"); } else if timeout_at >= 0 {
             given.push(nikaia_std::index::get(&config, nikaia_std::index::at(timeout_at)).value.clone());
             written = String::from("join(within, on_timeout)");
         }

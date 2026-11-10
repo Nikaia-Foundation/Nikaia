@@ -148,7 +148,7 @@ fn a_head_with_no_length_promised_no_body() {
     let buffer = buffer(&[b"GET / HTTP/1.1\r\nHost: x\r\n\r\n"]);
     let head = buffer.head().expect("a head");
     assert_eq!(head.length(), 0);
-    assert!(!head.keep_alive());
+    assert!(head.keep_alive());
     assert_eq!(buffer.text_from(head.size()).expect("no body"), "");
 }
 

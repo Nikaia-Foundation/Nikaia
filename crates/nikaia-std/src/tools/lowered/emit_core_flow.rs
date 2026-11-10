@@ -751,6 +751,11 @@ impl EmitState {
                 boxed = true;
             } else if scope.channel.starts_with("nikaia_std::error::Thrown<") { named = true; }
         }
+        if caught && sum.is_none() && self.emit_catch_is_a_timed_read(guarded_expr) {
+            sum = Some(String::from(""));
+            boxed = true;
+            named = false;
+        }
         if caught && sum.is_none() && !named && (self.emit_catch_is_a_field_call(guarded_expr) || self.emit_catch_calls_given_code(world, guarded_expr)) {
             sum = Some(String::from(""));
             boxed = true;
@@ -1045,6 +1050,15 @@ impl EmitState {
         }
         for member in set.iter() { if throws_given(member) { return true; } }
         false
+    }
+    pub(crate) fn emit_catch_is_a_timed_read(&self, guarded: &Expr) -> bool {
+        match guarded {
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &(node_key(receiver))) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || "".into()) == "net::Connection::read(within)" },
+            _ => false,
+        }
     }
     pub(crate) fn emit_catch_is_a_field_call(&self, guarded: &Expr) -> bool {
         match guarded {

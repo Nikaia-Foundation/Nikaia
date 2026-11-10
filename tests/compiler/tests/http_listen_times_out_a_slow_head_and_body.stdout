@@ -1,0 +1,5 @@
+a head that stops: HTTP/1.1 408 Request Timeout / 408 a request head that never ended
+a head a byte at a time: HTTP/1.1 408 Request Timeout / 408 a request head that never ended
+a slow body: HTTP/1.1 408 Request Timeout / 408 a body slower than the server takes
+listen returned after three connections
+exit 0

@@ -579,7 +579,7 @@ pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
     nikaia_std::block::Text::from(passed.join(", "))
 }
 
-pub(crate) fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
+pub fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
 
 pub(crate) fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {
     if flow.handled_here { return String::from("Box<dyn std::error::Error>"); }
