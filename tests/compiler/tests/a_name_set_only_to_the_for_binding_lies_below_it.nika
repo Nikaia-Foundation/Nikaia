@@ -23,7 +23,8 @@ fn gap(lines: Vec[String]) -> i64 sync {
 fn closed(lines: Vec[String]) -> i64 sync {
     let n = lines.len() as i64
     let mut prev = -1
-    for i in 0..n - 1 {
+    for i in
+        0..n - 1 {
         if prev >= 0 && lines[prev].len() > 0 {
             prev = i
         }
