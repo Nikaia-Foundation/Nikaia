@@ -136,6 +136,7 @@ pub(crate) struct Here {
     pub(crate) locals: collections::BTreeSet<String>,
     pub(crate) ours_listed: Option<String>,
     pub(crate) backs: collections::BTreeSet<String>,
+    pub(crate) places: collections::BTreeSet<String>,
     pub(crate) found: Vec<(Span, Destination)>,
 }
 
@@ -375,7 +376,11 @@ pub(crate) fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>
         Item::Fn { name, receiver, args, config, ret_type, body, .. } => {
             let name = *name;
             let mut declared: Vec<(winnow_grammar::Symbol, Type)> = vec![];
-            for arg in args.iter() { declared.push((arg.name, arg.ty.clone())); }
+            let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
+            for arg in args.iter() {
+                declared.push((arg.name, arg.ty.clone()));
+                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string())); }
+            }
             for option in config.iter() { declared.push((option.name, option.ty.clone())); }
             let mut any_view = false;
             for (_, ty) in declared.iter() { if ty.is_view { any_view = true; } }
@@ -394,7 +399,7 @@ pub(crate) fn scan(unit: &Unit, asked: &Asked<'_, '_, '_>, target: Option<&Type>
                 let mut here = Here { subject: match target {
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
-                }, subject_fields: subject_fields.copy_owned(), declared: declared.copy_owned(), ours: if result_holds_view { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, locals: collections::BTreeSet::new(), ours_listed: listed_struct(unit, asked, (ret_type).as_ref()), backs: collections::BTreeSet::new(), found: vec![] };
+                }, subject_fields: subject_fields.copy_owned(), declared: declared.copy_owned(), ours: if result_holds_view { text_of(asked, (ret_type).as_ref()) } else { None }, carriers, locals: collections::BTreeSet::new(), ours_listed: listed_struct(unit, asked, (ret_type).as_ref()), backs: collections::BTreeSet::new(), places: if result_holds_view { collections::BTreeSet::new() } else { places.copy_owned() }, found: vec![] };
                 walk_block(unit, asked, body, true, own_buffer, &mut here);
                 one_answer(asked, &here, param, Scanned { param: param_name, ty: written_type(asked.names, ty), function: nikaia_std::block::Text::from(function.to_string()), subject: match subject_name.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -911,6 +916,15 @@ pub(crate) fn stores(unit: &Unit, asked: &Asked<'_, '_, '_>, expr: &Expr, span: 
                 for arg in args.iter() { listed_back(unit, asked, arg, span, &own_buffer, here); }
                 return;
             }
+            if a_push_into_a_place(asked, &here, receiver, method) {
+                for arg in args.iter() {
+                    match arg {
+                        Expr::StructLit { .. } => { descend(unit, asked, arg, span, &own_buffer, here); },
+                        _ => { stores(unit, asked, arg, span, own_buffer, here); },
+                    }
+                }
+                return;
+            }
             handed_to(unit, asked, receiver, method, args, config, span, here);
             descend(unit, asked, expr, span, &own_buffer, here);
         },
@@ -944,6 +958,14 @@ pub(crate) fn a_push_into_a_local(asked: &Asked<'_, '_, '_>, here: &Here, receiv
     if !a_growing_method(asked.names.resolve(method)) { return false; }
     match receiver {
         Expr::Variable(n, _) => { let n = *n; here.locals.contains(asked.names.resolve(n)) },
+        _ => false,
+    }
+}
+
+pub(crate) fn a_push_into_a_place(asked: &Asked<'_, '_, '_>, here: &Here, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
+    if asked.names.resolve(method) != "push" { return false; }
+    match receiver {
+        Expr::Variable(n, _) => { let n = *n; here.places.contains(asked.names.resolve(n)) },
         _ => false,
     }
 }
@@ -2375,7 +2397,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             let walked_here = Here { subject: match subject {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }, subject_fields: fields_of_type(unit, asked, subject), declared, ours: None, carriers: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), ours_listed: None, backs: collections::BTreeSet::new(), found: vec![] };
+            }, subject_fields: fields_of_type(unit, asked, subject), declared, ours: None, carriers: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), ours_listed: None, backs: collections::BTreeSet::new(), places: collections::BTreeSet::new(), found: vec![] };
             let mut flow = rsrc_flow(at);
             for source in sources.iter() {
                 let mut own = rsrc_none();
@@ -2685,7 +2707,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             let here = Here { subject: match subject {
                 Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                 None => None,
-            }, subject_fields: fields_of_type(unit, asked, subject), declared, ours: None, carriers: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), ours_listed: None, backs: collections::BTreeSet::new(), found: vec![] };
+            }, subject_fields: fields_of_type(unit, asked, subject), declared, ours: None, carriers: collections::BTreeSet::new(), locals: collections::BTreeSet::new(), ours_listed: None, backs: collections::BTreeSet::new(), places: collections::BTreeSet::new(), found: vec![] };
             let mut flow = rsrc_flow(at);
             flow.places = places;
             for source in sources.iter() {

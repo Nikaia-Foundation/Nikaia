@@ -1,0 +1,22 @@
+// A struct literal holding a view of a lent parameter, pushed into a `mut`
+// list parameter, points into the caller's argument (ADR-283 D27, #1548): the
+// struct is the element itself, not a field of something that outlives the
+// call, so it shares the lent parameter's lifetime like a plain view does.
+struct Expr { n: i64, name: String }
+struct Block { exprs: Vec[Expr] }
+struct Use { at: ref Expr, k: i64 }
+
+fn collect(block: ref Block, mut out: Vec[Use]) {
+    for each in block.exprs {
+        out.push(Use { at: each, k: each.n * 10 })
+    }
+}
+
+fn main() throws {
+    let block = Block { exprs: [Expr { n: 1, name: "a" }, Expr { n: 2, name: "b" }] }
+    let mut out: Vec[Use] = []
+    collect(block, out)
+    for each in out {
+        println(f"{each.at.n} {each.at.name} {each.k}")
+    }
+}
