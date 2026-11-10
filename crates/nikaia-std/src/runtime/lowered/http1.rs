@@ -106,7 +106,7 @@ pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
     if !(*nikaia_std::index::get(&written.words, 2)).starts_with("HTTP/1.") { return refused("400 a version this does not speak"); }
     if method != "GET" && method != "POST" { return refused("400 a method this does not answer"); }
     let mut length: i64 = 0;
-    let mut keep_alive = false;
+    let mut keep_alive = *nikaia_std::index::get(&written.words, 2) != "HTTP/1.0";
     let mut headers: Vec<Header<'_>> = vec![];
     for field in written.fields.iter() {
         let name = nikaia_std::block::Text::from(field.name.trim().to_lowercase());
@@ -115,7 +115,10 @@ pub fn read_head<'a>(written: &Written<'a, 'a>) -> Read<'a, 'a, 'a, 'a> {
             let n = nikaia_std::index::or(text::parse_i64(value), || -1);
             if n < 0 { return refused("400 a content-length that is not a count"); }
             length = n;
-        } else if name == "connection" { keep_alive = value.to_lowercase() == "keep-alive"; } else if name == "transfer-encoding" { return refused("400 a transfer-encoding this does not speak"); }
+        } else if name == "connection" {
+            let said = nikaia_std::block::Text::from(value.to_lowercase());
+            if said == "close" { keep_alive = false; } else if said == "keep-alive" { keep_alive = true; }
+        } else if name == "transfer-encoding" { return refused("400 a transfer-encoding this does not speak"); }
         headers.push(Header { name, value });
     }
     Read { refused: "", method, target, length, keep_alive, headers }

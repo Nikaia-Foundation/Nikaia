@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1372] — 2026-11-10
+
+**Builders' changes (#121, #1526)**
+- The server takes many connections at once: `Listener.serve(handler; connections:)` runs each connection in a task of its own, `net::serve` is listen + serve, and `http::listen` answers a second client while a first is silent and answers 500 when a handler panics.
+- http::listen times a request: head_timeout (10 s) for the whole head, body_bytes_per_second (500, after 2 s) for the body, 408 past either; connections are kept alive between requests for idle_timeout (75 s), pipelined requests are answered in order, and Connection: close / HTTP/1.0 close after the answer; net::Connection.read(within: d) waits at most d and throws task::TimedOut (ADR-326 D6-D9)
+
 ## [0.0.1371] — 2026-11-09
 
 **Memory budget: a full block ends its task with task::OverBudget**

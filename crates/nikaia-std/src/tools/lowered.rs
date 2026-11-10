@@ -3160,7 +3160,7 @@ pub mod check_core_leaves {
 }
 pub mod check_core_method {
     #[allow(unused_imports)]
-    pub use super::{check_core_method_on_timeout, check_core_method_counted, check_core_method, check_core_method_code_lent};
+    pub use super::{check_core_method_on_timeout, check_core_method_counted, check_core_method_connection, check_core_method, check_core_method_code_lent};
 }
 pub mod check_core_ops {
     #[allow(unused_imports)]
@@ -3471,7 +3471,7 @@ pub mod emit_contracts {
 }
 pub mod emit_core_args {
     #[allow(unused_imports)]
-    pub use super::{emit_async_line, emit_async_pause, emit_async_during};
+    pub use super::{emit_call_on_the_pool, emit_async_line, emit_async_pause, emit_async_during};
 }
 pub mod emit_core_below {
     #[allow(unused_imports)]

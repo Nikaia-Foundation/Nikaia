@@ -259,6 +259,16 @@ impl EmitState {
             if escalated && handed {
                 out.push(f"impl{decl} From<nikaia_std::supervisor::Stopped> for {name}{params} {{\n    fn from(error: nikaia_std::supervisor::Stopped) -> {name}{params} {{\n        match error {{\n            nikaia_std::supervisor::Stopped::Escalated(e) => e.into(),\n            nikaia_std::supervisor::Stopped::Handed(e) => e.into(),\n        }}\n    }}\n}}\n")
             }
+            // A connection's `read(within:)` fails one of two ways (ADR-326 D8).
+            let mut io_failed = false
+            for member in members {
+                if member == "io::IoError" {
+                    io_failed = true
+                }
+            }
+            if io_failed && timed_out {
+                out.push(f"impl{decl} From<nikaia_std::net::ReadFailed> for {name}{params} {{\n    fn from(error: nikaia_std::net::ReadFailed) -> {name}{params} {{\n        match error {{\n            nikaia_std::net::ReadFailed::Io(e) => e.into(),\n            nikaia_std::net::ReadFailed::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n")
+            }
             if crashed && timed_out {
                 out.push(f"impl{decl} From<nikaia_std::task::Late> for {name}{params} {{\n    fn from(error: nikaia_std::task::Late) -> {name}{params} {{\n        match error {{\n            nikaia_std::task::Late::Crashed(e) => e.into(),\n            nikaia_std::task::Late::TimedOut(e) => e.into(),\n        }}\n    }}\n}}\n")
             }

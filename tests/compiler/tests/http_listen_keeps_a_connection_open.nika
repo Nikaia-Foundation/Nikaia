@@ -1,0 +1,33 @@
+// #1526, ADR-326 D9: `http::listen` keeps an HTTP/1.1 connection open for
+// the next request. Two requests on one connection are both answered, and two
+// sent in one write are answered in order. A connection that stays quiet for
+// `idle_timeout` is closed without a word. `Connection: close`, and HTTP/1.0
+// without keep-alive, are answered with `connection: close` and closed. The
+// server runs in a package of its own that depends on `examples/http` by path.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let repo = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nhttp = { path = \"" + repo + "/examples/http\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use http\nuse std::net\nuse std::time\n\nfn free() -> String throws {\n\tlet probe = net::listen(\"127.0.0.1:0\")\n\treturn probe.address()\n}\n\n// Reads until `wanted` has arrived; the first line and the last.\nfn until(mut conn: net::Connection, wanted: String) -> String throws {\n\tlet mut got = String()\n\twhile !got.contains(wanted) {\n\t\tlet more = conn.read()\n\t\tif more.len() == 0 {\n\t\t\treturn f\"closed before {wanted}\"\n\t\t}\n\t\tgot.push_str(more.text())\n\t}\n\tlet lines: Vec[String] = got.lines().collect()\n\treturn f\"{lines[0]} / {lines[lines.len() - 1]}\"\n}\n\n// What the server sent until it closed: the first line, whether it said it\n// closes, and the last line.\nfn until_closed(mut conn: net::Connection) -> String throws {\n\tlet mut got = String()\n\twhile true {\n\t\tlet more = conn.read()\n\t\tif more.len() == 0 {\n\t\t\tbreak\n\t\t}\n\t\tgot.push_str(more.text())\n\t}\n\tlet lines: Vec[String] = got.lines().collect()\n\treturn f\"{lines[0]} / connection: close {got.contains(\"connection: close\")} / {lines[lines.len() - 1]}\"\n}\n\nfn clients(at: String) throws {\n\tlet mut kept = net::connect(at)\n\tkept.write(\"GET /one HTTP/1.1\\r\\nhost: x\\r\\n\\r\\n\")\n\tprintln(f\"first request: {until(kept, \"answered /one\")}\")\n\tkept.write(\"GET /two HTTP/1.1\\r\\nhost: x\\r\\n\\r\\n\")\n\tprintln(f\"second request, same connection: {until(kept, \"answered /two\")}\")\n\tkept.write(\"GET /three HTTP/1.1\\r\\nhost: x\\r\\n\\r\\nGET /four HTTP/1.1\\r\\nhost: x\\r\\n\\r\\n\")\n\tprintln(f\"two in one write, in order: {until(kept, \"answered /four\")}\")\n\tlet quiet = time::now()\n\tlet more = kept.read()\n\tprintln(f\"quiet: closed with {more.len()} bytes, after idle_timeout {quiet.elapsed().in_millis() >= 400}\")\n\tlet mut closing = net::connect(at)\n\tclosing.write(\"GET /close HTTP/1.1\\r\\nhost: x\\r\\nconnection: close\\r\\n\\r\\n\")\n\tprintln(f\"connection: close: {until_closed(closing)}\")\n\tlet mut old = net::connect(at)\n\told.write(\"GET /old HTTP/1.0\\r\\nhost: x\\r\\n\\r\\n\")\n\tprintln(f\"HTTP/1.0: {until_closed(old)}\")\n}\n\nfn main() throws {\n\tlet at = free()\n\tlet copy = at.clone()\n\tlet client = spawn fn { clients(copy) }\n\thttp::listen(at; idle_timeout: 500.millis(), connections: 3) fn(request) {\n\t\treturn http::Response::text(f\"answered {request.path()}\")\n\t}\n\tclient.join()\n\tprintln(\"listen returned after three connections\")\n}\n")
+    let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+    for line in out.stdout.lines() {
+        if !line.starts_with("http: listening on ") {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    if out.code != 0 {
+        println(out.stderr.replace(tmp, "TMP"))
+    }
+    process::run("rm", ["-rf", tmp])
+}
