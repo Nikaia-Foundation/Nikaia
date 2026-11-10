@@ -747,8 +747,27 @@ impl EmitState {
                     out.push(f", {package}::{options}(), {claimed}, |source, how| {package}::{book}::parse_{rule}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){question}")
                     return true
                 }
-                out.push("nikaia_std::grammar::parse(&*")
-                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                // **The caller's table, where it hands one** (ADR-388 D1,
+                // #1519): the parse interns into it, as an entry beside the
+                // call does.
+                let mut table: Expr? = null
+                for c in config {
+                    if emit_text(world, c.name) == "words" && !options.contains("words") {
+                        table = c.value.clone()
+                    }
+                }
+                match table {
+                    words => {
+                        out.push("nikaia_std::grammar::parse_in(&*")
+                        self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                        out.push(", &")
+                        self.emit_expr(world, walk, out, host, words, depth, flow, scope)
+                    },
+                    null => {
+                        out.push("nikaia_std::grammar::parse(&*")
+                        self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                    },
+                }
                 out.push(f", {package}::{book}::parse_{rule}()){question}")
                 return true
             },

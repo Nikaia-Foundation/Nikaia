@@ -510,8 +510,20 @@ impl EmitState {
                     out.push(&format!(", {}::{}(), {}, |source, how| {}::{}::parse_{}_pieces(source, &winnow_grammar::ParseContext::<()>::default(), how)){}", package, options, claimed, package, book, rule, question));
                     return Ok(true);
                 }
-                out.push("nikaia_std::grammar::parse(&*");
-                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                let mut table: Option<Expr> = None;
+                for c in config.iter() { if emit_text(world, c.name) == "words" && !nikaia_std::list::contains(&options, &"words") { table = Some(c.value.clone()); } }
+                match table {
+                    Some(ref words) => {
+                        out.push("nikaia_std::grammar::parse_in(&*");
+                        self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                        out.push(", &");
+                        self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+                    },
+                    None => {
+                        out.push("nikaia_std::grammar::parse(&*");
+                        self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                    },
+                }
                 out.push(&format!(", {}::{}::parse_{}()){}", package, book, rule, question));
                 return Ok(true);
             },
@@ -1206,8 +1218,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple89273| {
-        let (i, word) = __nikaia_tuple89273;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90174| {
+        let (i, word) = __nikaia_tuple90174;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

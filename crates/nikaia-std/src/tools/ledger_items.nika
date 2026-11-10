@@ -155,9 +155,80 @@ pub fn declared_grammar(words: ref winnow_grammar::InternerContext, aliases: ref
             options.push(ConfigContract { name: words.resolve(option.name).clone(), ty: written_ty(words, aliases, option.ty), default: default_text(option.default) })
         }
         contract.signature = Signature { bounds: [], mutable: [], params: params, config: options, result: result }
+        // **Whether it interns** (ADR-388 D1, #1519): a caller in another
+        // package hands it `words:` by this, as one beside it does by the rule.
+        contract.interns = grammar_entry_interns(words, definition, words.resolve(rule.name))
         out.push(DeclaredFn { key: f"{owner}::{words.resolve(rule.name)}", contract: contract })
     }
     return out
+}
+
+/// **Whether the entry `entry` of `definition` interns** (ADR-388 D1): the
+/// rules it reaches, walked once each, call `ident` or `intern(p)`.
+pub fn grammar_entry_interns(words: ref winnow_grammar::InternerContext, definition: ref GrammarDef, entry: ref String) -> bool {
+    let mut rules: collections::BTreeSet[String] = collections::BTreeSet()
+    for r in definition.rules {
+        rules.insert(words.resolve(r.name).clone())
+    }
+    let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut todo: Vec[String] = [entry.clone()]
+    while todo.len() > 0 {
+        let at = todo.pop() ?? break
+        if !seen.contains(at) {
+            seen.insert(at.clone())
+            for r in definition.rules {
+                if words.resolve(r.name) == at {
+                    for alt in r.alts {
+                        if grammar_pattern_interns(words, alt.pattern.node, rules, todo) {
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return false
+}
+
+/// Whether `pattern` calls `ident` or `intern(p)` itself; the rules of the
+/// grammar it names go on `todo`.
+fn grammar_pattern_interns(words: ref winnow_grammar::InternerContext, pattern: ref Pattern, rules: ref collections::BTreeSet[String], mut todo: Vec[String]) -> bool {
+    match pattern {
+        Pattern::Seq(parts) => return parts.iter().any(fn(p) { grammar_pattern_interns(words, p.node, rules, todo) }),
+        Pattern::Choice(parts) => return parts.iter().any(fn(p) { grammar_pattern_interns(words, p.node, rules, todo) }),
+        Pattern::Bind { pat, .. } => return grammar_pattern_interns(words, pat.node, rules, todo),
+        Pattern::Group(pat) => return grammar_pattern_interns(words, pat.node, rules, todo),
+        Pattern::Repeat { pat, .. } => return grammar_pattern_interns(words, pat.node, rules, todo),
+        Pattern::Counted { pat, .. } => return grammar_pattern_interns(words, pat.node, rules, todo),
+        Pattern::Ref { name, args, .. } => {
+            let called = words.resolve(name).clone()
+            if rules.contains(called) {
+                todo.push(called)
+                return false
+            }
+            if called == "ident" || called == "intern" {
+                return true
+            }
+            return args.iter().any(fn(p) { grammar_pattern_interns(words, p.node, rules, todo) })
+        },
+        Pattern::Call { name, .. } => {
+            todo.push(words.resolve(name).clone())
+            return false
+        },
+        Pattern::Fold(spec) => {
+            todo.push(words.resolve(spec.rule).clone())
+            return false
+        },
+        Pattern::Choose { arms, .. } => return arms.iter().any(fn(arm) { arm.alts.iter().any(fn(alt) { grammar_pattern_interns(words, alt.pattern.node, rules, todo) }) }),
+        Pattern::Members { key, value, sep, fields, .. } => {
+            todo.push(words.resolve(value).clone())
+            for field in fields {
+                todo.push(words.resolve(field.value).clone())
+            }
+            return grammar_pattern_interns(words, key.node, rules, todo) || grammar_pattern_interns(words, sep.node, rules, todo)
+        },
+        else => return false,
+    }
 }
 
 fn folds_in_parallel(pattern: ref Pattern) -> bool {
