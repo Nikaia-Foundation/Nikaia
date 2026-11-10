@@ -165,7 +165,7 @@ impl EmitNeeds {
 
     /// The lines at the top of the emitted file.
     pub fn preamble(ref self) -> String {
-        let mut out: String = ""
+        let mut out: String = "#![allow(unused_unsafe)]\n"
         if self.uses_grammar {
             out.push_str("use winnow_grammar::grammar;\n")
         }
