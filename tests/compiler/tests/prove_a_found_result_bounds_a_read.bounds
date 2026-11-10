@@ -1,4 +1,4 @@
-bounds in tests/prove_a_found_result_bounds_a_read.nika: 8 indexes, 5 proved; 3 operations, 0 proved
+bounds in tests/prove_a_found_result_bounds_a_read.nika: 8 indexes, 5 proved; 3 operations, 1 proved
     10  parent[x]     checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)
     20  parent[ra]    proved
     20  parent[rb]    proved
@@ -9,4 +9,4 @@ bounds in tests/prove_a_found_result_bounds_a_read.nika: 8 indexes, 5 proved; 3 
     40  xs[k]         proved
     48  parent[r]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
     57  xs[r - 1]     checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-    57  r - 1         checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    57  r - 1         proved

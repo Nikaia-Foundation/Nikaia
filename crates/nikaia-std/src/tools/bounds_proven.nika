@@ -159,6 +159,7 @@ pub fn bounds_proven(
 				for rule in def.rules {
 					rules.insert(words.resolve(rule.name).clone())
 				}
+				let ranges = bp_rule_ranges(def, rules, context, program, words, ask)
 				for rule in def.rules {
 					let function = words.resolve(rule.name).clone()
 					let at = rule.span.start as i64
@@ -167,7 +168,7 @@ pub fn bounds_proven(
 						let mut found = bm_empty()
 						bm_matched(words, rules, alt.pattern.node, found)
 						let mut inner = context.clone()
-						inner.given = found.given
+						inner.given = bp_given(found, ranges)
 						inner.classes = found.classes
 						inner.text_lengths = found.text_lengths
 						inner.text_classes = found.text_classes
@@ -183,6 +184,77 @@ pub fn bounds_proven(
 	// **A fold's counters, proved from the input's length** (ADR-367 D3).
 	for at in folded() {
 		out.arithmetic.insert(at)
+	}
+	return out
+}
+
+/// **The interval each rule of a grammar hands back** (ADR-306 D30): the
+/// join of what each of its alternatives' actions hands back, walked with
+/// what its bindings matched, a binding of a rule found before among them.
+/// A rule with an alternative without an action, or one whose value has no
+/// interval, has none. Each round finds the rules whose bindings' rules are
+/// found; a recursive rule's own binding is never assumed.
+fn bp_rule_ranges(
+	def: ref GrammarDef,
+	rules: ref collections::BTreeSet[String],
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> collections::BTreeMap[String, Range] {
+	let mut out: collections::BTreeMap[String, Range] = collections::BTreeMap()
+	for _round in 0..<def.rules.len() {
+		let mut added = false
+		for rule in def.rules {
+			let name = words.resolve(rule.name).clone()
+			let ty = rule.ret_type ?? continue
+			if out.contains_key(name) || !rule.generics.is_empty() || ty.is_nullable || !ty.generics.is_empty()
+				|| !is_whole_number(words.resolve(ty.name)) {
+				continue
+			}
+			let mut joined: Range? = null
+			let mut every = !rule.alts.is_empty()
+			for alt in rule.alts {
+				if alt.action == null {
+					every = false
+					break
+				}
+				let action = alt.action ?? break
+				let mut found = bm_empty()
+				bm_matched(words, rules, alt.pattern.node, found)
+				let mut inner = context.clone()
+				inner.given = bp_given(found, out)
+				inner.classes = found.classes
+				inner.text_lengths = found.text_lengths
+				inner.text_classes = found.text_classes
+				let range = bounds_action_range(action, inner, program, words, ask) ?? {
+					every = false
+					break
+				}
+				joined = match joined {
+					null => range,
+					before => before.join(range),
+				}
+			}
+			if every && joined != null {
+				out.insert(name, joined ?? Range::open())
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	return out
+}
+
+/// What an alternative's bindings matched, a binding of a rule with a found
+/// interval (`bp_rule_ranges`) taking that interval.
+fn bp_given(found: ref BmMatched, ranges: ref collections::BTreeMap[String, Range]) -> collections::BTreeMap[String, Range] {
+	let mut out = found.given.clone()
+	for (bound, rule) in found.rule_binds {
+		let range = ranges.get(rule) ?? continue
+		out.insert(bound.clone(), range.clone())
 	}
 	return out
 }

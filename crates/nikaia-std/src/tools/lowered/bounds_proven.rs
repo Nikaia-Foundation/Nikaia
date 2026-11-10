@@ -58,6 +58,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
             Item::Grammar(def) => {
                 let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
                 for rule in def.rules.iter() { rules.insert(nikaia_std::block::Text::from(words.resolve(rule.name).to_string())); }
+                let ranges = bp_rule_ranges(def, &rules, &context, program, words, ask);
                 for rule in def.rules.iter() {
                     let function = nikaia_std::block::Text::from(words.resolve(rule.name).to_string());
                     let at = rule.span.start as i64;
@@ -66,7 +67,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                         let mut found = bm_empty();
                         bm_matched(words, &rules, &alt.pattern.node, &mut found);
                         let mut inner = context.clone();
-                        inner.given = found.given;
+                        inner.given = bp_given(&found, &ranges);
                         inner.classes = found.classes;
                         inner.text_lengths = found.text_lengths;
                         inner.text_classes = found.text_classes;
@@ -80,6 +81,57 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
         }
     }
     for at in folded() { out.arithmetic.insert(at); }
+    out
+}
+
+pub(crate) fn bp_rule_ranges(def: &GrammarDef, rules: &collections::BTreeSet<String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &impl Fn(&TermArena, &[i64], i64) -> bool) -> collections::BTreeMap<String, Range> {
+    let mut out: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
+    for _round in 0..def.rules.len() as i64 {
+        let mut added = false;
+        for rule in def.rules.iter() {
+            let name = nikaia_std::block::Text::from(words.resolve(rule.name).to_string());
+            let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if out.contains_key(&name) || !rule.generics.is_empty() || ty.is_nullable || !ty.generics.is_empty() || !is_whole_number(words.resolve(ty.name)) { continue; }
+            let mut joined: Option<Range> = None;
+            let mut every = !rule.alts.is_empty();
+            for alt in rule.alts.iter() {
+                if alt.action.is_none() {
+                    every = false;
+                    break;
+                }
+                let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => break };
+                let mut found = bm_empty();
+                bm_matched(words, rules, &alt.pattern.node, &mut found);
+                let mut inner = context.clone();
+                inner.given = bp_given(&found, &out);
+                inner.classes = found.classes;
+                inner.text_lengths = found.text_lengths;
+                inner.text_classes = found.text_classes;
+                let range = match bounds_action_range(action, &inner, program, words, ask) { Some(__nikaia_value) => __nikaia_value, None => {
+                    every = false;
+                    break;
+                } };
+                joined = Some(match joined {
+                    None => range,
+                    Some(before) => before.join(&range),
+                });
+            }
+            if every && joined.is_some() {
+                out.insert(name, nikaia_std::index::or(joined, || Range::open()));
+                added = true;
+            }
+        }
+        if !added { break; }
+    }
+    out
+}
+
+pub(crate) fn bp_given(found: &BmMatched, ranges: &collections::BTreeMap<String, Range>) -> collections::BTreeMap<String, Range> {
+    let mut out = found.given.copy_owned();
+    for (bound, rule) in found.rule_binds.iter() {
+        let range = match ranges.get(rule) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        out.insert(nikaia_std::block::Text::from(bound.to_string()), range.clone());
+    }
     out
 }
 

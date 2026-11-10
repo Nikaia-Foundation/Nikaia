@@ -15,10 +15,13 @@ pub struct BmMatched {
     pub classes: collections::BTreeMap[String, Range],
     pub text_lengths: collections::BTreeMap[String, Range],
     pub text_classes: collections::BTreeMap[String, Range],
+    /// A binding of a rule of the grammar's own, by name, with the rule's
+    /// name: its value is what the rule's actions hand back (ADR-306 D30).
+    pub rule_binds: collections::BTreeMap[String, String],
 }
 
 pub fn bm_empty() -> BmMatched {
-    return BmMatched { given: collections::BTreeMap(), classes: collections::BTreeMap(), text_lengths: collections::BTreeMap(), text_classes: collections::BTreeMap() }
+    return BmMatched { given: collections::BTreeMap(), classes: collections::BTreeMap(), text_lengths: collections::BTreeMap(), text_classes: collections::BTreeMap(), rule_binds: collections::BTreeMap() }
 }
 
 fn bm_range(lo: i64, hi: i64) -> Range {
@@ -97,6 +100,10 @@ fn bm_bound(words: ref winnow_grammar::InternerContext, rules: ref collections::
     }
     match what {
         Pattern::Ref { name, generics, args } => {
+            if generics.is_empty() && rules.contains(words.resolve(name)) {
+                found.rule_binds.insert(bound_name.clone(), words.resolve(name).clone())
+                return
+            }
             if words.resolve(name) != "dec" || rules.contains("dec") || generics.len() != 1 {
                 return
             }

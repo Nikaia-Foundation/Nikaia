@@ -312,6 +312,12 @@ struct BoundsWalk {
 	return_names: collections::BTreeSet[String],
 	return_seen: collections::BTreeSet[i64],
 	return_lost: bool,
+	/// **The interval every value handed back lies in** (ADR-306 D30), where
+	/// `return_ranging` asks for it: a function or a grammar action returning
+	/// a whole number. `return_unranged` once one return has none.
+	return_ranging: bool,
+	return_range: Range?,
+	return_unranged: bool,
 }
 
 /// **A loop's candidate invariant, while its body is walked** (ADR-361 D4):
@@ -667,6 +673,9 @@ fn bounding_new(
 		return_names: collections::BTreeSet(),
 		return_seen: collections::BTreeSet(),
 		return_lost: false,
+		return_ranging: false,
+		return_range: null,
+		return_unranged: false,
 	}
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -728,6 +737,8 @@ fn bounding_pass(
 	walk.return_names = collections::BTreeSet()
 	walk.return_seen = collections::BTreeSet()
 	walk.return_lost = false
+	walk.return_range = null
+	walk.return_unranged = false
 	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [] }
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -767,6 +778,59 @@ fn bounding_pass(
 		// What the body ends with is what it hands back.
 		rules_exit(walk, facts, rules_tail(body), false, context, program, words, ask)
 	}
+}
+
+/// **A value handed back, joined into the interval of every one** (ADR-306
+/// D30), where the walk asks for it; one the walk has no interval of, or a
+/// return without a value, leaves none.
+fn bounding_return_range(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	returned: ref Expr?,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if !walk.return_ranging || walk.return_unranged {
+		return
+	}
+	let value = returned ?? {
+		walk.return_unranged = true
+		return
+	}
+	let range = bounding_range(walk, value, facts, context, program, words, ask) ?? Range::open()
+	if !range.is_bounded() {
+		walk.return_unranged = true
+		return
+	}
+	walk.return_range = match walk.return_range {
+		null => range,
+		before => before.join(range),
+	}
+}
+
+/// **The interval a body's every value handed back lies in** (ADR-306 D30):
+/// a grammar action's, walked with `context` as its alternative's bindings
+/// give it; nothing where one value has none.
+pub fn bounds_action_range(
+	body: ref Block,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Range? {
+	let none: Vec[FnArg] = []
+	let mut walk = bounding_new(none, body, bp_names(nonnegative_locals(body), words), context, program, words)
+	walk.return_ranging = true
+	bounds_rounds(walk, none, body, context, program, words, ask)
+	if walk.return_unranged || walk.return_lost {
+		return null
+	}
+	if seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
+		return null
+	}
+	return walk.return_range?.clone()
 }
 
 /// The bounds this pass found: every key written, none written something
@@ -1292,6 +1356,22 @@ fn bounding_range(
 		Expr::Index { base, .. } => {
 			let key = elements_key(walk.shape, base, words) ?? return null
 			return bounding_assumed(walk, key)
+		},
+		// **A call's value lies where the callee's every return is found
+		// to** (ADR-306 D23, D30): `hex_value(c)` in `0..=156678`.
+		Expr::Call { func, config, .. } => {
+			if !config.is_empty() {
+				return null
+			}
+			let callee = bounding_callee(func, words) ?? return null
+			if walk.shape.bound.contains(callee) {
+				return null
+			}
+			let found = context.returns.get(callee) ?? return null
+			if found.each || found.pending {
+				return null
+			}
+			return found.range?.clone()
 		},
 		Expr::If { cond, then_branch, else_branch, .. } => return bounding_if_range(
 			walk,
@@ -7228,16 +7308,14 @@ pub fn bounds_returns(
 						below.insert(k)
 					}
 				}
-				// A list of numbers may be bounded by its values alone (D24).
-				if below.is_empty() && !each {
-					continue
-				}
+				// A list of numbers may be bounded by its values alone (D24),
+				// a whole number by its interval (D30).
 				assumed.insert(words.resolve(symbol).clone(), BoundsReturns {
 					each: each,
 					below: below,
 					sized: collections::BTreeSet(),
 					range: null,
-					pending: each,
+					pending: true,
 				})
 				bodies.push(item)
 			},
@@ -7257,7 +7335,28 @@ pub fn bounds_returns(
 	// one's base cases are what its values start from; the rounds below
 	// assume them and keep those proved.
 	context.returns = assumed.clone()
-	let collected = bounding_returns_round(context, bodies, assumed, program, words, ask)
+	let mut collected = bounding_returns_round(context, bodies, assumed, program, words, ask)
+	// **A whole number's interval through a chain of calls** (D30): one
+	// found while its callees' were pending is found again with theirs
+	// known. A pending call has none, so what is collected needs no
+	// assumption, a recursive call's included.
+	for _more in 0..<assumed.len() {
+		let mut known = assumed.clone()
+		for (name, found) in collected {
+			if !found.each && found.range != null {
+				let mut next = found.clone()
+				next.pending = false
+				known.insert(name.clone(), next)
+			}
+		}
+		context.returns = known.clone()
+		let again = bounding_returns_round(context, bodies, known, program, words, ask)
+		let before = bounding_returns_ranged(collected)
+		collected = again
+		if bounding_returns_ranged(collected) == before {
+			break
+		}
+	}
 	let mut started: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	for (name, wanted) in assumed {
 		let mut next = wanted.clone()
@@ -7322,6 +7421,7 @@ fn bounding_returns_round(
 					}
 				}
 				walk.return_each = wanted.each
+				walk.return_ranging = !wanted.each
 				let proven = bounds_rounds(walk, args, body, context, program, words, ask)
 				let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
@@ -7337,6 +7437,12 @@ fn bounding_returns_round(
 				let mut range: Range? = null
 				if wanted.each && returned {
 					range = bounding_returned_range(walk)
+				}
+				// **A whole number's interval** (D30): every value handed
+				// back, the body's last one among them, had one.
+				if !wanted.each && !walk.return_unranged && !walk.return_lost
+					&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
+					range = walk.return_range?.clone()
 				}
 				if range != null && !wanted.pending {
 					let seen = range ?? Range::open()
@@ -7405,6 +7511,17 @@ fn bounding_returns_each(ty: ref Type, words: ref winnow_grammar::InternerContex
 	return null
 }
 
+/// How many whole-number results of `returns` have an interval (D30).
+fn bounding_returns_ranged(returns: ref collections::BTreeMap[String, BoundsReturns]) -> i64 {
+	let mut out = 0
+	for (_name, found) in returns {
+		if !found.each && found.range != null {
+			out += 1
+		}
+	}
+	return out
+}
+
 /// How many bounds `returns` holds, over every function.
 fn bounding_returns_count(returns: ref collections::BTreeMap[String, BoundsReturns]) -> i64 {
 	let mut out = 0
@@ -7431,7 +7548,17 @@ fn bounding_returned(
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
 ) {
-	if walk.return_params.is_empty() || throwing {
+	if throwing {
+		return
+	}
+	if walk.return_ranging {
+		bounding_return_range(walk, facts, returned, context, program, words, ask)
+	}
+	if walk.return_params.is_empty() {
+		if walk.return_ranging {
+			let seen = returned ?? return
+			walk.return_seen.insert(node_key(seen))
+		}
 		return
 	}
 	let value = returned ?? {
