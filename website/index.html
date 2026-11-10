@@ -58,24 +58,32 @@ description: >-
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#outside" | relative_url }}">Input checked where it arrives</a></h3>
+        <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
+        <p>An <code>assert</code> is a contract. The compiler proves it, through loops too, without an invariant written by hand, and a call that breaks it is refused. Two tasks that change the same value are refused too.</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">fn ship(orders: int) -&gt; int {
+    assert(orders &gt;= 0)
+    let mut waiting = orders
+    let mut shipped = 0
+    while waiting &gt; 0 {
+        waiting -= 1
+        shipped += 1
+    }
+    assert(shipped == orders)    // none lost, none sent twice
+    return shipped
+}
+
+ship(-3)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code>  assert(shipped == orders)  <b>proved through the loop</b>
+<span class="d-error">error</span><b>: This call breaks `ship`'s precondition `orders &gt;= 0` every time it is reached.</b></code></pre></div>
+        <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
+      </div>
+      <div class="safe-tile safe-tile-b">
+        <span class="safe-chip safe-chip-build">Caught at compile time</span>
+        <h3><a href="{{ "/safe/#outside" | relative_url }}">The compiler knows where the data comes from</a></h3>
         <p>A claim about data from outside waits for a guard where the data arrives, a path from outside stays in the directory the call names, and formats are read by parsers built from a grammar.</p>
 <div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["rev-parse", "HEAD"])
 let n: int = out.stdout.len()
 assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: `n == 41` is a claim about data from outside the program.</b></code></pre></div>
         <a class="safe-more" href="{{ "/safe/#outside" | relative_url }}">Read more →</a>
-      </div>
-      <div class="safe-tile safe-tile-b">
-        <span class="safe-chip safe-chip-build">Caught at compile time</span>
-        <h3><a href="{{ "/safe/#logic" | relative_url }}">Contracts kept at every call</a></h3>
-        <p>An <code>assert</code> is a contract, and a call that breaks it is refused. Two tasks that change the same value are refused too.</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">fn percent(n: int) -&gt; int {
-    assert(n &gt;= 0 &amp;&amp; n &lt;= 100)
-    return n
-}
-
-percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="diagnostic"><code><span class="d-error">error</span><b>: This call breaks `percent`'s precondition `n &gt;= 0 &amp;&amp; n &lt;= 100` every time it is reached.</b></code></pre></div>
-        <a class="safe-more" href="{{ "/safe/#logic" | relative_url }}">Read more →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Checked on every build</span>
