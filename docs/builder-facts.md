@@ -213,4 +213,7 @@ together with the specification section and an example test.
 * Files of one package share one namespace: call a sibling file's `pub fn` by its bare name, since `mod x` is a parse error. (issue-1481)
 * A `??` whose left side reads a map value (`m[k] ?? []`) is NK1185 in tools code; write `m[k]?.clone() ?? []` behind a `contains_key` check. (issue-1485)
 * A heredoc report or edit script with backticks needs a quoted delimiter (`<<'EOF'`); unquoted, each backticked word runs as a shell command and silently drops out of the text. (issue-1485)
+* rustc ignores a lint attribute on `include!(...)` (it warns "unused attribute"), so lift a lint for included lowered code by wrapping the `include!` in `#[allow(..)] mod lowered { use super::*; include!(..) } pub use lowered::*;`. (issue-1475)
+* `lower-std` lowers at two levels: `sysroot::tools_build()` for the tools and runtime packages, and `emit_std_against` in `emit/mod.rs` for `text.nika` and `supervisor.nika`. A level change needs both. (issue-1475)
+* The `runtime` module in `nikaia-std/src/lib.rs` carries fewer clippy allows than `tools`; a new emitter form in lowered runtime code may need one added there. (issue-1475)
 
