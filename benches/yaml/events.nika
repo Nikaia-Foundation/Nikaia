@@ -1,0 +1,82 @@
+// The event stream of each file named on the command line, through
+// `yaml::documents` and `yaml::events`, one line per event in the form every
+// program of the bench prints (README, *The output*): the yaml-test-suite's
+// event lines without the flow markers and `...`, which `saphyr-parser` does
+// not report, and with each anchor numbered in the order it is defined. A file
+// the parser refuses prints `error`.
+use std::cli
+use std::collections
+use std::fs
+use yaml
+
+fn escaped(t: String) -> String {
+	let mut out = String()
+	for c in t.chars() {
+		if c == '\\' {
+			out.push_str("\\\\")
+		} else if c == '\n' {
+			out.push_str("\\n")
+		} else if c == '\t' {
+			out.push_str("\\t")
+		} else if c == '\r' {
+			out.push_str("\\r")
+		} else {
+			out.push(c)
+		}
+	}
+	return out
+}
+
+fn main() throws {
+	let mut out = String()
+	let mut args = cli::args()
+	args.nth(0)
+	for path in args {
+		let input = fs::read(path, fs::Root::Anywhere)
+		let docs = yaml::documents(input) catch {
+			out.push_str("error\n")
+			continue
+		}
+		let mut ids: collections::HashMap[String, i64] = collections::HashMap()
+		let mut next = 1
+		for e in yaml::events(docs) {
+			let mut props = String()
+			match e.anchor {
+				null => {}
+				a => {
+					ids.insert(a.clone(), next)
+					props.push_str(f" &{next}")
+					next += 1
+				}
+			}
+			match e.tag {
+				null => {}
+				t => props.push_str(f" <{t}>")
+			}
+			let line = match e.kind {
+				yaml::EventKind::StreamStart => "+STR"
+				yaml::EventKind::StreamEnd => "-STR"
+				yaml::EventKind::DocumentStart => if e.explicit { "+DOC ---" } else { "+DOC" }
+				yaml::EventKind::DocumentEnd => "-DOC"
+				yaml::EventKind::SequenceStart => f"+SEQ{props}"
+				yaml::EventKind::SequenceEnd => "-SEQ"
+				yaml::EventKind::MappingStart => f"+MAP{props}"
+				yaml::EventKind::MappingEnd => "-MAP"
+				yaml::EventKind::Alias => f"=ALI *{ids.get(e.value) ?? 0}"
+				yaml::EventKind::Scalar => {
+					let style = match e.style {
+						yaml::Style::Plain => ":"
+						yaml::Style::Single => "'"
+						yaml::Style::Double => "\""
+						yaml::Style::Literal => "|"
+						yaml::Style::Folded => ">"
+					}
+					f"=VAL{props} {style}{escaped(e.text ?? e.value)}"
+				}
+			}
+			out.push_str(line)
+			out.push_str("\n")
+		}
+	}
+	print(out)
+}
