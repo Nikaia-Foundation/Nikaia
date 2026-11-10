@@ -32,7 +32,7 @@ pub struct ProjectTestsOutcome {
     /// ([ADR-247](../../../docs/specification/adr/adr-247.md) D2).
     pub files: Vec[(String, Bytes?)],
     /// A test program's `--bounds` reports, each beside what it expects
-    /// (#1069): the file's name (`NAME.bounds`, `NAME.loops.bounds`), what
+    /// (#1069): the file's name (`NAME.bounds`, `NAME.asserts`), what
     /// the file holds and what was reported - one entry per file there is.
     pub bounds: Vec[(String, Bytes, Bytes)],
 }
@@ -71,11 +71,9 @@ pub struct ProgramTest {
     /// `NAME.stops`, where there is one: the program is expected to stop,
     /// writing this to standard error (#1260).
     pub stops: Bytes?,
-    /// `NAME.bounds`: its `--bounds` report at `prove-through-loops:off`
-    /// (#1069), where there is one.
+    /// `NAME.bounds`: its `--bounds` report (#1069), where there is one;
+    /// every build asks through a loop, so there is one report (ADR-361 D14).
     pub bounds: Bytes?,
-    /// `NAME.loops.bounds`: the same at `prove-through-loops:on`.
-    pub loops_bounds: Bytes?,
     /// `NAME.asserts`: its `check --asserts` report (ADR-269 D7), where
     /// there is one.
     pub asserts: Bytes?,
@@ -236,29 +234,33 @@ pub fn project_tests_program_manifest(root: ref fs::Path, package: String?) -> P
 pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
     let dir = root.join("tests")
     let mut tests: Vec[ProgramTest] = []
+    // **One `--bounds` expectation per test** (ADR-361 D14): a
+    // `NAME.loops.bounds` left from the switch is an error, not a file
+    // nothing reads.
+    for stem in project_tests_stems(dir, ".loops.bounds", false) {
+        throw ProjectTestsRefusal::Refused(f"tests/{stem}.loops.bounds: a test program has one `--bounds` expectation, `{stem}.bounds`, since every build asks a check through its loop (ADR-361 D14): move what it holds into `{stem}.bounds` and delete it")
+    }
     for name in project_tests_stems(dir, ".nika", false) {
         let stdout = project_tests_optional(dir.join(f"{name}.stdout"))
         let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
         let bounds = project_tests_optional(dir.join(f"{name}.bounds"))
-        let loops_bounds = project_tests_optional(dir.join(f"{name}.loops.bounds"))
         let asserts = project_tests_optional(dir.join(f"{name}.asserts"))
         let stops = project_tests_optional(dir.join(f"{name}.stops"))
         let stdin = project_tests_optional(dir.join(f"{name}.stdin")) ?? Bytes([])
-        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, loops_bounds: loops_bounds, asserts: asserts, stdin: stdin })
+        tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, asserts: asserts, stdin: stdin })
     }
     return tests
 }
 
-/// The `.bounds`, `.loops.bounds` and `.asserts` files in the package's
-/// `tests/` with no test program beside them (#1069), by file name: each is
-/// an error, not an expectation nothing checks.
+/// The `.bounds` and `.asserts` files in the package's `tests/` with no test
+/// program beside them (#1069), by file name: each is an error, not an
+/// expectation nothing checks. A `.loops.bounds` is left to
+/// [`program_tests`], which refuses every one (ADR-361 D14).
 pub fn project_tests_stray_bounds(root: ref fs::Path) -> Vec[String] {
     let dir = root.join("tests")
     let mut stray: Vec[String] = []
     for stem in project_tests_stems(dir, ".bounds", false) {
-        let short: String = (stem.strip_suffix(".loops") ?? "").clone()
-        let beside = project_tests_is_file(dir.join(f"{stem}.nika")) || (!short.is_empty() && project_tests_is_file(dir.join(f"{short}.nika")))
-        if !beside {
+        if !stem.ends_with(".loops") && !project_tests_is_file(dir.join(f"{stem}.nika")) {
             stray.push(f"{stem}.bounds")
         }
     }
@@ -324,21 +326,16 @@ pub fn project_tests_asserts_report(printed: String, written: String) -> Bytes {
 }
 
 /// **A test program's outcome with its `--bounds` and `--asserts` reports
-/// compared** (#1069): `off` and `on` are what `check --bounds` printed for
-/// it at `prove-through-loops:off` and `:on`, `asserts` what `check
-/// --asserts` printed, its path written `tests/NAME.nika`. Each report its
-/// `.bounds`, `.loops.bounds` or `.asserts` expects must be that file, byte
-/// for byte, or the test fails.
-pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, off: String, on: String, asserts: String) -> ProjectTestsOutcome {
+/// compared** (#1069): `report` is what `check --bounds` printed for it,
+/// `asserts` what `check --asserts` printed, its path written
+/// `tests/NAME.nika`. Each report its `.bounds` or `.asserts` expects must be
+/// that file, byte for byte, or the test fails.
+pub fn project_tests_bounds_outcome(program: ref ProgramTest, outcome: ref ProjectTestsOutcome, report: String, asserts: String) -> ProjectTestsOutcome {
     let written = f"tests/{program.name}.nika"
     let mut bounds: Vec[(String, Bytes, Bytes)] = []
     match program.bounds {
         null => {},
-        want => bounds.push((f"{program.name}.bounds", want.clone(), project_tests_bounds_report(off, written))),
-    }
-    match program.loops_bounds {
-        null => {},
-        want => bounds.push((f"{program.name}.loops.bounds", want.clone(), project_tests_bounds_report(on, written))),
+        want => bounds.push((f"{program.name}.bounds", want.clone(), project_tests_bounds_report(report, written))),
     }
     match program.asserts {
         null => {},
@@ -651,16 +648,12 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     fs::write(project.join("nikaia.toml"), fs::Root::Anywhere, f"[package]\nname = \"program_test\"\nversion = \"0.1.0\"\n{dependency}")
     let written = f"tests/{program.name}.nika"
-    // **The `--bounds` reports a `.bounds` or `.loops.bounds` expects**
-    // (#1069), as `check --bounds` computes them for the program; what is
-    // proved does not depend on the build's settings (ADR-306 D14).
-    let mut off: String = ""
+    // **The `--bounds` report a `.bounds` expects** (#1069), as `check
+    // --bounds` computes it for the program; what is proved does not depend
+    // on the build's settings (ADR-306 D14, ADR-361 D14).
+    let mut report: String = ""
     if program.bounds != null {
-        off = project_tests_relocated(host.explained(["--bounds", "--optimization", "prove-through-loops:off"], entry, own), entry, written, root)
-    }
-    let mut on: String = ""
-    if program.loops_bounds != null {
-        on = project_tests_relocated(host.explained(["--bounds", "--optimization", "prove-through-loops:on"], entry, own), entry, written, root)
+        report = project_tests_relocated(host.explained(["--bounds"], entry, own), entry, written, root)
     }
     // **The `--asserts` report an `.asserts` expects** (ADR-269 D7).
     let mut asserts: String = ""
@@ -670,7 +663,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     let built = host.compiler("build", setting, project, own, own, Bytes([]))
     if built.code != 0 {
         let refused = project_tests_refused_outcome(program, project_tests_relocated(built.stderr, entry, written, root))
-        return project_tests_bounds_outcome(program, refused, off, on, asserts)
+        return project_tests_bounds_outcome(program, refused, report, asserts)
     }
     // **The program runs in the package's directory** (ADR-269 D22, #1398),
     // as a `test` block does, so it reads the package's files by relative
@@ -689,7 +682,7 @@ pub fn project_tests_program_test[H: ProjectTestsProgramHost](host: ref H, progr
     }
     let (out, said) = ran
     let outcome = project_tests_ran_outcome(program, out.code, out.stdout, project_tests_relocated(said, entry, written, root))
-    return project_tests_bounds_outcome(program, outcome, off, on, asserts)
+    return project_tests_bounds_outcome(program, outcome, report, asserts)
 }
 
 /// What `--bless` did with one test.
@@ -718,7 +711,7 @@ pub fn project_tests_blessed_line(label: String, blessed: ref ProjectTestsBlesse
 /// from what happened, a refusal into `NAME.stderr` only, `NAME.stdout` made where the
 /// test has none and printed something (#1238), `NAME.stderr` made likewise
 /// where `stderr` (`--bless-stderr`) says so, and the `--bounds`
-/// reports into the `NAME.bounds` and `NAME.loops.bounds` there are (#1069). A program that
+/// report into the `NAME.bounds` there is (#1069). A program that
 /// built and ended unsuccessfully, or whose settings disagree, is not blessed;
 /// one that stopped is, into its `NAME.stops`, where it has one, never a new
 /// one: a stop nobody declared stays a failure (#1260).

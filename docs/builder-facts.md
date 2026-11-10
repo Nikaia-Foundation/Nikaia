@@ -26,6 +26,16 @@ together with the specification section and an example test.
 
 ### Every run
 
+* **`lower-std` runs the bounds walk**, so a slower walk slows every `lower-std` (one ran past 20 minutes and was killed): while you change the walk, lower with the binary before your change and measure with yours once. (issue-1470)
+* **After a change to any `bounds_*.nika`, each `lower-std` re-proves std with the new walk: 10-13 minutes, not the 40 s of `builder.md`.** Plan one such cycle per hour; iterate with `check --bounds` on a probe reduced from the real site, and find a slowdown with a few `gdb` stack samples (a minute), not callgrind (an hour). (issue-1470)
+* `/usr/bin/time` does not exist here; time a command with the bash `time` keyword or `date +%s.%N` before and after. (issue-1470)
+* `cargo fmt -- FILE` fails here; run `cargo fmt` at the repository root or `rustfmt --edition 2024 FILE`. (issue-1473)
+* A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. (issue-1473)
+* A wip branch whose single commit sits on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`, after `git diff --stat BASE HEAD` shows HEAD has not touched its files; after `lower-std`, an empty `git diff --stat wip/X -- crates/nikaia-std/src/tools/lowered` shows its lowered files are current. (issue-1470)
+* A fix in our tool sources (not the compiler) has no fails-before run of the compiler; show instead the same test program written the old way reported checked. (issue-1496)
+* `lower-std --bounds` prints only verdicts; a site's goal and facts come from `lower-std --bounds --bounds-trace tools/FILE.nika:LINE`, which is cheaper than re-running the whole walk to re-measure one site. (issue-1496)
+* A test parameter written `ref String` draws NK1261 (`ref` is redundant); write `String`. (issue-1496)
+* **A new `nikaia` flag is declared in clap in `crates/nikaia/src/main.rs` (Rust)**: the command line cannot be Nikaia-only, so a flag needs that Rust plumbing even under *no new Rust*. A development aid read deep inside is kept in a static `OnceLock` set there, not passed through every caller. (issue-1495)
 * **ADRs live in `docs/specification/adr/`**; search them with the Grep tool, since a `grep -r` from the root runs into `target/`. A script test run by hand resolves a relative `target/fast/nikaia` under its tmp dir: run a copy with the absolute path. (issue-1397, issue-1414)
 * **Copy `target/fast/nikaia` to your scratchpad before your first build**: it
   is the before binary for the fails-before run, and the binary long test runs
@@ -172,6 +182,15 @@ together with the specification section and an example test.
 * A `let x: V? = m.get(k)` or `m[k]` is typed `ref V?` by #297's `of_a_map` block in `check_core_stmt.nika`; a value-typed read must be exempted there. (issue-1460)
 * New test programs go in `tests/compiler/tests/NAME.nika` (with `.stdout` and an empty `.bounds` before `--bless`), not in `tests/compiler/`. (issue-1470)
 * A copy of `target/fast/nikaia` is no "before" binary: other sessions rebuild it from other trees, so build the fails-before binary from HEAD's `.nika`. (issue-1483)
+* A wip branch with a single commit on an ancestor of HEAD is applied with `git diff HEAD...wip/X | git apply`. Check with `git diff --stat BASE HEAD` that HEAD has not touched its files since. (issue-1470)
+* The fixpoint check after applying a wip is `git diff --stat wip/X -- crates/nikaia-std/src/tools/lowered` after `lower-std`: empty means the lowered files committed on the wip are current. (issue-1470)
+* `lower-std --sysroot` takes the `crates` directory of the copy (`X/crates`); given `X` it fails at once with "reading X/nikaia-std/src". (issue-1473)
+* When a wip draft was built before your run, `target/fast/nikaia` already holds it; build the before binary by checking out HEAD's version of only your own files, building, then `git apply` your saved patch. (issue-1473)
+* The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)
+* A new `nikaia` flag must be declared in clap in `crates/nikaia/src/main.rs` (Rust); a development aid read deep inside can be kept in a static `OnceLock` set there, instead of passing it through every caller. (issue-1495)
+* `lower-std --bounds` prints only verdicts; to see a site's goal and facts, run `lower-std --bounds --bounds-trace tools/FILE.nika:LINE`. (issue-1496)
+* The walk gets no fact from `let end = a.min(n)`, so a slice `s.bytes[0..<end]` stays checked whatever length `n` names. (issue-1496)
+* A test parameter written `ref String` draws an NK1261 warning; write `String`. (issue-1496)
 * Checker facts (`check_facts.nika`) are pure Nikaia with no Rust mirror: a new field needs only its declaration and its initializer there. (issue-1411)
 * A defect that shows only when the call crosses packages is often a type `qualify` (`ty.nika`) leaves unqualified, so a dependency's `H` never matches the caller's `lib::H`; check that before the lend logic. (issue-1417)
 * A cross-package probe or test copies the `mktemp` two-package setup of `tests/compiler/tests/dependency_struct_in_a_hole.nika` and runs `run` in `{tmp}/app`. (issue-1417)

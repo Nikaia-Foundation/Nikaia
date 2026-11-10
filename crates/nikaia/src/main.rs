@@ -61,10 +61,10 @@ pub struct Cli {
     /// the compiler proved inside without its check, and
     /// `remove-overflow-checks:on` a `+`, `-` or `*` it proved stays inside its
     /// type; what is proved does not depend on them, and a check nothing
-    /// proves stays either way. `prove-through-loops:on` asks a check a loop
-    /// leaves open once more through the loop's invariant (ADR-361 D10).
-    /// `skip-free-at-exit:on` leaves what `main` holds at its end to the
-    /// operating system. All are `off` by default.
+    /// proves stays either way; every build asks a check a loop leaves open
+    /// through the loop's invariant (ADR-361 D14). `skip-free-at-exit:on`
+    /// leaves what `main` holds at its end to the operating system. All are
+    /// `off` by default.
     ///
     /// May be given more than once; overrides `nikaia.toml`'s
     /// `[build] optimization`.
@@ -177,6 +177,14 @@ pub struct Cli {
     /// Like `--asserts`, it explains a decision rather than changing one.
     #[arg(long, global = true)]
     pub bounds: bool,
+
+    /// With `--bounds`, show for each goal the walk asks on line `LINE`
+    /// (`FILE:LINE` for `lower-std`, the file named by the end of its path)
+    /// the facts it was asked with, how many the cap on facts dropped, and
+    /// the rules between list fields the body uses (#1495). A development
+    /// aid: without it, nothing changes.
+    #[arg(long, global = true, value_name = "LINE")]
+    pub bounds_trace: Option<String>,
 
     /// Print what a `T::fields` loop was unrolled to, for the types actually
     /// used ([ADR-304](../../../docs/specification/adr/adr-304.md) D9,
@@ -1155,6 +1163,9 @@ fn run() -> Result<()> {
     }
 
     let args = Cli::parse();
+    if let Some(asked) = &args.bounds_trace {
+        nikaia::bounds_report::trace_at(asked.clone());
+    }
 
     let Some(command) = &args.command else {
         refuse!(

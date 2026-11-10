@@ -1,0 +1,19 @@
+bounds in tests/prove_a_builders_lengths.nika: 11 indexes, 10 proved; 6 operations, 2 proved
+    31  self.col[m]                               proved
+    32  self.holds[a]                             proved
+    33  s += self.row[a] + self.lits[2 * a].len()  checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    33  self.row[a] + self.lits[2 * a].len()      checked: a value read out of a list, of which the walk knows no fact (#797, #798): another read
+    33  self.row[a]                               proved
+    33  self.lits[2 * a]                          proved
+    33  2 * a                                     checked: a value read out of a list, of which the walk knows no fact (#797, #798): another read
+    48  atoms_in[a]                               proved
+    52  w.col[col]                                proved
+    57  a += 1                                    proved
+    76  self.col[m]                               proved
+    77  self.holds[a]                             checked: a value read out of a list, of which the walk knows no fact (#797, #798): another read
+    78  s += self.row[a]                          checked: a counter a loop changes, with no bound tied to the loop's turns (#1053 step 4, #432)
+    78  self.row[a]                               proved
+    90  v.col[0]                                  proved
+    92  atoms_in[a]                               proved
+    95  a += 1                                    proved
+  derived  start: 0 <= columns, columns <= atoms_in.len(), columns < atoms_in.len(), proved at the calls on lines 102

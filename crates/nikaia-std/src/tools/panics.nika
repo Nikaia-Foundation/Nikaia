@@ -41,7 +41,8 @@ pub struct PanicFacts {
     pub proven_indices: collections::BTreeSet[i64],
     pub proven_arithmetic: collections::BTreeSet[i64],
     pub proven_negations: collections::BTreeSet[i64],
-    /// The list literals the checker placed in the task's block
+    /// The list literals (and, by their `String`, the texts) the checker
+    /// placed in the task's block
     /// (`check_core_place_in_block`, ADR-327 D9), by node: what `places`
     /// asks (D13).
     pub placed: collections::BTreeSet[i64],
@@ -355,7 +356,13 @@ fn panics_expr(expr: ref Expr, items: ref Vec[Spanned[Item]], names: ref winnow_
             return
         }
         Expr::Spawn { .. } => return,
-        Expr::Call { func, .. } => panics_call(expr, func, items, names, own, library, reach),
+        Expr::Call { func, .. } => {
+            // A text placed in the block is keyed by the `String` it calls.
+            if facts.placed.contains(node_key(func)) {
+                reach.places = true
+            }
+            panics_call(expr, func, items, names, own, library, reach)
+        },
         Expr::Dsl { .. } => {
             reach.unknown = true
         }

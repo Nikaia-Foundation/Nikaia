@@ -2037,6 +2037,12 @@ impl EmitState {
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope) {
             return true
         }
+        // **A text the checker placed in the task's block** (ADR-327 D9,
+        // `check_core_place_in_block`) grows there.
+        if args.len() == 0 && self.facts.placed_in_block.contains(node_key(func)) {
+            out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)")
+            return true
+        }
         match func {
             Expr::Variable(name, _) => {
                 if self.emit_call_by_name(world, walk, out, host, emit_text(world, name), args, depth, flow, scope) {

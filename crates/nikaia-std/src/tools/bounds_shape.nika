@@ -57,6 +57,10 @@ pub struct Around {
 	/// The rules found between the private list fields of a type, not yet
 	/// checked (ADR-369 D4, `bounds_rules.nika`).
 	pub rules: Vec[BoundsRule],
+	/// **The rules that hold, by type**, found once for a round of
+	/// `bounds_fields` (`rules_held_all`), whose bodies all walk the same
+	/// context: empty elsewhere, where each body finds them itself.
+	pub held: collections::BTreeMap[String, Vec[BoundsRule]],
 	/// The private functions whose callers may bound their parameters, and
 	/// what the walks so far proved at their calls (ADR-391 D1,
 	/// `bounds_derived.nika`).

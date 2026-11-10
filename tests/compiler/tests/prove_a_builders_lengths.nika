@@ -1,0 +1,105 @@
+/// **A builder's lists keep the lengths it hands them back with** (ADR-306
+/// D25, #1470): a free function that builds a value from a literal, fills
+/// its lists and hands it back, using it otherwise only through its fields
+/// and its type's methods, is asked for the `length` rules where it hands
+/// it back and before each method it calls on it, not at its literal. `W`'s
+/// reads by a value of an inner list are proved; `V`'s builder fills
+/// `holds` only on some turns, so `holds[a]` stays checked.
+struct Atom {
+	k: i64,
+}
+
+struct W {
+	atoms: Vec[Atom],
+	row: Vec[i64],
+	holds: Vec[bool],
+	lits: Vec[Vec[i64]],
+	col: Vec[Vec[i64]],
+	unsat: Vec[i64],
+}
+
+impl W {
+	fn mark(ref mut self, c: i64) {
+		self.unsat.push(c)
+	}
+
+	fn get(ref self, m: i64) -> i64 {
+		if m < 0 || m >= self.col.len() {
+			return 0
+		}
+		let mut s = 0
+		for a in self.col[m] {
+			if self.holds[a] {
+				s += self.row[a] + self.lits[2 * a].len()
+			}
+		}
+		s
+	}
+}
+
+fn start(atoms_in: ref Vec[Atom], columns: i64) -> W? {
+	let atoms = atoms_in.len()
+	let mut w = W { atoms: atoms_in.clone(), row: [], holds: [], lits: [], col: [], unsat: [] }
+	for _ in 0..<columns {
+		w.col.push([])
+	}
+	let mut a = 0
+	while a < atoms {
+		let col = atoms_in[a].k
+		if col < 0 || col >= columns {
+			return null
+		}
+		w.col[col].push(a)
+		w.row.push(a)
+		w.holds.push(true)
+		w.lits.push([])
+		w.lits.push([])
+		a += 1
+	}
+	w.mark(0)
+	return w
+}
+
+struct V {
+	atoms: Vec[Atom],
+	row: Vec[i64],
+	holds: Vec[bool],
+	col: Vec[Vec[i64]],
+}
+
+impl V {
+	fn get(ref self, m: i64) -> i64 {
+		if m < 0 || m >= self.col.len() {
+			return 0
+		}
+		let mut s = 0
+		for a in self.col[m] {
+			if self.holds[a] {
+				s += self.row[a]
+			}
+		}
+		s
+	}
+}
+
+fn start_v(atoms_in: ref Vec[Atom]) -> V? {
+	let atoms = atoms_in.len()
+	let mut v = V { atoms: atoms_in.clone(), row: [], holds: [], col: [[]] }
+	let mut a = 0
+	while a < atoms {
+		v.col[0].push(a)
+		v.row.push(a)
+		if atoms_in[a].k == 0 {
+			v.holds.push(true)
+		}
+		a += 1
+	}
+	return v
+}
+
+fn main() throws {
+	let atoms = [Atom { k: 0 }, Atom { k: 1 }, Atom { k: 0 }]
+	let w = start(atoms, 2) ?? return
+	let v = start_v([Atom { k: 0 }, Atom { k: 0 }]) ?? return
+	println(f"{w.get(0)} {w.get(1)} {v.get(0)}")
+}

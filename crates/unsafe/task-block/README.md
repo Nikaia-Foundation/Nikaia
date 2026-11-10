@@ -40,6 +40,11 @@ push(&mut xs, 7);                   // a full block ends the task, here
   and `Vec`, `Text` and `String` hand over the same memory where it is
   outside the running task's block; only a value in the block is copied
   out.
+* **`Housed<T>` is a shared value's block** (D5, D6): a value with a block of
+  its own, put in place by `inside` for a door, its construction and its
+  rebuild, and around its drop. What a door places is the value's, not the
+  task's; a full one ends the door in `full`, which the lock reads as a
+  poison. What leaves the door is built outside (`Clone`, D9).
 * **A block value never leaves its task** (D9): the caller places in the
   block only what cannot outlive the task, and frees it while the task is
   polled. The caller is `nikaia-std` (`src/task.rs` puts a task's block in
@@ -55,6 +60,7 @@ push(&mut xs, 7);                   // a full block ends the task, here
 | `Block::grow` | `copy_nonoverlapping(ptr, moved, old)` | both are live cuts of at least `old` bytes, and two live cuts never share a byte: a cut's bytes return to a page only when its count frees the page |
 | `Drop for Block`, `Drop for Spares` | `dealloc(memory, MEMORY)` | `memory` came from `alloc(MEMORY)` and nothing points into it any more: the task is over (its `Entered` is gone), or it is a spare |
 | `current` | `CURRENT`'s pointer as `&Block` | it is set only by `enter` from a live `&Block` and reset when that `Entered` is dropped, which the block's owner holds for the poll |
+| `Drop for Housed` | `ManuallyDrop::drop(&mut self.value)` | the value is dropped once, in the `Housed`'s own drop, with its block in place, and nothing reads it after; the block is dropped after it, as a field |
 | `answered` | `NonNull::new_unchecked` | a block's cut is `start.add(at)` of a non-null `start` |
 | `impl Allocator for Place` | the allocator's contract | a block cut stays valid until it is given back or the task ends, and no block cut outlives its task (D9); a pointer not inside the running block is the global allocator's, which answers for it |
 | `Place::deallocate`, `grow` | `Global.deallocate`, `Global.grow` | reached only for a pointer not in the running task's block, so one `Global` allocated; the caller keeps the contract's layout |

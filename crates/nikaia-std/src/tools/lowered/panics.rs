@@ -254,7 +254,11 @@ pub(crate) fn panics_expr(expr: &Expr, items: &[Spanned<Item>], names: &winnow_g
             return;
         },
         Expr::Spawn { .. } => { return; },
-        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); panics_call(expr, func, items, names, own, library, reach); },
+        Expr::Call { func, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if facts.placed.contains(&node_key(func)) { reach.places = true; }
+            panics_call(expr, func, items, names, own, library, reach);
+        },
         Expr::Dsl { .. } => { reach.unknown = true; },
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);

@@ -57,15 +57,16 @@ pub fn optimizations(words: &str) -> Result<(BoundsChecks, OverflowChecks), nika
         let (name, level) = match word.split_once(":") { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--optimization={}` needs `on` or `off`: write `--optimization=remove-bounds-checks:on` or `--optimization=remove-overflow-checks:on`", word)), &"optimizations")) };
         match name {
             "remove-bounds-checks" => { bounds = match BoundsChecks::parse(level) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`remove-bounds-checks` is `on` or `off`, not `{}`{}", level, project_settings_renamed(level))), &"optimizations")) }; },
-            "skip-free-at-exit" | "prove-through-loops" => { if !matches!(level, "on" | "off") { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`{}` is `on` or `off`, not `{}`", name, level)), &"optimizations")); } },
+            "skip-free-at-exit" => { if !matches!(level, "on" | "off") { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`{}` is `on` or `off`, not `{}`", name, level)), &"optimizations")); } },
             "remove-overflow-checks" => { overflow = match OverflowChecks::parse(level) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`remove-overflow-checks` is `on` or `off`, not `{}`{}", level, project_settings_renamed(level))), &"optimizations")) }; },
-            _ => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("there is no optimization called `{}`: the ones there are, are `remove-bounds-checks`, `remove-overflow-checks`, `prove-through-loops` and `skip-free-at-exit`", name)), &"optimizations")); },
+            "prove-through-loops" => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("there is no optimization `prove-through-loops` any more: every build asks a check a loop leaves open through the loop (ADR-361 D14). Remove `{}`", word)), &"optimizations")); },
+            _ => { return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("there is no optimization called `{}`: the ones there are, are `remove-bounds-checks`, `remove-overflow-checks` and `skip-free-at-exit`", name)), &"optimizations")); },
         }
     }
     Ok((bounds, overflow))
 }
 
-pub fn prove_through_loops(words: &str) -> bool { nikaia_std::index::or(words.split(',').map(|w| { w.trim() }).filter_map(|w| { w.strip_prefix("prove-through-loops:") }).last(), || "") == "on" }
+pub fn prove_through_loops(words: &str) -> bool { true }
 
 pub fn skip_free_at_exit(words: &str) -> bool { nikaia_std::index::or(words.split(',').map(|w| { w.trim() }).filter_map(|w| { w.strip_prefix("skip-free-at-exit:") }).last(), || "") == "on" }
 
@@ -106,11 +107,10 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
         _ => format!("/remove-overflow-checks:{}", overflow.name()),
     };
     let skip_free = if skip_free_on { "/skip-free-at-exit:on" } else { "" };
-    let through_loops = if through_loops_on { "/prove-through-loops:on" } else { "" };
     let library = if words.artifact == "c-library" { format!("/c-library:{}", words.symbol_prefix) } else if words.artifact == "rust-library" { String::from("/rust-library") } else { String::from("") };
     let cpu = if words.cpu.is_some() { format!("/cpu:{}", cpu_key) } else { String::from("") };
     let root = if crate_root == "crate" { String::from("") } else { format!("/root:{}", crate_root) };
-    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, through_loops, library, cpu, root)
+    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, library, cpu, root)
 }
 
 pub fn panic_strategy(target: &Target) -> String {

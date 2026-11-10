@@ -1,0 +1,6 @@
+the first task runs
+the task kept 3000, the cache holds 2
+the second task runs
+outgrown: the task is over its memory budget
+the second task ended: true
+rebuilt: 7, 1 item

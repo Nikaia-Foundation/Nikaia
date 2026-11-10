@@ -1,0 +1,41 @@
+// #1495: `check --bounds --bounds-trace LINE` shows, for each goal of a
+// statement on that line, the facts the walk asked it with, how many the cap
+// on facts dropped, and the rules between list fields. Line 3's read is
+// proved by the `if`'s facts; line 5's stays checked, and its trace shows
+// that no fact bounds `xs.len()` from below.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    let program = "fn pick(xs: Vec[i64], i: i64) -> i64 {\n    if i >= 0 && i < xs.len() {\n        return xs[i]\n    }\n    return xs[0]\n}\n\nfn main() throws {\n    println(pick([1, 2, 3], 1))\n}\n"
+    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, program)
+    let plain = process::run(nikaia, ["check", "--bounds", "main.nika"]; dir: tmp.clone()).stdout.clone()
+    for asked in ["3", "main.nika:5", "other.nika:5"] {
+        let out = process::run(nikaia, ["check", "--bounds", "--bounds-trace", asked.clone(), "main.nika"]; dir: tmp.clone()).stdout.clone()
+        if out == plain {
+            println(f"{asked}: the report alone")
+            continue
+        }
+        let mut shown = false
+        for line in out.lines() {
+            if line.starts_with("bounds trace") {
+                shown = true
+            }
+            if line.starts_with("Checked") {
+                shown = false
+            }
+            if shown {
+                println(line)
+            }
+        }
+    }
+    process::run("rm", ["-rf", tmp])
+}

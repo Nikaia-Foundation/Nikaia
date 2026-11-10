@@ -969,7 +969,7 @@ fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref
             continue
         }
         let place = pieces[0].clone()
-        let source = entry.bytes[place.len() + 1..<entry.len()].text() catch { continue }
+        let source = entry.bytes[place.len() + 1..<entry.bytes.len()].text() catch { continue }
         let held_at = vc_param_index(signature, place)
         let source_at = vc_param_index(signature, source)
         if held_at < 0 || source_at < 0 || held_at >= args.len() || source_at >= args.len() {

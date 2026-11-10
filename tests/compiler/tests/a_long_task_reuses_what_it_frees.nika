@@ -1,0 +1,29 @@
+// A task's block counts what it holds, not what it has allocated (ADR-327
+// D10, D12): a long task that builds and frees a megabyte a thousand times,
+// in lists of 32 KiB, never holds more than its 64 KiB block and runs to its
+// end.
+fn churn() -> i64 {
+    let mut total = 0
+    for _turn in 0..<1000 {
+        for _piece in 0..<32 {
+            let mut xs: Vec[i64] = []
+            for i in 0..<4096 {
+                xs.push(i)
+            }
+            total += xs.len()
+        }
+    }
+    return total
+}
+
+fn main() throws {
+    let n = async churn() catch {
+        match error {
+            task::OverBudget => println(f"over budget: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    let width = 8
+    println(f"megabytes churned: {n * width / 1048576}")
+}

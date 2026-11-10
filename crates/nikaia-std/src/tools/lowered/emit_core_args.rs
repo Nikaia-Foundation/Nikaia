@@ -1269,6 +1269,10 @@ impl EmitState {
             }
         }
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(true); }
+        if args.is_empty() && self.facts.placed_in_block.contains(&node_key(func)) {
+            out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)");
+            return Ok(true);
+        }
         match func {
             Expr::Variable(name, _) => {
                 let name = *name;

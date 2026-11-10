@@ -2733,7 +2733,27 @@ fn check_core_place_in_block(mut state: CheckState, world: ref CheckWorld, block
     let mut at = 0
     while at < count {
         match block.stmts[at].node {
-            Stmt::Let { names, value, .. } => {
+            Stmt::Let { names, value, mutable, .. } => {
+                // **A text a task builds for itself** (#490 step 5): a
+                // `let mut s = String()` that stays in its function grows in
+                // the block, keyed by the `String` it calls.
+                if names.len() == 1 && mutable && check_core_placeable_text(world, value) {
+                    let name = f"{world.words.resolve(names[0])}"
+                    if check_core_a_plain_text(state, name) && check_core_view_list_bound_once(world, block, name) {
+                        let mut local = true
+                        let mut later = at + 1
+                        while later < count && local {
+                            local = check_core_stays_in_stmt(state, world, block.stmts[later].node, name)
+                            later += 1
+                        }
+                        if local {
+                            match value {
+                                Expr::Call { func, .. } => state.facts.placed_in_block.insert(node_key(func)),
+                                else => {},
+                            }
+                        }
+                    }
+                }
                 if names.len() == 1 && check_core_placeable_literal(value) {
                     let name = f"{world.words.resolve(names[0])}"
                     if check_core_a_plain_list(state, name) && check_core_view_list_bound_once(world, block, name) {
@@ -2759,6 +2779,26 @@ fn check_core_place_in_block(mut state: CheckState, world: ref CheckWorld, block
 fn check_core_placeable_literal(value: ref Expr) -> bool sync {
     return match value {
         Expr::ListLit { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether `value` is `String()`, an empty text the emitter can place.
+fn check_core_placeable_text(world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Call { func, args, config, .. } => args.len() == 0 && config.len() == 0 && match func {
+            Expr::Variable(found, _) => world.words.resolve(found) == "String",
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether `name` is bound, in this scope, to an owned `String`.
+fn check_core_a_plain_text(state: ref CheckState, name: ref String) -> bool sync {
+    let found = state.binding(name) ?? return false
+    return match found.ty {
+        Ty::Named { name, args, view } => !view && name == "String" && args.len() == 0,
         else => false,
     }
 }
@@ -2790,6 +2830,12 @@ fn check_core_is_the_name(world: ref CheckWorld, expr: ref Expr, name: ref Strin
 /// (`clone`, `split_off`, `into_iter` and the rest are not here).
 fn check_core_kept_method(method: ref String) -> bool sync {
     return method == "len" || method == "is_empty" || method == "push" || method == "pop" || method == "get" || method == "first" || method == "last" || method == "contains" || method == "iter" || method == "iter_mut" || method == "sort" || method == "sort_by" || method == "sort_by_key" || method == "reverse" || method == "clear" || method == "insert" || method == "remove" || method == "swap" || method == "truncate" || method == "extend" || method == "join" || method == "resize" || method == "retain" || method == "dedup"
+}
+
+/// Whether a method of a text keeps it where it is: it reads it or changes
+/// it in place, and hands out no text and no view of it.
+fn check_core_kept_text_method(method: ref String) -> bool sync {
+    return method == "len" || method == "is_empty" || method == "push" || method == "push_str" || method == "pop" || method == "contains" || method == "starts_with" || method == "ends_with" || method == "clear" || method == "truncate" || method == "insert" || method == "insert_str" || method == "remove"
 }
 
 /// Whether a statement after the binding uses `name` only where it stays.
@@ -2854,7 +2900,9 @@ fn check_core_stays_in(state: ref CheckState, world: ref CheckWorld, expr: ref E
             }
             if check_core_is_the_name(world, receiver, name) {
                 let described = state.facts.method_callees.get(id_of(receiver) as i64)
-                check_core_kept_method(world.words.resolve(method)) && (described?.starts_with("Vec::") ?? true) && check_core_stays_in_all(state, world, args, name)
+                let called = world.words.resolve(method)
+                let kept = if check_core_a_plain_text(state, name) { check_core_kept_text_method(called) } else { check_core_kept_method(called) && (described?.starts_with("Vec::") ?? true) }
+                kept && check_core_stays_in_all(state, world, args, name)
             } else {
                 check_core_stays_in(state, world, receiver, name) && check_core_stays_in_all(state, world, args, name)
             }

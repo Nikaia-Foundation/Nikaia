@@ -403,7 +403,7 @@ impl EmitState {
             out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*");
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
             out.push(").to_vec(); ");
-            let mut handed = String::new();
+            let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
             for i in 0..rule.args.len() as i64 {
                 out.push(&format!("let __wg_value{} = ", i));
                 if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&values, (i) as usize), depth, flow, scope)?; }

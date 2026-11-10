@@ -129,6 +129,8 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 ### Lowering and lower-std
 
+* `commit.nika` stages whole files: a defect fix that shares a file with a step is split by putting HEAD's version plus the fix hunks (in the `.nika` and its lowered `.rs`) in place, committing, then restoring the step. Plan the fix as its own commit before starting the step in that file. (issue-1470)
+
 * **Check lowered tools code with `cargo check --profile fast -p nikaia-std
   --features compiler --message-format short`** right after the first
   `lower-std`; without the feature the check is a false green (k3a2).
@@ -269,12 +271,20 @@ goes into the section of its topic, in one line, with the run that paid for it.
 
 * **An index read out of an inner list of a field** (`a = self.col[c][i]`, then `self.atoms[a]`) stays checked whatever length relation the lists have, until ADR-306 D28 is built; a local list of lists is proved already (D7). Sort such a site under D28, not under #385 (that is values computed from the same table). (issue-1470)
 * **A field rule holds only if every `ref mut self` method of the type keeps it** (checked at each `return`; `most_facts()` is 48, `rules_rounds()` is 8). One method that loses it (as `score` did for `sv_walk`) drops it for the whole type. So a probe for a field rule is reduced from the real type: the target function plus every `ref mut self` method, with stub types. A synthetic probe can pass while the real code stays checked. (issue-1470)
+* **The walk keeps only the newest 48 facts (`most_facts()`) and drops the oldest without a word.** Re-pushing many facts after each loop or branch evicts the length facts a proof needs; add rule facts only where a goal reads them (`walk.rule_facts`, added in `bounding_known`). `shape.bound` includes the parameters, so "bound by the body" must also exclude `args`. (issue-1470)
+* **Expressions in the bounds walk carry no byte span** (`node_key` is a node id): a goal's line is its statement's first byte (`walk.at`, set in the statement loop), as in the `--bounds` report; `--bounds-trace LINE` shows the goals of statements starting on that line. (issue-1495)
+* **`rules_give` pushes about 3 facts per length rule**, so a type with many equal-length fields fills the 48-fact cap and later goals fail without a word (ADR-306 D30, #1500, moves the cap to the question). To see why a rule is dropped or a goal fails, put an env-gated `eprintln!` into the lowered `.rs` (`walk.rule_failed.insert` in `bounds_rules.rs`, the goal in `bounds_walk.rs`), rebuild without `lower-std`, then restore the file by name; it finds in one build what guessing took 15 turns for. (issue-1470)
+* Every turn fact of a loop names that loop's `#turn` variable, so "facts connected to the goal" through shared names takes in every list the loop grows; weight a name by how many facts name it. (issue-1500)
+* `rules_settle` recomputes `rules_holding` (the fixpoint over every `ref mut self` method of the type) for every body it walks, so a change that adds field-rule candidates multiplies the cost of a type like sv_walk's; only `bounds_fields` (a plain ask, no ledger) may cache it, since `ask_in` writes each proof into `nikaia.proofs` per function. (issue-1470)
+* **The walk gets no fact from `let end = a.min(n)`** (`end <= n`), so `s.bytes[0..<end]` stays checked whatever `n` is, until #1514. (issue-1496)
+* `lower-std --bounds` writes nothing and reads no cache, so the old and new binaries can measure the same tree in parallel and be diffed site by site. (issue-1500)
+* Code that runs for every question of the bounds walk must not loop over string-keyed maps; give the names integer ids first, or `lower-std` grows from minutes to tens of minutes. (issue-1500)
+* **Before adding debug prints to `bounds_*.nika`, run `nikaia check --bounds --bounds-trace LINE F.nika`** (`lower-std --bounds --bounds-trace FILE:LINE` for a tools file): for each goal of a statement starting on that line it prints the goal, every fact it was asked with (rule facts and ledger facts included), how many the 48-fact cap evicted, and the type's field rules. (issue-1495)
 * **A rule's fact over every element of a list is guarded by the list's emptiness**: `bounding_each_guarded` turns it into `len(xs) <= 0 || fact`, and `bounding_each_present` gives `len(xs) >= 1` where an element is actually read. A new kind of rule (as D28's `inner`) states its element facts through these, or it proves anything under an empty list. (issue-1483)
 * **A list field that a free function such as `main` writes is dropped from the rule candidates**, so a rule test fills its lists only through `ref mut self` methods. (issue-1483)
 * **Derived entry claims (ADR-391) key on the first non-`self` parameter**, so a method that takes only `self` gets none. (issue-1483)
 * **`nikaia check --bounds FILE`** checks a file alone; a tools file is
-  measured with `lower-std --bounds --asserts [--optimization
-  prove-through-loops:on] > R` and `nikaia run scripts/proved.nika -- R`,
+  measured with `lower-std --bounds --asserts > R` and `nikaia run scripts/proved.nika -- R`,
   before and after on the same tree. Where the walk stops:
   `docs/formal-verification.md` §2.
   The two can differ: `check --bounds FILE` proved a site D23 reaches that
@@ -327,6 +337,7 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **Delete the dead locals** a replaced block leaves, and re-grep function names
   instead of trusting line numbers from an earlier listing.
 * the old binary lowers `for x in xs.f[a..]` wrong (NK1343, `expected Symbol, found &Symbol`); after the checker fix in fb2698e9, the first build of a tool that uses it needs the index-skip form, then a switch back. (issue-1383)
+* `for rule in found` lends each element from the named local, so `held.push(rule)` in the loop is refused (NK1102, a borrowed value moved); write `held.extend(found)`. (issue-1470)
 
 ### Syntax gaps of tools/*.nika
 
