@@ -276,7 +276,7 @@ impl EmitState {
                         while ((more) as usize) < slots.len() {
                             declared.push(format!("'a{}", more));
                             applied.push(format!("'a{}", more));
-                            more += 1;
+                            more = unsafe { nikaia_std::proven::add::<i64>(more, 1) };
                         }
                     }
                     for g in generics.iter() {
