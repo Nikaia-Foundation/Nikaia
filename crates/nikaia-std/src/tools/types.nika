@@ -326,6 +326,17 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 item_types(names, method.node, here, plain, views, prefix, method.span, out)
             }
         }
+        // **A rule's value is read as a function's parameter is**
+        // (ADR-grammar-1 D6): `ref` on a word says nothing there either, and on
+        // text says what plain text says.
+        Item::Grammar(def) => {
+            for rule in def.rules {
+                for arg in rule.args {
+                    types_word_by_ref(names, arg.ty, plain, "parameter", arg.span, out)
+                    types_text_by_ref(names, arg.ty, "parameter", views, "", arg.span, out)
+                }
+            }
+        }
         else => {}
     }
 }
