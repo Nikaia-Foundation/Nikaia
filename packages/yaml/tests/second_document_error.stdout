@@ -1,0 +1,14 @@
+1 good [4-5], error 4:1 NoContent
+  documents: error 4:1
+2 good [0-1, 6-7], error none
+  documents: 2
+0 good [], error 1:1 NoContent
+  documents: error 1:1
+2 good [0-1, 6-7], error 5:1 Syntax
+  documents: error 5:1
+1 good [4-5], error 2:5 InvalidTagged
+  documents: error 2:5
+1 good [4-5], error 3:1 Syntax
+  documents: error 3:1
+0 good [], error 1:5 InvalidTagged
+  documents: error 2:6

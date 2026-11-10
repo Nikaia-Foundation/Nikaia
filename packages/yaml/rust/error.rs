@@ -40,6 +40,9 @@ pub(crate) enum ErrorImpl {
     Message(String, Option<Pos>),
     /// The native parser refused the input.
     Parse(String, Mark),
+    /// A syntax error in libyaml's words: the problem, where, and what
+    /// libyaml was doing, written after the place.
+    Libyaml(&'static str, Mark, &'static str),
     EndOfStream,
     MoreThanOneDocument,
     RecursionLimitExceeded(Mark),
@@ -132,7 +135,45 @@ pub(crate) fn parse(e: &native::Error) -> Error {
         line: (e.line - 1).max(0) as usize,
         column: (e.column - 1).max(0) as usize,
     };
-    new(ErrorImpl::Parse(e.message.as_str().to_owned(), mark))
+    new(match e.kind {
+        native::ErrorKind::DepthLimit => ErrorImpl::RecursionLimitExceeded(mark),
+        native::ErrorKind::Reserved => ErrorImpl::Libyaml(
+            "found character that cannot start any token",
+            mark,
+            "while scanning for the next token",
+        ),
+        native::ErrorKind::NoContent => ErrorImpl::Libyaml(
+            "did not find expected node content",
+            mark,
+            "while parsing a block node",
+        ),
+        native::ErrorKind::UnknownAnchor => ErrorImpl::UnknownAnchor(mark),
+        // **A scalar its core tag does not fit** (ADR-yaml-1 D5) is serde's
+        // invalid value, as serde_yaml's deserializer of the tag says it.
+        native::ErrorKind::InvalidTagged => ErrorImpl::Message(
+            format!(
+                "invalid value: string {:?}, expected {}",
+                e.text.as_str(),
+                expected_by(e.tag.as_str())
+            ),
+            Some(Pos {
+                mark,
+                path: ".".to_owned(),
+            }),
+        ),
+        _ => ErrorImpl::Parse(e.message.as_str().to_owned(), mark),
+    })
+}
+
+/// What serde_yaml's deserializer of a core tag expects.
+fn expected_by(tag: &str) -> &'static str {
+    match tag.rsplit(':').next() {
+        Some("bool") => "a boolean",
+        Some("int") => "an integer",
+        Some("float") => "a float",
+        Some("null") => "null",
+        _ => "a string",
+    }
 }
 
 /// Gives a message without a place the place and the path of the node it is
@@ -161,6 +202,9 @@ impl Display for Error {
             // libyaml's own errors give the offset where they know no line.
             Some(mark) if mark.index != 0 && self.0.is_parse() => write!(f, " at {}", mark)?,
             _ => {}
+        }
+        if let Some(context) = self.0.context() {
+            write!(f, ", {}", context)?;
         }
         Ok(())
     }
@@ -198,9 +242,17 @@ impl de::Error for Error {
 impl ErrorImpl {
     fn is_parse(&self) -> bool {
         match self {
-            ErrorImpl::Parse(..) => true,
+            ErrorImpl::Parse(..) | ErrorImpl::Libyaml(..) => true,
             ErrorImpl::Shared(err) => err.is_parse(),
             _ => false,
+        }
+    }
+
+    fn context(&self) -> Option<&'static str> {
+        match self {
+            ErrorImpl::Libyaml(_, _, context) => Some(context),
+            ErrorImpl::Shared(err) => err.context(),
+            _ => None,
         }
     }
 
@@ -208,6 +260,7 @@ impl ErrorImpl {
         match self {
             ErrorImpl::Message(_, Some(Pos { mark, .. }))
             | ErrorImpl::Parse(_, mark)
+            | ErrorImpl::Libyaml(_, mark, _)
             | ErrorImpl::RecursionLimitExceeded(mark)
             | ErrorImpl::UnknownAnchor(mark) => Some(*mark),
             ErrorImpl::Shared(err) => err.mark(),
@@ -233,6 +286,7 @@ impl ErrorImpl {
                 f.write_str(msg)
             }
             ErrorImpl::Parse(msg, _) => f.write_str(msg),
+            ErrorImpl::Libyaml(problem, _, _) => f.write_str(problem),
             ErrorImpl::EndOfStream => f.write_str("EOF while parsing a value"),
             ErrorImpl::MoreThanOneDocument => f.write_str(
                 "deserializing from YAML containing more than one document is not supported",

@@ -141,11 +141,45 @@ struct Dir {
 	prefix: String,
 }
 
+// A failure: what went wrong (`kind`, so that a caller such as the serde_yaml
+// facade can word it its own way, D10), the message, and where: the line and
+// the column (from 1, in characters) and the byte offset. `tag` and `text`
+// are an `InvalidTagged` scalar's core tag (`tag:yaml.org,2002:bool`) and its
+// text as written, empty for every other kind.
 pub struct Error {
+	pub kind: ErrorKind,
 	pub message: String,
 	pub line: i64,
 	pub column: i64,
 	pub offset: i64,
+	pub tag: String,
+	pub text: String,
+}
+
+pub enum ErrorKind {
+	// Text the grammar refuses, where none of the kinds below says more.
+	Syntax,
+	// `@` or `` ` `` where a token begins (YAML 1.2.2 5.3, `c-reserved`), at it.
+	Reserved,
+	// `]` or `}` first on a line where a block node's content belongs, at it.
+	NoContent,
+	// Nesting deeper than `Limits.depth`, at the collection that passes it.
+	DepthLimit,
+	// Input longer than `Limits.bytes`, at the first byte past the limit.
+	SizeLimit,
+	// A scalar whose text does not fit its core tag (`!!bool str`, D5), at
+	// the scalar's first property.
+	InvalidTagged,
+	// `load`: an alias to no anchor before it, at the alias.
+	UnknownAnchor,
+	// `load`: an alias inside its own anchor's node, at the alias.
+	RecursiveAlias,
+	// `load`: aliases producing more nodes than `Limits.alias_nodes` allows.
+	AliasLimit,
+	// `load`: a key given twice in one mapping, at the second.
+	DuplicateKey,
+	// `load`: a `<<` whose value is no mapping or list of mappings.
+	Merge,
 }
 
 impl Error for Error {
@@ -981,9 +1015,10 @@ grammar Yaml {
 	// escape is a parse error with its line and column, and `scalar::from` is
 	// proved by the guard before it.
 	// `k` is the node's tag: a core tag that fixes a kind other than a string
-	// reads the text between the quotes as that kind, its shape checked here.
+	// reads the text between the quotes as that kind, its shape checked by
+	// `mistagged` once the document is read.
 	rule Double(n: i64, k: TagKind) -> Node =
-		a:here "\"" s:text(DoublePlain*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
+		a:here "\"" s:text(DoublePlain*) "\"" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, false) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
@@ -1009,7 +1044,7 @@ grammar Yaml {
 				value: v,
 			}
 		}
-		| a:here "\"" s:text(parts:DoublePart(n)*) "\"" b:here if(fits(k, s), "a scalar its tag fits") -> {
+		| a:here "\"" s:text(parts:DoublePart(n)*) "\"" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
 			let mut d = String()
 			for p in parts {
 				d.push_str(p)
@@ -1081,7 +1116,7 @@ grammar Yaml {
 	// Content that fits such a tag is one word, the written text trimmed: the
 	// value keeps that view, as `Value::Int` and `Value::Float` do.
 	rule BlockScalar(n: i64; k: TagKind = TagKind::Untagged) -> Node =
-		a:here st:BlockStyle if(block_fits(k), "a scalar its tag fits") h:Head e:here HeadEnd r:here s:text(i:BlockBody(n, h.indent))
+		a:here st:BlockStyle if(scalar_fits(k), "a scalar its tag fits") h:Head e:here HeadEnd r:here s:text(i:BlockBody(n, h.indent))
 		if(block_content_fits(k, s, i, h.chomp, st), "a scalar its tag fits") -> {
 			let v = match k {
 				TagKind::Null => Value::Null
@@ -1144,7 +1179,7 @@ grammar Yaml {
 
 	// `c-single-quoted`: `''` is a quote.
 	rule Single(n: i64, k: TagKind) -> Node =
-		a:here "'" s:text(SingleChar(n)*) "'" b:here if(fits(k, s), "a scalar its tag fits") -> {
+		a:here "'" s:text(SingleChar(n)*) "'" b:here if(scalar_fits(k), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, false) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
@@ -1178,9 +1213,9 @@ grammar Yaml {
 	// A plain scalar, resolved by the core schema. In flow the flow
 	// indicators end it; `multi` lets it go on over lines indented past `n`.
 	// `k` is the node's tag: a core tag fixes the kind, its shape checked
-	// here; no tag, or another, resolves by the core schema.
+	// by `mistagged`; no tag, or another, resolves by the core schema.
 	rule Plain(n: i64, flow: bool, multi: bool; k: TagKind = TagKind::Untagged) -> Node =
-		a:here s:text(PlainFirst(flow) PlainMore(n, flow, multi)*) b:here if(fits(k, s), "a scalar its tag fits") -> {
+		a:here s:text(PlainFirst(flow) PlainMore(n, flow, multi)*) b:here if(scalar_fits(k), "a scalar its tag fits") -> {
 			let v = match resolve(k, s, true) {
 				Kind::Null => Value::Null
 				Kind::True => Value::Bool(true)
@@ -1326,8 +1361,11 @@ fn fits(k: TagKind, s: String) -> bool sync {
 	}
 }
 
-// Whether a block scalar may carry the tag: any but a collection's.
-fn block_fits(k: TagKind) -> bool sync {
+// Whether a scalar may carry the tag: any but a collection's. Whether a
+// flow scalar's text fits a core tag is checked once the document is read
+// (`mistagged`), so that a mismatch is an error of its own kind at the
+// scalar, not a syntax error where the grammar gave up.
+fn scalar_fits(k: TagKind) -> bool sync {
 	return match k {
 		TagKind::Seq => false
 		TagKind::Map => false
@@ -1638,23 +1676,110 @@ fn offset_of(input: ref Bytes, line: i64, column: i64) -> i64 sync {
 	return n
 }
 
+// An error of `kind` at a byte offset, its line and column counted.
+fn error_at(input: ref Bytes, offset: i64, kind: ErrorKind, message: String) -> Error sync {
+	let (line, column) = place_of(input, offset)
+	return Error {
+		kind: kind,
+		message: message,
+		line: line,
+		column: column,
+		offset: offset,
+		tag: "",
+		text: "",
+	}
+}
+
 // A `ParseError` carries the parser's rendered message and nothing else
 // (Part II 10.8): the message, then `at line L, column C` and the line it
 // stopped in.
 fn error_of(input: ref Bytes, rendered: String) -> Error sync {
 	let parts: Vec[String] = rendered.split(" at line ").collect()
 	if parts.len() < 2 {
-		return Error { message: rendered.clone(), line: 1, column: 1, offset: 0 }
+		return Error {
+			kind: ErrorKind::Syntax,
+			message: rendered.clone(),
+			line: 1,
+			column: 1,
+			offset: 0,
+			tag: "",
+			text: "",
+		}
 	}
 	let place: Vec[String] = parts[1].split(", column ").collect()
 	let line = leading_number(place[0].clone())
 	let column = if place.len() > 1 { leading_number(place[1].clone()) } else { 1 }
 	return Error {
+		kind: ErrorKind::Syntax,
 		message: parts[0].clone(),
 		line: line,
 		column: column,
 		offset: offset_of(input, line, column),
+		tag: "",
+		text: "",
 	}
+}
+
+// The grammar's refusal as an `Error` of its kind. The parse stops at the
+// character it could not take or just past it: a depth guard after the `[`
+// or `{` it guards, a reserved indicator or a flow indicator, read as a token
+// that then cannot go on, before what follows it. So the depth limit is
+// placed at the opening that passes it, and the character the parse stopped
+// at, or the one before, names the kind where it begins a token.
+fn syntax_error(input: ref Bytes, rendered: String, depth: i64) -> Error sync {
+	let e = error_of(input, rendered)
+	let n = input.len() as i64
+	if rendered.contains("nesting within the depth limit") {
+		let mut at = e.offset
+		if at > 0 && at <= n && (input[at - 1] == 91 || input[at - 1] == 123) {
+			at -= 1
+		}
+		return error_at(
+			input,
+			at,
+			ErrorKind::DepthLimit,
+			f"nesting deeper than the depth limit of {depth}",
+		)
+	}
+	for at in [e.offset - 1, e.offset] {
+		if at >= 0 && at < n && starts_a_token(input, at) {
+			let b = input[at]
+			// `@` and `` ` ``
+			if b == 64 || b == 96 {
+				return error_at(
+					input,
+					at,
+					ErrorKind::Reserved,
+					f"`{b as char}` is reserved and cannot start a node",
+				)
+			}
+			// `]` and `}`
+			if (b == 93 || b == 125) && first_on_its_line(input, at) {
+				return error_at(
+					input,
+					at,
+					ErrorKind::NoContent,
+					f"`{b as char}` where a block node's content belongs",
+				)
+			}
+		}
+	}
+	return e
+}
+
+// Whether the byte at `at` begins a token: the input's first, or after a
+// space, a tab or a line break.
+fn starts_a_token(input: ref Bytes, at: i64) -> bool sync {
+	return at == 0 || input[at - 1] == 32 || input[at - 1] == 9 || input[at - 1] == 10
+}
+
+// Whether only spaces stand before the byte at `at` on its line.
+fn first_on_its_line(input: ref Bytes, at: i64) -> bool sync {
+	let mut i = at - 1
+	while i >= 0 && input[i] == 32 {
+		i -= 1
+	}
+	return i < 0 || input[i] == 10
 }
 
 // The line and the column (from 1, the column in characters) of a byte
@@ -1676,33 +1801,147 @@ fn place_of(input: ref Bytes, offset: i64) -> (i64, i64) sync {
 	return (line, column)
 }
 
+// The stream read as far as it is good: the documents before the first one
+// that fails, and that one's error, null where none does.
+pub struct Documents {
+	pub documents: Vec[Document],
+	pub error: Error?,
+}
+
 // The stream's documents, each with its root node and its `---` and `...`
 // (D7), within `limits` (D8): an input longer than `limits.bytes` is refused
-// before it is read, nesting deeper than `limits.depth` where the level past
-// the limit begins.
+// before it is read, nesting deeper than `limits.depth` at the opening that
+// passes the limit. A scalar whose text does not fit its core tag
+// (`!!bool str`, D5) fails at the scalar. The first failure fails the whole
+// stream; `read` gives the documents before it too.
 pub fn documents(input: ref Bytes; limits: Limits = default_limits()) -> Vec[Document] sync throws {
 	if input.len() as i64 > limits.bytes {
-		let (line, column) = place_of(input, limits.bytes)
-		throw Error {
-			message: f"input longer than the size limit of {limits.bytes} bytes",
-			line: line,
-			column: column,
-			offset: limits.bytes,
-		}
+		throw error_at(
+			input,
+			limits.bytes,
+			ErrorKind::SizeLimit,
+			f"input longer than the size limit of {limits.bytes} bytes",
+		)
 	}
 	let depth = limits.depth
-	return Yaml::stream(input, limits) catch {
-		let rendered = f"{error}"
-		if rendered.contains("nesting within the depth limit") {
-			let e = error_of(input, rendered)
-			throw Error {
-				message: f"nesting deeper than the depth limit of {depth}",
-				line: e.line,
-				column: e.column,
-				offset: e.offset,
+	let docs = Yaml::stream(input, limits) catch {
+		throw syntax_error(input, f"{error}", depth)
+	}
+	for d in docs {
+		tags_fit(input, d.directives, d.root)
+	}
+	return docs
+}
+
+// The stream's documents as `documents` reads them, up to the first that
+// fails (D7, D8): the good ones before it, then its error, as serde_yaml's
+// loader hands out the documents before a broken one. Where a document fails,
+// the documents before it are read again up to the document marker that
+// begins it: a `---` or `...` first on its line always ends what stands before
+// it (YAML 1.2.2 9.1.4), so they are a stream of their own, and an error of
+// theirs, before where that one begins, is the first.
+pub fn read(input: ref Bytes; limits: Limits = default_limits()) -> Documents sync {
+	let docs = documents(input; limits: limits) catch {
+		let b = match error.kind {
+			ErrorKind::SizeLimit => 0
+			else => marker_before(input, error.offset)
+		}
+		if b <= 0 {
+			return Documents { documents: [], error: error }
+		}
+		let first = read(input[0..<b]; limits: limits)
+		match first.error {
+			null => {}
+			x => if x.offset < b {
+				return first
 			}
 		}
-		throw error_of(input, rendered)
+		return Documents { documents: first.documents, error: error }
+	}
+	return Documents { documents: docs, error: null }
+}
+
+// The start of the last line at or before `at` that begins with a document
+// marker, `---` or `...` with a space, a tab, a line break or the end after
+// it; 0 where none does.
+fn marker_before(input: ref Bytes, at: i64) -> i64 sync {
+	let n = input.len() as i64
+	let mut i = at.min(n)
+	while i > 0 {
+		if input[i - 1] == 10 && is_marker_at(input, i) {
+			return i
+		}
+		i -= 1
+	}
+	return 0
+}
+
+fn is_marker_at(input: ref Bytes, i: i64) -> bool sync {
+	let n = input.len() as i64
+	if i + 3 > n {
+		return false
+	}
+	let c = input[i]
+	if c != 45 && c != 46 {
+		return false
+	}
+	if input[i + 1] != c || input[i + 2] != c {
+		return false
+	}
+	return i + 3 == n || input[i + 3] == 32 || input[i + 3] == 9 || input[i + 3] == 10
+}
+
+// Fails at the first scalar of a document's tree, in the order it is
+// written, whose text does not fit its core tag (D5). A block scalar's
+// content is checked by the grammar, which knows its indentation and
+// chomping.
+fn tags_fit(input: ref Bytes, ds: ref Vec[Dir], n: ref Node) sync throws {
+	match n.value {
+		Value::Seq(items) => {
+			for x in items {
+				tags_fit(input, ds, x)
+			}
+		}
+		Value::Map(entries) => {
+			for x in entries {
+				tags_fit(input, ds, x.key)
+				tags_fit(input, ds, x.value)
+			}
+		}
+		Value::Alias(_) => {}
+		else => {
+			let k = tag_kind(ds, n.tag)
+			let block = n.style == Style::Literal || n.style == Style::Folded
+			if !block && !fits(k, n.raw) {
+				throw invalid_tagged(input, n, core_name(k))
+			}
+		}
+	}
+}
+
+// An `InvalidTagged` error at the scalar's first property: the core tag it
+// carries, `core`, and its text as written.
+fn invalid_tagged(input: ref Bytes, n: ref Node, core: String) -> Error sync {
+	let (line, column) = place_of(input, n.start as i64)
+	return Error {
+		kind: ErrorKind::InvalidTagged,
+		message: f"`{n.raw}` does not fit its tag {core}",
+		line: line,
+		column: column,
+		offset: n.start as i64,
+		tag: f"tag:yaml.org,2002:{core}",
+		text: n.raw.clone(),
+	}
+}
+
+// The name of a core tag that fixes a scalar's kind.
+fn core_name(k: TagKind) -> String sync {
+	return match k {
+		TagKind::Null => "null"
+		TagKind::Bool => "bool"
+		TagKind::Int => "int"
+		TagKind::Float => "float"
+		else => "str"
 	}
 }
 
@@ -1776,9 +2015,8 @@ fn nodes_in(n: ref Node) -> i64 sync {
 	}
 }
 
-fn load_error(input: ref Bytes, start: u32, message: String) -> Error sync {
-	let (line, column) = place_of(input, start as i64)
-	return Error { message: message, line: line, column: column, offset: start as i64 }
+fn load_error(input: ref Bytes, start: u32, kind: ErrorKind, message: String) -> Error sync {
+	return error_at(input, start as i64, kind, message)
 }
 
 impl Loader {
@@ -1832,18 +2070,29 @@ impl Loader {
 	// before the copy is made.
 	fn expansion(ref mut self, name: String, start: u32, input: ref Bytes) -> Node sync throws {
 		let a = match self.anchors.get(name) {
-			null => throw load_error(input, start, f"unknown anchor *{name}")
+			null => throw load_error(
+				input,
+				start,
+				ErrorKind::UnknownAnchor,
+				f"unknown anchor *{name}",
+			)
 			x => x
 		}
 		let nodes = a.nodes
 		let node = match a.node {
-			null => throw load_error(input, start, f"alias *{name} inside its own anchor")
+			null => throw load_error(
+				input,
+				start,
+				ErrorKind::RecursiveAlias,
+				f"alias *{name} inside its own anchor",
+			)
 			x => x
 		}
 		if self.expanded + nodes > self.limit {
 			throw load_error(
 				input,
 				start,
+				ErrorKind::AliasLimit,
 				f"alias expansion exceeds {self.limit} nodes (alias_nodes limit {self.alias_nodes})",
 			)
 		}
@@ -1871,12 +2120,15 @@ impl Loader {
 				let first = seen.get(s)
 				if first != null {
 					let (line, column) = place_of(input, (first ?? 0) as i64)
-					let here = load_error(input, at, "")
+					let here = load_error(input, at, ErrorKind::DuplicateKey, "")
 					throw Error {
+						kind: ErrorKind::DuplicateKey,
 						message: f"duplicate key at {here.line}:{here.column}, first at {line}:{column}",
 						line: here.line,
 						column: here.column,
 						offset: here.offset,
+						tag: "",
+						text: "",
 					}
 				}
 				seen.insert(s, at)
@@ -2038,6 +2290,7 @@ fn merge_sources(v: Node, input: ref Bytes) -> Vec[Node] sync throws {
 					throw load_error(
 						input,
 						x.start,
+						ErrorKind::Merge,
 						f"expected a mapping to merge in the list, found {kind_of(x)}",
 					)
 				}
@@ -2048,6 +2301,7 @@ fn merge_sources(v: Node, input: ref Bytes) -> Vec[Node] sync throws {
 		else => throw load_error(
 			input,
 			v.start,
+			ErrorKind::Merge,
 			f"expected a mapping or a list of mappings to merge, found {kind_of(v)}",
 		)
 	}

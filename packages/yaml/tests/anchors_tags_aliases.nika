@@ -78,8 +78,8 @@ fn main() throws {
 	// properties in flow collections and on a block scalar
 	line("[&a x, !!int 3, *a, &b !!str ]\n")
 	line("a: !!str |\n  12\nb: &l >-\n  x\n  y\n")
-	// a scalar its core tag does not fit is an error: a quoted one after its
-	// closing quote, a plain one where reading stopped (the furthest failure)
+	// a scalar its core tag does not fit is an error at the node's start, its
+	// tag included (ADR yaml-1 D5)
 	line("a: !!int \"x\"\n")
 	line("a: !!int x\n")
 	line("a: !!bool yes\n")
