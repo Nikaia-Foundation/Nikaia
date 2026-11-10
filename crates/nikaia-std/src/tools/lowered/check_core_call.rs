@@ -319,7 +319,13 @@ pub(crate) fn check_core_call_variant_parts<H: CheckHost>(state: &mut CheckState
     for arg in args.iter() {
         i += 1;
         if i >= parts.len() as i64 || i >= found.len() as i64 { break; }
-        if state.text_literal(world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), arg, true).is_none() { state.hands_over(world, arg, nikaia_std::index::get(&found, nikaia_std::index::at(i)), "put into a variant", span); }
+        if state.text_literal(world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), arg, true).is_none() {
+            state.hands_over(world, arg, nikaia_std::index::get(&found, nikaia_std::index::at(i)), "put into a variant", span);
+            if a_plain_str_view(nikaia_std::index::get(&found, nikaia_std::index::at(i))) && a_plain_string(nikaia_std::index::get(&parts, nikaia_std::index::at(i))) {
+                let keeper = format!("`{}` keeps its part after this line", name);
+                state.expect_kept_asked(world, nikaia_std::index::get(&found, nikaia_std::index::at(i)), nikaia_std::index::get(&parts, nikaia_std::index::at(i)), Some(arg), &keeper, span, "field", &|was, wanted| { format!("`{}` holds `{}`, but you're giving it `{}`.", name, wanted, was) });
+            }
+        }
         check_core_a_kept_lambda(state, world, host, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), arg, span);
         let how = check_widened_slot(state, world, host, nikaia_std::index::get(&found, nikaia_std::index::at(i)), nikaia_std::index::get(&parts, nikaia_std::index::at(i)), Some(arg), span);
         if how.is_some() { state.facts.wrapped.insert(id_of(arg) as i64, match how { Some(__nikaia_value) => __nikaia_value, None => continue }); }

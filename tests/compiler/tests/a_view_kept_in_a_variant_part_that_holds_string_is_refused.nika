@@ -1,0 +1,28 @@
+// #1507: a view of an element put into a variant's `String` part and kept
+// past the loop is refused as a struct field's is (`NK1106`), where rustc
+// refused the lowered program (`NK1343`) before.
+enum Tok {
+	Word(String),
+	Num(i64),
+}
+
+fn toks(words: Vec[String]) -> Vec[Tok] {
+	let mut out: Vec[Tok] = []
+	for w in words {
+		out.push(Tok::Word(w))
+	}
+	return out
+}
+
+fn made(s: String) -> String {
+	let mut g = String()
+	g.push_str(s)
+	return g
+}
+
+fn main() throws {
+	let ws = [made("a"), made("b")]
+	let t = toks(ws)
+	println(t.len())
+	println(ws.len())
+}
