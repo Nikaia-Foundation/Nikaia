@@ -16,7 +16,11 @@
 // `OWNER <brief>: <text>`; a report whose `Result:` first word (`done.` too)
 // is not `done` or `noop`, `Pushed:` is `rejected` or `none` (not for `noop`),
 // `Gate:` is present and does not start with `green`, or `Deviation:` is not
-// `none` prints `CUT <brief>: <line>`; a `Found:` that is not `none` does not
+// `none` prints `CUT <brief>: <line>`; a line `Supervisor: <date>: accepted ...`
+// in the report clears a cut on `Result:`, `Gate:` or `Deviation:` (the
+// builder's lines stay as written), never one on `Result: blocked` (it needs
+// the next brief) or on `Pushed:` (the commits are not on develop), and never
+// an `Owner:` question (supervisor, 2026-11-10); a `Found:` that is not `none` does not
 // cut (supervisor, 2026-11-06): the driver collects it in `DIR/found.txt`
 // (drive.nika, `drive_found`); all done prints `BATCH DONE` and the count of
 // `Changelog:` lines that are not `none`. `--tokens` appends
@@ -64,9 +68,12 @@ fn batch_cut(text: String) -> String {
     let pushed = batch_field(text.clone(), "Pushed:")
     let deviation = batch_field(text.clone(), "Deviation:")
     let gate = batch_field(text, "Gate:")
+    let accepted = batch_field(text.clone(), "Supervisor:").contains(": accepted")
     let word = result.split(" ").collect()[0].trim_end_matches(".").clone()
-    if word != "done" && word != "noop" { return f"Result: {result}" }
+    if word == "blocked" { return f"Result: {result}" }
     if word == "done" && (pushed == "rejected" || pushed == "none" || pushed == "") { return f"Pushed: {pushed}" }
+    if accepted { return "" }
+    if word != "done" && word != "noop" { return f"Result: {result}" }
     if gate != "" && !gate.starts_with("green") { return f"Gate: {gate}" }
     if deviation != "none" { return f"Deviation: {deviation}" }
     return ""

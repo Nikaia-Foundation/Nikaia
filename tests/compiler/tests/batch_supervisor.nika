@@ -1,0 +1,54 @@
+// batch.nika: a `Supervisor: <date>: accepted ...` line clears a cut on
+// Result, Gate or Deviation, never on Result: blocked, Pushed or Owner.
+use std::fs
+use std::process
+
+fn root() -> String throws {
+    let here = process::run("pwd", []).stdout.trim().clone()
+    if fs::exists(f"{here}/scripts/batch.nika", fs::Root::Anywhere) { return here }
+    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
+    if fs::exists(f"{parent}/scripts/batch.nika", fs::Root::Anywhere) { return parent }
+    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn first(nikaia: String, repo: String, tmp: String) -> String throws {
+    let out = process::run(nikaia, ["run", "scripts/batch.nika", "--", tmp.clone()]; dir: repo)
+    return out.stdout.trim().split("\n").collect()[0].replace(tmp, "T")
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    let release = f"{repo}/target/release/nikaia"
+    if fs::exists(release.clone(), fs::Root::Anywhere) { return release }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    fs::write(f"{tmp}/batch.txt", fs::Root::Anywhere, "a.md\n")
+    fs::write(f"{tmp}/a.md", fs::Root::Anywhere, "body\n")
+    let ok = "Supervisor: 2026-11-10: accepted, see #1\n"
+    let cases = [
+        ["deviation", "Result: done\nPushed: abc\nDeviation: x\n"],
+        ["gate red", "Result: done\nPushed: abc\nGate: red x\nDeviation: none\n"],
+        ["partial", "Result: partial, rest in #2\nPushed: abc\nDeviation: none\n"],
+        ["blocked", "Result: blocked\nPushed: none\nDeviation: none\n"],
+        ["rejected", "Result: done\nPushed: rejected\nDeviation: x\n"],
+    ]
+    for c in cases {
+        fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, c[1].clone())
+        println(f"{c[0]}: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+        fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, c[1].clone() + ok)
+        println(f"{c[0]} accepted: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    }
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done\nPushed: abc\nDeviation: x\nSupervisor: 2026-11-10: noted, not decided\n")
+    println(f"not accepted: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    fs::write(f"{tmp}/a.report.md", fs::Root::Anywhere, "Result: done\nPushed: abc\nDeviation: none\nOwner: which way?\n" + ok)
+    println(f"owner: {first(nikaia.clone(), repo.clone(), tmp.clone())}")
+    process::run("rm", ["-rf", tmp])
+}
