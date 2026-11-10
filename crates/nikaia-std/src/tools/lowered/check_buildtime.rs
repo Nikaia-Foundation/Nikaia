@@ -142,7 +142,9 @@ impl CheckState {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn did_not_build(found: &CheckFinding) -> bool {
-    if found.code != "NK1178" || found.notes.is_empty() { return false; }
+    if found.notes.is_empty() { return false; }
+    if found.code == "NK1127" { return (*nikaia_std::index::get(&found.notes, 0)).starts_with(AsRef::<str>::as_ref(COMPTIME_NOT_LOWERED)); }
+    if found.code != "NK1178" { return false; }
     (*nikaia_std::index::get(&found.notes, 0)).starts_with("This is a bug in the compiler")
 }
 

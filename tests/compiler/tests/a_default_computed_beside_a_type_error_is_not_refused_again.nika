@@ -1,0 +1,24 @@
+// #1507: a type error elsewhere leaves the program unlowered, and the option
+// default computed from it was refused again as `NK1127`, "this compiler's
+// fault". One mistake, one error: only `NK1103` is said.
+struct Limits {
+	depth: i64,
+}
+
+pub fn default_limits() -> Limits sync {
+	return Limits { depth: 4 }
+}
+
+fn other() -> i64 {
+	let x: i64 = "no"
+	return x
+}
+
+pub fn read(input: String; limits: Limits = default_limits()) -> i64 sync {
+	return limits.depth + input.len() as i64
+}
+
+fn main() throws {
+	println(read("x"))
+	println(other())
+}
