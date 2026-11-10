@@ -1,0 +1,63 @@
+// ADR-327 D9 (#1543): a value sent moves its weight from the producer to the consumer, so a producer that sends far more than its budget in total runs on.
+use std::channel
+
+// producer: sends far more than its budget in total, places some each turn
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+struct Batch {
+	items: Vec[i64],
+	name: String,
+}
+
+fn produce(tx: channel::Sender[Batch], turns: i64) -> i64 {
+	let mut sent = 0
+	for t in 0..<turns {
+		let mut scratch: Vec[i64] = []
+		for i in 0..<9000 {
+			scratch.push(i)
+		}
+		let mut items: Vec[i64] = []
+		for i in 0..<1000 {
+			items.push(i + t)
+		}
+		let mut name = String()
+		name.push_str("batch")
+		tx.send(Batch { items: items, name: name })
+		sent += scratch.len() / 9000
+	}
+	return sent
+}
+
+fn consume(rx: channel::Receiver[Batch]) -> i64 {
+	let mut total = 0
+	while true {
+		let b = rx.recv() ?? break
+		let mut scratch: Vec[i64] = []
+		for i in 0..<9000 {
+			scratch.push(i)
+		}
+		total += b.items.len() + scratch.len() - 9000
+	}
+	return total
+}
+
+fn main() throws {
+	let (tx, rx) = channel::bounded[Batch](4)
+	let c = async(detached, admission: Tight {}) fn { consume(rx) }
+	let p = async(detached, admission: Tight {}) fn { produce(tx, 400) }
+	let sent = p.join() catch {
+		println(f"producer failed: {error}")
+		0
+	}
+	let got = c.join() catch {
+		println(f"consumer failed: {error}")
+		0
+	}
+	println(f"sent {sent}, received {got} items")
+}

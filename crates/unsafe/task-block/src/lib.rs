@@ -45,6 +45,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use allocator_api2::alloc::{AllocError, Allocator, Global, Layout};
+use std::alloc::{GlobalAlloc, System};
 use std::cell::{Cell, UnsafeCell};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -97,6 +98,11 @@ pub struct Block {
     /// The segments beyond the current one, and the budget (D15). Touched only
     /// where the current segment is full, or a free is not in it.
     chain: UnsafeCell<Chain>,
+    /// **What the task holds outside its block** (ADR-327 D9, D10), in bytes:
+    /// what [`Counting`] counted while the block was in place, less what was
+    /// handed over. A free counts against whoever runs, so it may go below
+    /// zero where a task frees what another built.
+    outside: Cell<isize>,
 }
 
 /// **A block's other segments** (D15): reached only on the cold paths.
@@ -195,7 +201,7 @@ fn segment() -> *mut u8 {
         Some(memory) => memory,
         None => {
             // SAFETY: `MEMORY` has a size.
-            let memory = unsafe { std::alloc::alloc(MEMORY) };
+            let memory = unsafe { System.alloc(MEMORY) };
             if !memory.is_null() {
                 SEGMENTS.fetch_add(1, Ordering::Relaxed);
             }
@@ -215,7 +221,7 @@ fn hand_back(memory: *mut u8) {
     });
     if kept != Ok(true) {
         // SAFETY: `memory` was allocated with `MEMORY`.
-        unsafe { std::alloc::dealloc(memory, MEMORY) };
+        unsafe { System.dealloc(memory, MEMORY) };
         SEGMENTS.fetch_sub(1, Ordering::Relaxed);
     }
 }
@@ -258,6 +264,7 @@ impl Block {
                 parked: Vec::new(),
                 runs: Vec::new(),
             }),
+            outside: Cell::new(0),
         }
     }
 }
@@ -282,7 +289,7 @@ impl Drop for Spares {
             if !memory.is_null() {
                 // SAFETY: a spare was allocated with `MEMORY`, and nothing
                 // holds it.
-                unsafe { std::alloc::dealloc(memory, MEMORY) };
+                unsafe { System.dealloc(memory, MEMORY) };
                 SEGMENTS.fetch_sub(1, Ordering::Relaxed);
             }
         }
@@ -438,7 +445,7 @@ impl Block {
             let index = match chain.parked.iter().position(|p| p.has_room(pages)) {
                 Some(index) => index,
                 None => {
-                    if 1 + chain.extra >= chain.budget {
+                    if (2 + chain.extra) * BLOCK + self.held_outside() > chain.budget * BLOCK {
                         return None;
                     }
                     let memory = segment();
@@ -462,6 +469,26 @@ impl Block {
         self.take(size, align)
     }
 
+    /// What the task holds outside the block, none where it freed more than
+    /// it built.
+    #[inline]
+    fn held_outside(&self) -> usize {
+        usize::try_from(self.outside.get()).unwrap_or(0)
+    }
+
+    /// **Whether the block holds what it holds within its budget** (D9): its
+    /// segments and what it holds outside.
+    fn within(&self) -> bool {
+        // SAFETY: as in `next`; only read.
+        let chain = unsafe { &*self.chain.get() };
+        let segments = if self.start.get().is_null() {
+            0
+        } else {
+            1 + chain.extra
+        };
+        segments * BLOCK + self.held_outside() <= chain.budget * BLOCK
+    }
+
     /// Exchange the current segment with a parked one.
     fn swap(&self, parked: &mut Parked) {
         parked.start = self.start.replace(parked.start);
@@ -481,11 +508,11 @@ impl Block {
     fn whole(&self, segments: usize) -> Option<*mut u8> {
         // SAFETY: as in `next`.
         let chain = unsafe { &mut *self.chain.get() };
-        if 1 + chain.extra + segments > chain.budget {
+        if (1 + chain.extra + segments) * BLOCK + self.held_outside() > chain.budget * BLOCK {
             return None;
         }
         // SAFETY: the layout has a size.
-        let memory = unsafe { std::alloc::alloc(run_layout(segments)) };
+        let memory = unsafe { System.alloc(run_layout(segments)) };
         if memory.is_null() {
             return None;
         }
@@ -525,7 +552,7 @@ impl Block {
         if let Some(at) = chain.runs.iter().position(|&(start, _)| start == ptr) {
             let (start, segments) = chain.runs.swap_remove(at);
             // SAFETY: the run was allocated with this layout.
-            unsafe { std::alloc::dealloc(start, run_layout(segments)) };
+            unsafe { System.dealloc(start, run_layout(segments)) };
             SEGMENTS.fetch_sub(segments, Ordering::Relaxed);
             chain.extra -= segments;
             return;
@@ -627,7 +654,7 @@ impl Drop for Block {
             }
             for (start, segments) in chain.runs.drain(..) {
                 // SAFETY: the run was allocated with this layout.
-                unsafe { std::alloc::dealloc(start, run_layout(segments)) };
+                unsafe { System.dealloc(start, run_layout(segments)) };
                 SEGMENTS.fetch_sub(segments, Ordering::Relaxed);
             }
         }
@@ -663,6 +690,89 @@ pub fn budget_running(bytes: usize) {
         // SAFETY: the chain is reached only through its block, by the thread
         // that polls the task, and no other borrow of it lives here.
         unsafe { (*block.chain.get()).budget = (bytes / BLOCK).max(1) };
+    }
+}
+
+/// **Count `bytes` held outside against the running block** (D9, D10):
+/// what [`Counting`] calls on every allocation and free; nothing where no
+/// block is in place.
+#[inline(always)]
+pub fn count(bytes: isize) {
+    if let Some(block) = current() {
+        block.outside.set(block.outside.get().wrapping_add(bytes));
+    }
+}
+
+/// **A value of `weight` bytes leaves the running task** (D9): sent, set
+/// into a shared value, or handed to a Rust owner.
+#[inline]
+pub fn hand_over(weight: usize) {
+    count(-isize::try_from(weight).unwrap_or(isize::MAX));
+}
+
+/// **A value of `weight` bytes reaches the running task or shared value**
+/// (D9): counted, and whether its block still holds what it holds within its
+/// budget. Where it does not, the caller panics (D6): the value is the
+/// receiver's now, and its free counts there.
+#[inline]
+pub fn take_over(weight: usize) -> bool {
+    count(isize::try_from(weight).unwrap_or(isize::MAX));
+    current().is_none_or(Block::within)
+}
+
+/// **What the running task still holds outside** (D9) as it ends, taken
+/// off its block: its value's weight, for whoever joins it.
+pub fn leftover() -> usize {
+    match current() {
+        Some(block) => usize::try_from(block.outside.replace(0)).unwrap_or(0),
+        None => 0,
+    }
+}
+
+/// **The program's allocator** (ADR-327 D9, D10): the system's, and every
+/// allocation and free counted against the block in place, so a budget
+/// counts what a task holds outside its block too. A free counts against
+/// whoever runs (D9: frees go to the running account).
+pub struct Counting;
+
+// SAFETY: every call is the system allocator's with the caller's arguments;
+// the count touches only a `Cell` of the block in place, never memory.
+unsafe impl GlobalAlloc for Counting {
+    #[inline]
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: the caller keeps `alloc`'s contract.
+        let ptr = unsafe { System.alloc(layout) };
+        if !ptr.is_null() {
+            count(layout.size().cast_signed());
+        }
+        ptr
+    }
+
+    #[inline]
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: as in `alloc`.
+        let ptr = unsafe { System.alloc_zeroed(layout) };
+        if !ptr.is_null() {
+            count(layout.size().cast_signed());
+        }
+        ptr
+    }
+
+    #[inline]
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: the caller keeps `dealloc`'s contract.
+        unsafe { System.dealloc(ptr, layout) };
+        count(-layout.size().cast_signed());
+    }
+
+    #[inline]
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, size: usize) -> *mut u8 {
+        // SAFETY: the caller keeps `realloc`'s contract.
+        let moved = unsafe { System.realloc(ptr, layout, size) };
+        if !moved.is_null() {
+            count(size.cast_signed().wrapping_sub(layout.size().cast_signed()));
+        }
+        moved
     }
 }
 

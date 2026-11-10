@@ -1,0 +1,34 @@
+// ADR-327 D9 (#1543): a closure crosses with its own size: its captures stay with the giver, so a tight receiver takes it.
+use std::channel
+
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+struct Job {
+	run: fn() -> i64,
+}
+
+fn call_one(rx: channel::Receiver[Job]) -> i64 {
+	let job = rx.recv() ?? return 0
+	return job.run()
+}
+
+fn main() throws {
+	let (tx, rx) = channel::bounded[Job](1)
+	let mut big: Vec[i64] = []
+	for i in 0..<100000 {
+		big.push(i)
+	}
+	tx.send(Job { run: fn { big.len() } })
+	let t = async(detached, admission: Tight {}) fn { call_one(rx) }
+	let got = t.join() catch {
+		println(f"failed: {error}")
+		0
+	}
+	println(f"got {got}")
+}

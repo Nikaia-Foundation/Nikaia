@@ -510,6 +510,9 @@ struct Inner<T> {
     /// ([ADR-326](../../../docs/specification/adr/adr-326.md) D4): there is no
     /// value coming, and a `join` says so.
     panicked: Option<crate::task::Crashed>,
+    /// **What the task still held outside its block as it ended**
+    /// (ADR-327 D9): its value's weight, which the joiner takes over.
+    weight: usize,
 }
 
 impl<T> Slot<T> {
@@ -519,15 +522,23 @@ impl<T> Slot<T> {
                 value: None,
                 waiting: None,
                 panicked: None,
+                weight: 0,
             }),
         })
     }
 
     /// Put the value in and wake whoever is waiting for it.
     pub fn fill(&self, value: T) {
+        self.fill_weighed(value, 0);
+    }
+
+    /// [`fill`](Slot::fill), with what the ended task held outside its block
+    /// (ADR-327 D9): the joiner's account takes it at the join.
+    pub fn fill_weighed(&self, value: T, weight: usize) {
         let waiting = {
             let mut inner = self.inner.lock().expect("the slot's lock");
             inner.value = Some(value);
+            inner.weight = weight;
             inner.waiting.take()
         };
         // Outside the lock: a waker may poll, and polling may reach for this
@@ -569,7 +580,14 @@ impl<T> Slot<T> {
             return Poll::Ready(Err(crashed));
         }
         match inner.value.take() {
-            Some(value) => Poll::Ready(Ok(value)),
+            Some(value) => {
+                let weight = std::mem::take(&mut inner.weight);
+                drop(inner);
+                // **The joiner takes the value's weight** (ADR-327 D9), and
+                // panics where it does not fit (decision (c)).
+                crate::block::received(weight);
+                Poll::Ready(Ok(value))
+            }
             None => {
                 inner.waiting = Some(context.waker().clone());
                 Poll::Pending

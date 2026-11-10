@@ -56,12 +56,13 @@ push(&mut xs, 7);                   // a full block ends the task, here
 | :--- | :--- | :--- |
 | `impl Send for Block` | a block's raw pointer crosses threads with its task | the block's memory is reached only through `CURRENT`, while the task that owns the block is polled; between polls nothing points into it |
 | `Block::take`, `take_slow`, `run` | `start.add(at)` | `at + size` is checked to lie inside the page, or the run's pages are free and inside the block's `BLOCK` bytes |
-| `segment` (from `Block::first`, `next`) | `std::alloc::alloc(MEMORY)` | `MEMORY` has a non-zero size; a null answer is a refusal |
+| `segment` (from `Block::first`, `next`) | `System.alloc(MEMORY)` | `MEMORY` has a non-zero size; a null answer is a refusal |
 | `Block::next`, `whole`, `chained`, `in_chain`, `give_chained`, `budget_running` | the block's `chain` (`UnsafeCell`) as `&mut` or `&` | a block is reached only by the one thread that polls its task (`CURRENT`); each borrow ends inside the function, before `take` is called again, and no other borrow of the chain lives meanwhile |
-| `Block::whole` | `std::alloc::alloc(run_layout(n))` | the layout has a non-zero size; a null answer is a refusal |
-| `Block::give_chained`, `Drop for Block` | `dealloc(start, run_layout(n))` | a run is kept with the count it was allocated with, and is given back once: by its one allocation's free, or with the block |
+| `Block::whole` | `System.alloc(run_layout(n))` | the layout has a non-zero size; a null answer is a refusal |
+| `Block::give_chained`, `Drop for Block` | `System.dealloc(start, run_layout(n))` | a run is kept with the count it was allocated with, and is given back once: by its one allocation's free, or with the block |
 | `Block::grow` | `copy_nonoverlapping(ptr, moved, old)` | both are live cuts of at least `old` bytes, and two live cuts never share a byte: a cut's bytes return to a page only when its count frees the page |
 | `hand_back` (from `Drop for Block`, `give_chained`), `Drop for Spares` | `dealloc(memory, MEMORY)` | `memory` came from `alloc(MEMORY)` and nothing points into it any more: the task is over (its `Entered` is gone), its segment holds nothing (every page's count is nothing), or it is a spare |
+| `impl GlobalAlloc for Counting` | the global allocator's contract, every call `System`'s | each call hands the caller's arguments to `System` unchanged and returns its answer; the count touches only the `outside` `Cell` of the block in place (`current`), never memory, and allocates nothing. A block's own segments come from `System`, not through it, so a segment is never counted as held outside |
 | `current` | `CURRENT`'s pointer as `&Block` | it is set only by `enter` from a live `&Block` and reset when that `Entered` is dropped, which the block's owner holds for the poll |
 | `Drop for Housed` | `ManuallyDrop::drop(&mut self.value)` | the value is dropped once, in the `Housed`'s own drop, with its block in place, and nothing reads it after; the block is dropped after it, as a field |
 | `answered` | `NonNull::new_unchecked` | a block's cut is `start.add(at)` of a non-null `start` |

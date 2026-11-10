@@ -724,7 +724,7 @@ pub trait ProjectDriveWrapperHost {
     fn trace(&self, verdict: &str);
     fn run(&self) -> Result<i32, Box<dyn std::error::Error>>;
     fn crate_name(&self) -> Option<String>;
-    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<fs::Path>, shown: Option<String>) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
+    fn lower(&self, source: &std::path::Path, no_cache: bool, allowlist: Option<fs::Path>, shown: Option<String>, program: bool) -> Result<(String, Vec<fs::Path>), Box<dyn std::error::Error>>;
     fn write_if_changed(&self, path: &std::path::Path, text: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn replace_source(&self, generated: &std::path::Path);
     fn args(&self) -> Vec<String>;
@@ -758,7 +758,12 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
         },
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
-    let (rust, sources) = host.lower(&source, no_cache, allowlist, shown)?;
+    let args = host.args();
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple55853| {
+        let (a, b) = __nikaia_tuple55853;
+        AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
+    });
+    let (rust, sources) = host.lower(&source, no_cache, allowlist, shown, a_program)?;
     let name = nikaia_std::index::or(host.crate_name(), || nikaia_std::index::or(match nikaia_std::fs::path::file_name(&(nikaia_std::fs::path::with_extension(&(source), std::path::Path::new(&(""))))).as_ref() {
         Some(__nikaia_it) => Some(nikaia_std::fs::path::display(&(__nikaia_it))),
         None => None,
@@ -778,11 +783,6 @@ pub fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Result<i32
     let generated = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(gen_dir), std::path::Path::new(&(name)))), std::path::Path::new(&(format!("{}.rs", name))));
     host.write_if_changed(&generated, &rust)?;
     host.replace_source(&generated);
-    let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple56714| {
-        let (a, b) = __nikaia_tuple56714;
-        AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
-    });
     if a_program {
         match env::var("NIKAIA_LINK_FLAGS") {
             None => { },

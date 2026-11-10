@@ -29,8 +29,8 @@
 
 pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
-    BLOCK, Block, Entered, Housed, List, Place, Text, enter, extend, full, held, list, push,
-    reserve,
+    BLOCK, Block, Counting, Entered, Housed, List, Place, Text, count, enter, extend, full,
+    hand_over, held, leftover, list, push, reserve, take_over,
 };
 
 use std::cell::Cell;
@@ -201,5 +201,280 @@ macro_rules! __nikaia_text {
     ($($part:tt)*) => {{
         let text = $crate::block::format($crate::block::Place::Outside, ::std::format_args!($($part)*));
         text
+    }};
+}
+
+/// **What a value holds on the heap** (ADR-327 D9): the walk a hand-over
+/// weighs it with, to move its weight from the giver's account to the
+/// receiver's. The emitter writes it for every declared struct and enum; a
+/// closure and a Rust-owned type weigh their own size only, which holds
+/// nothing beyond the value itself (decision (a), #1543).
+pub trait Weigh {
+    /// The bytes the value holds beyond its own size.
+    fn heap(&self) -> usize;
+}
+
+/// **What a value weighs as it crosses** (D9): what it holds on the heap.
+/// Its own bytes move with it, from one frame or slot to another, and were
+/// never counted outside: a closure or a Rust-owned type weighs nothing more.
+pub fn weight<T: Weigh>(value: &T) -> usize {
+    value.heap()
+}
+
+/// **A value that does not fit where it is handed** (ADR-327 D9, decision
+/// (c)): the receiving task panics at the take and ends `task::Crashed`; a
+/// shared value is poisoned (D6). It unwinds without the panic hook, as
+/// `OverBudget` does: the sentence is the payload `task::Crashed` carries,
+/// not a line on stderr naming a runtime file and thread.
+#[cold]
+#[inline(never)]
+pub fn does_not_fit(weight: usize) -> ! {
+    std::panic::resume_unwind(Box::new(format!(
+        "a value of {weight} bytes handed over does not fit the receiver's memory budget"
+    )))
+}
+
+/// **Take a value of `weight` bytes over** (D9) into the running task or
+/// shared value: counted, and a panic where it does not fit.
+#[inline]
+#[track_caller]
+pub fn received(weight: usize) {
+    if !take_over(weight) {
+        does_not_fit(weight)
+    }
+}
+
+/// **A list handed to a Rust owner leaves the giver's account** at the call
+/// (D8, D9; #1541): the owner keeps it, and what it frees later counts
+/// against whoever runs. Its elements are Rust's to weigh, so only its memory
+/// moves. What Rust hands back was allocated by [`Counting`] in the task
+/// that called it, and is in that task's account already.
+#[inline]
+pub fn handed_list<T>(list: impl Into<Vec<T>>) -> Vec<T> {
+    let list = list.into();
+    hand_over(list.capacity() * std::mem::size_of::<T>());
+    list
+}
+
+/// [`handed_list`], for a text.
+#[inline]
+pub fn handed_text(text: impl Into<String>) -> String {
+    let text = text.into();
+    hand_over(text.capacity());
+    text
+}
+
+macro_rules! weighs_nothing {
+    ($($t:ty),* $(,)?) => {
+        $(impl Weigh for $t {
+            #[inline]
+            fn heap(&self) -> usize {
+                0
+            }
+        })*
+    };
+}
+
+weighs_nothing!(
+    (),
+    bool,
+    char,
+    i8,
+    i16,
+    i32,
+    i64,
+    i128,
+    isize,
+    u8,
+    u16,
+    u32,
+    u64,
+    u128,
+    usize,
+    f32,
+    f64,
+    std::time::Duration,
+);
+
+impl Weigh for String {
+    fn heap(&self) -> usize {
+        self.capacity()
+    }
+}
+
+impl Weigh for Text {
+    fn heap(&self) -> usize {
+        if self.is_outside() {
+            self.capacity()
+        } else {
+            0
+        }
+    }
+}
+
+impl<T: Weigh> Weigh for Vec<T> {
+    fn heap(&self) -> usize {
+        self.capacity() * std::mem::size_of::<T>() + self.iter().map(Weigh::heap).sum::<usize>()
+    }
+}
+
+impl<T: Weigh> Weigh for List<T> {
+    fn heap(&self) -> usize {
+        let own = if self.is_outside() {
+            self.capacity() * std::mem::size_of::<T>()
+        } else {
+            0
+        };
+        own + self.iter().map(Weigh::heap).sum::<usize>()
+    }
+}
+
+impl<T: Weigh> Weigh for std::collections::VecDeque<T> {
+    fn heap(&self) -> usize {
+        self.capacity() * std::mem::size_of::<T>() + self.iter().map(Weigh::heap).sum::<usize>()
+    }
+}
+
+impl<T: Weigh> Weigh for Option<T> {
+    fn heap(&self) -> usize {
+        self.as_ref().map_or(0, Weigh::heap)
+    }
+}
+
+impl<T: Weigh, E: Weigh> Weigh for Result<T, E> {
+    fn heap(&self) -> usize {
+        match self {
+            Ok(value) => value.heap(),
+            Err(error) => error.heap(),
+        }
+    }
+}
+
+impl<T: Weigh + ?Sized> Weigh for Box<T> {
+    fn heap(&self) -> usize {
+        std::mem::size_of_val::<T>(self) + T::heap(self)
+    }
+}
+
+/// **A view weighs nothing**: what it shows is its owner's.
+impl<T: ?Sized> Weigh for &T {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+/// **A shared value weighs nothing where it crosses**: what it holds stays
+/// counted where it was built, and another holder keeps it alive.
+impl<T: ?Sized> Weigh for std::sync::Arc<T> {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+impl<T: ?Sized> Weigh for std::rc::Rc<T> {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+/// **A closure weighs its own size** (decision (a)): its captures stay
+/// counted where it was made.
+impl<F: ?Sized> Weigh for crate::func::Kept<F> {
+    fn heap(&self) -> usize {
+        0
+    }
+}
+
+impl<K: Weigh, V: Weigh, S> Weigh for std::collections::HashMap<K, V, S> {
+    fn heap(&self) -> usize {
+        // The table's slots and a control byte each, which is what
+        // `hashbrown` allocates, near enough for a budget.
+        self.capacity() * (std::mem::size_of::<(K, V)>() + 1)
+            + self.iter().map(|(k, v)| k.heap() + v.heap()).sum::<usize>()
+    }
+}
+
+impl<K: Weigh, S> Weigh for std::collections::HashSet<K, S> {
+    fn heap(&self) -> usize {
+        self.capacity() * (std::mem::size_of::<K>() + 1)
+            + self.iter().map(Weigh::heap).sum::<usize>()
+    }
+}
+
+impl<K: Weigh, V: Weigh> Weigh for std::collections::BTreeMap<K, V> {
+    fn heap(&self) -> usize {
+        self.iter()
+            .map(|(k, v)| std::mem::size_of::<(K, V)>() + k.heap() + v.heap())
+            .sum()
+    }
+}
+
+impl<K: Weigh> Weigh for std::collections::BTreeSet<K> {
+    fn heap(&self) -> usize {
+        self.iter()
+            .map(|k| std::mem::size_of::<K>() + k.heap())
+            .sum()
+    }
+}
+
+macro_rules! weighs_tuples {
+    ($(($($name:ident),+)),* $(,)?) => {
+        $(impl<$($name: Weigh),+> Weigh for ($($name,)+) {
+            #[allow(non_snake_case)]
+            fn heap(&self) -> usize {
+                let ($($name,)+) = self;
+                0 $(+ $name.heap())+
+            }
+        })*
+    };
+}
+
+weighs_tuples!(
+    (A),
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, G),
+);
+
+/// **The field walk the emitter writes** (decision (a)): a field whose type
+/// has [`Weigh`] is walked, any other - a Rust-owned type - weighs its own
+/// size only. Picked by method resolution on the field's concrete type.
+pub struct Weighing<'a, T: ?Sized>(pub &'a T);
+
+/// The walk, where the field's type has [`Weigh`].
+pub trait WeighKnown {
+    fn weigh(&self) -> usize;
+}
+
+impl<T: Weigh + ?Sized> WeighKnown for Weighing<'_, T> {
+    #[inline]
+    fn weigh(&self) -> usize {
+        self.0.heap()
+    }
+}
+
+/// Its own size only, where the field's type has no [`Weigh`].
+pub trait WeighOwn {
+    fn weigh(&self) -> usize;
+}
+
+impl<T: ?Sized> WeighOwn for &Weighing<'_, T> {
+    #[inline]
+    fn weigh(&self) -> usize {
+        0
+    }
+}
+
+/// `nikaia_std::__nikaia_weigh!(self.field)`: what a field holds on the
+/// heap, as the emitter's `Weigh` impls write it.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nikaia_weigh {
+    ($e:expr) => {{
+        #[allow(unused_imports)]
+        use $crate::block::{WeighKnown as _, WeighOwn as _};
+        (&$crate::block::Weighing(&$e)).weigh()
     }};
 }

@@ -1,0 +1,2 @@
+the receiver crashed: a value of 1048576 bytes handed over does not fit the receiver's memory budget
+got 0
