@@ -191,4 +191,8 @@ together with the specification section and an example test.
 * Files of one package share one namespace: call a sibling file's `pub fn` by its bare name, since `mod x` is a parse error. (issue-1481)
 * A `??` whose left side reads a map value (`m[k] ?? []`) is NK1185 in tools code; write `m[k]?.clone() ?? []` behind a `contains_key` check. (issue-1485)
 * A heredoc report or edit script with backticks needs a quoted delimiter (`<<'EOF'`); unquoted, each backticked word runs as a shell command and silently drops out of the text. (issue-1485)
+* A new `.stderr` expectation is written only when the file is absent before `--bless-stderr`. (issue-1490)
+* A `-> ref(a) String` or `a: borrowed` in the ledger for a `String` parameter comes from the text-tier pass (`lendable_parameter`, `a_keeping_target` in `text_tiers.nika`), which runs before the keep inference and the checker. (issue-1491)
+* A `.stdout`-only test passes even when the compiler prints a warning; add an empty `.stderr` beside it to pin "no warning". (issue-1491)
+* Files of the views-3 migration may carry `keep` marks the old binary already warned NK1334 on; when your fix makes `keep` mean kept, drop such marks where the file means lent. (issue-1491)
 
