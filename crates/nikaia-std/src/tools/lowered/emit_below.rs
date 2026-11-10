@@ -75,7 +75,7 @@ impl EmitState {
             Expr::Call { func, args, .. } => {
                 let func = nikaia_std::boxed::open(func);
                 match func {
-                    Expr::Path(segments, _) => { return segments.len() == 2 && self.grammars.contains_key(world.words.resolve(*nikaia_std::index::get(&segments, 0))) && args.len() == 1; },
+                    Expr::Path(segments, _) => { return segments.len() == 2 && self.grammars.contains_key(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) })) && args.len() == 1; },
                     _ => { },
                 }
             },
@@ -178,7 +178,7 @@ impl EmitState {
         }
         let name = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
         if unaliased_in(world.aliases, &name) != "task::scope" || args.is_empty() { return false; }
-        self.facts.paused_scopes.contains(&node_key(nikaia_std::index::get(&args, 0)))
+        self.facts.paused_scopes.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }))
     }
     pub fn decided_by_its_lambda(&self, world: &EmitWorld<'_, '_, '_, '_>, func: &Expr) -> bool {
         let name = match emit_callee_text(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -263,13 +263,13 @@ impl EmitState {
 
 impl EmitState {
     pub fn path(&self, world: &EmitWorld<'_, '_, '_, '_>, trusting: bool, unpinned: bool, segments: &[String]) -> String {
-        if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "scalar" && *nikaia_std::index::get(&segments, 1) == "from" { return String::from("nikaia_std::num::scalar_from"); }
-        if segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "int" && (*nikaia_std::index::get(&segments, 1) == "MIN" || *nikaia_std::index::get(&segments, 1) == "MAX") { return integer_limit_below(&nikaia_std::block::Text::from(segments.join("::"))); }
-        if segments.len() == 2 && *nikaia_std::index::get(&segments, 1) == "new" {
-            if unpinned && (*nikaia_std::index::get(&segments, 0) == "HashMap" || *nikaia_std::index::get(&segments, 0) == "HashSet") { return format!("{}::default", *nikaia_std::index::get(&segments, 0)); }
-            let chosen = self.map_name(trusting, nikaia_std::index::get(&segments, 0));
+        if segments.len() == 2 && *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } == "scalar" && *unsafe { nikaia_std::proven::read(&segments, (1) as usize) } == "from" { return String::from("nikaia_std::num::scalar_from"); }
+        if segments.len() == 2 && *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } == "int" && (*unsafe { nikaia_std::proven::read(&segments, (1) as usize) } == "MIN" || *unsafe { nikaia_std::proven::read(&segments, (1) as usize) } == "MAX") { return integer_limit_below(&nikaia_std::block::Text::from(segments.join("::"))); }
+        if segments.len() == 2 && *unsafe { nikaia_std::proven::read(&segments, (1) as usize) } == "new" {
+            if unpinned && (*unsafe { nikaia_std::proven::read(&segments, (0) as usize) } == "HashMap" || *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } == "HashSet") { return format!("{}::default", *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }); }
+            let chosen = self.map_name(trusting, unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
             if chosen == "HashMap" { return String::from("HashMap::<_, _>::default"); }
-            if chosen != *nikaia_std::index::get(&segments, 0) { return format!("{}::default", chosen); }
+            if chosen != *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } { return format!("{}::default", chosen); }
         }
         let mut mapped: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for segment in segments.iter() { mapped.push(self.map_name(trusting, segment)); }
@@ -294,7 +294,7 @@ impl EmitState {
     }
     pub fn attributes_read(&self, world: &EmitWorld<'_, '_, '_, '_>, wanted: &str, args: &[Expr], texts: &[String]) -> String {
         let mut written: String = String::from("");
-        if !args.is_empty() { written = nikaia_std::index::or(emit_callee_text(world, nikaia_std::index::get(&args, 0)), || "".into()); }
+        if !args.is_empty() { written = nikaia_std::index::or(emit_callee_text(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }), || "".into()); }
         let asked = unaliased_in(world.aliases, &written);
         let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for text in texts.iter() {
@@ -302,7 +302,7 @@ impl EmitState {
             if *nikaia_std::index::get(&parts, 0) == asked { values.push(self.attribute_in_rust(world, text)); }
         }
         if wanted == "attribute" {
-            if !values.is_empty() { return format!("Some({})", *nikaia_std::index::get(&values, 0)); }
+            if !values.is_empty() { return format!("Some({})", *unsafe { nikaia_std::proven::read(&values, (0) as usize) }); }
             return format!("None::<{}>", asked);
         }
         if !values.is_empty() {
@@ -360,8 +360,8 @@ pub(crate) fn emit_enters_a_parallel_rule(grammars: &collections::BTreeMap<Strin
             match func {
                 Expr::Path(segments, _) => {
                     if segments.len() != 2 { return false; }
-                    let def = match grammars.get(world.words.resolve(*nikaia_std::index::get(&segments, 0))) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                    for rule in def.rules.iter() { if rule.is_entry && rule.name == *nikaia_std::index::get(&segments, 1) && emit_is_a_par_fold(rule) { return true; } }
+                    let def = match grammars.get(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) })) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                    for rule in def.rules.iter() { if rule.is_entry && rule.name == *unsafe { nikaia_std::proven::read(&segments, (1) as usize) } && emit_is_a_par_fold(rule) { return true; } }
                 },
                 _ => { },
             }

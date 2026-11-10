@@ -183,7 +183,7 @@ pub(crate) fn loop_constant_step(arena: &mut TermArena, name: &str, value: i64) 
     for n in read.iter() {
         low.insert(nikaia_std::block::Text::from(n.to_string()), 3 + 7 * k);
         high.insert(nikaia_std::block::Text::from(n.to_string()), 11 + 13 * k);
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     let a = match arena.int_value(difference, &low) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let b = match arena.int_value(difference, &high) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -229,7 +229,7 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
                         p.unread.insert(nikaia_std::block::Text::from(n.to_string()));
                     }
                     if term.is_none() && names.len() == 1 && loop_whole_let((ty).as_ref(), value, words) {
-                        let n = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string());
+                        let n = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
                         term = Some(arena.var(&format!("{}~{}", n, arena.nodes.len() as i64)));
                     }
                     if term.is_some() {
@@ -276,7 +276,7 @@ pub(crate) fn loop_block(arena: &mut TermArena, block: &Block, first: &[LoopPath
             if ended != "" { ends.push(LoopEnd { kind: ended, path: p }); } else if keep { next.push(p); }
         }
         live = next;
-        if (live.len() as i64 + ends.len() as i64) > loop_paths_most() { return None; }
+        if (unsafe { nikaia_std::proven::add::<i64>(live.len() as i64, ends.len() as i64) }) > loop_paths_most() { return None; }
     }
     Some(live)
 }
@@ -354,9 +354,9 @@ pub fn loop_candidates(arena: &mut TermArena, record: &LoopRecord, proved: &impl
         if k == 0 { found.push((arena.equal(here, before), String::from("closed forms"))); } else if k > 0 { found.push((arena.ge(here, before), String::from("closed forms"))); } else { found.push((arena.le(here, before), String::from("closed forms"))); }
     }
     for i in 0..steady.len() as i64 {
-        for j in i + 1..steady.len() as i64 {
-            let (x, kx) = nikaia_std::index::get(&steady, (i) as usize); let kx = nikaia_std::num::value(kx);
-            let (y, ky) = nikaia_std::index::get(&steady, nikaia_std::index::at(j)); let ky = nikaia_std::num::value(ky);
+        for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..steady.len() as i64 {
+            let (x, kx) = unsafe { nikaia_std::proven::read(&steady, (i) as usize) }; let kx = nikaia_std::num::value(kx);
+            let (y, ky) = unsafe { nikaia_std::proven::read(&steady, (j) as usize) }; let ky = nikaia_std::num::value(ky);
             if kx == 0 || ky == 0 { continue; }
             let left = loop_scaled_offset(arena, record, &x, ky);
             let right = loop_scaled_offset(arena, record, &y, kx);
@@ -443,9 +443,9 @@ pub(crate) fn loop_octagons(arena: &mut TermArena, record: &LoopRecord) -> Vec<(
     let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, _) in record.steps.iter() { names.push(nikaia_std::block::Text::from(name.to_string())); }
     for a in 0..names.len() as i64 {
-        for b in a + 1..names.len() as i64 {
-            let x = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (a) as usize)).to_string());
-            let y = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(b))).to_string());
+        for b in unsafe { nikaia_std::proven::add::<i64>(a, 1) }..names.len() as i64 {
+            let x = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (a) as usize) }).to_string());
+            let y = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (b) as usize) }).to_string());
             let dx = match *nikaia_std::index::get(&record.steps, &x) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let dy = match *nikaia_std::index::get(&record.steps, &y) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if dx.is_empty() || (dx.len() as i64) != dy.len() as i64 { continue; }
@@ -454,10 +454,10 @@ pub(crate) fn loop_octagons(arena: &mut TermArena, record: &LoopRecord) -> Vec<(
             let mut x_steady = true;
             let mut y_steady = true;
             for k in 0..dx.len() as i64 {
-                if *nikaia_std::index::get(&dx, (k) as usize) > *nikaia_std::index::get(&dy, (k) as usize) { at_most = false; }
-                if *nikaia_std::index::get(&dx, (k) as usize) < *nikaia_std::index::get(&dy, (k) as usize) { at_least = false; }
-                if *nikaia_std::index::get(&dx, (k) as usize) != *nikaia_std::index::get(&dx, 0) { x_steady = false; }
-                if *nikaia_std::index::get(&dy, (k) as usize) != *nikaia_std::index::get(&dy, 0) { y_steady = false; }
+                if *unsafe { nikaia_std::proven::read(&dx, (k) as usize) } > *unsafe { nikaia_std::proven::read(&dy, (k) as usize) } { at_most = false; }
+                if *unsafe { nikaia_std::proven::read(&dx, (k) as usize) } < *unsafe { nikaia_std::proven::read(&dy, (k) as usize) } { at_least = false; }
+                if *unsafe { nikaia_std::proven::read(&dx, (k) as usize) } != *unsafe { nikaia_std::proven::read(&dx, (0) as usize) } { x_steady = false; }
+                if *unsafe { nikaia_std::proven::read(&dy, (k) as usize) } != *unsafe { nikaia_std::proven::read(&dy, (0) as usize) } { y_steady = false; }
             }
             if x_steady && y_steady || at_most && at_least { continue; }
             let mut left = arena.var(&x);
@@ -709,7 +709,7 @@ pub fn loop_found(arena: &mut TermArena, record: &LoopRecord, proved: &impl Fn(&
     let mut kept: Vec<(i64, String)> = vec![];
     let mut most_rounds: i64 = 4;
     for (term, origin) in loop_candidates(arena, record, proved, asked) {
-        if origin == loop_unrolled_origin() { most_rounds = 4 + loop_turns_most(); }
+        if origin == loop_unrolled_origin() { most_rounds = unsafe { nikaia_std::proven::add::<i64>(4, loop_turns_most()) }; }
         let query = lg_loop_entry_query(&record.problem, term);
         asked.push(1);
         if proved(&arena, &query.facts, query.goal) { kept.push((term, nikaia_std::block::Text::from(origin.to_string()))); }
@@ -862,7 +862,7 @@ pub fn loop_reads(arena: &TermArena, facts: &[i64], claim: i64, records: &[LoopR
         for k in 0..facts.len() as i64 {
             if used.contains(&k) { continue; }
             let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-            arena.variables(*nikaia_std::index::get(&facts, nikaia_std::index::at(k)), &mut read);
+            arena.variables(*unsafe { nikaia_std::proven::read(&facts, (k) as usize) }, &mut read);
             let mut ties = false;
             for n in read.iter() {
                 if names.contains(n) {
@@ -998,13 +998,13 @@ pub(crate) fn loop_built(arena: &mut TermArena, op: &str, args: Vec<i64>) -> Opt
     if op == "and" { return Some(arena.and(args)); }
     if op == "or" { return Some(arena.or(args)); }
     if args.len() == 1 {
-        if op == "neg" { return Some(arena.neg(*nikaia_std::index::get(&args, 0))); }
-        if op == "not" { return Some(arena.not(*nikaia_std::index::get(&args, 0))); }
+        if op == "neg" { return Some(arena.neg(*unsafe { nikaia_std::proven::read(&args, (0) as usize) })); }
+        if op == "not" { return Some(arena.not(*unsafe { nikaia_std::proven::read(&args, (0) as usize) })); }
         return None;
     }
     if args.len() != 2 { return None; }
-    let a = *nikaia_std::index::get(&args, 0);
-    let b = *nikaia_std::index::get(&args, 1);
+    let a = *unsafe { nikaia_std::proven::read(&args, (0) as usize) };
+    let b = *unsafe { nikaia_std::proven::read(&args, (1) as usize) };
     if op == "add" { return Some(arena.add(a, b)); }
     if op == "sub" { return Some(arena.sub(a, b)); }
     if op == "mul" { return Some(arena.mul(a, b)); }

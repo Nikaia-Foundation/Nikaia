@@ -28,9 +28,9 @@ impl CheckState {
     pub fn failing_cleanups_bound(&mut self) {
         let depth = self.scope.len() as i64;
         for at in 0..self.cleanups_pending.len() as i64 {
-            if nikaia_std::index::get(&self.cleanups_pending, (at) as usize).depth == depth && nikaia_std::index::get(&self.cleanups_pending, (at) as usize).binding.is_none() {
-                let name: String = nikaia_std::block::Text::from(nikaia_std::index::get(&self.cleanups_pending, (at) as usize).name.to_string());
-                self.cleanups_pending[nikaia_std::index::at(at)].binding = self.binding_id(&name);
+            if unsafe { nikaia_std::proven::read(&self.cleanups_pending, (at) as usize) }.depth == depth && unsafe { nikaia_std::proven::read(&self.cleanups_pending, (at) as usize) }.binding.is_none() {
+                let name: String = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&self.cleanups_pending, (at) as usize) }.name.to_string());
+                (*unsafe { nikaia_std::proven::slot(&mut self.cleanups_pending, (at) as usize) }).binding = self.binding_id(&name);
             }
         }
     }
@@ -80,10 +80,10 @@ impl CheckState {
         let mut in_loop: i64 = -1;
         let mut at = self.repeats.len() as i64;
         while at > 0 && in_loop < 0 {
-            at = at - 1;
-            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).what == "loop" {
-                in_loop = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).opened;
-                if how == "break" || how == "continue" { loop_frame = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame; }
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.what == "loop" {
+                in_loop = unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.opened;
+                if how == "break" || how == "continue" { loop_frame = unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.frame; }
             }
         }
         self.ways_out.push(CheckWayOut { how: nikaia_std::block::Text::from(how.to_string()), word: nikaia_std::block::Text::from(word.to_string()), at: span.start as i64, seq: self.read_seq, choices: self.branch.copy_owned(), span: span.clone(), loop_frame, in_loop });
@@ -113,7 +113,7 @@ impl CheckState {
         let taken = self.taken(nikaia_std::block::Text::from(path.to_string()), ty.clone(), self.read_seq, to, span);
         self.handed.push(taken);
         self.facts.taken_parts.insert(node_key(value), stand_in);
-        self.a_part_out(&root, &path, self.handed.len() as i64 - 1);
+        self.a_part_out(&root, &path, unsafe { nikaia_std::proven::sub::<i64>(self.handed.len() as i64, 1) });
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -194,7 +194,7 @@ impl CheckState {
         let mut best: i64 = -1;
         let mut at: i64 = 0;
         while at < self.reads_on_paths.len() as i64 {
-            let read = (*nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(at))).clone();
+            let read = (*unsafe { nikaia_std::proven::read(&self.reads_on_paths, (at) as usize) }).clone();
             let mut before_the_end = true;
             if taken.until.is_some() { before_the_end = read.at < nikaia_std::index::or(taken.until, || 0); }
             if a_path_overlaps(&read.path, &taken.path) && read.binding == taken.binding && !choices_apart(&taken.choices, &read.choices) && before_the_end && (read.at >= taken.at || read.at == taken.from && read.seq > taken.seq) {
@@ -203,12 +203,12 @@ impl CheckState {
                     if read.at < held.at || read.at == held.at && read.seq < held.seq { best = at; }
                 }
             }
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         if best < 0 { return None; }
         let used = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(best)).at;
         for written in self.written_at.iter() { if a_path_revives(&written.0, &taken.path) && written.1 >= taken.from && written.1 <= used { return None; } }
-        Some(CheckUse { at: used, path: nikaia_std::block::Text::from(nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(best)).path.to_string()) })
+        Some(CheckUse { at: used, path: nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&self.reads_on_paths, (best) as usize) }.path.to_string()) })
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -236,17 +236,17 @@ impl CheckState {
     pub(crate) fn frame_of(&self, name: &str) -> i64 {
         let mut frame_at = self.scope.len() as i64;
         while frame_at > 0 {
-            frame_at = frame_at - 1;
-            for local in (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame_at))).iter() { if local.name == name { return frame_at; } }
+            frame_at = unsafe { nikaia_std::proven::sub::<i64>(frame_at, 1) };
+            for local in (*unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }).iter() { if local.name == name { return frame_at; } }
         }
         -1
     }
     pub(crate) fn around_a_repeat(&self, bound: i64, path: &str) -> i64 {
         let mut at = self.repeats.len() as i64;
         while at > 0 {
-            at = at - 1;
-            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame <= bound { return -1; }
-            if (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).takes_again(path) { return at; }
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.frame <= bound { return -1; }
+            if (*unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }).takes_again(path) { return at; }
         }
         -1
     }
@@ -291,7 +291,7 @@ impl CheckState {
         self.handed.push(taken);
         if stand_in.is_some() {
             self.facts.taken_parts.insert(node, nikaia_std::block::Text::from(nikaia_std::index::or(stand_in.as_deref(), || "").to_string()));
-            self.a_part_out(&root, path, self.handed.len() as i64 - 1);
+            self.a_part_out(&root, path, unsafe { nikaia_std::proven::sub::<i64>(self.handed.len() as i64, 1) });
         }
         let bound = self.frame_of(&root);
         if bound < 0 { return; }
@@ -318,12 +318,12 @@ impl CheckState {
         let mut holder: i64 = -1;
         let mut at = self.repeats.len() as i64;
         while at > 0 {
-            at = at - 1;
-            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).what != "loop" { return; }
-            loops.push(nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).opened);
-            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame > bound && holder < 0 {
-                if (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).revives(path) { return; }
-                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).leaves { holder = at; }
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.what != "loop" { return; }
+            loops.push(unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.opened);
+            if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.frame > bound && holder < 0 {
+                if (*unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }).revives(path) { return; }
+                if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.leaves { holder = at; }
             }
         }
         if holder < 0 { return; }
@@ -333,11 +333,11 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn a_loop_ends(&mut self) {
-        let last = self.repeats.len() as i64 - 1;
+        let last = unsafe { nikaia_std::proven::sub::<i64>(self.repeats.len() as i64, 1) };
         if last < 0 { return; }
-        let ending = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).opened;
-        let held = nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).held.copy_owned();
-        self.repeats[nikaia_std::index::at(last)].held = vec![];
+        let ending = unsafe { nikaia_std::proven::read(&self.repeats, (last) as usize) }.opened;
+        let held = unsafe { nikaia_std::proven::read(&self.repeats, (last) as usize) }.held.copy_owned();
+        (*unsafe { nikaia_std::proven::slot(&mut self.repeats, (last) as usize) }).held = vec![];
         for taking in held.iter() {
             if self.a_turn_follows(ending, taking) {
                 self.handed_over_again("loop", &taking.path, &taking.ty, &taking.to, &taking.span);
@@ -345,10 +345,10 @@ impl CheckState {
             }
             let mut out = last;
             while out > 0 {
-                out = out - 1;
-                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(out)).frame <= taking.bound || (*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(out))).revives(&taking.path) { break; }
-                if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(out)).leaves {
-                    self.repeats[nikaia_std::index::at(out)].held.push(taking.clone());
+                out = unsafe { nikaia_std::proven::sub::<i64>(out, 1) };
+                if unsafe { nikaia_std::proven::read(&self.repeats, (out) as usize) }.frame <= taking.bound || (*unsafe { nikaia_std::proven::read(&self.repeats, (out) as usize) }).revives(&taking.path) { break; }
+                if unsafe { nikaia_std::proven::read(&self.repeats, (out) as usize) }.leaves {
+                    (*unsafe { nikaia_std::proven::slot(&mut self.repeats, (out) as usize) }).held.push(taking.clone());
                     break;
                 }
             }
@@ -358,7 +358,7 @@ impl CheckState {
         let mut at = taking.from;
         while at < self.ways_out.len() as i64 {
             let way = (*nikaia_std::index::get(&self.ways_out, nikaia_std::index::at(at))).clone();
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             if choices_apart(&taking.choices, &way.choices) { continue; }
             if way.how == "continue" && way.in_loop == ending { return true; }
             let leaves = way.how == "return" || way.how == "throw" || way.how == "break" && way.in_loop == ending;
@@ -409,9 +409,9 @@ impl CheckState {
         }
         let mut at = self.repeats.len() as i64;
         while at > 0 {
-            at = at - 1;
-            if nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at)).frame <= bound { break; }
-            if !(*nikaia_std::index::get(&self.repeats, nikaia_std::index::at(at))).revives(&name) {
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }.frame <= bound { break; }
+            if !(*unsafe { nikaia_std::proven::read(&self.repeats, (at) as usize) }).revives(&name) {
                 self.facts.lent_concatenated.insert(node);
                 return;
             }
@@ -535,9 +535,9 @@ impl CheckState {
         self.ways_out = vec![];
         let mut reports: Vec<CheckMissing> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for index in 0..outs.len() as i64 {
-            let out = (*nikaia_std::index::get(&outs, nikaia_std::index::at(index))).clone();
+            let out = (*unsafe { nikaia_std::proven::read(&outs, (index) as usize) }).clone();
             if out.handed < 0 || out.handed >= self.handed.len() as i64 { continue; }
-            let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(out.handed))).clone();
+            let taken = (*unsafe { nikaia_std::proven::read(&self.handed, (out.handed) as usize) }).clone();
             if nikaia_std::index::or(taken.binding, || -1) != out.binding { continue; }
             let mut from = taken.from;
             let mut seq = taken.seq;
@@ -551,7 +551,7 @@ impl CheckState {
             if out.ends >= 0 { ends = out.ends; }
             let mut ahead: Vec<(i64, i64, i64)> = vec![];
             for at in 0..ways.len() as i64 {
-                let way = (*nikaia_std::index::get(&ways, (at) as usize)).clone();
+                let way = (*unsafe { nikaia_std::proven::read(&ways, (at) as usize) }).clone();
                 let after = way.at > from || way.at == from && way.seq >= seq;
                 let before_the_end = (taken.until.is_none() || way.at < nikaia_std::index::or(taken.until, || 0)) && way.at < ends;
                 let a_jump = way.how == "break" || way.how == "continue";
@@ -570,8 +570,8 @@ impl CheckState {
                 let given_back = gives_cover(&held, &base, &self.flow.choice_arms);
                 if given_back { continue; }
                 let mut found: i64 = -1;
-                for r in 0..reports.len() as i64 { if found < 0 && nikaia_std::index::get(&reports, (r) as usize).subject == out.subject && nikaia_std::index::get(&reports, (r) as usize).at == position.0 && nikaia_std::index::get(&reports, (r) as usize).seq == position.1 { found = r; } }
-                if found >= 0 { reports[nikaia_std::index::at(found)].parts.push(index); } else { reports.push(CheckMissing { subject: nikaia_std::block::Text::from(out.subject.to_string()), at: position.0, seq: position.1, way: position.2, parts: vec![index] }); }
+                for r in 0..reports.len() as i64 { if found < 0 && unsafe { nikaia_std::proven::read(&reports, (r) as usize) }.subject == out.subject && unsafe { nikaia_std::proven::read(&reports, (r) as usize) }.at == position.0 && unsafe { nikaia_std::proven::read(&reports, (r) as usize) }.seq == position.1 { found = r; } }
+                if found >= 0 { (*unsafe { nikaia_std::proven::slot(&mut reports, (found) as usize) }).parts.push(index); } else { reports.push(CheckMissing { subject: nikaia_std::block::Text::from(out.subject.to_string()), at: position.0, seq: position.1, way: position.2, parts: vec![index] }); }
                 break;
             }
         }
@@ -588,14 +588,14 @@ impl CheckState {
             let index = nikaia_std::num::value(index);
             names.push(format!("`{}`", nikaia_std::index::get(&outs, nikaia_std::index::at(index)).part));
         }
-        let mut part: String = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string());
+        let mut part: String = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
         if names.len() > 1 {
             let mut head: String = String::from("");
-            for at in 0..names.len() as i64 - 1 {
+            for at in 0..unsafe { nikaia_std::proven::sub::<i64>(names.len() as i64, 1) } {
                 if at > 0 { head = format!("{}, ", head); }
-                head = format!("{}{}", head, *nikaia_std::index::get(&names, (at) as usize));
+                head = format!("{}{}", head, *unsafe { nikaia_std::proven::read(&names, (at) as usize) });
             }
-            part = format!("{} and {}", head, *nikaia_std::index::get(&names, nikaia_std::index::at(names.len() as i64 - 1)));
+            part = format!("{} and {}", head, *unsafe { nikaia_std::proven::read(&names, (nikaia_std::proven::sub::<i64>(names.len() as i64, 1)) as usize) });
         }
         let from = Span { start: u32::try_from(taken.from).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(taken.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
         let some = report.way >= 0;
@@ -679,7 +679,7 @@ pub(crate) fn by_position(ahead: &[(i64, i64, i64)]) -> Vec<(i64, i64, i64)> {
     let mut out: Vec<(i64, i64, i64)> = vec![];
     for item in ahead.iter() {
         let mut spot = out.len() as i64;
-        while spot > 0 && (nikaia_std::index::get(&out, nikaia_std::index::at(spot - 1)).0 > item.0 || nikaia_std::index::get(&out, nikaia_std::index::at(spot - 1)).0 == item.0 && nikaia_std::index::get(&out, nikaia_std::index::at(spot - 1)).1 > item.1) { spot = spot - 1; }
+        while spot > 0 && (unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(spot, 1)) as usize) }.0 > item.0 || unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(spot, 1)) as usize) }.0 == item.0 && unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(spot, 1)) as usize) }.1 > item.1) { spot = unsafe { nikaia_std::proven::sub::<i64>(spot, 1) }; }
         out.insert(nikaia_std::count::of(spot), item.clone());
     }
     out
@@ -816,8 +816,8 @@ impl CheckState {
         let mut copies = true;
         for item in items.iter() { if self.takes_away(world, &item.ty) { copies = false; } }
         if !copies {
-            let last = self.repeats.len() as i64 - 1;
-            if last < 0 || nikaia_std::index::get(&self.repeats, nikaia_std::index::at(last)).leaves { return; }
+            let last = unsafe { nikaia_std::proven::sub::<i64>(self.repeats.len() as i64, 1) };
+            if last < 0 || unsafe { nikaia_std::proven::read(&self.repeats, (last) as usize) }.leaves { return; }
             let mut at = handed_before;
             while at < self.handed.len() as i64 {
                 let taken = (*nikaia_std::index::get(&self.handed, nikaia_std::index::at(at))).clone();
@@ -825,7 +825,7 @@ impl CheckState {
                     let id: Option<i64> = Some(item.id);
                     if taken.binding == id { return; }
                 }
-                at = at + 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         }
         let node = id_of(iter) as i64;

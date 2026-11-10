@@ -45,8 +45,8 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
     seen.insert(nikaia_std::block::Text::from(start.to_string()));
     let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while ((next) as usize) < queue.len() {
-        let at = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
-        next += 1;
+        let at = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
+        next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
         let reach = match *nikaia_std::index::get(&graph, &at) { Some(__nikaia_value) => __nikaia_value, None => continue };
         if reach.pauses_here || reach.blocked { return chain_back_to(&came_from, &at); }
         for callee in reach.calls.iter() {
@@ -73,8 +73,8 @@ pub(crate) fn chain_back_to(came_from: &collections::BTreeMap<String, String>, a
     let mut chain: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut backwards = backwards;
     let mut i = backwards.len() as i64;
     while i > 0 {
-        i -= 1;
-        chain.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&backwards, nikaia_std::index::at(i))).to_string()));
+        i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
+        chain.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&backwards, (i) as usize) }).to_string()));
     }
     chain
 }
@@ -188,7 +188,7 @@ pub(crate) fn code_bound_in(block: &Block, names: &winnow_grammar::InternerConte
         match &stmt.node {
             Stmt::Let { names: bound, ty, value, .. } => {
                 if bound.len() == 1 {
-                    let name = nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&bound, 0)).to_string());
+                    let name = nikaia_std::block::Text::from(names.resolve(*unsafe { nikaia_std::proven::read(&bound, (0) as usize) }).to_string());
                     let written = code_written((ty).as_ref());
                     if written.is_some() { code.insert(name, nikaia_std::index::or(written, || false)); } else {
                         let from = code_source(value, names, &code);
@@ -205,7 +205,7 @@ pub(crate) fn code_bound_in(block: &Block, names: &winnow_grammar::InternerConte
                     let from = match code_source(value, names, &code) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     for arm in arms.iter() {
                         match &arm.pattern {
-                            MatchPattern::Path(segments) => { if segments.len() == 1 { code.insert(nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&segments, 0)).to_string()), from); } },
+                            MatchPattern::Path(segments) => { if segments.len() == 1 { code.insert(nikaia_std::block::Text::from(names.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string()), from); } },
                             _ => { },
                         }
                     }

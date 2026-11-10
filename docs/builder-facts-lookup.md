@@ -317,6 +317,9 @@ goes into the section of its topic, in one line, with the run that paid for it.
 * **Generated crates are re-lowered by the rustc wrapper** (`project_drive.nika`, host `lower` in `crates/nikaia/src/project.rs`) from `Settings::from_env()`: an emit setting changed only in `lower_member` never reaches `gen/`; a per-crate choice passes through the wrapper's `lower` (as `program` does). (issue-1543)
 * **A program test links its package as a `[lib]`** next to the program, so a once-per-binary item (`#[global_allocator]`, a `main` hook) is emitted only for `--crate-type bin`. (issue-1543)
 * **A runtime panic outside the program's line table prints thread name, file line and backtrace**, which differ between the two settings: unwind with `resume_unwind` (as `OverBudget` does) or expect only stdout. (issue-1543)
+* **`std.contracts`' `keeps` column decides whether a std method takes its argument by value**: without it a parameter handed there is lent as `&T` and rustc refuses (NK1343). (issue-1544)
+* **A generic `T` handed to a std method whose Rust impl has a bound** (`Sender::send` DeepSize, `HashSet::insert` Hash + Eq) fails rustc, because ledger signatures carry no bound (ADR-024 D9); decided in #1559 (implied DeepSize, `[T: Eq]` lowers to `Eq + Hash`). (issue-1544)
+* **A channel probe needs `use std::channel`**; `rx.recv() ?? x` inline gives NK1342: bind first, `let v: T? = rx.recv()`. (issue-1544)
 
 ## Moving Rust into Nikaia (self-hosting, ADR-294, #125)
 

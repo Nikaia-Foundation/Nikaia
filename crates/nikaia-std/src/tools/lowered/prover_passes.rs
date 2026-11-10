@@ -14,7 +14,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
     let readers = prover_readers(program, words);
     walk.state.value_readers = prover_value_readers(&readers, own, library);
     walk.state.readers = prover_length_keepers(program, &readers, words);
-    let bound = program.items.len() as i64 + 2;
+    let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();
     for _ in 0..bound {
         walk.state.known = preconditions;
@@ -51,8 +51,8 @@ pub(crate) fn strike_broken(state: &mut ProverState) {
     for one in state.broken.iter() { broken.push(one.clone()); }
     let mut k = broken.len() as i64;
     while k > 0 {
-        k -= 1;
-        let (function, index) = nikaia_std::index::get(&broken, nikaia_std::index::at(k)); let index = nikaia_std::num::value(index);
+        k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+        let (function, index) = unsafe { nikaia_std::proven::read(&broken, (k) as usize) }; let index = nikaia_std::num::value(index);
         let mut posts = match state.postconditions.remove(function) { Some(__nikaia_value) => __nikaia_value, None => continue };
         posts.remove(nikaia_std::count::of(index));
         state.postconditions.insert(nikaia_std::block::Text::from(function.to_string()), posts);

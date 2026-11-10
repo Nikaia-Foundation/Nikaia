@@ -77,9 +77,9 @@ impl CxNode {
         }
         let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         while ((place) as usize) < entry.arg_names.len() {
-            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&entry.arg_names, (place) as usize)).to_string());
+            let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&entry.arg_names, (place) as usize) }).to_string());
             let ty = (*nikaia_std::index::get(&entry.arg_types, (place) as usize)).clone();
-            place += 1;
+            place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
             let at: i64 = position;
             position += 1;
             let value = format!("argv[{}]", at);
@@ -380,14 +380,14 @@ impl CxNode {
         let mut at: i64 = 0;
         while at < ctx.handles.len() as i64 {
             if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) { exported.push(at); }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let mut state_fields: String = String::from("    int none;\n");
         if !exported.is_empty() {
             state_fields = String::from("");
             for place in exported.iter() {
                 let place = nikaia_std::num::value(place);
-                state_fields.push_str(&format!("    napi_ref {};\n", nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name));
+                state_fields.push_str(&format!("    napi_ref {};\n", unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name));
             }
         }
         let digest = CX_LEDGER_DIGEST;
@@ -395,7 +395,7 @@ impl CxNode {
         for place in cx_records_in_order(&ctx.records) { out.push_str(&cx_node_record_text(nikaia_std::index::get(&ctx.records, nikaia_std::index::at(place)), ctx)); }
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
-            out.push_str(&cx_node_handle(&nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name, place, prefix, &upper));
+            out.push_str(&cx_node_handle(&unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name, place, prefix, &upper));
         }
         if self.any_async { out.push_str(&cx_node_async(prefix)); }
         for trampoline in self.trampolines.iter() {
@@ -408,7 +408,7 @@ impl CxNode {
         }
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
-            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_string());
+            let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name.to_string());
             let made_by = *nikaia_std::index::get(&self.constructors, &ty);
             let mut made = format!("napi_throw_type_error(env, NULL, \"{} has no constructor: the library makes it\");\n    return NULL;", ty);
             if made_by.is_some() {
@@ -423,7 +423,7 @@ impl CxNode {
         out.push_str(&format!("    {{\n        napi_property_descriptor functions[] = {{\n            {}\n        }};\n        napi_define_properties(env, exports, sizeof functions / sizeof *functions, functions);\n    }}\n", nikaia_std::block::Text::from(functions.join(",\n            "))));
         for place in exported.iter() {
             let place = nikaia_std::num::value(place);
-            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&ctx.handles, nikaia_std::index::at(place)).name.to_string());
+            let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&ctx.handles, (place) as usize) }.name.to_string());
             #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::List::from_array_in([format!("{{ \"close\", NULL, nk_close_{}, NULL, NULL, NULL, napi_default_method, NULL }}", ty)], nikaia_std::block::Place::Block);
             let own = *nikaia_std::index::get(&self.members, &ty); #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
             if own.is_some() {

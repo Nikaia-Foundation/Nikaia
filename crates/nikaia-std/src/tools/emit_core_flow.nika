@@ -594,19 +594,23 @@ impl EmitState {
             // `proven-index`'s, as every dropped check is (ADR-378 D2).
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
                 let shift = if op == BinaryOp::Shl { "nikaia_std::proven::shl" } else { "nikaia_std::proven::shr" }
-                out.push(f"unsafe {{ {shift}::<{ty}>(")
+                out.open_unsafe()
+                out.push(f"{shift}::<{ty}>(")
                 self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
                 out.push(", (")
                 self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
-                out.push(") as u32) }")
+                out.push(") as u32)")
+                out.close_unsafe()
                 return
             }
             let name = emit_flow_proven(op)
-            out.push(f"unsafe {{ {name}::<{ty}>(")
+            out.open_unsafe()
+            out.push(f"{name}::<{ty}>(")
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
             out.push(", ")
             self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)
-            out.push(") }")
+            out.push(")")
+            out.close_unsafe()
             return
         }
         // Parenthesised only where precedence needs it: the operators mean the same

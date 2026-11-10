@@ -79,8 +79,8 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
                 let mut at: i64 = 0;
                 for param in names.iter() {
-                    if at < args.len() as i64 { bound.insert(nikaia_std::block::Text::from(param.to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
-                    at = at + 1;
+                    if at < args.len() as i64 { bound.insert(nikaia_std::block::Text::from(param.to_string()), (*unsafe { nikaia_std::proven::read(&args, (at) as usize) }).clone()); }
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
             }
             for field in fields.iter() {
@@ -147,8 +147,8 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
                 let names = match params { Some(__nikaia_value) => __nikaia_value, None => return true };
                 let mut at: i64 = 0;
                 for param in names.iter() {
-                    if at < args.len() as i64 { bound.insert(nikaia_std::block::Text::from(param.to_string()), (*nikaia_std::index::get(&args, nikaia_std::index::at(at))).clone()); }
-                    at = at + 1;
+                    if at < args.len() as i64 { bound.insert(nikaia_std::block::Text::from(param.to_string()), (*unsafe { nikaia_std::proven::read(&args, (at) as usize) }).clone()); }
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
             }
             for field in fields.iter() {
@@ -269,12 +269,12 @@ impl CheckState {
             let mut at: i64 = 0;
             for handed in self.handed.iter() {
                 if at >= from && compare_path_within(&handed.path, name, &format!("{}.", name)) { taken = true; }
-                at = at + 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             at = changed_from;
             while at < self.changed.len() as i64 {
                 if *nikaia_std::index::get(&self.changed, nikaia_std::index::at(at)) == *name { taken = true; }
-                at = at + 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             if taken || check_gives_back(body, name, world.words) || self.gives_back_a_moving_field(world, body, name, ty) { continue; }
             lent.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -329,7 +329,7 @@ pub fn compare_standard_bounds(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
             let ordered = wanted_trait == "Ord";
             let mut met = false;
             let own_bounds = compare_parameter_bounds(&held, parameters);
-            if own_bounds.len() == 1 && *nikaia_std::index::get(&own_bounds, 0) == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && own == "Eq" { met = true; } } }
+            if own_bounds.len() == 1 && *unsafe { nikaia_std::proven::read(&own_bounds, (0) as usize) } == "?" { if ordered { met = asking.orders(&held); } else { met = asking.totally(&held); } } else { for own in own_bounds.iter() { if own == "Ord" || !ordered && own == "Eq" { met = true; } } }
             if met { continue; }
             let shown = held.text();
             let mut what: &'static str = "an equality that is an equivalence";
@@ -350,8 +350,8 @@ pub fn compare_keys_with_no_order(asking: &CheckComparable<'_, '_, '_, '_, '_, '
         match one {
             Ty::Named { ref name, ref args, .. } => {
                 let last = compare_base(name);
-                if (last == "BTreeMap" || last == "BTreeSet") && !args.is_empty() && !asking.orders(nikaia_std::index::get(&args, 0)) {
-                    let key = (*nikaia_std::index::get(&args, 0)).text();
+                if (last == "BTreeMap" || last == "BTreeSet") && !args.is_empty() && !asking.orders(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
+                    let key = (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text();
                     let note: String = String::from("A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have one. A float doesn't (`NaN`), a `struct` or an `enum` you declare isn't given one, and a type from a library has one only where its ledger says `orders = true`.");
                     refused.push(check_refusal("NK1247", span, format!("`{}` keeps its keys in order, and `{}` has no order.", last, key), vec![note], Some(String::from("Use a `HashMap` or `HashSet` where the order of the keys is not observable, or key by a text or a number that says what comes first."))));
                 }

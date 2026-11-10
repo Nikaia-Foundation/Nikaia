@@ -129,7 +129,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let mut index: i64 = 0;
     for (name, found_option) in passed.iter() {
         let at: i64 = index;
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
         let mut known = false;
         for option in lowered_options(contract) {
             if option.name != *name || known { continue; }
@@ -140,17 +140,17 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
                     _ => option.ty.clone(),
                 };
                 if found_option.fits(&inner) {
-                    state.facts.nullable_args.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)), FactWrap::Constructor);
+                    state.facts.nullable_args.insert(*unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) }, FactWrap::Constructor);
                     continue;
                 }
             }
             if found_option.fits(&option.ty) { continue; }
-            if at < state.flow.option_literals.len() as i64 && *nikaia_std::index::get(&state.flow.option_literals, nikaia_std::index::at(at)) && a_plain_string(&option.ty) {
+            if at < state.flow.option_literals.len() as i64 && *unsafe { nikaia_std::proven::read(&state.flow.option_literals, (at) as usize) } && a_plain_string(&option.ty) {
                 state.facts.owned_texts.insert(*nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at)));
                 continue;
             }
             if at < state.flow.option_values.len() as i64 && option.ty.is_a_view() && !found_option.is_a_view() && found_option.fits(&option.ty.owned()) {
-                let value = *nikaia_std::index::get(&state.flow.option_values, nikaia_std::index::at(at));
+                let value = *unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) };
                 state.facts.lent_options.insert(value);
                 continue;
             }
@@ -173,21 +173,21 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let mut position: i64 = 0;
     while ((position) as usize) < found.len() {
         let at: i64 = position;
-        position += 1;
-        let found_here = (*nikaia_std::index::get(&found, nikaia_std::index::at(at))).clone();
-        let known_want = at < wanted.len() as i64 && wholly_known(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1) && !check_arguments_a_var(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
+        let found_here = (*unsafe { nikaia_std::proven::read(&found, (at) as usize) }).clone();
+        let known_want = at < wanted.len() as i64 && wholly_known(&unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1) && !check_arguments_a_var(&unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1);
         let mut arms: Vec<CheckArm<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        if found_here.is_unknown() && known_want && at < given.len() as i64 { arms = state.arms_to_ask(world, nikaia_std::index::get(&given, nikaia_std::index::at(at))); }
+        if found_here.is_unknown() && known_want && at < given.len() as i64 { arms = state.arms_to_ask(world, unsafe { nikaia_std::proven::read(&given, (at) as usize) }); }
         if arms.is_empty() {
-            let here: Option<&Expr> = if at < given.len() as i64 { Some(nikaia_std::index::get(&given, nikaia_std::index::at(at))) } else { None };
+            let here: Option<&Expr> = if at < given.len() as i64 { Some(unsafe { nikaia_std::proven::read(&given, (at) as usize) }) } else { None };
             expanded.push(CheckArgument { at, arm: false, given: here, found: found_here });
             continue;
         }
-        let no_number = at < wanted.len() as i64 && state.no_integer_is(world, &nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1);
+        let no_number = at < wanted.len() as i64 && state.no_integer_is(world, &unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1);
         let mut k: i64 = 0;
         while ((k) as usize) < arms.len() {
-            let arm = (*nikaia_std::index::get(&arms, (k) as usize)).clone();
-            k += 1;
+            let arm = (*unsafe { nikaia_std::proven::read(&arms, (k) as usize) }).clone();
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
             let literal = matches!(check_peeled(tail), Expr::LitInt { .. });
             if arm.ty.is_unknown() && literal && no_number { expanded.push(CheckArgument { at, arm: true, given: Some(tail), found: Ty::Named { name: String::from("i64"), args: vec![], view: false } }); } else { expanded.push(CheckArgument { at, arm: true, given: Some(tail), found: arm.ty.clone() }); }
@@ -199,8 +199,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     if own {
         let mut next: i64 = 0;
         while ((next) as usize) < expanded.len() {
-            let argument = nikaia_std::index::get(&expanded, (next) as usize);
-            next += 1;
+            let argument = unsafe { nikaia_std::proven::read(&expanded, (next) as usize) };
+            next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
             let var = match check_arguments_var_name(&nikaia_std::index::get(&wanted, nikaia_std::index::at(argument.at)).1) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let literal = match argument.given {
                 None => false,
@@ -234,8 +234,8 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
                     let mut rest: Vec<(i64, Integer)> = vec![];
                     let mut j: i64 = 0;
                     while ((j) as usize) < pending.len() {
-                        if j != hit { rest.push((*nikaia_std::index::get(&pending, (j) as usize)).clone()); }
-                        j += 1;
+                        if j != hit { rest.push((*unsafe { nikaia_std::proven::read(&pending, (j) as usize) }).clone()); }
+                        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
                     }
                     state.flow.literal_receivers = rest;
                 }
@@ -440,10 +440,10 @@ pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
     if (had.len() as i64) != wanted.len() as i64 { return 0; }
     let mut at: i64 = 0;
     for one in had.iter() {
-        let other = (*nikaia_std::index::get(&wanted, (at) as usize)).clone();
+        let other = (*unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }).clone();
         let changes = lent_mut(one).is_some();
-        if changes != (lent_mut(&other).is_some()) && nikaia_std::index::or(lent_mut(one), || one.clone().into()).fits(&nikaia_std::index::or(lent_mut(&other), || other.clone().into())) { return at + 1; }
-        at += 1;
+        if changes != (lent_mut(&other).is_some()) && nikaia_std::index::or(lent_mut(one), || one.clone().into()).fits(&nikaia_std::index::or(lent_mut(&other), || other.clone().into())) { return unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     0
 }
@@ -474,10 +474,10 @@ impl CheckState {
         let mut eased: Vec<Ty> = vec![];
         let mut any = false;
         for at in 0..params.len() as i64 {
-            if (*nikaia_std::index::get(&wanted, nikaia_std::index::at(at))).is_a_view() && !(*nikaia_std::index::get(&params, nikaia_std::index::at(at))).is_a_view() && view_of_type(nikaia_std::index::get(&params, nikaia_std::index::at(at))).fits(nikaia_std::index::get(&wanted, nikaia_std::index::at(at))) && lends_in_own(contract, at, &vec![world.library]) {
+            if (*unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }).is_a_view() && !(*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).is_a_view() && view_of_type(unsafe { nikaia_std::proven::read(&params, (at) as usize) }).fits(unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }) && lends_in_own(contract, at, &vec![world.library]) {
                 eased.push((*nikaia_std::index::get(&wanted, nikaia_std::index::at(at))).clone());
                 any = true;
-            } else { eased.push((*nikaia_std::index::get(&params, nikaia_std::index::at(at))).clone()); }
+            } else { eased.push((*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).clone()); }
         }
         any && Ty::Fn { params: eased, result: Box::new(result), is_sync, can_throw }.fits(want)
     }

@@ -85,27 +85,27 @@ pub fn sv_features(cnf: &SvCnf) -> SvFeatures {
     let mut twos: i64 = 0;
     let mut a: i64 = 0;
     while ((a) as usize) < cnf.query.atoms.len() {
-        if ((a) as usize) < cnf.definition.len() && *nikaia_std::index::get(&cnf.definition, (a) as usize) {
-            a += 1;
+        if ((a) as usize) < cnf.definition.len() && *unsafe { nikaia_std::proven::read(&cnf.definition, (a) as usize) } {
+            a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
             continue;
         }
         f.atoms += 1;
-        let width = nikaia_std::index::get(&cnf.query.atoms, (a) as usize).row.ks.len() as i64;
+        let width = unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.ks.len() as i64;
         f.nonzeros += width;
-        for k in nikaia_std::index::get(&cnf.query.atoms, (a) as usize).row.ks.iter() {
+        for k in unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.ks.iter() {
             let k = nikaia_std::num::value(k);
             let size = sv_strategy_size(k);
             if size > f.max_coefficient { f.max_coefficient = size; }
         }
-        let constant = sv_strategy_size(nikaia_std::index::get(&cnf.query.atoms, (a) as usize).row.constant);
+        let constant = sv_strategy_size(unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.constant);
         if constant > f.max_constant { f.max_constant = constant; }
-        if width == 1 { ones += 1; }
+        if width == 1 { ones = unsafe { nikaia_std::proven::add::<i64>(ones, 1) }; }
         if width == 2 {
-            let k0 = *nikaia_std::index::get(&nikaia_std::index::get(&cnf.query.atoms, (a) as usize).row.ks, 0);
-            let k1 = *nikaia_std::index::get(&nikaia_std::index::get(&cnf.query.atoms, (a) as usize).row.ks, 1);
-            if k0 == 1 && k1 == -1 || k0 == -1 && k1 == 1 { twos += 1; }
+            let k0 = *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.ks, 0);
+            let k1 = *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }.row.ks, 1);
+            if k0 == 1 && k1 == -1 || k0 == -1 && k1 == 1 { twos = unsafe { nikaia_std::proven::add::<i64>(twos, 1) }; }
         }
-        a += 1;
+        a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
     }
     for clause in cnf.query.clauses.iter() {
         f.boolean += clause.len() as i64;
@@ -159,8 +159,8 @@ pub(crate) fn sv_strategy_values(cnf: &SvCnf, values: &[i64]) -> collections::BT
     let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut col: i64 = 0;
     while ((col) as usize) < values.len() && ((col) as usize) < cnf.names.len() {
-        named.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&cnf.names, (col) as usize)).to_string()), *nikaia_std::index::get(&values, (col) as usize));
-        col += 1;
+        named.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (col) as usize) }).to_string()), *unsafe { nikaia_std::proven::read(&values, (col) as usize) });
+        col = unsafe { nikaia_std::proven::add::<i64>(col, 1) };
     }
     named
 }

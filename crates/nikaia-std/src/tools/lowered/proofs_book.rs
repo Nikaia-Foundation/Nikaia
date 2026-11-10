@@ -13,14 +13,14 @@ pub fn pb_read(text: &str, long: &impl Fn(&str) -> Option<String>) -> Vec<PbLine
     for line in text.lines() {
         if line.starts_with('#') || line.trim().is_empty() { continue; }
         let words: Vec<&str> = line.split(' ').collect::<Vec<_>>();
-        if words.len() == 4 && *nikaia_std::index::get(&words, 1) == "invariant" {
-            out.push(PbLine { key: nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 0)).to_string()), kind: nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 1)).to_string()), body: format!("{} {}", *nikaia_std::index::get(&words, 2), *nikaia_std::index::get(&words, 3)) });
+        if words.len() == 4 && *unsafe { nikaia_std::proven::read(&words, (1) as usize) } == "invariant" {
+            out.push(PbLine { key: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (0) as usize) }).to_string()), kind: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (1) as usize) }).to_string()), body: format!("{} {}", *unsafe { nikaia_std::proven::read(&words, (2) as usize) }, *unsafe { nikaia_std::proven::read(&words, (3) as usize) }) });
             continue;
         }
         if words.len() != 3 { continue; }
-        let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 0)).to_string());
-        let kind = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 1)).to_string());
-        let body = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 2)).to_string());
+        let key = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (0) as usize) }).to_string());
+        let kind = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (1) as usize) }).to_string());
+        let body = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (2) as usize) }).to_string());
         if kind == "proved" && body == "@" {
             let held = match long(&key) { Some(__nikaia_value) => __nikaia_value, None => continue };
             out.push(PbLine { key, kind, body: nikaia_std::block::Text::from(held.trim().to_string()) });

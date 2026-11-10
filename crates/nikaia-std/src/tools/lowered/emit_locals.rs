@@ -25,7 +25,7 @@ pub fn nonnegative_locals(body: &Block) -> Vec<winnow_grammar::Symbol> {
     }
     let mut out: Vec<winnow_grammar::Symbol> = vec![];
     for at in 0..state.symbols.len() as i64 {
-        let symbol = *nikaia_std::index::get(&state.symbols, (at) as usize);
+        let symbol = *unsafe { nikaia_std::proven::read(&state.symbols, (at) as usize) };
         if nn_every_declaration(&state, symbol) && !state.spoiled.contains(&symbol) { out.push(symbol); }
     }
     out
@@ -88,14 +88,14 @@ pub(crate) fn nn_note(stmt: &Stmt, state: &mut NnState) {
                 let name = *name;
                 nn_declare(name, state);
             }
-            if names.len() == 1 && ty.is_none() && nn_literal(value) { nn_candidate(*nikaia_std::index::get(&names, 0), state); }
+            if names.len() == 1 && ty.is_none() && nn_literal(value) { nn_candidate(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }, state); }
         },
         Stmt::For { bindings, iter, .. } => {
             for name in bindings.iter() {
                 let name = *name;
                 nn_declare(name, state);
             }
-            if bindings.len() == 1 && nn_range_from_literal(iter) { nn_candidate(*nikaia_std::index::get(&bindings, 0), state); }
+            if bindings.len() == 1 && nn_range_from_literal(iter) { nn_candidate(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }, state); }
         },
         Stmt::Assign { target, op, value } => {
             match target {
@@ -158,7 +158,7 @@ pub(crate) fn nn_every(body: &Block, visited: &[&Expr], state: &mut NnState) {
     }
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut blocks = blocks;
     while ((at) as usize) < blocks.len() {
-        let block = *nikaia_std::index::get(&blocks, (at) as usize);
+        let block = *unsafe { nikaia_std::proven::read(&blocks, (at) as usize) };
         for stmt in block.stmts.iter() {
             match &stmt.node {
                 Stmt::For { body, .. } => { blocks.push(body); },

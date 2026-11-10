@@ -294,7 +294,7 @@ pub(crate) fn maybe_expression_blocks(expr: Option<&Expr>, names: &winnow_gramma
 pub(crate) fn path_name(segments: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext, unaliased: &impl Fn(&str) -> String) -> String {
     let mut name = unaliased(names.resolve(*nikaia_std::index::get(&segments, 0)));
     for k in 1..segments.len() as i64 {
-        let segment = names.resolve(*nikaia_std::index::get(&segments, (k) as usize));
+        let segment = names.resolve(*unsafe { nikaia_std::proven::read(&segments, (k) as usize) });
         name = format!("{}::{}", name, segment);
     }
     name
@@ -319,7 +319,7 @@ pub(crate) fn a_named_call(func: &Expr, args: &[Expr], config: &[ConfigArg], spa
     }
     let at = root_at(&name);
     let mut wrote: Option<Wrote> = None;
-    if at >= 0 && at < args.len() as i64 { wrote = written_root(names, nikaia_std::index::get(&args, nikaia_std::index::at(at))); }
+    if at >= 0 && at < args.len() as i64 { wrote = written_root(names, unsafe { nikaia_std::proven::read(&args, (at) as usize) }); }
     let mut literals: Vec<Option<String>> = vec![];
     for arg in args.iter() {
         literals.push(match arg {

@@ -42,7 +42,7 @@ pub async fn project_write_proofs(root: &std::path::Path, book: &ProofsBook, loc
     }
     if book.searched > 0 || !proofs_book_as_recorded(book, root).await {
         let mut places: String = book.searched_at.iter().take(nikaia_std::count::of(PROJECT_WRITE_SHOWN)).map(|place| { format!("\n  asked at {}", proofs_shown(place, root)) }).collect();
-        if (book.searched_at.len() as i64) > PROJECT_WRITE_SHOWN { places.push_str(&format!("\n  and at {} other places", book.searched_at.len() as i64 - PROJECT_WRITE_SHOWN)); }
+        if (book.searched_at.len() as i64) > PROJECT_WRITE_SHOWN { places.push_str(&format!("\n  and at {} other places", unsafe { nikaia_std::proven::sub::<i64>(book.searched_at.len() as i64, PROJECT_WRITE_SHOWN) })); }
         let why = match book.searched {
             0 => String::from("it holds entries no question asked"),
             1 => String::from("1 question was searched"),

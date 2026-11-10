@@ -85,7 +85,7 @@ pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, s
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
     for parameter in ty.generics.iter() {
         let mut text = written_type(names, parameter);
-        let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *nikaia_std::index::get(&code.param_names, (at) as usize) } else { None };
+        let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *unsafe { nikaia_std::proven::read(&code.param_names, (at) as usize) } } else { None };
         match written {
             None => { },
             Some(symbol) => {
@@ -95,7 +95,7 @@ pub fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &Type, s
             },
         }
         shown.push(text);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let joined = nikaia_std::block::Text::from(shown.join(", "));
     let mut function = format!("fn({})", joined); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;

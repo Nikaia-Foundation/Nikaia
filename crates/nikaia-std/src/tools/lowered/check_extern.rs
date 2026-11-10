@@ -152,9 +152,9 @@ impl CheckState {
         if base == "String" && plain && !view && !out { return Some(String::from("Take `ref String`: C keeps the text and lends it for the call.")); }
         if ext_a_text(base) && plain && view && out { return Some(String::from("Hand back `String`: it is written into the caller's buffer.")); }
         if base == "Bytes" && plain { return None; }
-        if base == "Vec" && args.len() == 1 && !view && out && *nikaia_std::index::get(&args, 0) == "u8" { return None; }
-        if base == "Array" && args.len() == 1 && view && !out && ext_a_number(nikaia_std::index::get(&args, 0)) { return None; }
-        if args.len() == 1 && (base == "Array" && view && !out || base == "Vec" && !view) && an_extern_struct_named(&world.here, nikaia_std::index::get(&args, 0)) { return None; }
+        if base == "Vec" && args.len() == 1 && !view && out && *unsafe { nikaia_std::proven::read(&args, (0) as usize) } == "u8" { return None; }
+        if base == "Array" && args.len() == 1 && view && !out && ext_a_number(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { return None; }
+        if args.len() == 1 && (base == "Array" && view && !out || base == "Vec" && !view) && an_extern_struct_named(&world.here, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { return None; }
         if (base == "Vec" || base == "Array") && !out { return Some(String::from("Take `ref Array[T]` of a number: C keeps the array and lends it for the call.")); }
         if plain && declared { return None; }
         if base == "Locked" || base == "Shared" || base == "SharedMut" || base == "Seen" { return Some(format!("Keep the `{}` inside the package, in a `pub struct` C holds as a handle.", name)); }

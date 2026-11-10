@@ -106,8 +106,8 @@ pub(crate) fn readable_name(reached: &Reached) -> Option<String> {
 
 pub fn group_verdict(run: &[Operation]) -> Verdict {
     for i in 0..run.len() as i64 {
-        for j in i + 1..run.len() as i64 {
-            let found = verdict(nikaia_std::index::get(&run, (i) as usize), nikaia_std::index::get(&run, nikaia_std::index::at(j)));
+        for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..run.len() as i64 {
+            let found = verdict(unsafe { nikaia_std::proven::read(&run, (i) as usize) }, unsafe { nikaia_std::proven::read(&run, (j) as usize) });
             if !found.is_overlap() { return found; }
         }
     }
@@ -118,14 +118,14 @@ pub fn group_of(run: &[Operation]) -> i64 {
     let mut taken: i64 = if !run.is_empty() { 1 } else { 0 };
     while taken < run.len() as i64 {
         if !fits_with_the_front(run, taken) { break; }
-        taken += 1;
+        taken = unsafe { nikaia_std::proven::add::<i64>(taken, 1) };
     }
     if taken < 2 { return 0; }
     taken
 }
 
 pub(crate) fn fits_with_the_front(run: &[Operation], at: i64) -> bool {
-    for i in 0..at { if !verdict(nikaia_std::index::get(&run, (i) as usize), nikaia_std::index::get(&run, nikaia_std::index::at(at))).is_overlap() { return false; } }
+    for i in 0..at { if !verdict(unsafe { nikaia_std::proven::read(&run, (i) as usize) }, unsafe { nikaia_std::proven::read(&run, (at) as usize) }).is_overlap() { return false; } }
     true
 }
 
@@ -140,7 +140,7 @@ pub(crate) fn accounted_as(stmt: &Stmt, words: &winnow_grammar::InternerContext,
         Stmt::Let { names, value, ty, .. } => {
             if ty.is_some() { return Accounted::Opaque(String::from("a written type, which would have to be carried onto one half of a pattern")); }
             if names.len() != 1 { return Accounted::Opaque(String::from("several names bound at once")); }
-            let binds: Option<String> = Some(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string()));
+            let binds: Option<String> = Some(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()));
             accounted_value(binds, value, words, walking, beside)
         },
         Stmt::Expr(value) => accounted_value(None, value, words, walking, beside),
@@ -235,16 +235,16 @@ pub(crate) fn known_kind(kind: &str) -> bool {
 
 pub(crate) fn call_parameters(signature: &Signature) -> Vec<String> {
     let mut out: Vec<String> = vec![];
-    for i in 0..signature.params.len() as i64 { if i > 0 || nikaia_std::index::get(&signature.params, (i) as usize).0 != "self" { out.push(nikaia_std::block::Text::from(nikaia_std::index::get(&signature.params, (i) as usize).0.to_string())); } }
+    for i in 0..signature.params.len() as i64 { if i > 0 || unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0 != "self" { out.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0.to_string())); } }
     out
 }
 
 pub(crate) fn argument_named(parameter: Option<&str>, parameters: &[String], arguments: &[Expr]) -> Option<String> {
     let wanted = match parameter { Some(__nikaia_value) => __nikaia_value, None => return None };
     for at in 0..parameters.len() as i64 {
-        if *nikaia_std::index::get(&parameters, (at) as usize) == wanted {
+        if *unsafe { nikaia_std::proven::read(&parameters, (at) as usize) } == wanted {
             if ((at) as usize) >= arguments.len() { return None; }
-            return literal_text(nikaia_std::index::get(&arguments, (at) as usize));
+            return literal_text(unsafe { nikaia_std::proven::read(&arguments, (at) as usize) });
         }
     }
     None
@@ -519,14 +519,14 @@ pub(crate) fn one_block_report(key: &str, block: &Block, names: &winnow_grammar:
 }
 
 pub(crate) fn first_refused(operations: &[Operation], present: &[bool]) -> Vec<i64> {
-    for i in 0..operations.len() as i64 { for j in i + 1..operations.len() as i64 { if *nikaia_std::index::get(&present, (i) as usize) && *nikaia_std::index::get(&present, nikaia_std::index::at(j)) && !verdict(nikaia_std::index::get(&operations, (i) as usize), nikaia_std::index::get(&operations, nikaia_std::index::at(j))).is_overlap() { return vec![i, j]; } } }
+    for i in 0..operations.len() as i64 { for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..operations.len() as i64 { if *nikaia_std::index::get(&present, (i) as usize) && *nikaia_std::index::get(&present, nikaia_std::index::at(j)) && !verdict(unsafe { nikaia_std::proven::read(&operations, (i) as usize) }, unsafe { nikaia_std::proven::read(&operations, (j) as usize) }).is_overlap() { return vec![i, j]; } } }
     vec![]
 }
 
 pub(crate) fn refused_header(key: &str, count: i64, operations: &[Operation], pair: &[i64]) -> String {
     let first = *nikaia_std::index::get(&pair, 0) + 1;
     let second = *nikaia_std::index::get(&pair, 1) + 1;
-    let why = verdict(nikaia_std::index::get(&operations, nikaia_std::index::at(*nikaia_std::index::get(&pair, 0))), nikaia_std::index::get(&operations, nikaia_std::index::at(*nikaia_std::index::get(&pair, 1)))).why();
+    let why = verdict(nikaia_std::index::get(&operations, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&pair, (0) as usize) })), nikaia_std::index::get(&operations, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&pair, (1) as usize) }))).why();
     format!("{}: an `overlap` of {} branches, and branches {} and {} may not run together - {}\n", key, count, first, second, why)
 }
 
@@ -535,7 +535,7 @@ pub(crate) fn padded_right(text: &str, width: i64) -> String {
     let mut have = text.chars().count() as i64;
     while have < width {
         out.push(' ');
-        have += 1;
+        have = unsafe { nikaia_std::proven::add::<i64>(have, 1) };
     }
     out
 }

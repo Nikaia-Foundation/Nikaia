@@ -93,20 +93,20 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn findings_moved(&mut self, span: &Span, at: &Span, pushed: i64, waiting: &[bool]) {
         if at == span { return; }
-        for index in pushed..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(index)).span == *span { self.findings[nikaia_std::index::at(index)].span = at.clone(); } }
+        for index in pushed..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(index)).span == *span { (*unsafe { nikaia_std::proven::slot(&mut self.findings, (index) as usize) }).span = at.clone(); } }
         let key = span.start as i64;
         let held = match self.flow.unsigned_slots.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return };
         let mut slots: Vec<CheckUnsignedSlot> = held.copy_owned();
         for index in 0..slots.len() as i64 {
-            let was = index < waiting.len() as i64 && *nikaia_std::index::get(&waiting, nikaia_std::index::at(index));
-            let refusal = match match nikaia_std::index::get(&slots, nikaia_std::index::at(index)).refusal.as_ref() {
+            let was = index < waiting.len() as i64 && *unsafe { nikaia_std::proven::read(&waiting, (index) as usize) };
+            let refusal = match match unsafe { nikaia_std::proven::read(&slots, (index) as usize) }.refusal.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => continue };
             if !was && refusal.span == *span {
                 let mut moved = refusal.clone();
                 moved.span = at.clone();
-                slots[nikaia_std::index::at(index)].refusal = Some(moved);
+                (*unsafe { nikaia_std::proven::slot(&mut slots, (index) as usize) }).refusal = Some(moved);
             }
         }
         self.flow.unsigned_slots.insert(key, slots);
@@ -156,7 +156,7 @@ pub(crate) fn check_overflow_leaves_none(state: &CheckState, world: &CheckWorld<
 // this was written - see `contracts::sync`.
 pub(crate) fn check_overflow_block_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Return(_) => true,
         Stmt::Break => true,
         Stmt::Continue => true,
@@ -285,24 +285,24 @@ pub fn check_overflow_list_into_nullables(state: &mut CheckState, given: &Expr, 
         _ => return false,
     };
     let wants_nullable = match want {
-        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && check_overflow_a_nullable(nikaia_std::index::get(&args, 0)),
+        Ty::Named { name, args, .. } => name == "Vec" && args.len() == 1 && check_overflow_a_nullable(unsafe { nikaia_std::proven::read(&args, (0) as usize) }),
         _ => false,
     };
     let mut open = false;
     let found_plain = match found {
         Ty::Named { name, args, .. } => {
-            open = args.len() == 1 && (*nikaia_std::index::get(&args, 0)).is_unknown();
-            name == "Vec" && args.len() == 1 && !check_overflow_a_nullable(nikaia_std::index::get(&args, 0))
+            open = args.len() == 1 && (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown();
+            name == "Vec" && args.len() == 1 && !check_overflow_a_nullable(unsafe { nikaia_std::proven::read(&args, (0) as usize) })
         },
         _ => false,
     };
     if !wants_nullable || !found_plain {
         let inner_want = match want {
-            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return false; },
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return false; },
             _ => return false,
         };
         let inner_found = match found {
-            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return false; },
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return false; },
             _ => return false,
         };
         let mut deeper = false;
@@ -337,9 +337,9 @@ pub fn check_overflow_tuple_into_nullables(state: &mut CheckState, given: &Expr,
     if (wants.len() as i64) != items.len() as i64 || (founds.len() as i64) != items.len() as i64 { return false; }
     let mut any = false;
     for i in 0..items.len() as i64 {
-        let item = nikaia_std::index::get(&items, (i) as usize);
-        let part = nikaia_std::index::get(&wants, (i) as usize);
-        let had = nikaia_std::index::get(&founds, (i) as usize);
+        let item = unsafe { nikaia_std::proven::read(&items, (i) as usize) };
+        let part = unsafe { nikaia_std::proven::read(&wants, (i) as usize) };
+        let had = unsafe { nikaia_std::proven::read(&founds, (i) as usize) };
         let is_null = matches!(item, Expr::LitNull(_));
         let lent = state.facts.nullable_args.contains_key(&(id_of(&item) as i64));
         if check_overflow_a_nullable(&part) && !check_overflow_a_nullable(&had) && !is_null && !lent && (!had.is_unknown() || is_a_literal(&item)) {

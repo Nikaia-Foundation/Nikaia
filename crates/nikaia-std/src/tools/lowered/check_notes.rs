@@ -36,13 +36,13 @@ impl CheckState {
     pub fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
-        let receiver_lacks = !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" && self.a_sequence_lacks(&written, &nikaia_std::index::get(&signature.params, 0).1, on, span);
+        let receiver_lacks = !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" && self.a_sequence_lacks(&written, &unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, on, span);
         if receiver_lacks { return; }
         let arguments = call_arguments(signature);
         let mut at: i64 = 0;
         while ((at) as usize) < arguments.len() && ((at) as usize) < found.len() {
-            if self.a_sequence_lacks(&written, &nikaia_std::index::get(&arguments, (at) as usize).1, nikaia_std::index::get(&found, (at) as usize), span) { return; }
-            at += 1;
+            if self.a_sequence_lacks(&written, &unsafe { nikaia_std::proven::read(&arguments, (at) as usize) }.1, unsafe { nikaia_std::proven::read(&found, (at) as usize) }, span) { return; }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -55,11 +55,11 @@ impl CheckState {
         let mut needs: &'static str = "walks the sequence more than once"; #[allow(clippy::redundant_locals)] let missing = missing;
         let mut lacks: &'static str = "this one is used up by the first walk"; #[allow(clippy::redundant_locals)] let missing = missing;
         let mut way: String = String::from("Collect it into a list first."); #[allow(clippy::redundant_locals)] let missing = missing;
-        if *nikaia_std::index::get(&missing, 0) == ENDS {
+        if *unsafe { nikaia_std::proven::read(&missing, (0) as usize) } == ENDS {
             needs = "walks a sequence from the back";
             lacks = "this one can only be walked from the front";
             way = String::from("Collect it into a list first, and walk the list from the back: `….collect()` and then `list.iter().rev()`.");
-        } else if *nikaia_std::index::get(&missing, 0) == SIZED {
+        } else if *unsafe { nikaia_std::proven::read(&missing, (0) as usize) } == SIZED {
             needs = "needs to know how long the sequence is";
             lacks = "this one doesn't know until it has been walked";
             way = String::from("Collect it into a list first with `….collect()`: a list knows its length.");
@@ -211,7 +211,7 @@ impl CheckState {
         };
         let key = world.here.unaliased(&name);
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if contract.fails_with.len() == 1 && *nikaia_std::index::get(&contract.fails_with, 0) != "?" { return Some(Ty::Named { name: nikaia_std::block::Text::from((*nikaia_std::index::get(&contract.fails_with, 0)).to_string()), args: vec![], view: false }); }
+        if contract.fails_with.len() == 1 && *unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) } != "?" { return Some(Ty::Named { name: nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) }).to_string()), args: vec![], view: false }); }
         None
     }
 }

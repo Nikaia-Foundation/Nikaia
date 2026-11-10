@@ -21,9 +21,9 @@ pub(crate) fn print_throws_blocks(tokens: &[MigrateToken]) -> Vec<(i64, i64)> {
     let mut out: Vec<(i64, i64)> = vec![];
     let mut k: i64 = 0;
     while ((k) as usize) < tokens.len() {
-        let t = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, (k) as usize).text.to_string());
-        if nikaia_std::index::get(&tokens, (k) as usize).kind == MigrateKind::Word && (t == "impl" || t == "trait") {
-            let mut j: i64 = k + 1;
+        let t = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text.to_string());
+        if unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind == MigrateKind::Word && (t == "impl" || t == "trait") {
+            let mut j: i64 = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             while j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != ";" {
                 if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open { j = migrate_closing(tokens, j); }
                 j += 1;
@@ -46,7 +46,7 @@ pub(crate) fn print_throws_fns(tokens: &[MigrateToken]) -> Vec<PrintThrowsFn> {
     let mut out: Vec<PrintThrowsFn> = vec![];
     let mut k: i64 = 0;
     while k + 1 < tokens.len() as i64 {
-        let declares = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text == "fn" && nikaia_std::index::get(&tokens, nikaia_std::index::at(k + 1)).kind == MigrateKind::Word && migrate_text_at(tokens, k - 1) != ".";
+        let declares = nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind == MigrateKind::Word && unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text == "fn" && unsafe { nikaia_std::proven::read(&tokens, (nikaia_std::proven::add::<i64>(k, 1)) as usize) }.kind == MigrateKind::Word && migrate_text_at(tokens, unsafe { nikaia_std::proven::sub::<i64>(k, 1) }) != ".";
         if !declares {
             k += 1;
             continue;
@@ -58,12 +58,12 @@ pub(crate) fn print_throws_fns(tokens: &[MigrateToken]) -> Vec<PrintThrowsFn> {
             if word < k && k < end { method = true; }
         }
         let mut public = false;
-        let mut back: i64 = k - 1;
-        while back >= 0 && back >= k - 3 {
-            if nikaia_std::index::get(&tokens, nikaia_std::index::at(back)).text == "pub" { public = true; }
-            back -= 1;
+        let mut back: i64 = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+        while back >= 0 && back >= unsafe { nikaia_std::proven::sub::<i64>(k, 3) } {
+            if unsafe { nikaia_std::proven::read(&tokens, (back) as usize) }.text == "pub" { public = true; }
+            back = unsafe { nikaia_std::proven::sub::<i64>(back, 1) };
         }
-        let mut j: i64 = k + 2;
+        let mut j: i64 = unsafe { nikaia_std::proven::add::<i64>(k, 2) };
         if migrate_text_at(tokens, j) == "[" { j = migrate_closing(tokens, j) + 1; }
         if migrate_text_at(tokens, j) != "(" {
             k += 1;
@@ -75,14 +75,14 @@ pub(crate) fn print_throws_fns(tokens: &[MigrateToken]) -> Vec<PrintThrowsFn> {
         let mut close: i64 = j - 1;
         while j < tokens.len() as i64 {
             let t = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text.to_string());
-            let kind = nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind;
+            let kind = unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.kind;
             if t == "{" {
                 open = j;
                 close = migrate_closing(tokens, j);
                 break;
             }
             if kind == MigrateKind::Close || t == ";" || t.is_empty() || kind == MigrateKind::Word && print_throws_item_word(&t) {
-                close = j - 1;
+                close = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
                 break;
             }
             if kind == MigrateKind::Word && t == "throws" { says_throws = true; }
@@ -117,8 +117,8 @@ pub(crate) fn print_throws_paren(tokens: &[MigrateToken], k: i64) -> i64 {
 pub(crate) fn print_throws_fails_at(tokens: &[MigrateToken], k: i64, free: &collections::BTreeSet<String>, methods: &collections::BTreeSet<String>) -> bool {
     let paren = print_throws_paren(tokens, k);
     if nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).kind != MigrateKind::Word || paren < 0 { return false; }
-    let word = nikaia_std::block::Text::from(nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text.to_string());
-    let before = migrate_text_at(tokens, k - 1);
+    let word = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text.to_string());
+    let before = migrate_text_at(tokens, unsafe { nikaia_std::proven::sub::<i64>(k, 1) });
     let called = if before == "." { methods.contains(&word) } else if before == "::" { methods.contains(&word) || free.contains(&word) } else if before == "fn" { false } else { print_throws_is_print(&word) || free.contains(&word) };
     called && !print_throws_caught(tokens, paren)
 }
@@ -129,7 +129,7 @@ pub(crate) fn print_throws_body_fails(tokens: &[MigrateToken], open: i64, close:
     let mut k = open + 1;
     while k < close {
         if print_throws_fails_at(tokens, k, free, methods) { return true; }
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     false
 }
@@ -143,7 +143,7 @@ pub(crate) fn print_throws_names(fns: &[PrintThrowsFn], failing: &[bool], outsid
         let bare = name.strip_prefix('.');
         if bare.is_some() { methods.insert(nikaia_std::block::Text::from(nikaia_std::index::or(bare, || "").to_string())); } else { free.insert(nikaia_std::block::Text::from(name.to_string())); }
     }
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) { if nikaia_std::index::get(&fns, (i) as usize).method { methods.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&fns, (i) as usize).name.to_string())); } else { free.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&fns, (i) as usize).name.to_string())); } } }
+    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.method { methods.insert(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name.to_string())); } else { free.insert(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name.to_string())); } } }
     (free, methods)
 }
 
@@ -153,13 +153,13 @@ pub(crate) fn print_throws_lambdas(tokens: &[MigrateToken]) -> Vec<(i64, i64, i6
     let mut out: Vec<(i64, i64, i64)> = vec![];
     for k in 0..tokens.len() as i64 {
         let next = migrate_text_at(tokens, k + 1);
-        if nikaia_std::index::get(&tokens, (k) as usize).kind != MigrateKind::Word || nikaia_std::index::get(&tokens, (k) as usize).text != "fn" || next != "(" && next != "{" { continue; }
-        let mut j = k + 1;
+        if nikaia_std::index::get(&tokens, (k) as usize).kind != MigrateKind::Word || unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text != "fn" || next != "(" && next != "{" { continue; }
+        let mut j = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         if next == "(" {
             j = migrate_closing(tokens, j) + 1;
             while j < tokens.len() as i64 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "{" {
-                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Close || nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text == ";" { break; }
-                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open { j = migrate_closing(tokens, j); }
+                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Close || unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.text == ";" { break; }
+                if unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.kind == MigrateKind::Open { j = migrate_closing(tokens, j); }
                 j += 1;
             }
         }
@@ -171,18 +171,18 @@ pub(crate) fn print_throws_lambdas(tokens: &[MigrateToken]) -> Vec<(i64, i64, i6
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn print_throws_handed_to_method(tokens: &[MigrateToken], k: i64) -> bool {
-    if migrate_text_at(tokens, k - 2) == "." && nikaia_std::index::get(&tokens, nikaia_std::index::at(k - 1)).kind == MigrateKind::Word { return true; }
+    if migrate_text_at(tokens, unsafe { nikaia_std::proven::sub::<i64>(k, 2) }) == "." && nikaia_std::index::get(&tokens, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(k, 1) })).kind == MigrateKind::Word { return true; }
     let mut depth = 0;
-    let mut j = k - 1;
+    let mut j = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
     while j >= 0 {
-        if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Close { depth += 1; } else if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Open {
+        if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).kind == MigrateKind::Close { depth += 1; } else if unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.kind == MigrateKind::Open {
             if depth == 0 {
-                if nikaia_std::index::get(&tokens, nikaia_std::index::at(j)).text != "(" { return false; }
-                return j >= 2 && nikaia_std::index::get(&tokens, nikaia_std::index::at(j - 1)).kind == MigrateKind::Word && nikaia_std::index::get(&tokens, nikaia_std::index::at(j - 2)).text == ".";
+                if unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.text != "(" { return false; }
+                return j >= 2 && unsafe { nikaia_std::proven::read(&tokens, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) }.kind == MigrateKind::Word && unsafe { nikaia_std::proven::read(&tokens, (nikaia_std::proven::sub::<i64>(j, 2)) as usize) }.text == ".";
             }
             depth -= 1;
         }
-        j -= 1;
+        j = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
     }
     false
 }
@@ -193,7 +193,7 @@ pub(crate) fn print_throws_line(tokens: &[MigrateToken], k: i64) -> i64 {
     let mut line: i64 = 1;
     for i in 0..k + 1 {
         for c in nikaia_std::index::get(&tokens, (i) as usize).gap.chars() { if c == '\n' { line += 1; } }
-        if i < k { for c in nikaia_std::index::get(&tokens, (i) as usize).text.chars() { if c == '\n' { line += 1; } } }
+        if i < k { for c in unsafe { nikaia_std::proven::read(&tokens, (i) as usize) }.text.chars() { if c == '\n' { line += 1; } } }
     }
     line
 }
@@ -213,11 +213,11 @@ pub(crate) fn print_throws_failing(tokens: &[MigrateToken], fns: &[PrintThrowsFn
     while changed {
         changed = false;
         for i in 0..fns.len() as i64 {
-            if *nikaia_std::index::get(&failing, (i) as usize) { continue; }
-            let f = nikaia_std::index::get(&fns, (i) as usize);
+            if *unsafe { nikaia_std::proven::read(&failing, (i) as usize) } { continue; }
+            let f = unsafe { nikaia_std::proven::read(&fns, (i) as usize) };
             let fails = if f.open < 0 { f.method && methods.contains(&f.name) } else { print_throws_body_fails(tokens, f.open, f.close, &free, &methods) };
             if fails {
-                { let __nikaia_stored = true; nikaia_std::index::set(&mut failing, (i) as usize, __nikaia_stored); }
+                { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut failing, (i) as usize, __nikaia_stored) }; }
                 changed = true;
                 if f.method { methods.insert(nikaia_std::block::Text::from(f.name.to_string())); } else { free.insert(nikaia_std::block::Text::from(f.name.to_string())); }
             }
@@ -241,7 +241,7 @@ pub fn migrate_print_throws_exports(source: &str, outside: &[String]) -> Vec<Str
     let fns = print_throws_fns(&tokens);
     let failing = print_throws_failing(&tokens, &fns, &outside);
     let mut out: Vec<String> = vec![];
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && nikaia_std::index::get(&fns, (i) as usize).public { if nikaia_std::index::get(&fns, (i) as usize).method { out.push(format!(".{}", nikaia_std::index::get(&fns, (i) as usize).name)); } else { out.push(nikaia_std::block::Text::from(nikaia_std::index::get(&fns, (i) as usize).name.to_string())); } } }
+    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.public { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.method { out.push(format!(".{}", unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name)); } else { out.push(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.name.to_string())); } } }
     out
 }
 
@@ -253,12 +253,12 @@ pub fn migrate_print_throws_nika(source: &str, outside: &[String]) -> String {
     let failing = print_throws_failing(&tokens, &fns, &outside);
     let mut before: collections::BTreeSet<i64> = collections::BTreeSet::new();
     let mut after: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && !nikaia_std::index::get(&fns, (i) as usize).says_throws { if nikaia_std::index::get(&fns, (i) as usize).open >= 0 { before.insert(nikaia_std::index::get(&fns, (i) as usize).open); } else { after.insert(nikaia_std::index::get(&fns, (i) as usize).close); } } }
+    for i in 0..fns.len() as i64 { if *nikaia_std::index::get(&failing, (i) as usize) && !unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.says_throws { if unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.open >= 0 { before.insert(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.open); } else { after.insert(unsafe { nikaia_std::proven::read(&fns, (i) as usize) }.close); } } }
     let mut out: String = String::from("");
     for k in 0..tokens.len() as i64 {
         if before.contains(&k) { out.push_str(" throws"); }
-        out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).gap);
-        out.push_str(&nikaia_std::index::get(&tokens, nikaia_std::index::at(k)).text);
+        out.push_str(&unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.gap);
+        out.push_str(&unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text);
         if after.contains(&k) { out.push_str(" throws"); }
     }
     out

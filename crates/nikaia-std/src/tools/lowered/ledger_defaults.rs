@@ -50,14 +50,14 @@ pub fn attribute_value(ledger: &Ledger, library: &Ledger, words: &winnow_grammar
         let mut value: String = String::from("");
         if field.default.is_empty() {
             if ((position) as usize) >= attribute.args.len() { return None; }
-            value = match ld_argument_text(ledger, library, words, &field.ty, nikaia_std::index::get(&attribute.args, (position) as usize), computed) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            position += 1;
+            value = match ld_argument_text(ledger, library, words, &field.ty, unsafe { nikaia_std::proven::read(&attribute.args, (position) as usize) }, computed) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
         } else {
             let mut given: i64 = -1;
             let mut at: i64 = 0;
             for option in attribute.config.iter() {
                 if given < 0 && words.resolve(option.name) == field.name { given = at; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             if given >= 0 { value = match ld_argument_text(ledger, library, words, &field.ty, &nikaia_std::index::get(&attribute.config, nikaia_std::index::at(given)).value, computed) { Some(__nikaia_value) => __nikaia_value, None => return None }; } else { value = nikaia_std::block::Text::from(field.default.to_string()); }
         }
@@ -74,7 +74,7 @@ pub fn computed_options(item: &Item) -> Vec<i64> {
             let mut at: i64 = 0;
             for option in config.iter() {
                 if !a_literal(&option.default) { places.push(at); }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },

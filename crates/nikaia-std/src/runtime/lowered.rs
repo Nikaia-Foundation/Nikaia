@@ -21,6 +21,7 @@ use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
 use nikaia_std::text;
 
+#[allow(unsafe_code)]
 mod http1_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -31,6 +32,7 @@ mod http1_lowered {
 #[allow(unused_imports)]
 pub use http1_lowered::*;
 
+#[allow(unsafe_code)]
 mod line_breaks_lowered {
     #[allow(unused_imports)]
     use super::*;

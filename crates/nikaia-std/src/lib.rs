@@ -20,8 +20,12 @@
 
 // **No `unsafe` here** (ADR-218): what safe Rust cannot say lives in a small
 // crate of its own under `crates/unsafe/`, with its argument and its own
-// checks, and this crate uses it through a safe API.
-#![forbid(unsafe_code)]
+// checks, and this crate uses it through a safe API. The one exception is the
+// lowered code (ADR-218 D5): the emitter's `unsafe` around a
+// `nikaia_std::proven` call at a proved site (ADR-306 D27, ADR-378). Each
+// lowered file's module takes `#[allow(unsafe_code)]`, which a `forbid` would
+// refuse; hand-written Rust here stays under the `deny`.
+#![deny(unsafe_code)]
 
 // **A lowered `.nika` names this crate the way a program does**: the emitter
 // writes `nikaia_std::index::get(…)`, and a module lowered into this crate
@@ -106,7 +110,16 @@ pub mod text {
     /// The language's word for one character, which the lowered file writes.
     #[allow(unused_imports)]
     use crate::prelude::scalar;
-    include!("text.rs");
+    /// The lowered half, in a module of its own so that only it lifts the
+    /// crate's `deny(unsafe_code)` for the emitter's `proven` calls (ADR-218
+    /// D5): a lint attribute on the `include!` itself is ignored.
+    #[allow(unsafe_code)]
+    mod lowered {
+        #[allow(unused_imports)]
+        use super::*;
+        include!("text.rs");
+    }
+    pub use lowered::*;
     include!("text_float.rs");
     include!("text_normal.rs");
     /// The bytes a grammar's `span(p)` covered (ADR-339 D1).
@@ -121,7 +134,11 @@ pub mod text {
 /// the tools are, and kept apart from them because a program compiles this
 /// half and never the compiler's. Unpublished: `std.contracts` does not list
 /// it, and `std`'s Rust (`http1.rs`) is its only caller.
+///
+/// `unnecessary_cast`, as in `tools` below: a proved index at a literal is
+/// lowered `proven::read(&xs, (0) as usize)` (ADR-306 D27).
 #[doc(hidden)]
+#[allow(clippy::unnecessary_cast)]
 pub mod runtime {
     include!("runtime/lowered.rs");
 

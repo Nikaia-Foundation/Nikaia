@@ -42,7 +42,7 @@ pub(crate) fn upto(c: &[scalar], to: i64) -> String { slice(c, 0, to) }
 
 pub(crate) fn last_line_to(c: &[scalar], to: i64) -> String {
     let mut from = to;
-    while from > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(from - 1)) != '\n' { from -= 1; }
+    while from > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(from, 1) })) != '\n' { from = unsafe { nikaia_std::proven::sub::<i64>(from, 1) }; }
     slice(c, from, to)
 }
 
@@ -50,17 +50,17 @@ pub(crate) fn last_line_of(c: &[scalar], to: i64) -> Option<String> {
     if to == 0 { return None; }
     let mut end = to;
     if *nikaia_std::index::get(&c, nikaia_std::index::at(end - 1)) == '\n' {
-        end -= 1;
-        if end > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(end - 1)) == '\r' { end -= 1; }
+        end = unsafe { nikaia_std::proven::sub::<i64>(end, 1) };
+        if end > 0 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(end, 1)) as usize) } == '\r' { end = unsafe { nikaia_std::proven::sub::<i64>(end, 1) }; }
     }
     let mut from = end;
-    while from > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(from - 1)) != '\n' { from -= 1; }
+    while from > 0 && *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(from, 1) })) != '\n' { from = unsafe { nikaia_std::proven::sub::<i64>(from, 1) }; }
     Some(slice(c, from, end))
 }
 
 pub(crate) fn trimmed_len(c: &[scalar], to: i64) -> i64 {
     let mut end = to;
-    while end > 0 && (*nikaia_std::index::get(&c, nikaia_std::index::at(end - 1))).is_whitespace() { end -= 1; }
+    while end > 0 && (*nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(end, 1) }))).is_whitespace() { end = unsafe { nikaia_std::proven::sub::<i64>(end, 1) }; }
     end
 }
 
@@ -114,7 +114,7 @@ pub(crate) fn a_better_reading(error: &Failure, c: &[scalar], at: i64, stops_at:
             }
         }
     }
-    if has_found && found_word == "/" && last_line_to(c, at).trim().is_empty() && !(at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/') { return Some(reading_at(at, "/", "A single `/` is division, and nothing stands before it to divide.", "A comment starts with `//`.")); }
+    if has_found && found_word == "/" && last_line_to(c, at).trim().is_empty() && !(at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) })) == '/') { return Some(reading_at(at, "/", "A single `/` is division, and nothing stands before it to divide.", "A comment starts with `//`.")); }
     if has_found {
         let quote = nikaia_std::block::Text::from(found_word.to_string());
         if quote == "“" || quote == "”" || quote == "‘" || quote == "’" || quote == "„" { return Some(reading_at(at, &quote, &format!("`{}` isn't a quote the language reads.", quote), "Text is written between straight quotes: `\"hi\"`.")); }
@@ -179,7 +179,7 @@ pub(crate) fn reserved_word_note(has_found: bool, found: &str, c: &[scalar], at:
     let mut placed: i64 = 0;
     while placed < width {
         with_a_name.push('z');
-        placed += 1;
+        placed = unsafe { nikaia_std::proven::add::<i64>(placed, 1) };
     }
     with_a_name = format!("{}{}", with_a_name, slice(c, at + width, c.len() as i64));
     if parses_further(&with_a_name, at + width, stops_at) { return Some(format!("`{}` is a reserved word, so it can't be used as a name here.", token)); }
@@ -191,11 +191,11 @@ pub(crate) fn sorted_words(list: &[String]) -> Vec<String> {
     for item in list.iter() {
         let mut at: i64 = 0;
         let mut seen = false;
-        while ((at) as usize) < out.len() && AsRef::<str>::as_ref(&(*nikaia_std::index::get(&out, (at) as usize))) < AsRef::<str>::as_ref(&(item)) { at += 1; }
-        if ((at) as usize) < out.len() && *nikaia_std::index::get(&out, (at) as usize) == *item { seen = true; }
+        while ((at) as usize) < out.len() && AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&out, (at) as usize) })) < AsRef::<str>::as_ref(&(item)) { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
+        if ((at) as usize) < out.len() && *unsafe { nikaia_std::proven::read(&out, (at) as usize) } == *item { seen = true; }
         if !seen {
             let mut rest: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for k in at..out.len() as i64 { rest.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&out, nikaia_std::index::at(k))).to_string())); }
+            for k in at..out.len() as i64 { rest.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&out, (k) as usize) }).to_string())); }
             while out.len() > ((at) as usize) { out.pop(); }
             out.push(nikaia_std::block::Text::from(item.to_string()));
             for r in rest.iter() { out.push(nikaia_std::block::Text::from(r.to_string())); }
@@ -213,10 +213,10 @@ pub(crate) fn what_was_expected(error: &Failure) -> String {
     }
     let expected = sorted_words(&listed);
     let mut wanted: Option<String> = None; #[allow(clippy::redundant_locals)] let expected = expected;
-    if expected.len() == 1 { wanted = Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&expected, 0)).to_string())); } else if expected.len() >= 2 && expected.len() <= 4 {
+    if expected.len() == 1 { wanted = Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&expected, (0) as usize) }).to_string())); } else if expected.len() >= 2 && expected.len() <= 4 {
         let mut head: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for k in 0..expected.len() as i64 - 1 { head.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&expected, (k) as usize)).to_string())); }
-        wanted = Some(format!("{} or {}", nikaia_std::block::Text::from(head.join(", ")), *nikaia_std::index::get(&expected, nikaia_std::index::at(expected.len() as i64 - 1))));
+        for k in 0..unsafe { nikaia_std::proven::sub::<i64>(expected.len() as i64, 1) } { head.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&expected, (k) as usize) }).to_string())); }
+        wanted = Some(format!("{} or {}", nikaia_std::block::Text::from(head.join(", ")), *unsafe { nikaia_std::proven::read(&expected, (nikaia_std::proven::sub::<i64>(expected.len() as i64, 1)) as usize) }));
     }
     let mut found: Option<String> = None;
     if error.has_found {
@@ -249,7 +249,7 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
     if error.has_message {
         let parts = first_sentence(&error.message);
         message = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
-        if parts.len() > 1 { help = Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string())); }
+        if parts.len() > 1 { help = Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string())); }
     }
     #[allow(unused_mut)] let mut notes: Vec<String> = vec![];
     let said_word = nikaia_std::block::Text::from(error.found.to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
@@ -269,8 +269,8 @@ pub fn a_parse_error(error: &Failure, source: &str, stops_at: &impl Fn(&str) -> 
         let pairs = nikaia_std::block::List::from_array_in([coalesce_fallback_note(&said_word, &before)], nikaia_std::block::Place::Block);
         for pair in pairs.iter() {
             if pair.len() >= 2 {
-                notes.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pair, 0)).to_string()));
-                help = Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&pair, 1)).to_string()));
+                notes.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pair, (0) as usize) }).to_string()));
+                help = Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pair, (1) as usize) }).to_string()));
             }
         }
     }

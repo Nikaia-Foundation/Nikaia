@@ -6,8 +6,8 @@
 pub fn distance(a: &str, b: &str) -> i64 {
     let x: Vec<scalar> = nikaia_std::list::chars(a.chars());
     let y: Vec<scalar> = nikaia_std::list::chars(b.chars());
-    let rows = x.len() as i64 + 1;
-    let cols = y.len() as i64 + 1;
+    let rows = unsafe { nikaia_std::proven::add::<i64>(x.len() as i64, 1) };
+    let cols = unsafe { nikaia_std::proven::add::<i64>(y.len() as i64, 1) };
     let mut d: Vec<Vec<i64>> = Vec::new();
     for i in 0..rows {
         let mut row: Vec<i64> = Vec::new();
@@ -16,16 +16,16 @@ pub fn distance(a: &str, b: &str) -> i64 {
     }
     for i in 1..rows {
         for j in 1..cols {
-            let cost: i64 = if *nikaia_std::index::get(&x, nikaia_std::index::at(i - 1)) == *nikaia_std::index::get(&y, nikaia_std::index::at(j - 1)) { 0 } else { 1 };
-            let mut best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i - 1)), nikaia_std::index::at(j)) + 1;
-            if *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i)), nikaia_std::index::at(j - 1)) + 1 < best { best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i)), nikaia_std::index::at(j - 1)) + 1; }
-            if *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i - 1)), nikaia_std::index::at(j - 1)) + cost < best { best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i - 1)), nikaia_std::index::at(j - 1)) + cost; }
-            let swapped = i > 1 && j > 1 && *nikaia_std::index::get(&x, nikaia_std::index::at(i - 1)) == *nikaia_std::index::get(&y, nikaia_std::index::at(j - 2)) && *nikaia_std::index::get(&x, nikaia_std::index::at(i - 2)) == *nikaia_std::index::get(&y, nikaia_std::index::at(j - 1));
-            if swapped && *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i - 2)), nikaia_std::index::at(j - 2)) + 1 < best { best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i - 2)), nikaia_std::index::at(j - 2)) + 1; }
-            { let __nikaia_stored = best; nikaia_std::index::set(&mut d[nikaia_std::index::at(i)], nikaia_std::index::at(j), __nikaia_stored); }
+            let cost: i64 = if *unsafe { nikaia_std::proven::read(&x, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } == *unsafe { nikaia_std::proven::read(&y, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) } { 0 } else { 1 };
+            let mut best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 1) })), nikaia_std::index::at(j)) + 1;
+            if *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i)), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + 1 < best { best = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (i) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + 1; }
+            if *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + cost < best { best = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + cost; }
+            let swapped = i > 1 && j > 1 && *unsafe { nikaia_std::proven::read(&x, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } == *unsafe { nikaia_std::proven::read(&y, (nikaia_std::proven::sub::<i64>(j, 2)) as usize) } && *unsafe { nikaia_std::proven::read(&x, (nikaia_std::proven::sub::<i64>(i, 2)) as usize) } == *unsafe { nikaia_std::proven::read(&y, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) };
+            if swapped && *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 2) })), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 2) })) + 1 < best { best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 2) })), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 2) })) + 1; }
+            { let __nikaia_stored = best; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut d, (i) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
         }
     }
-    *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(rows - 1)), nikaia_std::index::at(cols - 1))
+    *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(rows, 1) })), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(cols, 1) }))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -36,11 +36,11 @@ pub fn one_edit_apart(a: &str, b: &str) -> bool {
     let y: Vec<scalar> = nikaia_std::list::chars(b.chars());
     if (x.len() as i64) == y.len() as i64 {
         let mut differ = 0;
-        for i in 0..x.len() as i64 { if *nikaia_std::index::get(&x, (i) as usize) != *nikaia_std::index::get(&y, (i) as usize) { differ += 1; } }
+        for i in 0..x.len() as i64 { if *unsafe { nikaia_std::proven::read(&x, (i) as usize) } != *unsafe { nikaia_std::proven::read(&y, (i) as usize) } { differ += 1; } }
         return differ == 1;
     }
-    if (x.len() as i64) == y.len() as i64 + 1 { return one_put_in(a, b); }
-    if (y.len() as i64) == x.len() as i64 + 1 { return one_put_in(b, a); }
+    if (x.len() as i64) == unsafe { nikaia_std::proven::add::<i64>(y.len() as i64, 1) } { return one_put_in(a, b); }
+    if (y.len() as i64) == unsafe { nikaia_std::proven::add::<i64>(x.len() as i64, 1) } { return one_put_in(b, a); }
     false
 }
 
@@ -50,7 +50,7 @@ pub(crate) fn one_put_in(long: &str, short: &str) -> bool {
     let kept: Vec<scalar> = nikaia_std::list::chars(short.chars());
     let mut at: i64 = 0;
     let mut skipped = false;
-    for c in long.chars() { if ((at) as usize) < kept.len() && *nikaia_std::index::get(&kept, (at) as usize) == c { at += 1; } else if skipped { return false; } else { skipped = true; } }
+    for c in long.chars() { if ((at) as usize) < kept.len() && *unsafe { nikaia_std::proven::read(&kept, (at) as usize) } == c { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; } else if skipped { return false; } else { skipped = true; } }
     true
 }
 

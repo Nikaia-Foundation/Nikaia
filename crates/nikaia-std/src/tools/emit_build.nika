@@ -545,10 +545,10 @@ pub fn emit_build_rust_targets() -> Vec[ref String] sync {
 }
 
 /// What happens to an index check the walk proved (ADR-306 D14): `on` writes
-/// it without its check, `off` (the default, `Kept`) keeps it. What is proved
-/// does not depend on it.
+/// it without its check, `off` (`Kept`) keeps it. A program's build is `on`
+/// unless it says `off` (ADR-306 D26). What is proved does not depend on it.
 pub enum BoundsChecks {
-    /// Every index is checked: the default.
+    /// Every index is checked: `off`.
     Kept,
     /// An index the walk proved inside is written without its check.
     Removed,
@@ -573,9 +573,9 @@ impl BoundsChecks {
 }
 
 /// What happens to an overflow check the walk proved (ADR-306 D14), as for
-/// `BoundsChecks`; the default is `Kept`.
+/// `BoundsChecks`; a program's build is `Removed` unless it says `off`.
 pub enum OverflowChecks {
-    /// Every `+`, `-` and `*` is checked: the default.
+    /// Every `+`, `-` and `*` is checked: `off`.
     Kept,
     /// One the walk proved stays inside its type is written without its check.
     Removed,

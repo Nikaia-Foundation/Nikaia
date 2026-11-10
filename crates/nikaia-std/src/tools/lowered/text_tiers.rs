@@ -182,12 +182,12 @@ pub fn unaliased_in(aliases: &collections::BTreeMap<String, String>, name: &str)
         amp = "&";
         let chars: Vec<scalar> = nikaia_std::list::chars(name.chars());
         bare = String::from("");
-        for k in 1..chars.len() as i64 { bare.push(*nikaia_std::index::get(&chars, (k) as usize)); }
+        for k in 1..chars.len() as i64 { bare.push(*unsafe { nikaia_std::proven::read(&chars, (k) as usize) }); }
     }
     let parts: Vec<&str> = bare.splitn(2, "::").collect::<Vec<_>>();
     if parts.len() < 2 { return nikaia_std::block::Text::from(name.to_string()); }
-    let package = match *nikaia_std::index::get(&aliases, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
-    format!("{}{}::{}", amp, package, *nikaia_std::index::get(&parts, 1))
+    let package = match *nikaia_std::index::get(&aliases, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    format!("{}{}::{}", amp, package, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -457,7 +457,7 @@ pub(crate) fn open_tier_scope(walk: &mut TierWalk) { walk.frames.push(vec![]); }
 
 pub(crate) fn close_tier_scope(walk: &mut TierWalk) {
     if walk.frames.is_empty() { return; }
-    let names = (*nikaia_std::index::get(&walk.frames, nikaia_std::index::at(walk.frames.len() as i64 - 1))).copy_owned();
+    let names = (*unsafe { nikaia_std::proven::read(&walk.frames, (nikaia_std::proven::sub::<i64>(walk.frames.len() as i64, 1)) as usize) }).copy_owned();
     for name in names.iter() {
         let mut stack = match match *nikaia_std::index::get(&walk.locals, name) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -472,7 +472,7 @@ pub(crate) fn close_tier_scope(walk: &mut TierWalk) {
 pub(crate) fn tier_local(name: &str, walk: &TierWalk) -> Option<TierLocal> {
     let stack = match *nikaia_std::index::get(&walk.locals, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if stack.is_empty() { return None; }
-    Some((*nikaia_std::index::get(&stack, nikaia_std::index::at(stack.len() as i64 - 1))).clone())
+    Some((*unsafe { nikaia_std::proven::read(&stack, (nikaia_std::proven::sub::<i64>(stack.len() as i64, 1)) as usize) }).clone())
 }
 
 pub(crate) fn set_tier_local(name: &str, local: TierLocal, walk: &mut TierWalk) {
@@ -489,8 +489,8 @@ pub(crate) fn set_tier_local(name: &str, local: TierLocal, walk: &mut TierWalk) 
 pub(crate) fn bind_tier_local(name: String, local: TierLocal, walk: &mut TierWalk) {
     walk.locals.entry(nikaia_std::block::Text::from(name.to_string())).or_insert(vec![]).push(local);
     if !walk.frames.is_empty() {
-        let last = walk.frames.len() as i64 - 1;
-        walk.frames[nikaia_std::index::at(last)].push(name);
+        let last = unsafe { nikaia_std::proven::sub::<i64>(walk.frames.len() as i64, 1) };
+        (*unsafe { nikaia_std::proven::slot(&mut walk.frames, (last) as usize) }).push(name);
     }
 }
 
@@ -567,7 +567,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
             }
             flow_type(owner, arg, path, kinds, ask, walk);
             path.pop();
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         return;
     }
@@ -578,7 +578,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
             path.push(at);
             flow_type(owner, part, path, kinds, ask, walk);
             path.pop();
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
 }
@@ -586,7 +586,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
 pub(crate) fn tie_parts(owner: &TextOwner, ty: &Type, path: &[i64], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let mut words: Vec<String> = vec![];
     tuple_text_words(owner, ty, &mut path.copy_owned(), ask, walk, &mut words);
-    for at in 1..words.len() as i64 { walk.flows.links.insert((nikaia_std::block::Text::from((*nikaia_std::index::get(&words, nikaia_std::index::at(at - 1))).to_string()), nikaia_std::block::Text::from((*nikaia_std::index::get(&words, (at) as usize)).to_string()))); }
+    for at in 1..words.len() as i64 { walk.flows.links.insert((nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }).to_string()), nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (at) as usize) }).to_string()))); }
 }
 
 pub(crate) fn tuple_text_words(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
@@ -595,7 +595,7 @@ pub(crate) fn tuple_text_words(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>
         path.push(at);
         if part.is_tuple && !part.is_view && !part.is_nullable { tuple_text_words(owner, part, &mut path.copy_owned(), ask, walk, out); } else if plain_string(ask.names, part) { out.push(seen(owner, &path, walk)); }
         path.pop();
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -604,7 +604,7 @@ pub(crate) fn tier_part_index(field: &str) -> i64 {
     let mut at: i64 = 0;
     for c in field.chars() {
         if c < '0' || c > '9' || field.len() > 4 { return -1; }
-        at = at * 10 + (c as i64 - 48);
+        at = at * 10 + (unsafe { nikaia_std::proven::sub::<i64>(c as i64, 48) });
     }
     at
 }
@@ -620,7 +620,7 @@ pub(crate) fn tuple_part_going(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, w
     if !a_followed_tuple(ask.names, &whole.ty) || at >= whole.ty.generics.len() as i64 { return None; }
     let mut path = whole.path.copy_owned();
     path.push(at);
-    Some(going_into(&whole.owner, nikaia_std::index::get(&whole.ty.generics, nikaia_std::index::at(at)), path, true))
+    Some(going_into(&whole.owner, unsafe { nikaia_std::proven::read(&whole.ty.generics, (at) as usize) }, path, true))
 }
 
 pub(crate) fn part_root(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<TierGoing> {
@@ -632,7 +632,7 @@ pub(crate) fn part_root(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
             if !a_container(ask.names, &list.ty) || a_map(ask.names, &list.ty) || list.ty.generics.is_empty() { return None; }
             let mut path = list.path.copy_owned();
             path.push(0);
-            return Some(going_into(&list.owner, nikaia_std::index::get(&list.ty.generics, 0), path, true));
+            return Some(going_into(&list.owner, unsafe { nikaia_std::proven::read(&list.ty.generics, (0) as usize) }, path, true));
         },
         Expr::Field { name, .. } => {
             let name = *name;
@@ -646,7 +646,7 @@ pub(crate) fn part_root(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &m
 
 pub(crate) fn flow_tuple_tail(going: &TierGoing, block: &Block, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
     if block.stmts.is_empty() { return false; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(last) => {
             flow_value(going, Some(last), kinds, ask, walk);
             return true;
@@ -671,8 +671,8 @@ pub(crate) fn flow_tuple_parts(going: &TierGoing, value: &Expr, kinds: &Kinds, a
                 let mut at: i64 = 0;
                 for part in parts.iter() {
                     let part = *part;
-                    if tuple_part_holds_text(ask.names, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))) { text = kinds_joined(&text, &part); }
-                    at += 1;
+                    if tuple_part_holds_text(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }) { text = kinds_joined(&text, &part); }
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
             }
             let mut at: i64 = 0;
@@ -680,10 +680,10 @@ pub(crate) fn flow_tuple_parts(going: &TierGoing, value: &Expr, kinds: &Kinds, a
                 let mut path = going.path.copy_owned();
                 path.push(at);
                 let mut given = text.clone();
-                if (parts.len() as i64) == items.len() as i64 && !tuple_part_holds_text(ask.names, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))) { given = (*nikaia_std::index::get(&parts, nikaia_std::index::at(at))).clone(); }
-                given = lent_back_in_part(going, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), &path, item, given, ask, walk);
-                flow_value(&going_into(&going.owner, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), path, true), Some(item), &given, ask, walk);
-                at += 1;
+                if (parts.len() as i64) == items.len() as i64 && !tuple_part_holds_text(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }) { given = (*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }).clone(); }
+                given = lent_back_in_part(going, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, &path, item, given, ask, walk);
+                flow_value(&going_into(&going.owner, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, path, true), Some(item), &given, ask, walk);
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             return true;
         },
@@ -885,7 +885,7 @@ pub(crate) fn text_source_word(value: Option<&Expr>, ask: &TierAsk<'_, '_, '_, '
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             if args.len() != 1 || ask.names.resolve(method) != "get" { return None; }
-            element_text_word(receiver, nikaia_std::index::get(&args, 0), ask, walk)
+            element_text_word(receiver, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk)
         },
         Expr::Coalesce { value: first, fallback, .. } => {
             let first = nikaia_std::boxed::open(first); let fallback = nikaia_std::boxed::open(fallback);
@@ -903,7 +903,7 @@ pub(crate) fn element_text_word(base: &Expr, index: &Expr, ask: &TierAsk<'_, '_,
     if !a_container(ask.names, &ty) { return None; }
     let mut at: i64 = 0;
     if a_map(ask.names, &ty) { at = 1; }
-    if ty.generics.len() <= ((at) as usize) || !plain_string(ask.names, nikaia_std::index::get(&ty.generics, (at) as usize)) { return None; }
+    if ty.generics.len() <= ((at) as usize) || !plain_string(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }) { return None; }
     Some(seen(&found.owner, &vec![at], walk))
 }
 
@@ -984,7 +984,7 @@ pub(crate) fn element_word(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk:
     let found = match source_of(iter, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let ty = found.ty.clone();
     if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
-    if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return None; }
+    if !plain_string(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) { return None; }
     Some(seen(&found.owner, &vec![0], walk))
 }
 
@@ -1022,8 +1022,8 @@ pub(crate) fn std_has_method(method: &str, ask: &TierAsk<'_, '_, '_, '_, '_>) ->
 pub(crate) fn kept_args(args: &[Expr], given: &[Kinds], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if ((at) as usize) < given.len() && nikaia_std::index::get(&given, (at) as usize).still { kept_unseen(arg, ask, walk); }
-        at += 1;
+        if ((at) as usize) < given.len() && unsafe { nikaia_std::proven::read(&given, (at) as usize) }.still { kept_unseen(arg, ask, walk); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -1037,7 +1037,7 @@ pub(crate) fn flow_payload(callee: &str, args: &[Expr], given: &[Kinds], ask: &T
     while at < args.len() as i64 && at < given.len() as i64 && at < parts.len() as i64 {
         let owner = TextOwner::Variant(nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(variant.to_string()), at);
         flow_value(&going_into(&owner, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), vec![], true), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), nikaia_std::index::get(&given, nikaia_std::index::at(at)), ask, walk);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -1048,7 +1048,7 @@ pub(crate) fn bind_tuple_parts(pattern: &MatchPattern, scrutinee: &Kinds, ask: &
             if !path.is_empty() { return; }
             for part in parts.iter() {
                 match part {
-                    MatchPattern::Path(named) => { if named.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_string()), plain_local(scrutinee.clone()), walk); } },
+                    MatchPattern::Path(named) => { if named.len() == 1 && !names_a_type(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) })) { bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) }).to_string()), plain_local(scrutinee.clone()), walk); } },
                     _ => { },
                 }
             }
@@ -1062,10 +1062,10 @@ pub(crate) fn bind_whole_name(pattern: &MatchPattern, subject: &Expr, null_arm: 
     let from = match text_source_word(Some(subject), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     match pattern {
         MatchPattern::Path(named) => {
-            if named.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) {
+            if named.len() == 1 && !names_a_type(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) })) {
                 let mut local = plain_local(scrutinee.clone());
                 local.from = Some(from);
-                bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_string()), local, walk);
+                bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) }).to_string()), local, walk);
             }
         },
         _ => { },
@@ -1077,14 +1077,14 @@ pub(crate) fn bind_bare_payload(pattern: &MatchPattern, subject: &Expr, null_arm
     let name = match pattern {
         MatchPattern::Path(named) => {
             if !null_arm || named.len() != 1 { return; }
-            *nikaia_std::index::get(&named, 0)
+            *unsafe { nikaia_std::proven::read(&named, (0) as usize) }
         },
         MatchPattern::Tuple { path, parts } => {
             if path.len() != 1 || parts.len() != 1 || joined_segments(path, ask.names) != "Some" { return; }
-            match nikaia_std::index::get(&parts, 0) {
+            match unsafe { nikaia_std::proven::read(&parts, (0) as usize) } {
                 MatchPattern::Path(named) => {
                     if named.len() != 1 { return; }
-                    *nikaia_std::index::get(&named, 0)
+                    *unsafe { nikaia_std::proven::read(&named, (0) as usize) }
                 },
                 _ => return,
             }
@@ -1170,7 +1170,7 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
             for part in parts.iter() {
                 if at >= declared.len() as i64 || pattern_is_rest(part) { return bound; }
                 if bind_a_payload(part, TextOwner::Variant(nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(variant.to_string()), at), nikaia_std::index::get(&declared, nikaia_std::index::at(at)), ask, walk) { bound = true; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         MatchPattern::Named { path, fields, .. } => {
@@ -1200,8 +1200,8 @@ pub(crate) fn bind_static_payloads(pattern: &MatchPattern, ask: &TierAsk<'_, '_,
 pub(crate) fn bind_a_payload(part: &MatchPattern, owner: TextOwner, ty: &Type, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
     let name = match part {
         MatchPattern::Path(named) => {
-            if named.len() != 1 || names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { return false; }
-            nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_string())
+            if named.len() != 1 || names_a_type(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) })) { return false; }
+            nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) }).to_string())
         },
         _ => return false,
     };
@@ -1251,7 +1251,7 @@ pub(crate) fn bind_some_payload(pattern: &MatchPattern, scrutinee: &Expr, null_a
     match pattern {
         MatchPattern::Tuple { path, parts } => {
             if path.len() != 1 || parts.len() != 1 || joined_segments(path, ask.names) != "Some" { return None; }
-            return bind_payload_name(nikaia_std::index::get(&parts, 0), scrutinee, kinds, ask, walk);
+            return bind_payload_name(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, scrutinee, kinds, ask, walk);
         },
         MatchPattern::Path(_) => {
             if !null_arm { return None; }
@@ -1271,7 +1271,7 @@ pub(crate) fn bind_payload_name(part: &MatchPattern, scrutinee: &Expr, kinds: &K
     if !lent_root(base, ask, walk) { return None; }
     match part {
         MatchPattern::Path(named) => {
-            if named.len() != 1 || names_a_type(ask.names.resolve(*nikaia_std::index::get(&named, 0))) { return None; }
+            if named.len() != 1 || names_a_type(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) })) { return None; }
             if kinds.still {
                 let mut local = plain_local(still_kinds());
                 local.from = Some(seen(&place.owner, &no_path(), walk));
@@ -1279,12 +1279,12 @@ pub(crate) fn bind_payload_name(part: &MatchPattern, scrutinee: &Expr, kinds: &K
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 };
-                bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_string()), local, walk);
+                bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) }).to_string()), local, walk);
                 return word;
             }
             let mut local = plain_local(owned_kinds());
             local.lent = true;
-            bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&named, 0)).to_string()), local, walk);
+            bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&named, (0) as usize) }).to_string()), local, walk);
             return None;
         },
         _ => return None,
@@ -1363,11 +1363,11 @@ pub(crate) fn literals_beside_null(value: &Expr) -> bool {
         Expr::If { then_branch, else_branch, .. } => {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
             if then_branch.stmts.len() != 1 || otherwise.stmts.len() != 1 { return false; }
-            match &nikaia_std::index::get(&then_branch.stmts, 0).node {
+            match &unsafe { nikaia_std::proven::read(&then_branch.stmts, (0) as usize) }.node {
                 Stmt::Expr(last) => { tails.push(last.clone()); },
                 _ => { return false; },
             }
-            match &nikaia_std::index::get(&otherwise.stmts, 0).node {
+            match &unsafe { nikaia_std::proven::read(&otherwise.stmts, (0) as usize) }.node {
                 Stmt::Expr(last) => { tails.push(last.clone()); },
                 _ => { return false; },
             }
@@ -1401,7 +1401,7 @@ pub(crate) fn demote_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, a
         path.push(at);
         demote_inside(owner, arg, &mut path.copy_owned(), ask, walk);
         path.pop();
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -1417,7 +1417,7 @@ pub(crate) fn unlinked_inside(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>,
         path.push(at);
         unlinked_inside(owner, arg, &mut path.copy_owned(), ask, walk);
         path.pop();
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -1451,7 +1451,7 @@ pub(crate) fn still_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wal
 
 pub(crate) fn still_tail(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk, out: &mut Vec<String>) {
     if block.stmts.is_empty() { return; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(last) => { still_sources(last, ask, walk, out); },
         _ => { },
     }
@@ -1599,7 +1599,7 @@ pub(crate) fn kinds_beside_lent_items(value: &Expr, result: &Type, kinds: &Kinds
         _ => return kinds.clone(),
     };
     if !a_container(ask.names, result) || a_map(ask.names, result) || result.generics.is_empty() { return kinds.clone(); }
-    let element = (*nikaia_std::index::get(&result.generics, 0)).clone();
+    let element = (*unsafe { nikaia_std::proven::read(&result.generics, (0) as usize) }).clone();
     if !plain_string(ask.names, &element) || element.is_nullable { return kinds.clone(); }
     let mut left = no_kinds();
     for item in items.iter() {
@@ -1656,13 +1656,13 @@ pub(crate) fn collected_into(going: &TierGoing, receiver: &Expr, ask: &TierAsk<'
         return;
     }
     if !a_container(ask.names, &ty) || ty.generics.is_empty() { return; }
-    if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return; }
+    if !plain_string(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) { return; }
     let mut at = going.path.copy_owned();
     at.push(0);
     let moved = drained_list(receiver, ask, walk);
     if moved.is_some() {
         let from = match moved { Some(__nikaia_value) => __nikaia_value, None => return };
-        let to = Declaring { owner: going.owner.clone(), ty: (*nikaia_std::index::get(&ty.generics, 0)).clone() };
+        let to = Declaring { owner: going.owner.clone(), ty: (*unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }).clone() };
         link(&from, &mut vec![0], &to, &mut at.copy_owned(), ask, walk);
     }
     let word = seen(&going.owner, &at, walk);
@@ -1678,8 +1678,8 @@ pub(crate) fn drained_list(chain: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk
             let found = match source_of(receiver, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let ty = found.ty.clone();
             if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
-            if !plain_string(ask.names, nikaia_std::index::get(&ty.generics, 0)) { return None; }
-            return Some(Declaring { owner: found.owner.clone(), ty: (*nikaia_std::index::get(&ty.generics, 0)).clone() });
+            if !plain_string(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) { return None; }
+            return Some(Declaring { owner: found.owner.clone(), ty: (*unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }).clone() });
         },
         _ => { },
     }
@@ -1688,7 +1688,7 @@ pub(crate) fn drained_list(chain: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk
 
 pub(crate) fn mixed_part(going: &TierGoing, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
     if (going.ty.generics.len() as i64) <= at { return false; }
-    if !plain_string(ask.names, nikaia_std::index::get(&going.ty.generics, nikaia_std::index::at(at))) { return false; }
+    if !plain_string(ask.names, unsafe { nikaia_std::proven::read(&going.ty.generics, (at) as usize) }) { return false; }
     let mut path = going.path.copy_owned();
     path.push(at);
     let word = seen(&going.owner, &path, walk);
@@ -1721,7 +1721,7 @@ pub(crate) fn called_result(func: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk
 pub(crate) fn method_result(method: &str, walk: &TierWalk) -> Option<Declaring> {
     let keys = match *nikaia_std::index::get(&walk.declared.methods, method) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if keys.len() != 1 { return None; }
-    let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, 0)).to_string());
+    let key = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (0) as usize) }).to_string());
     let function = match *nikaia_std::index::get(&walk.declared.fns, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let result = match function.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(Declaring { owner: TextOwner::Returned(nikaia_std::block::Text::from(key.to_string())), ty: result.clone() })
@@ -1755,8 +1755,8 @@ pub(crate) fn link(from: &Declaring, from_path: &mut Vec<i64>, to: &Declaring, t
             walk.flows.in_maps.insert(a);
             walk.flows.in_maps.insert(b);
         }
-        let inner_from = Declaring { owner: from.owner.clone(), ty: (*nikaia_std::index::get(&from_ty.generics, nikaia_std::index::at(at))).clone() };
-        let inner_to = Declaring { owner: to.owner.clone(), ty: (*nikaia_std::index::get(&to_ty.generics, nikaia_std::index::at(at))).clone() };
+        let inner_from = Declaring { owner: from.owner.clone(), ty: (*unsafe { nikaia_std::proven::read(&from_ty.generics, (at) as usize) }).clone() };
+        let inner_to = Declaring { owner: to.owner.clone(), ty: (*unsafe { nikaia_std::proven::read(&to_ty.generics, (at) as usize) }).clone() };
         link(&inner_from, &mut from_path.copy_owned(), &inner_to, &mut to_path.copy_owned(), ask, walk);
         from_path.pop();
         to_path.pop();
@@ -1792,7 +1792,7 @@ pub(crate) fn kinds_of(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, ask: &
                 out = kinds_joined(&out, &kinds_of(owner, arg, &mut path.copy_owned(), ask, walk));
                 path.pop();
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         if !no_text(&out) { return out; }
     }
@@ -1809,7 +1809,7 @@ pub(crate) fn element_kinds(declared: &Declaring, keys: bool, ask: &TierAsk<'_, 
     let mut at: i64 = 0;
     if a_map(ask.names, &ty) && !keys { at = 1; }
     if ty.generics.len() <= ((at) as usize) { return owned_kinds(); }
-    kinds_of(&declared.owner, nikaia_std::index::get(&ty.generics, (at) as usize), &mut vec![at], ask, walk)
+    kinds_of(&declared.owner, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, &mut vec![at], ask, walk)
 }
 
 pub(crate) fn place_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<Declaring> {
@@ -1847,12 +1847,12 @@ pub(crate) fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk:
         let before = walk.handed_back;
         let bound = handed_by_name(&stmt.node, block, k, ask);
         if bound >= 0 { walk.handed_back = bound; }
-        if k + 1 == block.stmts.len() as i64 && (walk.frames.len() == 2 || back) && walk.result.is_some() { walk.tail_back = a_value_statement(&stmt.node); }
+        if unsafe { nikaia_std::proven::add::<i64>(k, 1) } == block.stmts.len() as i64 && (walk.frames.len() == 2 || back) && walk.result.is_some() { walk.tail_back = a_value_statement(&stmt.node); }
         walk.stmt = Span { start: stmt.span.start, end: stmt.span.end };
         let kinds = tier_statement(&stmt.node, stmt.span.start as i64, ask, walk);
         walk.tail_back = false;
         if bound >= 0 { walk.handed_back = before; }
-        if k + 1 == block.stmts.len() as i64 {
+        if unsafe { nikaia_std::proven::add::<i64>(k, 1) } == block.stmts.len() as i64 {
             tail = kinds;
             if keeps && tail.still {
                 match &stmt.node {
@@ -1870,7 +1870,7 @@ pub(crate) fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk:
                 }
             }
         }
-        k += 1;
+        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
     close_tier_scope(walk);
     tail
@@ -1880,7 +1880,7 @@ pub(crate) fn a_value_statement(stmt: &Stmt) -> bool { matches!(stmt, Stmt::Expr
 
 pub(crate) fn handed_by_name(stmt: &Stmt, block: &Block, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>) -> i64 {
     match stmt {
-        Stmt::Let { names, value, .. } => { if names.len() == 1 && handed_struct(value) >= 0 && local_struct_handed_back(ask.names, block, at, ask.names.resolve(*nikaia_std::index::get(&names, 0))) > 0 { handed_struct(value) } else { -1 } },
+        Stmt::Let { names, value, .. } => { if names.len() == 1 && handed_struct(value) >= 0 && local_struct_handed_back(ask.names, block, at, ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) > 0 { handed_struct(value) } else { -1 } },
         _ => -1,
     }
 }
@@ -1976,10 +1976,10 @@ pub(crate) fn tier_loop_turns(cond: Option<&Expr>, body: &Block, ask: &TierAsk<'
 pub(crate) fn tier_loop_seen(walk: &TierWalk) -> String {
     let mut out: String = String::from("");
     for (name, stack) in walk.locals.iter() {
-        let top = stack.len() as i64 - 1;
+        let top = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
         if top < 0 { continue; }
-        let k = nikaia_std::index::get(&stack, nikaia_std::index::at(top)).kinds;
-        out.push_str(&format!("{} {} {} {} {} {} {}\n", name, k.owned, k.view, k.lasting, k.still, k.either, nikaia_std::index::get(&stack, nikaia_std::index::at(top)).literal));
+        let k = unsafe { nikaia_std::proven::read(&stack, (top) as usize) }.kinds;
+        out.push_str(&format!("{} {} {} {} {} {} {}\n", name, k.owned, k.view, k.lasting, k.still, k.either, unsafe { nikaia_std::proven::read(&stack, (top) as usize) }.literal));
     }
     out
 }
@@ -2048,7 +2048,7 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
         let mut element_of: Option<String> = None;
         if !written { element_of = made_element_read(value, ask, walk); }
         let local = TierLocal { kinds: bound, of, literal, declared, from, empty, listed, through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of, cut: a_cut(value, ask), element_of, text_items, called: !written && a_function_call(value) };
-        bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string()), local, walk);
+        bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), local, walk);
         return;
     }
     if !written && !(bound.owned && (bound.view || bound.still)) && !bound.either {
@@ -2084,7 +2084,7 @@ pub(crate) fn a_literal_text(value: &Expr) -> bool {
 
 pub(crate) fn a_literal_tail(block: &Block) -> bool {
     if block.stmts.len() != 1 { return false; }
-    match &nikaia_std::index::get(&block.stmts, 0).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
         Stmt::Expr(last) => a_literal_text(last),
         _ => false,
     }
@@ -2107,12 +2107,12 @@ pub(crate) fn tier_assign(target: &Expr, value: &Expr, compound: bool, ask: &Tie
             if !a_container(ask.names, &ty) { return; }
             if a_map(ask.names, &ty) {
                 if ty.generics.len() == 2 {
-                    flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], true), Some(index), &key, ask, walk);
-                    flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 1), vec![1], true), Some(value), &kinds, ask, walk);
+                    flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], true), Some(index), &key, ask, walk);
+                    flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }, vec![1], true), Some(value), &kinds, ask, walk);
                 }
                 return;
             }
-            if !ty.generics.is_empty() { flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], true), Some(value), &kinds, ask, walk); }
+            if !ty.generics.is_empty() { flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], true), Some(value), &kinds, ask, walk); }
         },
         _ => {
             let place = place_of(target, ask, walk);
@@ -2275,14 +2275,14 @@ pub(crate) fn lent_through_code(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>,
     if at >= function.params.len() as i64 { return None; }
     let code = match (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at)).code).clone() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if code.result_from.len() != 1 { return None; }
-    let named = *nikaia_std::index::get(&code.result_from, 0);
+    let named = *unsafe { nikaia_std::proven::read(&code.result_from, (0) as usize) };
     let mut position: i64 = 0;
     for written in code.param_names.iter() {
         let written = *written;
         let here: i64 = position;
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
         let symbol = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if symbol == named && here < args.len() as i64 { return Some((*nikaia_std::index::get(&args, nikaia_std::index::at(here))).clone()); }
+        if symbol == named && here < args.len() as i64 { return Some((*unsafe { nikaia_std::proven::read(&args, (here) as usize) }).clone()); }
     }
     None
 }
@@ -2352,10 +2352,10 @@ pub(crate) fn lendable_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>
 }
 
 pub(crate) fn tie_depth(name: &str, walk: &TierWalk) -> i64 {
-    let mut at = walk.frames.len() as i64 - 1;
+    let mut at = unsafe { nikaia_std::proven::sub::<i64>(walk.frames.len() as i64, 1) };
     while at >= 0 {
-        if nikaia_std::list::contains(nikaia_std::index::get(&walk.frames, nikaia_std::index::at(at)), &name) { return at; }
-        at -= 1;
+        if nikaia_std::list::contains(unsafe { nikaia_std::proven::read(&walk.frames, (at) as usize) }, &name) { return at; }
+        at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
     }
     -1
 }
@@ -2425,8 +2425,8 @@ pub(crate) fn call_ties(callee: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
     let mut at: i64 = 0;
     while at < args.len() as i64 && at < function.params.len() as i64 {
         for tie in ties_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk) { out.push(tie); }
-        if a_text_parameter(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
-            let root = tie_root(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask);
+        if a_text_parameter(ask.names, unsafe { nikaia_std::proven::read(&function.params, (at) as usize) }) {
+            let root = tie_root(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, ask);
             if root.is_some() {
                 let name: String = nikaia_std::index::or(root, || "".into());
                 let local = tier_local(&name, &walk);
@@ -2512,7 +2512,7 @@ pub(crate) fn lent_element(base: &Expr, made: bool, ask: &TierAsk<'_, '_, '_, '_
     if made && untyped_text_list(base, ask, &walk) { return true; }
     let list = match list_place(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) { return false; }
-    let element = nikaia_std::index::get(&list.ty.generics, 0);
+    let element = unsafe { nikaia_std::proven::read(&list.ty.generics, (0) as usize) };
     if !plain_string(ask.names, &element) || element.is_nullable { return false; }
     match base {
         Expr::Variable(name, _) => { let name = *name; lent_list_parameter(ask.names.resolve(name), &walk) || made && made_list_local(ask.names.resolve(name), &walk) },
@@ -2545,7 +2545,7 @@ pub(crate) fn list_place(base: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &
             let inner = nikaia_std::boxed::open(inner);
             let outer = match list_place(inner, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if outer.ty.is_nullable || outer.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(outer.ty.name)) { return None; }
-            Some(Declaring { owner: outer.owner.clone(), ty: (*nikaia_std::index::get(&outer.ty.generics, 0)).clone() })
+            Some(Declaring { owner: outer.owner.clone(), ty: (*unsafe { nikaia_std::proven::read(&outer.ty.generics, (0) as usize) }).clone() })
         },
         _ => place_of(base, ask, walk),
     }
@@ -2726,7 +2726,7 @@ pub(crate) fn element_struct(list: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, wal
     let mut at: i64 = 0;
     if a_map(ask.names, &ty) { at = 1; }
     if ty.generics.len() <= ((at) as usize) { return None; }
-    let element = (*nikaia_std::index::get(&ty.generics, (at) as usize)).clone();
+    let element = (*unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }).clone();
     if !element.generics.is_empty() || element.is_nullable || element.is_tuple || element.is_slice || (*element.code).is_some() { return None; }
     Some(nikaia_std::block::Text::from(ask.names.resolve(element.name).to_string()))
 }
@@ -2750,7 +2750,7 @@ pub(crate) fn literal_items_struct(list: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_
     match list {
         Expr::ListLit { items, .. } => {
             if items.is_empty() { return None; }
-            let first = match literal_struct_name(nikaia_std::index::get(&items, 0), ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let first = match literal_struct_name(unsafe { nikaia_std::proven::read(&items, (0) as usize) }, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
             for item in items.iter() {
                 let name = match literal_struct_name(item, ask) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 if name != first { return None; }
@@ -2841,12 +2841,12 @@ pub(crate) fn kept_beside(receiver: &Expr, method: &str, args: &[Expr], ask: &Ti
             if puts {
                 let mut at: i64 = 0;
                 for arg in args.iter() {
-                    if ((at) as usize) < inner.len() { kept_beside_parts(arg, nikaia_std::index::get(&inner, (at) as usize), ask, walk); }
-                    at += 1;
+                    if ((at) as usize) < inner.len() { kept_beside_parts(arg, unsafe { nikaia_std::proven::read(&inner, (at) as usize) }, ask, walk); }
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
             } else if args.len() == 1 {
-                match *nikaia_std::index::get(&inner, 0) {
-                    Ty::Tuple(_) => { kept_beside_parts(nikaia_std::index::get(&args, 0), nikaia_std::index::get(&inner, 0), ask, walk); },
+                match *unsafe { nikaia_std::proven::read(&inner, (0) as usize) } {
+                    Ty::Tuple(_) => { kept_beside_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&inner, (0) as usize) }, ask, walk); },
                     _ => { },
                 }
             }
@@ -2887,9 +2887,9 @@ pub(crate) fn kept_in_lookup(value: &Expr, owner: &TextOwner, path: &mut Vec<i64
             let mut at: i64 = 0;
             for item in items.iter() {
                 path.push(at);
-                if a_followed_tuple(ask.names, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))) { kept_in_lookup(item, owner, &mut path.copy_owned(), nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), ask, walk); } else { kept_literal(item, owner, &path, nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)), ask, walk); }
+                if a_followed_tuple(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }) { kept_in_lookup(item, owner, &mut path.copy_owned(), unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, ask, walk); } else { kept_literal(item, owner, &path, unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }, ask, walk); }
                 path.pop();
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },
@@ -2923,14 +2923,14 @@ pub(crate) fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk
             let mut kinds = (*nikaia_std::index::get(&given, nikaia_std::index::at(at))).clone();
             if a_keeping_target(&function, at, ask) && tier_keeping_read(position_word(&owner, &no_path()), walk) {
                 let only_owned = kinds.owned && !kinds.view && !kinds.either && !kinds.still;
-                if only_owned && walk.late_args.contains(&node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at)))) && lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk).is_none() && !outlived_by_a_keeper(key, at, args, ask, &walk) {
-                    walk.flows.viewed_arms.insert(node_key(nikaia_std::index::get(&args, nikaia_std::index::at(at))));
+                if only_owned && walk.late_args.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (at) as usize) })) && lendable_parameter(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, ask, walk).is_none() && !outlived_by_a_keeper(key, at, args, ask, &walk) {
+                    walk.flows.viewed_arms.insert(node_key(unsafe { nikaia_std::proven::read(&args, (at) as usize) }));
                     kinds = view_kinds();
                 }
-                if tier_a_choice(nikaia_std::index::get(&args, nikaia_std::index::at(at))) { param_arm_leaves(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk); }
+                if tier_a_choice(unsafe { nikaia_std::proven::read(&args, (at) as usize) }) { param_arm_leaves(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, ask, walk); }
             }
             if a_text_parameter(ask.names, nikaia_std::index::get(&function.params, nikaia_std::index::at(at))) {
-                let source = lendable_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask, walk);
+                let source = lendable_parameter(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, ask, walk);
                 if source.is_some() {
                     let word: String = nikaia_std::index::or(source, || "".into());
                     let to = seen(&owner, &no_path(), walk);
@@ -2945,8 +2945,8 @@ pub(crate) fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk
                     kinds = no_kinds();
                 }
             }
-            flow_value(&going_into(&owner, nikaia_std::index::get(&function.params, nikaia_std::index::at(at)), vec![], false), Some(nikaia_std::index::get(&args, nikaia_std::index::at(at))), &kinds, ask, walk);
-            if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { changed_in_place(nikaia_std::index::get(&args, nikaia_std::index::at(at)), format!("{}({})", key, tier_written(nikaia_std::index::get(&args, nikaia_std::index::at(at)), ask)), ask, walk); }
+            flow_value(&going_into(&owner, unsafe { nikaia_std::proven::read(&function.params, (at) as usize) }, vec![], false), Some(unsafe { nikaia_std::proven::read(&args, (at) as usize) }), &kinds, ask, walk);
+            if at < function.changes.len() as i64 && *unsafe { nikaia_std::proven::read(&function.changes, (at) as usize) } { changed_in_place(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, format!("{}({})", key, tier_written(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, ask)), ask, walk); }
         }
         at += 1;
     }
@@ -3103,13 +3103,13 @@ pub(crate) fn late_bind(name: String, late: &mut TierLate) {
 pub(crate) fn late_serial(name: &str, late: &TierLate) -> i64 {
     let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
     if held.is_empty() { return -1; }
-    nikaia_std::index::get(&held, nikaia_std::index::at(held.len() as i64 - 1)).serial
+    unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.serial
 }
 
 pub(crate) fn late_loops(name: &str, late: &TierLate) -> i64 {
     let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
     if held.is_empty() { return 0; }
-    nikaia_std::index::get(&held, nikaia_std::index::at(held.len() as i64 - 1)).loops
+    unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.loops
 }
 
 pub(crate) fn late_read(name: &str, late: &mut TierLate) {
@@ -3158,7 +3158,7 @@ pub(crate) fn late_block(block: &Block, leaf: bool, ask: &TierAsk<'_, '_, '_, '_
     late_open(late);
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         let outer = late.temporaries.copy_owned();
         late_stmt(&stmt.node, leaf && ((at) as usize) == block.stmts.len(), ask, late);
         late.temporaries = outer;
@@ -3179,8 +3179,8 @@ pub(crate) fn late_stmt(stmt: &Stmt, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
                 late_viewing(ask.names.resolve(name), &sources, (alias).as_deref(), late);
             }
             if names.len() == 1 {
-                late_held_view(ask.names.resolve(*nikaia_std::index::get(&names, 0)), value, ask, late);
-                late_holding(ask.names.resolve(*nikaia_std::index::get(&names, 0)), value, ask, late);
+                late_held_view(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), value, ask, late);
+                late_holding(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), value, ask, late);
             }
         },
         Stmt::Comptime { name, value, .. } => {
@@ -3230,12 +3230,12 @@ pub(crate) fn late_all(values: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_>, late:
 
 pub(crate) fn late_pattern(pattern: &MatchPattern, ask: &TierAsk<'_, '_, '_, '_, '_>, late: &mut TierLate) {
     match pattern {
-        MatchPattern::Path(segments) => { if segments.len() == 1 && !names_a_type(ask.names.resolve(*nikaia_std::index::get(&segments, 0))) { late_bind(nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&segments, 0)).to_string()), late); } },
+        MatchPattern::Path(segments) => { if segments.len() == 1 && !names_a_type(ask.names.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) })) { late_bind(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string()), late); } },
         MatchPattern::Tuple { parts, .. } => { for part in parts.iter() { late_pattern(part, ask, late); } },
         MatchPattern::List(parts) => { for part in parts.iter() { late_pattern(part, ask, late); } },
         MatchPattern::RestNamed(name) => { let name = *name; late_bind(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), late); },
         MatchPattern::Named { fields, .. } => { for field in fields.iter() { late_pattern(&field.pat, ask, late); } },
-        MatchPattern::Or(alternatives) => { if !alternatives.is_empty() { late_pattern(nikaia_std::index::get(&alternatives, 0), ask, late); } },
+        MatchPattern::Or(alternatives) => { if !alternatives.is_empty() { late_pattern(unsafe { nikaia_std::proven::read(&alternatives, (0) as usize) }, ask, late); } },
         _ => { },
     }
 }
@@ -3442,11 +3442,11 @@ pub(crate) fn late_holds_text(ty: &Type, declared: &TextDeclared, ask: &TierAsk<
     if depth > 4 { return false; }
     let name = ask.names.resolve(ty.name);
     if name == "String" { return true; }
-    for arg in ty.generics.iter() { if late_holds_text(arg, declared, ask, depth + 1) { return true; } }
+    for arg in ty.generics.iter() { if late_holds_text(arg, declared, ask, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }) { return true; } }
     if !declared.types.contains(name) { return false; }
-    for (key, field) in declared.fields.iter() { if key.0 == name && late_holds_text(&field.ty, declared, ask, depth + 1) { return true; } }
+    for (key, field) in declared.fields.iter() { if key.0 == name && late_holds_text(&field.ty, declared, ask, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }) { return true; } }
     let prefix = format!("{}::", name);
-    for (key, parts) in declared.variants.iter() { if key.starts_with(&*prefix) { for part in parts.iter() { if late_holds_text(part, declared, ask, depth + 1) { return true; } } } }
+    for (key, parts) in declared.variants.iter() { if key.starts_with(&*prefix) { for part in parts.iter() { if late_holds_text(part, declared, ask, unsafe { nikaia_std::proven::add::<i64>(depth, 1) }) { return true; } } } }
     false
 }
 
@@ -4061,15 +4061,15 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
     }
     let mut at: i64 = 0;
     for arg in args.iter() {
-        walk.closure_owns = a_lambda(arg) && at < params.len() as i64 && code_owns_text(ask.names, Some(nikaia_std::index::get(&params, nikaia_std::index::at(at))));
+        walk.closure_owns = a_lambda(arg) && at < params.len() as i64 && code_owns_text(ask.names, Some(unsafe { nikaia_std::proven::read(&params, (at) as usize) }));
         given.push(tier_expr(arg, ask, walk));
         walk.closure_owns = false;
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     if walk.declared.fns.contains_key(&callee) {
         flow_args(&callee, args, &given, ask, walk);
-        if walk.declared.rules.contains(&callee) && !args.is_empty() { parsed_parameter(nikaia_std::index::get(&args, 0), ask, walk); }
+        if walk.declared.rules.contains(&callee) && !args.is_empty() { parsed_parameter(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask, walk); }
         return result_kinds(&callee, ask, walk);
     }
     if walk.declared.variants.contains_key(&callee) {
@@ -4081,8 +4081,8 @@ pub(crate) fn call_kinds(func: &Expr, args: &[Expr], ask: &TierAsk<'_, '_, '_, '
         let lent_at = from_named_positions(func, ask, &walk);
         let mut at: i64 = 0;
         for arg in args.iter() {
-            if at < given.len() as i64 && nikaia_std::index::get(&given, nikaia_std::index::at(at)).still && !lent_at.contains(nikaia_std::index::AsKey::as_key(&at)) { kept_unseen(arg, ask, walk); }
-            at += 1;
+            if at < given.len() as i64 && unsafe { nikaia_std::proven::read(&given, (at) as usize) }.still && !lent_at.contains(nikaia_std::index::AsKey::as_key(&at)) { kept_unseen(arg, ask, walk); }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     } else { std_container_args(&callee, args, ask, walk); }
     std_result(&callee, ask)
@@ -4114,11 +4114,11 @@ pub(crate) fn std_container_args(callee: &str, args: &[Expr], ask: &TierAsk<'_, 
     let mut at: i64 = 0;
     for arg in args.iter() {
         let built = matches!(arg, Expr::ListLit { .. } | Expr::Tuple(_, _));
-        if built && ((at) as usize) < params.len() && std_owns_text_inside(&nikaia_std::index::get(&params, (at) as usize).1) {
+        if built && ((at) as usize) < params.len() && std_owns_text_inside(&unsafe { nikaia_std::proven::read(&params, (at) as usize) }.1) {
             kept_unseen(arg, ask, walk);
             owned_literal_lets(arg, ask, walk);
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         let whole = source_of(arg, ask, walk);
         if whole.is_some() {
             let found = match whole { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -4208,28 +4208,28 @@ pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &T
             return owned_kinds();
         }
         if method == "entry" && a_map(ask.names, &ty) && args.len() == 1 && given.len() == 1 && ty.generics.len() == 2 {
-            flow_value(&going_into(&found.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], true), Some(nikaia_std::index::get(&args, 0)), nikaia_std::index::get(&given, 0), ask, walk);
+            flow_value(&going_into(&found.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], true), Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), unsafe { nikaia_std::proven::read(&given, (0) as usize) }, ask, walk);
             return owned_kinds();
         }
-        if looks_up(method) && a_container(ask.names, &ty) && args.len() == 1 && !ty.generics.is_empty() && a_followed_tuple(ask.names, nikaia_std::index::get(&ty.generics, 0)) { kept_in_lookup(nikaia_std::index::get(&args, 0), &found.owner, &mut vec![0], nikaia_std::index::get(&ty.generics, 0), ask, walk); }
+        if looks_up(method) && a_container(ask.names, &ty) && args.len() == 1 && !ty.generics.is_empty() && a_followed_tuple(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) { kept_in_lookup(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &found.owner, &mut vec![0], unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, ask, walk); }
         if hands_back_an_element(method) { return element_kinds(&found, method == "keys", ask, walk); }
         if (method == "clone" || method == "to_owned" || method == "to_vec") && args.is_empty() && a_container(ask.names, &ty) && received.still { demote_inside(&found.owner, &ty, &mut vec![], ask, walk); }
     }
     if method == "fold" && args.len() == 2 && given.len() == 2 {
-        match nikaia_std::index::get(&args, 1) {
+        match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
             Expr::Closure { params, body, .. } => {
                 let made = mapped(params, body, &received, ask, walk);
                 if made.owned {
-                    let word = text_source_word(Some(nikaia_std::index::get(&args, 0)), ask, walk);
+                    let word = text_source_word(Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), ask, walk);
                     if word.is_some() { flow_word(nikaia_std::index::or(word.as_deref(), || ""), &owned_kinds(), walk); }
                 }
-                return kinds_joined(nikaia_std::index::get(&given, 0), &made);
+                return kinds_joined(unsafe { nikaia_std::proven::read(&given, (0) as usize) }, &made);
             },
             _ => { },
         }
     }
     if (method == "map" || method == "filter_map") && args.len() == 1 {
-        match nikaia_std::index::get(&args, 0) {
+        match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::Closure { params, body, .. } => { return mapped(params, body, &received, ask, walk); },
             _ => { },
         }
@@ -4300,14 +4300,14 @@ pub(crate) fn put_into_container(place: &Declaring, method: &str, args: &[Expr],
     let ty = place.ty.clone();
     if a_map(ask.names, &ty) {
         if args.len() == 2 && given.len() == 2 && ty.generics.len() == 2 {
-            flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], true), Some(nikaia_std::index::get(&args, 0)), nikaia_std::index::get(&given, 0), ask, walk);
-            flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 1), vec![1], true), Some(nikaia_std::index::get(&args, 1)), nikaia_std::index::get(&given, 1), ask, walk);
+            flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], true), Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), unsafe { nikaia_std::proven::read(&given, (0) as usize) }, ask, walk);
+            flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }, vec![1], true), Some(unsafe { nikaia_std::proven::read(&args, (1) as usize) }), unsafe { nikaia_std::proven::read(&given, (1) as usize) }, ask, walk);
         }
         return;
     }
     if ty.generics.is_empty() || args.is_empty() || given.is_empty() { return; }
     let wrap = method != "extend" && method != "append";
-    flow_value(&going_into(&place.owner, nikaia_std::index::get(&ty.generics, 0), vec![0], wrap), Some(nikaia_std::index::get(&args, nikaia_std::index::at(args.len() as i64 - 1))), nikaia_std::index::get(&given, nikaia_std::index::at(given.len() as i64 - 1)), ask, walk);
+    flow_value(&going_into(&place.owner, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, vec![0], wrap), Some(unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::sub::<i64>(args.len() as i64, 1)) as usize) }), unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::sub::<i64>(given.len() as i64, 1)) as usize) }, ask, walk);
 }
 
 pub(crate) fn mapped(params: &[winnow_grammar::Symbol], body: &Block, received: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
@@ -4413,7 +4413,7 @@ pub(crate) fn tier_units(program: &Program) -> Vec<(i64, i64)> {
                 let mut m: i64 = 0;
                 while ((m) as usize) < methods.len() {
                     units.push((at, m));
-                    m += 1;
+                    m = unsafe { nikaia_std::proven::add::<i64>(m, 1) };
                 }
             },
             _ => { units.push((at, -1)); },
@@ -4676,7 +4676,7 @@ pub(crate) fn walk_action(action: Option<&Block>, ask: &TierAsk<'_, '_, '_, '_, 
     let block = match action { Some(__nikaia_value) => __nikaia_value, None => return };
     let tail = tier_block(block, ask, walk);
     if !block.stmts.is_empty() {
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Expr(last) => { flow_result(last, &tail, ask, walk); },
             _ => { },
         }
@@ -4756,7 +4756,7 @@ pub(crate) fn grammar_choice_kinds(gname: &str, rules: &collections::BTreeSet<St
 pub(crate) fn grammar_reference_kinds(gname: &str, rules: &collections::BTreeSet<String>, called: &str, generics: i64, args: &[Spanned<Pattern>], ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     if rules.contains(called) { return result_kinds(&format!("{}::{}", gname, called), ask, walk); }
     if generics > 0 { return no_kinds(); }
-    if (called == "peek" || called == "list") && !args.is_empty() { return grammar_pattern_kinds(gname, rules, &nikaia_std::index::get(&args, 0).node, ask, walk); }
+    if (called == "peek" || called == "list") && !args.is_empty() { return grammar_pattern_kinds(gname, rules, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node, ask, walk); }
     if (called == "until" || called == "text") && !args.is_empty() { return view_kinds(); }
     if args.is_empty() && (called == "raw_ident" || called == "string" || called == "alpha1" || called == "multispace0" || called == "multispace1") { return view_kinds(); }
     no_kinds()
@@ -4803,7 +4803,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
     }
     walk.handed_back = -1;
     if !body.stmts.is_empty() {
-        match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Expr(last) => { walk.handed_back = handed_struct(last); },
             _ => { },
         }
@@ -4811,7 +4811,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
     let tail = tier_block(body, ask, walk);
     walk.handed_back = -1;
     if !body.stmts.is_empty() {
-        match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Expr(last) => { flow_result(last, &tail, ask, walk); },
             _ => { },
         }
@@ -5194,9 +5194,9 @@ pub(crate) fn viewed_param_arms(flows: &Flows, before: &collections::BTreeSet<i6
 
 pub(crate) fn a_keeping_target(function: &FnDecl, at: i64, ask: &TierAsk<'_, '_, '_, '_, '_>) -> bool {
     if function.published || function.of_a_trait || at >= function.params.len() as i64 { return false; }
-    if at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at)) { return false; }
-    if at < function.keeps.len() as i64 && *nikaia_std::index::get(&function.keeps, nikaia_std::index::at(at)) { return false; }
-    let ty = (*nikaia_std::index::get(&function.params, nikaia_std::index::at(at))).clone();
+    if at < function.changes.len() as i64 && *unsafe { nikaia_std::proven::read(&function.changes, (at) as usize) } { return false; }
+    if at < function.keeps.len() as i64 && *unsafe { nikaia_std::proven::read(&function.keeps, (at) as usize) } { return false; }
+    let ty = (*unsafe { nikaia_std::proven::read(&function.params, (at) as usize) }).clone();
     if !plain_string(ask.names, &ty) || ty.is_nullable || ty.is_view { return false; }
     true
 }
@@ -5223,7 +5223,7 @@ pub(crate) fn param_arm_leaves(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_>, 
 
 pub(crate) fn param_arm_tail(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
     if block.stmts.is_empty() { return; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(last) => { param_arm_leaves(last, ask, walk); },
         _ => { },
     }
@@ -5304,15 +5304,15 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextT
     for _ in 0..16 {
         let mut u: i64 = 0;
         while ((u) as usize) < units.len() {
-            if *nikaia_std::index::get(&dirty, (u) as usize) {
+            if *unsafe { nikaia_std::proven::read(&dirty, (u) as usize) } {
                 walk.flows = no_flows();
                 walk.reads = no_reads();
-                let (item_at, method_at) = *nikaia_std::index::get(&units, (u) as usize);
+                let (item_at, method_at) = *unsafe { nikaia_std::proven::read(&units, (u) as usize) };
                 walk_unit(program, item_at, method_at, ask, &mut walk);
-                { let __nikaia_stored = walk.flows.clone(); nikaia_std::index::set(&mut found_flows, (u) as usize, __nikaia_stored); }
-                { let __nikaia_stored = walk.reads.clone(); nikaia_std::index::set(&mut found_reads, (u) as usize, __nikaia_stored); }
+                { let __nikaia_stored = walk.flows.clone(); unsafe { nikaia_std::proven::write(&mut found_flows, (u) as usize, __nikaia_stored) }; }
+                { let __nikaia_stored = walk.reads.clone(); unsafe { nikaia_std::proven::write(&mut found_reads, (u) as usize, __nikaia_stored) }; }
             }
-            u += 1;
+            u = unsafe { nikaia_std::proven::add::<i64>(u, 1) };
         }
         walk.flows = no_flows();
         for unit_flows in found_flows.iter() { merge_flows(&mut walk.flows, unit_flows); }
@@ -5333,8 +5333,8 @@ pub fn text_tiers(program: &Program, ask: &TierAsk<'_, '_, '_, '_, '_>) -> TextT
         let adopted_moved = changed_adopted(&walk.flows.adopted, &walk.adopted);
         let mut v: i64 = 0;
         while ((v) as usize) < units.len() {
-            { let __nikaia_stored = tier_reads_changed(nikaia_std::index::get(&found_reads, (v) as usize), &tiers_moved, &keeping_moved, &arms_moved, &adopted_moved); nikaia_std::index::set(&mut dirty, (v) as usize, __nikaia_stored); }
-            v += 1;
+            { let __nikaia_stored = tier_reads_changed(unsafe { nikaia_std::proven::read(&found_reads, (v) as usize) }, &tiers_moved, &keeping_moved, &arms_moved, &adopted_moved); unsafe { nikaia_std::proven::write(&mut dirty, (v) as usize, __nikaia_stored) }; }
+            v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
         }
         walk.tiers = next;
         walk.adopted = walk.flows.adopted.copy_owned();
@@ -5456,7 +5456,7 @@ pub(crate) fn tw_mark(ty: &mut Type, path: &[i64], from: i64, tier: &Tier) {
         return;
     }
     let arg = match ty.generics.get_mut(nikaia_std::count::of(*nikaia_std::index::get(&path, nikaia_std::index::at(from)))) { Some(__nikaia_value) => __nikaia_value, None => return };
-    tw_mark(&mut *arg, path, from + 1, &tier);
+    tw_mark(&mut *arg, path, unsafe { nikaia_std::proven::add::<i64>(from, 1) }, &tier);
 }
 
 pub(crate) fn tw_mark_maybe(ty: &mut Option<Type>, path: &[i64], tier: &Tier) { if ty.is_some() { tw_mark(ty.as_mut().unwrap(), path, 0, &tier); } }
@@ -6075,7 +6075,7 @@ pub(crate) fn sv_block(block: &Block, words: &winnow_grammar::InternerContext, r
                 let mutable = *mutable;
                 sv_literals(value, words, &roots, &views, filled);
                 if names.len() == 1 {
-                    let named = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string());
+                    let named = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
                     let view = sv_a_view(value, words, &roots, &views);
                     views.remove(&named);
                     roots.insert(nikaia_std::block::Text::from(named.to_string()));
@@ -6487,7 +6487,7 @@ pub(crate) fn hb_call_sources<'r>(expr: &'r Expr, words: &winnow_grammar::Intern
     for at in sources.iter() {
         let at = nikaia_std::num::value(at);
         if at < 0 || at >= given.len() as i64 { return None; }
-        let argument = nikaia_std::index::get(&given, nikaia_std::index::at(at));
+        let argument = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
         if hb_place_root(&argument, words).is_some() { out.push(argument); } else { out.extend(match hb_call_sources(&argument, words, views) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
     }
     Some(out)

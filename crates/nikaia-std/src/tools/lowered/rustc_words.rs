@@ -77,8 +77,8 @@ pub(crate) fn shared_names(message: &str) -> String {
         }
         if !taken {
             out.push(*nikaia_std::index::get(&c, nikaia_std::index::at(at)));
-            last = *nikaia_std::index::get(&c, nikaia_std::index::at(at));
-            at += 1;
+            last = *unsafe { nikaia_std::proven::read(&c, (at) as usize) };
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     out
@@ -87,7 +87,7 @@ pub(crate) fn shared_names(message: &str) -> String {
 pub(crate) fn closing_angle(c: &[scalar], from: i64) -> i64 {
     let mut depth = 1;
     for at in from..c.len() as i64 {
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '<' { depth += 1; } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '>' {
+        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '<' { depth += 1; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '>' {
             depth -= 1;
             if depth == 0 { return at; }
         }
@@ -98,7 +98,7 @@ pub(crate) fn closing_angle(c: &[scalar], from: i64) -> i64 {
 pub(crate) fn begins_at(c: &[scalar], at: i64, word: &str) -> bool {
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
     if (at + w.len() as i64) > c.len() as i64 { return false; }
-    for k in 0..w.len() as i64 { if *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != *nikaia_std::index::get(&w, (k) as usize) { return false; } }
+    for k in 0..w.len() as i64 { if *nikaia_std::index::get(&c, nikaia_std::index::at(at + k)) != *unsafe { nikaia_std::proven::read(&w, (k) as usize) } { return false; } }
     true
 }
 
@@ -122,14 +122,14 @@ pub fn said(text: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(text.trim_end().chars());
     if c.is_empty() { return String::from(""); }
     let mut first: String = String::from("");
-    first.push(*nikaia_std::index::get(&c, 0));
+    first.push(*unsafe { nikaia_std::proven::read(&c, (0) as usize) });
     let mut out = nikaia_std::block::Text::from(first.to_uppercase());
-    for k in 1..c.len() as i64 { out.push(*nikaia_std::index::get(&c, (k) as usize)); }
-    let last = *nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - 1));
+    for k in 1..c.len() as i64 { out.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
+    let last = *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(c.len() as i64, 1)) as usize) };
     let mut closed = last == '.' || last == '?' || last == '!' || last == ':';
-    if c.len() >= 2 && last == ')' && (*nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - 2)) == '.' || *nikaia_std::index::get(&c, nikaia_std::index::at(c.len() as i64 - 2)) == '?') { closed = true; }
+    if c.len() >= 2 && last == ')' && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(c.len() as i64, 2)) as usize) } == '.' || *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(c.len() as i64, 2)) as usize) } == '?') { closed = true; }
     let break_at = find_last(&c, '\n');
-    if break_at >= 0 && break_at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(break_at + 1)) == ' ' { closed = true; }
+    if break_at >= 0 && break_at + 1 < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(break_at, 1)) as usize) } == ' ' { closed = true; }
     if !closed { out.push('.'); }
     out
 }
@@ -143,17 +143,17 @@ pub fn word_in(line: &str, column: i64, word: &str) -> (i64, i64) {
     let c: Vec<scalar> = nikaia_std::list::chars(line.chars());
     let w: Vec<scalar> = nikaia_std::list::chars(word.chars());
     if w.is_empty() { return (column, 1); }
-    let starts_wordy = a_wordy_char(*nikaia_std::index::get(&w, 0));
-    let ends_wordy = a_wordy_char(*nikaia_std::index::get(&w, nikaia_std::index::at(w.len() as i64 - 1)));
+    let starts_wordy = a_wordy_char(*unsafe { nikaia_std::proven::read(&w, (0) as usize) });
+    let ends_wordy = a_wordy_char(*unsafe { nikaia_std::proven::read(&w, (nikaia_std::proven::sub::<i64>(w.len() as i64, 1)) as usize) });
     let mut from = column - 1;
     if from < 0 { from = 0; }
     if from > c.len() as i64 { from = c.len() as i64; }
     for start in [from, 0] {
         let mut at = find_text(&c, start, word);
         while at >= 0 {
-            let free_before = !starts_wordy || at == 0 || !a_wordy_char(*nikaia_std::index::get(&c, nikaia_std::index::at(at - 1)));
+            let free_before = !starts_wordy || at == 0 || !a_wordy_char(*nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(at, 1) })));
             let after = at + w.len() as i64;
-            let free_after = !ends_wordy || after >= c.len() as i64 || !a_wordy_char(*nikaia_std::index::get(&c, nikaia_std::index::at(after)));
+            let free_after = !ends_wordy || after >= c.len() as i64 || !a_wordy_char(*unsafe { nikaia_std::proven::read(&c, (after) as usize) });
             if free_before && free_after { return (at + 1, w.len() as i64); }
             at = find_text(&c, at + w.len() as i64, word);
         }

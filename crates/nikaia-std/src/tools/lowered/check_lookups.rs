@@ -171,10 +171,10 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn spelling(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) {
-        if world.words.resolve(ty.name) == "Shared" && !ty.generics.is_empty() && world.words.resolve(nikaia_std::index::get(&ty.generics, 0).name) == "Locked" {
-            let held = nikaia_std::index::get(&ty.generics, 0);
+        if world.words.resolve(ty.name) == "Shared" && !ty.generics.is_empty() && world.words.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name) == "Locked" {
+            let held = unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) };
             let mut inside: String = String::from("T");
-            if !held.generics.is_empty() { inside = nikaia_std::block::Text::from(world.words.resolve(nikaia_std::index::get(&held.generics, 0).name).to_string()); }
+            if !held.generics.is_empty() { inside = nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&held.generics, (0) as usize) }.name).to_string()); }
             self.findings.push(check_refusal("NK1123", span, format!("Write `SharedMut[{}]` instead of a `Shared` around a lock.", inside), vec![String::from("The common case has a short name, and it's the only way to write it: one type, one spelling.")], Some(format!("Write `SharedMut[{}]`.", inside))));
         }
         for inner in ty.generics.iter() { self.spelling(world, inner, span); }
@@ -202,17 +202,17 @@ pub fn names_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> 
 pub fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, trait_name: &str) -> String {
     if world.own.traits.contains_key(trait_name) { return nikaia_std::block::Text::from(trait_name.to_string()); }
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
-    let mut take = segments.len() as i64 - 1;
+    let mut take = unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) };
     while take >= 1 {
         #[allow(unused_mut)] let mut prefix: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
         while at < take {
-            prefix.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(at))).to_string()));
-            at = at + 1;
+            prefix.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&segments, (at) as usize) }).to_string()));
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let qualified = format!("{}::{}", nikaia_std::block::Text::from(prefix.join("::")), trait_name);
         if world.own.traits.contains_key(&qualified) { return qualified; }
-        take = take - 1;
+        take = unsafe { nikaia_std::proven::sub::<i64>(take, 1) };
     }
     nikaia_std::block::Text::from(trait_name.to_string())
 }

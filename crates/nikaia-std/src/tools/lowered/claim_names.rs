@@ -12,7 +12,7 @@ pub fn is_a_parameter(name: &str, params: &collections::BTreeSet<String>) -> boo
     if !name.ends_with(".len()") { return false; }
     let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
     let mut base: String = String::from("");
-    for k in 0..c.len() as i64 - 6 { base.push(*nikaia_std::index::get(&c, (k) as usize)); }
+    for k in 0..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 6) } { base.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     params.contains(&base)
 }
 

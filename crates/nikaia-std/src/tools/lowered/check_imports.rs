@@ -9,7 +9,7 @@ pub(crate) fn is_promised(name: &str) -> bool { name == "backend" || name == "bu
 // this was written - see `contracts::sync`.
 pub(crate) fn has_a_self_parameter(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self"
+    !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self"
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -17,7 +17,7 @@ pub(crate) fn has_a_self_parameter(contract: &FnContract) -> bool {
 pub(crate) fn starts_with_a_capital(name: &str) -> bool {
     let letters: Vec<scalar> = nikaia_std::list::chars(name.chars());
     if letters.is_empty() { return false; }
-    (*nikaia_std::index::get(&letters, 0)).to_ascii_lowercase() != *nikaia_std::index::get(&letters, 0)
+    (*unsafe { nikaia_std::proven::read(&letters, (0) as usize) }).to_ascii_lowercase() != *unsafe { nikaia_std::proven::read(&letters, (0) as usize) }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -33,8 +33,8 @@ impl CheckState {
             let part = *part;
             segments.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
-        if segments.len() < 2 || *nikaia_std::index::get(&segments, 0) != "std" { return; }
-        let last = nikaia_std::block::Text::from((*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string());
+        if segments.len() < 2 || *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } != "std" { return; }
+        let last = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }).to_string());
         let mut a_type = false;
         for (entry_name, _) in world.library.types.iter() { if a_type_base(entry_name) == last { a_type = true; } }
         if !a_type {
@@ -46,7 +46,7 @@ impl CheckState {
             }
         }
         if !a_type {
-            self.a_std_module_nobody_declared(nikaia_std::index::get(&segments, 1), &segments, span);
+            self.a_std_module_nobody_declared(unsafe { nikaia_std::proven::read(&segments, (1) as usize) }, &segments, span);
             return;
         }
         let mut help: String = format!("Remove the line: `{}` is always available, no `use` needed.", last);

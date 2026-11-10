@@ -22,7 +22,7 @@ pub(crate) fn check_defaults_errors_since(state: &CheckState, from: i64) -> bool
             CheckSeverity::Error => { return true; },
             _ => { },
         }
-        at = at + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     false
 }
@@ -125,7 +125,7 @@ pub fn check_defaults_computed_value<H: CheckHost>(state: &mut CheckState, world
         }
         let owned = unwritable_in(&state, world, &computed, &|of, variant| { check_walked_payload_of(world, of, variant) });
         if owned.len() == 2 {
-            state.a_field_that_owns_memory(name, nikaia_std::index::get(&owned, 0), nikaia_std::index::get(&owned, 1), "a default", span);
+            state.a_field_that_owns_memory(name, unsafe { nikaia_std::proven::read(&owned, (0) as usize) }, unsafe { nikaia_std::proven::read(&owned, (1) as usize) }, "a default", span);
             return;
         }
     }

@@ -283,7 +283,9 @@ impl EmitState {
         let loaded = self.facts.simd_loads[node_key(func)] ?? 0
         if loaded != 0 && args.len() == 2 && self.proven_indices.contains(node_key(func)) {
             let width: String = if loaded < 0 { "{ simd::WIDTH }" } else { f"{loaded}" }
-            out.push(f"simd::load_proven(unsafe {{ nikaia_std::proven::array::<u8, {width}>(&")
+            out.push("simd::load_proven(")
+            out.open_unsafe()
+            out.push(f"nikaia_std::proven::array::<u8, {width}>(&")
             self.emit_core_nested(world, walk, out, host, args[0], 255, depth, flow, scope)
             out.push(", (")
             if only_literals(args[1]) {
@@ -291,7 +293,9 @@ impl EmitState {
             } else {
                 self.emit_expr(world, walk, out, host, args[1], depth, flow, scope)
             }
-            out.push(") as usize) })")
+            out.push(") as usize)")
+            out.close_unsafe()
+            out.push(")")
             return
         }
         // **A call to a function with a precondition** reaches its checked entry
@@ -631,7 +635,7 @@ impl EmitState {
                 // called** (#1117, ADR-382).
                 let how = self.facts.narrowed_reads.get(key) ?? -1
                 if how >= 0 {
-                    self.emit_expr_narrowed(out, EmitOut { buf: escaped_name(emit_text(world, name)), entries: [] }, how, false)
+                    self.emit_expr_narrowed(out, EmitOut { buf: escaped_name(emit_text(world, name)), entries: [], unsafe_depth: 0 }, how, false)
                     out.push("(")
                 } else {
                     out.push(f"{escaped_name(emit_text(world, name))}(")
@@ -1750,7 +1754,9 @@ impl EmitState {
         if width > 0 && args.len() == 1 && self.proven_indices.contains(node_key(receiver)) {
             let kind = if width == 4 { "u32" } else { "u64" }
             let order = if name.ends_with("_be") { "be" } else { "le" }
-            out.push(f"{kind}::from_{order}_bytes(*unsafe {{ nikaia_std::proven::array::<u8, {width}>(&")
+            out.push(f"{kind}::from_{order}_bytes(*")
+            out.open_unsafe()
+            out.push(f"nikaia_std::proven::array::<u8, {width}>(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
             out.push(", (")
             if only_literals(args[0]) {
@@ -1758,7 +1764,9 @@ impl EmitState {
             } else {
                 self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
             }
-            out.push(") as usize) })")
+            out.push(") as usize)")
+            out.close_unsafe()
+            out.push(")")
             return
         }
         // **`field.of(value)` is the field read a program would have written by

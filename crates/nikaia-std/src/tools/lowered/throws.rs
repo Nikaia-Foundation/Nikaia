@@ -260,9 +260,9 @@ pub fn error_type(names: &winnow_grammar::InternerContext, thrown: &Expr) -> Opt
 
 pub(crate) fn all_but_the_last(names: &winnow_grammar::InternerContext, segments: &[winnow_grammar::Symbol]) -> String {
     let mut written: String = String::from("");
-    for k in 0..segments.len() as i64 - 1 {
+    for k in 0..unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) } {
         if k > 0 { written = format!("{}::", written); }
-        let segment = names.resolve(*nikaia_std::index::get(&segments, (k) as usize));
+        let segment = names.resolve(*unsafe { nikaia_std::proven::read(&segments, (k) as usize) });
         written = format!("{}{}", written, segment);
     }
     written
@@ -273,9 +273,9 @@ pub(crate) fn struct_type(written: &str) -> String {
     for part in written.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     if parts.len() < 2 { return nikaia_std::block::Text::from(written.to_string()); }
     let mut ty: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
-    for k in 0..parts.len() as i64 - 1 {
+    for k in 0..unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } {
         if k > 0 { ty = format!("{}::", ty); }
-        ty = format!("{}{}", ty, *nikaia_std::index::get(&parts, (k) as usize));
+        ty = format!("{}{}", ty, *unsafe { nikaia_std::proven::read(&parts, (k) as usize) });
     }
     ty
 }
@@ -552,7 +552,7 @@ pub(crate) fn named_in_match(expr: &Expr, names: &winnow_grammar::InternerContex
                 let path = match pattern_path(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if path.len() < 2 { continue; }
                 let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                for at in 0..path.len() as i64 - 1 { parts.push(nikaia_std::block::Text::from(names.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string())); }
+                for at in 0..unsafe { nikaia_std::proven::sub::<i64>(path.len() as i64, 1) } { parts.push(nikaia_std::block::Text::from(names.resolve(*unsafe { nikaia_std::proven::read(&path, (at) as usize) }).to_string())); }
                 out.insert(nikaia_std::block::Text::from(parts.join("::")));
             }
         },

@@ -10,7 +10,7 @@ pub struct Integer {
 pub fn integer(magnitude: u64, negative: bool) -> Integer { Integer { magnitude, negative: negative && magnitude != 0u64 } }
 
 pub fn integer_of_count(n: i64) -> Integer {
-    if n < 0 { return integer(u64::try_from(0 - (n + 1)).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")) + 1u64, true); }
+    if n < 0 { return integer(u64::try_from(0 - (unsafe { nikaia_std::proven::add::<i64>(n, 1) })).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")) + 1u64, true); }
     integer(u64::try_from(n).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")), false)
 }
 

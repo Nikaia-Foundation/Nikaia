@@ -52,14 +52,14 @@ pub fn generic_of(written: &str, name: &str) -> Option<String> {
     let rest = after.trim_start();
     if !rest.starts_with('<') || !rest.ends_with('>') { return None; }
     let r: Vec<scalar> = nikaia_std::list::chars(rest.chars());
-    Some(slice(&r, 1, r.len() as i64 - 1))
+    Some(slice(&r, 1, unsafe { nikaia_std::proven::sub::<i64>(r.len() as i64, 1) }))
 }
 
 pub fn bounds_send(text: &str) -> bool {
     let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
     let mut start: i64 = 0;
-    for at in 0..c.len() as i64 + 1 {
-        let ends = at == c.len() as i64 || !((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '_');
+    for at in 0..unsafe { nikaia_std::proven::add::<i64>(c.len() as i64, 1) } {
+        let ends = at == c.len() as i64 || !((*nikaia_std::index::get(&c, nikaia_std::index::at(at))).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_');
         if ends {
             if slice(&c, start, at) == "Send" { return true; }
             start = at + 1;
@@ -74,8 +74,8 @@ pub fn a_list(names: &[String], one: &str, many: &str) -> String {
     if names.len() == 1 { word = nikaia_std::block::Text::from(one.to_string()); }
     let mut out = format!("{} ", word);
     for at in 0..names.len() as i64 {
-        if at > 0 && at == names.len() as i64 - 1 { out.push_str(" and "); } else if at > 0 { out.push_str(", "); }
-        let name = nikaia_std::index::get(&names, (at) as usize);
+        if at > 0 && at == unsafe { nikaia_std::proven::sub::<i64>(names.len() as i64, 1) } { out.push_str(" and "); } else if at > 0 { out.push_str(", "); }
+        let name = unsafe { nikaia_std::proven::read(&names, (at) as usize) };
         let quoted = format!("`{}`", name);
         out.push_str(&quoted);
     }
@@ -89,9 +89,9 @@ pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<St
     seen.insert(nikaia_std::block::Text::from(from.to_string()));
     let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     while ((next) as usize) < queue.len() {
-        let at = nikaia_std::block::Text::from((*nikaia_std::index::get(&queue, (next) as usize)).to_string());
+        let at = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
         let how = (*nikaia_std::index::get(&ways, (next) as usize)).copy_owned();
-        next += 1;
+        next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
         for call in nikaia_std::index::or(match *nikaia_std::index::get(&calls, &at) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -156,12 +156,12 @@ pub fn thread_lines(name: &str, bound: &[String], way: Option<&Vec<String>>) -> 
     }
     if way.is_some() {
         let steps = nikaia_std::index::or(way, || &[][..]);
-        let sink = nikaia_std::index::get(&steps, nikaia_std::index::at(steps.len() as i64 - 1));
+        let sink = nikaia_std::index::get(&steps, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) }));
         if steps.len() == 1 { out.push(format!("`{}`: calls `{}`.", name, sink)); } else {
             let mut through: String = String::from("");
-            for at in 0..steps.len() as i64 - 1 {
+            for at in 0..unsafe { nikaia_std::proven::sub::<i64>(steps.len() as i64, 1) } {
                 if at > 0 { through.push_str(" -> "); }
-                let step = nikaia_std::index::get(&steps, (at) as usize);
+                let step = unsafe { nikaia_std::proven::read(&steps, (at) as usize) };
                 let quoted = format!("`{}`", step);
                 through.push_str(&quoted);
             }

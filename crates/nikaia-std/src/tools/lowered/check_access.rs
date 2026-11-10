@@ -11,7 +11,7 @@ impl CheckState {
             let param = *param;
             named.push(format!("`{}`", world.words.resolve(param)));
         }
-        let first = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&params, 0)).to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
+        let first = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).to_string()); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
         self.findings.push(check_refusal("NK2103", span, format!("This task's lambda takes {}, but a task isn't given any arguments.", nikaia_std::block::Text::from(named.join(", "))), vec![String::from("`spawn` starts a body without arguments; the body takes what it needs from the code around it.")], Some(format!("Remove the argument list: `spawn fn {{ … }}`. If `{}` is a value from here, declare it before the task and use it inside.", first))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -83,7 +83,7 @@ impl CheckState {
                 let mut at: i64 = 1;
                 while at < alternatives.len() as i64 {
                     let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-                    names.extend(pattern_names(world, nikaia_std::index::get(&alternatives, nikaia_std::index::at(at))));
+                    names.extend(pattern_names(world, unsafe { nikaia_std::proven::read(&alternatives, (at) as usize) }));
                     if names != first {
                         let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                         for name in first.iter() { if !names.contains(name) { missing.push(nikaia_std::block::Text::from(name.to_string())); } }
@@ -92,7 +92,7 @@ impl CheckState {
                         self.findings.push(check_refusal("NK1155", span, format!("The alternatives of this pattern don't all bind the same names: `{}`.", nikaia_std::block::Text::from(missing.join("`, `"))), vec![String::from("Every alternative of an `|` pattern has to bind the same names, because the arm's body doesn't know which one matched.")], Some(String::from("Bind the same names in each alternative, or write a separate arm for each."))));
                         break;
                     }
-                    at = at + 1;
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
                 for alternative in alternatives.iter() { self.an_or_pattern_that_binds_unevenly(world, alternative, span); }
             },
@@ -149,5 +149,5 @@ pub fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string())); } }
+pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string())); } }
 

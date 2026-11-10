@@ -271,7 +271,13 @@ fn main() throws {
 fn the_option_is_read_and_a_wrong_word_is_refused() {
     use nikaia::project::optimizations;
     let bounds = |words: &str| optimizations(words).unwrap().0;
-    assert_eq!(bounds(""), BoundsChecks::Kept);
+    // ADR-306 D26: a name the words leave out is `on`.
+    assert_eq!(bounds(""), BoundsChecks::Removed);
+    assert_eq!(
+        optimizations("remove-bounds-checks:off").unwrap().1,
+        nikaia::bounds::OverflowChecks::Removed
+    );
+    assert_eq!(bounds("remove-bounds-checks:off"), BoundsChecks::Kept);
     assert_eq!(bounds("remove-bounds-checks:on"), BoundsChecks::Removed);
     assert_eq!(
         bounds("remove-bounds-checks:on, remove-bounds-checks:off"),

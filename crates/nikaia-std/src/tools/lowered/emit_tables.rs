@@ -17,7 +17,7 @@ pub(crate) fn emit_tables_named_plain(words: &winnow_grammar::InternerContext, t
 pub fn emit_tables_names_borrowing(ty: &Type, borrowing: &[winnow_grammar::Symbol]) -> bool {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return emit_tables_borrowing_plain(ty, borrowing) };
     let mut named: i64 = 0;
-    for part in ty.generics.iter() { if !holds_view(part) && emit_tables_names_borrowing(part, borrowing) { named += 1; } }
+    for part in ty.generics.iter() { if !holds_view(part) && emit_tables_names_borrowing(part, borrowing) { named = unsafe { nikaia_std::proven::add::<i64>(named, 1) }; } }
     if views_the_call_s(ty, named) { return false; }
     let result = match (*code.result).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     emit_tables_names_borrowing(result, borrowing)
@@ -80,7 +80,7 @@ pub fn emit_tables_borrowing_structs_beside(words: &winnow_grammar::InternerCont
                     }
                 }
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     borrowing

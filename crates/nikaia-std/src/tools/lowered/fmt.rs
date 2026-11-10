@@ -47,10 +47,10 @@ impl FmtLexer {
             if c == '\n' {
                 breaks += 1;
                 spaced = false;
-                self.at += 1;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             } else if c.is_whitespace() {
                 spaced = true;
-                self.at += 1;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             } else {
                 let start = self.at;
                 let kind = self.scan()?;
@@ -59,7 +59,7 @@ impl FmtLexer {
                 let mut multi = false;
                 for k in start..self.at {
                     if *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '\n' { multi = true; }
-                    text.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k)));
+                    text.push(*unsafe { nikaia_std::proven::read(&self.c, (k) as usize) });
                 }
                 self.tokens.push(FmtToken { text, kind, spaced, breaks, width: self.at - start, multi });
                 breaks = 0;
@@ -75,10 +75,10 @@ impl FmtLexer {
         ' '
     }
     pub(crate) fn scan(&mut self) -> Result<FmtKind, nikaia_std::error::Thrown<Refused>> {
-        while self.next < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(self.next)) < self.at { self.next += 1; }
+        while self.next < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(self.next)) < self.at { self.next = unsafe { nikaia_std::proven::add::<i64>(self.next, 1) }; }
         if self.next < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(self.next)) == self.at {
             self.at = *nikaia_std::index::get(&self.ends, nikaia_std::index::at(self.next));
-            self.next += 1;
+            self.next = unsafe { nikaia_std::proven::add::<i64>(self.next, 1) };
             return Ok(FmtKind::Comment);
         }
         let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
@@ -120,8 +120,8 @@ impl FmtLexer {
     pub(crate) fn quoted(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
-            if c == '\\' { self.at += 2; } else {
-                self.at += 1;
+            if c == '\\' { self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 2) }; } else {
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
                 if c == '"' { return Ok(()); }
             }
         }
@@ -132,13 +132,13 @@ impl FmtLexer {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
             let d = self.ahead(1);
             if c == '\\' && d == 'u' && self.ahead(2) == '{' {
-                while self.at < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at)) != '}' { self.at += 1; }
+                while self.at < self.c.len() as i64 && *unsafe { nikaia_std::proven::read(&self.c, (self.at) as usize) } != '}' { self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }; }
                 self.at += 1;
-            } else if c == '\\' || c == '{' && d == '{' || c == '}' && d == '}' { self.at += 2; } else if c == '{' {
-                self.at += 1;
+            } else if c == '\\' || c == '{' && d == '{' || c == '}' && d == '}' { self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 2) }; } else if c == '{' {
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
                 self.hole()?;
             } else {
-                self.at += 1;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
                 if c == '"' { return Ok(()); }
             }
         }
@@ -161,10 +161,10 @@ impl FmtLexer {
     // this was written - see `contracts::sync`.
     pub(crate) fn character(&mut self) -> bool {
         let mut k = self.at + 1;
-        if k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '\\' { k += 2; } else { k += 1; }
-        while k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != '\'' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != '\n' { k += 1; }
+        if k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '\\' { k = unsafe { nikaia_std::proven::add::<i64>(k, 2) }; } else { k += 1; }
+        while k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != '\'' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
         if k < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '\'' {
-            self.at = k + 1;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             return true;
         }
         false
@@ -176,29 +176,29 @@ impl FmtLexer {
         let digits = first >= '0' && first <= '9';
         self.at += 1;
         while self.at < self.c.len() as i64 {
-            let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
+            let c = *unsafe { nikaia_std::proven::read(&self.c, (self.at) as usize) };
             let d = self.ahead(1);
             let digit_next = d >= '0' && d <= '9';
-            let exponent = (c == '+' || c == '-') && *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at - 1)) == 'e';
-            if c.is_alphanumeric() || c == '_' || digits && (c == '.' || exponent) && digit_next { self.at += 1; } else { return; }
+            let exponent = (c == '+' || c == '-') && *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::sub::<i64>(self.at, 1)) as usize) } == 'e';
+            if c.is_alphanumeric() || c == '_' || digits && (c == '.' || exponent) && digit_next { self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }; } else { return; }
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn after_dsl(&self) -> bool {
         let n = self.tokens.len() as i64;
-        if n < 2 || nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 1)).kind != FmtKind::Word { return false; }
-        if nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 2)).text == "dsl" { return true; }
-        n >= 4 && nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 2)).text == "::" && nikaia_std::index::get(&self.tokens, nikaia_std::index::at(n - 4)).text == "dsl"
+        if n < 2 || unsafe { nikaia_std::proven::read(&self.tokens, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.kind != FmtKind::Word { return false; }
+        if unsafe { nikaia_std::proven::read(&self.tokens, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) }.text == "dsl" { return true; }
+        n >= 4 && unsafe { nikaia_std::proven::read(&self.tokens, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) }.text == "::" && unsafe { nikaia_std::proven::read(&self.tokens, (nikaia_std::proven::sub::<i64>(n, 4)) as usize) }.text == "dsl"
     }
     pub(crate) fn verbatim(&mut self) -> Result<(), nikaia_std::error::Thrown<Refused>> {
         let mut k = self.at + 1;
         while k + 4 < self.c.len() as i64 {
-            if *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '}' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 1)) == ' ' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 2)) == 'e' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 3)) == 'o' && *nikaia_std::index::get(&self.c, nikaia_std::index::at(k + 4)) == 'd' {
-                self.at = k + 5;
+            if *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) == '}' && *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::add::<i64>(k, 1)) as usize) } == ' ' && *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::add::<i64>(k, 2)) as usize) } == 'e' && *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::add::<i64>(k, 3)) as usize) } == 'o' && *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::add::<i64>(k, 4)) as usize) } == 'd' {
+                self.at = unsafe { nikaia_std::proven::add::<i64>(k, 5) };
                 return Ok(());
             }
-            k += 1;
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         }
         return Err(nikaia_std::error::throwing(Refused::Because(String::from("a `dsl` body without its `} eod`")), &"verbatim"));
     }
@@ -242,12 +242,12 @@ pub(crate) fn fmt_joined(lines: &[FmtLine]) -> Vec<FmtLine> {
     let mut out: Vec<FmtLine> = vec![];
     for line in lines.iter() {
         let n = out.len() as i64;
-        if n > 0 && !line.blank && fmt_joins(&nikaia_std::index::get(&out, nikaia_std::index::at(n - 1)).toks, &line.toks) {
+        if n > 0 && !line.blank && fmt_joins(&unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.toks, &line.toks) {
             for t in line.toks.iter() {
                 let mut moved = t.clone();
                 moved.spaced = true;
                 moved.breaks = 0;
-                out[nikaia_std::index::at(n - 1)].toks.push(moved);
+                (*unsafe { nikaia_std::proven::slot(&mut out, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }).toks.push(moved);
             }
         } else { out.push(line.clone()); }
     }
@@ -257,12 +257,12 @@ pub(crate) fn fmt_joined(lines: &[FmtLine]) -> Vec<FmtLine> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_joins(before: &[FmtToken], line: &[FmtToken]) -> bool {
-    let last = (*nikaia_std::index::get(&before, nikaia_std::index::at(before.len() as i64 - 1))).clone();
+    let last = (*nikaia_std::index::get(&before, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(before.len() as i64, 1) }))).clone();
     if last.kind == FmtKind::Comment || last.multi { return false; }
     let first = (*nikaia_std::index::get(&line, 0)).clone();
-    if first.kind == FmtKind::Open && first.text == "{" { return fmt_head(&nikaia_std::index::get(&before, 0).text); }
+    if first.kind == FmtKind::Open && first.text == "{" { return fmt_head(&unsafe { nikaia_std::proven::read(&before, (0) as usize) }.text); }
     if first.text == "else" && first.kind == FmtKind::Word {
-        let arm = line.len() > 1 && nikaia_std::index::get(&line, 1).text == "=>";
+        let arm = line.len() > 1 && unsafe { nikaia_std::proven::read(&line, (1) as usize) }.text == "=>";
         return !arm && last.kind == FmtKind::Close && last.text == "}";
     }
     false
@@ -284,8 +284,8 @@ pub(crate) fn fmt_comment_only(line: &FmtLine) -> bool {
 pub(crate) fn fmt_last_code(toks: &[FmtToken]) -> i64 {
     let mut k = toks.len() as i64;
     while k > 0 {
-        k -= 1;
-        if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind != FmtKind::Comment { return k; }
+        k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+        if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind != FmtKind::Comment { return k; }
     }
     -1
 }
@@ -294,7 +294,7 @@ pub(crate) fn fmt_last_code(toks: &[FmtToken]) -> i64 {
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_spaced(toks: &[FmtToken], k: i64) -> bool {
     if k == 0 { return false; }
-    nikaia_std::index::get(&toks, nikaia_std::index::at(k)).spaced || nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Comment && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text.starts_with("//")
+    nikaia_std::index::get(&toks, nikaia_std::index::at(k)).spaced || unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Comment && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text.starts_with("//")
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -303,7 +303,7 @@ pub(crate) fn fmt_render(toks: &[FmtToken]) -> String {
     let mut out: String = String::from("");
     for k in 0..toks.len() as i64 {
         if fmt_spaced(toks, k) { out.push(' '); }
-        out.push_str(&nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text);
+        out.push_str(&unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text);
     }
     out
 }
@@ -313,7 +313,7 @@ pub(crate) fn fmt_render(toks: &[FmtToken]) -> String {
 pub(crate) fn fmt_code_width(toks: &[FmtToken]) -> i64 {
     let last = fmt_last_code(toks);
     let mut width: i64 = 0;
-    for k in 0..last + 1 {
+    for k in 0..unsafe { nikaia_std::proven::add::<i64>(last, 1) } {
         if fmt_spaced(toks, k) { width += 1; }
         width += nikaia_std::index::get(&toks, nikaia_std::index::at(k)).width;
     }
@@ -354,7 +354,7 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
     let mut depth: Vec<i64> = vec![];
     let mut barred: Vec<bool> = vec![];
     for k in 0..toks.len() as i64 {
-        let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
+        let t = (*unsafe { nikaia_std::proven::read(&toks, (k) as usize) }).clone();
         let bar = t.kind == FmtKind::Punct && t.text == "|";
         let top = nikaia_std::block::Text::from(nikaia_std::index::or(stack.last().map(|__nikaia_found| nikaia_std::block::Text::from(__nikaia_found.to_string())), || "".into()).to_string());
         if t.kind == FmtKind::Close {
@@ -362,16 +362,16 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
                 stack.pop();
                 bars -= 1;
             }
-            if !stack.is_empty() { stack.pop(); } else { under += 1; }
-            depth.push(stack.len() as i64 - under);
+            if !stack.is_empty() { stack.pop(); } else { under = unsafe { nikaia_std::proven::add::<i64>(under, 1) }; }
+            depth.push(unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, under) });
             barred.push(bars > 0);
         } else if bar && top == "|" {
             stack.pop();
             bars -= 1;
-            depth.push(stack.len() as i64 - under);
+            depth.push(unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, under) });
             barred.push(true);
         } else {
-            depth.push(stack.len() as i64 - under);
+            depth.push(unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, under) });
             if t.kind == FmtKind::Open {
                 stack.push(nikaia_std::block::Text::from(t.text.to_string()));
                 barred.push(bars > 0);
@@ -389,7 +389,7 @@ pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_bar_opens(toks: &[FmtToken], k: i64) -> bool {
     if k == 0 { return true; }
-    let before = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k - 1))).clone();
+    let before = (*unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(k, 1)) as usize) }).clone();
     if before.kind == FmtKind::Open { return true; }
     if before.kind == FmtKind::Word { return before.text == "return" || before.text == "move"; }
     matches!(&*before.text, "," | "=" | "=>" | ":" | "??" | "+=")
@@ -400,7 +400,7 @@ pub(crate) fn fmt_bar_opens(toks: &[FmtToken], k: i64) -> bool {
 pub(crate) fn fmt_partner(toks: &[FmtToken], k: i64) -> i64 {
     let mut depth = 0;
     for at in k..toks.len() as i64 {
-        if nikaia_std::index::get(&toks, nikaia_std::index::at(at)).kind == FmtKind::Open { depth += 1; } else if nikaia_std::index::get(&toks, nikaia_std::index::at(at)).kind == FmtKind::Close {
+        if nikaia_std::index::get(&toks, nikaia_std::index::at(at)).kind == FmtKind::Open { depth += 1; } else if unsafe { nikaia_std::proven::read(&toks, (at) as usize) }.kind == FmtKind::Close {
             depth -= 1;
             if depth == 0 { return at; }
         }
@@ -422,11 +422,11 @@ pub(crate) fn fmt_looseness(toks: &[FmtToken], k: i64) -> i64 {
     let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
     if t.kind != FmtKind::Punct || k == 0 { return 0; }
     if t.text == "." || t.text == "?." {
-        let call = k + 2 < toks.len() as i64 && nikaia_std::index::get(&toks, nikaia_std::index::at(k + 1)).kind == FmtKind::Word && nikaia_std::index::get(&toks, nikaia_std::index::at(k + 2)).text == "(";
+        let call = k + 2 < toks.len() as i64 && unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::add::<i64>(k, 1)) as usize) }.kind == FmtKind::Word && unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::add::<i64>(k, 2)) as usize) }.text == "(";
         if call { return 7; }
         return 0;
     }
-    let before = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k - 1))).clone();
+    let before = (*unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(k, 1)) as usize) }).clone();
     let operand = before.kind == FmtKind::Text || before.kind == FmtKind::Close || before.kind == FmtKind::Word;
     if !operand || fmt_leads(&before.text) { return 0; }
     match &*t.text {
@@ -443,8 +443,8 @@ pub(crate) fn fmt_looseness(toks: &[FmtToken], k: i64) -> i64 {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_opens_grammar(toks: &[FmtToken]) -> bool {
-    if toks.len() > 1 && nikaia_std::index::get(&toks, 0).text == "grammar" { return true; }
-    toks.len() > 2 && nikaia_std::index::get(&toks, 0).text == "pub" && nikaia_std::index::get(&toks, 1).text == "grammar"
+    if toks.len() > 1 && unsafe { nikaia_std::proven::read(&toks, (0) as usize) }.text == "grammar" { return true; }
+    toks.len() > 2 && unsafe { nikaia_std::proven::read(&toks, (0) as usize) }.text == "pub" && unsafe { nikaia_std::proven::read(&toks, (1) as usize) }.text == "grammar"
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -489,8 +489,8 @@ impl FmtPrinter {
             if !pieces.is_empty() {
                 let mut k = pieces.len() as i64;
                 while k > 0 {
-                    k -= 1;
-                    self.work.push((*nikaia_std::index::get(&pieces, nikaia_std::index::at(k))).clone());
+                    k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+                    self.work.push((*unsafe { nikaia_std::proven::read(&pieces, (k) as usize) }).clone());
                 }
                 continue;
             }
@@ -507,13 +507,13 @@ impl FmtPrinter {
     pub(crate) fn inner(&self) -> i64 {
         let n = self.frames.len() as i64;
         if n == 0 { return 0; }
-        nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).inner
+        unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.inner
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn in_grammar(&self) -> bool {
         let n = self.frames.len() as i64;
-        n > 0 && nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).rules
+        n > 0 && unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.rules
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -521,7 +521,7 @@ impl FmtPrinter {
         let first = (*nikaia_std::index::get(&line.toks, 0)).clone();
         let inner = self.inner();
         if first.kind == FmtKind::Close {
-            if inner > 0 { return inner - 1; }
+            if inner > 0 { return unsafe { nikaia_std::proven::sub::<i64>(inner, 1) }; }
             return 0;
         }
         let starts_rule = fmt_starts_rule(&first.text);
@@ -552,28 +552,28 @@ impl FmtPrinter {
     pub(crate) fn emit(&mut self, line: &FmtLine, indent: i64) {
         let shape = fmt_shape(&line.toks);
         for k in 0..line.toks.len() as i64 {
-            let t = (*nikaia_std::index::get(&line.toks, nikaia_std::index::at(k))).clone();
+            let t = (*unsafe { nikaia_std::proven::read(&line.toks, (k) as usize) }).clone();
             if t.kind == FmtKind::Open {
                 let rules = t.text == "{" && k == fmt_last_code(&line.toks) && fmt_opens_grammar(&line.toks);
                 self.frames.push(FmtFrame { open: t.text, inner: indent + 1, commas: 0, rules });
             } else if t.kind == FmtKind::Close { self.frames.pop(); } else if t.kind == FmtKind::Punct && t.text == "," && !*nikaia_std::index::get(&shape.barred, nikaia_std::index::at(k)) && !self.frames.is_empty() {
                 let n = self.frames.len() as i64;
-                self.frames[nikaia_std::index::at(n - 1)].commas += 1;
+                (*unsafe { nikaia_std::proven::slot(&mut self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }).commas += 1;
             }
         }
         let last = fmt_last_code(&line.toks);
         let end = (*nikaia_std::index::get(&line.toks, nikaia_std::index::at(last))).clone();
         let mut toks = line.toks.copy_owned();
         let n = self.frames.len() as i64;
-        if n > 0 && nikaia_std::index::get(&self.frames, nikaia_std::index::at(n - 1)).commas > 0 && self.next_closes() {
+        if n > 0 && unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.commas > 0 && self.next_closes() {
             let open = end.kind == FmtKind::Open || end.text == "," || end.text == ";";
-            if !open && nikaia_std::index::get(&line.toks, 0).text != ".." {
-                toks = fmt_slice(&line.toks, 0, last + 1);
+            if !open && unsafe { nikaia_std::proven::read(&line.toks, (0) as usize) }.text != ".." {
+                toks = fmt_slice(&line.toks, 0, unsafe { nikaia_std::proven::add::<i64>(last, 1) });
                 toks.push(fmt_comma());
-                for k in last + 1..line.toks.len() as i64 { toks.push((*nikaia_std::index::get(&line.toks, nikaia_std::index::at(k))).clone()); }
+                for k in unsafe { nikaia_std::proven::add::<i64>(last, 1) }..line.toks.len() as i64 { toks.push((*unsafe { nikaia_std::proven::read(&line.toks, (k) as usize) }).clone()); }
             }
         }
-        let glob = end.text == "*" && last > 0 && nikaia_std::index::get(&line.toks, nikaia_std::index::at(last - 1)).text == "::";
+        let glob = end.text == "*" && last > 0 && unsafe { nikaia_std::proven::read(&line.toks, (nikaia_std::proven::sub::<i64>(last, 1)) as usize) }.text == "::";
         self.hanging = end.kind == FmtKind::Punct && fmt_operator_ends(&nikaia_std::block::Text::from(end.text.to_string())) && !glob;
         self.tail = nikaia_std::block::Text::from(end.text.to_string());
         self.tail_kind = end.kind;
@@ -584,8 +584,8 @@ impl FmtPrinter {
     pub(crate) fn next_closes(&self) -> bool {
         let mut k = self.work.len() as i64;
         while k > 0 {
-            k -= 1;
-            if !fmt_comment_only(nikaia_std::index::get(&self.work, nikaia_std::index::at(k))) { return nikaia_std::index::get(&nikaia_std::index::get(&self.work, nikaia_std::index::at(k)).toks, 0).kind == FmtKind::Close; }
+            k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+            if !fmt_comment_only(unsafe { nikaia_std::proven::read(&self.work, (k) as usize) }) { return nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&self.work, (k) as usize) }.toks, 0).kind == FmtKind::Close; }
         }
         false
     }
@@ -602,7 +602,7 @@ impl FmtPrinter {
             kinds.push(nikaia_std::block::Text::from(f.open.to_string()));
         }
         for k in 0..n {
-            let t = (*nikaia_std::index::get(&toks, nikaia_std::index::at(k))).clone();
+            let t = (*unsafe { nikaia_std::proven::read(&toks, (k) as usize) }).clone();
             if t.kind == FmtKind::Open {
                 opens.push(k);
                 kinds.push(nikaia_std::block::Text::from(t.text.to_string()));
@@ -613,15 +613,15 @@ impl FmtPrinter {
                 }
             } else if t.kind == FmtKind::Punct && t.text == ";" {
                 let m = kinds.len() as i64;
-                if m == 0 || *nikaia_std::index::get(&kinds, nikaia_std::index::at(m - 1)) == "{" {
+                if m == 0 || *unsafe { nikaia_std::proven::read(&kinds, (nikaia_std::proven::sub::<i64>(m, 1)) as usize) } == "{" {
                     let mut at: i64 = -1;
-                    if m > 0 { at = *nikaia_std::index::get(&opens, nikaia_std::index::at(m - 1)); }
+                    if m > 0 { at = *nikaia_std::index::get(&opens, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(m, 1) })); }
                     if k == last {
                         let mut kept = fmt_slice(&toks, 0, k);
-                        for j in k + 1..n { kept.push((*nikaia_std::index::get(&toks, nikaia_std::index::at(j))).clone()); }
+                        for j in unsafe { nikaia_std::proven::add::<i64>(k, 1) }..n { kept.push((*unsafe { nikaia_std::proven::read(&toks, (j) as usize) }).clone()); }
                         return vec![FmtLine { toks: kept, blank: line.blank }];
                     }
-                    if at < 0 { return vec![FmtLine { toks: fmt_slice(&toks, 0, k), blank: line.blank }, FmtLine { toks: fmt_slice(&toks, k + 1, n), blank: false }]; }
+                    if at < 0 { return vec![FmtLine { toks: fmt_slice(&toks, 0, k), blank: line.blank }, FmtLine { toks: fmt_slice(&toks, unsafe { nikaia_std::proven::add::<i64>(k, 1) }, n), blank: false }]; }
                     let close = fmt_partner(&toks, at);
                     if close < 0 { return vec![FmtLine { toks: fmt_slice(&toks, 0, at + 1), blank: line.blank }, FmtLine { toks: fmt_slice(&toks, at + 1, n), blank: false }]; }
                     return fmt_broken(line, at, close);
@@ -631,12 +631,12 @@ impl FmtPrinter {
         if fmt_has_multi(&toks) || indent * 4 + fmt_code_width(&toks) <= 100 { return vec![]; }
         let shape = fmt_shape(&toks);
         let mut cuts: Vec<i64> = vec![];
-        if !self.frames.is_empty() { for k in 0..last { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Punct && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "," && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { cuts.push(k + 1); } } }
+        if !self.frames.is_empty() { for k in 0..last { if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Punct && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "," && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { cuts.push(unsafe { nikaia_std::proven::add::<i64>(k, 1) }); } } }
         if !cuts.is_empty() { return fmt_cut(line, &cuts); }
         let loosest = fmt_loosest(&toks, &shape, last);
         if loosest > 0 && loosest < 7 { return fmt_cut(line, &fmt_operators(&toks, &shape, last, loosest)); }
         let mut first = nikaia_std::index::get(&toks, nikaia_std::index::at(last)).text == "{";
-        for k in 0..last { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "->" && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { first = true; } }
+        for k in 0..last { if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "->" && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 { first = true; } }
         let rule = self.in_grammar();
         let mut group: i64 = -1;
         let mut close: i64 = -1;
@@ -644,7 +644,7 @@ impl FmtPrinter {
         while k < n {
             if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Open {
                 let m = fmt_partner(&toks, k);
-                if m > k + 1 && (fmt_sealed(&toks, k, m) || rule && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "(" || rule && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "{" && k > 0 && nikaia_std::index::get(&toks, nikaia_std::index::at(k - 1)).kind == FmtKind::Word) { k = m; } else if m > k + 1 && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
+                if m > unsafe { nikaia_std::proven::add::<i64>(k, 1) } && (fmt_sealed(&toks, k, m) || rule && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "(" || rule && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "{" && k > 0 && unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(k, 1)) as usize) }.kind == FmtKind::Word) { k = m; } else if m > unsafe { nikaia_std::proven::add::<i64>(k, 1) } && fmt_breakable(&toks, &shape, k, m) && (group < 0 || !first) {
                     group = k;
                     close = m;
                     k = m;
@@ -674,18 +674,18 @@ pub(crate) fn fmt_loosest(toks: &[FmtToken], shape: &FmtShape, last: i64) -> i64
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_operators(toks: &[FmtToken], shape: &FmtShape, last: i64, level: i64) -> Vec<i64> {
     let mut cuts: Vec<i64> = vec![];
-    for k in 1..last + 1 { if *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 && fmt_looseness(toks, k) == level { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "-" { cuts.push(k + 1); } else { cuts.push(k); } } }
+    for k in 1..last + 1 { if *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == 0 && fmt_looseness(toks, k) == level { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "-" { cuts.push(unsafe { nikaia_std::proven::add::<i64>(k, 1) }); } else { cuts.push(k); } } }
     cuts
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_sealed(toks: &[FmtToken], open: i64, close: i64) -> bool {
-    if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "[" && open > 0 && nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).kind == FmtKind::Word { return true; }
-    if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "(" && open > 0 && (nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).text == "->" || nikaia_std::index::get(&toks, nikaia_std::index::at(open - 1)).text == ":") { return true; }
-    if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "(" && fmt_in_closure_params(toks, open) { return true; }
+    if unsafe { nikaia_std::proven::read(&toks, (open) as usize) }.text == "[" && open > 0 && unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(open, 1)) as usize) }.kind == FmtKind::Word { return true; }
+    if unsafe { nikaia_std::proven::read(&toks, (open) as usize) }.text == "(" && open > 0 && (unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(open, 1)) as usize) }.text == "->" || unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(open, 1)) as usize) }.text == ":") { return true; }
+    if unsafe { nikaia_std::proven::read(&toks, (open) as usize) }.text == "(" && fmt_in_closure_params(toks, open) { return true; }
     if close + 1 >= toks.len() as i64 { return false; }
-    let after = &nikaia_std::index::get(&toks, nikaia_std::index::at(close + 1)).text;
+    let after = &nikaia_std::index::get(&toks, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(close, 1) })).text;
     after == "=>" || after == "|" || after == "=" || after == "in"
 }
 
@@ -694,13 +694,13 @@ pub(crate) fn fmt_sealed(toks: &[FmtToken], open: i64, close: i64) -> bool {
 pub(crate) fn fmt_in_closure_params(toks: &[FmtToken], open: i64) -> bool {
     let mut at = open;
     while at > 0 {
-        if nikaia_std::index::get(&toks, nikaia_std::index::at(at)).text == "(" && nikaia_std::index::get(&toks, nikaia_std::index::at(at - 1)).text == "fn" { return true; }
+        if nikaia_std::index::get(&toks, nikaia_std::index::at(at)).text == "(" && unsafe { nikaia_std::proven::read(&toks, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.text == "fn" { return true; }
         let mut depth = 0;
-        let mut k = at - 1;
+        let mut k = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
         let mut found: i64 = -1;
         while k >= 0 && found < 0 {
-            if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Close { depth += 1; } else if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Open { if depth == 0 { found = k; } else { depth -= 1; } }
-            k -= 1;
+            if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Close { depth += 1; } else if unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.kind == FmtKind::Open { if depth == 0 { found = k; } else { depth -= 1; } }
+            k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
         }
         if found < 0 || nikaia_std::index::get(&toks, nikaia_std::index::at(found)).text != "(" { return false; }
         at = found;
@@ -712,8 +712,8 @@ pub(crate) fn fmt_in_closure_params(toks: &[FmtToken], open: i64) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_breakable(toks: &[FmtToken], shape: &FmtShape, open: i64, close: i64) -> bool {
     if fmt_sealed(toks, open, close) { return false; }
-    if nikaia_std::index::get(&toks, nikaia_std::index::at(open)).text == "{" { return true; }
-    for k in open + 1..close { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Punct && nikaia_std::index::get(&toks, nikaia_std::index::at(k)).text == "," && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(open)) + 1 { return true; } }
+    if unsafe { nikaia_std::proven::read(&toks, (open) as usize) }.text == "{" { return true; }
+    for k in unsafe { nikaia_std::proven::add::<i64>(open, 1) }..close { if nikaia_std::index::get(&toks, nikaia_std::index::at(k)).kind == FmtKind::Punct && unsafe { nikaia_std::proven::read(&toks, (k) as usize) }.text == "," && *nikaia_std::index::get(&shape.depth, nikaia_std::index::at(k)) == *unsafe { nikaia_std::proven::read(&shape.depth, (open) as usize) } + 1 { return true; } }
     false
 }
 
@@ -758,8 +758,8 @@ pub(crate) fn fmt_broken(line: &FmtLine, open: i64, close: i64) -> Vec<FmtLine> 
     if !item.is_empty() { items.push(item); }
     for each in items.iter() {
         let mut toks_of = each.copy_owned();
-        let end = (*nikaia_std::index::get(&toks_of, nikaia_std::index::at(toks_of.len() as i64 - 1))).clone();
-        if listed && end.text != "," && nikaia_std::index::get(&toks_of, 0).text != ".." { toks_of.push(fmt_comma()); }
+        let end = (*nikaia_std::index::get(&toks_of, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(toks_of.len() as i64, 1) }))).clone();
+        if listed && end.text != "," && unsafe { nikaia_std::proven::read(&toks_of, (0) as usize) }.text != ".." { toks_of.push(fmt_comma()); }
         pieces.push(FmtLine { toks: toks_of, blank: false });
     }
     pieces.push(FmtLine { toks: fmt_slice(&toks, close, toks.len() as i64), blank: false });
@@ -773,8 +773,8 @@ pub fn fmt_source(source: &str, starts: Vec<i64>, ends: Vec<i64>) -> Result<Stri
     let mut work: Vec<FmtLine> = vec![];
     let mut k = lines.len() as i64;
     while k > 0 {
-        k -= 1;
-        work.push((*nikaia_std::index::get(&lines, nikaia_std::index::at(k))).clone());
+        k = unsafe { nikaia_std::proven::sub::<i64>(k, 1) };
+        work.push((*unsafe { nikaia_std::proven::read(&lines, (k) as usize) }).clone());
     }
     let mut printer = FmtPrinter { frames: vec![], work, held: vec![], out: String::from(""), hanging: false, tail: String::from(""), tail_kind: FmtKind::Open };
     printer.print();

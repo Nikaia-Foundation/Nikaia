@@ -53,7 +53,7 @@ pub fn hands_a_run(found: &Ty, want: &Ty) -> bool {
         _ => Ty::Unknown,
     };
     match found {
-        Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && !args.is_empty() && (*nikaia_std::index::get(&args, 0)).fits(&item),
+        Ty::Named { name, args, .. } => (name == ARRAY || name == "Vec" || name == "List") && !args.is_empty() && (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).fits(&item),
         _ => false,
     }
 }
@@ -61,7 +61,7 @@ pub fn hands_a_run(found: &Ty, want: &Ty) -> bool {
 pub fn hands_a_run_view(found: &Ty, want: &Ty) -> bool {
     match found {
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; slice && !mutable && match want {
-            Ty::Named { name, args, view } => { let view = *view; !view && name == ARRAY && args.len() == 1 && item.fits(nikaia_std::index::get(&args, 0)) },
+            Ty::Named { name, args, view } => { let view = *view; !view && name == ARRAY && args.len() == 1 && item.fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) },
             _ => false,
         } },
         _ => false,
@@ -163,7 +163,7 @@ pub fn is_a_hull(name: &str) -> bool { name == "Shared" || name == "SharedMut" |
 
 pub fn locked_content_of(ty: &Ty) -> Option<Ty> {
     match ty {
-        Ty::Named { name, args, .. } => if (name == "SharedMut" || name == "Locked") && !args.is_empty() { Some((*nikaia_std::index::get(&args, 0)).clone()) } else { None },
+        Ty::Named { name, args, .. } => if (name == "SharedMut" || name == "Locked") && !args.is_empty() { Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()) } else { None },
         _ => None,
     }
 }
@@ -177,7 +177,7 @@ pub fn is_a_handle(ty: &Ty) -> bool {
 
 pub fn locked_content(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if name == "Locked" && !view && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { ty.clone() } },
+        Ty::Named { name, args, view } => { let view = *view; if name == "Locked" && !view && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { ty.clone() } },
         _ => ty.clone(),
     }
 }
@@ -186,7 +186,7 @@ pub fn becomes_shared(found: &Ty, want: &Ty) -> bool {
     match want {
         Ty::Named { name, args, view } => {
             let view = *view;
-            if !is_a_hull(name) || view || args.len() != 1 || found.is_unknown() { false } else { found.fits(nikaia_std::index::get(&args, 0)) || found.fits(&locked_content(nikaia_std::index::get(&args, 0))) }
+            if !is_a_hull(name) || view || args.len() != 1 || found.is_unknown() { false } else { found.fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) || found.fits(&locked_content(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) }
         },
         _ => false,
     }
@@ -252,8 +252,8 @@ pub(crate) fn code_keeps_where_lent(found: &Ty, want: &Ty) -> bool {
     };
     if (given.len() as i64) != wanted.len() as i64 { return false; }
     for at in 0..given.len() as i64 {
-        let plain = (*nikaia_std::index::get(&given, (at) as usize)).text();
-        if (*nikaia_std::index::get(&wanted, (at) as usize)).is_a_view() && !(*nikaia_std::index::get(&given, (at) as usize)).is_a_view() && plain != "String" && code_param_as_written(nikaia_std::index::get(&given, (at) as usize)).starts_with("keep ") { return true; }
+        let plain = (*unsafe { nikaia_std::proven::read(&given, (at) as usize) }).text();
+        if (*unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }).is_a_view() && !(*unsafe { nikaia_std::proven::read(&given, (at) as usize) }).is_a_view() && plain != "String" && code_param_as_written(unsafe { nikaia_std::proven::read(&given, (at) as usize) }).starts_with("keep ") { return true; }
     }
     false
 }
@@ -290,7 +290,7 @@ pub(crate) fn part_of_a_list(found: &Ty, want: &Ty) -> Option<String> {
     };
     if type_last_segment(name) != "Vec" { return None; }
     if args.is_empty() { return Some(String::from("?")); }
-    Some((*nikaia_std::index::get(&args, 0)).text())
+    Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text())
 }
 
 pub fn element_walked(over: &Ty, bindings: i64) -> Ty {
@@ -299,7 +299,7 @@ pub fn element_walked(over: &Ty, bindings: i64) -> Ty {
         Ty::Named { name, args, view } => {
             let view = *view;
             let last = type_last_segment(name);
-            if args.len() == 1 { if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" || view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown } } else if !args.is_empty() && !view && name == ARRAY { (*nikaia_std::index::get(&args, 0)).clone() } else if args.is_empty() && last == "Bytes" { Ty::Named { name: String::from("u8"), args: vec![], view: false } } else if the_command_line(over) { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { Ty::Unknown }
+            if args.len() == 1 { if last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet" || view && name == ARRAY { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { Ty::Unknown } } else if !args.is_empty() && !view && name == ARRAY { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else if args.is_empty() && last == "Bytes" { Ty::Named { name: String::from("u8"), args: vec![], view: false } } else if the_command_line(over) { Ty::Named { name: String::from("String"), args: vec![], view: false } } else { Ty::Unknown }
         },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { item.clone() } else { Ty::Unknown } },
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },
@@ -327,7 +327,7 @@ pub(crate) fn parts_walked(over: &Ty, bindings: i64) -> Vec<Ty> {
     match over {
         Ty::Named { name, args, .. } => {
             let last = type_last_segment(name);
-            if (last == "HashMap" || last == "Map" || last == "BTreeMap" || last == "TrustedMap") && args.len() == 2 && bindings == 2 { vec![(*nikaia_std::index::get(&args, 0)).clone(), (*nikaia_std::index::get(&args, 1)).clone()] } else if (last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet") && args.len() == 1 || name == ARRAY && !args.is_empty() { tuple_parts(nikaia_std::index::get(&args, 0)) } else { vec![] }
+            if (last == "HashMap" || last == "Map" || last == "BTreeMap" || last == "TrustedMap") && args.len() == 2 && bindings == 2 { vec![(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone(), (*unsafe { nikaia_std::proven::read(&args, (1) as usize) }).clone()] } else if (last == "Vec" || last == "List" || last == "BTreeSet" || last == "HashSet") && args.len() == 1 || name == ARRAY && !args.is_empty() { tuple_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) } else { vec![] }
         },
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); tuple_parts(item) },
         _ => vec![],
@@ -382,7 +382,7 @@ pub(crate) fn a_copied_scalar(name: &str) -> bool { matches!(name, "i32" | "i64"
 
 pub fn tail_value_of(block: &Block) -> Option<&Expr> {
     if block.stmts.is_empty() { return None; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(value) => Some(value),
         _ => None,
     }

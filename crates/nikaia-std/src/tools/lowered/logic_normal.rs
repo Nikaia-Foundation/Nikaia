@@ -26,7 +26,7 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
         for one in ordered.iter() { if one.named == named { seen = true; } }
         if !seen {
             let mut at = ordered.len() as i64;
-            while at > 0 && AsRef::<str>::as_ref(&(shape)) < AsRef::<str>::as_ref(&(nikaia_std::index::get(&ordered, nikaia_std::index::at(at - 1)).shape)) { at -= 1; }
+            while at > 0 && AsRef::<str>::as_ref(&(shape)) < AsRef::<str>::as_ref(&(unsafe { nikaia_std::proven::read(&ordered, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.shape)) { at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) }; }
             ordered.insert(nikaia_std::count::of(at), LgOrdered { shape, named, fact });
         }
     }
@@ -385,10 +385,10 @@ pub(crate) fn lg_step_of(word: &str) -> Option<LgStep> {
     let body = nikaia_std::block::Text::from(nikaia_std::index::or(word.strip_prefix('c'), || "").to_string());
     let parts: Vec<&str> = body.split(':').collect::<Vec<_>>();
     if parts.len() != 4 { return None; }
-    let left = match lg_number(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let by_left = match text::parse_i64(*nikaia_std::index::get(&parts, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let right = match lg_number(*nikaia_std::index::get(&parts, 2)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let by_right = match text::parse_i64(*nikaia_std::index::get(&parts, 3)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let left = match lg_number(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let by_left = match text::parse_i64(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let right = match lg_number(*unsafe { nikaia_std::proven::read(&parts, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let by_right = match text::parse_i64(*unsafe { nikaia_std::proven::read(&parts, (3) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(LgStep::Combine { left, by_left, right, by_right })
 }
 

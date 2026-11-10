@@ -230,7 +230,7 @@ pub fn expression_ensures(item: &Item, words: &winnow_grammar::InternerContext, 
     if receiver.is_some() || !config.is_empty() || !ret.generics.is_empty() || body.stmts.len() != 1 { return None; }
     let answer = words.resolve(ret.name);
     if !(answer == "i32" || answer == "i64" || answer == "u8" || answer == "u32" || answer == "u64") { return None; }
-    let value = match &nikaia_std::index::get(&body.stmts, 0).node {
+    let value = match &unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node {
         Stmt::Return(returned) => match returned { Some(__nikaia_value) => __nikaia_value, None => return None },
         _ => return None,
     };

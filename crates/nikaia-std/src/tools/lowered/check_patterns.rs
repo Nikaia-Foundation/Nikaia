@@ -33,7 +33,7 @@ impl CheckState {
         match pattern {
             MatchPattern::Path(one) => {
                 if one.len() == 1 && !on.is_unknown() {
-                    let word = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string());
+                    let word = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&one, (0) as usize) }).to_string());
                     let mut a_variant = false;
                     match on {
                         Ty::Named { name, .. } => { a_variant = self.is_variant(name, &word) || self.variant_parts.contains_key(&format!("{}::{}", name, word)); },
@@ -128,15 +128,15 @@ impl CheckState {
         let mut rest_at: i64 = -1;
         let mut at: i64 = 0;
         while at < parts.len() as i64 {
-            if pattern_is_rest(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) { rest_at = at; }
-            at = at + 1;
+            if pattern_is_rest(unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) { rest_at = at; }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         at = 0;
         while at < parts.len() as i64 {
             let mut place: i64 = at;
-            if rest_at >= 0 && at > rest_at { place = types.len() as i64 - (parts.len() as i64 - at); }
-            if (rest_at < 0 || at != rest_at) && place >= 0 && place < types.len() as i64 { self.bind_a_part(world, nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&types, nikaia_std::index::at(place)), out); }
-            at = at + 1;
+            if rest_at >= 0 && at > rest_at { place = unsafe { nikaia_std::proven::sub::<i64>(types.len() as i64, nikaia_std::proven::sub::<i64>(parts.len() as i64, at)) }; }
+            if (rest_at < 0 || at != rest_at) && place >= 0 && place < types.len() as i64 { self.bind_a_part(world, unsafe { nikaia_std::proven::read(&parts, (at) as usize) }, unsafe { nikaia_std::proven::read(&types, (place) as usize) }, out); }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -147,7 +147,7 @@ impl CheckState {
             _ => return String::from(""),
         };
         let key = self.pattern_variant(world, path, &owner);
-        if plain && path.len() == 1 && !self.structs.contains_key(&key) && world.words.resolve(*nikaia_std::index::get(&path, 0)) == owner { return owner; }
+        if plain && path.len() == 1 && !self.structs.contains_key(&key) && world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == owner { return owner; }
         key
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -158,14 +158,14 @@ impl CheckState {
             let part = *part;
             written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
         }
-        if written.len() == 1 { return format!("{}::{}", owner, *nikaia_std::index::get(&written, 0)); }
+        if written.len() == 1 { return format!("{}::{}", owner, *unsafe { nikaia_std::proven::read(&written, (0) as usize) }); }
         nikaia_std::block::Text::from(written.join("::"))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn bind_a_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
         match part {
-            MatchPattern::Path(one) => { if one.len() == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&one, 0)).to_string()), ty.clone()); } },
+            MatchPattern::Path(one) => { if one.len() == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&one, (0) as usize) }).to_string()), ty.clone()); } },
             MatchPattern::Tuple { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
             MatchPattern::Named { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
             MatchPattern::List(_) => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
@@ -178,12 +178,12 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
     match pattern {
-        MatchPattern::Path(segments) => if segments.len() == 1 { vec![nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string())] } else { vec![] },
+        MatchPattern::Path(segments) => if segments.len() == 1 { vec![nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string())] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
         MatchPattern::List(parts) => names_of_parts(world, parts),
         MatchPattern::RestNamed(name) => { let name = *name; vec![nikaia_std::block::Text::from(world.words.resolve(name).to_string())] },
         MatchPattern::Named { fields, .. } => names_of_fields(world, fields),
-        MatchPattern::Or(alternatives) => if !alternatives.is_empty() { pattern_names(world, nikaia_std::index::get(&alternatives, 0)) } else { vec![] },
+        MatchPattern::Or(alternatives) => if !alternatives.is_empty() { pattern_names(world, unsafe { nikaia_std::proven::read(&alternatives, (0) as usize) }) } else { vec![] },
         _ => vec![],
     }
 }
@@ -208,7 +208,7 @@ pub fn pattern_is_rest(part: &MatchPattern) -> bool { matches!(part, MatchPatter
 
 pub fn pattern_list_element(on: &Ty) -> Option<Ty> {
     match on {
-        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "Array" || name == "List") && !args.is_empty() { return Some((*nikaia_std::index::get(&args, 0)).clone()); } },
+        Ty::Named { name, args, .. } => { if (name == "Vec" || name == "Array" || name == "List") && !args.is_empty() { return Some((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()); } },
         _ => { },
     }
     None
@@ -252,8 +252,8 @@ impl CheckState {
                 let mut at: i64 = 0;
                 for part in parts.iter() {
                     if pattern_is_rest(part) || at >= types.len() as i64 { return; }
-                    self.a_struct_pattern_that_leaves_fields_out(world, part, nikaia_std::index::get(&types, nikaia_std::index::at(at)), span);
-                    at = at + 1;
+                    self.a_struct_pattern_that_leaves_fields_out(world, part, unsafe { nikaia_std::proven::read(&types, (at) as usize) }, span);
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
                 return;
             },
@@ -269,7 +269,7 @@ impl CheckState {
                     written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
                 }
                 let mut key: String = self.pattern_variant(world, path, &owner); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
-                if written.len() == 1 && *nikaia_std::index::get(&written, 0) == owner { key = nikaia_std::block::Text::from(owner.to_string()); }
+                if written.len() == 1 && *unsafe { nikaia_std::proven::read(&written, (0) as usize) } == owner { key = nikaia_std::block::Text::from(owner.to_string()); }
                 let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.structs, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

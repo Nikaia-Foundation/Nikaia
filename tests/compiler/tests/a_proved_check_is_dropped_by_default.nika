@@ -1,0 +1,45 @@
+// #1474, ADR-306 D26: a build that names neither `remove-bounds-checks` nor
+// `remove-overflow-checks` drops the index and overflow checks a proof shows
+// unneeded, as `on` does; the two `off` words keep them. An index and an
+// addition the walk cannot prove keep their checks at every level, and the
+// program prints the same.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn lowered(tmp: String, words: Vec[String]) -> String throws {
+    let mut args = words.clone()
+    args.push("lower")
+    args.push("p.nika")
+    args.push("-o")
+    args.push("p.rs")
+    let done = process::run(toolchain(), args; dir: tmp.clone())
+    if done.stdout.contains("Lowered p.nika") == false { println(done.stderr) }
+    return fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+}
+
+fn counted(said: String, rust: String) throws {
+    println(f"{said}: {rust.matches("nikaia_std::proven::read(").count()} proven::read, {rust.matches("nikaia_std::proven::add::<").count()} proven::add")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, "fn total(xs: ref Vec[i64]) -> i64 {\n    let mut t = 0\n    for i in 0..<xs.len() {\n        t = t ^ xs[i]\n    }\n    return t\n}\n\nfn pick(xs: ref Vec[i64], i: i64) -> i64 {\n    return xs[i]\n}\n\nfn double(x: u32) -> u32 {\n    if x < 1000 {\n        return x + x\n    }\n    return 0\n}\n\nfn sum(x: u32, y: u32) -> u32 {\n    return x + y\n}\n\nfn main() throws {\n    let xs = [3, 5, 9]\n    println(f\"{total(xs)} {pick(xs, 2)} {double(21)} {sum(40, 2)}\")\n}\n")
+    let named_nothing = lowered(tmp.clone(), [])
+    let on = lowered(tmp.clone(), ["--optimization=remove-bounds-checks:on,remove-overflow-checks:on"])
+    let off = lowered(tmp.clone(), ["--optimization=remove-bounds-checks:off,remove-overflow-checks:off"])
+    counted("named nothing", named_nothing)
+    counted("on", on)
+    counted("off", off)
+    println(f"named nothing is on: {named_nothing == on}")
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    println(ran.stdout.trim())
+    let kept = process::run(toolchain(), ["--optimization=remove-bounds-checks:off,remove-overflow-checks:off", "run", "p.nika"]; dir: tmp.clone())
+    println(kept.stdout.trim())
+    process::run("rm", ["-rf", tmp])
+}

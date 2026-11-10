@@ -265,7 +265,7 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
             },
             _ => { },
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let mut built: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
     while !waiting.is_empty() {
@@ -273,7 +273,7 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
         if free.contains_key(&nikaia_std::block::Text::from(name.to_string())) && !built.contains(&nikaia_std::block::Text::from(name.to_string())) {
             built.insert(nikaia_std::block::Text::from(name.to_string()));
             let place = match free.get(&nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return built };
-            match &nikaia_std::index::get(&items, nikaia_std::index::at(place)).node {
+            match &unsafe { nikaia_std::proven::read(&items, (place) as usize) }.node {
                 Item::Fn { body, .. } => { emit_holes_names_block(host, words, body, 1, &mut waiting); },
                 _ => { },
             }

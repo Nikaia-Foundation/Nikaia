@@ -71,9 +71,9 @@ pub(crate) fn dump_tuple(shapes: &Shapes, parts: &[Ty], expr: &str, depth: i64, 
     let mut at: i64 = 0;
     while ((at) as usize) < parts.len() {
         out.push_str(&format!("{}out.push(' ');\n", pad));
-        let refused = dump(shapes, nikaia_std::index::get(&parts, (at) as usize), &format!("{}.{}", expr, at), depth + 1, out);
+        let refused = dump(shapes, unsafe { nikaia_std::proven::read(&parts, (at) as usize) }, &format!("{}.{}", expr, at), depth + 1, out);
         if refused.is_some() { return std::convert::identity(refused); }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out.push_str(&format!("{}out.push(')');\n", pad));
     None
@@ -101,7 +101,7 @@ pub(crate) fn dump_named(shapes: &Shapes, ty: &Ty, name: &str, args: &[Ty], expr
         out.push_str(&format!("{}out.push_str(&format!(\"(i {{}})\", {}));\n", pad, expr));
         return None;
     }
-    if (name == "Vec" || name == "List" || name == ARRAY) && !args.is_empty() { return dump_run(shapes, nikaia_std::index::get(&args, 0), expr, depth, out); }
+    if (name == "Vec" || name == "List" || name == ARRAY) && !args.is_empty() { return dump_run(shapes, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, expr, depth, out); }
     if name == "f32" || name == "f64" {
         out.push_str(&format!("{}out.push_str(&format!(\"(f {{:?}})\", {}));\n", pad, expr));
         return None;
@@ -144,7 +144,7 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((at) as usize) < variant.carried.len() {
             bound.push(format!("__nikaia_p{}", at));
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let mut pattern = format!("{}::{}", name, variant.name); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         if !bound.is_empty() {
@@ -156,9 +156,9 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
         let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
         while ((i) as usize) < bound.len() {
             out.push_str(&format!("{}        out.push(' ');\n", pad));
-            let refused = dump(shapes, nikaia_std::index::get(&variant.carried, (i) as usize), nikaia_std::index::get(&bound, (i) as usize), depth + 2, out);
+            let refused = dump(shapes, unsafe { nikaia_std::proven::read(&variant.carried, (i) as usize) }, unsafe { nikaia_std::proven::read(&bound, (i) as usize) }, depth + 2, out);
             if refused.is_some() { return std::convert::identity(refused); }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         out.push_str(&format!("{}        out.push(')');\n", pad));
         out.push_str(&format!("{}    }}\n", pad));

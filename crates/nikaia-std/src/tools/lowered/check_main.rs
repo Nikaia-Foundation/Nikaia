@@ -9,7 +9,7 @@ pub(crate) fn main_refused_type(ty: &Type, words: &winnow_grammar::InternerConte
     if ty.is_tuple || (*ty.code).is_some() || ty.count.is_some() { return Some(format!("a `{}`", main_written_type(ty, words))); }
     if name == "Vec" && ty.generics.len() == 1 && !ty.is_nullable {
         if !last { return Some(String::from("a `Vec` that is not the last subject parameter")); }
-        let item = nikaia_std::index::get(&ty.generics, 0);
+        let item = unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) };
         if item.is_nullable || !item.generics.is_empty() || item.is_view || item.is_tuple || !main_word_type(words.resolve(item.name)) { return Some(format!("a `{}`", main_written_type(ty, words))); }
         return None;
     }
@@ -31,9 +31,9 @@ impl CheckState {
                 let note: &'static str = "A parameter of `main` is a word the program is started with: `int`, a fixed-width integer, `f64`, `bool`, `String`, or one of these behind `?`; the last subject parameter may be a `Vec[T]` of one of them (Part I 5.5).";
                 let mut maybe: String = String::from("");
                 for index in 0..args.len() as i64 {
-                    let arg = nikaia_std::index::get(&args, (index) as usize);
+                    let arg = unsafe { nikaia_std::proven::read(&args, (index) as usize) };
                     let param = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
-                    let last = ((index + 1) as usize) == args.len();
+                    let last = ((unsafe { nikaia_std::proven::add::<i64>(index, 1) }) as usize) == args.len();
                     let refused = main_refused_type(&arg.ty, world.words, last);
                     if refused.is_none() && maybe != "" && !arg.ty.is_nullable && !(last && world.words.resolve(arg.ty.name) == "Vec") { self.findings.push(check_refusal("NK1273", span, format!("`{}` of `main` is a required word after `{}`, which may be left out.", param, maybe), vec![String::from("A subject of type `T?` may be left out at the end; it stands after every required subject and before a last `Vec[T]` (Part I 5.5).")], Some(format!("Move `{}` before `{}`, or make it a `T?` too.", param, maybe)))); }
                     if arg.ty.is_nullable && maybe == "" { maybe = nikaia_std::block::Text::from(param.to_string()); }

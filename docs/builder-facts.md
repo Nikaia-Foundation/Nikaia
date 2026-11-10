@@ -28,6 +28,7 @@ together with the specification section and an example test.
 
 * **`lower-std` runs the bounds walk**, so a slower walk slows every `lower-std` (one ran past 20 minutes and was killed): while you change the walk, lower with the binary before your change and measure with yours once. (issue-1470)
 * **After a change to any `bounds_*.nika`, each `lower-std` re-proves std with the new walk: 10-13 minutes, not the 40 s of `builder.md`.** Plan one such cycle per hour; iterate with `check --bounds` on a probe reduced from the real site, and find a slowdown with a few `gdb` stack samples (a minute), not callgrind (an hour). (issue-1470)
+* **A change to the bounds walk that asks new questions makes committed `nikaia.proofs` stale** (the examples', a package's): `build --locked` then fails with "N questions were searched", but only on a clean target, since a warm cache hides it. After such a change, rebuild each example with a committed ledger on a clean target and commit the added entries. (qa, 3c055bf5)
 * `/usr/bin/time` does not exist here; time a command with the bash `time` keyword or `date +%s.%N` before and after. (issue-1470)
 * `cargo fmt -- FILE` fails here; run `cargo fmt` at the repository root or `rustfmt --edition 2024 FILE`. (issue-1473)
 * A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. (issue-1473)

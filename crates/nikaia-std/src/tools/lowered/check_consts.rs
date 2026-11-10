@@ -134,7 +134,7 @@ pub(crate) fn a_growable_list(ty: &Ty) -> bool {
 
 pub(crate) fn list_element(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { args, .. } => if !args.is_empty() { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown },
+        Ty::Named { args, .. } => if !args.is_empty() { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { Ty::Unknown },
         _ => Ty::Unknown,
     }
 }
@@ -149,7 +149,7 @@ pub(crate) fn type_arguments(ty: &Ty) -> Vec<Ty> {
 pub(crate) fn a_pair_of(held: &Ty, key: &Ty, value: &Ty) -> bool {
     match held {
         Ty::Unknown => true,
-        Ty::Tuple(parts) => parts.len() == 2 && (*nikaia_std::index::get(&parts, 0)).fits(key) && (*nikaia_std::index::get(&parts, 1)).fits(value),
+        Ty::Tuple(parts) => parts.len() == 2 && (*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).fits(key) && (*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).fits(value),
         _ => false,
     }
 }
@@ -183,7 +183,7 @@ impl CheckState {
         if is_fixed(want) {
             let args = type_arguments(want);
             if !a_growable_list(found) || args.len() != 2 { return CheckCrossing::Other; }
-            if !a_pair_of(&list_element(found), nikaia_std::index::get(&args, 0), nikaia_std::index::get(&args, 1)) { return CheckCrossing::Other; }
+            if !a_pair_of(&list_element(found), unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&args, (1) as usize) }) { return CheckCrossing::Other; }
             if kind == 1 { return CheckCrossing::Fits; }
             return CheckCrossing::Unanswered;
         }
@@ -203,7 +203,7 @@ impl CheckState {
             _ => return CheckCrossing::Other,
         };
         if args.len() != 2 { return CheckCrossing::Other; }
-        let count = match array_length(nikaia_std::index::get(&args, 1)) { Some(__nikaia_value) => __nikaia_value, None => return CheckCrossing::Other };
+        let count = match array_length(unsafe { nikaia_std::proven::read(&args, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return CheckCrossing::Other };
         if !a_growable_list(found) { return CheckCrossing::Other; }
         if kind != 1 { return CheckCrossing::Unanswered; }
         let length = computed_length(evaluated);
@@ -211,7 +211,7 @@ impl CheckState {
             self.findings.push(a_list_the_wrong_length_for_its_array(length, count, span, true));
             return CheckCrossing::Said;
         }
-        if !list_element(found).fits(nikaia_std::index::get(&args, 0)) { return CheckCrossing::Other; }
+        if !list_element(found).fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { return CheckCrossing::Other; }
         CheckCrossing::Fits
     }
 }
@@ -302,7 +302,7 @@ pub fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn tuple_spelled(parts: &[String]) -> String {
-    if parts.len() == 1 { return format!("({},)", *nikaia_std::index::get(&parts, 0)); }
+    if parts.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); }
     format!("({})", nikaia_std::block::Text::from(parts.join(", ")))
 }
 
@@ -347,7 +347,7 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
-                at = at + 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             return Some(format!("{}::{}({})", ty, variant, nikaia_std::block::Text::from(written.join(", "))));
         },
@@ -362,7 +362,7 @@ pub fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, 
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 written.push(text);
-                at = at + 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             return Some(tuple_spelled(&written));
         },
@@ -377,11 +377,11 @@ impl CheckState {
     pub fn a_table_that_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &impl Fn(&str, &str) -> Option<Vec<Ty>>, float_text: &impl Fn(f64) -> String) -> CheckTable {
         let args = type_arguments(want);
         if args.len() != 2 { return no_table(false); }
-        if !a_str_view_key(nikaia_std::index::get(&args, 0)) {
-            self.a_table_key_that_is_not_text(bound, &(*nikaia_std::index::get(&args, 0)).text(), span);
+        if !a_str_view_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
+            self.a_table_key_that_is_not_text(bound, &(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text(), span);
             return no_table(true);
         }
-        let held: Ty = (*nikaia_std::index::get(&args, 1)).clone();
+        let held: Ty = (*unsafe { nikaia_std::proven::read(&args, (1) as usize) }).clone();
         let mut value_below: String = String::from("");
         let mut borrow: &'static str = "";
         let constant = rust_constant_type(world.library, &held);
@@ -401,7 +401,7 @@ impl CheckState {
                 _ => return no_table(false),
             };
             if parts.len() != 2 { return no_table(false); }
-            let key = match text_of_value(nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            let key = match text_of_value(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             if seen.contains_key(&key) {
                 let first = nikaia_std::index::or(*nikaia_std::index::get(&seen, &key), || 0);
                 self.a_table_with_one_key_twice(bound, &key, first, at, span);
@@ -409,9 +409,9 @@ impl CheckState {
             }
             seen.insert(nikaia_std::block::Text::from(key.to_string()), at);
             keys.push(nikaia_std::block::Text::from(key.to_string()));
-            let text = match written_below(self, world, nikaia_std::index::get(&parts, 1), (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
+            let text = match written_below(self, world, unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, (some_held).as_ref(), payloads, float_text) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
             values.push(format!("{}{}", borrow, text));
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let table = match build(&keys) { Some(__nikaia_value) => __nikaia_value, None => return no_table(false) };
         #[allow(unused_mut)] let mut disps: Vec<String> = vec![];

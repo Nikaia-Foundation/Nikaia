@@ -32,20 +32,20 @@ pub(crate) fn sv_fast_bound(book: &SvBook, l: u32) -> Option<SvFastBound> {
     if at >= book.atoms.len() as i64 { return None; }
     let width = nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.cols.len() as i64;
     if width > 2 { return None; }
-    match nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).rel {
+    match unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.rel {
         SvRel::Le => { },
         _ => { return None; },
     }
     let sign: i64 = if l % 2u32 == 0u32 { 1 } else { -1 };
     let shift: i64 = if l % 2u32 == 0u32 { 0 } else { 1 };
-    let mut b = SvFastBound { width, col0: 0, k0: 0, col1: 0, k1: 0, constant: match sv_mul_add(sign, nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.constant, shift, 1) { Some(__nikaia_value) => __nikaia_value, None => return None } };
+    let mut b = SvFastBound { width, col0: 0, k0: 0, col1: 0, k1: 0, constant: match sv_mul_add(sign, unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.row.constant, shift, 1) { Some(__nikaia_value) => __nikaia_value, None => return None } };
     if width > 0 {
-        b.col0 = *nikaia_std::index::get(&nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.cols, 0);
-        b.k0 = match sv_mul_add(sign, *nikaia_std::index::get(&nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.ks, 0), 0, 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        b.col0 = *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.row.cols, 0);
+        b.k0 = match sv_mul_add(sign, *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.row.ks, 0), 0, 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
     }
     if width > 1 {
-        b.col1 = *nikaia_std::index::get(&nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.cols, 1);
-        b.k1 = match sv_mul_add(sign, *nikaia_std::index::get(&nikaia_std::index::get(&book.atoms, nikaia_std::index::at(at)).row.ks, 1), 0, 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        b.col1 = *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.row.cols, 1);
+        b.k1 = match sv_mul_add(sign, *nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&book.atoms, (at) as usize) }.row.ks, 1), 0, 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
     }
     Some(b)
 }
@@ -53,7 +53,7 @@ pub(crate) fn sv_fast_bound(book: &SvBook, l: u32) -> Option<SvFastBound> {
 pub(crate) fn sv_fast_choice_free(cnf: &SvCnf) -> bool {
     for clause in cnf.query.clauses.iter() {
         if clause.len() != 1 { return false; }
-        let at = (*nikaia_std::index::get(&clause, 0) / 2u32) as i64;
+        let at = (*unsafe { nikaia_std::proven::read(&clause, (0) as usize) } / 2u32) as i64;
         if at < cnf.definition.len() as i64 && *nikaia_std::index::get(&cnf.definition, nikaia_std::index::at(at)) { return false; }
     }
     true
@@ -151,7 +151,7 @@ pub(crate) fn sv_fast_interval(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> S
         }
         let value = if has_lo { lo } else if has_hi { hi } else { 0 };
         let at = col as i64;
-        if at < cnf.names.len() as i64 { values.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&cnf.names, nikaia_std::index::at(at))).to_string()), value); }
+        if at < cnf.names.len() as i64 { values.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (at) as usize) }).to_string()), value); }
         col += 1;
     }
     SvFastEnd::Sat(values)
@@ -228,7 +228,7 @@ pub(crate) fn sv_fast_difference<T: SvDist>(book: &mut SvBook, cnf: &SvCnf, ids:
                     last = e.to;
                 }
             }
-            c += 1;
+            c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
         }
         if last < 0 { break; }
     }
@@ -237,8 +237,8 @@ pub(crate) fn sv_fast_difference<T: SvDist>(book: &mut SvBook, cnf: &SvCnf, ids:
         let mut col: i64 = 0;
         while col < zero && col < cnf.names.len() as i64 {
             let v = match d.dist(col).checked_sub(d.dist(zero)) { Some(__nikaia_value) => __nikaia_value, None => return sv_fast_skip() };
-            values.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&cnf.names, nikaia_std::index::at(col))).to_string()), v);
-            col += 1;
+            values.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (col) as usize) }).to_string()), v);
+            col = unsafe { nikaia_std::proven::add::<i64>(col, 1) };
         }
         return SvFastRun { end: SvFastEnd::Sat(values), work: round, path: String::from("difference") };
     }

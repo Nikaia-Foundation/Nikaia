@@ -135,13 +135,14 @@ The index in `sum` is inside the range the loop walks, and the guard in `percent
 elements whose size nothing states. For a checked line the report names what stopped the
 proof and, where one exists, the issue that would supply the missing fact.
 
-A proved check is left out of the program only when the build asks for it, with the
-`optimization` setting in `nikaia.toml` or `--optimization` on the command line
-([ADR-306](../docs/specification/adr/adr-306.md)). What is proved is the same either way; the
-setting only decides whether it is used, and the header of the report says which:
+A proved check is left out of the program unless the build says otherwise, with
+`remove-bounds-checks:off` or `remove-overflow-checks:off` in the `optimization` setting in
+`nikaia.toml` or `--optimization` on the command line
+([ADR-306](../docs/specification/adr/adr-306.md) D26). What is proved is the same either way;
+the setting only decides whether it is used, and the header of the report says which:
 
 ```text
-$ nikaia check --bounds --optimization=remove-bounds-checks:on --optimization=remove-overflow-checks:on checks.nika
+$ nikaia check --bounds checks.nika
 bounds in checks.nika: 2 indexes, 1 proved; 3 operations, 1 proved - written without their check: indexes on, operations on
 ```
 

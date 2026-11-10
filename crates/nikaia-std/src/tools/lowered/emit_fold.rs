@@ -45,11 +45,11 @@ impl EmitState {
         match step {
             Expr::Closure { params, body, .. } => {
                 if params.len() == 2 && !body.stmts.is_empty() {
-                    let accumulator = *nikaia_std::index::get(&params, 0);
-                    let item = *nikaia_std::index::get(&params, 1);
+                    let accumulator = *unsafe { nikaia_std::proven::read(&params, (0) as usize) };
+                    let item = *unsafe { nikaia_std::proven::read(&params, (1) as usize) };
                     let mut on_accumulator = false;
                     let mut mutates = false;
-                    match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node {
+                    match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
                         Stmt::Expr(last) => {
                             match last {
                                 Expr::MethodCall { receiver, method, .. } => {
@@ -98,15 +98,15 @@ impl EmitState {
         match merge {
             Expr::Path(segments, _) => {
                 if segments.len() == 2 {
-                    let owner = *nikaia_std::index::get(&segments, 0);
-                    let name = *nikaia_std::index::get(&segments, 1);
+                    let owner = *unsafe { nikaia_std::proven::read(&segments, (0) as usize) };
+                    let name = *unsafe { nikaia_std::proven::read(&segments, (1) as usize) };
                     let key = format!("{}::{}", emit_text(world, owner), emit_text(world, name));
                     let declared = self.methods.get(&key);
                     match declared {
                         None => { },
                         Some(method) => {
                             if method.mutates_in_place() && method.args.len() == 1 {
-                                let by_view = if nikaia_std::index::get(&method.args, 0).ty.is_view { "&" } else { "" };
+                                let by_view = if unsafe { nikaia_std::proven::read(&method.args, (0) as usize) }.ty.is_view { "&" } else { "" };
                                 let owner_type = host.ty_named(walk, &Type { name: owner, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false })?;
                                 out.push(&format!("|mut a: {}, b| {{ a.{}({}b); a }}", owner_type, emit_text(world, name), by_view));
                                 return Ok(());

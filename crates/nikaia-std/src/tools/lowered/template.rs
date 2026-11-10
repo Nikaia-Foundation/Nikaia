@@ -107,13 +107,13 @@ impl Splitter {
         while self.at < self.c.len() as i64 {
             if self.here("</for>") {
                 if inside {
-                    self.at += 6;
+                    self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 6) };
                     if !text.is_empty() { segments.push(Segment::Text(text)); }
                     return Ok(segments);
                 }
                 return Ok(segments);
             }
-            if self.here("<for") && self.at + 4 < self.c.len() as i64 && blank(*nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at + 4))) {
+            if self.here("<for") && unsafe { nikaia_std::proven::add::<i64>(self.at, 4) } < self.c.len() as i64 && blank(*nikaia_std::index::get(&self.c, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(self.at, 4) }))) {
                 let (binding, collection) = self.loop_header()?;
                 if !text.is_empty() {
                     segments.push(Segment::Text(text));
@@ -124,23 +124,23 @@ impl Splitter {
                 continue;
             }
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
-            let next = self.at + 1 < self.c.len() as i64;
-            if c == '{' && next && *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at + 1)) == '{' {
+            let next = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) } < self.c.len() as i64;
+            if c == '{' && next && *nikaia_std::index::get(&self.c, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(self.at, 1) })) == '{' {
                 text.push('{');
-                self.at += 2;
-            } else if c == '}' && next && *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at + 1)) == '}' {
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 2) };
+            } else if c == '}' && next && *nikaia_std::index::get(&self.c, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(self.at, 1) })) == '}' {
                 text.push('}');
-                self.at += 2;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 2) };
             } else if c == '{' {
                 let position = self.scan.position();
-                let mut close = self.at + 1;
-                while close < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(close)) != '}' { close += 1; }
+                let mut close = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
+                while close < self.c.len() as i64 && *unsafe { nikaia_std::proven::read(&self.c, (close) as usize) } != '}' { close = unsafe { nikaia_std::proven::add::<i64>(close, 1) }; }
                 if close == self.c.len() as i64 {
                     let at = self.at;
                     return Err(nikaia_std::error::throwing(Refused::Because(format!("unclosed `{{` in the template, at character {}", at)), &"until"));
                 }
                 let mut expr: String = String::from("");
-                for k in self.at + 1..close { expr.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
+                for k in unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }..close { expr.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
                 if !text.is_empty() {
                     segments.push(Segment::Text(text));
                     text = String::from("");
@@ -150,7 +150,7 @@ impl Splitter {
             } else {
                 self.scan.feed(c);
                 text.push(c);
-                self.at += 1;
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             }
         }
         if inside { return Err(nikaia_std::error::throwing(Refused::Because(String::from("a `<for …>` in the template is never closed")), &"until")); }
@@ -163,22 +163,22 @@ impl Splitter {
         let mut k = self.at;
         for w in word.chars() {
             if k >= self.c.len() as i64 || *nikaia_std::index::get(&self.c, nikaia_std::index::at(k)) != w { return false; }
-            k += 1;
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         }
         true
     }
     pub(crate) fn loop_header(&mut self) -> Result<(String, String), nikaia_std::error::Thrown<Refused>> {
         let mut close = self.at;
-        while close < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(close)) != '>' { close += 1; }
+        while close < self.c.len() as i64 && *nikaia_std::index::get(&self.c, nikaia_std::index::at(close)) != '>' { close = unsafe { nikaia_std::proven::add::<i64>(close, 1) }; }
         if close == self.c.len() as i64 { return Err(nikaia_std::error::throwing(Refused::Because(String::from("`<for` in the template is never closed with `>`")), &"loop_header")); }
         let mut header: String = String::from("");
         for k in self.at + 4..close { header.push(*nikaia_std::index::get(&self.c, nikaia_std::index::at(k))); }
         self.at = close + 1;
         let mut words: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for word in header.split_whitespace() { words.push(nikaia_std::block::Text::from(word.to_string())); }
-        if words.len() != 3 || *nikaia_std::index::get(&words, 1) != "in" { return Err(nikaia_std::error::throwing(Refused::Because(format!("a template loop is written `<for name in :collection>`, not `<for{}>`", header)), &"loop_header")); }
-        let binding = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 0)).to_string());
-        let written = nikaia_std::block::Text::from((*nikaia_std::index::get(&words, 2)).to_string());
+        if words.len() != 3 || *unsafe { nikaia_std::proven::read(&words, (1) as usize) } != "in" { return Err(nikaia_std::error::throwing(Refused::Because(format!("a template loop is written `<for name in :collection>`, not `<for{}>`", header)), &"loop_header")); }
+        let binding = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (0) as usize) }).to_string());
+        let written = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&words, (2) as usize) }).to_string());
         if !written.starts_with(':') { return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` is captured from the enclosing scope, so it is written `:{}` - the colon is where the template's names end and the program's begin (ADR-296 D4)", written, written)), &"loop_header")); }
         let mut collection: String = String::from("");
         let mut first = true;
@@ -240,7 +240,7 @@ impl Scan {
         self.tail.push(c.to_ascii_lowercase());
         if self.tail.len() > 9 {
             let mut kept: Vec<scalar> = vec![];
-            for k in self.tail.len() as i64 - 9..self.tail.len() as i64 { kept.push(*nikaia_std::index::get(&self.tail, nikaia_std::index::at(k))); }
+            for k in unsafe { nikaia_std::proven::sub::<i64>(self.tail.len() as i64, 9) }..self.tail.len() as i64 { kept.push(*unsafe { nikaia_std::proven::read(&self.tail, (k) as usize) }); }
             self.tail = kept;
         }
         match self.state {

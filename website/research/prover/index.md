@@ -118,6 +118,11 @@ until then it asks the reference solver. How the parts fit together is drawn und
 <div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Bit-vectors, about 0 % built, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><span class="rq-pct">0 %</span></div>
 <p class="rq-note">Masks, shifts and wrapping arithmetic, blasted into clauses for the CDCL skeleton. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D13)</p>
 </div>
+<div class="rq-comp">
+<div class="rq-comp-head"><span class="rq-comp-name">Rules over every element</span><span class="rq-stage rq-stage-later">open question</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Rules over every element, about 0 % built, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 35%"></span></div><span class="rq-pct">0 %</span></div>
+<p class="rq-note">Claims that hold for every element of a list, used by the solver without making proofs fragile. Not decided, and asked under the questions below. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a>, <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/798">#798</a>)</p>
+</div>
 <p class="rq-layer">Steering</p>
 <div class="rq-comp">
 <div class="rq-comp-head"><span class="rq-comp-name">Strategy layer and budgets</span><span class="rq-stage rq-stage-growing">partly built</span></div>
@@ -235,6 +240,44 @@ over all elements ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798
 list contents that the compiler would have to find by itself. Finding such
 invariants without help is the hardest part of the question "nothing written
 for it", and the place where its limits are most likely to show.
+
+### Can it use rules over every element and keep its proofs stable?
+
+<div class="rq-bars">
+<div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 3 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 5%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
+<div class="rq-row"><span>Evidence</span><div class="rq-conf" role="img" aria-label="Evidence neither way yet"><span class="rq-conf-pos" style="width: 0%"></span></div></div>
+<p class="rq-note">The committed proof file, which keeps a found proof from being searched again, is built. A solver that reasons about every element is not, so nothing has been measured yet.</p>
+</div>
+
+Many claims about a program speak of every element at once: every index
+in a list of positions is inside the list, every node of a tree is valid,
+the result of a sort holds the same elements as its input. A solver reasons
+about such claims with rules that hold for all values of a variable. The
+established way to use these rules is to pick, by patterns, which values to
+put in. It reaches far, and it is also the main reason proofs in this style
+are fragile. A different solver version, another random seed or an edit
+elsewhere in the program can make a proof that held fail, and keeping it
+alive takes work the program does not otherwise need.
+
+Two parts of Nikaia bear on this. A proof that was found is recorded in the
+committed `nikaia.proofs` and checked when it is read, so it is not searched
+again on the next build ([ADR-270](/docs/specification/adr/adr-270.html) D4, D19-D22). That
+removes one cause of fragility, the search that differs between versions and
+machines, but it does not help when an edit changes the question. And a
+property such as `is_sorted(xs)` travels by name from a promise to its
+callers without its body being read ([ADR-381](/docs/specification/adr/adr-381.html)), so many
+claims of this kind are carried without any rule over all elements.
+
+The solver itself decides linear integer arithmetic and has no rules over
+all values yet. Whether it needs them is to be asked when a claim does
+([ADR-270](/docs/specification/adr/adr-270.html)), and the first such claim, a rule over every
+element that the prover reads, `xs.all(|x| ...)`, waits for a count of how
+many unproved indexes need it ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798)). Rules of this kind written
+into a loop by the programmer were not taken up
+([ADR-361](/docs/specification/adr/adr-361.html)). The question is whether rules over every
+element can be used in a form whose proofs survive an edit and a new solver
+version, with a certificate the small checker can replay, and how much of
+the range of the established method that form gives up.
 
 ### What does trust cost in an ordinary build?
 

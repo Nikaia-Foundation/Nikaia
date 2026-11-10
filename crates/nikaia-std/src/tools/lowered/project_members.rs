@@ -233,7 +233,7 @@ pub fn project_members_dependencies_first(members: &[ProjectMembersMember]) -> V
         let at = ready.remove(0);
         out.push(at);
         for other in 0..needs.len() as i64 {
-            if (*nikaia_std::index::get(&needs, nikaia_std::index::at(other))).contains(&at) {
+            if (*unsafe { nikaia_std::proven::read(&needs, (other) as usize) }).contains(&at) {
                 left[nikaia_std::index::at(other)] -= 1;
                 if *nikaia_std::index::get(&left, nikaia_std::index::at(other)) == 0 { ready.push(other); }
             }
@@ -325,7 +325,7 @@ pub async fn project_members_fetched_of<H: ProjectMembersHost>(manifest: &Projec
         Some(ref handed) => {
             for line in handed.lines() {
                 let parts: Vec<&str> = line.splitn(2, '=').map(|part| { part }).collect::<Vec<_>>();
-                if parts.len() == 2 { out.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()), cargo_json_path(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string()))); }
+                if parts.len() == 2 { out.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()), cargo_json_path(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string()))); }
             }
             return Ok(out);
         },

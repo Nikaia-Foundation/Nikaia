@@ -48,7 +48,7 @@ pub(crate) fn sv_check(query: &SvQuery, log: &[SvStep]) -> SvVerdict {
     for step in log.iter() {
         let why = replay.step(query, step);
         if why != "" { return SvVerdict { ok: false, step: at, reason: format!("{}: {}", sv_step_kind(step), why) }; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if !replay.refuted { return SvVerdict { ok: false, step: at, reason: String::from("the log ends without the empty clause") }; }
     SvVerdict { ok: true, step: at, reason: String::from("") }
@@ -101,9 +101,9 @@ impl SvReplay {
     pub(crate) fn input(&mut self, query: &SvQuery, c: u32) -> String {
         let at = c as i64;
         if at >= query.clauses.len() as i64 { return format!("the query has no clause {}", c); }
-        let why = self.lits_known(nikaia_std::index::get(&query.clauses, nikaia_std::index::at(at)));
+        let why = self.lits_known(unsafe { nikaia_std::proven::read(&query.clauses, (at) as usize) });
         if why != "" { return why; }
-        self.add_clause((*nikaia_std::index::get(&query.clauses, nikaia_std::index::at(at))).copy_owned())
+        self.add_clause((*unsafe { nikaia_std::proven::read(&query.clauses, (at) as usize) }).copy_owned())
     }
     pub(crate) fn learn(&mut self, lits: &[u32], hints: &[u32]) -> String {
         let why = self.lits_known(lits);
@@ -121,9 +121,9 @@ impl SvReplay {
     pub(crate) fn delete(&mut self, id: u32) -> String {
         let at = id as i64;
         if at >= self.entries.len() as i64 { return format!("entry {} does not exist", id); }
-        let gone = matches!(*nikaia_std::index::get(&self.entries, nikaia_std::index::at(at)), SvEntry::Gone);
+        let gone = matches!(*unsafe { nikaia_std::proven::read(&self.entries, (at) as usize) }, SvEntry::Gone);
         if gone { return format!("entry {} is already deleted", id); }
-        { let __nikaia_stored = SvEntry::Gone; nikaia_std::index::set(&mut self.entries, nikaia_std::index::at(at), __nikaia_stored); }
+        { let __nikaia_stored = SvEntry::Gone; unsafe { nikaia_std::proven::write(&mut self.entries, (at) as usize, __nikaia_stored) }; }
         String::from("")
     }
     pub(crate) fn source(&self, src: &SvSrc) -> SvSum {
@@ -162,9 +162,9 @@ impl SvReplay {
         let mut assumed: Vec<u32> = vec![];
         let mut i: i64 = 0;
         while ((i) as usize) < sources.len() {
-            let got = self.source(nikaia_std::index::get(&sources, (i) as usize));
+            let got = self.source(unsafe { nikaia_std::proven::read(&sources, (i) as usize) });
             let b = match got.bound { Some(__nikaia_value) => __nikaia_value, None => return SvSum { bound: None, why: got.why } };
-            let m = *nikaia_std::index::get(&multipliers, (i) as usize);
+            let m = *unsafe { nikaia_std::proven::read(&multipliers, (i) as usize) };
             let is_eq = matches!(b.rel, SvRel::Eq);
             if !is_eq && m < 0 { return SvSum { bound: None, why: format!("multiplier {} of source {} is negative on an inequality", m, i) }; }
             if m != 0 {
@@ -177,7 +177,7 @@ impl SvReplay {
                     if !assumed.contains(&l) { assumed.push(l); }
                 }
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         assumed.sort();
         let rel = if equality { SvRel::Eq } else if strict { SvRel::Lt } else { SvRel::Le };
@@ -189,7 +189,7 @@ impl SvReplay {
         if why != "" { return why; }
         let sum = self.combination(sources, multipliers);
         let b = match sum.bound { Some(__nikaia_value) => __nikaia_value, None => return sum.why };
-        if !b.row.cols.is_empty() { return format!("x{} is left in the combination", *nikaia_std::index::get(&b.row.cols, 0)); }
+        if !b.row.cols.is_empty() { return format!("x{} is left in the combination", *unsafe { nikaia_std::proven::read(&b.row.cols, (0) as usize) }); }
         let c = b.row.constant;
         let contradiction = match b.rel {
             SvRel::Le => c > 0,
@@ -214,10 +214,10 @@ impl SvReplay {
         let mut ks: Vec<i64> = vec![];
         let mut i: i64 = 0;
         while ((i) as usize) < b.row.ks.len() {
-            let k = *nikaia_std::index::get(&b.row.ks, (i) as usize);
+            let k = *unsafe { nikaia_std::proven::read(&b.row.ks, (i) as usize) };
             if k % d != 0 { return format!("the coefficient {} of x{} is not divisible by {}", k, *nikaia_std::index::get(&b.row.cols, (i) as usize), d); }
             ks.push(k / d);
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let c = b.row.constant;
         let mut rel = SvRel::Le;
@@ -246,7 +246,7 @@ impl SvReplay {
         let real = self.real_in(le);
         if real != "" { return real; }
         let both = match sv_row_sum(1, le, 1, ge) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
-        if !both.cols.is_empty() { return format!("the two sides are not one form: x{} is left", *nikaia_std::index::get(&both.cols, 0)); }
+        if !both.cols.is_empty() { return format!("the two sides are not one form: x{} is left", *unsafe { nikaia_std::proven::read(&both.cols, (0) as usize) }); }
         if both.constant > 1 { return format!("the split leaves out an alternative: its sides add up to {}, not 1", both.constant); }
         if both.constant < 1 { return String::from("the split's sides overlap; it is not L <= k or L >= k + 1"); }
         let first = match u32::try_from(self.atoms.len() as i64).ok() { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
@@ -265,7 +265,7 @@ impl SvReplay {
         let mq = SvRow { cols: vec![q], ks: vec![m], constant: 0 };
         let below = match sv_row_sum(-1, l, 1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
         let above0 = match sv_row_sum(1, l, -1, &mq) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
-        let above = match sv_row_sum(1, &above0, -(m - 1), &sv_row_constant(1)) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
+        let above = match sv_row_sum(1, &above0, unsafe { nikaia_std::proven::neg::<i64>(nikaia_std::proven::sub::<i64>(m, 1)) }, &sv_row_constant(1)) { Some(__nikaia_value) => __nikaia_value, None => return String::from("overflow") };
         self.entries.push(SvEntry::Bound(SvBound { row: below, rel: SvRel::Le, assumed: vec![] }));
         self.entries.push(SvEntry::Bound(SvBound { row: above, rel: SvRel::Le, assumed: vec![] }));
         String::from("")
@@ -295,8 +295,8 @@ pub(crate) fn sv_unit_chain(entries: &[SvEntry], value: &mut Vec<i64>, lits: &[u
         }
         if open.is_empty() { return String::from(""); }
         if open.len() > 1 { return format!("hint {} is not unit: {} literals open", h, open.len() as i64); }
-        sv_assign(value, *nikaia_std::index::get(&open, 0));
-        touched.push(*nikaia_std::index::get(&open, 0));
+        sv_assign(value, *unsafe { nikaia_std::proven::read(&open, (0) as usize) });
+        touched.push(*unsafe { nikaia_std::proven::read(&open, (0) as usize) });
     }
     String::from("the hints end without a conflict")
 }

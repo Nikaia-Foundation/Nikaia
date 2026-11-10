@@ -278,29 +278,29 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     }
     let mut c: i64 = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).copy_owned();
+        let clause = (*unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) }).copy_owned();
         if clause.len() == 2 {
             for k in [0, 1] {
                 let d = *nikaia_std::index::get(&clause, nikaia_std::index::at(k));
                 let a = (d / 2u32) as i64;
                 if d % 2u32 == 0u32 && *nikaia_std::index::get(&cnf.definition, nikaia_std::index::at(a)) {
                     short_lit[nikaia_std::index::at(a)].push(*nikaia_std::index::get(&clause, nikaia_std::index::at(1 - k)));
-                    short_id[nikaia_std::index::at(a)].push(*nikaia_std::index::get(&ids, (c) as usize));
+                    (*unsafe { nikaia_std::proven::slot(&mut short_id, (a) as usize) }).push(*nikaia_std::index::get(&ids, (c) as usize));
                 }
             }
         }
-        c += 1;
+        c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
     }
     c = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).copy_owned();
+        let clause = (*unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) }).copy_owned();
         let mut defined = clause.len() >= 2;
         for l in clause.iter() {
             let l = nikaia_std::num::value(l);
             if l % 2u32 == 0u32 || !*nikaia_std::index::get(&cnf.definition, nikaia_std::index::at((l / 2u32) as i64)) { defined = false; }
         }
         if defined && !sv_smt_congruence(&clause, *nikaia_std::index::get(&ids, (c) as usize), &short_lit, &short_id, book, units, unit_ids, facts) { return false; }
-        c += 1;
+        c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
     }
     true
 }
@@ -320,7 +320,7 @@ pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>],
         let mut rows: Vec<SvBound> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut second: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         for k in 0..n {
-            let r = match book.lit_bound(*nikaia_std::index::get(nikaia_std::index::get(&short_lit, nikaia_std::index::at(a)), nikaia_std::index::at(k))) { Some(__nikaia_value) => __nikaia_value, None => return true };
+            let r = match book.lit_bound(*nikaia_std::index::get(unsafe { nikaia_std::proven::read(&short_lit, (a) as usize) }, nikaia_std::index::at(k))) { Some(__nikaia_value) => __nikaia_value, None => return true };
             if r.row.ks == vec![-1] {
                 let key = format!("{} {}", *nikaia_std::index::get(&r.row.cols, 0), r.row.constant);
                 if !second.contains_key(&key) { second.insert(key, k); }
@@ -330,7 +330,7 @@ pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>],
         let mut found = false;
         let mut i: i64 = 0;
         while i < n && !found {
-            let pr = (*nikaia_std::index::get(&rows, (i) as usize)).clone();
+            let pr = (*unsafe { nikaia_std::proven::read(&rows, (i) as usize) }).clone();
             i += 1;
             if pr.row.ks != vec![1] { continue; }
             let x = *nikaia_std::index::get(&pr.row.cols, 0) as i64;
@@ -339,10 +339,10 @@ pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>],
             if j >= 0 && (column < 0 || x == column) {
                 column = x;
                 values.push(v);
-                ps.push(*nikaia_std::index::get(nikaia_std::index::get(&short_lit, nikaia_std::index::at(a)), nikaia_std::index::at(i - 1)));
-                ns.push(*nikaia_std::index::get(nikaia_std::index::get(&short_lit, nikaia_std::index::at(a)), nikaia_std::index::at(j)));
-                p_ids.push(*nikaia_std::index::get(nikaia_std::index::get(&short_id, nikaia_std::index::at(a)), nikaia_std::index::at(i - 1)));
-                n_ids.push(*nikaia_std::index::get(nikaia_std::index::get(&short_id, nikaia_std::index::at(a)), nikaia_std::index::at(j)));
+                ps.push(*nikaia_std::index::get(unsafe { nikaia_std::proven::read(&short_lit, (a) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 1) })));
+                ns.push(*nikaia_std::index::get(unsafe { nikaia_std::proven::read(&short_lit, (a) as usize) }, nikaia_std::index::at(j)));
+                p_ids.push(*nikaia_std::index::get(nikaia_std::index::get(&short_id, nikaia_std::index::at(a)), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 1) })));
+                n_ids.push(*nikaia_std::index::get(unsafe { nikaia_std::proven::read(&short_id, (a) as usize) }, nikaia_std::index::at(j)));
                 found = true;
             }
         }
@@ -368,13 +368,13 @@ pub(crate) fn sv_smt_congruence(clause: &[u32], id: u32, short_lit: &[Vec<u32>],
     let mut cases: Vec<u32> = vec![];
     let mut j: i64 = 0;
     while j < ps.len() as i64 {
-        let r1 = match book.combine(vec![SvSrc::Lit(below), SvSrc::Lit(*nikaia_std::index::get(&ps, nikaia_std::index::at(j)))], vec![1, 1]) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let r1 = match book.combine(vec![SvSrc::Lit(below), SvSrc::Lit(*unsafe { nikaia_std::proven::read(&ps, (j) as usize) })], vec![1, 1]) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let r2 = match book.combine(vec![SvSrc::Fact(ext.first + 1u32), SvSrc::Lit(*nikaia_std::index::get(&ns, nikaia_std::index::at(j)))], vec![1, 1]) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let f1 = match book.round(r1) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let f2 = match book.round(r2) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let lemma = match book.farkas(vec![SvSrc::Fact(f1), SvSrc::Fact(f2)], vec![1, 1]) { Some(__nikaia_value) => __nikaia_value, None => return false };
         cases.push(book.learn(sv_sorted(vec![sv_not(below), sv_not(*nikaia_std::index::get(&clause, nikaia_std::index::at(j)))]), vec![*nikaia_std::index::get(&p_ids, nikaia_std::index::at(j)), *nikaia_std::index::get(&n_ids, nikaia_std::index::at(j)), lemma.id]));
-        j += 1;
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
     }
     cases.push(id);
     let no_gap = book.learn(vec![sv_not(below)], cases);
@@ -432,25 +432,25 @@ pub(crate) fn sv_smt_search_cnf(arena: &TermArena, facts: &[i64], goal: i64, bud
     let mut theory_atom: Vec<bool> = vec![];
     let mut a: i64 = 0;
     while ((a) as usize) < book.atoms.len() {
-        theory_atom.push(((a) as usize) >= cnf.definition.len() || !*nikaia_std::index::get(&cnf.definition, (a) as usize));
-        a += 1;
+        theory_atom.push(((a) as usize) >= cnf.definition.len() || !*unsafe { nikaia_std::proven::read(&cnf.definition, (a) as usize) });
+        a = unsafe { nikaia_std::proven::add::<i64>(a, 1) };
     }
     let mut sat = sv_sat_book(vars, book);
     let mut i: i64 = 0;
     while ((i) as usize) < cnf.query.clauses.len() {
-        sat.add_input(nikaia_std::index::get(&cnf.query.clauses, (i) as usize), *nikaia_std::index::get(&ids, (i) as usize));
-        i += 1;
+        sat.add_input(unsafe { nikaia_std::proven::read(&cnf.query.clauses, (i) as usize) }, *nikaia_std::index::get(&ids, (i) as usize));
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     i = 0;
     while ((i) as usize) < units.len() {
-        sat.assign_unit(*nikaia_std::index::get(&units, (i) as usize), *nikaia_std::index::get(&unit_ids, (i) as usize));
-        i += 1;
+        sat.assign_unit(*unsafe { nikaia_std::proven::read(&units, (i) as usize) }, *nikaia_std::index::get(&unit_ids, (i) as usize));
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     for lemma in pre.lemmas.iter() { sat.add_input(&lemma.lits, lemma.id); }
     let mut v: i64 = 0;
     while v < phases.len() as i64 && v < vars as i64 {
-        sat.set_phase(v, *nikaia_std::index::get(&phases, nikaia_std::index::at(v)));
-        v += 1;
+        sat.set_phase(v, *unsafe { nikaia_std::proven::read(&phases, (v) as usize) });
+        v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
     }
     let mut run = if real {
         let mut sx = sv_strategy_simplex(cnf.names.copy_owned(), p);

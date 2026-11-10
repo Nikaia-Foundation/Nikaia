@@ -11,7 +11,7 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
     let count = nikaia_std::index::or(ty.count, || -1);
     if ty.count.is_some() { return Ty::Count(count); }
     if ty.is_view && !ty.is_slice && names.resolve(ty.name) == ARRAY && ty.generics.len() == 1 {
-        let item = written_ty(names, aliases, nikaia_std::index::get(&ty.generics, 0));
+        let item = written_ty(names, aliases, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
         if ty.is_nullable { return Ty::Pointed { item: Box::new(Ty::Nullable(Box::new(item))), slice: true, mutable: ty.is_mut }; }
         return Ty::Pointed { item: Box::new(item), slice: true, mutable: ty.is_mut };
     }
@@ -55,7 +55,7 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
 }
 
 pub(crate) fn lent_item(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, ty: &Type) -> Ty {
-    if !ty.generics.is_empty() { return written_ty(names, aliases, nikaia_std::index::get(&ty.generics, 0)); }
+    if !ty.generics.is_empty() { return written_ty(names, aliases, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }); }
     Ty::Named { name: unaliased_in(aliases, names.resolve(ty.name)), args: vec![], view: false }
 }
 
@@ -64,7 +64,7 @@ pub fn code_as_read(names: &winnow_grammar::InternerContext, ty: &Type) -> Type 
     if !code_lends_unmarked(names, ty) { return ty.clone(); }
     let mut generics: Vec<Type> = vec![];
     for at in 0..ty.generics.len() as i64 {
-        let mut part = (*nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at))).clone();
+        let mut part = (*unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }).clone();
         if code_lends_at(names, ty, at) { part.is_view = true; }
         generics.push(part);
     }
@@ -95,7 +95,7 @@ pub fn code_lends_at(names: &winnow_grammar::InternerContext, ty: &Type, at: i64
 pub fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &Type) -> bool {
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !code.result_from.is_empty() { return true; }
-    for at in 0..ty.generics.len() as i64 { if !nikaia_std::index::get(&ty.generics, nikaia_std::index::at(at)).is_view && code_lends_at(names, ty, at) { return true; } }
+    for at in 0..ty.generics.len() as i64 { if !unsafe { nikaia_std::proven::read(&ty.generics, (at) as usize) }.is_view && code_lends_at(names, ty, at) { return true; } }
     false
 }
 

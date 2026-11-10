@@ -69,12 +69,12 @@ pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget
     let mut at: i64 = 0;
     let mut index: i64 = 1;
     while ((index) as usize) < state.open_ors.len() {
-        let here = *nikaia_std::index::get(&state.open_ors, (index) as usize);
+        let here = *unsafe { nikaia_std::proven::read(&state.open_ors, (index) as usize) };
         let best = *nikaia_std::index::get(&state.open_ors, nikaia_std::index::at(at));
         let fewer = ((*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(here))).len() as i64) < (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(best))).len() as i64;
         let same = ((*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(here))).len() as i64) == (*nikaia_std::index::get(&indexed.ors, nikaia_std::index::at(best))).len() as i64;
         if fewer || same && here < best { at = index; }
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     let mut rest = LgBranch { held_atoms: state.held_atoms.copy_owned(), held_why: state.held_why.copy_owned(), open_ors: vec![], open_why: vec![] };
     let mut position: i64 = 0;
@@ -82,13 +82,13 @@ pub(crate) fn lg_search(indexed: &LgIndexed, state: &LgBranch, budget: &LgBudget
     let mut brought: collections::BTreeSet<i64> = collections::BTreeSet::new();
     while ((position) as usize) < state.open_ors.len() {
         if position == at {
-            disjunction = *nikaia_std::index::get(&state.open_ors, (position) as usize);
+            disjunction = *unsafe { nikaia_std::proven::read(&state.open_ors, (position) as usize) };
             brought = (*nikaia_std::index::get(&state.open_why, (position) as usize)).copy_owned();
         } else {
-            rest.open_ors.push(*nikaia_std::index::get(&state.open_ors, (position) as usize));
+            rest.open_ors.push(*unsafe { nikaia_std::proven::read(&state.open_ors, (position) as usize) });
             rest.open_why.push((*nikaia_std::index::get(&state.open_why, (position) as usize)).copy_owned());
         }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     let mut why = brought.copy_owned();
     why.insert(disjunction);
@@ -269,10 +269,10 @@ pub(crate) fn lg_follow(indexed: &LgIndexed, branch: &LgChecking, certificate: &
             while at < alternatives.len() as i64 {
                 let mut next = LgChecking { held: branch.held.copy_owned(), open: branch.open.copy_owned() };
                 next.open.remove(&which);
-                next.absorb(nikaia_std::index::get(&alternatives, nikaia_std::index::at(at)));
-                lg_follow(indexed, &next, nikaia_std::index::get(&cases, nikaia_std::index::at(at)), verdict);
+                next.absorb(unsafe { nikaia_std::proven::read(&alternatives, (at) as usize) });
+                lg_follow(indexed, &next, unsafe { nikaia_std::proven::read(&cases, (at) as usize) }, verdict);
                 if verdict.rejected.is_some() { return; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
     }
@@ -291,10 +291,10 @@ pub(crate) fn lg_replay(indexed: &LgIndexed, branch: &LgChecking, refutation: &L
             };
         }
         made.push(nikaia_std::index::or(bound.lin, || lg_constant(0).into()));
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if !made.is_empty() {
-        let last = (*nikaia_std::index::get(&made, nikaia_std::index::at(made.len() as i64 - 1))).clone();
+        let last = (*unsafe { nikaia_std::proven::read(&made, (nikaia_std::proven::sub::<i64>(made.len() as i64, 1)) as usize) }).clone();
         if last.terms.is_empty() && last.constant > 0 { return None; }
     }
     Some(LgRejected::NotAContradiction { case })

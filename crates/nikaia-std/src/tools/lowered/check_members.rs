@@ -157,8 +157,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         if path.len() != 2 { return; }
-        let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
-        let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string());
+        let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
+        let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
         if self.is_variant(&ty, &member) { return; }
         self.a_member_this_type_does_not_have(world, &ty, &member, span);
     }
@@ -166,8 +166,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
         if path.len() != 2 { return; }
-        let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
-        let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string());
+        let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
+        let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
         let key = format!("{}::{}", ty, member);
         if !self.variant_parts.contains_key(&key) { return; }
         let declared = nikaia_std::index::or(match *nikaia_std::index::get(&self.variant_parts, &key) {
@@ -184,8 +184,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_rest_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
         if !self.one_rest_at_most(parts, span) || path.len() != 2 { return; }
-        let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
-        let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 1)).to_string());
+        let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
+        let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
         let key = format!("{}::{}", ty, member);
         if self.is_variant(&ty, &member) && !self.variant_parts.contains_key(&key) && !self.structs.contains_key(&key) {
             self.findings.push(check_refusal("NK1255", span, format!("`{}` carries no values, so `..` in `{}(..)` has nothing to stand for.", key, key), vec![String::from("`..` matches the values of a variant that has some.")], Some(nikaia_std::block::Text::from(format!("Write `{}`.", key).to_string()))));
@@ -195,7 +195,7 @@ impl CheckState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || vec![].into()).len() as i64;
-        let named = parts.len() as i64 - 1;
+        let named = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
         if self.variant_parts.contains_key(&key) && named > declared { self.findings.push(check_refusal("NK1253", span, format!("The pattern `{}` names {} part(s) besides `..`, but the variant carries {}.", key, named, declared), vec![String::from("`..` stands for the values not named; it cannot make room for more.")], Some(String::from("Name at most as many parts as the variant carries.")))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

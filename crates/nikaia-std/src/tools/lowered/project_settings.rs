@@ -51,8 +51,8 @@ pub fn unproved_claims(word: String) -> Result<String, nikaia_std::error::Thrown
 }
 
 pub fn optimizations(words: &str) -> Result<(BoundsChecks, OverflowChecks), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
-    let mut bounds = BoundsChecks::Kept;
-    let mut overflow = OverflowChecks::Kept;
+    let mut bounds = BoundsChecks::Removed;
+    let mut overflow = OverflowChecks::Removed;
     for word in words.split(',').map(|w| { w.trim() }).filter(|&w| { !w.is_empty() }) {
         let (name, level) = match word.split_once(":") { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--optimization={}` needs `on` or `off`: write `--optimization=remove-bounds-checks:on` or `--optimization=remove-overflow-checks:on`", word)), &"optimizations")) };
         match name {

@@ -28,7 +28,7 @@ pub(crate) fn the_whole_filesystem(names: &winnow_grammar::InternerContext, func
         _ => false,
     };
     if !is_dir || args.is_empty() { return None; }
-    match nikaia_std::index::get(&args, 0) {
+    match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
         Expr::LitStr { text, .. } => if text == "/" { Some(Wrote::TheFilesystemRoot) } else { None },
         _ => None,
     }
@@ -36,7 +36,7 @@ pub(crate) fn the_whole_filesystem(names: &winnow_grammar::InternerContext, func
 
 pub(crate) fn ends_with_variant(names: &winnow_grammar::InternerContext, segments: &[winnow_grammar::Symbol], variant: &str) -> bool {
     let n = segments.len() as i64;
-    n >= 2 && names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(n - 2))) == "Root" && names.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(n - 1))) == variant
+    n >= 2 && names.resolve(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) }) == "Root" && names.resolve(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }) == variant
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +164,7 @@ pub(crate) fn line_of_byte(text: &str, at: i64) -> i64 {
     for b in text.bytes() {
         if i >= at { break; }
         if b == 10 { line += 1; }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     line
 }
@@ -296,7 +296,7 @@ pub(crate) fn mc_poison_function(classes: &mut MapClasses, name: &str, arity: i6
     while at < arity {
         let param = format!("p:{}:{}", name, at);
         mc_poison(classes, &param);
-        at = at + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -310,7 +310,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
         }, || true);
         if provenance == Provenance::Untrusted && a_method {
             let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-            env.sources.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()));
+            env.sources.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }))).to_string()));
         }
     }
     for item in program.items.iter() {
@@ -455,9 +455,9 @@ pub(crate) fn tm_trusted_bindings(given: &[Vec<KeyDeps>]) -> collections::BTreeS
     let mut id: i64 = 0;
     while id < given.len() as i64 {
         let mut every = true;
-        for one in (*nikaia_std::index::get(&given, nikaia_std::index::at(id))).iter() { if !one.known { every = false; } }
+        for one in (*unsafe { nikaia_std::proven::read(&given, (id) as usize) }).iter() { if !one.known { every = false; } }
         if every { trusted.insert(id); }
-        id = id + 1;
+        id = unsafe { nikaia_std::proven::add::<i64>(id, 1) };
     }
     let mut settled = false;
     while !settled {
@@ -487,14 +487,14 @@ pub(crate) fn tm_bind(name: winnow_grammar::Symbol, given: &KeyDeps, node: &str,
     walk.nodes.push(nikaia_std::block::Text::from(node.to_string()));
     walk.given.push(vec![KeyDeps { known: given.known, ids: given.ids.copy_owned() }]);
     tm_count_binding(name, walk);
-    let last = walk.scopes.len() as i64 - 1;
+    let last = unsafe { nikaia_std::proven::sub::<i64>(walk.scopes.len() as i64, 1) };
     walk.scopes[nikaia_std::index::at(last)].insert(name.copy_owned(), id);
     id
 }
 
 pub(crate) fn tm_opaque(name: winnow_grammar::Symbol, walk: &mut MapWalk) {
     tm_count_binding(name, walk);
-    let last = walk.scopes.len() as i64 - 1;
+    let last = unsafe { nikaia_std::proven::sub::<i64>(walk.scopes.len() as i64, 1) };
     walk.scopes[nikaia_std::index::at(last)].insert(name.copy_owned(), -1);
 }
 
@@ -506,8 +506,8 @@ pub(crate) fn tm_count_binding(name: winnow_grammar::Symbol, walk: &mut MapWalk)
 pub(crate) fn tm_resolve(name: winnow_grammar::Symbol, walk: &MapWalk) -> i64 {
     let mut at = walk.scopes.len() as i64;
     while at > 0 {
-        at = at - 1;
-        let found = (*nikaia_std::index::get(&walk.scopes, nikaia_std::index::at(at))).get(&name);
+        at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+        let found = (*unsafe { nikaia_std::proven::read(&walk.scopes, (at) as usize) }).get(&name);
         if found.is_some() { return nikaia_std::index::or(found, || -2); }
     }
     -2
@@ -520,7 +520,7 @@ pub(crate) fn tm_walk_block(block: &Block, words: &winnow_grammar::InternerConte
             Stmt::Let { names, value, .. } => {
                 let given = tm_deps_of(value, words, library, env, &walk);
                 if names.len() == 1 {
-                    let name = (*nikaia_std::index::get(&names, 0)).copy_owned();
+                    let name = (*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).copy_owned();
                     let node = format!("l:{}", stmt.span.start);
                     if is_a_map_made(value, words) { tm_walk_expr(value, words, library, env, classes, walk); } else { tm_flow(&node, value, words, library, env, classes, walk); }
                     let id = tm_bind(name, &given, &node, walk);
@@ -853,7 +853,7 @@ pub(crate) fn is_a_map_made(value: &Expr, words: &winnow_grammar::InternerContex
             if !args.is_empty() { false } else {
                 match func {
                     Expr::Path(segments, _) => {
-                        let last = words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)));
+                        let last = words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })));
                         last == "HashMap" || last == "HashSet"
                     },
                     Expr::Variable(one, _) => {

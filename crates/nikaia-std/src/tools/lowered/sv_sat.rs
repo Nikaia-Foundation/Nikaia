@@ -65,7 +65,7 @@ pub(crate) fn sv_luby(i: i64) -> i64 {
     let mut seq: i64 = 0;
     while size < i + 1 {
         seq += 1;
-        size = 2 * size + 1;
+        size = unsafe { nikaia_std::proven::add::<i64>(2 * size, 1) };
     }
     let mut x = i;
     while size - 1 != x {
@@ -76,7 +76,7 @@ pub(crate) fn sv_luby(i: i64) -> i64 {
     let mut out: i64 = 1;
     while seq > 0 {
         out = out * 2;
-        seq -= 1;
+        seq = unsafe { nikaia_std::proven::sub::<i64>(seq, 1) };
     }
     out
 }
@@ -100,7 +100,7 @@ pub(crate) fn sv_sat_book(vars: u32, book: SvBook) -> SvSat {
         s.phase.push(false);
         s.seen.push(false);
         s.heap_insert(v);
-        v += 1;
+        v = unsafe { nikaia_std::proven::add::<u32>(v, 1) };
     }
     s
 }
@@ -141,9 +141,9 @@ impl SvSat {
         let mut changed = false;
         let mut i: i64 = 0;
         while ((i) as usize) < sorted.len() {
-            let l = *nikaia_std::index::get(&sorted, (i) as usize);
-            let before: u32 = if i > 0 { *nikaia_std::index::get(&sorted, nikaia_std::index::at(i - 1)) } else { l ^ 1u32 };
-            i += 1;
+            let l = *unsafe { nikaia_std::proven::read(&sorted, (i) as usize) };
+            let before: u32 = if i > 0 { *unsafe { nikaia_std::proven::read(&sorted, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } } else { l ^ 1u32 };
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             if i > 1 && before == l {
                 changed = true;
                 continue;
@@ -169,7 +169,7 @@ impl SvSat {
             return;
         }
         if kept.len() == 1 {
-            self.assign_unit(*nikaia_std::index::get(&kept, 0), entry);
+            self.assign_unit(*unsafe { nikaia_std::proven::read(&kept, (0) as usize) }, entry);
             return;
         }
         self.attach(&kept, entry, 0, false);
@@ -193,7 +193,7 @@ impl SvSat {
         let at = c as i64;
         let a = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 3));
         let b = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 4));
-        let name = if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at)) == 2u32 { c | 2147483648u32 } else { c };
+        let name = if *unsafe { nikaia_std::proven::read(&self.arena, (at) as usize) } == 2u32 { c | 2147483648u32 } else { c };
         self.watch_clause[nikaia_std::index::at(a as i64)].push(name);
         self.watch_blocker[nikaia_std::index::at(a as i64)].push(b);
         self.watch_clause[nikaia_std::index::at(b as i64)].push(name);
@@ -224,19 +224,19 @@ impl SvSat {
         let v = sv_sat_var(l);
         if *nikaia_std::index::get(&self.value, nikaia_std::index::at(v)) != 0 {
             if self.lit_value(l) < 0 {
-                self.book.log.learn(vec![], vec![u32::try_from(*nikaia_std::index::get(&self.unit, nikaia_std::index::at(v))).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), id]);
+                self.book.log.learn(vec![], vec![u32::try_from(*unsafe { nikaia_std::proven::read(&self.unit, (v) as usize) }).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), id]);
                 self.stats.learned += 1;
                 self.refuted = true;
             }
             return;
         }
         self.assign(l, -1);
-        { let __nikaia_stored = id as i64; nikaia_std::index::set(&mut self.unit, nikaia_std::index::at(v), __nikaia_stored); }
+        { let __nikaia_stored = id as i64; unsafe { nikaia_std::proven::write(&mut self.unit, (v) as usize, __nikaia_stored) }; }
     }
     pub(crate) fn propagate(&mut self) -> i64 {
         while self.head < self.trail.len() as i64 {
             let p = *nikaia_std::index::get(&self.trail, nikaia_std::index::at(self.head));
-            self.head += 1;
+            self.head = unsafe { nikaia_std::proven::add::<i64>(self.head, 1) };
             self.stats.propagations += 1;
             let f = p ^ 1u32;
             let fl = f as i64;
@@ -245,18 +245,18 @@ impl SvSat {
             let mut j: i64 = 0;
             let mut conflict: i64 = -1;
             while i < n {
-                let name = *nikaia_std::index::get(nikaia_std::index::get(&self.watch_clause, nikaia_std::index::at(fl)), (i) as usize);
-                let blocker = *nikaia_std::index::get(nikaia_std::index::get(&self.watch_blocker, nikaia_std::index::at(fl)), (i) as usize);
+                let name = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_clause, (fl) as usize) }, (i) as usize);
+                let blocker = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_blocker, (fl) as usize) }, (i) as usize);
                 i += 1;
                 if self.lit_value(blocker) > 0 {
-                    { let __nikaia_stored = name; nikaia_std::index::set(&mut self.watch_clause[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
-                    { let __nikaia_stored = blocker; nikaia_std::index::set(&mut self.watch_blocker[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
+                    { let __nikaia_stored = name; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
+                    { let __nikaia_stored = blocker; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
                     j += 1;
                     continue;
                 }
                 if name >= 2147483648u32 {
-                    { let __nikaia_stored = name; nikaia_std::index::set(&mut self.watch_clause[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
-                    { let __nikaia_stored = blocker; nikaia_std::index::set(&mut self.watch_blocker[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
+                    { let __nikaia_stored = name; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
+                    { let __nikaia_stored = blocker; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
                     j += 1;
                     let c = (name - 2147483648u32) as i64;
                     if self.lit_value(blocker) < 0 {
@@ -269,13 +269,13 @@ impl SvSat {
                 let c = name as i64;
                 let at = c + 3;
                 if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at)) == f {
-                    { let __nikaia_stored = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 1)); nikaia_std::index::set(&mut self.arena, nikaia_std::index::at(at), __nikaia_stored); }
-                    { let __nikaia_stored = f; nikaia_std::index::set(&mut self.arena, nikaia_std::index::at(at + 1), __nikaia_stored); }
+                    { let __nikaia_stored = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + 1)); unsafe { nikaia_std::proven::write(&mut self.arena, (at) as usize, __nikaia_stored) }; }
+                    { let __nikaia_stored = f; unsafe { nikaia_std::proven::write(&mut self.arena, (at + 1) as usize, __nikaia_stored) }; }
                 }
-                let first = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at));
+                let first = *unsafe { nikaia_std::proven::read(&self.arena, (at) as usize) };
                 if first != blocker && self.lit_value(first) > 0 {
-                    { let __nikaia_stored = name; nikaia_std::index::set(&mut self.watch_clause[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
-                    { let __nikaia_stored = first; nikaia_std::index::set(&mut self.watch_blocker[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
+                    { let __nikaia_stored = name; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
+                    { let __nikaia_stored = first; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
                     j += 1;
                     continue;
                 }
@@ -285,8 +285,8 @@ impl SvSat {
                 while k < size {
                     let l = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(at + k));
                     if self.lit_value(l) >= 0 {
-                        { let __nikaia_stored = l; nikaia_std::index::set(&mut self.arena, nikaia_std::index::at(at + 1), __nikaia_stored); }
-                        { let __nikaia_stored = f; nikaia_std::index::set(&mut self.arena, nikaia_std::index::at(at + k), __nikaia_stored); }
+                        { let __nikaia_stored = l; unsafe { nikaia_std::proven::write(&mut self.arena, (at + 1) as usize, __nikaia_stored) }; }
+                        { let __nikaia_stored = f; unsafe { nikaia_std::proven::write(&mut self.arena, (at + k) as usize, __nikaia_stored) }; }
                         self.watch_clause[nikaia_std::index::at(l as i64)].push(name);
                         self.watch_blocker[nikaia_std::index::at(l as i64)].push(first);
                         moved = true;
@@ -295,8 +295,8 @@ impl SvSat {
                     k += 1;
                 }
                 if moved { continue; }
-                { let __nikaia_stored = name; nikaia_std::index::set(&mut self.watch_clause[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
-                { let __nikaia_stored = first; nikaia_std::index::set(&mut self.watch_blocker[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
+                { let __nikaia_stored = name; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
+                { let __nikaia_stored = first; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
                 j += 1;
                 if self.lit_value(first) < 0 {
                     conflict = c;
@@ -305,13 +305,13 @@ impl SvSat {
                 self.assign(first, c);
             }
             while i < n {
-                { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&self.watch_clause, nikaia_std::index::at(fl)), (i) as usize); nikaia_std::index::set(&mut self.watch_clause[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
-                { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&self.watch_blocker, nikaia_std::index::at(fl)), (i) as usize); nikaia_std::index::set(&mut self.watch_blocker[nikaia_std::index::at(fl)], nikaia_std::index::at(j), __nikaia_stored); }
+                { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_clause, (fl) as usize) }, (i) as usize); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
+                { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.watch_blocker, (fl) as usize) }, (i) as usize); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
                 i += 1;
                 j += 1;
             }
-            self.watch_clause[nikaia_std::index::at(fl)].truncate(nikaia_std::count::of(j));
-            self.watch_blocker[nikaia_std::index::at(fl)].truncate(nikaia_std::count::of(j));
+            (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (fl) as usize) }).truncate(nikaia_std::count::of(j));
+            (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (fl) as usize) }).truncate(nikaia_std::count::of(j));
             if conflict >= 0 {
                 self.head = self.trail.len() as i64;
                 return conflict;
@@ -328,27 +328,27 @@ impl SvSat {
         let mut p: u32 = 0u32;
         let mut resolving = false;
         let mut c = conflict;
-        let mut index = self.trail.len() as i64 - 1;
+        let mut index = unsafe { nikaia_std::proven::sub::<i64>(self.trail.len() as i64, 1) };
         loop {
             let size = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c)) as i64;
             let mut k: i64 = 0;
             while k < size {
-                let q = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c + 3 + k));
-                k += 1;
+                let q = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c, 3) } + k));
+                k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 if resolving && q == p { continue; }
                 let v = sv_sat_var(q);
                 if *nikaia_std::index::get(&self.seen, nikaia_std::index::at(v)) { continue; }
-                { let __nikaia_stored = true; nikaia_std::index::set(&mut self.seen, nikaia_std::index::at(v), __nikaia_stored); }
-                if *nikaia_std::index::get(&self.level, nikaia_std::index::at(v)) == 0 {
+                { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut self.seen, (v) as usize, __nikaia_stored) }; }
+                if *unsafe { nikaia_std::proven::read(&self.level, (v) as usize) } == 0 {
                     zero.push(v);
                     continue;
                 }
                 self.bump_var(v);
-                if *nikaia_std::index::get(&self.level, nikaia_std::index::at(v)) == current { path += 1; } else { lits.push(q); }
+                if *unsafe { nikaia_std::proven::read(&self.level, (v) as usize) } == current { path += 1; } else { lits.push(q); }
             }
-            while !*nikaia_std::index::get(&self.seen, nikaia_std::index::at(sv_sat_var(*nikaia_std::index::get(&self.trail, nikaia_std::index::at(index))))) { index -= 1; }
-            p = *nikaia_std::index::get(&self.trail, nikaia_std::index::at(index));
-            index -= 1;
+            while !*nikaia_std::index::get(&self.seen, nikaia_std::index::at(sv_sat_var(*nikaia_std::index::get(&self.trail, nikaia_std::index::at(index))))) { index = unsafe { nikaia_std::proven::sub::<i64>(index, 1) }; }
+            p = *unsafe { nikaia_std::proven::read(&self.trail, (index) as usize) };
+            index = unsafe { nikaia_std::proven::sub::<i64>(index, 1) };
             let v = sv_sat_var(p);
             { let __nikaia_stored = false; nikaia_std::index::set(&mut self.seen, nikaia_std::index::at(v), __nikaia_stored); }
             path -= 1;
@@ -357,48 +357,48 @@ impl SvSat {
             chain.push(self.clause_id(c));
             resolving = true;
         }
-        { let __nikaia_stored = p ^ 1u32; nikaia_std::index::set(&mut lits, 0usize, __nikaia_stored); }
+        { let __nikaia_stored = p ^ 1u32; unsafe { nikaia_std::proven::write(&mut lits, (0) as usize, __nikaia_stored) }; }
         let mut hints: Vec<u32> = vec![];
         for v in zero.iter() {
             let v = nikaia_std::num::value(v);
             hints.push(u32::try_from(*nikaia_std::index::get(&self.unit, nikaia_std::index::at(v))).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")));
-            { let __nikaia_stored = false; nikaia_std::index::set(&mut self.seen, nikaia_std::index::at(v), __nikaia_stored); }
+            { let __nikaia_stored = false; unsafe { nikaia_std::proven::write(&mut self.seen, (v) as usize, __nikaia_stored) }; }
         }
-        let mut r = chain.len() as i64 - 1;
+        let mut r = unsafe { nikaia_std::proven::sub::<i64>(chain.len() as i64, 1) };
         while r >= 0 {
-            hints.push(*nikaia_std::index::get(&chain, nikaia_std::index::at(r)));
-            r -= 1;
+            hints.push(*unsafe { nikaia_std::proven::read(&chain, (r) as usize) });
+            r = unsafe { nikaia_std::proven::sub::<i64>(r, 1) };
         }
         let mut back: i64 = 0;
         let mut levels: Vec<i64> = vec![current];
         let mut i: i64 = 1;
         while ((i) as usize) < lits.len() {
-            let v = sv_sat_var(*nikaia_std::index::get(&lits, (i) as usize));
+            let v = sv_sat_var(*unsafe { nikaia_std::proven::read(&lits, (i) as usize) });
             { let __nikaia_stored = false; nikaia_std::index::set(&mut self.seen, nikaia_std::index::at(v), __nikaia_stored); }
             let lv = *nikaia_std::index::get(&self.level, nikaia_std::index::at(v));
             if !levels.contains(&lv) { levels.push(lv); }
             if lv > back {
                 back = lv;
-                let held = *nikaia_std::index::get(&lits, 1);
-                { let __nikaia_stored = *nikaia_std::index::get(&lits, (i) as usize); nikaia_std::index::set(&mut lits, 1usize, __nikaia_stored); }
-                { let __nikaia_stored = held; nikaia_std::index::set(&mut lits, (i) as usize, __nikaia_stored); }
+                let held = *unsafe { nikaia_std::proven::read(&lits, (1) as usize) };
+                { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&lits, (i) as usize) }; unsafe { nikaia_std::proven::write(&mut lits, (1) as usize, __nikaia_stored) }; }
+                { let __nikaia_stored = held; unsafe { nikaia_std::proven::write(&mut lits, (i) as usize, __nikaia_stored) }; }
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         SvLearned { lits, hints, level: back, glue: levels.len() as i64 }
     }
     pub(crate) fn backjump(&mut self, target: i64) {
         if self.decision_level() <= target { return; }
         let start = *nikaia_std::index::get(&self.limits, nikaia_std::index::at(target));
-        let mut at = self.trail.len() as i64 - 1;
+        let mut at = unsafe { nikaia_std::proven::sub::<i64>(self.trail.len() as i64, 1) };
         while at >= start {
-            let l = *nikaia_std::index::get(&self.trail, nikaia_std::index::at(at));
+            let l = *unsafe { nikaia_std::proven::read(&self.trail, (at) as usize) };
             let v = sv_sat_var(l);
             { let __nikaia_stored = 0; nikaia_std::index::set(&mut self.value, nikaia_std::index::at(v), __nikaia_stored); }
             { let __nikaia_stored = -1; nikaia_std::index::set(&mut self.reason, nikaia_std::index::at(v), __nikaia_stored); }
             { let __nikaia_stored = l % 2u32 == 0u32; nikaia_std::index::set(&mut self.phase, nikaia_std::index::at(v), __nikaia_stored); }
             if *nikaia_std::index::get(&self.place, nikaia_std::index::at(v)) < 0 { self.heap_insert(u32::try_from(v).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))); }
-            at -= 1;
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
         }
         if start < self.undone { self.undone = start; }
         self.trail.truncate(nikaia_std::count::of(start));
@@ -462,7 +462,7 @@ impl SvSat {
         self.backjump(learned.level);
         let id = self.book.log.learn(learned.lits.copy_owned(), learned.hints);
         self.stats.learned += 1;
-        if learned.lits.len() == 1 { self.assign_unit(*nikaia_std::index::get(&learned.lits, 0), id); } else {
+        if learned.lits.len() == 1 { self.assign_unit(*unsafe { nikaia_std::proven::read(&learned.lits, (0) as usize) }, id); } else {
             let first = *nikaia_std::index::get(&learned.lits, 0);
             let c = self.attach(&learned.lits, id, learned.glue, true);
             self.assign(first, c as i64);
@@ -493,10 +493,10 @@ impl SvSat {
                 continue;
             }
             falsified.push(l);
-            let mut at = falsified.len() as i64 - 1;
-            while at > 0 && self.level_of(*nikaia_std::index::get(&falsified, nikaia_std::index::at(at - 1))) < self.level_of(l) {
-                { let __nikaia_stored = *nikaia_std::index::get(&falsified, nikaia_std::index::at(at - 1)); nikaia_std::index::set(&mut falsified, nikaia_std::index::at(at), __nikaia_stored); }
-                at -= 1;
+            let mut at = unsafe { nikaia_std::proven::sub::<i64>(falsified.len() as i64, 1) };
+            while at > 0 && self.level_of(*unsafe { nikaia_std::proven::read(&falsified, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }) < self.level_of(l) {
+                { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&falsified, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }; unsafe { nikaia_std::proven::write(&mut falsified, (at) as usize, __nikaia_stored) }; }
+                at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
             }
             { let __nikaia_stored = l; nikaia_std::index::set(&mut falsified, nikaia_std::index::at(at), __nikaia_stored); }
         }
@@ -511,11 +511,11 @@ impl SvSat {
         }
         if ordered.len() == 1 {
             self.backjump(0);
-            self.assign_unit(*nikaia_std::index::get(&ordered, 0), id);
+            self.assign_unit(*unsafe { nikaia_std::proven::read(&ordered, (0) as usize) }, id);
             return -1;
         }
         if open == 0 {
-            let top = self.level_of(*nikaia_std::index::get(&ordered, 0));
+            let top = self.level_of(*unsafe { nikaia_std::proven::read(&ordered, (0) as usize) });
             self.backjump(top);
             let c = self.attach(&ordered, id, 2, true) as i64;
             if top == 0 {
@@ -525,8 +525,8 @@ impl SvSat {
             return c;
         }
         if open == 1 && !holds {
-            self.backjump(self.level_of(*nikaia_std::index::get(&ordered, 1)));
-            let first = *nikaia_std::index::get(&ordered, 0);
+            self.backjump(self.level_of(*unsafe { nikaia_std::proven::read(&ordered, (1) as usize) }));
+            let first = *unsafe { nikaia_std::proven::read(&ordered, (0) as usize) };
             let c = self.attach(&ordered, id, 2, true);
             self.assign(first, c as i64);
             return -1;
@@ -536,7 +536,7 @@ impl SvSat {
     }
     pub(crate) fn carried(&self) -> Vec<Vec<u32>> {
         let mut out: Vec<Vec<u32>> = vec![];
-        let top = if !self.limits.is_empty() { *nikaia_std::index::get(&self.limits, 0) } else { self.trail.len() as i64 };
+        let top = if !self.limits.is_empty() { *unsafe { nikaia_std::proven::read(&self.limits, (0) as usize) } } else { self.trail.len() as i64 };
         for i in 0..top { out.push(vec![*nikaia_std::index::get(&self.trail, (i) as usize)]); }
         for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
@@ -548,11 +548,11 @@ impl SvSat {
         }
         out
     }
-    pub(crate) fn set_phase(&mut self, v: i64, phase: bool) { if v >= 0 && v < self.phase.len() as i64 { { let __nikaia_stored = phase; nikaia_std::index::set(&mut self.phase, nikaia_std::index::at(v), __nikaia_stored); } } }
+    pub(crate) fn set_phase(&mut self, v: i64, phase: bool) { if v >= 0 && v < self.phase.len() as i64 { { let __nikaia_stored = phase; unsafe { nikaia_std::proven::write(&mut self.phase, (v) as usize, __nikaia_stored) }; } } }
     pub(crate) fn pick(&mut self) -> Option<u32> {
         while !self.heap.is_empty() {
             let v = self.heap_pop();
-            if *nikaia_std::index::get(&self.value, nikaia_std::index::at(v as i64)) == 0 { return Some(if *nikaia_std::index::get(&self.phase, nikaia_std::index::at(v as i64)) { v << 1 } else { v << 1 | 1u32 }); }
+            if *nikaia_std::index::get(&self.value, nikaia_std::index::at(v as i64)) == 0 { return Some(if *unsafe { nikaia_std::proven::read(&self.phase, (v as i64) as usize) } { v << 1 } else { v << 1 | 1u32 }); }
         }
         None
     }
@@ -563,18 +563,18 @@ impl SvSat {
         for c in self.learnts.iter() {
             let c = nikaia_std::num::value(c);
             let glue = (*nikaia_std::index::get(&self.arena, nikaia_std::index::at(c as i64 + 1)) >> 2) as i64;
-            keys.push(glue * 4294967296i64 + (4294967295i64 - c as i64));
+            keys.push(unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::mul::<i64>(glue, 4294967296i64), nikaia_std::proven::sub::<i64>(4294967295i64, c as i64)) });
         }
         keys.sort();
         let mut going = keys.len() as i64 / 2;
-        let mut at = keys.len() as i64 - 1;
+        let mut at = unsafe { nikaia_std::proven::sub::<i64>(keys.len() as i64, 1) };
         while at >= 0 && going > 0 {
-            let key = *nikaia_std::index::get(&keys, nikaia_std::index::at(at));
-            at -= 1;
+            let key = *unsafe { nikaia_std::proven::read(&keys, (at) as usize) };
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
             if key / 4294967296i64 <= 2 { break; }
-            let c = 4294967295i64 - key % 4294967296i64;
-            { let __nikaia_stored = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c + 1)) | 2u32; nikaia_std::index::set(&mut self.arena, nikaia_std::index::at(c + 1), __nikaia_stored); }
-            self.wasted += *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c)) as i64 + 3;
+            let c = unsafe { nikaia_std::proven::sub::<i64>(4294967295i64, key % 4294967296i64) };
+            { let __nikaia_stored = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c, 1) })) | 2u32; unsafe { nikaia_std::proven::write(&mut self.arena, (nikaia_std::proven::add::<i64>(c, 1)) as usize, __nikaia_stored) }; }
+            self.wasted += *unsafe { nikaia_std::proven::read(&self.arena, (c) as usize) } as i64 + 3;
             self.book.log.delete(self.clause_id(c));
             self.stats.deleted += 1;
             going -= 1;
@@ -596,13 +596,13 @@ impl SvSat {
         let mut c: i64 = 0;
         while c < self.arena.len() as i64 {
             let words = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c)) as i64 + 3;
-            let info = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c + 1));
+            let info = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c, 1) }));
             if info & 2u32 == 0u32 {
                 if info & 1u32 == 1u32 { learnts.push(u32::try_from(fresh.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))); }
                 let mut k: i64 = 0;
                 while k < words {
                     fresh.push(*nikaia_std::index::get(&self.arena, nikaia_std::index::at(c + k)));
-                    k += 1;
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
             }
             c += words;
@@ -612,34 +612,34 @@ impl SvSat {
         self.wasted = 0;
         let mut v: i64 = 0;
         while ((v) as usize) < self.reason.len() {
-            { let __nikaia_stored = -1; nikaia_std::index::set(&mut self.reason, (v) as usize, __nikaia_stored); }
-            v += 1;
+            { let __nikaia_stored = -1; unsafe { nikaia_std::proven::write(&mut self.reason, (v) as usize, __nikaia_stored) }; }
+            v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
         }
     }
     pub(crate) fn rewatch(&mut self) {
         let mut l: i64 = 0;
         while ((l) as usize) < self.watch_clause.len() {
-            self.watch_clause[nikaia_std::index::at(l)].truncate(0);
-            self.watch_blocker[nikaia_std::index::at(l)].truncate(0);
-            l += 1;
+            (*unsafe { nikaia_std::proven::slot(&mut self.watch_clause, (l) as usize) }).truncate(0);
+            (*unsafe { nikaia_std::proven::slot(&mut self.watch_blocker, (l) as usize) }).truncate(0);
+            l = unsafe { nikaia_std::proven::add::<i64>(l, 1) };
         }
         let mut c: i64 = 0;
         while c < self.arena.len() as i64 {
             let words = *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c)) as i64 + 3;
-            if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(c + 1)) & 2u32 == 0u32 { self.watch(u32::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))); }
+            if *nikaia_std::index::get(&self.arena, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(c, 1) })) & 2u32 == 0u32 { self.watch(u32::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"))); }
             c += words;
         }
     }
     pub(crate) fn bump_var(&mut self, v: i64) {
-        self.activity[nikaia_std::index::at(v)] += self.bump;
-        if *nikaia_std::index::get(&self.activity, nikaia_std::index::at(v)) > 1152921504606846976i64 { self.rescale(); }
-        if *nikaia_std::index::get(&self.place, nikaia_std::index::at(v)) >= 0 { self.heap_up(*nikaia_std::index::get(&self.place, nikaia_std::index::at(v))); }
+        { let __nikaia_stored = self.bump; let __nikaia_at = (v) as usize; let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.activity, __nikaia_at) } + __nikaia_stored; unsafe { nikaia_std::proven::write(&mut self.activity, __nikaia_at, __nikaia_stored) }; }
+        if *unsafe { nikaia_std::proven::read(&self.activity, (v) as usize) } > 1152921504606846976i64 { self.rescale(); }
+        if *unsafe { nikaia_std::proven::read(&self.place, (v) as usize) } >= 0 { self.heap_up(*unsafe { nikaia_std::proven::read(&self.place, (v) as usize) }); }
     }
     pub(crate) fn rescale(&mut self) {
         let mut v: i64 = 0;
         while ((v) as usize) < self.activity.len() {
-            { let __nikaia_stored = *nikaia_std::index::get(&self.activity, (v) as usize) / 1073741824; nikaia_std::index::set(&mut self.activity, (v) as usize, __nikaia_stored); }
-            v += 1;
+            { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&self.activity, (v) as usize) } / 1073741824; unsafe { nikaia_std::proven::write(&mut self.activity, (v) as usize, __nikaia_stored) }; }
+            v = unsafe { nikaia_std::proven::add::<i64>(v, 1) };
         }
         self.bump = self.bump / 1073741824 + 1;
     }
@@ -649,15 +649,15 @@ impl SvSat {
         x > y || x == y && a < b
     }
     pub(crate) fn heap_insert(&mut self, v: u32) {
-        { let __nikaia_stored = self.heap.len() as i64; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(v as i64), __nikaia_stored); }
+        { let __nikaia_stored = self.heap.len() as i64; unsafe { nikaia_std::proven::write(&mut self.place, (v as i64) as usize, __nikaia_stored) }; }
         self.heap.push(v);
-        self.heap_up(self.heap.len() as i64 - 1);
+        self.heap_up(unsafe { nikaia_std::proven::sub::<i64>(self.heap.len() as i64, 1) });
     }
     pub(crate) fn heap_pop(&mut self) -> u32 {
         let top = *nikaia_std::index::get(&self.heap, 0);
-        let last = self.heap.len() as i64 - 1;
-        let moved = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(last));
-        { let __nikaia_stored = moved; nikaia_std::index::set(&mut self.heap, 0usize, __nikaia_stored); }
+        let last = unsafe { nikaia_std::proven::sub::<i64>(self.heap.len() as i64, 1) };
+        let moved = *unsafe { nikaia_std::proven::read(&self.heap, (last) as usize) };
+        { let __nikaia_stored = moved; unsafe { nikaia_std::proven::write(&mut self.heap, (0) as usize, __nikaia_stored) }; }
         { let __nikaia_stored = 0; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(moved as i64), __nikaia_stored); }
         self.heap.truncate(nikaia_std::count::of(last));
         { let __nikaia_stored = -1; nikaia_std::index::set(&mut self.place, nikaia_std::index::at(top as i64), __nikaia_stored); }
@@ -668,7 +668,7 @@ impl SvSat {
         let mut i = start;
         let v = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(i));
         while i > 0 {
-            let parent = (i - 1) / 2;
+            let parent = (unsafe { nikaia_std::proven::sub::<i64>(i, 1) }) / 2;
             let u = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(parent));
             if !self.above(v, u) { break; }
             { let __nikaia_stored = u; nikaia_std::index::set(&mut self.heap, nikaia_std::index::at(i), __nikaia_stored); }
@@ -685,7 +685,7 @@ impl SvSat {
         loop {
             let left = 2 * i + 1;
             if left >= n { break; }
-            let right = left + 1;
+            let right = unsafe { nikaia_std::proven::add::<i64>(left, 1) };
             let child = if right < n && self.above(*nikaia_std::index::get(&self.heap, nikaia_std::index::at(right)), *nikaia_std::index::get(&self.heap, nikaia_std::index::at(left))) { right } else { left };
             let u = *nikaia_std::index::get(&self.heap, nikaia_std::index::at(child));
             if !self.above(u, v) { break; }

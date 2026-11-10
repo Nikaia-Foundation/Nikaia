@@ -97,8 +97,8 @@ pub fn offered(surface: &Surface, path: &str) -> bool {
     #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in path.split("::") { parts.push(nikaia_std::block::Text::from(part.to_string())); }
     let mut at: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
-    for k in 0..parts.len() as i64 - 1 {
-        at = joined(&at, nikaia_std::index::get(&parts, (k) as usize));
+    for k in 0..unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } {
+        at = joined(&at, unsafe { nikaia_std::proven::read(&parts, (k) as usize) });
         let public = nikaia_std::index::or(surface.modules.get(&at), || false);
         if !public { return false; }
     }
@@ -213,7 +213,7 @@ pub(crate) fn directly_under(path: &str, under: &str) -> Option<String> {
 pub(crate) fn before_colon(written: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(written.chars());
     let mut end = c.len() as i64;
-    for at in 0..c.len() as i64 { if *nikaia_std::index::get(&c, (at) as usize) == ':' && end == c.len() as i64 { end = at; } }
+    for at in 0..c.len() as i64 { if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ':' && end == c.len() as i64 { end = at; } }
     let head = between(&c, 0, end);
     nikaia_std::block::Text::from(head.trim().to_string())
 }

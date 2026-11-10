@@ -20,10 +20,10 @@ pub fn an_escape_nothing_names(literal: &str, char_of: &impl Fn(i64) -> Option<s
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '\\' {
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        match one_escape(&c, at + 1, char_of) {
+        match one_escape(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, char_of) {
             EscapeRead::Means { next, .. } => { at = next; },
             EscapeRead::Nothing { refused } => { return Some(refused); },
         }
@@ -37,11 +37,11 @@ pub fn decoded(literal: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> Optio
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '\\' {
-            out.push(*nikaia_std::index::get(&c, nikaia_std::index::at(at)));
-            at += 1;
+            out.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
-        match one_escape(&c, at + 1, char_of) {
+        match one_escape(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, char_of) {
             EscapeRead::Means { value, next } => {
                 out.push(value);
                 at = next;
@@ -67,21 +67,21 @@ pub fn as_a_literal(text: &str) -> String {
 pub(crate) fn one_escape(c: &[scalar], at: i64, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
     let mut written: String = String::from("\\");
     if at >= c.len() as i64 { return not_an_escape(&written, "a `\\` at the end of a literal escapes nothing"); }
-    let first = *nikaia_std::index::get(&c, nikaia_std::index::at(at));
+    let first = *unsafe { nikaia_std::proven::read(&c, (at) as usize) };
     written.push(first);
-    if first == 'x' { return a_byte(c, at + 1, &written, char_of); }
-    if first == 'u' { return a_character(c, at + 1, &written, char_of); }
+    if first == 'x' { return a_byte(c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &written, char_of); }
+    if first == 'u' { return a_character(c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, &written, char_of); }
     let value = match named_escape(first) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, "no escape starts with that character") };
-    EscapeRead::Means { value, next: at + 1 }
+    EscapeRead::Means { value, next: unsafe { nikaia_std::proven::add::<i64>(at, 1) } }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn a_high_byte(literal: &str) -> Option<i64> {
     let c: Vec<scalar> = nikaia_std::list::chars(literal.chars());
-    if c.len() != 4 || *nikaia_std::index::get(&c, 0) != '\\' || *nikaia_std::index::get(&c, 1) != 'x' { return None; }
-    let high = match hex_digit(*nikaia_std::index::get(&c, 2)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let low = match hex_digit(*nikaia_std::index::get(&c, 3)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if c.len() != 4 || *unsafe { nikaia_std::proven::read(&c, (0) as usize) } != '\\' || *unsafe { nikaia_std::proven::read(&c, (1) as usize) } != 'x' { return None; }
+    let high = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let low = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (3) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let value = high * 16 + low;
     if value < 128 { return None; }
     Some(value)
@@ -91,12 +91,12 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
     let mut written = nikaia_std::block::Text::from(so_far.to_string());
     let mut end = from;
     while end < from + 2 && end < c.len() as i64 {
-        written.push(*nikaia_std::index::get(&c, nikaia_std::index::at(end)));
-        end += 1;
+        written.push(*unsafe { nikaia_std::proven::read(&c, (end) as usize) });
+        end = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
     }
-    if end < from + 2 { return not_an_escape(&written, "`\\x` takes exactly two hexadecimal digits"); }
+    if end < unsafe { nikaia_std::proven::add::<i64>(from, 2) } { return not_an_escape(&written, "`\\x` takes exactly two hexadecimal digits"); }
     let high = nikaia_std::index::or(hex_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(from))), || 128);
-    let low = nikaia_std::index::or(hex_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(from + 1))), || 128);
+    let low = nikaia_std::index::or(hex_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(from, 1) }))), || 128);
     let why = "`\\x` takes two hexadecimal digits naming a byte below `\\x80`";
     let value = high * 16 + low;
     if value >= 128 { return not_an_escape(&written, why); }
@@ -106,18 +106,18 @@ pub(crate) fn a_byte(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i6
 
 pub(crate) fn a_character(c: &[scalar], from: i64, so_far: &str, char_of: &impl Fn(i64) -> Option<scalar>) -> EscapeRead {
     let mut written = nikaia_std::block::Text::from(so_far.to_string());
-    if from >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(from)) != '{' { return not_an_escape(&written, "`\\u` takes its digits in braces, as `\\u{1F600}`"); }
+    if from >= c.len() as i64 || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } != '{' { return not_an_escape(&written, "`\\u` takes its digits in braces, as `\\u{1F600}`"); }
     written.push('{');
-    let mut end = from + 1;
+    let mut end = unsafe { nikaia_std::proven::add::<i64>(from, 1) };
     let mut closed = false;
     while end < c.len() as i64 && !closed {
-        written.push(*nikaia_std::index::get(&c, nikaia_std::index::at(end)));
-        closed = *nikaia_std::index::get(&c, nikaia_std::index::at(end)) == '}';
-        end += 1;
+        written.push(*unsafe { nikaia_std::proven::read(&c, (end) as usize) });
+        closed = *unsafe { nikaia_std::proven::read(&c, (end) as usize) } == '}';
+        end = unsafe { nikaia_std::proven::add::<i64>(end, 1) };
     }
     if !closed { return not_an_escape(&written, "`\\u{` is never closed"); }
     let why = "`\\u{…}` takes up to six hexadecimal digits naming a character";
-    let value = match code_point(c, from + 1, end - 1) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, why) };
+    let value = match code_point(c, unsafe { nikaia_std::proven::add::<i64>(from, 1) }, unsafe { nikaia_std::proven::sub::<i64>(end, 1) }) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, why) };
     let named = match char_of(value) { Some(__nikaia_value) => __nikaia_value, None => return not_an_escape(&written, why) };
     EscapeRead::Means { value: named, next: end }
 }
@@ -131,11 +131,11 @@ pub(crate) fn code_point(c: &[scalar], from: i64, to: i64) -> Option<i64> {
     let mut at = from;
     while at < to {
         if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '_' {
-            let digit = match hex_digit(*nikaia_std::index::get(&c, nikaia_std::index::at(at))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let digit = match hex_digit(*unsafe { nikaia_std::proven::read(&c, (at) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             value = value * 16 + digit;
             digits += 1;
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if digits > 6 { return None; }
     Some(value)
@@ -155,9 +155,9 @@ pub(crate) fn named_escape(c: scalar) -> Option<scalar> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn hex_digit(c: scalar) -> Option<i64> {
-    if c >= '0' && c <= '9' { return Some(c as i64 - 48); }
-    if c >= 'a' && c <= 'f' { return Some(c as i64 - 87); }
-    if c >= 'A' && c <= 'F' { return Some(c as i64 - 55); }
+    if c >= '0' && c <= '9' { return Some(unsafe { nikaia_std::proven::sub::<i64>(c as i64, 48) }); }
+    if c >= 'a' && c <= 'f' { return Some(unsafe { nikaia_std::proven::sub::<i64>(c as i64, 87) }); }
+    if c >= 'A' && c <= 'F' { return Some(unsafe { nikaia_std::proven::sub::<i64>(c as i64, 55) }); }
     None
 }
 
@@ -173,8 +173,8 @@ pub fn hex_of(n: i64) -> String {
     let mut out: String = String::from("");
     let mut i = backwards.len() as i64;
     while i > 0 {
-        i -= 1;
-        out.push(*nikaia_std::index::get(&backwards, nikaia_std::index::at(i)));
+        i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
+        out.push(*unsafe { nikaia_std::proven::read(&backwards, (i) as usize) });
     }
     out
 }

@@ -23,7 +23,7 @@ impl EmitState {
     }
     pub fn named_error_of(&self, world: &EmitWorld<'_, '_, '_, '_>, thrown: &[String]) -> i64 {
         if thrown.len() != 1 { return 0; }
-        self.name_of_error(world, nikaia_std::index::get(&thrown, 0))
+        self.name_of_error(world, unsafe { nikaia_std::proven::read(&thrown, (0) as usize) })
     }
     pub fn named_error(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> i64 {
         let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
@@ -40,7 +40,7 @@ impl EmitState {
         let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
         while ((at) as usize) < slots.len() {
             parts.push(nikaia_std::block::Text::from(lifetime.to_string()));
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         nikaia_std::block::Text::from(parts.join(", "))
     }
@@ -247,7 +247,7 @@ pub fn emit_sums_written(sums: &collections::BTreeMap<Vec<String>, String>, unit
         let mut owner: i64 = -1;
         for member in members.iter() {
             if owner >= 0 { break; }
-            for at in 0..declared.len() as i64 { if owner < 0 && (*nikaia_std::index::get(&declared, (at) as usize)).contains(member) { owner = at; } }
+            for at in 0..declared.len() as i64 { if owner < 0 && (*unsafe { nikaia_std::proven::read(&declared, (at) as usize) }).contains(member) { owner = at; } }
         }
         if owner == 0 || owner < 0 && used_here.contains(name) { out.insert(nikaia_std::block::Text::from(name.to_string())); }
     }

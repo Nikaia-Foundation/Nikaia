@@ -244,7 +244,7 @@ impl EmitState {
                     let mut more: i64 = 1;
                     while ((more) as usize) < slots.len() {
                         parts.push(format!("'a{}", more));
-                        more += 1;
+                        more = unsafe { nikaia_std::proven::add::<i64>(more, 1) };
                     }
                 }
                 for g in generics.iter() { parts.push(emit_bounded(world, g)); }
@@ -276,7 +276,7 @@ impl EmitState {
                         while ((more) as usize) < slots.len() {
                             declared.push(format!("'a{}", more));
                             applied.push(format!("'a{}", more));
-                            more += 1;
+                            more = unsafe { nikaia_std::proven::add::<i64>(more, 1) };
                         }
                     }
                     for g in generics.iter() {
@@ -319,8 +319,8 @@ impl EmitState {
                     let s = *s;
                     segments.push(emit_text(world, s));
                 }
-                if self.is_std && alias.is_none() && segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "std" {
-                    out.push(&format!("#[allow(unused_imports)]\nuse nikaia_std::{};\n", *nikaia_std::index::get(&segments, 1)));
+                if self.is_std && alias.is_none() && segments.len() == 2 && *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } == "std" {
+                    out.push(&format!("#[allow(unused_imports)]\nuse nikaia_std::{};\n", *unsafe { nikaia_std::proven::read(&segments, (1) as usize) }));
                     return Ok(());
                 }
                 let joined = nikaia_std::block::Text::from(segments.join("::"));
@@ -437,24 +437,24 @@ impl EmitState {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
             let mut i: i64 = 0;
             for method in methods.iter() {
-                if (*nikaia_std::index::get(&wider, (i) as usize)).is_some() {
+                if (*unsafe { nikaia_std::proven::read(&wider, (i) as usize) }).is_some() {
                     self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, (match declared_by.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }).as_deref(), Some(public))?;
                 }
-                i += 1;
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             }
             out.push("}\n");
         }
         if has_trait { out.push(&format!("impl{} {} for {}{} {{\n", declares, trait_text, target_name, applied)); } else { out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied)); }
         let mut i: i64 = 0;
         for method in methods.iter() {
-            let w = match nikaia_std::index::get(&wider, (i) as usize) {
+            let w = match unsafe { nikaia_std::proven::read(&wider, (i) as usize) } {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             match w {
                 None => {
                     self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, (match declared_by.as_ref() {
@@ -559,7 +559,7 @@ impl EmitState {
     pub(crate) fn emit_foreign_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type) -> String {
         if self.writes_a_run(world, ty) {
             let mut element: String = String::from("u8");
-            if !ty.generics.is_empty() { element = self.emit_foreign_ty(world, walk, host, nikaia_std::index::get(&ty.generics, 0)); }
+            if !ty.generics.is_empty() { element = self.emit_foreign_ty(world, walk, host, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }); }
             return format!("*{} {}", pointing(ty.is_mut), element);
         }
         if ty.is_view {

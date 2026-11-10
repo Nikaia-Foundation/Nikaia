@@ -136,7 +136,7 @@ impl CheckState {
             self.facts.lent_reads.extend(owned);
             return true;
         }
-        if (names + owned.len() as i64) == 0 || (made.len() as i64 + owned.len() as i64) == 0 { return false; }
+        if (names + owned.len() as i64) == 0 || (unsafe { nikaia_std::proven::add::<i64>(made.len() as i64, owned.len() as i64) }) == 0 { return false; }
         for node in owned.iter() {
             let node = nikaia_std::num::value(node);
             self.facts.lent_reads.insert(node);
@@ -302,7 +302,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn narrowed_reads_given_back_in(&mut self, block: &Block) {
         if block.stmts.is_empty() { return; }
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Expr(value) => { self.narrowed_reads_given_back(value); },
             _ => { },
         }
@@ -368,8 +368,8 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn hands_over_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, ty: &Ty, to: &str, span: &Span) {
         if block.stmts.is_empty() { return; }
-        let read_at = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).span.start as i64;
-        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+        let read_at = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.span.start as i64;
+        match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Expr(value) => { self.hands_over_read_at(world, value, ty, to, span, read_at); },
             _ => { },
         }
@@ -499,7 +499,7 @@ impl CheckState {
         if (given.len() as i64) != found_parts.len() as i64 || (given.len() as i64) != wanted.len() as i64 { return false; }
         for (k, part) in found_parts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let whole = (*nikaia_std::index::get(&wanted, nikaia_std::index::at(k))).clone();
-            if a_text_literal_expr(nikaia_std::index::get(&given, nikaia_std::index::at(k))) || !(views_into_text(part, &whole) || self.a_view_of_what_does_not_copy(world, part, &whole)) { continue; }
+            if a_text_literal_expr(unsafe { nikaia_std::proven::read(&given, (k) as usize) }) || !(views_into_text(part, &whole) || self.a_view_of_what_does_not_copy(world, part, &whole)) { continue; }
             self.findings.push(check_refusal("NK1102", span, format!("`{}` expects `{}` to be `{}` here, but part {} of the tuple is `{}`.", key, name, want.text(), k, part.text()), vec![format!("This is a view: it points into a `{}` that something else owns.", whole.text()), format!("`{}` keeps its `{}` after the call returns, so its tuple needs a `{}` of its own.", key, name, whole.text())], Some(String::from("Write `.clone()` to copy it here."))));
             return true;
         }
@@ -522,26 +522,26 @@ impl CheckState {
         let mut at: i64 = 0;
         while at + offset < signature.params.len() as i64 && ((at) as usize) < expected.len() {
             let i: i64 = at;
-            at += 1;
-            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).0.to_string());
-            let generic = a_type_variable(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i + offset)).1);
-            let want = (*nikaia_std::index::get(&expected, nikaia_std::index::at(i))).clone();
-            let position: i64 = i + offset;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            let name = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&signature.params, (nikaia_std::proven::add::<i64>(i, offset)) as usize) }.0.to_string());
+            let generic = a_type_variable(&unsafe { nikaia_std::proven::read(&signature.params, (nikaia_std::proven::add::<i64>(i, offset)) as usize) }.1);
+            let want = (*unsafe { nikaia_std::proven::read(&expected, (i) as usize) }).clone();
+            let position: i64 = unsafe { nikaia_std::proven::add::<i64>(i, offset) };
             let lends = if own { lends_in_own(contract, position, &vec![world.library]) } else { lends_in(contract, position, &vec![world.library]) };
             let kept = !(lends || i == 0 && is_a_lookup(key));
             if i >= found.len() as i64 { continue; }
-            let found_here = check_arm_leaves_a_text_view(nikaia_std::index::get(&found, nikaia_std::index::at(i)));
+            let found_here = check_arm_leaves_a_text_view(unsafe { nikaia_std::proven::read(&found, (i) as usize) });
             if generic && kept && self.a_view_of_what_does_not_copy(world, &found_here, &want) {
                 self.a_view_kept_whole(key, &name, &found_here, &want, span);
                 continue;
             }
-            if generic && kept && i < given.len() as i64 && self.a_view_kept_in_a_tuple_part(world, key, &name, nikaia_std::index::get(&given, nikaia_std::index::at(i)), &found_here, &want, span) { continue; }
+            if generic && kept && i < given.len() as i64 && self.a_view_kept_in_a_tuple_part(world, key, &name, unsafe { nikaia_std::proven::read(&given, (i) as usize) }, &found_here, &want, span) { continue; }
             if !generic || !kept || !views_into_text(&found_here, &want) { continue; }
             let mut ty = found_here.clone();
-            if i < given.len() as i64 { ty = nikaia_std::index::or(self.text_literal(world, &want, nikaia_std::index::get(&given, nikaia_std::index::at(i)), true), || found_here.clone().into()); }
+            if i < given.len() as i64 { ty = nikaia_std::index::or(self.text_literal(world, &want, unsafe { nikaia_std::proven::read(&given, (i) as usize) }, true), || found_here.clone().into()); }
             if !views_into_text(&ty, &want) { continue; }
             let keeper = format!("`{}` keeps its `{}` after the call returns", key, name);
-            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(&&*nikaia_std::index::get(&given, nikaia_std::index::at(i))), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
+            if i < given.len() as i64 { self.expect_kept_asked(world, &ty, &want, Some(&&*unsafe { nikaia_std::proven::read(&given, (i) as usize) }), &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); } else { self.expect_kept_asked(world, &ty, &want, None, &keeper, span, "argument", &|found, wanted| { format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, wanted, found) }); }
         }
     }
 }
@@ -648,7 +648,7 @@ impl CheckState {
                 let mut i = pushed;
                 while i < self.findings.len() as i64 {
                     self.findings[nikaia_std::index::at(i)].span = Span { start: here.start, end: here.end };
-                    i += 1;
+                    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                 }
                 if refused { continue; }
             }

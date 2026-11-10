@@ -10,7 +10,7 @@ impl TermArena {
     pub fn empty() -> TermArena { TermArena { nodes: vec![] } }
     pub(crate) fn push(&mut self, node: SolverTerm) -> i64 {
         self.nodes.push(node);
-        self.nodes.len() as i64 - 1
+        unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
     pub fn at(&self, id: i64) -> SolverTerm { (*nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id))).clone() }
     pub fn boolean(&mut self, value: bool) -> i64 { self.push(SolverTerm::Bool(value)) }
@@ -295,7 +295,7 @@ impl TermArena {
             };
             self.nodes.push(moved);
         }
-        self.nodes.len() as i64 - 1
+        unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
     pub fn is_the_variable(&self, id: i64, name: &str) -> bool {
         match nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id)) {

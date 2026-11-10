@@ -33,48 +33,48 @@ pub fn differing_lines(expected: &str, produced: &str) -> String {
     #[allow(unused_mut)] let mut b: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut a = a;
     for line in produced.lines() { b.push(nikaia_std::block::Text::from(line.to_string())); }
     if same_lines(&a, &b) { return String::from("  the same lines; they differ in the line break at the end\n"); }
-    if (a.len() as i64 + 1) * (b.len() as i64 + 1) > 4000000 { return format!("  expected:\n{}\n  produced:\n{}\n", expected, produced); }
+    if (unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, 1) }) * (unsafe { nikaia_std::proven::add::<i64>(b.len() as i64, 1) }) > 4000000 { return format!("  expected:\n{}\n  produced:\n{}\n", expected, produced); }
     let mut common: Vec<Vec<i64>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for _i in 0..a.len() as i64 + 1 {
+    for _i in 0..unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, 1) } {
         let mut row: Vec<i64> = vec![];
-        for _j in 0..b.len() as i64 + 1 { row.push(0); }
+        for _j in 0..unsafe { nikaia_std::proven::add::<i64>(b.len() as i64, 1) } { row.push(0); }
         common.push(row);
     }
-    let mut i = a.len() as i64 - 1;
+    let mut i = unsafe { nikaia_std::proven::sub::<i64>(a.len() as i64, 1) };
     while i >= 0 {
-        let mut j = b.len() as i64 - 1;
+        let mut j = unsafe { nikaia_std::proven::sub::<i64>(b.len() as i64, 1) };
         while j >= 0 {
-            if *nikaia_std::index::get(&a, nikaia_std::index::at(i)) == *nikaia_std::index::get(&b, nikaia_std::index::at(j)) { { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&common, nikaia_std::index::at(i + 1)), nikaia_std::index::at(j + 1)) + 1; nikaia_std::index::set(&mut common[nikaia_std::index::at(i)], nikaia_std::index::at(j), __nikaia_stored); } } else if *nikaia_std::index::get(nikaia_std::index::get(&common, nikaia_std::index::at(i + 1)), nikaia_std::index::at(j)) >= *nikaia_std::index::get(nikaia_std::index::get(&common, nikaia_std::index::at(i)), nikaia_std::index::at(j + 1)) { { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&common, nikaia_std::index::at(i + 1)), nikaia_std::index::at(j)); nikaia_std::index::set(&mut common[nikaia_std::index::at(i)], nikaia_std::index::at(j), __nikaia_stored); } } else { { let __nikaia_stored = *nikaia_std::index::get(nikaia_std::index::get(&common, nikaia_std::index::at(i)), nikaia_std::index::at(j + 1)); nikaia_std::index::set(&mut common[nikaia_std::index::at(i)], nikaia_std::index::at(j), __nikaia_stored); } }
-            j -= 1;
+            if *unsafe { nikaia_std::proven::read(&a, (i) as usize) } == *unsafe { nikaia_std::proven::read(&b, (j) as usize) } { { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&common, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(j, 1) })) + 1; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut common, (i) as usize) }), nikaia_std::index::at(j), __nikaia_stored); } } else if *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&common, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }, nikaia_std::index::at(j)) >= *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&common, (i) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(j, 1) })) { { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&common, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }, nikaia_std::index::at(j)); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut common, (i) as usize) }), nikaia_std::index::at(j), __nikaia_stored); } } else { { let __nikaia_stored = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&common, (i) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(j, 1) })); nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut common, (i) as usize) }), nikaia_std::index::at(j), __nikaia_stored); } }
+            j = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
         }
-        i -= 1;
+        i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
     }
     let mut marks: Vec<scalar> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut a = a; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
     let mut x: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut a = a; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     let mut y: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut a = a; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     while ((x) as usize) < a.len() || ((y) as usize) < b.len() {
-        if ((x) as usize) < a.len() && ((y) as usize) < b.len() && *nikaia_std::index::get(&a, (x) as usize) == *nikaia_std::index::get(&b, (y) as usize) {
+        if ((x) as usize) < a.len() && ((y) as usize) < b.len() && *unsafe { nikaia_std::proven::read(&a, (x) as usize) } == *unsafe { nikaia_std::proven::read(&b, (y) as usize) } {
             marks.push(' ');
-            lines.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&a, (x) as usize)).to_string()));
-            x += 1;
-            y += 1;
-        } else if ((y) as usize) < b.len() && (((x) as usize) == a.len() || *nikaia_std::index::get(nikaia_std::index::get(&common, (x) as usize), (y + 1) as usize) >= *nikaia_std::index::get(nikaia_std::index::get(&common, (x + 1) as usize), (y) as usize)) {
+            lines.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&a, (x) as usize) }).to_string()));
+            x = unsafe { nikaia_std::proven::add::<i64>(x, 1) };
+            y = unsafe { nikaia_std::proven::add::<i64>(y, 1) };
+        } else if ((y) as usize) < b.len() && (((x) as usize) == a.len() || *nikaia_std::index::get(nikaia_std::index::get(&common, (x) as usize), (unsafe { nikaia_std::proven::add::<i64>(y, 1) }) as usize) >= *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&common, (nikaia_std::proven::add::<i64>(x, 1)) as usize) }, (y) as usize)) {
             marks.push('+');
-            lines.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&b, (y) as usize)).to_string()));
-            y += 1;
+            lines.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&b, (y) as usize) }).to_string()));
+            y = unsafe { nikaia_std::proven::add::<i64>(y, 1) };
         } else {
             marks.push('-');
             lines.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&a, (x) as usize)).to_string()));
-            x += 1;
+            x = unsafe { nikaia_std::proven::add::<i64>(x, 1) };
         }
     }
     let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
     let mut skipped = false;
     for at in 0..marks.len() as i64 {
         let mut near = false;
-        let from = if at >= 2 { at - 2 } else { 0 };
-        let to = if ((at + 3) as usize) < marks.len() { at + 3 } else { marks.len() as i64 };
+        let from = if at >= 2 { unsafe { nikaia_std::proven::sub::<i64>(at, 2) } } else { 0 };
+        let to = if ((unsafe { nikaia_std::proven::add::<i64>(at, 3) }) as usize) < marks.len() { unsafe { nikaia_std::proven::add::<i64>(at, 3) } } else { marks.len() as i64 };
         for k in from..to { if *nikaia_std::index::get(&marks, nikaia_std::index::at(k)) != ' ' { near = true; } }
         if !near {
             skipped = true;
@@ -84,9 +84,9 @@ pub fn differing_lines(expected: &str, produced: &str) -> String {
             out.push_str("  …\n");
             skipped = false;
         }
-        out.push(*nikaia_std::index::get(&marks, (at) as usize));
+        out.push(*unsafe { nikaia_std::proven::read(&marks, (at) as usize) });
         out.push(' ');
-        out.push_str(nikaia_std::index::get(&lines, (at) as usize));
+        out.push_str(unsafe { nikaia_std::proven::read(&lines, (at) as usize) });
         out.push('\n');
     }
     out
@@ -94,7 +94,7 @@ pub fn differing_lines(expected: &str, produced: &str) -> String {
 
 pub(crate) fn same_lines(a: &[String], b: &[String]) -> bool {
     if (a.len() as i64) != b.len() as i64 { return false; }
-    for k in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (k) as usize) != *nikaia_std::index::get(&b, (k) as usize) { return false; } }
+    for k in 0..a.len() as i64 { if *unsafe { nikaia_std::proven::read(&a, (k) as usize) } != *unsafe { nikaia_std::proven::read(&b, (k) as usize) } { return false; } }
     true
 }
 

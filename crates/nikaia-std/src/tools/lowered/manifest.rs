@@ -452,7 +452,7 @@ pub(crate) fn __nikaia_test_8() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
     if !(manifest.notes.len() == 1) { nikaia_std::abort::assertion_failed("assert(manifest.notes.len() == 1)", None, &[("manifest.notes.len()", (&&nikaia_std::abort::Operand(&(manifest.notes.len() as i64))).shown()), ]) };
-    let note = nikaia_std::index::get(&manifest.notes, 0);
+    let note = unsafe { nikaia_std::proven::read(&manifest.notes, (0) as usize) };
     if !(note.contains("cleanup-deadline")) { nikaia_std::abort::assertion_failed("assert(note.contains(\"cleanup-deadline\"))", None, &[]) };
     if !(note.contains("nikaia-runtime.toml")) { nikaia_std::abort::assertion_failed("assert(note.contains(\"nikaia-runtime.toml\"))", None, &[]) };
     if !(note.contains("no longer reads this key")) { nikaia_std::abort::assertion_failed("assert(note.contains(\"no longer reads this key\"))", None, &[]) };

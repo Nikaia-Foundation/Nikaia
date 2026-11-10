@@ -27,7 +27,7 @@ pub fn unpacked(body: &mut Block, unpacks: &[(winnow_grammar::Symbol, Vec<winnow
     for u in unpacks.iter() {
         let open = Stmt::Let { names: u.1.copy_owned(), shape: u.2.copy_owned(), mutable: false, deep: false, ty: None, value: Expr::Variable(u.0, node_id::NodeId::parsed()) };
         body.stmts.insert(nikaia_std::count::of(at), Spanned { node: open, span: u.3, doc: None, attributes: vec![] });
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 

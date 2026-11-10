@@ -46,7 +46,7 @@ impl EmitState {
                 Expr::Variable(name, _) => {
                     let name = *name;
                     let copied_out = self.facts.copied_views.contains(&at) && !self.facts.copied_args.contains(&at);
-                    self.emit_expr_narrowed(out, &EmitOut { buf: emit_text(world, name), entries: vec![] }, if copied_out { how + 64 } else { how }, false);
+                    self.emit_expr_narrowed(out, &EmitOut { buf: emit_text(world, name), entries: vec![], unsafe_depth: 0 }, if copied_out { how + 64 } else { how }, false);
                     return Ok(());
                 },
                 Expr::Field { .. } => {
@@ -465,9 +465,11 @@ impl EmitState {
         }
         if negation && self.proven_negations.contains_key(&node_key(node)) {
             let ty = nikaia_std::block::Text::from(nikaia_std::index::or(self.proven_negations.get(&node_key(node)), || "").to_string());
-            out.push(&format!("unsafe {{ nikaia_std::proven::neg::<{}>(", ty));
+            out.open_unsafe();
+            out.push(&format!("nikaia_std::proven::neg::<{}>(", ty));
             self.emit_expr(world, walk, out, host, operand, depth, flow, scope)?;
-            out.push(") }");
+            out.push(")");
+            out.close_unsafe();
             return Ok(());
         }
         out.push(&unary_op(&op));

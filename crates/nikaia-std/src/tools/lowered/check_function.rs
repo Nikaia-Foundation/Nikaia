@@ -12,8 +12,8 @@ pub(crate) fn check_function_walks_the_fields_of(here: &ParsedView<'_, '_, '_, '
         match expr {
             Expr::Path(segments, _) => {
                 if segments.len() == 2 {
-                    let ty = here.text(*nikaia_std::index::get(&segments, 0));
-                    let member = here.text(*nikaia_std::index::get(&segments, 1));
+                    let ty = here.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
+                    let member = here.text(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
                     if ty == parameter && (member == shape || member == "attribute" || member == "attributes") { return true; }
                 }
             },
@@ -42,8 +42,8 @@ pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '
             Expr::Path(segments, at) => {
                 let at = *at;
                 if segments.len() == 2 && !called.contains(&at.get()) {
-                    let member = here.text(*nikaia_std::index::get(&segments, 1));
-                    if here.text(*nikaia_std::index::get(&segments, 0)) == parameter && (member == "kind" || member == "name") { return true; }
+                    let member = here.text(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
+                    if here.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == parameter && (member == "kind" || member == "name") { return true; }
                 }
             },
             _ => { },
@@ -174,7 +174,7 @@ pub(crate) fn check_function_arms_end_in(arms: &[MatchArm], grows: bool) -> bool
 
 pub(crate) fn check_function_block_ends_in(block: &Block, grows: bool) -> bool {
     if block.stmts.is_empty() { return false; }
-    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) };
     match &last.node {
         Stmt::Expr(value) => check_function_ends_in(value, grows),
         _ => false,
@@ -300,13 +300,13 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
             None => None,
         }, || Ty::Unknown);
-        let at = nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).span;
-        match &nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).node {
+        let at = nikaia_std::index::get(&action.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })).span;
+        match &unsafe { nikaia_std::proven::read(&action.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
             Stmt::Expr(value) => { tail = nikaia_std::index::or(state.text_literal(world, &wanted, value, true), || tail.into()); },
             _ => { },
         }
         state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &|found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
-        match &nikaia_std::index::get(&action.stmts, nikaia_std::index::at(count - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&action.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
             Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, &tail, &wanted, value, &Span { start: at.start, end: at.end }); },
             _ => { },
         }
@@ -316,13 +316,13 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
 
 pub(crate) fn check_function_first_span(body: &Block) -> Span {
     if body.stmts.is_empty() { return Span::nowhere(); }
-    let first = nikaia_std::index::get(&body.stmts, 0).span;
+    let first = unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span;
     Span { start: first.start, end: first.end }
 }
 
 pub(crate) fn check_function_last_span(body: &Block) -> Option<Span> {
     if body.stmts.is_empty() { return None; }
-    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).span;
+    let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.span;
     Some(Span { start: last.start, end: last.end })
 }
 
@@ -330,7 +330,7 @@ pub(crate) fn check_function_is_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nul
 
 pub(crate) fn check_function_tail_hands_nothing(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
-    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) };
     match &last.node {
         Stmt::Expr(value) => check_function_end_hands_nothing(value),
         _ => false,
@@ -351,7 +351,7 @@ pub(crate) fn check_function_end_hands_nothing(expr: &Expr) -> bool {
 
 pub(crate) fn check_function_tail_is_a_value(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
-    let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) };
     match &last.node {
         Stmt::Expr(value) => check_function_every_end_is_a_value(value),
         Stmt::Return(_) => true,
@@ -444,7 +444,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
         if !arg.mutable { local.without_mut = Some(CheckImmutable { at: Span { start: arg.span.start, end: arg.span.end }, kind: CheckKind::Parameter, over: String::from("") }); }
         local.changing = arg.mutable;
         frame.push(local);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     for option in config.iter() { check_defaults_a_computed_default(state, world, host, option); }
     let lowered = check_function_options_lowered(world, key);
@@ -477,7 +477,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
     }, || Ty::Unknown);
-    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
     let at = Span { start: last.span.start, end: last.span.end };
     match &last.node {
         Stmt::Expr(value) => {
@@ -509,7 +509,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: &Ty, tail: Ty, lending: bool, tail_view: bool, span: &Span) {
-    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1) }));
     let nullable = check_function_is_nullable(expected);
     let tail_nullable = check_function_is_nullable(&tail) && !tail.is_a_view();
     let mut shown = tail;
@@ -554,7 +554,7 @@ pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block,
     let want = expected.text();
     if body.stmts.is_empty() && !is_extern { state.findings.push(check_refusal("NK1104", at, format!("This function returns `()`, but it's declared to return `{}`.", want), vec![String::from("Its body is empty, so it hands nothing back.")], Some(format!("Write the `{}` it returns as the body's last expression, or remove `-> {}`.", want, want)))); }
     if !body.stmts.is_empty() && ends {
-        let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+        let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
         match &last.node {
             Stmt::Expr(value) => { if check_function_end_hands_nothing(value) { state.findings.push(check_refusal("NK1104", &last.span, format!("This function returns `()` where this `if` is not taken, but it's declared to return `{}`.", want), vec![String::from("An `if` without `else` hands nothing back when its condition is false, and nothing comes after it.")], Some(format!("Add an `else` that hands back a `{}`, or a `return` after the `if`.", want)))); } },
             _ => { },
@@ -596,7 +596,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
             state.a_lambda_the_promise_names(world, &key, &nikaia_std::block::Text::from(world.words.resolve(named).to_string()), args, &first);
         }
     }
-    if !body.stmts.is_empty() { state.nameable(&own_name, &nikaia_std::index::get(&body.stmts, 0).span, "a function"); }
+    if !body.stmts.is_empty() { state.nameable(&own_name, &unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span, "a function"); }
     let outer_current: Option<String> = match state.current.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

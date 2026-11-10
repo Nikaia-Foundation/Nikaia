@@ -73,7 +73,7 @@ impl CheckState {
                 for ask in member.1.asks.iter() {
                     if ask.2 {
                         let mut place = beside.len() as i64;
-                        while place > 0 && nikaia_std::index::get(&beside, nikaia_std::index::at(place - 1)).1.start > ask.1.start { place = place - 1; }
+                        while place > 0 && unsafe { nikaia_std::proven::read(&beside, (nikaia_std::proven::sub::<i64>(place, 1)) as usize) }.1.start > ask.1.start { place = unsafe { nikaia_std::proven::sub::<i64>(place, 1) }; }
                         beside.insert(nikaia_std::count::of(place), (nikaia_std::block::Text::from(ask.0.to_string()), ask.1.clone()));
                     } else { indexed = true; }
                 }
@@ -91,12 +91,12 @@ impl CheckState {
                         Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
                     }, || "".into());
-                    self.findings.push(a_map_number_asked_for_two_types(&head.name, keys, &other, &nikaia_std::index::get(&types, 0).0, &nikaia_std::index::get(&types, 1).0, &nikaia_std::index::get(&types, 1).1));
-                } else { self.findings.push(a_number_asked_for_two_types(&head.name, head.element, &nikaia_std::index::get(&types, 0).0, &nikaia_std::index::get(&types, 1).0, &nikaia_std::index::get(&types, 1).1)); }
+                    self.findings.push(a_map_number_asked_for_two_types(&head.name, keys, &other, &unsafe { nikaia_std::proven::read(&types, (0) as usize) }.0, &unsafe { nikaia_std::proven::read(&types, (1) as usize) }.0, &unsafe { nikaia_std::proven::read(&types, (1) as usize) }.1));
+                } else { self.findings.push(a_number_asked_for_two_types(&head.name, head.element, &unsafe { nikaia_std::proven::read(&types, (0) as usize) }.0, &unsafe { nikaia_std::proven::read(&types, (1) as usize) }.0, &unsafe { nikaia_std::proven::read(&types, (1) as usize) }.1)); }
                 continue;
             }
             let mut decided: Option<String> = None;
-            if !types.is_empty() { decided = Some(nikaia_std::block::Text::from(nikaia_std::index::get(&types, 0).0.to_string())); } else if indexed { decided = Some(String::from("i64")); }
+            if !types.is_empty() { decided = Some(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&types, (0) as usize) }.0.to_string())); } else if indexed { decided = Some(String::from("i64")); }
             let mut held: String = String::from("i32");
             if decided.is_some() { held = nikaia_std::block::Text::from(nikaia_std::index::or(decided.as_deref(), || "").to_string()); } else {
                 for member in members.iter() {
@@ -124,7 +124,7 @@ impl CheckState {
                 for member in members.iter() {
                     for derived in member.1.derived.iter() {
                         let mut reported = false;
-                        for at in before..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).span.start == derived.1.start && nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).span.end == derived.1.end { reported = true; } }
+                        for at in before..self.findings.len() as i64 { if nikaia_std::index::get(&self.findings, nikaia_std::index::at(at)).span.start == derived.1.start && unsafe { nikaia_std::proven::read(&self.findings, (at) as usize) }.span.end == derived.1.end { reported = true; } }
                         if !reported {
                             self.a_number_not_fitting(&derived.0, false, &held, &derived.1, match why.as_ref() {
                                 Some(__nikaia_it) => Some(__nikaia_it.clone()),

@@ -23,8 +23,8 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     let mut ks: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for t in sorted.iter() {
         let t = *t;
-        let last = cols.len() as i64 - 1;
-        if !cols.is_empty() && *nikaia_std::index::get(&cols, nikaia_std::index::at(last)) == t.col { { let __nikaia_stored = match (*nikaia_std::index::get(&ks, nikaia_std::index::at(last))).checked_add(t.k) { Some(__nikaia_value) => __nikaia_value, None => return None }; nikaia_std::index::set(&mut ks, nikaia_std::index::at(last), __nikaia_stored); } } else {
+        let last = unsafe { nikaia_std::proven::sub::<i64>(cols.len() as i64, 1) };
+        if !cols.is_empty() && *unsafe { nikaia_std::proven::read(&cols, (last) as usize) } == t.col { { let __nikaia_stored = match (*nikaia_std::index::get(&ks, nikaia_std::index::at(last))).checked_add(t.k) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut ks, (last) as usize, __nikaia_stored) }; } } else {
             cols.push(t.col);
             ks.push(t.k);
         }
@@ -33,10 +33,10 @@ pub(crate) fn sv_row_of(terms: Vec<SvTerm>, constant: i64) -> Option<SvRow> {
     let mut i: i64 = 0;
     while ((i) as usize) < cols.len() {
         if *nikaia_std::index::get(&ks, (i) as usize) != 0 {
-            row.cols.push(*nikaia_std::index::get(&cols, (i) as usize));
-            row.ks.push(*nikaia_std::index::get(&ks, (i) as usize));
+            row.cols.push(*unsafe { nikaia_std::proven::read(&cols, (i) as usize) });
+            row.ks.push(*unsafe { nikaia_std::proven::read(&ks, (i) as usize) });
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Some(row)
 }
@@ -59,19 +59,19 @@ pub(crate) fn sv_row_sum(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvRow> 
     while ((i) as usize) < r.cols.len() || ((j) as usize) < s.cols.len() {
         let mut col: u32 = 0u32;
         let mut k: i64 = 0;
-        if ((j) as usize) >= s.cols.len() || ((i) as usize) < r.cols.len() && *nikaia_std::index::get(&r.cols, (i) as usize) < *nikaia_std::index::get(&s.cols, (j) as usize) {
-            col = *nikaia_std::index::get(&r.cols, (i) as usize);
+        if ((j) as usize) >= s.cols.len() || ((i) as usize) < r.cols.len() && *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } < *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } {
+            col = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) };
             k = match a.checked_mul(*nikaia_std::index::get(&r.ks, (i) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            i += 1;
-        } else if ((i) as usize) >= r.cols.len() || *nikaia_std::index::get(&s.cols, (j) as usize) < *nikaia_std::index::get(&r.cols, (i) as usize) {
-            col = *nikaia_std::index::get(&s.cols, (j) as usize);
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        } else if ((i) as usize) >= r.cols.len() || *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } < *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } {
+            col = *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) };
             k = match b.checked_mul(*nikaia_std::index::get(&s.ks, (j) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            j += 1;
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         } else {
-            col = *nikaia_std::index::get(&r.cols, (i) as usize);
+            col = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) };
             k = match sv_mul_add(a, *nikaia_std::index::get(&r.ks, (i) as usize), b, *nikaia_std::index::get(&s.ks, (j) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            i += 1;
-            j += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
         if k != 0 {
             out.cols.push(col);
@@ -124,18 +124,18 @@ pub fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < r.cols.len() && ((j) as usize) < s.cols.len() {
-        if *nikaia_std::index::get(&r.cols, (i) as usize) < *nikaia_std::index::get(&s.cols, (j) as usize) { i += 1; } else if *nikaia_std::index::get(&s.cols, (j) as usize) < *nikaia_std::index::get(&r.cols, (i) as usize) { j += 1; } else {
+        if *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } < *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } { i = unsafe { nikaia_std::proven::add::<i64>(i, 1) }; } else if *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } < *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } { j = unsafe { nikaia_std::proven::add::<i64>(j, 1) }; } else {
             let x_up = *nikaia_std::index::get(&r.ks, (i) as usize) > 0;
             let y_up = *nikaia_std::index::get(&s.ks, (j) as usize) > 0;
             if !opposite || x_up != y_up {
-                let cost = sv_column_cost(*nikaia_std::index::get(&r.ks, (i) as usize), *nikaia_std::index::get(&s.ks, (j) as usize));
+                let cost = sv_column_cost(*unsafe { nikaia_std::proven::read(&r.ks, (i) as usize) }, *unsafe { nikaia_std::proven::read(&s.ks, (j) as usize) });
                 if cost.is_some() && (best.is_none() || nikaia_std::index::or(cost, || 0) < best_cost) {
-                    best = Some(*nikaia_std::index::get(&r.cols, (i) as usize));
+                    best = Some(*unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) });
                     best_cost = nikaia_std::index::or(cost, || 0);
                 }
             }
-            i += 1;
-            j += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
     }
     best
@@ -145,11 +145,11 @@ pub fn sv_row_eval(r: &SvRow, values: &[SvRat]) -> Option<SvRat> {
     let mut sum = sv_int(r.constant);
     let mut i: i64 = 0;
     while ((i) as usize) < r.cols.len() {
-        let at = *nikaia_std::index::get(&r.cols, (i) as usize) as i64;
+        let at = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } as i64;
         if at >= values.len() as i64 { return None; }
         let term = match sv_rat_mul(&sv_int(*nikaia_std::index::get(&r.ks, (i) as usize)), nikaia_std::index::get(&values, nikaia_std::index::at(at))) { Some(__nikaia_value) => __nikaia_value, None => return None };
         sum = match sv_rat_add(&sum, &term) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Some(sum)
 }
@@ -164,8 +164,8 @@ pub(crate) fn sv_row_text(r: &SvRow) -> String {
         let size = nikaia_std::index::or(k.checked_abs(), || 0);
         let sign = if k < 0 { if i == 0 { "-" } else { " - " } } else if i == 0 { "" } else { " + " };
         let factor = if size == 1 { String::from("") } else { format!("{}·", size) };
-        out.push_str(&format!("{}{}x{}", sign, factor, *nikaia_std::index::get(&r.cols, (i) as usize)));
-        i += 1;
+        out.push_str(&format!("{}{}x{}", sign, factor, *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) }));
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if r.cols.is_empty() { return format!("{}", r.constant); }
     if r.constant > 0 { out.push_str(&format!(" + {}", r.constant)); } else if r.constant < 0 { out.push_str(&format!(" - {}", nikaia_std::index::or(r.constant.checked_abs(), || 0))); }

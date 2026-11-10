@@ -353,6 +353,9 @@ pub fn emit_std_against(
     // and the committed text must not depend on where it was lowered.
     let build = Build {
         target: Target::X86_64Linux,
+        // **The D26 default** ([ADR-306](../../docs/specification/adr/adr-306.md) D27).
+        bounds: crate::bounds::BoundsChecks::Removed,
+        overflow: crate::bounds::OverflowChecks::Removed,
         ..Build::default()
     };
     let mut library = std_ledger().clone();

@@ -71,12 +71,12 @@ impl EmitState {
         let mut reads: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         for index in 0..args.len() as i64 {
-            let arg = nikaia_std::index::get(&args, (index) as usize);
+            let arg = unsafe { nikaia_std::proven::read(&args, (index) as usize) };
             let param = nikaia_std::block::Text::from(world.words.resolve(arg.name).to_string());
             let local = escaped_name(&param);
             let ty = main_written_type(&arg.ty, world.words);
             let mut rust: String = String::from("_");
-            if ((index) as usize) < types.len() { rust = nikaia_std::block::Text::from((*nikaia_std::index::get(&types, (index) as usize)).to_string()); }
+            if ((index) as usize) < types.len() { rust = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&types, (index) as usize) }).to_string()); }
             let mut kind: &'static str = "Subject";
             let mut read: &'static str = "subject";
             if words_vec(&arg.ty, world.words) {
@@ -90,18 +90,18 @@ impl EmitState {
             if arg.mutable {
                 binding = "mut ";
                 passed.push(format!("&mut {}", local));
-            } else if ((index) as usize) < passing.len() { passed.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&passing, (index) as usize)).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
+            } else if ((index) as usize) < passing.len() { passed.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&passing, (index) as usize) }).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
             reads = format!("{}    let {}{}: {} = __nikaia_words.{}({});\n", reads, binding, local, rust, read, index);
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: \"\", pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, main_claims_of(&checks, &param)));
         }
         for k in 0..config.len() as i64 {
-            let option = nikaia_std::index::get(&config, (k) as usize);
-            let at = args.len() as i64 + k;
+            let option = unsafe { nikaia_std::proven::read(&config, (k) as usize) };
+            let at = unsafe { nikaia_std::proven::add::<i64>(args.len() as i64, k) };
             let param = nikaia_std::block::Text::from(world.words.resolve(option.name).to_string());
             let local = escaped_name(&param);
             let ty = main_written_type(&option.ty, world.words);
             let mut rust: String = String::from("_");
-            if at < types.len() as i64 { rust = nikaia_std::block::Text::from((*nikaia_std::index::get(&types, nikaia_std::index::at(at))).to_string()); }
+            if at < types.len() as i64 { rust = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&types, (at) as usize) }).to_string()); }
             let mut default: String = String::from("");
             let mut shown: String = String::from("");
             for declared in options.iter() {
@@ -114,7 +114,7 @@ impl EmitState {
             let mut kind: &'static str = "Option";
             if ty == "bool" { kind = "Flag"; }
             reads = format!("{}    let {}: {} = match __nikaia_words.option({}) {{ Some(__nikaia_word) => __nikaia_word, None => {} }};\n", reads, local, rust, at, default);
-            if at < passing.len() as i64 { passed.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&passing, nikaia_std::index::at(at))).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
+            if at < passing.len() as i64 { passed.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&passing, (at) as usize) }).replace("{}", &local))); } else { passed.push(nikaia_std::block::Text::from(local.to_string())); }
             params.push(format!("nikaia_std::cli::Param {{ name: {}, ty: {}, kind: nikaia_std::cli::Kind::{}, default: {}, pre: &[{}] }}", rust_string(&param), rust_string(&ty), kind, rust_string(&shown), main_claims_of(&checks, &param)));
         }
         let mut text: String = format!("    static __NIKAIA_INTERFACE: nikaia_std::cli::Interface = nikaia_std::cli::Interface {{ about: {}, params: &[{}] }};\n", rust_string(about), nikaia_std::block::Text::from(params.join(", "))); #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
