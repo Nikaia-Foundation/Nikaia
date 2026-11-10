@@ -215,11 +215,15 @@ impl EmitState {
         let loaded = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.simd_loads, &(node_key(func))), || 0);
         if loaded != 0 && args.len() == 2 && self.proven_indices.contains(&node_key(func)) {
             let width: String = if loaded < 0 { String::from("{ simd::WIDTH }") } else { format!("{}", loaded) };
-            out.push(&format!("simd::load_proven(unsafe {{ nikaia_std::proven::array::<u8, {}>(&", width));
+            out.push("simd::load_proven(");
+            out.open_unsafe();
+            out.push(&format!("nikaia_std::proven::array::<u8, {}>(&", width));
             self.emit_core_nested(world, walk, out, host, nikaia_std::index::get(&args, 0), 255, depth, flow, scope)?;
             out.push(", (");
             if only_literals(nikaia_std::index::get(&args, 1)) { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 1), depth, flow, scope)?; }
-            out.push(") as usize) })");
+            out.push(") as usize)");
+            out.close_unsafe();
+            out.push(")");
             return Ok(());
         }
         let callee = self.emit_call_checked_callee(world, func);
@@ -407,7 +411,7 @@ impl EmitState {
                 let fails = kept.1;
                 let how = nikaia_std::index::or(self.facts.narrowed_reads.get(&key), || -1);
                 if how >= 0 {
-                    self.emit_expr_narrowed(out, &EmitOut { buf: escaped_name(&emit_text(world, name)), entries: vec![] }, how, false);
+                    self.emit_expr_narrowed(out, &EmitOut { buf: escaped_name(&emit_text(world, name)), entries: vec![], unsafe_depth: 0 }, how, false);
                     out.push("(");
                 } else { out.push(&format!("{}(", escaped_name(&emit_text(world, name)))); }
                 let mut at = 0;
@@ -1126,11 +1130,15 @@ impl EmitState {
         if width > 0 && args.len() == 1 && self.proven_indices.contains(&node_key(receiver)) {
             let kind = if width == 4 { "u32" } else { "u64" };
             let order = if name.ends_with("_be") { "be" } else { "le" };
-            out.push(&format!("{}::from_{}_bytes(*unsafe {{ nikaia_std::proven::array::<u8, {}>(&", kind, order, width));
+            out.push(&format!("{}::from_{}_bytes(*", kind, order));
+            out.open_unsafe();
+            out.push(&format!("nikaia_std::proven::array::<u8, {}>(&", width));
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
             out.push(", (");
             if only_literals(nikaia_std::index::get(&args, 0)) { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?; }
-            out.push(") as usize) })");
+            out.push(") as usize)");
+            out.close_unsafe();
+            out.push(")");
             return Ok(());
         }
         if self.emit_core_a_field_call(world, walk, out, host, receiver, false, method, args, depth, flow, scope)? { return Ok(()); }
@@ -1212,8 +1220,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90196| {
-        let (i, word) = __nikaia_tuple90196;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple90412| {
+        let (i, word) = __nikaia_tuple90412;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *nikaia_std::index::get(&copies, 0)); }

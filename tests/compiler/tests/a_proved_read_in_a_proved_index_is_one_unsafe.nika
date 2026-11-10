@@ -1,0 +1,47 @@
+// ADR-306 D26: with both remove-*-checks on by default, a proved read whose
+// index is itself a proved read, or a proved addition, is written inside one
+// `unsafe` block, not one in another: `rustc` calls the inner one
+// unnecessary, and its warning shows in what the program prints. Off, no
+// `unsafe` is written at all.
+use std::fs
+use std::process
+
+// The running `nikaia`: the nearest ancestor whose executable has that name
+// (#1305, as `solver_run`'s).
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done"]).stdout.trim().clone()
+    if exe.len() == 0 {
+        eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+        process::exit(2)
+    }
+    return exe
+}
+
+fn lowered(tmp: String, words: Vec[String]) -> String throws {
+    let mut args = words.clone()
+    args.push("lower")
+    args.push("p.nika")
+    args.push("-o")
+    args.push("p.rs")
+    let done = process::run(toolchain(), args; dir: tmp.clone())
+    if done.stdout.contains("Lowered p.nika") == false { println(done.stderr) }
+    return fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+}
+
+fn counted(said: String, rust: String) throws {
+    println(f"{said}: {rust.matches("unsafe {").count()} unsafe, {rust.matches("nikaia_std::proven::read(").count()} proven::read, {rust.matches("nikaia_std::proven::add::<").count()} proven::add, {rust.matches("nikaia_std::proven::write(").count()} proven::write")
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, "fn masked(t: ref Vec[i64], b: ref Vec[i64], i: i64) -> i64 {\n    if i >= 0 && i < b.len() && t.len() == 4 {\n        return t[b[i] & 3]\n    }\n    return 0\n}\n\nfn next(a: ref Vec[i64], i: i64) -> i64 {\n    if i >= 0 && i < a.len() - 1 {\n        return a[i + 1]\n    }\n    return 0\n}\n\nfn put(mut t: Vec[i64], b: ref Vec[i64], i: i64) {\n    if i >= 0 && i < b.len() && t.len() == 4 {\n        t[b[i] & 3] = 7\n    }\n}\n\nfn main() throws {\n    let mut t = [10, 20, 30, 40]\n    let b = [2, 0, 1]\n    put(t, b, 2)\n    println(f\"{masked(t, b, 0)} {masked(t, b, 2)} {next(t, 1)}\")\n}\n")
+    counted("named nothing", lowered(tmp.clone(), []))
+    counted("off", lowered(tmp.clone(), ["--optimization=remove-bounds-checks:off,remove-overflow-checks:off"]))
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    println(ran.stdout.trim())
+    println(f"rustc warned: {ran.stderr.contains("warning")}")
+    let kept = process::run(toolchain(), ["--optimization=remove-bounds-checks:off,remove-overflow-checks:off", "run", "p.nika"]; dir: tmp.clone())
+    println(kept.stdout.trim())
+    println(f"rustc warned: {kept.stderr.contains("warning")}")
+    process::run("rm", ["-rf", tmp])
+}

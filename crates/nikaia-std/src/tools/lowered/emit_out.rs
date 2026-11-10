@@ -28,11 +28,20 @@ pub fn emit_out_placed(entries: &mut Vec<EmitMapEntry>, by: i64, unit: i64) {
 pub struct EmitOut {
     pub buf: String,
     pub entries: Vec<EmitMapEntry>,
+    pub unsafe_depth: i64,
 }
 
 impl EmitOut {
-    pub fn empty() -> EmitOut { EmitOut { buf: String::from(""), entries: vec![] } }
+    pub fn empty() -> EmitOut { EmitOut { buf: String::from(""), entries: vec![], unsafe_depth: 0 } }
     pub fn push(&mut self, text: &str) { self.buf.push_str(text); }
+    pub fn open_unsafe(&mut self) {
+        if self.unsafe_depth == 0 { self.buf.push_str("unsafe { "); }
+        self.unsafe_depth += 1;
+    }
+    pub fn close_unsafe(&mut self) {
+        self.unsafe_depth -= 1;
+        if self.unsafe_depth == 0 { self.buf.push_str(" }"); }
+    }
     pub fn mark(&self) -> i64 { self.buf.len() as i64 }
     pub fn record(&mut self, span: &Span, start: i64) {
         let end = self.buf.len() as i64;

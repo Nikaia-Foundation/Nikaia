@@ -1,0 +1,6 @@
+named nothing: 4 unsafe, 4 proven::read, 1 proven::add, 1 proven::write
+off: 0 unsafe, 0 proven::read, 0 proven::add, 0 proven::write
+30 7 30
+rustc warned: false
+30 7 30
+rustc warned: false

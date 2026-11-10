@@ -880,10 +880,12 @@ impl EmitState {
         // **A position proved inside is written without its check** (ADR-306
         // D5), as it is read.
         if self.proven_indices.contains(node_key(base)) && self.map_key(index, true) == null {
+            out.push("; ")
+            out.open_unsafe()
             if lent_on {
-                out.push("; unsafe { nikaia_std::proven::write(&mut *")
+                out.push("nikaia_std::proven::write(&mut *")
             } else {
-                out.push("; unsafe { nikaia_std::proven::write(&mut ")
+                out.push("nikaia_std::proven::write(&mut ")
             }
             self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
             out.push(", (")
@@ -892,7 +894,9 @@ impl EmitState {
             } else {
                 self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
             }
-            out.push(") as usize, __nikaia_stored) }; }")
+            out.push(") as usize, __nikaia_stored)")
+            out.close_unsafe()
+            out.push("; }")
             return
         }
         if lent_on {
@@ -999,20 +1003,26 @@ impl EmitState {
                 let arithmetic = self.proven_arithmetic.get(at)
                 let wide = given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul
                 if arithmetic != null && wide {
-                    out.push(f"unsafe {{ {emit_flow_proven(given)}::<{arithmetic ?? ""}>(")
+                    out.open_unsafe()
+                    out.push(f"{emit_flow_proven(given)}::<{arithmetic ?? ""}>(")
                     self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)
-                    out.push(", __nikaia_stored) }")
+                    out.push(", __nikaia_stored)")
+                    out.close_unsafe()
                 } else {
                     self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)
                     out.push(f" {binary_op(given)} __nikaia_stored")
                 }
+                out.push("; ")
+                out.open_unsafe()
                 if lent_on {
-                    out.push("; unsafe { nikaia_std::proven::write(&mut *")
+                    out.push("nikaia_std::proven::write(&mut *")
                 } else {
-                    out.push("; unsafe { nikaia_std::proven::write(&mut ")
+                    out.push("nikaia_std::proven::write(&mut ")
                 }
                 self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
-                out.push(", __nikaia_at, __nikaia_stored) }; }")
+                out.push(", __nikaia_at, __nikaia_stored)")
+                out.close_unsafe()
+                out.push("; }")
                 return true
             },
             else => return false,
@@ -1021,9 +1031,12 @@ impl EmitState {
 
     /// The slot read once, unchecked.
     fn emit_stmt_proven_read[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, base: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        out.push("*unsafe { nikaia_std::proven::read(&")
+        out.push("*")
+        out.open_unsafe()
+        out.push("nikaia_std::proven::read(&")
         self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)
-        out.push(", __nikaia_at) }")
+        out.push(", __nikaia_at)")
+        out.close_unsafe()
     }
 
     /// `x += d` proved to stay inside its type (#387) is written as the
@@ -1045,11 +1058,15 @@ impl EmitState {
             return false
         }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)
-        out.push(f" = unsafe {{ {emit_flow_proven(given)}::<{ty}>(")
+        out.push(" = ")
+        out.open_unsafe()
+        out.push(f"{emit_flow_proven(given)}::<{ty}>(")
         self.emit_expr(world, walk, out, host, target, depth, flow, scope)
         out.push(", ")
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)
-        out.push(") };")
+        out.push(")")
+        out.close_unsafe()
+        out.push(";")
         return true
     }
 

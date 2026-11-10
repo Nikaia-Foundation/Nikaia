@@ -68,7 +68,7 @@ impl EmitState {
                     // is wanted, is copied out** (ADR-387 D1, #1291): a
                     // `let` of a map's read binds `Option<&T>` below.
                     let copied_out = self.facts.copied_views.contains(at) && !self.facts.copied_args.contains(at)
-                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [] }, if copied_out { how + 64 } else { how }, false)
+                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [], unsafe_depth: 0 }, if copied_out { how + 64 } else { how }, false)
                     return
                 },
                 // **A path of fields, as written, and then unwrapped**.
@@ -683,9 +683,11 @@ impl EmitState {
         // without its check, by `proven-index` (ADR-378 D2).
         if negation && self.proven_negations.contains_key(node_key(node)) {
             let ty = (self.proven_negations.get(node_key(node)) ?? "").clone()
-            out.push(f"unsafe {{ nikaia_std::proven::neg::<{ty}>(")
+            out.open_unsafe()
+            out.push(f"nikaia_std::proven::neg::<{ty}>(")
             self.emit_expr(world, walk, out, host, operand, depth, flow, scope)
-            out.push(") }")
+            out.push(")")
+            out.close_unsafe()
             return
         }
         out.push(unary_op(op))

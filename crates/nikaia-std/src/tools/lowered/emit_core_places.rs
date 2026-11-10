@@ -321,11 +321,15 @@ impl EmitState {
                 },
                 _ => { },
             }
-            if lent_on { out.push("(*unsafe { nikaia_std::proven::slot(&mut *"); } else { out.push("(*unsafe { nikaia_std::proven::slot(&mut "); }
+            out.push("(*");
+            out.open_unsafe();
+            if lent_on { out.push("nikaia_std::proven::slot(&mut *"); } else { out.push("nikaia_std::proven::slot(&mut "); }
             self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
             out.push(", (");
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
-            out.push(") as usize) })");
+            out.push(") as usize)");
+            out.close_unsafe();
+            out.push(")");
             return Ok(());
         }
         self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;

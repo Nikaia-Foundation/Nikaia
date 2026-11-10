@@ -382,19 +382,23 @@ impl EmitState {
             let ty = nikaia_std::block::Text::from(nikaia_std::index::or(self.proven_arithmetic.get(&site), || "").to_string());
             if op == BinaryOp::Shl || op == BinaryOp::Shr {
                 let shift = if op == BinaryOp::Shl { "nikaia_std::proven::shl" } else { "nikaia_std::proven::shr" };
-                out.push(&format!("unsafe {{ {}::<{}>(", shift, ty));
+                out.open_unsafe();
+                out.push(&format!("{}::<{}>(", shift, ty));
                 self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
                 out.push(", (");
                 self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
-                out.push(") as u32) }");
+                out.push(") as u32)");
+                out.close_unsafe();
                 return Ok(());
             }
             let name = emit_flow_proven(&op);
-            out.push(&format!("unsafe {{ {}::<{}>(", name, ty));
+            out.open_unsafe();
+            out.push(&format!("{}::<{}>(", name, ty));
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;
             out.push(", ");
             self.emit_expr(world, walk, out, host, rhs, depth, wide, scope)?;
-            out.push(") }");
+            out.push(")");
+            out.close_unsafe();
             return Ok(());
         }
         let here = precedence(&op);

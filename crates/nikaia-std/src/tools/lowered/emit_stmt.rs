@@ -625,11 +625,15 @@ impl EmitState {
             _ => { },
         }
         if self.proven_indices.contains(&node_key(base)) && self.map_key(index, true).is_none() {
-            if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
+            out.push("; ");
+            out.open_unsafe();
+            if lent_on { out.push("nikaia_std::proven::write(&mut *"); } else { out.push("nikaia_std::proven::write(&mut "); }
             self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
             out.push(", (");
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
-            out.push(") as usize, __nikaia_stored) }; }");
+            out.push(") as usize, __nikaia_stored)");
+            out.close_unsafe();
+            out.push("; }");
             return Ok(());
         }
         if lent_on { out.push("; nikaia_std::index::set(&mut *"); } else { out.push("; nikaia_std::index::set(&mut "); }
@@ -718,16 +722,22 @@ impl EmitState {
                 let arithmetic = self.proven_arithmetic.get(&at);
                 let wide = *given == BinaryOp::Add || *given == BinaryOp::Sub || *given == BinaryOp::Mul;
                 if arithmetic.is_some() && wide {
-                    out.push(&format!("unsafe {{ {}::<{}>(", emit_flow_proven(given), nikaia_std::index::or(arithmetic, || "")));
+                    out.open_unsafe();
+                    out.push(&format!("{}::<{}>(", emit_flow_proven(given), nikaia_std::index::or(arithmetic, || "")));
                     self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)?;
-                    out.push(", __nikaia_stored) }");
+                    out.push(", __nikaia_stored)");
+                    out.close_unsafe();
                 } else {
                     self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(&format!(" {} __nikaia_stored", binary_op(given)));
                 }
-                if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
+                out.push("; ");
+                out.open_unsafe();
+                if lent_on { out.push("nikaia_std::proven::write(&mut *"); } else { out.push("nikaia_std::proven::write(&mut "); }
                 self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
-                out.push(", __nikaia_at, __nikaia_stored) }; }");
+                out.push(", __nikaia_at, __nikaia_stored)");
+                out.close_unsafe();
+                out.push("; }");
                 return Ok(true);
             },
             _ => return Ok(false),
@@ -737,9 +747,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_stmt_proven_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        out.push("*unsafe { nikaia_std::proven::read(&");
+        out.push("*");
+        out.open_unsafe();
+        out.push("nikaia_std::proven::read(&");
         self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
-        out.push(", __nikaia_at) }");
+        out.push(", __nikaia_at)");
+        out.close_unsafe();
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -753,11 +766,15 @@ impl EmitState {
         let place = matches!(target, Expr::Variable(_, _) | Expr::Field { .. });
         if !place { return Ok(false); }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
-        out.push(&format!(" = unsafe {{ {}::<{}>(", emit_flow_proven(given), ty));
+        out.push(" = ");
+        out.open_unsafe();
+        out.push(&format!("{}::<{}>(", emit_flow_proven(given), ty));
         self.emit_expr(world, walk, out, host, target, depth, flow, scope)?;
         out.push(", ");
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-        out.push(") };");
+        out.push(")");
+        out.close_unsafe();
+        out.push(";");
         Ok(true)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

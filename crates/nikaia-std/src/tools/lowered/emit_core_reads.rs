@@ -365,14 +365,16 @@ impl EmitState {
         if deref && !slicing && !shares { out.push("*"); }
         let nested = self.emit_read_nested(world, &walk, &scope.function, base);
         if !slicing && self.proven_indices.contains(&node_key(base)) && self.map_key(index, false).is_none() {
-            out.push("unsafe { nikaia_std::proven::read(");
+            out.open_unsafe();
+            out.push("nikaia_std::proven::read(");
             if nested { self.emit_read_inner(world, walk, out, host, base, depth, flow, scope)?; } else {
                 out.push("&");
                 self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
             }
             out.push(", (");
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
-            out.push(") as usize) }");
+            out.push(") as usize)");
+            out.close_unsafe();
             if self.reads_through_handle(world, &walk, &scope.function, base) { out.push(".get()"); }
             if shares { out.push(".clone()"); }
             return Ok(());
@@ -381,13 +383,15 @@ impl EmitState {
             match index {
                 Expr::Range { start, end, inclusive, .. } => {
                     let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
-                    out.push("unsafe { nikaia_std::proven::cut(&");
+                    out.open_unsafe();
+                    out.push("nikaia_std::proven::cut(&");
                     self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(", (");
                     if only_literals(start) { self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, start, depth, flow, scope)?; }
                     out.push(") as usize, (");
                     if only_literals(end) { self.emit_expr(world, walk, out, host, end, depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, end, depth, flow, scope)?; }
-                    if inclusive { out.push(") as usize + 1) }"); } else { out.push(") as usize) }"); }
+                    if inclusive { out.push(") as usize + 1)"); } else { out.push(") as usize)"); }
+                    out.close_unsafe();
                     return Ok(());
                 },
                 _ => { },
