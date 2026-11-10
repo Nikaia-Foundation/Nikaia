@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1373] — 2026-11-10
+
+**http: head_timeout, body_bytes_per_second and idle_timeout with keep-alive, on net::Connection.read(within:) (#1526)**
+- http::listen times a request: head_timeout (10 s) for the whole head, body_bytes_per_second (500, after 2 s) for the body, 408 past either; connections are kept alive between requests for idle_timeout (75 s), pipelined requests are answered in order, and Connection: close / HTTP/1.0 close after the answer; net::Connection.read(within: d) waits at most d and throws task::TimedOut (ADR-326 D6-D9)
+
 ## [0.0.1372] — 2026-11-10
 
 **Builders' changes (#121, #1526)**
