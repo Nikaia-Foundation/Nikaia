@@ -63,7 +63,7 @@ pub fn parse_findings_one_task_limit(at: i64) -> Finding {
 pub fn parse_findings_refusal(finding: Finding, source: &str) -> ParseFindingsRefusal {
     let end = (finding.span.start as i64).min(source.as_bytes().len() as i64);
     let mut from = end;
-    while from > 0 && *nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(from, 1) })) != 10 { from = unsafe { nikaia_std::proven::sub::<i64>(from, 1) }; }
+    while from > 0 && *unsafe { nikaia_std::proven::read(&source.as_bytes(), (nikaia_std::proven::sub::<i64>(from, 1)) as usize) } != 10 { from = unsafe { nikaia_std::proven::sub::<i64>(from, 1) }; }
     let line = nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(0..from)).iter().copied().filter(|&b| { b == 10 }).count() as i64 + 1;
     let column = parse_findings_char_of(source, end) - parse_findings_char_of(source, from) + 1;
     let said_message = said(&finding.message);

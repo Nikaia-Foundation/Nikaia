@@ -42,6 +42,24 @@ impl EmitOut {
         self.unsafe_depth -= 1;
         if self.unsafe_depth == 0 { self.buf.push_str(" }"); }
     }
+    pub fn block_headed_from(&self, start: i64) -> bool {
+        let text = match nikaia_std::index::get(&self.buf.as_bytes(), nikaia_std::index::at(start..)).text() {
+            Ok(value) => value,
+            Err(_error) => { return false; },
+        };
+        if !text.starts_with("unsafe { ") { return false; }
+        let mut depth = 0;
+        let mut at: i64 = 0;
+        for b in text.bytes() {
+            at += 1;
+            if (b as i64) == 123 { depth += 1; }
+            if (b as i64) == 125 {
+                depth -= 1;
+                if depth == 0 { return ((at) as usize) < text.len(); }
+            }
+        }
+        false
+    }
     pub fn mark(&self) -> i64 { self.buf.len() as i64 }
     pub fn record(&mut self, span: &Span, start: i64) {
         let end = self.buf.len() as i64;

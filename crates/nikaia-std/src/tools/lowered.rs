@@ -3294,7 +3294,7 @@ pub mod bounds_interval {
 }
 pub mod bounds_matched {
     #[allow(unused_imports)]
-    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_required, bm_each, bm_changing_methods};
+    pub use super::{BmMatched, bm_empty, bm_matched, bm_ensured, bm_collected, bm_required, bm_each, bm_changing_methods};
 }
 pub mod bounds_proven {
     #[allow(unused_imports)]

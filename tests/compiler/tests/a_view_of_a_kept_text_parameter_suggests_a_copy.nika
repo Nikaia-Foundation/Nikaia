@@ -1,0 +1,9 @@
+// NK2302 on a text parameter does not suggest `ref`, which NK1261
+// refuses as redundant; it suggests keeping a copy (#1523).
+fn f(t: String, mut all: Vec[String]) -> String {
+    all.push(t)
+    return t.trim()
+}
+
+fn main() {
+}

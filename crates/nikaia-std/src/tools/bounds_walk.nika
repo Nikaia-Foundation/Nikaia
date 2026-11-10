@@ -41,6 +41,10 @@ pub struct BoundsContext {
 	/// What each element of a sequence a ledger entry hands back holds, by
 	/// the entry's key (ADR-375 D5).
 	pub each: collections::BTreeMap[String, Ensured],
+	/// What a sequence's ledger entry ensures of how many it yields, over
+	/// `result.len()`, by the entry's key (#1546): a list it is collected
+	/// into is as long.
+	pub collected: collections::BTreeMap[String, Ensured],
 	/// The method calls on a type `std`'s ledger describes, by node, with the
 	/// type's name as the ledger keys it (ADR-314 D3, ADR-375 D5).
 	pub std_receivers: collections::BTreeMap[i64, String],
@@ -761,12 +765,13 @@ fn bounding_new(
 	return walk
 }
 
-/// Whether `ty` is a `Vec`, a `List` or an `Array`: an index into one stops
-/// the program where it lies outside (Part III A.2), where a map's hands
-/// back `null`.
+/// Whether `ty` is a `Vec`, a `List`, an `Array` or `Bytes` (#1516): an
+/// index into one stops the program where it lies outside (Part III A.2),
+/// where a map's hands back `null`.
 fn bounding_is_list_type(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
 	let name = words.resolve(ty.name)
-	return !ty.is_nullable && !ty.is_tuple && (name == "Vec" || name == "List" || name == "Array")
+	return !ty.is_nullable && !ty.is_tuple
+		&& (name == "Vec" || name == "List" || name == "Array" || name == "Bytes")
 }
 
 /// One pass over the body: proofs into `proven`, what is written into
@@ -801,7 +806,7 @@ fn bounding_pass(
 				bounding_at_least_zero(walk, facts, name)
 			}
 		}
-		if ty == "Vec" || ty == "List" || ty == "Array" {
+		if ty == "Vec" || ty == "List" || ty == "Array" || ty == "Bytes" {
 			bounding_at_least_zero(walk, facts, length_of(name))
 		}
 	}
@@ -2709,6 +2714,31 @@ fn bounding_lin(
 			if args.is_empty() && words.resolve(method) == "len" {
 				let path = path_of(receiver, words) ?? return null
 				return bounding_length(walk, receiver, path, context)
+			}
+			// **`a.min(b)` is at most each of the two, `a.max(b)` at least
+			// each** (#1516), of whole numbers: `let mut i = at.min(n)`
+			// starts a counter below `n`.
+			let picked = words.resolve(method)
+			if args.len() == 1 && (picked == "min" || picked == "max") {
+				let whole = context.std_receivers[node_key(expr)] ?? return null
+				if !is_whole_number(whole) {
+					return null
+				}
+				let a = bounding_lin(walk, receiver, facts, context, program, words) ?? return null
+				let b = bounding_lin(walk, args[0], facts, context, program, words) ?? return null
+				let name = f"result#{walk.codes}"
+				walk.codes += 1
+				let result = walk.arena.var(name)
+				let mut held: Vec[i64] = []
+				if picked == "min" {
+					held.push(walk.arena.le(result, a))
+					held.push(walk.arena.le(result, b))
+				} else {
+					held.push(walk.arena.ge(result, a))
+					held.push(walk.arena.ge(result, b))
+				}
+				walk.axioms.insert(name, held)
+				return result
 			}
 			// **What `std`'s ledger ensures of a method's result** (ADR-314
 			// D3): `x.trailing_zeros()` of a `u64` is in `0..=64`.
@@ -5900,6 +5930,17 @@ fn bounding_let(
 		return
 	}
 	let name = words.resolve(names[0]).clone()
+	// **What every arm of a choice holds** (#1516), beside the range the
+	// arms join to.
+	if value_lin == null {
+		let chosen = bounding_choice_facts(walk, facts, name, value, context, program, words, ask)
+		if !chosen.is_empty() {
+			facts.ints.insert(name.clone())
+			for fact in chosen {
+				bounding_push(walk, facts, fact)
+			}
+		}
+	}
 	// **A sequence held under a name keeps what `std`'s ledger states of
 	// each element** (ADR-375 D5), as facts of a name within it.
 	let held = walk.arena.var(bounding_element_of(name))
@@ -5941,6 +5982,9 @@ fn bounding_let(
 		}
 	}
 	bounding_built(walk, facts, name, value, words)
+	if bounding_declared_list(ty, words) {
+		bounding_collected(walk, facts, name, value, context, program, words)
+	}
 	if walk.shape.roots.contains(name) {
 		match value {
 			Expr::ListLit { items, .. } => {
@@ -5962,6 +6006,160 @@ fn bounding_let(
 			else => {},
 		}
 	}
+}
+
+/// **What every arm of a choice holds of `name`** (#1516): `let b = match
+/// k { 0 => 0, else => last(xs) }` gives `b <= xs.len()` where the first
+/// arm's value proves what the second's callee is found to hold (ADR-306
+/// D23, D31). Of each arm what a `let` of its value alone would give; of
+/// those facts, the ones every other arm's own facts prove. Nothing where
+/// an arm is more than a value, binds a name, or is no whole number the
+/// walk reads. `facts` hold nothing of `name`.
+fn bounding_choice_facts(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Vec[i64] {
+	let mut own: Vec[Vec[i64]] = []
+	match value {
+		Expr::If { then_branch, else_branch, .. } => {
+			let otherwise = else_branch ?? return []
+			let first = bounding_arm_value(then_branch) ?? return []
+			own.push(bounding_arm_facts(walk, facts, name, first, context, program, words, ask) ?? return [])
+			let second = bounding_arm_value(otherwise) ?? return []
+			own.push(bounding_arm_facts(walk, facts, name, second, context, program, words, ask) ?? return [])
+		},
+		Expr::Match { arms, .. } => {
+			for arm in arms {
+				// A name the arm binds is not the one outside it; a path of
+				// more than one segment (`Kind::Size`) binds none.
+				let mut bound: Vec[String] = []
+				match arm.pattern {
+					MatchPattern::Path(segments) => {
+						if segments.len() == 1 {
+							return []
+						}
+					},
+					else => frame_pattern_names(arm.pattern, words, bound),
+				}
+				if !bound.is_empty() {
+					return []
+				}
+				let arm_value = bounding_arm_body(arm.body) ?? return []
+				own.push(bounding_arm_facts(walk, facts, name, arm_value, context, program, words, ask) ?? return [])
+			}
+		},
+		else => return [],
+	}
+	let mut out: Vec[i64] = []
+	if own.len() < 2 {
+		return out
+	}
+	for k in 0..<own.len() {
+		for fact in own[k] {
+			if out.contains(fact) {
+				continue
+			}
+			let mut every = true
+			for j in 0..<own.len() {
+				if !every || j == k || own[j].contains(fact) {
+					continue
+				}
+				let mut trial = facts.clone()
+				for held in own[j] {
+					bounding_push(walk, trial, held)
+				}
+				every = bounding_proves(walk, trial, fact, ask)
+			}
+			if every {
+				out.push(fact)
+			}
+		}
+	}
+	return out
+}
+
+// A `match` arm's value: its body, or the last expression of a block body
+// with no statement before it.
+fn bounding_arm_body(body: ref Expr) -> ref Expr? {
+	match body {
+		Expr::Block(block, _) => {
+			return bounding_arm_value(block)
+		},
+		else => {},
+	}
+	return body
+}
+
+/// The value of an arm that is only its value.
+fn bounding_arm_value(arm: ref Block) -> ref Expr? {
+	if arm.stmts.len() != 1 {
+		return null
+	}
+	return match arm.stmts[0].node {
+		Stmt::Expr(value) => value,
+		else => null,
+	}
+}
+
+/// **What a `let` of `value` alone gives of `name`** (#1516): its linear
+/// term, or of a call's whole-number result what the callee is found to
+/// return (ADR-306 D23) and to hold of its arguments (D31); nothing where
+/// it is neither.
+fn bounding_arm_facts(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref TermArena, ref Vec[i64], i64) -> bool sync,
+) -> Vec[i64]? {
+	let n = walk.arena.var(name)
+	let lin = bounding_lin(walk, value, facts, context, program, words)
+	if lin != null {
+		let term = lin ?? 0
+		if walk.arena.mentions(term, name) {
+			return null
+		}
+		// Both sides apart, so that each can hold of every arm alone.
+		return [walk.arena.le(n, term), walk.arena.ge(n, term)]
+	}
+	// The checker marks only a `let` value's call a whole number; an arm's
+	// is one where the callee is found to hand back one (`context.returns`,
+	// which both readers below look up).
+	let call = match value {
+		Expr::Call { .. } => true,
+		else => false,
+	}
+	if !call {
+		return null
+	}
+	let relations = bounding_relations_of(walk, facts, name, value, context, program, words, ask)
+	let mut given = facts.clone()
+	given.facts = []
+	bounding_returned_facts(walk, given, name, value, context, words)
+	bounding_relations_push(walk, given, name, relations)
+	// The interval its result is found in (D23): the floor a list's
+	// relation (`at most xs.len()`) leaves open.
+	let range = bounding_range(walk, value, facts, context, program, words, ask) ?? Range::open()
+	if range.lo != null {
+		let least = walk.arena.int(range.lo ?? 0)
+		let low = walk.arena.ge(n, least)
+		bounding_push(walk, given, low)
+	}
+	if range.hi != null {
+		let most = walk.arena.int(range.hi ?? 0)
+		let high = walk.arena.le(n, most)
+		bounding_push(walk, given, high)
+	}
+	return given.facts.clone()
 }
 
 /// **What `value` is an element of**: `xs` of `xs[i]` and of a map's
@@ -6001,6 +6199,62 @@ fn bounding_leaves(expr: ref Expr) -> bool {
 fn bounding_declared_whole(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool? {
 	let t = ty ?? return null
 	return t.generics.is_empty() && is_whole_number(words.resolve(t.name))
+}
+
+/// Whether a declared type is a list, `Vec[T]`: a sequence collected into
+/// it holds one element for each item.
+fn bounding_declared_list(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool {
+	let t = ty ?? return false
+	let name = words.resolve(t.name)
+	return t.generics.len() == 1 && (name == "Vec" || name == "List")
+}
+
+/// **A sequence collected into a list keeps what `std`'s ledger ensures of
+/// how many it yields** (ADR-306 D4, #1546): `t.split(", ").collect()` is one
+/// piece at least, so `name.len() >= 1`. The arguments stand for the
+/// parameters, each a number of its own where the walk does not read it.
+fn bounding_collected(
+	mut walk: BoundsWalk,
+	mut facts: BoundsFacts,
+	name: ref String,
+	value: ref Expr,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+) {
+	match value {
+		Expr::MethodCall { receiver: sequence, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "collect" {
+				return
+			}
+			match sequence {
+				Expr::MethodCall { method: made, args: given, .. } => {
+					let ty = context.std_receivers[node_key(sequence)] ?? return
+					let collected = context.collected[f"{ty}::{words.resolve(made)}"] ?? return
+					if given.len() != collected.params.len() {
+						return
+					}
+					let mut named: collections::BTreeMap[String, i64] = collections::BTreeMap()
+					for k in 0..<given.len() {
+						let term = if collected.chars[k] {
+							bounding_code_of(walk, given[k], context, words)
+						} else {
+							bounding_lin(walk, given[k], facts, context, program, words) ?? bounding_fresh(walk)
+						}
+						named.insert(collected.params[k].clone(), term)
+					}
+					named.insert(length_of("result"), walk.arena.var(length_of(name)))
+					for nodes in collected.conditions {
+						let read = walk.arena.adopt(nodes)
+						let fact = walk.arena.substitute(read, named)
+						bounding_push(walk, facts, fact)
+					}
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
 }
 
 fn bounding_declared_unsigned(ty: ref Type?, words: ref winnow_grammar::InternerContext) -> bool {
@@ -8107,7 +8361,15 @@ fn bounding_returns_round(
 					if wanted.at_least.contains(k) && !seek_block(body, Seek::Rebound(param.clone()), words) {
 						scalar = param.clone()
 					}
-					if wanted.within.contains(k) && walk.lists.contains(param) && length_stays(body, param, words) {
+					// A parameter not written `mut` changes only where it
+					// is bound again: a call it is handed to cannot change it
+					// (ADR-094 D3; #1516).
+					let stays = if args[k].mutable {
+						length_stays(body, param, words)
+					} else {
+						!seek_block(body, Seek::Rebound(param.clone()), words)
+					}
+					if wanted.within.contains(k) && walk.lists.contains(param) && stays {
 						list = param.clone()
 					}
 					walk.return_scalars.push(scalar)

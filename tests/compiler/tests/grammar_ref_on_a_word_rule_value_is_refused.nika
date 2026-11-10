@@ -1,0 +1,12 @@
+// `ref` on a rule's value is read as on a function's parameter (ADR-grammar-1
+// D6, ADR-views-3 D4, #1560): a word is copied at a read, so `ref i64` says
+// nothing and is refused.
+
+grammar G {
+	entry rule top -> i64 = v:Item(2) -> { v }
+	rule Item(n: ref i64) -> i64 = "x" -> { 1 }
+}
+
+fn main() throws {
+	println(G::top("x") catch { return })
+}

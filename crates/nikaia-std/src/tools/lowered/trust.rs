@@ -310,7 +310,7 @@ pub fn trusted_maps(program: &Program, words: &winnow_grammar::InternerContext, 
         }, || true);
         if provenance == Provenance::Untrusted && a_method {
             let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-            env.sources.insert(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }))).to_string()));
+            env.sources.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string()));
         }
     }
     for item in program.items.iter() {

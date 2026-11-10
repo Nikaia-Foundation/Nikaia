@@ -1,0 +1,23 @@
+// A function that takes structs holding views by value and builds its
+// result from them gets one lifetime for all of them (#1523).
+pub struct Node {
+    pub name: String,
+    pub kids: Vec[Node],
+}
+
+fn leaf(input: String) -> Node {
+    let n = input.trim()
+    return Node{ name: n, kids: [] }
+}
+
+fn pair(k: Node, v: Node) -> Node {
+    return Node{ name: "pair", kids: [k, v] }
+}
+
+fn main() throws {
+    let s = " a "
+    let t = " b "
+    let p = pair(leaf(s), leaf(t))
+    println(p.kids.len())
+    println(p.kids[1].name)
+}

@@ -6443,6 +6443,7 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
             walk.in_hole = false
             walk.hole_text = -1
             open_tier_scope(walk)
+            bind_rule_values(rule, ask, walk)
             bind_grammar_pattern(gname, rules, alt.pattern.node, ask, walk)
             if alt.action == null {
                 let kinds = grammar_pattern_kinds(gname, rules, alt.pattern.node, ask, walk)
@@ -6455,6 +6456,33 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
             own_stream_items(rule.ret_type, ask, walk)
         }
     }
+}
+
+/// **A rule's value of a struct is a value of that struct** (ADR-grammar-1
+/// D2, #1548): a rule declares its values as a function does, so `p.anchor`
+/// read off `p: Props` is the field `Props.anchor`, with the tier the field
+/// has, as it is off a function's parameter. A value of text or of a
+/// container is not bound here: rules take no positions of their own.
+fn bind_rule_values(rule: ref GrammarRule, ask: ref TierAsk, mut walk: TierWalk) {
+    for arg in rule.args {
+        bind_rule_value(arg.name, arg.ty, ask, walk)
+    }
+    for option in rule.config {
+        bind_rule_value(option.name, option.ty, ask, walk)
+    }
+}
+
+fn bind_rule_value(name: winnow_grammar::Symbol, ty: ref Type, ask: ref TierAsk, mut walk: TierWalk) {
+    if plain_string(ask.names, ty) || ty.is_view || ty.is_nullable || ty.is_tuple || ty.is_slice || ty.code != null || a_container(ask.names, ty) {
+        return
+    }
+    let of = ask.names.resolve(ty.name).clone()
+    if !walk.declared.types.contains(of) {
+        return
+    }
+    let mut local = plain_local(no_kinds())
+    local.of = of
+    bind_tier_local(ask.names.resolve(name).clone(), local, walk)
 }
 
 /// **A stream entry's items are owned** (ADR-grammar-2 D7, amended

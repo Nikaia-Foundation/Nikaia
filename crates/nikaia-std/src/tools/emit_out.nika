@@ -74,6 +74,26 @@ impl EmitOut {
         }
     }
 
+    /// **Whether the text from `start` begins with an `unsafe { … }` block and
+    /// goes on after it** (ADR-306 D26): `unsafe { add(i, 3) } == n` as a
+    /// statement or a tail, which Rust reads as the block statement and then
+    /// a stray `== n`, so the caller writes it in brackets.
+    pub fn block_headed_from(ref self, start: i64) -> bool {
+        let text = self.buf.bytes[start..].text() catch { return false }
+        if !text.starts_with("unsafe { ") { return false }
+        let mut depth = 0
+        let mut at = 0
+        for b in text.bytes() {
+            at += 1
+            if b as i64 == 123 { depth += 1 }
+            if b as i64 == 125 {
+                depth -= 1
+                if depth == 0 { return at < text.len() }
+            }
+        }
+        return false
+    }
+
     /// Where what is about to be written starts.
     pub fn mark(ref self) -> i64 {
         return self.buf.len()

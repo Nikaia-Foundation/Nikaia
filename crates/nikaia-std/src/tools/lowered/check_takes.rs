@@ -671,8 +671,8 @@ pub(crate) fn a_copy_said(path: &str, ty: &Ty) -> String {
 
 pub(crate) fn a_root_segment(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-    let first: Vec<&str> = (*nikaia_std::index::get(&parts, 0)).split('[').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&first, 0)).to_string())
+    let first: Vec<&str> = (*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).split('[').collect::<Vec<_>>();
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&first, (0) as usize) }).to_string())
 }
 
 pub(crate) fn by_position(ahead: &[(i64, i64, i64)]) -> Vec<(i64, i64, i64)> {

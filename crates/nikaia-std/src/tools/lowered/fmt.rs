@@ -507,7 +507,7 @@ impl FmtPrinter {
     pub(crate) fn inner(&self) -> i64 {
         let n = self.frames.len() as i64;
         if n == 0 { return 0; }
-        unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.inner
+        (unsafe { nikaia_std::proven::read(&self.frames, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }.inner)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

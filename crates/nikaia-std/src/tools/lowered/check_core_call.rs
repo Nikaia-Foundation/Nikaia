@@ -62,7 +62,7 @@ pub(crate) fn check_core_call_holds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 pub(crate) fn check_core_call_variant(state: &CheckState, name: &str) -> Option<String> {
     if !name.contains("::") { return None; }
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    let ty: String = format!("{}", *nikaia_std::index::get(&parts, 0)); ::core::mem::drop(parts);
+    let ty: String = format!("{}", *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); ::core::mem::drop(parts);
     let rest = nikaia_std::block::Text::from(nikaia_std::index::or(name.strip_prefix(&*format!("{}::", ty)), || "").to_string());
     if state.is_variant(&ty, &rest) { return Some(ty); }
     None

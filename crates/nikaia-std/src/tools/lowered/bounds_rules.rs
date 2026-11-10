@@ -250,7 +250,7 @@ pub(crate) fn rules_fields_of(path: &str) -> Vec<String> {
     for (at, piece) in path.split('.').enumerate().map(|(at, item)| (at as i64, item)) {
         if at == 0 { continue; }
         let parts: Vec<&str> = piece.split('[').collect::<Vec<_>>();
-        out.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()));
+        out.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()));
     }
     out
 }

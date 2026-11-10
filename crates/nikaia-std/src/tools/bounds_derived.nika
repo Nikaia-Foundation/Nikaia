@@ -323,7 +323,7 @@ fn derived_claims(
 				unsigned.insert(name.clone())
 			}
 			ints.push(name)
-		} else if ty == "Vec" || ty == "List" || ty == "Array" {
+		} else if ty == "Vec" || ty == "List" || ty == "Array" || ty == "Bytes" {
 			lists.push(name)
 		}
 	}
@@ -361,8 +361,9 @@ fn derived_claims(
 			else => {},
 		}
 	}
-	// **A counter a parameter starts** (`let mut i = from`, #1516): what
-	// bounds the counter at its start is a claim on the parameter.
+	// **A counter a parameter starts** (`let mut i = from`, `let mut i =
+	// at - 1`, #1516): what bounds the counter at its start is a claim on
+	// the parameter.
 	for stmt in body.stmts {
 		match stmt.node {
 			Stmt::Let { names, value, .. } => {
@@ -370,6 +371,21 @@ fn derived_claims(
 					match value {
 						Expr::Variable(name, _) => {
 							compared.insert(words.resolve(name).clone())
+						},
+						Expr::Binary { op, lhs, rhs, .. } => {
+							if op == BinaryOp::Add || op == BinaryOp::Sub {
+								match lhs {
+									Expr::Variable(name, _) => {
+										match rhs {
+											Expr::LitInt { .. } => {
+												compared.insert(words.resolve(name).clone())
+											},
+											else => {},
+										}
+									},
+									else => {},
+								}
+							}
 						},
 						else => {},
 					}

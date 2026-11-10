@@ -348,7 +348,14 @@ impl EmitState {
                 let is_return = matches!(tail, EmitTail::Return);
                 if value.is_some() {
                     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                    if is_return { self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)?; } else if here.can_throw {
+                    if is_return {
+                        let start = out.mark();
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)?;
+                        if out.block_headed_from(start) {
+                            out.insert_at(start, "(");
+                            out.push(")");
+                        }
+                    } else if here.can_throw {
                         out.push("return Ok(");
                         self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)?;
                         out.push(");");
@@ -964,7 +971,12 @@ impl EmitState {
         let either = is_return && call_returns_either(world.words, world.items, &scope.function) && !is_null && !never_a_value(expr) && !self.facts.mixed_choices.contains(&node_key(expr)) && !self.facts.mixed_leaves.contains_key(&node_key(expr));
         if either { out.push("nikaia_std::either_text::either("); }
         if is_return && self.facts.lent_returns.contains(&at) { out.push("&"); }
+        let start = out.mark();
         self.emit_expr(world, walk, out, host, expr, depth, flow, scope)?;
+        if out.block_headed_from(start) {
+            out.insert_at(start, "(");
+            out.push(")");
+        }
         if either { out.push(")"); }
         let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
         if !tail.is_value() && !block_shaped { out.push(";"); }

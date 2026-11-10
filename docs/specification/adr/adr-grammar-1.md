@@ -117,6 +117,21 @@ its own Rust layer.
 **A brace in the input** is written as a literal, `"{" p "}"`: `{ p }` as a
 delimiter element (Part II 10.8 until now) was never built and is withdrawn.
 
+### D6 — A rule's values are passed as a function's are: lent, never copied (supervisor, 2026-11-10).
+
+```nika
+rule Two(ds: Vec[Dir]) -> Doc = …
+… d:Two(ds) …
+```
+
+D2 makes a rule's values a function's parameters, so ADR-views-3 D1-D4 hold for
+them: the caller writes nothing, a plain value is lent, `keep` keeps it, and
+`ref` is refused as everywhere outside `extern "C"` (views-3 D4). The lowering
+hands the engine a borrow of a lent value; it does not clone it at each call.
+**Why:** a clone per call is a cost the program never asked for (on the yaml
+package's large input, 4 % of all instructions, #1548), and a rule that differs
+from a function here is a second rule to learn.
+
 ## 5. Consequences
 
 * Every grammar in the repository is rewritten with the arrow in one change

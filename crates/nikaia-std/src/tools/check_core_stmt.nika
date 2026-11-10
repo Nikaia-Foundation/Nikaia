@@ -1279,6 +1279,18 @@ pub fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref Check
     // `let k: K? = m.get(1)` holds the `K`, as a number's read holds it.
     // **So does a tuple copied out** (#1535): `let t: (i64, i64)? = m.get(k)`
     // holds the tuple, which has no view to be typed as.
+    // **And an untyped `let` of a tuple whose parts copy** (#1539): `let t =
+    // m.get(k)` holds the tuple, as the inline `m.get(k) ?? (0, 0)` does.
+    if of_a_map && ty == null {
+        match bound {
+            Ty::Nullable(inner) => {
+                if check_core_stmt_a_tuple(inner) && !state.takes_away(world, inner) && state.flow.map_read_sites.contains(id_of(value) as i64) {
+                    let added = state.facts.copied_reads.insert(id_of(value) as i64)
+                }
+            },
+            else => {},
+        }
+    }
     let word_copied = match bound {
         Ty::Nullable(inner) => ((!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner)) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(id_of(value) as i64) || state.facts.copied_reads.contains(id_of(value) as i64)),
         else => false,

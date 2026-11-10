@@ -51,12 +51,12 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, na
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if view.text(symbol) != own { return false; }
     if at < 0 || at >= args.len() as i64 { return false; }
-    unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either
+    (unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either)
 }
 
 pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-    let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) }))).to_string());
+    let own = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
     let mut target: String = String::from("");
     if parts.len() > 1 { target = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 2)) as usize) }).to_string()); }
     for item in view.items.iter() {

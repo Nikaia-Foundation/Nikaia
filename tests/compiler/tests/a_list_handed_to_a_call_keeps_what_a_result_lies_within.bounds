@@ -1,0 +1,7 @@
+bounds in tests/a_list_handed_to_a_call_keeps_what_a_result_lies_within.nika: 3 indexes, 3 proved; 2 operations, 2 proved
+     6  input[i]        proved
+    13  input[i - 1]    proved
+    13  i - 1           proved
+    16  i -= 1          proved
+    23  input[0..<end]  proved
+  derived  is_mark: 0 <= i, i <= input.len(), proved at the calls on lines 13

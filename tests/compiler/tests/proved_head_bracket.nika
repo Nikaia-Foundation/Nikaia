@@ -1,0 +1,13 @@
+// A proved add at the head of a tail expression (ADR-306 D26): the
+// `unsafe { … }` it is written in must not end the statement.
+fn is_marker_at(input: ref Vec[u8], i: i64) -> bool {
+    let n = input.len()
+    if i + 3 > n { return false }
+    return i + 3 == n || input[i + 3] == 32
+}
+
+fn main() throws {
+    let v: Vec[u8] = [45, 45, 45, 32, 120]
+    println(f"{is_marker_at(v, 0)}")
+    println(f"{is_marker_at(v, 2)}")
+}

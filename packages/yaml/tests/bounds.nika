@@ -2,9 +2,10 @@
 // and operation of `src/main.nika` the solver proves within its bounds runs
 // without its check; this prints the sites it does not prove yet. A `.bounds`
 // expectation holds the report of the test program itself, so the package's
-// report is read here by `nikaia check --bounds`. Each site proved takes its
-// line out; the issue is done when only the count line remains, with all
-// proved.
+// report is read here by `nikaia check --bounds`. No index stays checked; an
+// operation the solver does not prove stays checked only where `justified`
+// names its bound (the supervisor's decisions on #1516), and its line says so.
+// A site neither proved nor named prints the walk's own reason.
 use std::fs
 use std::process
 
@@ -31,6 +32,31 @@ fn root() -> String throws {
 	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
 }
 
+// The operations that keep their check, by the text of the site, and the
+// bound each holds to: a count of what the input or memory holds, far from
+// `i64`'s 2^63.
+fn justified() -> Vec[(String, String)] {
+	let memory = "a count of nodes, which the memory holding them bounds"
+	let input = "a count over the input, which its length bounds"
+	return [
+		("depth_of(", f"{memory}: a tree's depth is at most its node count"),
+		("nodes_in(", memory.clone()),
+		("1 + items.iter().map(", memory.clone()),
+		("1 + entries.iter().map(", memory.clone()),
+		("self.made", f"{memory}: the nodes alias expansion made, at most `limit`"),
+		("self.expanded", f"{memory}: the nodes alias expansion made, at most `limit`"),
+		("e.offset - 1", "a byte offset into the input, never negative (the walk does not follow `error_of`'s result into its field)"),
+		("n + d", f"{input}: an indentation and an indicator digit"),
+		("from + (", f"{input}: an offset into the scalar's text"),
+		("self.column", "a column of the text the library writes, which its length bounds"),
+		("self.indent", "an indentation of the text the library writes, at most twice the depth"),
+		("tag_length(", f"{input}: a tag's length"),
+		("length +=", f"{input}: the length of a node's text"),
+		("width - 1", "a width the callers write as a literal, 2 to 8 digits"),
+		("value * radix", "at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`"),
+	]
+}
+
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain(repo.clone())
@@ -43,7 +69,15 @@ fn main() throws {
 			// The tail names the settings the sites were written under.
 			println(line.split(" - ").next() ?? line)
 		} else if line.contains("checked: ") {
-			println(line)
+			let site = line.split("checked: ").next() ?? line
+			let mut reason: String? = null
+			for (text, why) in justified() {
+				if reason == null && site.contains(text) { reason = why }
+			}
+			match reason {
+				null => println(line),
+				else => println(f"{site}justified: {reason ?? ""}"),
+			}
 		}
 	}
 	if checked.code != 0 { println(checked.stderr.trim()) }

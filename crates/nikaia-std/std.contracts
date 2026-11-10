@@ -4746,20 +4746,25 @@ touches = []
 signature = "(self: ref String) -> Seq[ref(self) String] sync ends"
 
 # The pieces of the text between each `sep`, each a view into it.
+# **There is always one piece at least** (#1546): text without `sep`, the empty
+# text too, is one piece, itself; `result.len()` counts the pieces, so a list
+# they are collected into is not empty.
 [fn."str::split"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["result.len() >= 1"]
 signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
 
 # The pieces of the text between each `sep`, each a view into it, from the
-# last to the first.
+# last to the first. One piece at least, as `split` gives (#1546).
 [fn."str::rsplit"]
 pub = true
 panics = false
 sync = true
 touches = []
+ensures = ["result.len() >= 1"]
 signature = "(self: ref String, sep: ?) -> Seq[ref(self) String] sync ends"
 
 # The text cut in two at a byte position: what stands before it and what from

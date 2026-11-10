@@ -250,6 +250,14 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
                 item_types(names, &method.node, &here, plain, views, &prefix, &method.span, out);
             }
         },
+        Item::Grammar(def) => {
+            for rule in def.rules.iter() {
+                for arg in rule.args.iter() {
+                    types_word_by_ref(names, &arg.ty, plain, "parameter", &arg.span, out);
+                    types_text_by_ref(names, &arg.ty, "parameter", views, "", &arg.span, out);
+                }
+            }
+        },
         _ => { },
     }
 }

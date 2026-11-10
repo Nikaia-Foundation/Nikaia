@@ -610,6 +610,11 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         let own_type = check_core_method_own_type(world, on, written)
         if own_type != "" {
             state.facts.std_receivers.insert(id_of(expr) as i64, own_type)
+        } else if is_text_type(on) && resolve_method(world, f"str::{written}") != null {
+            // **A `String`'s method without an entry of its own is `str`'s**
+            // (#1546), as the checker resolves it: `t.split(", ")`'s entry
+            // says what the walk knows of the pieces.
+            state.facts.std_receivers.insert(id_of(expr) as i64, "str")
         }
     }
     // **A pattern of one scalar is that character** (#617): the same match, and

@@ -50,5 +50,24 @@ on the questions about the prover, and its starting point is the
 <div class="rq-over-row"><a href="performance/#can-our-own-optimiser-over-a-fast-backend-beat-every-combination">Can our own optimiser over a fast backend beat every combination?</a><div class="rq-build" role="img" aria-label="Built: about 2 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 3%"></span></span><span class="rq-unknown" style="width: 35%"></span></div><div class="rq-conf" role="img" aria-label="Evidence neither way yet"><span class="rq-conf-pos" style="width: 0%"></span></div></div>
 </div>
 
+[Libraries written in Nikaia](libraries/) asks whether a library written in
+Nikaia can be both safe and fast, with every index and operation in it proved to
+stay inside its bounds, and its instructions counted against a tuned library
+in Rust. Its first case study is the `yaml` package, measured against
+`saphyr-parser`. Its questions are about the proofs, the distance to the tuned
+parser, whether the compiler can show where to optimise, a grammar as the
+parser, keeping comments when a file is written back, and an interface its
+users already know.
+
+<div class="rq-over">
+<div class="rq-over-row rq-over-head"><span>Question</span><span>Built</span><span>Evidence</span></div>
+<div class="rq-over-row"><a href="libraries/#is-every-bound-check-proved">Is every bound check proved?</a><div class="rq-build" role="img" aria-label="Built: about 70 % of the estimated whole, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 88%"></span></span><span class="rq-unknown" style="width: 20%"></span></div><div class="rq-conf" role="img" aria-label="Evidence for a positive answer"><span class="rq-conf-pos" style="width: 25%"></span></div></div>
+<div class="rq-over-row"><a href="libraries/#how-close-does-it-come-to-saphyr-parser">How close does it come to saphyr-parser?</a><div class="rq-build" role="img" aria-label="Built: about 35 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 50%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><div class="rq-conf" role="img" aria-label="Evidence for a positive answer"><span class="rq-conf-pos" style="width: 5%"></span></div></div>
+<div class="rq-over-row"><a href="libraries/#does-the-compiler-show-where-to-optimise">Does the compiler show where to optimise?</a><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><div class="rq-conf" role="img" aria-label="Evidence neither way yet"><span class="rq-conf-pos" style="width: 0%"></span></div></div>
+<div class="rq-over-row"><a href="libraries/#can-a-grammar-be-the-parser">Can a grammar be the parser?</a><div class="rq-build" role="img" aria-label="Built: about 60 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 80%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><div class="rq-conf" role="img" aria-label="Evidence for a positive answer"><span class="rq-conf-pos" style="width: 20%"></span></div></div>
+<div class="rq-over-row"><a href="libraries/#can-it-keep-comments-and-layout">Can it keep comments and layout?</a><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div><div class="rq-conf" role="img" aria-label="Evidence neither way yet"><span class="rq-conf-pos" style="width: 0%"></span></div></div>
+<div class="rq-over-row"><a href="libraries/#does-it-feel-familiar-to-the-people-who-use-it">Does it feel familiar to the people who use it?</a><div class="rq-build" role="img" aria-label="Built: about 70 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 93%"></span></span><span class="rq-unknown" style="width: 25%"></span></div><div class="rq-conf" role="img" aria-label="Evidence for a positive answer"><span class="rq-conf-pos" style="width: 15%"></span></div></div>
+</div>
+
 The two bars are explained under
 [open questions about the prover](prover/#where-it-stands).

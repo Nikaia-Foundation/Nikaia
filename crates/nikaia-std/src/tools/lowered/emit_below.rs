@@ -299,7 +299,7 @@ impl EmitState {
         let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for text in texts.iter() {
             let parts: Vec<&str> = text.split(" { ").collect::<Vec<_>>();
-            if *nikaia_std::index::get(&parts, 0) == asked { values.push(self.attribute_in_rust(world, text)); }
+            if *unsafe { nikaia_std::proven::read(&parts, (0) as usize) } == asked { values.push(self.attribute_in_rust(world, text)); }
         }
         if wanted == "attribute" {
             if !values.is_empty() { return format!("Some({})", *unsafe { nikaia_std::proven::read(&values, (0) as usize) }); }

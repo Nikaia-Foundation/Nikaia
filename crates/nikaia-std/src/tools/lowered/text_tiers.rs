@@ -3103,13 +3103,13 @@ pub(crate) fn late_bind(name: String, late: &mut TierLate) {
 pub(crate) fn late_serial(name: &str, late: &TierLate) -> i64 {
     let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
     if held.is_empty() { return -1; }
-    unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.serial
+    (unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.serial)
 }
 
 pub(crate) fn late_loops(name: &str, late: &TierLate) -> i64 {
     let held = match *nikaia_std::index::get(&late.bound, name) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
     if held.is_empty() { return 0; }
-    unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.loops
+    (unsafe { nikaia_std::proven::read(&held, (nikaia_std::proven::sub::<i64>(held.len() as i64, 1)) as usize) }.loops)
 }
 
 pub(crate) fn late_read(name: &str, late: &mut TierLate) {
@@ -4632,6 +4632,7 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_>, 
             walk.in_hole = false;
             walk.hole_text = -1;
             open_tier_scope(walk);
+            bind_rule_values(rule, ask, walk);
             bind_grammar_pattern(&gname, &rules, &alt.pattern.node, ask, walk);
             if alt.action.is_none() {
                 let kinds = grammar_pattern_kinds(&gname, &rules, &alt.pattern.node, ask, walk);
@@ -4642,6 +4643,20 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_>, 
         }
         if rule.stream { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
     }
+}
+
+pub(crate) fn bind_rule_values(rule: &GrammarRule, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    for arg in rule.args.iter() { bind_rule_value(arg.name, &arg.ty, ask, walk); }
+    for option in rule.config.iter() { bind_rule_value(option.name, &option.ty, ask, walk); }
+}
+
+pub(crate) fn bind_rule_value(name: winnow_grammar::Symbol, ty: &Type, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    if plain_string(ask.names, ty) || ty.is_view || ty.is_nullable || ty.is_tuple || ty.is_slice || (*ty.code).is_some() || a_container(ask.names, ty) { return; }
+    let of = nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string());
+    if !walk.declared.types.contains(&of) { return; }
+    let mut local = plain_local(no_kinds());
+    local.of = Some(of);
+    bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), local, walk);
 }
 
 pub(crate) fn own_stream_items(ret_type: Option<&Type>, ask: &TierAsk<'_, '_, '_, '_, '_>, walk: &mut TierWalk) {

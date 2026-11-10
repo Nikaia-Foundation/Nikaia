@@ -1,0 +1,7 @@
+bounds in tests/a_split_collected_is_one_piece_at_least.nika: 6 indexes, 5 proved; 0 operations, 0 proved
+    18  parts[0]  proved
+    23  parts[0]  proved
+    30  rows[1]   proved
+    31  place[0]  proved
+    37  parts[0]  proved
+    46  again[0]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
