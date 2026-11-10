@@ -157,7 +157,16 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let ty = option.ty.text();
             state.expect_type(world, found_option, &option.ty, span, "field", &|found_text, wanted_text| { format!("The option `{}` of `{}` takes `{}`, but you're passing `{}`.", name, key, ty, found_text) });
         }
+        if !known && name == "words" && contract.interns {
+            known = true;
+            state.expect_type(world, &found_option.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
+        }
         if !known { state.no_such_option(key, name, signature, span); }
+    }
+    if contract.interns && !passed.iter().any(|p| { p.0 == "words" }) && !signature.config.iter().any(|o| { o.name == "words" }) {
+        let result = signature.result_or_unit();
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.text()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
     }
     let text_view = Ty::Named { name: String::from("str"), args: vec![], view: true };
     let mut expanded: Vec<CheckArgument<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);

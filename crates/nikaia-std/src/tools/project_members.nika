@@ -705,8 +705,15 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
     let mut moved: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     let none: collections::BTreeMap[String, String] = collections::BTreeMap()
     for name in declared {
-        let ledger = project_members_description_at(root, name, host) ?? continue
+        let mut ledger = project_members_description_at(root, name, host) ?? continue
         described.insert(name.clone())
+        // **What the checker asks of a Rust owner's argument** (ADR-327 D8,
+        // #1541) needs to know the entry is a crate's, not `std`'s.
+        let functions: Vec[String] = ledger.functions.keys().map(fn(x) { x.clone() }).collect()
+        for function in functions {
+            let mut contract = ledger.functions.get(function) ?? continue
+            contract.described = true
+        }
         let differing = project_members_sources_that_moved(root, name, ledger, host)
         if !differing.is_empty() {
             moved.insert(name.clone(), differing)

@@ -1,0 +1,31 @@
+// #1519: another package's entry whose result holds a symbol must be handed
+// the table (NK1330, ADR-388 D2), and one that does not intern takes no
+// `words:` (NK1109), as for an entry beside the call.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/words/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/words/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"words\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/words/src/main.nika", fs::Root::Anywhere, "pub grammar Interned {\n\t@stream entry rule names -> winnow_grammar::Symbol = name+\n\tentry rule all -> Vec[winnow_grammar::Symbol] = ns:name+ eof -> { ns }\n\tentry rule count -> i64 = ns:name+ eof -> { ns.len() as i64 }\n\tentry rule plain -> String = w:until(\";\") \";\" eof -> { w.clone() }\n\trule name -> winnow_grammar::Symbol = n:ident \";\" -> { n }\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nwords = { path = \"../words\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use words\nuse std::winnow_grammar\n\nfn main() throws {\n\tlet table = winnow_grammar::InternerContext()\n\tprintln(words::Interned::all(\"x;y;\").len())\n\tprintln(words::Interned::plain(\"x;\"; words: table))\n}\n")
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let text = line.trim()
+        if !text.starts_with("Compiling") && !text.starts_with("Finished") && !text.starts_with("Running") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

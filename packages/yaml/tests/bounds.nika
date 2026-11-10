@@ -1,0 +1,50 @@
+// The bound checks of the package's core (#1516, Part of #928): each index
+// and operation of `src/main.nika` the solver proves within its bounds runs
+// without its check; this prints the sites it does not prove yet. A `.bounds`
+// expectation holds the report of the test program itself, so the package's
+// report is read here by `nikaia check --bounds`. Each site proved takes its
+// line out; the issue is done when only the count line remains, with all
+// proved.
+use std::fs
+use std::process
+
+fn toolchain(repo: String) -> String throws {
+	let exe = process::run(
+		"sh",
+		[
+			"-c",
+			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
+		],
+	).stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	return f"{repo}/target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	let here = process::run("pwd", []).stdout.trim().clone()
+	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
+	let parent = process::run(
+		"sh",
+		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
+	).stdout.trim().clone()
+	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
+	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain(repo.clone())
+	let checked = process::run(
+		nikaia,
+		["check", "--bounds", "src/main.nika"]; dir: f"{repo}/packages/yaml",
+	)
+	for line in checked.stdout.lines() {
+		if line.starts_with("bounds in ") {
+			// The tail names the settings the sites were written under.
+			println(line.split(" - ").next() ?? line)
+		} else if line.contains("checked: ") {
+			println(line)
+		}
+	}
+	if checked.code != 0 { println(checked.stderr.trim()) }
+}

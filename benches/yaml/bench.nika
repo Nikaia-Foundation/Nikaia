@@ -1,0 +1,453 @@
+// The yaml package against the tuned Rust YAML libraries (#1517): it
+// generates the inputs, builds every program at both overflow-check settings,
+// checks that the programs of a comparison print the same output byte for
+// byte, counts each with callgrind and prints the table `README.md` keeps,
+// with each program's length in tokens.
+//
+//     nikaia run benches/yaml/bench.nika            the large input 10 MB
+//     nikaia run benches/yaml/bench.nika -- 1       quicker, 1 MB
+//
+// Counts, not a clock (docs/measuring.md): instructions and mispredicted
+// branches (`--branch-sim=yes`, conditional and indirect), over the whole
+// process. Release builds on both sides with the same settings:
+// `opt-level = 3`, link-time optimisation on (`lto = true`), one codegen
+// unit; each counted with overflow checks on and off.
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn root() -> String throws {
+	return process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+}
+
+// The compiler: `$NIKAIA`, else the `nikaia` on the path, else a release
+// build of the repository's own.
+fn toolchain(repo: String) -> String throws {
+	let exe = sh("echo ${NIKAIA:-$(command -v nikaia)}").stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	must(
+		f"cargo build -q --release -p nikaia --manifest-path {repo}/Cargo.toml",
+		"the compiler's release build",
+	)
+	return f"{repo}/target/release/nikaia"
+}
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+fn must(script: String, what: String) throws {
+	let r = sh(script)
+	if r.code != 0 {
+		println(f"{what} failed:\n{r.stdout}{r.stderr}")
+		process::exit(1)
+	}
+}
+
+fn write(path: String, text: String) throws {
+	fs::write(path, fs::Root::Anywhere, text)
+}
+
+// --- the inputs ------------------------------------------------------------
+
+// A configuration file of about 1 KB.
+fn small() -> String {
+	return "# service configuration
+service:
+  name: ledger-api
+  version: 3
+  debug: false
+  listen:
+    host: 0.0.0.0
+    port: 8080
+    timeout: 2.5
+  tls:
+    enabled: true
+    cert: /etc/ledger/tls/cert.pem
+    key: /etc/ledger/tls/key.pem
+database: &db
+  driver: postgres
+  host: db.internal
+  port: 5432
+  pool: 16
+  user: ledger
+  password: \"s3cr\\\"et\"
+replica: *db
+features: [audit, export, 'bulk-import', webhooks]
+limits:
+  requests_per_minute: 1200
+  burst: 50
+  body_bytes: 1048576
+logging:
+  level: info
+  targets:
+    - kind: stdout
+      format: json
+    - kind: file
+      path: /var/log/ledger/api.log
+      rotate: daily
+      keep: 14
+notes: |
+  Rolled out in two waves.
+  The second wave waits for the audit sign-off.
+banner: >
+  Ledger API, internal use only;
+  contact the platform team.
+"
+}
+
+// One record of the large input: block and flow mappings and sequences, a
+// folded scalar, and every 50th record an anchor the next one aliases.
+fn record(i: i64) -> String {
+	let active = if i % 3 == 0 { "false" } else { "true" }
+	let mut meta = ""
+	if i % 50 == 0 {
+		meta = f"  meta: &m{i} {{owner: ops, level: {i % 5}}}\n"
+	} else if i % 50 == 1 {
+		meta = f"  meta: *m{i - 1}\n"
+	}
+	return f"- id: {i}
+  name: \"station {i}\"
+  score: {i % 1000}.25
+  active: {active}
+  tags: [alpha, beta-{i % 7}, 'gamma {i % 11}']
+  point: {{x: {i % 13}, y: {i % 17 - 8}}}
+{meta}  history:
+    - year: {2000 + i % 25}
+      value: {i % 101}
+    - year: {2001 + i % 25}
+      value: {i % 103}
+  note: >
+    reading {i} taken at the north gate,
+    checked twice
+"
+}
+
+fn records(bytes: i64) -> String {
+	let mut out = String()
+	let mut i = 0
+	while out.len() < bytes {
+		out.push_str(record(i))
+		i += 1
+	}
+	return out
+}
+
+// Nesting near the parser's depth limit (128): block mappings 100 deep and
+// flow sequences 120 deep, items of one sequence.
+fn deep(bytes: i64) -> String {
+	let mut out = String()
+	let mut i = 0
+	while out.len() < bytes {
+		out.push_str("- k0:\n")
+		for d in 1..<100 {
+			out.push_str(" ".repeat(2 + 2 * d))
+			if d == 99 {
+				out.push_str(f"k{d}: leaf {i}\n")
+			} else {
+				out.push_str(f"k{d}:\n")
+			}
+		}
+		out.push_str(f"- {"[".repeat(120)}x{i}{"]".repeat(120)}\n")
+		i += 1
+	}
+	return out
+}
+
+// Long scalars of every style: literal and folded blocks, double-quoted with
+// escapes, single-quoted with a doubled quote, plain over several lines.
+fn scalars(bytes: i64) -> String {
+	let mut out = String()
+	let mut i = 0
+	let words = "the quick brown fox jumps over the lazy dog and keeps running far"
+	while out.len() < bytes {
+		out.push_str("- |\n")
+		for l in 0..<20 {
+			out.push_str(f"  line {l} of block {i}: {words}\n")
+		}
+		out.push_str("- >-\n")
+		for l in 0..<10 {
+			out.push_str(f"  folded {l} of {i}: {words}\n")
+		}
+		out.push_str(f"- \"double {i}:\\t{words} caf\\u00e9 \\\\ {words} \\\"q\\\" {words}\"\n")
+		out.push_str(f"- 'single {i}: it''s {words} {words}'\n")
+		out.push_str(f"- plain {i} {words}\n  {words}\n  {words}\n")
+		i += 1
+	}
+	return out
+}
+
+// --- the programs ----------------------------------------------------------
+
+struct Program {
+	// The name in the table.
+	name: String,
+	// The binary at overflow checks on and off.
+	on: String,
+	off: String,
+	// The source counted for tokens.
+	source: String,
+}
+
+fn nikaia_toml(dir: String, repo: String) throws {
+	write(
+		f"{dir}/nikaia.toml",
+		f"[package]
+name = \"bench\"
+version = \"0.1.0\"
+
+[dependencies]
+yaml = {{ path = \"{repo}/packages/yaml\" }}
+
+[build.x86_64-linux]
+opt-level = 3
+lto = true
+codegen-units = 1
+incremental = false
+",
+	)
+}
+
+// `source` built as a Nikaia project at both settings; the binaries are
+// copied out to `{work}/bin/{name}.on` and `.off`.
+fn build_nikaia(nikaia: String, repo: String, work: String, name: String, source: String) throws {
+	let dir = f"{work}/{name}"
+	must(f"mkdir -p {dir}/src && cp {source} {dir}/src/main.nika", "copy")
+	nikaia_toml(dir.clone(), repo.clone())
+	for setting in ["on", "off"] {
+		must(
+			f"cd {dir} && RUSTFLAGS='-C overflow-checks={setting}' {nikaia} build >build.log 2>&1 && cp target/nikaia/bin/bench {work}/bin/{name}.{setting}",
+			f"nikaia build of {name} ({setting}, log in {dir}/build.log)",
+		)
+	}
+}
+
+// The Rust programs, each setting in a target directory of its own.
+fn build_rust(repo: String, work: String) throws {
+	for setting in ["on", "off"] {
+		must(
+			f"RUSTFLAGS='-C overflow-checks={setting}' CARGO_TARGET_DIR={work}/rust-{setting} cargo build -q --release --bins --manifest-path {repo}/benches/yaml/Cargo.toml",
+			f"cargo build ({setting})",
+		)
+	}
+}
+
+// The yaml package as the Rust crate `nikaia_yaml`, and `facade/` over it.
+fn build_facade(nikaia: String, repo: String, work: String) throws {
+	let from = f"{repo}/packages/yaml"
+	must(
+		f"rm -rf {work}/yaml {work}/facade && mkdir -p {work}/yaml && cp -r {from}/nikaia.toml {from}/src {from}/rust {work}/yaml && cp -r {repo}/benches/yaml/facade {work}/facade",
+		"copy of the package",
+	)
+	must(
+		f"cd {work}/yaml && {nikaia} build >build.log 2>&1",
+		f"nikaia build of the package (log in {work}/yaml/build.log)",
+	)
+	for setting in ["on", "off"] {
+		must(
+			f"cd {work}/facade && RUSTFLAGS='-C overflow-checks={setting}' CARGO_TARGET_DIR={work}/facade-{setting} cargo build -q --release && cp {work}/facade-{setting}/release/typed-facade {work}/bin/typed_facade.{setting}",
+			f"cargo build of the facade ({setting})",
+		)
+	}
+}
+
+fn rust(work: String, repo: String, name: String, label: String) -> Program {
+	return Program {
+		name: label,
+		on: f"{work}/rust-on/release/{name}",
+		off: f"{work}/rust-off/release/{name}",
+		source: f"{repo}/benches/yaml/src/bin/{name}.rs",
+	}
+}
+
+fn nika(work: String, repo: String, name: String, label: String) -> Program {
+	return Program {
+		name: label,
+		on: f"{work}/bin/{name}.on",
+		off: f"{work}/bin/{name}.off",
+		source: f"{repo}/benches/yaml/{name}.nika",
+	}
+}
+
+// --- the same output, then the counts --------------------------------------
+
+// The suite's cases where every program of a comparison prints the same
+// events or tree and none refuses the case, as arguments for one run.
+fn agreed(repo: String, programs: Vec[Program]) -> String throws {
+	let suite = f"{repo}/packages/yaml/tests/suite"
+	let cases = sh(f"find {suite} -name in.yaml | sort").stdout
+	let mut out = String()
+	for case in cases.lines() {
+		let first = sh(f"{programs[0].on} {case}").stdout
+		if first == "error\n" {
+			continue
+		}
+		let mut same = true
+		for p in programs {
+			if sh(f"{p.on} {case}").stdout != first {
+				same = false
+			}
+		}
+		if same {
+			out.push_str(f" {case}")
+		}
+	}
+	return out
+}
+
+// Every program at both settings prints the first one's output for `args`.
+fn same_output(work: String, programs: Vec[Program], args: String, what: String) throws {
+	let want = f"{work}/out/want"
+	must(f"{programs[0].on} {args} > {want}", f"{programs[0].name} on {what}")
+	for p in programs {
+		for bin in [p.on.clone(), p.off.clone()] {
+			let r = sh(f"{bin} {args} | cmp -s - {want}")
+			if r.code != 0 {
+				println(f"FAIL: {bin} prints another output than {programs[0].on} for {what}")
+				process::exit(1)
+			}
+		}
+	}
+}
+
+struct Count {
+	instructions: i64,
+	mispredicted: i64,
+}
+
+// Instructions and mispredicted branches of one run, from callgrind's totals
+// (`events: Ir Bc Bcm Bi Bim`).
+fn count(work: String, bin: String, args: String) -> Count throws {
+	let file = f"{work}/out/callgrind.out"
+	must(
+		f"valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {bin} {args} > /dev/null 2>{work}/out/valgrind.log",
+		f"callgrind of {bin}",
+	)
+	let totals = sh(f"grep -E '^(totals|summary):' {file} | head -1").stdout.trim().clone()
+	let fields: Vec[String] = totals.split_whitespace().collect()
+	return Count {
+		instructions: text::parse_i64(fields[1]) ?? 0,
+		mispredicted: (text::parse_i64(fields[3]) ?? 0) + (text::parse_i64(fields[5]) ?? 0),
+	}
+}
+
+// A count in millions, one decimal.
+fn millions(n: i64) -> String {
+	let tenths = (n + 50000) / 100000
+	return f"{tenths / 10}.{tenths % 10}"
+}
+
+fn ratio(a: i64, b: i64) -> String {
+	let hundredths = (a * 100 + b / 2) / b
+	return f"{hundredths / 100}.{if hundredths % 100 < 10 { "0" } else { "" }}{hundredths % 100}"
+}
+
+fn tokens(repo: String, nikaia: String, source: String) -> String throws {
+	let r = process::run(nikaia, ["run", f"{repo}/scripts/tokens.nika", "--", source]; dir: repo)
+	let fields: Vec[String] = r.stdout.trim().split_whitespace().collect()
+	return fields[0].clone()
+}
+
+// One comparison: every input counted for every program at both settings, a
+// table row each, the last column against the fewest instructions any Rust
+// program of the comparison needed with checks off.
+fn compare(work: String, programs: Vec[Program], inputs: Vec[(String, String)]) -> String throws {
+	let mut out = String()
+	for (label, args) in inputs {
+		same_output(work, programs, args, label)
+		let mut rows: Vec[(String, Count, Count)] = []
+		let mut best = 0
+		for p in programs {
+			let on = count(work, p.on, args)
+			let off = count(work, p.off, args)
+			if !p.on.contains("/bin/") && (best == 0 || off.instructions < best) {
+				best = off.instructions
+			}
+			rows.push((p.name.clone(), on, off))
+		}
+		for (name, on, off) in rows {
+			out.push_str(
+				f"| {label} | {name} | {millions(on.instructions)} | {millions(on.mispredicted)} | {millions(off.instructions)} | {millions(off.mispredicted)} | {ratio(off.instructions, best)} |\n",
+			)
+		}
+	}
+	return out
+}
+
+fn main() throws {
+	let repo = root()
+	let mut args = cli::args()
+	args.nth(0)
+	let mb = text::parse_i64(args.nth(0) ?? "10") ?? 10
+	let nikaia = toolchain(repo.clone())
+	let work = f"{repo}/target/yaml-bench"
+	must(f"mkdir -p {work}/bin {work}/inputs {work}/out", "mkdir")
+	must("command -v valgrind", "bench.nika needs valgrind (callgrind):")
+	println(f"compiler: {nikaia}")
+
+	let input = f"{work}/inputs"
+	write(f"{input}/small.yaml", small())
+	write(f"{input}/large.yaml", records(mb * 1000000))
+	write(f"{input}/deep.yaml", deep(mb * 100000))
+	write(f"{input}/scalars.yaml", scalars(mb * 200000))
+
+	build_rust(repo, work)
+	build_nikaia(nikaia, repo, work, "events", f"{repo}/benches/yaml/events.nika")
+	build_nikaia(nikaia, repo, work, "load", f"{repo}/benches/yaml/load.nika")
+	build_facade(nikaia, repo, work)
+
+	let events: Vec[Program] = [
+		nika(work, repo, "events", "yaml::events"),
+		rust(work, repo, "events_libyaml", "unsafe-libyaml"),
+		rust(work, repo, "events_saphyr", "saphyr-parser"),
+	]
+	let load: Vec[Program] = [
+		nika(work, repo, "load", "yaml::load"),
+		rust(work, repo, "load_serde_yaml", "serde_yaml::Value"),
+		rust(work, repo, "load_saphyr", "saphyr::Yaml"),
+	]
+	let typed: Vec[Program] = [
+		Program {
+			name: "nikaia_yaml::from_str",
+			on: f"{work}/bin/typed_facade.on",
+			off: f"{work}/bin/typed_facade.off",
+			source: f"{repo}/benches/yaml/facade/src/main.rs",
+		},
+		rust(work, repo, "typed_serde_yaml", "serde_yaml::from_str"),
+	]
+
+	let mut generated: Vec[(String, String)] = []
+	for name in ["small", "large", "deep", "scalars"] {
+		generated.push((name.clone(), f"{input}/{name}.yaml"))
+	}
+	let suite_events = agreed(repo, events)
+	let suite_load = agreed(repo, load)
+	let mut with_events = generated.clone()
+	with_events.push(("suite", suite_events.clone()))
+	let mut with_load = generated.clone()
+	with_load.push(("suite", suite_load.clone()))
+
+	println("| input | program | instructions (M), checks on | mispredicted (M), on | instructions (M), checks off | mispredicted (M), off | instructions off / fastest Rust |")
+	println("|---|---|---:|---:|---:|---:|---:|")
+	print(compare(work, events, with_events))
+	print(compare(work, load, with_load))
+	print(compare(work, typed, [("large", f"{input}/large.yaml")]))
+
+	println("")
+	for (name, path) in generated {
+		let bytes = sh(f"wc -c < {path}").stdout.trim().clone()
+		println(f"input {name}: {bytes} bytes")
+	}
+	let cases_events = suite_events.split_whitespace().count()
+	let cases_load = suite_load.split_whitespace().count()
+	println(f"input suite: {cases_events} cases for the events, {cases_load} for the trees")
+	println("")
+	println("| program | tokens |")
+	println("|---|---:|")
+	for group in [events, load, typed] {
+		for p in group {
+			println(f"| {p.name} | {tokens(repo, nikaia, p.source.clone())} |")
+		}
+	}
+}

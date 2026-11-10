@@ -1,0 +1,3 @@
+bounds in tests/a_counter_set_back_to_zero_stays_below_the_turns.nika: 0 indexes, 0 proved; 2 operations, 2 proved
+    11  column += 1  proved
+    23  column += 1  proved

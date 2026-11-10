@@ -1,0 +1,26 @@
+// A text parameter taken by value, given whole to a nullable field of
+// either kind (ADR-282 D12) by a literal or by `with`, moves in as the
+// field's own text, so the function may hand the struct back (#1515).
+struct Node {
+	name: String,
+	tag: String?,
+}
+
+fn view(input: String) -> Node sync {
+	return Node { name: "v", tag: input.trim() }
+}
+
+fn owned(n: Node, tag: String) -> Node sync {
+	return n with { tag: tag }
+}
+
+fn literal(n: Node, tag: String) -> Node sync {
+	return Node { name: n.name, tag: tag }
+}
+
+fn main() throws {
+	let input = "!a"
+	let a = owned(view(input), f"!{input.len()}")
+	let b = literal(view(input), f"!c{input.len()}")
+	println(f"{a.tag ?? "none"} {b.tag ?? "none"}")
+}

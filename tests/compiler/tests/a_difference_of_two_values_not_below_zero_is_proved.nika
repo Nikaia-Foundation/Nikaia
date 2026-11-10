@@ -1,0 +1,20 @@
+// #1516: `n - i` of two whole numbers not below zero lies in `-hi..=hi`,
+// inside a signed type, though `i` has no upper bound after its loop; an
+// unsigned difference can still fall below zero and keeps its check.
+fn rest(t: String) -> i64 sync {
+	let cs: Vec[scalar] = t.chars().collect()
+	let n = cs.len() as i64
+	let mut i = 2
+	while i < n && cs[i] == '0' {
+		i += 1
+	}
+	return n - i
+}
+
+fn gap(a: u32, b: u32) -> u32 sync {
+	return a - b
+}
+
+fn main() throws {
+	println(f"{rest("0x00f")} {rest("x")} {gap(5, 3)}")
+}

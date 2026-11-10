@@ -10,6 +10,7 @@ pub(crate) enum Ask {
     Pinned,
     Assigned,
     Untracked(collections::BTreeSet<String>),
+    Follows(String, String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +56,12 @@ pub fn assigned_in_expr(expr: &Expr, words: &winnow_grammar::InternerContext) ->
     let mut found = tally();
     tally_expr(expr, &Ask::Assigned, false, words, &mut found);
     found.names
+}
+
+pub fn follows_only(body: &Block, name: &str, binding: &str, words: &winnow_grammar::InternerContext) -> bool {
+    let mut found = tally();
+    tally_block(body, &Ask::Follows(nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(binding.to_string())), false, words, &mut found);
+    !found.found && !rebinds(body, binding, words)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -201,6 +208,15 @@ pub(crate) fn tally_statement(stmt: &Stmt, ask: &Ask, deferred: bool, words: &wi
             },
             _ => { },
         }; },
+        Ask::Follows(name, binding) => { match stmt {
+            Stmt::Assign { target, op, value } => {
+                if nikaia_std::index::or(assigned_root(target, words), || "".into()) == *name {
+                    let plain = op.is_none() && variable_text(target, words).is_some() && nikaia_std::index::or(variable_text(value, words), || "".into()) == *binding;
+                    if deferred || !plain { tally.found = true; }
+                }
+            },
+            _ => { },
+        }; },
         Ask::Untracked(_) => {
             match stmt {
                 Stmt::Assign { target, .. } => {
@@ -278,6 +294,13 @@ pub(crate) fn tally_here(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
             _ => { },
         }; },
         Ask::Assigned => { },
+        Ask::Follows(name, _) => { match expr {
+            Expr::Call { args, .. } => { if names_the(args, name, words) { tally.found = true; } },
+            Expr::MethodCall { args, .. } => { if names_the(args, name, words) { tally.found = true; } },
+            Expr::SafeMethod { args, .. } => { if names_the(args, name, words) { tally.found = true; } },
+            Expr::Match { arms, .. } => { for arm in arms.iter() { if assigned_in_expr(&arm.body, words).contains(name) { tally.found = true; } } },
+            _ => { },
+        }; },
         Ask::Untracked(readers) => { match expr {
             Expr::MethodCall { receiver, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver);

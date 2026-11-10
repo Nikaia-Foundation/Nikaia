@@ -1,0 +1,18 @@
+error[NK1330]: `words::Interned::all` hands back `Vec[winnow_grammar::Symbol]`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.
+  --> TMP/app/src/main.nika:6:2
+   |
+ 6 | 	println(words::Interned::all("x;y;").len())
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).
+   = help: Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `words::Interned::all(input; words: table)`; `table.resolve(symbol)` reads a name back.
+error[NK1109]: `words::Interned::plain` has no option called `words`.
+  --> TMP/app/src/main.nika:7:2
+   |
+ 7 | 	println(words::Interned::plain("x;"; words: table))
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `words::Interned::plain` takes no options: its declaration has no `;`.
+   = help: Pass it as a plain argument, without a name.
+2 type errors
+exit 1

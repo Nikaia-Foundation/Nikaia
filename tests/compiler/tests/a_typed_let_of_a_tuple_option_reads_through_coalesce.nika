@@ -1,0 +1,14 @@
+// A typed `let` of a map's tuple option keeps its written type, read through
+// `??` and destructured (#1535).
+use std::collections
+
+fn main() throws {
+    let mut m: collections::BTreeMap[String, (i64, i64)] = collections::BTreeMap()
+    m.insert("a", (1, 2))
+    let had: (i64, i64)? = m.get("a")
+    let (x, y) = had ?? (0, 0)
+    let (p, q) = m.get("a") ?? (0, 0)
+    let none: (i64, i64)? = m.get("b")
+    let t = none ?? (3, 4)
+    println(f"{x} {y} {p} {q} {t.0} {t.1}")
+}

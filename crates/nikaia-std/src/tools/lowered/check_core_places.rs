@@ -629,7 +629,7 @@ pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     let declared: Vec<FieldContract> = match fields_of { Some(__nikaia_value) => __nikaia_value, None => return found };
     if fields.is_empty() { state.a_with_that_changes_nothing(&name, span); }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    for init in fields.iter() { check_core_places_a_with_field(state, world, host, &name, &declared, init, &mut seen, span); }
+    for init in fields.iter() { check_core_places_a_with_field(state, world, host, expr, &name, &declared, init, &mut seen, span); }
     state.facts.with_types.insert(id_of(expr) as i64, nikaia_std::block::Text::from(name.to_string()));
     found
 }
@@ -637,7 +637,7 @@ pub fn check_core_with<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, declared: &[FieldContract], init: &FieldInit, seen: &mut collections::BTreeSet<String>, span: &Span) {
+pub(crate) fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, name: &str, declared: &[FieldContract], init: &FieldInit, seen: &mut collections::BTreeSet<String>, span: &Span) {
     let field: String = format!("{}", world.words.resolve(init.name));
     if seen.contains(&field) { state.a_field_written_twice(name, &field, span); } else { seen.insert(nikaia_std::block::Text::from(field.to_string())); }
     let code_field = state.a_field_holds_code(world, name, &field);
@@ -670,6 +670,11 @@ pub(crate) fn check_core_places_a_with_field<H: CheckHost>(state: &mut CheckStat
     let waiting = state.slots_waiting(span);
     state.expect_type(world, &given, &want, span, "field", &|was, wanted| { format!("`{}.{}` holds `{}`, but you're giving it `{}`.", name, field, wanted, was) });
     state.findings_moved(span, &said, pushed, &waiting);
+    let how: Option<FactWrap> = check_widened_slot(state, world, host, &given, &want, (init.value).as_ref(), span);
+    if how.is_some() {
+        let wrap: FactWrap = match how { Some(__nikaia_value) => __nikaia_value, None => return };
+        state.facts.nullable_fields.insert((id_of(expr) as i64, nikaia_std::block::Text::from(field.to_string())), wrap);
+    }
     if init.value.is_some() && check_core_places_lent_field(&want, &given) {
         let v: &Expr = match init.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         state.facts.lent_fields.insert(id_of(v) as i64);

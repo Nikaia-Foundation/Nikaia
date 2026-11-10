@@ -2,9 +2,10 @@
 //! D10; ADR-393 D7, option A): `from_str`, `from_slice`, `from_reader` and
 //! `Deserializer` (one document, or each of a stream) into any `Deserialize`
 //! type; `Value` with its indexing, `Tag` and `TaggedValue`, `Mapping`,
-//! `Number`, `from_value` and `to_value`; `with::singleton_map`; and `Error`.
-//! The parser is `native`, the lowered package; this facade is hand-written
-//! Rust over it. `value/`, `mapping.rs`, `number.rs` and `with.rs` are
+//! `Number`, `from_value` and `to_value`; `with::singleton_map`; `Error`;
+//! and the writing side, `to_string`, `to_writer` and `Serializer` (#1515).
+//! The parser and the writer are `native`, the lowered package; this facade
+//! is hand-written Rust over it. `value/`, `mapping.rs`, `number.rs` and `with.rs` are
 //! serde_yaml 0.9.34's (David Tolnay, MIT OR Apache-2.0); `de.rs` reads the
 //! native events where serde_yaml reads libyaml's.
 
@@ -33,6 +34,7 @@
 
 pub use crate::de::{Deserializer, from_reader, from_slice, from_str};
 pub use crate::error::{Error, Location, Result};
+pub use crate::ser::{Serializer, to_string, to_writer};
 #[doc(inline)]
 pub use crate::value::{Index, Number, Sequence, Value, from_value, to_value};
 
@@ -44,6 +46,7 @@ mod error;
 pub mod mapping;
 mod number;
 mod path;
+mod ser;
 pub mod value;
 pub mod with;
 
