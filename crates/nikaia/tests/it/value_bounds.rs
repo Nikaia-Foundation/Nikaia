@@ -43,13 +43,14 @@ fn unchecked_indexes(rust: &str) -> usize {
         + rust.matches("nikaia_std::proven::write(").count()
 }
 
-/// Operations written without their overflow check.
+/// Operations written without their overflow check (a proved operation
+/// inside another shares its one `unsafe` block, ADR-306 D26).
 fn unchecked_arithmetic(rust: &str) -> usize {
-    rust.matches("unsafe { nikaia_std::proven::add::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::sub::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::mul::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::shl::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::shr::<").count()
+    rust.matches("nikaia_std::proven::add::<").count()
+        + rust.matches("nikaia_std::proven::sub::<").count()
+        + rust.matches("nikaia_std::proven::mul::<").count()
+        + rust.matches("nikaia_std::proven::shl::<").count()
+        + rust.matches("nikaia_std::proven::shr::<").count()
 }
 
 fn run(purpose: &str, source: &str, level: Level) -> (bool, String, String) {
