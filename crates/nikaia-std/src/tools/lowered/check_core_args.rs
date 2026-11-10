@@ -278,9 +278,14 @@ pub(crate) fn check_core_args_slot(callee: Option<&FnContract>, at: i64) -> bool
 #[allow(clippy::too_many_arguments)]
 pub fn check_core_arguments_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[Expr], expected: &[Ty], declared_here: bool, callee: Option<&FnContract>, span: &Span) -> Vec<Ty> {
     let mut out: Vec<Ty> = vec![];
+    let mut bound: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut at: i64 = 0;
     for arg in args.iter() {
-        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, expected, at) { out.push(check_core_args_lambda(state, world, host, arg, nikaia_std::index::get(&expected, nikaia_std::index::at(at)), declared_here, callee, at, false, span)); } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span)); }
+        if check_core_args_slot(callee, at) { out.push(Ty::Unknown); } else if check_core_args_is_lambda(arg, expected, at) {
+            let wanted = if declared_here && !bound.is_empty() { substitute(nikaia_std::index::get(&expected, nikaia_std::index::at(at)), &bound) } else { (*nikaia_std::index::get(&expected, nikaia_std::index::at(at))).clone() };
+            out.push(check_core_args_lambda(state, world, host, arg, &wanted, declared_here, callee, at, false, span));
+        } else { out.push(check_core_args_other(state, world, host, arg, expected, declared_here, callee, at, false, span)); }
+        if declared_here && at < expected.len() as i64 { bind(nikaia_std::index::get(&expected, nikaia_std::index::at(at)), nikaia_std::index::get(&out, nikaia_std::index::at(at)), &mut bound); }
         at += 1;
     }
     out

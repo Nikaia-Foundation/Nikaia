@@ -1,0 +1,71 @@
+// A plain parameter of a function type is lent whatever its type (Part I
+// §C, ADR-views-3 D2, #1504): a struct, a type variable bound to one or to a
+// number, a payloadless enum and `Bytes` are each read twice. A lambda handed
+// to a generic function reads what the arguments before it bound, and a
+// named function that takes a number by value is handed a copy.
+
+struct Row {
+    name: String,
+}
+
+enum Light {
+    Red,
+    Green,
+}
+
+fn total(r: Row, read: fn(Row) -> i64) -> i64 {
+    return read(r) + read(r)
+}
+
+fn twice[T](x: T, f: fn(T) -> i64) -> i64 {
+    return f(x) + f(x)
+}
+
+fn both(l: Light, f: fn(Light) -> i64) -> i64 {
+    return f(l) + f(l)
+}
+
+fn count(b: Bytes, f: fn(Bytes) -> i64) -> i64 {
+    return f(b) + f(b)
+}
+
+fn size(r: Row) -> i64 {
+    return r.name.len()
+}
+
+fn inc(v: i64) -> i64 {
+    return v + 1
+}
+
+fn code(l: Light) -> i64 {
+    return match l {
+        Light::Red => 1,
+        Light::Green => 2,
+    }
+}
+
+fn length(b: Bytes) -> i64 {
+    return b.len()
+}
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("abc")
+    return g
+}
+
+fn main() throws {
+    let r = Row { name: make() }
+    println(total(r, fn(v) { v.name.len() }))
+    println(total(r, size))
+    println(twice(r, fn(v) { v.name.len() }))
+    println(twice(r, size))
+    println(twice(5, fn(v) { v + 1 }))
+    println(twice(5, inc))
+    println(both(Light::Green, code))
+    println(both(Light::Red, fn(v) { code(v) }))
+    let b: Bytes = Bytes([1, 2, 3])
+    println(count(b, length))
+    println(count(b, fn(v) { v.len() }))
+    println(r.name)
+}
