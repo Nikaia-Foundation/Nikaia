@@ -51,8 +51,8 @@ pub fn unproved_claims(word: String) -> Result<String, nikaia_std::error::Thrown
 }
 
 pub fn optimizations(words: &str) -> Result<(BoundsChecks, OverflowChecks), nikaia_std::error::Thrown<ProjectSettingsRefusal>> {
-    let mut bounds = BoundsChecks::Kept;
-    let mut overflow = OverflowChecks::Kept;
+    let mut bounds = BoundsChecks::Removed;
+    let mut overflow = OverflowChecks::Removed;
     for word in words.split(',').map(|w| { w.trim() }).filter(|&w| { !w.is_empty() }) {
         let (name, level) = match word.split_once(":") { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ProjectSettingsRefusal::Refused(format!("`--optimization={}` needs `on` or `off`: write `--optimization=remove-bounds-checks:on` or `--optimization=remove-overflow-checks:on`", word)), &"optimizations")) };
         match name {
@@ -94,7 +94,8 @@ pub fn cpu_config(words: &ProjectWords, target: &Target) -> Vec<String> {
     }
 }
 
-pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str, crate_root: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: &str, crate_root: &str, counts_heap: bool) -> String {
     let tests = if words.tests { "/tests" } else { "" };
     let refuted = if words.refuted_claims == "warn" { "/refuted-claims:warn" } else { "" };
     let unproved = if words.unproved_claims == "warn" { "/unproved-claims:warn" } else { "" };
@@ -110,7 +111,8 @@ pub fn choices_key(words: &ProjectWords, bounds: &BoundsChecks, overflow: &Overf
     let library = if words.artifact == "c-library" { format!("/c-library:{}", words.symbol_prefix) } else if words.artifact == "rust-library" { String::from("/rust-library") } else { String::from("") };
     let cpu = if words.cpu.is_some() { format!("/cpu:{}", cpu_key) } else { String::from("") };
     let root = if crate_root == "crate" { String::from("") } else { format!("/root:{}", crate_root) };
-    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, library, cpu, root)
+    let heap = if counts_heap { "" } else { "/dependency" };
+    format!("{}/{}/{}{}{}{}{}{}{}{}{}{}{}", words.target, words.user_parallelism, words.reentrancy_check, tests, refuted, unproved, removed_bounds, removed_overflow, skip_free, library, cpu, root, heap)
 }
 
 pub fn panic_strategy(target: &Target) -> String {

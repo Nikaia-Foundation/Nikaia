@@ -177,7 +177,7 @@ fn throws_on_the_type_is_the_result_a_throws_function_has() {
     // word adds.
     let plain = lowered("fn load(reader: fn(Path) -> Bytes sync throws) { }\nfn main() { }\n");
     assert!(
-        plain.contains("impl Fn(Path) -> Result<Bytes, Box<dyn std::error::Error>>"),
+        plain.contains("&impl Fn(&Path) -> Result<Bytes, Box<dyn std::error::Error>>"),
         "{plain}"
     );
     // Without it, the same `Result` is what the **async closure** hands back
@@ -186,7 +186,7 @@ fn throws_on_the_type_is_the_result_a_throws_function_has() {
     // than the box.
     let run = lowered("fn load(reader: fn(Path) -> Bytes throws) { }\nfn main() { }\n");
     assert!(
-        run.contains("impl AsyncFn(Path) -> Result<Bytes, Box<dyn std::error::Error>>"),
+        run.contains("&impl AsyncFn(&Path) -> Result<Bytes, Box<dyn std::error::Error>>"),
         "{run}"
     );
     let nothing = lowered("fn attempt(step: fn() sync throws) { }\nfn main() { }\n");

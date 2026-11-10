@@ -51,14 +51,14 @@ pub(crate) fn kind_count_of(ty: &Ty) -> Option<i64> {
 
 pub(crate) fn kind_array_room(found: &[Ty], at: i64) -> Option<i64> {
     if at >= found.len() as i64 { return None; }
-    match nikaia_std::index::get(&found, nikaia_std::index::at(at)) {
+    match unsafe { nikaia_std::proven::read(&found, (at) as usize) } {
         Ty::Named { name, args, .. } => kind_array_count(name, args),
         _ => None,
     }
 }
 
 pub(crate) fn kind_array_count(name: &str, args: &[Ty]) -> Option<i64> {
-    if name == ARRAY && args.len() == 2 { return kind_count_of(nikaia_std::index::get(&args, 1)); }
+    if name == ARRAY && args.len() == 2 { return kind_count_of(unsafe { nikaia_std::proven::read(&args, (1) as usize) }); }
     None
 }
 
@@ -92,8 +92,8 @@ pub(crate) fn kind_names_a_value_of_the_inner(pattern: &MatchPattern) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn kind_some_or_none(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<&'static str> {
     match pattern {
-        MatchPattern::Tuple { path, .. } => { if path.len() == 1 && world.words.resolve(*nikaia_std::index::get(&path, 0)) == "Some" { return Some("Some"); } },
-        MatchPattern::Path(path) => { if path.len() == 1 && world.words.resolve(*nikaia_std::index::get(&path, 0)) == "None" { return Some("None"); } },
+        MatchPattern::Tuple { path, .. } => { if path.len() == 1 && world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == "Some" { return Some("Some"); } },
+        MatchPattern::Path(path) => { if path.len() == 1 && world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == "None" { return Some("None"); } },
         MatchPattern::Or(alternatives) => {
             for alternative in alternatives.iter() {
                 let found = kind_some_or_none(world, alternative);
@@ -109,7 +109,7 @@ pub(crate) fn kind_some_or_none(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
 // this was written - see `contracts::sync`.
 pub(crate) fn kind_some_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> String {
     match pattern {
-        MatchPattern::Tuple { parts, .. } => { if parts.len() == 1 { return written_pattern(world.words, nikaia_std::index::get(&parts, 0)); } },
+        MatchPattern::Tuple { parts, .. } => { if parts.len() == 1 { return written_pattern(world.words, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); } },
         _ => { },
     }
     String::from("value")
@@ -211,18 +211,18 @@ impl CheckState {
         let mut at: i64 = 0;
         while at < wanted.len() as i64 {
             self.a_buffer_and_its_count(world, written, wanted, given, found, at, span);
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
-        if !kind_a_slice_pointer(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at)).1) { return; }
-        if at + 1 >= wanted.len() as i64 || !kind_a_usize(&nikaia_std::index::get(&wanted, nikaia_std::index::at(at + 1)).1) { return; }
-        if at + 1 >= given.len() as i64 { return; }
-        let buffer = nikaia_std::index::get(&given, nikaia_std::index::at(at));
-        let count = nikaia_std::index::get(&given, nikaia_std::index::at(at + 1));
+        if !kind_a_slice_pointer(&unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1) { return; }
+        if at + 1 >= wanted.len() as i64 || !kind_a_usize(&unsafe { nikaia_std::proven::read(&wanted, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }.1) { return; }
+        if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= given.len() as i64 { return; }
+        let buffer = unsafe { nikaia_std::proven::read(&given, (at) as usize) };
+        let count = unsafe { nikaia_std::proven::read(&given, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
         if kind_the_buffers_own_length(world, &count, &buffer) { return; }
         let folded = self.constant_of(world, &count);
         if kind_a_count_fits((folded).as_ref(), kind_array_room(found, at)) { return; }
@@ -291,7 +291,7 @@ impl CheckState {
             let named = match self.a_type_named_whole(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if nikaia_std::list::contains(&members, &named) { continue; }
             let written = written_expression(world.words, value);
-            let shown = if members.len() == 1 { format!("a `{}`", *nikaia_std::index::get(&members, 0)) } else { format!("one of `{}`", nikaia_std::block::Text::from(members.join("`, `"))) };
+            let shown = if members.len() == 1 { format!("a `{}`", *unsafe { nikaia_std::proven::read(&members, (0) as usize) }) } else { format!("one of `{}`", nikaia_std::block::Text::from(members.join("`, `"))) };
             self.findings.push(check_refusal("NK1103", span, format!("`{}` is {}, so the pattern `{}` can't match it.", written, shown, named), vec![String::from("Over `error`, an arm's pattern names a type that can arrive at this `catch`, or one of its variants.")], Some(String::from("Name a type that can arrive, or `else => …` for the rest."))));
             return;
         }
@@ -331,7 +331,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn kind_a_variant_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], kind: &str) -> bool {
         if path.len() != 2 { return false; }
-        let owner = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
+        let owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         self.enums.contains_key(&owner) && owner != kind
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

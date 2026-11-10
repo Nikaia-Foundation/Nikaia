@@ -1,7 +1,16 @@
 // A task's block counts what it holds, not what it has allocated (ADR-327
 // D10, D12): a long task that builds and frees a megabyte a thousand times,
 // in lists of 32 KiB, never holds more than its 64 KiB block and runs to its
-// end.
+// end, under a strategy that gives it one segment (D15).
+// A strategy that gives each task one segment, 64 KiB (ADR-327 D15).
+struct Small {}
+
+impl task::Admission for Small {
+    fn decide(mut self, load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 65536 }
+    }
+}
+
 fn churn() -> i64 {
     let mut total = 0
     for _turn in 0..<1000 {
@@ -17,7 +26,7 @@ fn churn() -> i64 {
 }
 
 fn main() throws {
-    let n = async churn() catch {
+    let n = async(admission: Small {}) churn() catch {
         match error {
             task::OverBudget => println(f"over budget: {error}"),
             else => println(f"failed: {error}"),

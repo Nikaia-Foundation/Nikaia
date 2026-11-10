@@ -96,7 +96,8 @@ fn each_view_of_a_result_is_written_by_its_path() {
 }
 
 /// **A type variable is declared in brackets before the parameters**, as
-/// `fn hand[T](x: T) -> T` declares it, and a bound stays where it stood.
+/// `fn hand[T](x: T) -> T` declares it, and a bound stays where it stood. A
+/// plain `x: T` is lent (ADR-views-3 D12), which the signature says as `ref`.
 #[test]
 fn a_type_variable_is_declared_in_brackets() {
     let (_, text) = written(
@@ -104,7 +105,10 @@ fn a_type_variable_is_declared_in_brackets() {
          pub trait Speaks { fn speak(ref self) -> String }\n\
          pub fn tell[T: Speaks](x: T) -> String { return x.speak() }\n",
     );
-    assert!(text.contains("signature = \"[T](x: T) -> T\""), "{text}");
+    assert!(
+        text.contains("signature = \"[T](x: ref T) -> ref(x) T\""),
+        "{text}"
+    );
     assert!(
         text.contains("signature = \"[T: Speaks](x: T) -> String\""),
         "{text}"

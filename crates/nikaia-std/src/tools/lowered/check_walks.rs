@@ -27,9 +27,9 @@ pub(crate) fn check_walks_clash(earlier: &Accounted, later: &Accounted) -> Optio
 pub(crate) fn check_walks_shared(changed_by: &[collections::BTreeSet<String>], mentioned: &[collections::BTreeSet<String>], i: i64, j: i64) -> Option<(String, bool)> {
     for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(i))).iter() {
         if (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), true)); }
-        if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(j))).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), false)); }
+        if (*unsafe { nikaia_std::proven::read(&mentioned, (j) as usize) }).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), false)); }
     }
-    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*nikaia_std::index::get(&mentioned, nikaia_std::index::at(i))).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), false)); } }
+    for name in (*nikaia_std::index::get(&changed_by, nikaia_std::index::at(j))).iter() { if (*unsafe { nikaia_std::proven::read(&mentioned, (i) as usize) }).contains(name) { return Some((nikaia_std::block::Text::from(name.to_string()), false)); } }
     None
 }
 
@@ -246,19 +246,19 @@ impl CheckState {
             mentioned.push(names);
         }
         for i in 0..operations.len() as i64 {
-            for j in i + 1..operations.len() as i64 {
+            for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..operations.len() as i64 {
                 let shared = check_walks_shared(changed_by, &mentioned, i, j);
                 if shared.is_some() {
                     let (name, both) = nikaia_std::index::or(shared, || ("".into(), false.into()));
                     let note = if both { format!("Both change `{}`.", name) } else { format!("One changes `{}`, and the other reads it.", name) };
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![note, String::from("`overlap` runs its branches at once, so a binding one changes can't be touched by the other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![note, String::from("`overlap` runs its branches at once, so a binding one changes can't be touched by the other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
                     break;
                 }
-                let clash = check_walks_clash(nikaia_std::index::get(&operations, nikaia_std::index::at(i)), nikaia_std::index::get(&operations, nikaia_std::index::at(j)));
+                let clash = check_walks_clash(unsafe { nikaia_std::proven::read(&operations, (i) as usize) }, unsafe { nikaia_std::proven::read(&operations, (j) as usize) });
                 if clash.is_some() {
                     let verdict = nikaia_std::index::or(clash, || Verdict::NotAccountedFor);
                     let why = capitalised(&verdict.why());
-                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j)).span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![format!("{}.", why), String::from("`overlap` runs its branches at once, so they can't depend on each other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
+                    self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) }.span.clone(), code: String::from("NK2104"), message: String::from("These two branches can't run at the same time."), notes: vec![format!("{}.", why), String::from("`overlap` runs its branches at once, so they can't depend on each other.")], help: Some(String::from("If they should run in order, write them as ordinary statements.")), labels: vec![] });
                     break;
                 }
             }
@@ -295,8 +295,8 @@ impl CheckState {
         for j in 0..tasks.len() as i64 {
             for i in 0..tasks.len() as i64 {
                 if i == j { continue; }
-                let earlier = nikaia_std::index::get(&tasks, (i) as usize);
-                let later = nikaia_std::index::get(&tasks, (j) as usize);
+                let earlier = unsafe { nikaia_std::proven::read(&tasks, (i) as usize) };
+                let later = unsafe { nikaia_std::proven::read(&tasks, (j) as usize) };
                 let before = earlier.span.start < later.span.start || earlier.span.start == later.span.start && i < j;
                 let inside = later.span.start >= earlier.span.start && later.span.end <= earlier.span.end;
                 let held = earlier.span.start >= later.span.start && earlier.span.end <= later.span.end;

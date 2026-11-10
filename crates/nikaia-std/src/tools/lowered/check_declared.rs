@@ -74,7 +74,7 @@ impl CheckState {
 
 pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64, facts: &CheckFacts, offset: i64) -> Option<(i64, Span, String)> {
     if here_at < 0 || here_at >= units.len() as i64 { return None; }
-    let here = nikaia_std::index::get(&units, nikaia_std::index::at(here_at));
+    let here = unsafe { nikaia_std::proven::read(&units, (here_at) as usize) };
     let mut best: Option<CheckDeclared> = None;
     let mut width: i64 = -1;
     for (node, what) in facts.declared.iter() {
@@ -96,14 +96,14 @@ pub fn declared_site(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], here_at: i64,
         },
         CheckDeclared::Function(ref key) => {
             let (owner, parts) = site_split(units, &package, key);
-            let last = parts.len() as i64 - 1;
-            let place: Option<(i64, Span)> = if parts.len() == 1 { site_function(units, &owner, nikaia_std::index::get(&parts, 0)) } else if parts.len() == 2 { site_member(units, &owner, nikaia_std::index::get(&parts, 0), nikaia_std::index::get(&parts, 1), 0) } else { None };
+            let last = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
+            let place: Option<(i64, Span)> = if parts.len() == 1 { site_function(units, &owner, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) } else if parts.len() == 2 { site_member(units, &owner, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, 0) } else { None };
             site_named(place, nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
         },
         CheckDeclared::Field(ref ty, ref field) => site_named(site_typed(units, &package, ty, field, 1), field),
         CheckDeclared::Type(ref ty) => {
             let words: Vec<&str> = ty.split("::").map(|part| { part }).collect::<Vec<_>>();
-            site_named(site_typed(units, &package, ty, "", 2), *nikaia_std::index::get(&words, nikaia_std::index::at(words.len() as i64 - 1)))
+            site_named(site_typed(units, &package, ty, "", 2), *nikaia_std::index::get(&words, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(words.len() as i64, 1) })))
         },
         CheckDeclared::Variant(ref ty, ref variant) => site_named(site_typed(units, &package, ty, variant, 3), variant),
     }
@@ -124,7 +124,7 @@ pub(crate) fn site_package_of(unit: &ParsedView<'_, '_, '_, '_, '_, '_>) -> Stri
 pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, name: &'r str) -> (nikaia_std::either_text::EitherText<'r>, Vec<nikaia_std::either_text::EitherText<'r>>) {
     let parts: Vec<nikaia_std::either_text::EitherText<'_>> = name.split("::").map(|part| { part }).either_items().collect::<Vec<_>>();
     if parts.len() >= 2 {
-        let head = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string());
+        let head = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string());
         if units.iter().any(|unit| { site_package_of(unit) == head }) {
             let rest: Vec<nikaia_std::either_text::EitherText<'_>> = parts.iter().skip(1).map(|part| { nikaia_std::block::Text::from(part.to_string()) }).either_items().collect::<Vec<_>>();
             return (head.into_either(), rest);
@@ -136,7 +136,7 @@ pub(crate) fn site_split<'r>(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], packa
 pub(crate) fn site_typed(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, ty: &str, member: &str, what: i64) -> Option<(i64, Span)> {
     let (owner, parts) = site_split(units, package, ty);
     if parts.len() != 1 { return None; }
-    site_member(units, &owner, nikaia_std::index::get(&parts, 0), member, what)
+    site_member(units, &owner, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, member, what)
 }
 
 pub(crate) fn site_function(units: &[ParsedView<'_, '_, '_, '_, '_, '_>], package: &str, name: &str) -> Option<(i64, Span)> {

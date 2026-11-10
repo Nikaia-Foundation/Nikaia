@@ -72,8 +72,8 @@ pub fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ru
     }, || Ty::Unknown);
     if wanted.is_unknown() { return Some(grammar_stream_refusal(&entry, &rule.span, "it names no item type", format!("Write the type of one item after the arrow: `@stream entry rule {} -> Item = item*`.", entry))); }
     if rule.alts.len() != 1 { return Some(grammar_stream_refusal(&entry, &rule.span, &format!("it has {} alternatives", rule.alts.len() as i64), String::from("Put the choice into the item's rule, and leave the entry one repetition: `item*`."))); }
-    if nikaia_std::index::get(&rule.alts, 0).action.is_some() { return Some(grammar_stream_refusal(&entry, &rule.span, "it has an action", String::from("Leave the action out: each item goes to the caller as it is parsed, so there is no list for an action to read."))); }
-    let found = grammar_stream_paths(world, &nikaia_std::index::get(&rule.alts, 0).pattern.node, &wanted, results, rules);
+    if unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.action.is_some() { return Some(grammar_stream_refusal(&entry, &rule.span, "it has an action", String::from("Leave the action out: each item goes to the caller as it is parsed, so there is no list for an action to read."))); }
+    let found = grammar_stream_paths(world, &unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.pattern.node, &wanted, results, rules);
     if found == 1 { return None; }
     let item = wanted.text();
     if found == 0 { return Some(grammar_stream_refusal(&entry, &rule.span, &format!("no element of it repeats a rule of type `{}`", item), format!("Repeat the rule of one item: `item*`, `item+` or `list(item, \",\")`, where `item` is a rule `-> {}`.", item))); }
@@ -110,7 +110,7 @@ pub(crate) fn grammar_stream_paths(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
         Pattern::Ref { name, generics, args } => {
             let name = *name;
             let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
-            if called == "list" && !rules.contains(&called) && generics.is_empty() && args.len() == 2 && grammar_stream_item(world, &nikaia_std::index::get(&args, 0).node, wanted, results, rules) { return 1; }
+            if called == "list" && !rules.contains(&called) && generics.is_empty() && args.len() == 2 && grammar_stream_item(world, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node, wanted, results, rules) { return 1; }
             return 0;
         },
         _ => return 0,
@@ -180,12 +180,12 @@ impl CheckState {
         let mut first = Ty::Unknown;
         let mut at: i64 = 0;
         while at < alternatives.len() as i64 {
-            let ty = self.pattern_type(world, &nikaia_std::index::get(&alternatives, nikaia_std::index::at(at)).node, rules);
+            let ty = self.pattern_type(world, &unsafe { nikaia_std::proven::read(&alternatives, (at) as usize) }.node, rules);
             if at == 0 {
                 if ty.is_unknown() { return Ty::Unknown; }
                 first = ty;
             } else if ty.text() != first.text() { return Ty::Unknown; }
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         first
     }
@@ -200,8 +200,8 @@ impl CheckState {
             }, || Ty::Unknown);
         }
         if called == "dec" && generics.len() == 1 {
-            let written = nikaia_std::block::Text::from(world.words.resolve(nikaia_std::index::get(&generics, 0).name).to_string());
-            if nikaia_std::index::get(&generics, 0).generics.is_empty() && an_offered_number_name(&written) { return pattern_named(&written, false); }
+            let written = nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&generics, (0) as usize) }.name).to_string());
+            if unsafe { nikaia_std::proven::read(&generics, (0) as usize) }.generics.is_empty() && an_offered_number_name(&written) { return pattern_named(&written, false); }
             return Ty::Unknown;
         }
         if generics.is_empty() {
@@ -216,8 +216,8 @@ impl CheckState {
             if called == "here" && args.is_empty() { return pattern_named("u32", false); }
             if called == "same_line" && args.is_empty() { return Ty::Tuple(vec![]); }
             if called == "count" && args.len() == 1 { return pattern_named("i64", false); }
-            if called == "peek" && args.len() == 1 { return self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules); }
-            if called == "list" && args.len() == 2 { return list_of_known(self.pattern_type(world, &nikaia_std::index::get(&args, 0).node, rules)); }
+            if called == "peek" && args.len() == 1 { return self.pattern_type(world, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node, rules); }
+            if called == "list" && args.len() == 2 { return list_of_known(self.pattern_type(world, &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node, rules)); }
         }
         Ty::Unknown
     }
@@ -447,9 +447,9 @@ impl CheckState {
             if (args.len() as i64) != rule.args.len() as i64 { self.findings.push(check_refusal("NK1101", span, format!("`{}` takes {} before the `;`, but you passed {}.", called, counted(rule.args.len() as i64, "value"), args.len() as i64), vec![String::from("A rule takes its values as a function takes its arguments (ADR-grammar-1 D2).")], Some(String::from("Give one value for each, by position; an option goes after the `;` by name.")))); }
             for i in 0..args.len() as i64 {
                 if ((i) as usize) < rule.args.len() {
-                    let want = host.type_of(&nikaia_std::index::get(&rule.args, (i) as usize).ty);
-                    let what = format!("The value for `{}`", world.words.resolve(nikaia_std::index::get(&rule.args, (i) as usize).name));
-                    self.grammar_value(world, host, nikaia_std::index::get(&args, (i) as usize), &want, scope, span, &what);
+                    let want = host.type_of(&unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.ty);
+                    let what = format!("The value for `{}`", world.words.resolve(unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name));
+                    self.grammar_value(world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, &want, scope, span, &what);
                 }
             }
             for given in config.iter() {

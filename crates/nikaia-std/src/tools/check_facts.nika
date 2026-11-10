@@ -509,6 +509,17 @@ pub struct CheckFacts {
     /// The calls whose result, a view of a parameter of a type bound to a
     /// copied word, is read at the call (ADR-views-3 D12, #1239).
     pub copied_results: collections::BTreeSet[i64],
+    /// **Text of its own lent as the view a type variable holds** (ADR-views-3
+    /// D12, #1498): in `second(o, "p")` of `fn second[T](x: T, y: T) -> T`,
+    /// `T` is the `&str` the literal is, so `o` goes as `&o.as_str()`.
+    pub lent_text_views: collections::BTreeSet[i64],
+    /// The calls (by their span's start) whose type variable holds a view of
+    /// text (#1498): the result, a view of that view, is read at the call.
+    pub viewed_text_calls: collections::BTreeSet[i64],
+    /// **Brackets the arguments already say are the plain call** (NK1233,
+    /// #1498): `id[i64](3)` is lowered as `id(3)`, by the callee's node, so a
+    /// lent type variable is the view its argument is.
+    pub plain_bracket_calls: collections::BTreeSet[i64],
     pub compared_numbers: collections::BTreeSet[(i64, String)],
     /// **Text ordered against text** (#733), and a lambda's lent item
     /// compared with text (#688), by the operator's span: both sides are
@@ -538,6 +549,15 @@ pub struct CheckFacts {
     /// method's argument. Written `*name` below.
     pub copied_views: collections::BTreeSet[i64],
     pub settle_fns: collections::BTreeMap[String, bool],
+    /// **The type parameters a std operation weighs, by function** (ADR-327
+    /// D9, #1559): a `T` handed to a channel's `send` or a shared value's
+    /// `set`, whose Rust is bounded by `DeepSize`. The emitter writes the
+    /// bound; no Nikaia bound says it.
+    pub weighed: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **A generic call that hands its own type parameter on**, by caller:
+    /// the callee, the callee's parameter, and the caller's parameter in the
+    /// type it is bound to. Where the callee weighs it, the caller does.
+    pub weighed_through: collections::BTreeMap[String, collections::BTreeSet[(String, String, String)]],
     pub settle_lets: collections::BTreeMap[i64, bool],
     pub lent_lets: collections::BTreeSet[i64],
     pub lent_returns: collections::BTreeSet[i64],
@@ -816,6 +836,9 @@ impl CheckFacts {
             wrapped: collections::BTreeMap(),
             compared_views: collections::BTreeSet(),
             copied_results: collections::BTreeSet(),
+            lent_text_views: collections::BTreeSet(),
+            viewed_text_calls: collections::BTreeSet(),
+            plain_bracket_calls: collections::BTreeSet(),
             compared_numbers: collections::BTreeSet(),
             ordered_texts: collections::BTreeSet(),
             claims: collections::BTreeMap(),
@@ -830,6 +853,8 @@ impl CheckFacts {
             copied_args: collections::BTreeSet(),
             copied_views: collections::BTreeSet(),
             settle_fns: collections::BTreeMap(),
+            weighed: collections::BTreeMap(),
+            weighed_through: collections::BTreeMap(),
             settle_lets: collections::BTreeMap(),
             lent_lets: collections::BTreeSet(),
             lent_returns: collections::BTreeSet(),
@@ -866,6 +891,33 @@ impl CheckFacts {
             map_read_views: collections::BTreeSet(),
             keep_plans: null,
         }
+    }
+
+    /// **The type parameters of `key` that are weighed** (ADR-327 D9,
+    /// #1559): those a std operation in its body weighs, and those it hands
+    /// to a generic callee that weighs them, to a fixed point.
+    pub fn weighed_of(ref self, key: ref String) -> collections::BTreeSet[String] {
+        let mut all: collections::BTreeMap[String, collections::BTreeSet[String]] = self.weighed.clone()
+        let mut changed = true
+        while changed {
+            changed = false
+            for (caller, edges) in self.weighed_through {
+                for edge in edges {
+                    let (callee, param, own) = edge.clone()
+                    let reached = all.get(callee)?.contains(param) ?? false
+                    if !reached {
+                        continue
+                    }
+                    let mut held: collections::BTreeSet[String] = all.get(caller)?.clone() ?? collections::BTreeSet()
+                    if !held.contains(own) {
+                        held.insert(own)
+                        all.insert(caller.clone(), held)
+                        changed = true
+                    }
+                }
+            }
+        }
+        return all.get(key)?.clone() ?? collections::BTreeSet()
     }
 }
 

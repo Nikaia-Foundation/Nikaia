@@ -43,13 +43,14 @@ fn unchecked_indexes(rust: &str) -> usize {
         + rust.matches("nikaia_std::proven::write(").count()
 }
 
-/// Operations written without their overflow check.
+/// Operations written without their overflow check (a proved operation
+/// inside another shares its one `unsafe` block, ADR-306 D26).
 fn unchecked_arithmetic(rust: &str) -> usize {
-    rust.matches("unsafe { nikaia_std::proven::add::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::sub::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::mul::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::shl::<").count()
-        + rust.matches("unsafe { nikaia_std::proven::shr::<").count()
+    rust.matches("nikaia_std::proven::add::<").count()
+        + rust.matches("nikaia_std::proven::sub::<").count()
+        + rust.matches("nikaia_std::proven::mul::<").count()
+        + rust.matches("nikaia_std::proven::shl::<").count()
+        + rust.matches("nikaia_std::proven::shr::<").count()
 }
 
 fn run(purpose: &str, source: &str, level: Level) -> (bool, String, String) {
@@ -436,7 +437,8 @@ fn the_overflow_option_is_read_and_a_wrong_level_is_refused() {
         optimizations("remove-bounds-checks:off,remove-overflow-checks:on").unwrap();
     assert_eq!(bounds, BoundsChecks::Kept);
     assert_eq!(overflow, OverflowChecks::Removed);
-    assert_eq!(optimizations("").unwrap().1, OverflowChecks::Kept);
+    // ADR-306 D26: a name the words leave out is `on`.
+    assert_eq!(optimizations("").unwrap().1, OverflowChecks::Removed);
     let basic = optimizations("remove-overflow-checks:basic").unwrap_err();
     assert!(basic.to_text().contains("`on` or `off`"), "{basic}");
 }

@@ -13,18 +13,18 @@ pub fn rust_format_escape(text: &str) -> String {
     let chars: Vec<scalar> = nikaia_std::list::chars(text.chars());
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
-        let c = *nikaia_std::index::get(&chars, (at) as usize);
-        at += 1;
+        let c = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         if c == '\\' {
             out.push('\\');
             if ((at) as usize) >= chars.len() { break; }
-            let escape = *nikaia_std::index::get(&chars, (at) as usize);
-            at += 1;
+            let escape = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             out.push(escape);
-            if escape == 'u' && ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '{' {
+            if escape == 'u' && ((at) as usize) < chars.len() && *unsafe { nikaia_std::proven::read(&chars, (at) as usize) } == '{' {
                 while ((at) as usize) < chars.len() {
-                    let inner = *nikaia_std::index::get(&chars, (at) as usize);
-                    at += 1;
+                    let inner = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                     out.push(inner);
                     if inner == '}' { break; }
                 }

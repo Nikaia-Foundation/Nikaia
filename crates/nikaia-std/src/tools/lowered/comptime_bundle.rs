@@ -159,10 +159,10 @@ pub(crate) fn comptime_bundle_run_fingerprint<H: ComptimeBundleHost>(host: &H) -
 
 pub(crate) fn comptime_bundle_read_record(text: &str, fingerprint: &str) -> Option<ComptimeBundle> {
     let lines: Vec<&str> = text.lines().collect::<Vec<_>>();
-    if lines.len() < 4 || *nikaia_std::index::get(&lines, 0) != fingerprint { return None; }
-    let dylib: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 1));
-    let deps: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 2));
-    let libdir: fs::Path = std::path::PathBuf::from(*nikaia_std::index::get(&lines, 3));
+    if lines.len() < 4 || *unsafe { nikaia_std::proven::read(&lines, (0) as usize) } != fingerprint { return None; }
+    let dylib: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (1) as usize) });
+    let deps: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (2) as usize) });
+    let libdir: fs::Path = std::path::PathBuf::from(*unsafe { nikaia_std::proven::read(&lines, (3) as usize) });
     let rlibs: Vec<(String, fs::Path)> = lines.iter().skip(4).filter_map(|line| { line.split_once("=") }).map(|__nikaia_tuple10572| {
         let (name, rlib) = __nikaia_tuple10572;
         (nikaia_std::block::Text::from(name.to_string()), comptime_bundle_path(nikaia_std::either_text::either(rlib)))
@@ -238,7 +238,7 @@ pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &C
     let found = comptime_bundle_artifacts(&built.stdout, &comptime_bundle_named());
     if (found.rlibs.len() as i64) != COMPTIME_BUNDLE_NAMED.len() as i64 { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("cargo built the bundle and named no library")), &"comptime_bundle_bundle_of")); }
     let dylib = match found.dylib { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("cargo built the bundle and named no library")), &"comptime_bundle_bundle_of")) };
-    let deps = match nikaia_std::fs::path::parent(&(nikaia_std::index::get(&found.rlibs, 0).1)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("no directory for std")), &"comptime_bundle_bundle_of")) };
+    let deps = match nikaia_std::fs::path::parent(&(unsafe { nikaia_std::proven::read(&found.rlibs, (0) as usize) }.1)) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(String::from("no directory for std")), &"comptime_bundle_bundle_of")) };
     let stamp = comptime_bundle_stamp_of(&dylib, &found.rlibs)?;
     Ok(ComptimeBundle { dylib, rlibs: found.rlibs, deps, stamp, libdir: comptime_bundle_path(nikaia_std::either_text::either(host.target_libdir())) })
 }

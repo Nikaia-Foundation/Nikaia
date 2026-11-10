@@ -124,7 +124,7 @@ pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: 
             let func = nikaia_std::boxed::open(func);
             match func {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "asset" },
-                Expr::Path(path, _) => path.len() == 2 && enums.contains(world.words.resolve(*nikaia_std::index::get(&path, 0))) && config.is_empty() && host_all_fold(world, args, enums),
+                Expr::Path(path, _) => path.len() == 2 && enums.contains(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) })) && config.is_empty() && host_all_fold(world, args, enums),
                 _ => false,
             }
         },
@@ -139,7 +139,7 @@ pub(crate) fn host_all_fold(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, valu
 
 pub(crate) fn host_branch_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, enums: &collections::BTreeSet<String>) -> bool {
     if block.stmts.len() != 1 { return false; }
-    match &nikaia_std::index::get(&block.stmts, 0).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
         Stmt::Expr(inner) => host_folds(world, inner, enums),
         _ => false,
     }
@@ -172,7 +172,7 @@ pub(crate) fn host_runs_a_grammar(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
             Expr::Call { func, .. } => {
                 let func = nikaia_std::boxed::open(func);
                 match func {
-                    Expr::Path(path, _) => { if !path.is_empty() && grammars.contains(world.words.resolve(*nikaia_std::index::get(&path, 0))) { runs = true; } },
+                    Expr::Path(path, _) => { if !path.is_empty() && grammars.contains(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) })) { runs = true; } },
                     _ => { },
                 }
             },
@@ -205,7 +205,7 @@ pub(crate) fn host_assets_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_
                             let mut path: String = String::from("");
                             let mut literal = false;
                             if args.len() == 1 {
-                                match nikaia_std::index::get(&args, 0) {
+                                match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
                                     Expr::LitStr { text, .. } => {
                                         let read = host.decoded(text);
                                         if read.is_some() {
@@ -315,7 +315,7 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
     let mut i: i64 = 0;
     for held in path.iter() {
         if held == at && from == path.len() as i64 { from = i; }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if from < path.len() as i64 {
         let mut computed = false;
@@ -323,11 +323,11 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
         let mut j = from;
         while j < path.len() as i64 {
             if !(*nikaia_std::index::get(&path, nikaia_std::index::at(j))).starts_with("f:") { computed = true; }
-            ring.push(nikaia_std::index::or(match labels.get(nikaia_std::index::get(&path, nikaia_std::index::at(j))) {
+            ring.push(nikaia_std::index::or(match labels.get(unsafe { nikaia_std::proven::read(&path, (j) as usize) }) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || "".into()));
-            j += 1;
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
         if !computed { return vec![]; }
         ring.push(nikaia_std::index::or(match labels.get(at) {
@@ -430,7 +430,7 @@ impl CheckState {
         let nothing = CheckCompiled { answered: false, value: None, said: false };
         let ring = host_ring(world, value);
         if !ring.is_empty() {
-            let mut subject = nikaia_std::block::Text::from((*nikaia_std::index::get(&ring, 0)).to_string());
+            let mut subject = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&ring, (0) as usize) }).to_string());
             if !self.computing_default { for name in ring.iter() { if name == bound { subject = nikaia_std::block::Text::from(bound.to_string()); } } }
             self.a_constant_built_from_itself(&subject, &ring, span);
             return CheckCompiled { answered: true, value: None, said: true };
@@ -470,7 +470,7 @@ impl CheckState {
         let mut outermost: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
         let mut typed: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         if !self.scope.is_empty() {
-            for local in (*nikaia_std::index::get(&self.scope, 0)).iter() {
+            for local in (*unsafe { nikaia_std::proven::read(&self.scope, (0) as usize) }).iter() {
                 let one = host_known(local);
                 if one.is_some() {
                     outermost.insert(nikaia_std::block::Text::from(local.name.to_string()), match one { Some(__nikaia_value) => __nikaia_value, None => continue });
@@ -561,8 +561,8 @@ impl CheckState {
         }
         let mut at: i64 = 0;
         while at < pending.len() as i64 {
-            let hole = (*nikaia_std::index::get(&pending, nikaia_std::index::at(at))).clone();
-            at = at + 1;
+            let hole = (*unsafe { nikaia_std::proven::read(&pending, (at) as usize) }).clone();
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             for expr in visited_in_expr(&hole) {
                 match expr {
                     Expr::Variable(name, _) => {

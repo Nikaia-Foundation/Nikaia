@@ -150,7 +150,7 @@ pub(crate) fn emit_declared_empty(world: &EmitWorld<'_, '_, '_, '_>, declared: &
 pub(crate) fn emit_empty_list_named(world: &EmitWorld<'_, '_, '_, '_>, names: &[winnow_grammar::Symbol], mutable: bool, value: &Expr) -> Option<String> {
     if !mutable || names.len() != 1 { return None; }
     match value {
-        Expr::ListLit { items, .. } => if items.is_empty() { Some(emit_text(world, *nikaia_std::index::get(&names, 0))) } else { None },
+        Expr::ListLit { items, .. } => if items.is_empty() { Some(emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) })) } else { None },
         _ => None,
     }
 }

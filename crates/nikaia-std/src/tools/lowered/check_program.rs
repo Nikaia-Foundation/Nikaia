@@ -128,8 +128,8 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
         let mut already: collections::BTreeSet<(String, u32)> = collections::BTreeSet::new();
         let mut at: i64 = 0;
         while at < before {
-            already.insert((nikaia_std::block::Text::from(nikaia_std::index::get(&state.findings, (at) as usize).code.to_string()), nikaia_std::index::get(&state.findings, (at) as usize).span.start));
-            at += 1;
+            already.insert((nikaia_std::block::Text::from(nikaia_std::index::get(&state.findings, (at) as usize).code.to_string()), unsafe { nikaia_std::proven::read(&state.findings, (at) as usize) }.span.start));
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let isenum = state.enums.contains_key(on);
         let mut member = "fields";
@@ -151,7 +151,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
                 found.notes.push(nikaia_std::block::Text::from(said.to_string()));
                 fresh.push(found);
             }
-            next += 1;
+            next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
         }
         state.findings.truncate(nikaia_std::count::of(before));
         for found in fresh.iter() { state.findings.push(found.clone()); }
@@ -271,7 +271,7 @@ pub(crate) fn check_program_slot_calls(state: &CheckState, world: &CheckWorld<'_
                             };
                             let slot = check_core_slot_index(world, &callee);
                             if slot < 0 || slot >= args.len() as i64 || nikaia_std::list::contains(&out, &callee) || !check_program_declares(world, &callee) { continue; }
-                            let held = match nikaia_std::index::get(&args, nikaia_std::index::at(slot)) {
+                            let held = match unsafe { nikaia_std::proven::read(&args, (slot) as usize) } {
                                 Expr::Variable(symbol, _) => {
                                     let symbol = *symbol;
                                     let ty = world.here.text(symbol);

@@ -38,7 +38,7 @@ pub fn rust_of_name(name: &str, escape: &impl Fn(&str) -> String) -> String {
     if name.ends_with(".len()") {
         let c: Vec<scalar> = nikaia_std::list::chars(name.chars());
         let mut base: String = String::from("");
-        for k in 0..c.len() as i64 - 6 { base.push(*nikaia_std::index::get(&c, (k) as usize)); }
+        for k in 0..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 6) } { base.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
         return format!("({}.len() as i128)", escape(&base));
     }
     format!("({}.clone() as i128)", escape(name))
@@ -106,8 +106,8 @@ pub(crate) fn term_whole(id: i64, arrow: bool, term_of: &dyn Fn(i64) -> SolverTe
         SolverTerm::Ne(a, b) => term_binary("!=", a, b, r, arrow, &term_of),
         SolverTerm::Or(ref parts) => {
             if arrow && parts.len() == 2 {
-                match term_of(*nikaia_std::index::get(&parts, 0)) {
-                    SolverTerm::Not(taken) => { return format!("{} → {}", term_inner(taken, 1, arrow, &term_of), term_inner(*nikaia_std::index::get(&parts, 1), 1, arrow, &term_of)); },
+                match term_of(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) {
+                    SolverTerm::Not(taken) => { return format!("{} → {}", term_inner(taken, 1, arrow, &term_of), term_inner(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, 1, arrow, &term_of)); },
                     _ => { },
                 }
             }
@@ -134,7 +134,7 @@ pub fn lowered_first(text: &str) -> String {
     let mut head: String = String::from("");
     head.push(*nikaia_std::index::get(&c, 0));
     let mut out = nikaia_std::block::Text::from(head.to_lowercase());
-    for k in 1..c.len() as i64 { out.push(*nikaia_std::index::get(&c, (k) as usize)); }
+    for k in 1..c.len() as i64 { out.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     out
 }
 

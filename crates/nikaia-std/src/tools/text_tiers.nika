@@ -1234,10 +1234,20 @@ fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: Tie
     let local = tier_local(name, walk) ?? return
     // **And a list literal going whole into a published position** (#1449):
     // that position keeps text of its own (ADR-282 D22), so the literal's
-    // text is built there.
+    // text is built there. **And a list literal going whole into any other
+    // position that holds text is declared with its type** (#1501), as
+    // `let v: Vec[String] = ["a"]` is: its own position, linked to every
+    // position it goes into, so `n(v)` with `fn n(v: Vec[String])` builds
+    // the literal's text where another caller hands `n` text of its own.
     let mut at = local.empty
-    if at < 0 && local.listed >= 0 && position_published(going.owner, walk.declared) {
-        at = local.listed
+    let mut own = false
+    if at < 0 && local.listed >= 0 {
+        if position_published(going.owner, walk.declared) {
+            at = local.listed
+        } else if !walk.flows.adopted.contains_key(local.listed) {
+            at = local.listed
+            own = true
+        }
     }
     if at < 0 {
         return
@@ -1247,6 +1257,13 @@ fn adopt(value: ref Expr?, going: ref TierGoing, ask: ref TierAsk, mut walk: Tie
     // position's written type it would be a local map of its own.
     let kind = container_of(ask.names, going.ty) ?? ""
     if is_a_map_name(kind) || kind == "HashSet" {
+        return
+    }
+    if own {
+        let mut ty = going.ty.clone()
+        ty.is_view = false
+        ty.is_mut = false
+        walk.flows.adopted.insert(at, Declaring { owner: TextOwner::Let(at), ty: ty })
         return
     }
     walk.flows.adopted.insert(at, Declaring { owner: going.owner.clone(), ty: going.ty.clone() })
@@ -2807,6 +2824,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
     let mut literal = -1
     let mut empty = -1
     let mut listed = -1
+    let mut adopted_list = false
     let mut declared: Declaring? = null
     let written = ty != null
     let from = text_source_word(value, ask, walk)
@@ -2837,12 +2855,21 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
         if !an_empty_container(value, ask) && is_a_list_literal_expr(value) {
             listed = at
+            // **And a list literal adopted by a position is declared as it**
+            // (#1449, #1501), as one written with that type is: its items
+            // flow into the declared position. Read whether or not one has
+            // adopted it yet, so the round that adopts it walks this again.
+            walk.reads.adopted.insert(at)
+            if declared == null && walk.adopted.contains_key(at) {
+                declared = walk.adopted[at]?.clone()
+                adopted_list = true
+            }
         }
     }
     let mut bound = kinds
     if declared != null {
         let found = declared?.clone() ?? return
-        if !written {
+        if !written && !adopted_list {
             bound = kinds_of_declared(found, ask, walk)
         } else {
             flow_value(going_into(found.owner, found.ty, [], true), value, kinds, ask, walk)
@@ -2850,7 +2877,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         }
     }
     if names.len() == 1 {
-        let text_items = !written && declared == null && own_text_items(value, bound)
+        let text_items = !written && (declared == null || adopted_list) && own_text_items(value, bound)
         let mut element_of: String? = null
         if !written {
             element_of = made_element_read(value, ask, walk)
@@ -7842,9 +7869,9 @@ fn tw_said(tiers: ref collections::BTreeMap[(i64, String, String, i64, Vec[i64])
 /// how it is taken. A result written `from` is a view of any type (D8,
 /// #1257): the checker holds the body to it, as for text.
 /// An `impl` of a trait keeps the trait's signature. A whole parameter handed
-/// back is asked only in a file that writes `keep` (#1213): until the
-/// migration reaches a file, returning a parameter by value keeps it there,
-/// as `NK2302` is raised only in such a file (`check_keep_marks.nika`).
+/// back is asked in every file (#1498), not only in one that writes `keep`:
+/// D12 is stated for every parameter, and a result that must own it takes
+/// it `keep`.
 /// A call of a function of the file whose result is a view hands back a view
 /// of what it is given there (D8, #1266): `return rest(xs)` is a view of `xs`
 /// once `rest`'s result is one, so the pass runs until no result changes.
@@ -7861,7 +7888,7 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
     while true {
         let before = views.len()
         for mut item in program.items {
-            hb_item(item.node, words, plain, private, held, opted, views, made)
+            hb_item(item.node, words, plain, private, held, views, made)
         }
         if views.len() == before {
             break
@@ -8332,13 +8359,13 @@ fn sv_through_an_index(expr: ref Expr) -> bool {
 
 /// `views` holds, for each free function of the file whose result the pass
 /// made a view, the positions of the parameters it points into.
-fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], held: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
+fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], held: ref collections::BTreeSet[String], mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
     match item {
-        Item::Fn { .. } => hb_fn(item, words, plain, private, held, opted, views, true),
+        Item::Fn { .. } => hb_fn(item, words, plain, private, held, views, true),
         Item::Impl { trait_name, target, methods } => {
             if trait_name == null {
                 for mut method in methods {
-                    hb_fn(method.node, words, plain, private, held, opted, views, false)
+                    hb_fn(method.node, words, plain, private, held, views, false)
                 }
             } else {
                 let owner = words.resolve(target.name).clone()
@@ -8400,7 +8427,7 @@ fn hb_plain_text(t: ref Type, words: ref winnow_grammar::InternerContext) -> boo
 
 /// `free`: a function of the file, not a method; only such a one is entered
 /// in `views`, where a call names it.
-fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], held: ref collections::BTreeSet[String], opted: bool, mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
+fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], held: ref collections::BTreeSet[String], mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
     let lent_fields = hb_text_field_roots(item, words, private, if free { hb_fn_name(item, words) } else { null }, held)
     if !lent_fields.is_empty() {
         match item {
@@ -8446,7 +8473,7 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
                 hb_enter(name, sources, words, views, free)
                 return
             }
-            let roots = hb_roots(body, args, hb_plain_self(receiver), words, opted, views) ?? return
+            let roots = hb_roots(body, args, hb_plain_self(receiver), words, views) ?? return
             if nullable && (roots.is_empty() || roots.iter().any(fn(root) { root != "self" })) {
                 return
             }
@@ -8746,7 +8773,7 @@ pub fn hands_back_a_piece_of_self(item: ref Item, words: ref winnow_grammar::Int
                 return false
             }
             let none: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
-            let roots = hb_roots(body, args, true, words, true, none) ?? return false
+            let roots = hb_roots(body, args, true, words, none) ?? return false
             return roots.contains("self")
         },
         else => {},
@@ -8800,9 +8827,8 @@ pub fn hb_type_may_be_a_view(t: ref Type, words: ref winnow_grammar::InternerCon
 }
 
 /// The parameters every way out of `body` is a place of; `null` where one
-/// way out is anything else, or the whole parameter outside a file that
-/// writes `keep`.
-fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, opted: bool, views: ref collections::BTreeMap[String, Vec[i64]]) -> collections::BTreeSet[String]? {
+/// way out is anything else.
+fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, views: ref collections::BTreeMap[String, Vec[i64]]) -> collections::BTreeSet[String]? {
     let ways = hb_ways_out(body)
     if ways.is_empty() {
         return null
@@ -8814,7 +8840,7 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
             continue
         }
         if hb_place_root(way, words) != null {
-            roots.insert(hb_root(way, body, args, plain_self, words, opted, false) ?? return null)
+            roots.insert(hb_root(way, body, args, plain_self, words) ?? return null)
             continue
         }
         // A call of a function whose result is a view is a view of the
@@ -8822,7 +8848,7 @@ fn hb_roots(body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref 
         // parameter handed there whole is lent to it, not handed back.
         let given = hb_call_sources(way, words, views) ?? return null
         for place in given {
-            roots.insert(hb_root(place, body, args, plain_self, words, opted, true) ?? return null)
+            roots.insert(hb_root(place, body, args, plain_self, words) ?? return null)
         }
     }
     return roots
@@ -8836,13 +8862,9 @@ fn hb_a_null(way: ref Expr) -> bool {
 }
 
 /// The parameter the place `way` hands back a view of; `null` where it is
-/// none, or the whole parameter handed back by value (not `lent` to a call)
-/// outside a file that writes `keep`.
-fn hb_root(way: ref Expr, body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext, opted: bool, lent: bool) -> String? {
+/// none.
+fn hb_root(way: ref Expr, body: ref Block, args: ref Vec[FnArg], plain_self: bool, words: ref winnow_grammar::InternerContext) -> String? {
     let root = hb_place_root(way, words) ?? return null
-    if !lent && !opted && hb_a_name(way) && !hb_a_run(args, root, words) {
-        return null
-    }
     if root == "self" {
         if !plain_self || hb_a_name(way) || rebinds(body, root, words) {
             return null
@@ -8891,10 +8913,6 @@ fn hb_call_sources(expr: ref Expr, words: ref winnow_grammar::InternerContext, v
 /// **An `Array[T]` parameter with no length is a run of the caller's**
 /// (ADR-views-3 D11): it has no value of its own a result could keep, so
 /// handed back whole it is a view in any file, as a piece of it is.
-fn hb_a_run(args: ref Vec[FnArg], root: ref String, words: ref winnow_grammar::InternerContext) -> bool {
-    return args.iter().any(fn(arg) { words.resolve(arg.name) == root && arg.ty.count == null && arg.ty.generics.len() == 1 && words.resolve(arg.ty.name) == "Array" })
-}
-
 fn hb_a_name(expr: ref Expr) -> bool {
     return match expr {
         Expr::Variable(_, _) => true,

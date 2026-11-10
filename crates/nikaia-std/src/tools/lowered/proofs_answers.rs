@@ -143,7 +143,7 @@ pub(crate) fn proofs_write_term(arena: &TermArena, id: i64, out: &mut String) {
         out.push_str("?");
         return;
     }
-    match nikaia_std::index::get(&arena.nodes, nikaia_std::index::at(id)) {
+    match unsafe { nikaia_std::proven::read(&arena.nodes, (id) as usize) } {
         SolverTerm::Bool(value) => { let value = *value; out.push_str(if value { "T" } else { "F" }); },
         SolverTerm::Int(value) => { let value = *value; out.push_str(&format!("i{},", value)); },
         SolverTerm::Var(name) => { out.push_str(&format!("v{}:{}", name.len() as i64, name)); },
@@ -400,9 +400,9 @@ pub fn proofs_place_of(at: i64, source: &str) -> String {
         if i >= limit { break; }
         if b == 10 {
             line += 1;
-            start = i + 1;
+            start = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     format!("{}:{}", line, limit - start + 1)
 }
@@ -410,8 +410,8 @@ pub fn proofs_place_of(at: i64, source: &str) -> String {
 pub fn proofs_byte_of(place: &str, source: &str) -> Option<i64> {
     let parts: Vec<&str> = place.split(':').collect::<Vec<_>>();
     if parts.len() != 2 { return None; }
-    let line = match text::parse_i64(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let column = match text::parse_i64(*nikaia_std::index::get(&parts, 1)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let line = match text::parse_i64(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let column = match text::parse_i64(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if line < 0 || column < 1 { return None; }
     let mut row: i64 = 1;
     let mut start: i64 = 0;

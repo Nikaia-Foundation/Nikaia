@@ -8,7 +8,7 @@ pub enum EmitHole {
 }
 
 pub trait EmitHolesHost {
-    fn hole(&self, site: u32, text: String) -> EmitHole;
+    fn hole(&self, site: u32, text: &str) -> EmitHole;
     fn wrapped_hole(&self, at: u32, hole: &Expr) -> Option<Expr>;
     fn cached_holes(&self) -> collections::BTreeMap<(i64, String), Expr>;
     fn cached_kept_calls(&self) -> collections::BTreeMap<(String, i64), EmitKeptCall>;
@@ -57,7 +57,7 @@ pub fn emit_holes_literal_bound<H: EmitHolesHost>(host: &H, words: &winnow_gramm
         _ => {
             let site = id_of(literal);
             for (text, bound) in emit_holes_template_texts(words, literal) {
-                match host.hole(site, text) {
+                match host.hole(site, &text) {
                     EmitHole::Parsed(ref hole) => { out.push((hole.clone(), bound.copy_owned())); },
                     EmitHole::Refused(_) => { },
                 }
@@ -171,7 +171,7 @@ pub(crate) fn emit_holes_ask_block<H: EmitHolesHost>(host: &H, words: &winnow_gr
     for expr in visited_in_block(body) {
         let site = id_of(expr);
         for (text, _) in emit_holes_template_texts(words, expr) {
-            match host.hole(site, nikaia_std::block::Text::from(text.to_string())) {
+            match host.hole(site, &nikaia_std::block::Text::from(text.to_string())) {
                 EmitHole::Refused(ref said) => { errors.insert((site as i64, nikaia_std::block::Text::from(text.to_string())), nikaia_std::block::Text::from(said.to_string())); },
                 EmitHole::Parsed(_) => { },
             }
@@ -265,7 +265,7 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
             },
             _ => { },
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let mut built: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut waiting = waiting;
     while !waiting.is_empty() {
@@ -273,7 +273,7 @@ pub fn emit_holes_built_at_build_time<H: EmitHolesHost>(host: &H, words: &winnow
         if free.contains_key(&nikaia_std::block::Text::from(name.to_string())) && !built.contains(&nikaia_std::block::Text::from(name.to_string())) {
             built.insert(nikaia_std::block::Text::from(name.to_string()));
             let place = match free.get(&nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return built };
-            match &nikaia_std::index::get(&items, nikaia_std::index::at(place)).node {
+            match &unsafe { nikaia_std::proven::read(&items, (place) as usize) }.node {
                 Item::Fn { body, .. } => { emit_holes_names_block(host, words, body, 1, &mut waiting); },
                 _ => { },
             }

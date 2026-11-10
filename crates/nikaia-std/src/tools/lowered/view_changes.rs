@@ -115,13 +115,13 @@ pub fn vc_mut_viewed(facts: &CheckFacts) -> collections::BTreeSet<i64> {
 pub(crate) fn vc_owns(contract: &FnContract, index: i64) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if index < 0 || index >= signature.params.len() as i64 { return false; }
-    let param = &nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).0;
+    let param = &unsafe { nikaia_std::proven::read(&signature.params, (index) as usize) }.0;
     if param == "self" { return false; }
-    nikaia_std::list::contains(&contract.keeps, &param) && !nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).1.is_a_view() || nikaia_std::list::contains(&signature.mutable, &param)
+    nikaia_std::list::contains(&contract.keeps, &param) && !unsafe { nikaia_std::proven::read(&signature.params, (index) as usize) }.1.is_a_view() || nikaia_std::list::contains(&signature.mutable, &param)
 }
 
 pub(crate) fn vc_param_index(signature: &Signature, name: &str) -> i64 {
-    for i in 0..signature.params.len() as i64 { if nikaia_std::index::get(&signature.params, (i) as usize).0 == name { return i; } }
+    for i in 0..signature.params.len() as i64 { if unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0 == name { return i; } }
     -1
 }
 
@@ -149,30 +149,30 @@ pub(crate) fn vc_through(root: &str, part: String, outer: &[VcView]) -> (collect
     let at = vc_last_named(outer, root);
     if at >= 0 {
         roots.extend(nikaia_std::index::get(&outer, nikaia_std::index::at(at)).roots.iter().cloned());
-        parts.extend(nikaia_std::index::get(&outer, nikaia_std::index::at(at)).parts.iter().cloned());
+        parts.extend(unsafe { nikaia_std::proven::read(&outer, (at) as usize) }.parts.iter().cloned());
     }
     (roots, parts)
 }
 
 pub(crate) fn vc_last_named(views: &[VcView], name: &str) -> i64 {
-    let mut i = views.len() as i64 - 1;
+    let mut i = unsafe { nikaia_std::proven::sub::<i64>(views.len() as i64, 1) };
     while i >= 0 {
-        if nikaia_std::index::get(&views, nikaia_std::index::at(i)).name == name { return i; }
-        i -= 1;
+        if unsafe { nikaia_std::proven::read(&views, (i) as usize) }.name == name { return i; }
+        i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
     }
     -1
 }
 
 pub(crate) fn vc_first_viewing(views: &[VcView], root: &str) -> i64 {
-    for i in 0..views.len() as i64 { if nikaia_std::index::get(&views, (i) as usize).used.is_some() && !nikaia_std::index::get(&views, (i) as usize).looped && nikaia_std::index::get(&views, (i) as usize).roots.contains(root) { return i; } }
+    for i in 0..views.len() as i64 { if unsafe { nikaia_std::proven::read(&views, (i) as usize) }.used.is_some() && !unsafe { nikaia_std::proven::read(&views, (i) as usize) }.looped && unsafe { nikaia_std::proven::read(&views, (i) as usize) }.roots.contains(root) { return i; } }
     -1
 }
 
 pub(crate) fn vc_last_viewing(views: &[VcView], root: &str) -> i64 {
-    let mut i = views.len() as i64 - 1;
+    let mut i = unsafe { nikaia_std::proven::sub::<i64>(views.len() as i64, 1) };
     while i >= 0 {
-        if nikaia_std::index::get(&views, nikaia_std::index::at(i)).used.is_some() && nikaia_std::index::get(&views, nikaia_std::index::at(i)).roots.contains(root) { return i; }
-        i -= 1;
+        if unsafe { nikaia_std::proven::read(&views, (i) as usize) }.used.is_some() && unsafe { nikaia_std::proven::read(&views, (i) as usize) }.roots.contains(root) { return i; }
+        i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
     }
     -1
 }
@@ -242,12 +242,12 @@ pub(crate) fn vc_calls_in(expr: &Expr, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '
             let callee = vc_variable(func, ask);
             let mut lent_and_read: Vec<String> = vec![];
             for i in 0..args.len() as i64 {
-                let root = match nikaia_std::index::get(&roots, nikaia_std::index::at(i)).as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let root = match unsafe { nikaia_std::proven::read(&roots, (i) as usize) }.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if !vc_lent_mut((callee).as_deref(), i, ask) { continue; }
-                let path = vc_path_of(nikaia_std::index::get(&args, nikaia_std::index::at(i)), ask);
-                for j in i + 1..args.len() as i64 {
-                    let bound_ahead = made_in_the_call(nikaia_std::index::get(&args, nikaia_std::index::at(j))) && !emit_arg_is_closure(nikaia_std::index::get(&args, nikaia_std::index::at(j)));
-                    if !bound_ahead && vc_reads_path(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &path, ask, &holes_of) {
+                let path = vc_path_of(unsafe { nikaia_std::proven::read(&args, (i) as usize) }, ask);
+                for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..args.len() as i64 {
+                    let bound_ahead = made_in_the_call(unsafe { nikaia_std::proven::read(&args, (j) as usize) }) && !emit_arg_is_closure(unsafe { nikaia_std::proven::read(&args, (j) as usize) });
+                    if !bound_ahead && vc_reads_path(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, &path, ask, &holes_of) {
                         lent_and_read.push(nikaia_std::block::Text::from(root.to_string()));
                         break;
                     }
@@ -338,7 +338,7 @@ pub(crate) fn vc_method_keeps(method: &str, index: i64, ask: &VcAsk<'_, '_, '_, 
 
 pub(crate) fn vc_subject_first(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self"
+    !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self"
 }
 
 pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>, walk: &VcWalk) -> bool {
@@ -354,7 +354,7 @@ pub(crate) fn vc_changes(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_
             continue;
         }
         for index in 0..call.roots.len() as i64 {
-            let root = match nikaia_std::index::get(&call.roots, nikaia_std::index::at(index)).as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let root = match unsafe { nikaia_std::proven::read(&call.roots, (index) as usize) }.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
             if root == name && vc_changes_argument((call.callee).as_deref(), index, ask) { return true; }
         }
     }
@@ -367,7 +367,7 @@ pub(crate) fn vc_changes_argument(callee: Option<&str>, index: i64, ask: &VcAsk<
     let contract = match *nikaia_std::index::get(&ask.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return true } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
     if index >= signature.params.len() as i64 { return true; }
-    nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).0)
+    nikaia_std::list::contains(&signature.mutable, &unsafe { nikaia_std::proven::read(&signature.params, (index) as usize) }.0)
 }
 
 pub(crate) fn vc_reads_path(expr: &Expr, path: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &dyn Fn(&Expr) -> Vec<Expr>) -> bool {
@@ -412,7 +412,7 @@ pub(crate) fn vc_lent_mut(callee: Option<&str>, index: i64, ask: &VcAsk<'_, '_, 
     let contract = match *nikaia_std::index::get(&ask.own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, name) { Some(__nikaia_value) => __nikaia_value, None => return false } };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if index >= signature.params.len() as i64 { return false; }
-    nikaia_std::list::contains(&signature.mutable, &nikaia_std::index::get(&signature.params, nikaia_std::index::at(index)).0)
+    nikaia_std::list::contains(&signature.mutable, &unsafe { nikaia_std::proven::read(&signature.params, (index) as usize) }.0)
 }
 
 pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>, walk: &mut VcWalk) {
@@ -437,14 +437,14 @@ pub(crate) fn vc_changes_in(stmt: &Stmt, at: &Span, views: &[VcView], ask: &VcAs
         let callee = match call.callee.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if call.method {
             for index in 0..call.names.len() as i64 {
-                let name = match nikaia_std::index::get(&call.names, nikaia_std::index::at(index)).as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let name = match unsafe { nikaia_std::proven::read(&call.names, (index) as usize) }.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if vc_method_keeps(callee, index, ask, &walk) { handed.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(callee.to_string()))); }
             }
             continue;
         }
         let contract = match *nikaia_std::index::get(&ask.own.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => match *nikaia_std::index::get(&ask.library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => continue } };
         for index in 0..call.names.len() as i64 {
-            let name = match nikaia_std::index::get(&call.names, nikaia_std::index::at(index)).as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let name = match unsafe { nikaia_std::proven::read(&call.names, (index) as usize) }.as_deref() { Some(__nikaia_value) => __nikaia_value, None => continue };
             if vc_owns(contract, index) { handed.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(callee.to_string()))); }
         }
     }
@@ -494,9 +494,9 @@ pub(crate) fn vc_view_of(at: &Span, name: &str, value: &Expr, outer: &[VcView], 
             for borrowed in contract.borrows.iter() {
                 let index = vc_param_index(signature, borrowed);
                 if index < 0 || index >= args.len() as i64 { continue; }
-                let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(index))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let root = match root_of(ask.names, unsafe { nikaia_std::proven::read(&args, (index) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 way_out.insert(nikaia_std::block::Text::from(root.to_string()), vc_returning(&callee, borrowed, ask));
-                let path = vc_path_of(nikaia_std::index::get(&args, nikaia_std::index::at(index)), ask);
+                let path = vc_path_of(unsafe { nikaia_std::proven::read(&args, (index) as usize) }, ask);
                 if path == "" { parts.insert(nikaia_std::block::Text::from(root.to_string())); } else { parts.insert(path); }
                 roots.insert(root);
             }
@@ -624,16 +624,16 @@ pub(crate) fn vc_kept_in_places(at: &Span, func: &Expr, args: &[Expr], ask: &VcA
     for entry in contract.stores.iter() {
         let pieces: Vec<&str> = entry.split(':').collect::<Vec<_>>();
         if pieces.len() < 2 { continue; }
-        let place = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string()); ::core::mem::drop(pieces);
-        let source = match nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(place.len() as i64 + 1..)).text() {
+        let place = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string()); ::core::mem::drop(pieces);
+        let source = match nikaia_std::index::get(&entry.as_bytes(), nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(place.len() as i64, 1) }..)).text() {
             Ok(value) => value,
             Err(_error) => { continue; },
         };
         let held_at = vc_param_index(signature, &place);
         let source_at = vc_param_index(signature, source);
         if held_at < 0 || source_at < 0 || held_at >= args.len() as i64 || source_at >= args.len() as i64 { continue; }
-        let holder = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(held_at))) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let root = match root_of(ask.names, nikaia_std::index::get(&args, nikaia_std::index::at(source_at))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let holder = match root_of(ask.names, unsafe { nikaia_std::proven::read(&args, (held_at) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let root = match root_of(ask.names, unsafe { nikaia_std::proven::read(&args, (source_at) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut roots: collections::BTreeSet<String> = collections::BTreeSet::new();
         roots.insert(nikaia_std::block::Text::from(root.to_string()));
         let mut way_out: collections::BTreeMap<String, String> = collections::BTreeMap::new();
@@ -674,7 +674,7 @@ pub(crate) fn vc_returns(block: &Block, param: &str, ask: &VcAsk<'_, '_, '_, '_,
 }
 
 pub(crate) fn vc_used_after(block: &Block, from: i64, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &impl Fn(&Expr) -> Vec<Expr>) -> Option<Span> {
-    for k in from..block.stmts.len() as i64 { if vc_mentions_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, name, ask, holes_of) { return Some(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).span.clone()); } }
+    for k in from..block.stmts.len() as i64 { if vc_mentions_stmt(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(k)).node, name, ask, holes_of) { return Some(unsafe { nikaia_std::proven::read(&block.stmts, (k) as usize) }.span.clone()); } }
     None
 }
 
@@ -683,10 +683,10 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
     let own_from = views.len() as i64;
     let mut declared: collections::BTreeMap<String, (i64, bool)> = collections::BTreeMap::new();
     for j in 0..block.stmts.len() as i64 {
-        let stmt = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(j));
+        let stmt = unsafe { nikaia_std::proven::read(&block.stmts, (j) as usize) };
         for v in own_from..views.len() as i64 {
             let name = nikaia_std::block::Text::from(nikaia_std::index::get(&views, nikaia_std::index::at(v)).name.to_string());
-            views[nikaia_std::index::at(v)].used = vc_used_after(block, j + 1, &name, ask, &holes_of);
+            (*unsafe { nikaia_std::proven::slot(&mut views, (v) as usize) }).used = vc_used_after(block, unsafe { nikaia_std::proven::add::<i64>(j, 1) }, &name, ask, &holes_of);
         }
         let looping = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
         let at = stmt.span.clone();
@@ -710,7 +710,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
             Stmt::Let { names, value, mutable, .. } => {
                 let mutable = *mutable;
                 if names.len() == 1 {
-                    let name = nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&names, 0)).to_string());
+                    let name = nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
                     vc_let(&name, value, &at, &mut views, ask, walk);
                     walk.lets.insert(nikaia_std::block::Text::from(name.to_string()), at.start as i64);
                     declared.insert(name, (at.start as i64, mutable));
@@ -923,7 +923,7 @@ pub(crate) fn vc_part_of(head: &str) -> &str {
     if !head.ends_with(": ") { return ""; }
     let words: Vec<&str> = head.split(' ').map(|w| { w }).collect::<Vec<_>>();
     if words.len() < 3 { return ""; }
-    nikaia_std::index::or((*nikaia_std::index::get(&words, 2)).strip_suffix(':'), || "")
+    nikaia_std::index::or((*unsafe { nikaia_std::proven::read(&words, (2) as usize) }).strip_suffix(':'), || "")
 }
 
 pub(crate) fn vc_label(span: Span, word: &str, text: String, main: bool) -> CheckLabel { CheckLabel { span, word: nikaia_std::block::Text::from(word.to_string()), text, main } }

@@ -10,7 +10,7 @@ pub struct CheckCleanup {
 
 pub(crate) fn check_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string())
 }
 
 pub(crate) fn check_implements_in(ledger: &Ledger, teardown: &str, base: &str) -> bool {

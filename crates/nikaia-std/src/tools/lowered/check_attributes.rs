@@ -42,8 +42,8 @@ pub(crate) fn check_attributes_place_word(unit: &ParsedView<'_, '_, '_, '_, '_, 
         Expr::Variable(word, _) => { let word = *word; return unit.text(word) },
         Expr::Path(segments, _) => {
             if segments.is_empty() { return String::from(""); }
-            let last = segments.len() as i64 - 1;
-            return nikaia_std::block::Text::from(unit.text(*nikaia_std::index::get(&segments, nikaia_std::index::at(last))).to_lowercase());
+            let last = unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) };
+            return nikaia_std::block::Text::from(unit.text(*unsafe { nikaia_std::proven::read(&segments, (last) as usize) }).to_lowercase());
         },
         _ => return String::from(""),
     }
@@ -214,7 +214,7 @@ pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &
         let written = world.here.text(attribute.name);
         let name = world.here.unaliased(&written);
         if name == inline_name {
-            inlines += 1;
+            inlines = unsafe { nikaia_std::proven::add::<i64>(inlines, 1) };
             check_attributes_the_inline(state, world, attribute, place, inlines);
             continue;
         }
@@ -246,7 +246,7 @@ pub(crate) fn check_attributes_inline_refusal(world: &CheckWorld<'_, '_, '_, '_,
     let bare = attribute.config.is_empty();
     if attribute.args.is_empty() && bare { return None; }
     if attribute.args.len() == 1 && bare {
-        match nikaia_std::index::get(&attribute.args, 0) {
+        match unsafe { nikaia_std::proven::read(&attribute.args, (0) as usize) } {
             Expr::Variable(word, _) => {
                 let word = *word;
                 let spelled = world.here.text(word);
@@ -332,19 +332,19 @@ pub(crate) fn check_attributes_arguments<H: CheckHost>(state: &mut CheckState, w
     }
     let mut at: i64 = 0;
     while at < required.len() as i64 && at < attribute.args.len() as i64 {
-        check_attributes_argument(state, world, host, name, nikaia_std::index::get(&required, nikaia_std::index::at(at)), nikaia_std::index::get(&attribute.args, nikaia_std::index::at(at)), &attribute.span);
-        at += 1;
+        check_attributes_argument(state, world, host, name, unsafe { nikaia_std::proven::read(&required, (at) as usize) }, unsafe { nikaia_std::proven::read(&attribute.args, (at) as usize) }, &attribute.span);
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     for option in attribute.config.iter() {
         let option_name = world.here.text(option.name);
         let mut found: i64 = -1;
         let mut index: i64 = 0;
         while index < options.len() as i64 {
-            if nikaia_std::index::get(&options, nikaia_std::index::at(index)).name == option_name {
+            if unsafe { nikaia_std::proven::read(&options, (index) as usize) }.name == option_name {
                 found = index;
                 break;
             }
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
         }
         if found >= 0 {
             check_attributes_argument(state, world, host, name, nikaia_std::index::get(&options, nikaia_std::index::at(found)), &option.value, &attribute.span);
@@ -424,7 +424,7 @@ pub fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckW
     let mut written: String = String::from("");
     let mut one = false;
     if args.len() == 1 {
-        match nikaia_std::index::get(&args, 0) {
+        match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::Variable(name, _) => {
                 let name = *name;
                 written = world.here.text(name);
@@ -550,7 +550,7 @@ pub fn check_attributes_inline_written(words: &winnow_grammar::InternerContext, 
         if !attribute.config.is_empty() { return None; }
         if attribute.args.is_empty() { return Some(String::from("#[inline]")); }
         if attribute.args.len() != 1 { return None; }
-        let word = match nikaia_std::index::get(&attribute.args, 0) {
+        let word = match unsafe { nikaia_std::proven::read(&attribute.args, (0) as usize) } {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
             _ => String::from(""),
         };

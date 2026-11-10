@@ -240,7 +240,7 @@ pub(crate) fn a_part_assigned(words: &winnow_grammar::InternerContext, target: &
 
 pub fn a_body_never_ends(body: &Block) -> bool {
     if body.stmts.is_empty() { return false; }
-    let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1));
+    let last = unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) };
     match &last.node {
         Stmt::While { cond, body } => { return a_true_literal(cond) && !a_jump_leaves(body, 0); },
         _ => { return false; },

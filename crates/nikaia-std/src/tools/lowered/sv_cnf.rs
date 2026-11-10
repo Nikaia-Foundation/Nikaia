@@ -46,7 +46,7 @@ pub(crate) fn sv_cnf_sorted(arena: &TermArena, facts: &[i64], goal: i64, reals: 
     match t.assert(arena, goal, false, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut at: i64 = 0;
     while ((at) as usize) < why.quotients.len() {
-        let formula = match lg_quotient(arena, *nikaia_std::index::get(&why.quotients, (at) as usize), why) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let formula = match lg_quotient(arena, *unsafe { nikaia_std::proven::read(&why.quotients, (at) as usize) }, why) { Some(__nikaia_value) => __nikaia_value, None => return None };
         match t.assert_formula(&formula) { Some(__nikaia_value) => __nikaia_value, None => return None };
         at += 1;
     }
@@ -191,7 +191,7 @@ impl SvTseitin {
         let either: Vec<u32> = match clause { Some(__nikaia_value) => __nikaia_value, None => return if parts.conjunction { Some(-2) } else { Some(-1) } };
         if either.is_empty() { return if parts.conjunction { Some(-1) } else { Some(-2) }; }
         if either.len() == 1 {
-            let l = *nikaia_std::index::get(&either, 0) as i64;
+            let l = *unsafe { nikaia_std::proven::read(&either, (0) as usize) } as i64;
             return Some(if parts.conjunction { sv_cnf_not(l) } else { l });
         }
         let col = match self.vars.column(&format!("def#{}", self.definitions)) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -313,8 +313,8 @@ pub(crate) fn sv_cnf_clause(lits: &[i64]) -> Option<Vec<u32>> {
     for l in out.iter() {
         let l = nikaia_std::num::value(l);
         let n = kept.len() as i64;
-        if n > 0 && *nikaia_std::index::get(&kept, nikaia_std::index::at(n - 1)) == l { continue; }
-        if n > 0 && *nikaia_std::index::get(&kept, nikaia_std::index::at(n - 1)) == l ^ 1u32 { return None; }
+        if n > 0 && *unsafe { nikaia_std::proven::read(&kept, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) } == l { continue; }
+        if n > 0 && *unsafe { nikaia_std::proven::read(&kept, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) } == l ^ 1u32 { return None; }
         kept.push(l);
     }
     Some(kept)

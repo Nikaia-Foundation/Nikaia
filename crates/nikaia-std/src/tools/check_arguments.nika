@@ -26,6 +26,18 @@ fn check_arguments_a_var(ty: ref Ty) -> bool sync {
     }
 }
 
+// The name of a type variable, viewed or not; `null` for any other type.
+fn check_arguments_var_name(ty: ref Ty) -> String? sync {
+    return match ty {
+        Ty::Var { name, .. } => name.clone(),
+        else => null,
+    }
+}
+
+fn string_ty() -> Ty sync {
+    return Ty::Named { name: "String", args: [], view: false }
+}
+
 fn check_arguments_nullable(ty: ref Ty) -> bool sync {
     return match ty {
         Ty::Nullable(_) => true,
@@ -256,6 +268,27 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     let own = world.own.functions.contains_key(key)
     let offset = if signature.takes_a_receiver() { 1 } else { 0 }
+    // **Text of two tiers meeting in one type variable** (ADR-views-3 D12,
+    // #1498): a type variable this program's function lends holds what the
+    // caller holds behind one `&` (#1342), so where one argument is a view of
+    // text (or a literal), the variable is that `&str`, every text of its own
+    // there is lent as a view of it, and the result is read at the call.
+    let mut viewed_vars: collections::BTreeSet[String] = collections::BTreeSet()
+    if own {
+        let mut next = 0
+        while next < expanded.len() {
+            let argument = expanded[next]
+            next += 1
+            let var = check_arguments_var_name(wanted[argument.at].1) ?? continue
+            let literal = match argument.given {
+                null => false,
+                value => a_text_literal_expr(value),
+            }
+            if literal || is_a_view_of_a_string(argument.found) || argument.found == text_view {
+                viewed_vars.insert(var)
+            }
+        }
+    }
     for argument in expanded {
         let at = argument.at
         let given_here: ref Expr? = argument.given
@@ -340,7 +373,9 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         if kept && state.decided_by_this_argument(signature, wanted, at) {
             literal_wants = Ty::Named { name: "String", args: [], view: false }
         }
-        let a_lent_variable = lent && own && check_arguments_a_var(declared) && !declared.is_a_view()
+        // A `ref T` parameter, a parameter handed back among them (D12), is
+        // lent so too (#1498).
+        let a_lent_variable = own && check_arguments_a_var(declared) && (lent || declared.is_a_view())
         if given_here != null {
             let value = given_here ?? continue
             let array = state.array_literal(world, found_here, want, value, span)
@@ -384,6 +419,13 @@ pub fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             }
             if a_text_literal_expr(value) && !state.facts.owned_texts.contains(id_of(value) as i64) {
                 state.facts.lent_literals.insert(id_of(value) as i64)
+            }
+            let var = check_arguments_var_name(declared) ?? continue
+            if viewed_vars.contains(var) {
+                state.facts.viewed_text_calls.insert(span.start as i64)
+                if found_here == string_ty() && !a_text_literal_expr(value) {
+                    state.facts.lent_text_views.insert(id_of(value) as i64)
+                }
             }
             continue
         }

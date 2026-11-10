@@ -99,7 +99,7 @@ impl CheckState {
         if pieces.len() == 2 {
             let message = format!("`{}` always has a value, so `?.` guards nothing.", written_expression(world.words, receiver));
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `?.` only passes over a `null`.";
-            self.findings.push(check_refusal("NK1121", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0), plain))));
+            self.findings.push(check_refusal("NK1121", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`, then write `{}`.", *unsafe { nikaia_std::proven::read(&pieces, (1) as usize) }, *unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }, plain))));
             return;
         }
         self.facts.plain_reaches.insert(fact_key(reach));
@@ -126,7 +126,7 @@ impl CheckState {
         let message = format!("`{}` always has a value, so `??` has nothing to replace.", shown); #[allow(clippy::redundant_locals)] let pieces = pieces;
         if index {
             let note = "A list read never comes back empty: an index that does not fit stops the program, and `??` only replaces a `null`.";
-            self.findings.push(check_refusal("NK1211", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 0)))));
+            self.findings.push(check_refusal("NK1211", span, message, vec![nikaia_std::block::Text::from(note.to_string())], Some(format!("Check the length first: `if {} < {}.len()`.", *nikaia_std::index::get(&pieces, 1), *unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }))));
             return false;
         }
         let note = format!("`??` replaces a `null`, and a value of type `{}` is never `null`: only a type written with `?` can be.", seen.text());
@@ -212,12 +212,12 @@ impl CheckState {
         let mut at: i64 = -1;
         let mut scan: i64 = 0;
         while scan < signature.params.len() as i64 {
-            if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(scan)).0 == name { at = scan; }
-            scan = scan + 1;
+            if at < 0 && unsafe { nikaia_std::proven::read(&signature.params, (scan) as usize) }.0 == name { at = scan; }
+            scan = unsafe { nikaia_std::proven::add::<i64>(scan, 1) };
         }
         if at < 0 { return false; }
         let mut first: i64 = 0;
-        while first < self.scope.len() as i64 && !check_fields_holds(nikaia_std::index::get(&self.scope, nikaia_std::index::at(first)), &name) { first = first + 1; }
+        while first < self.scope.len() as i64 && !check_fields_holds(unsafe { nikaia_std::proven::read(&self.scope, (first) as usize) }, &name) { first = unsafe { nikaia_std::proven::add::<i64>(first, 1) }; }
         if self.frame_holding(&name) != first { return false; }
         lends_in_own(&contract, at, &vec![world.library])
     }
@@ -235,40 +235,47 @@ impl CheckState {
         } { Some(__nikaia_value) => __nikaia_value, None => return false };
         if !nikaia_std::list::contains(&signature.mutable, &name) { return false; }
         let mut first: i64 = 0;
-        while first < self.scope.len() as i64 && !check_fields_holds(nikaia_std::index::get(&self.scope, nikaia_std::index::at(first)), name) { first = first + 1; }
+        while first < self.scope.len() as i64 && !check_fields_holds(unsafe { nikaia_std::proven::read(&self.scope, (first) as usize) }, name) { first = unsafe { nikaia_std::proven::add::<i64>(first, 1) }; }
         self.frame_holding(name) == first
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn an_owned_parameter(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+        let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        !lent
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_plain_parameter_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> Option<bool> {
         let name = match given {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
-            _ => return false,
+            _ => return None,
         };
-        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let key = match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let contract = match match *nikaia_std::index::get(&world.own.functions, key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return false };
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => return false };
-        if name == "self" || nikaia_std::list::contains(&signature.mutable, &name) { return false; }
+        } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if name == "self" || nikaia_std::list::contains(&signature.mutable, &name) { return None; }
         let mut at: i64 = -1;
         let mut scan: i64 = 0;
         while scan < signature.params.len() as i64 {
-            if at < 0 && nikaia_std::index::get(&signature.params, nikaia_std::index::at(scan)).0 == name { at = scan; }
-            scan = scan + 1;
+            if at < 0 && unsafe { nikaia_std::proven::read(&signature.params, (scan) as usize) }.0 == name { at = scan; }
+            scan = unsafe { nikaia_std::proven::add::<i64>(scan, 1) };
         }
-        if at < 0 || nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view() { return false; }
-        !lends_in_own(&contract, at, &vec![world.library])
+        if at < 0 || nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view() { return None; }
+        Some(lends_in_own(&contract, at, &vec![world.library]))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn an_owned_parameter_handed_back(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, given: &Expr) -> bool {
         if found.is_a_view() || !want.is_a_view() || want.text() != format!("ref {}", found.text()) { return false; }
-        check_fields_holds_text(world, found, &vec![]) && self.an_owned_parameter(world, given)
+        let lent = match self.a_plain_parameter_lent(world, given) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        lent || check_fields_holds_text(world, found, &vec![])
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -340,7 +347,7 @@ pub fn check_fields_map_first_written(state: &mut CheckState, world: &CheckWorld
                     let base_name: String = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                     let local = match state.binding(&base_name) { Some(__nikaia_value) => __nikaia_value, None => return };
                     let open = match local.ty {
-                        Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && ((*nikaia_std::index::get(&args, 0)).is_unknown() || (*nikaia_std::index::get(&args, 1)).is_unknown())),
+                        Ty::Named { ref name, ref args, .. } => a_map_name(name) && (args.is_empty() || args.len() == 2 && ((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown() || (*unsafe { nikaia_std::proven::read(&args, (1) as usize) }).is_unknown())),
                         _ => false,
                     };
                     if !open { return; }

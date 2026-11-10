@@ -41,7 +41,7 @@ pub fn bounds_around(program: &Program, beside: &[&Program], beside_words: &[&wi
             break;
         }
         context.around.frames = next;
-        round += 1;
+        round = unsafe { nikaia_std::proven::add::<i64>(round, 1) };
     }
     if !settled { context.around.frames = collections::BTreeMap::new(); }
     let rules = rules_candidates(program, &context, words);
@@ -109,10 +109,10 @@ pub(crate) fn frame_of_body(receiver: Option<&Receiver>, args: &[FnArg], body: &
     for place in changed.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();
         if pieces.len() != 3 { continue; }
-        let list = *nikaia_std::index::get(&pieces, 0);
+        let list = *unsafe { nikaia_std::proven::read(&pieces, (0) as usize) };
         if roots.contains_key(&path_root(list)) {
             let mapped = frame_rooted(list, &roots);
-            if frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else { out.elements.insert(format!("{}||{}", mapped, *nikaia_std::index::get(&pieces, 2))); }
+            if frame_deep(&mapped) { out.values.insert(frame_cut(&mapped)); } else { out.elements.insert(format!("{}||{}", mapped, *unsafe { nikaia_std::proven::read(&pieces, (2) as usize) })); }
         } else { frame_put(&mut out, list, 0, &roots, &aliases); }
     }
     out
@@ -143,10 +143,10 @@ pub(crate) fn frame_rooted(path: &str, roots: &collections::BTreeMap<String, Str
     format!("{}{}", mapped, rest)
 }
 
-pub(crate) fn frame_deep(path: &str) -> bool { (path.split('.').count() as i64) > frame_depth() + 1 }
+pub(crate) fn frame_deep(path: &str) -> bool { (path.split('.').count() as i64) > unsafe { nikaia_std::proven::add::<i64>(frame_depth(), 1) } }
 
 pub(crate) fn frame_cut(path: &str) -> String {
-    let kept: Vec<&str> = path.split('.').take(nikaia_std::count::of(frame_depth() + 1)).collect::<Vec<_>>();
+    let kept: Vec<&str> = path.split('.').take(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(frame_depth(), 1) })).collect::<Vec<_>>();
     nikaia_std::block::Text::from(kept.join("."))
 }
 
@@ -252,8 +252,8 @@ pub fn frame_at_call(frame: &BoundsChanged, receiver: Option<&str>, handed: &[Op
     for place in frame.elements.iter() {
         let pieces: Vec<&str> = place.split('|').collect::<Vec<_>>();
         if pieces.len() != 3 { continue; }
-        let list = match frame_onto(*nikaia_std::index::get(&pieces, 0), receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        out.elements.insert(format!("{}|{}|{}", list, *nikaia_std::index::get(&pieces, 1), *nikaia_std::index::get(&pieces, 2)));
+        let list = match frame_onto(*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }, receiver, handed) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        out.elements.insert(format!("{}|{}|{}", list, *unsafe { nikaia_std::proven::read(&pieces, (1) as usize) }, *unsafe { nikaia_std::proven::read(&pieces, (2) as usize) }));
     }
     out
 }
@@ -276,7 +276,7 @@ pub(crate) fn frame_onto(path: &str, receiver: Option<&str>, handed: &[Option<St
 
 pub(crate) fn frame_list(entry: &str) -> String {
     let pieces: Vec<&str> = entry.split('|').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string())
 }
 
 pub fn frame_writes(frame: &BoundsChanged, root: &str) -> bool { frame.values.iter().any(|e| { frame_from(e, root) }) || frame.lengths.iter().any(|e| { frame_from(e, root) }) || frame.parts.iter().any(|e| { frame_from(e, root) }) || frame.elements.iter().any(|e| { frame_from(e, root) }) }
@@ -339,7 +339,7 @@ pub(crate) fn fields_declared(program: &Program, words: &winnow_grammar::Interne
                     let map = (map_name == "BTreeMap" || map_name == "HashMap") && ty.generics.len() == 2;
                     fits = fits && ((list == "Vec" || list == "List") && ty.generics.len() == 1 || map);
                     if fits {
-                        let inner = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(ty.generics.len() as i64 - 1));
+                        let inner = nikaia_std::index::get(&ty.generics, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(ty.generics.len() as i64, 1) }));
                         fits = inner.generics.is_empty() && is_whole_number(words.resolve(inner.name));
                     }
                     let was = nikaia_std::index::or(scan.live.get(&name), || true);

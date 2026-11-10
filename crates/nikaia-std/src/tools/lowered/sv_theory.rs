@@ -39,15 +39,15 @@ pub(crate) fn sv_lin(row: &SvRow, names: &[String]) -> LgLin {
     let mut terms: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut i: i64 = 0;
     while ((i) as usize) < row.cols.len() {
-        terms.insert(sv_column_name(*nikaia_std::index::get(&row.cols, (i) as usize), names), *nikaia_std::index::get(&row.ks, (i) as usize));
-        i += 1;
+        terms.insert(sv_column_name(*unsafe { nikaia_std::proven::read(&row.cols, (i) as usize) }, names), *nikaia_std::index::get(&row.ks, (i) as usize));
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     LgLin { terms, constant: row.constant }
 }
 
 pub(crate) fn sv_column_name(c: u32, names: &[String]) -> String {
     let at = c as i64;
-    if at < names.len() as i64 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(at))).to_string()); }
+    if at < names.len() as i64 { return nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (at) as usize) }).to_string()); }
     format!("sv#{}", c)
 }
 
@@ -68,12 +68,12 @@ pub(crate) fn sv_spelled_sum(a: i64, x: &SvSpelled, b: i64, y: &SvSpelled) -> Op
         let mut found = false;
         let mut i: i64 = 0;
         while ((i) as usize) < out.sources.len() {
-            if sv_src_same(nikaia_std::index::get(&out.sources, (i) as usize), src) {
-                { let __nikaia_stored = match (*nikaia_std::index::get(&out.multipliers, (i) as usize)).checked_add(add) { Some(__nikaia_value) => __nikaia_value, None => return None }; nikaia_std::index::set(&mut out.multipliers, (i) as usize, __nikaia_stored); }
+            if sv_src_same(unsafe { nikaia_std::proven::read(&out.sources, (i) as usize) }, src) {
+                { let __nikaia_stored = match (*nikaia_std::index::get(&out.multipliers, (i) as usize)).checked_add(add) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut out.multipliers, (i) as usize, __nikaia_stored) }; }
                 found = true;
                 break;
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         if !found {
             out.sources.push(src.clone());
@@ -111,9 +111,9 @@ pub(crate) fn sv_written(refutation: &LgRefutation, held: &[SvHeld], book: &mut 
         };
         spelled.push(made);
     }
-    let last = spelled.len() as i64 - 1;
+    let last = unsafe { nikaia_std::proven::sub::<i64>(spelled.len() as i64, 1) };
     if last < 0 { return None; }
-    book.farkas(nikaia_std::index::get(&spelled, nikaia_std::index::at(last)).sources.copy_owned(), nikaia_std::index::get(&spelled, nikaia_std::index::at(last)).multipliers.copy_owned())
+    book.farkas(unsafe { nikaia_std::proven::read(&spelled, (last) as usize) }.sources.copy_owned(), unsafe { nikaia_std::proven::read(&spelled, (last) as usize) }.multipliers.copy_owned())
 }
 
 pub(crate) fn sv_rat_values(values: &collections::BTreeMap<String, i64>) -> collections::BTreeMap<String, SvRat> {
@@ -181,11 +181,11 @@ impl SvTh for SvTheory {
     fn explain(&mut self, lit: u32, book: &mut SvBook) -> Option<SvClause> {
         let mut i: i64 = 0;
         while ((i) as usize) < self.implied.len() {
-            if *nikaia_std::index::get(&self.implied, (i) as usize) == lit {
+            if *unsafe { nikaia_std::proven::read(&self.implied, (i) as usize) } == lit {
                 let negation = if lit % 2u32 == 0u32 { lit + 1u32 } else { lit - 1u32 };
                 return book.farkas(vec![SvSrc::Lit(*nikaia_std::index::get(&self.implied_by, (i) as usize)), SvSrc::Lit(negation)], vec![1, 1]);
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         None
     }
@@ -199,10 +199,10 @@ impl SvTh for SvTheory {
         let mut i: i64 = 0;
         while ((i) as usize) < self.implied.len() {
             if self.trail.contains(nikaia_std::index::get(&self.implied_by, (i) as usize)) {
-                implied.push(*nikaia_std::index::get(&self.implied, (i) as usize));
-                implied_by.push(*nikaia_std::index::get(&self.implied_by, (i) as usize));
+                implied.push(*unsafe { nikaia_std::proven::read(&self.implied, (i) as usize) });
+                implied_by.push(*unsafe { nikaia_std::proven::read(&self.implied_by, (i) as usize) });
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         self.implied = implied;
         self.implied_by = implied_by;
@@ -255,18 +255,18 @@ pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, s
     let mut out = values.copy_owned();
     let mut i = solved.len() as i64;
     while i > 0 {
-        i -= 1;
-        let s = (*nikaia_std::index::get(&solved, nikaia_std::index::at(i))).clone();
+        i = unsafe { nikaia_std::proven::sub::<i64>(i, 1) };
+        let s = (*unsafe { nikaia_std::proven::read(&solved, (i) as usize) }).clone();
         let mut rest: i64 = s.row.constant;
         let mut unit: i64 = 0;
         let mut j: i64 = 0;
         while ((j) as usize) < s.row.cols.len() {
-            let c = *nikaia_std::index::get(&s.row.cols, (j) as usize);
+            let c = *unsafe { nikaia_std::proven::read(&s.row.cols, (j) as usize) };
             if c == s.column { unit = *nikaia_std::index::get(&s.row.ks, (j) as usize); } else {
                 let v: i64 = nikaia_std::index::or(out.get(&sv_column_name(c, names)), || 0);
                 rest = match rest.checked_add(match (*nikaia_std::index::get(&s.row.ks, (j) as usize)).checked_mul(v) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             }
-            j += 1;
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
         if unit != 1 && unit != -1 { return None; }
         let value = if unit == 1 { match rest.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None } } else { rest };

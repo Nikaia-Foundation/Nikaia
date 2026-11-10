@@ -37,7 +37,7 @@ pub(crate) fn counted_statement(stmt: &Stmt, over: &mut Vec<CountedLoop>, words:
                 inner = without(&inner, words.resolve(b));
             }
             if bindings.len() == 1 {
-                let found = loop_over_length(*nikaia_std::index::get(&bindings, 0), iter, body, &over, words);
+                let found = loop_over_length(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }, iter, body, &over, words);
                 if found.is_some() { inner.push(nikaia_std::index::or(found, || CountedLoop { binding: String::from(""), list: String::from("") })); }
             }
             counted_block(body, &mut inner, words, out);
@@ -287,7 +287,7 @@ pub fn path_of(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<S
 
 pub fn path_root(path: &str) -> String {
     let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())
 }
 
 pub fn path_within(path: &str, within: &str) -> bool {

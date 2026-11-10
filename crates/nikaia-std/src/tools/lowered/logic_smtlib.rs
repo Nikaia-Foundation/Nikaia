@@ -37,7 +37,7 @@ pub(crate) fn lg_smt_binary(op: &str, arena: &TermArena, a: i64, b: i64) -> Stri
 
 pub(crate) fn lg_smt_list(op: &str, arena: &TermArena, parts: &[i64], empty: &str) -> String {
     if parts.is_empty() { return nikaia_std::block::Text::from(empty.to_string()); }
-    if parts.len() == 1 { return lg_term(arena, *nikaia_std::index::get(&parts, 0)); }
+    if parts.len() == 1 { return lg_term(arena, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); }
     let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
@@ -134,26 +134,26 @@ pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
     let mut stack: Vec<Vec<LgSexp>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
     let mut at: i64 = 0;
     while ((at) as usize) < chars.len() {
-        let c = *nikaia_std::index::get(&chars, (at) as usize);
-        at += 1;
+        let c = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         if c == ';' {
             while ((at) as usize) < chars.len() {
-                let next = *nikaia_std::index::get(&chars, (at) as usize);
-                at += 1;
+                let next = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 if next == '\n' { break; }
             }
         } else if c == '(' { stack.push(vec![]); } else if c == ')' {
             if stack.len() < 2 { return LgParsedSexps::Failed(LgReadError::Syntax(String::from("a `)` with no `(`"))); }
-            let list = (*nikaia_std::index::get(&stack, nikaia_std::index::at(stack.len() as i64 - 1))).copy_owned();
+            let list = (*unsafe { nikaia_std::proven::read(&stack, (nikaia_std::proven::sub::<i64>(stack.len() as i64, 1)) as usize) }).copy_owned();
             stack.pop();
-            let last = stack.len() as i64 - 1;
+            let last = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
             stack[nikaia_std::index::at(last)].push(LgSexp::List(list));
-        } else if c.is_whitespace() { at += 0; } else if c == '|' {
+        } else if c.is_whitespace() { at = unsafe { nikaia_std::proven::add::<i64>(at, 0) }; } else if c == '|' {
             let mut atom: String = String::from("|");
             let mut closed = false;
             while ((at) as usize) < chars.len() {
-                let next = *nikaia_std::index::get(&chars, (at) as usize);
-                at += 1;
+                let next = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 if next == '|' {
                     closed = true;
                     break;
@@ -162,17 +162,17 @@ pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
             }
             if !closed { return LgParsedSexps::Failed(LgReadError::Syntax(String::from("an unclosed `|`"))); }
             atom.push('|');
-            let last = stack.len() as i64 - 1;
+            let last = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
             stack[nikaia_std::index::at(last)].push(LgSexp::Atom(atom));
         } else if c == '"' {
             let mut atom: String = String::from("\"");
             let mut closed = false;
             while ((at) as usize) < chars.len() {
-                let next = *nikaia_std::index::get(&chars, (at) as usize);
-                at += 1;
+                let next = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 if next == '"' {
-                    if ((at) as usize) < chars.len() && *nikaia_std::index::get(&chars, (at) as usize) == '"' {
-                        at += 1;
+                    if ((at) as usize) < chars.len() && *unsafe { nikaia_std::proven::read(&chars, (at) as usize) } == '"' {
+                        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                         atom.push_str("\"\"");
                     } else {
                         closed = true;
@@ -182,23 +182,23 @@ pub(crate) fn lg_parse(source: &str) -> LgParsedSexps {
             }
             if !closed { return LgParsedSexps::Failed(LgReadError::Syntax(String::from("an unclosed string"))); }
             atom.push('"');
-            let last = stack.len() as i64 - 1;
+            let last = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
             stack[nikaia_std::index::at(last)].push(LgSexp::Atom(atom));
         } else {
             let mut atom: String = String::from("");
             atom.push(c);
             while ((at) as usize) < chars.len() {
-                let next = *nikaia_std::index::get(&chars, (at) as usize);
+                let next = *unsafe { nikaia_std::proven::read(&chars, (at) as usize) };
                 if next.is_whitespace() || next == '(' || next == ')' { break; }
                 atom.push(next);
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            let last = stack.len() as i64 - 1;
+            let last = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
             stack[nikaia_std::index::at(last)].push(LgSexp::Atom(atom));
         }
     }
     if stack.len() != 1 { return LgParsedSexps::Failed(LgReadError::Syntax(String::from("a `(` with no `)`"))); }
-    LgParsedSexps::Done((*nikaia_std::index::get(&stack, 0)).copy_owned())
+    LgParsedSexps::Done((*unsafe { nikaia_std::proven::read(&stack, (0) as usize) }).copy_owned())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,28 +241,28 @@ impl LgReader {
         let mut args: Vec<i64> = vec![];
         let mut at: i64 = 1;
         while ((at) as usize) < items.len() {
-            match self.term(nikaia_std::index::get(&items, (at) as usize)) {
+            match self.term(unsafe { nikaia_std::proven::read(&items, (at) as usize) }) {
                 LgTermRead::Term(id) => { args.push(id); },
                 LgTermRead::Failed(ref why) => { return LgTermRead::Failed(why.clone()); },
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         let n = args.len() as i64;
-        if op == "not" && n == 1 { return LgTermRead::Term(self.arena.not(*nikaia_std::index::get(&args, 0))); }
+        if op == "not" && n == 1 { return LgTermRead::Term(self.arena.not(*unsafe { nikaia_std::proven::read(&args, (0) as usize) })); }
         if op == "and" { return LgTermRead::Term(self.arena.and(args)); }
         if op == "or" { return LgTermRead::Term(self.arena.or(args)); }
         if op == "=>" && n == 2 {
-            let not_x = self.arena.not(*nikaia_std::index::get(&args, 0));
-            return LgTermRead::Term(self.arena.or(vec![not_x, *nikaia_std::index::get(&args, 1)]));
+            let not_x = self.arena.not(*unsafe { nikaia_std::proven::read(&args, (0) as usize) });
+            return LgTermRead::Term(self.arena.or(vec![not_x, *unsafe { nikaia_std::proven::read(&args, (1) as usize) }]));
         }
-        if op == "-" && n == 1 { return LgTermRead::Term(self.arena.neg(*nikaia_std::index::get(&args, 0))); }
+        if op == "-" && n == 1 { return LgTermRead::Term(self.arena.neg(*unsafe { nikaia_std::proven::read(&args, (0) as usize) })); }
         if n >= 2 {
             if op == "+" || op == "-" || op == "*" {
-                let mut acc = *nikaia_std::index::get(&args, 0);
+                let mut acc = *unsafe { nikaia_std::proven::read(&args, (0) as usize) };
                 let mut next: i64 = 1;
                 while next < n {
-                    if op == "+" { acc = self.arena.add(acc, *nikaia_std::index::get(&args, (next) as usize)); } else if op == "-" { acc = self.arena.sub(acc, *nikaia_std::index::get(&args, (next) as usize)); } else { acc = self.arena.mul(acc, *nikaia_std::index::get(&args, (next) as usize)); }
-                    next += 1;
+                    if op == "+" { acc = self.arena.add(acc, *unsafe { nikaia_std::proven::read(&args, (next) as usize) }); } else if op == "-" { acc = self.arena.sub(acc, *unsafe { nikaia_std::proven::read(&args, (next) as usize) }); } else { acc = self.arena.mul(acc, *unsafe { nikaia_std::proven::read(&args, (next) as usize) }); }
+                    next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
                 }
                 return LgTermRead::Term(acc);
             }
@@ -270,16 +270,16 @@ impl LgReader {
                 let mut links: Vec<i64> = vec![];
                 let mut next: i64 = 0;
                 while next + 1 < n {
-                    let a = *nikaia_std::index::get(&args, (next) as usize);
-                    let b = *nikaia_std::index::get(&args, (next + 1) as usize);
+                    let a = *unsafe { nikaia_std::proven::read(&args, (next) as usize) };
+                    let b = *unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::add::<i64>(next, 1)) as usize) };
                     if op == "<=" { links.push(self.arena.le(a, b)); } else if op == "<" { links.push(self.arena.lt(a, b)); } else if op == ">=" { links.push(self.arena.ge(a, b)); } else if op == ">" { links.push(self.arena.gt(a, b)); } else { links.push(self.arena.equal(a, b)); }
-                    next += 1;
+                    next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
                 }
-                if links.len() == 1 { return LgTermRead::Term(*nikaia_std::index::get(&links, 0)); }
+                if links.len() == 1 { return LgTermRead::Term(*unsafe { nikaia_std::proven::read(&links, (0) as usize) }); }
                 return LgTermRead::Term(self.arena.and(links));
             }
         }
-        if op == "distinct" && n == 2 { return LgTermRead::Term(self.arena.unequal(*nikaia_std::index::get(&args, 0), *nikaia_std::index::get(&args, 1))); }
+        if op == "distinct" && n == 2 { return LgTermRead::Term(self.arena.unequal(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }, *unsafe { nikaia_std::proven::read(&args, (1) as usize) })); }
         LgTermRead::Failed(LgReadError::Unsupported(lg_show(sexp)))
     }
 }
@@ -307,7 +307,7 @@ pub fn lg_smtlib_read(source: &str) -> LgRead {
                     continue;
                 }
                 if n == 2 && head == "assert" {
-                    match reader.term(nikaia_std::index::get(&items, 1)) {
+                    match reader.term(unsafe { nikaia_std::proven::read(&items, (1) as usize) }) {
                         LgTermRead::Term(id) => { assertions.push(id); },
                         LgTermRead::Failed(ref why) => { return LgRead::Failed(why.clone()); },
                     }

@@ -102,8 +102,13 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
         }
         Expr::StructLit { name, fields, .. } => {
             out.insert(words.resolve(name).clone())
+            // A field's label is a name read only where it stands alone
+            // (`Kept { v }`); `Kept { v: field }` reads `field`, not a `v`
+            // in scope (#1501).
             for field in fields {
-                out.insert(words.resolve(field.name).clone())
+                if field.value == null {
+                    out.insert(words.resolve(field.name).clone())
+                }
                 maybe_names_in(field.value, words, out)
             }
         }
@@ -113,7 +118,9 @@ pub fn names_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut 
         Expr::With { base, fields, .. } => {
             names_in(base, words, out)
             for field in fields {
-                out.insert(words.resolve(field.name).clone())
+                if field.value == null {
+                    out.insert(words.resolve(field.name).clone())
+                }
                 maybe_names_in(field.value, words, out)
             }
         }

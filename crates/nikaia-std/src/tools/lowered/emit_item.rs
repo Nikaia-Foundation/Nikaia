@@ -174,6 +174,35 @@ impl EmitState {
                     }
                 }
                 out.push("}\n");
+                if !self.is_std && !variants.is_empty() {
+                    let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                    for variant in variants.iter() {
+                        let vname = escaped_name(&emit_text(world, variant.name));
+                        match &variant.fields {
+                            VariantFields::Unit => { arms.push(format!("Self::{} => 0", vname)); },
+                            VariantFields::Tuple(types) => {
+                                #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                                let mut walked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+                                for i in 0..types.len() as i64 {
+                                    bound.push(format!("f{}", i));
+                                    walked.push(format!(" + nikaia_std::__nikaia_deep_size!(*f{})", i));
+                                }
+                                arms.push(format!("Self::{}({}) => 0{}", vname, nikaia_std::block::Text::from(bound.join(", ")), nikaia_std::block::Text::from(walked.join(""))));
+                            },
+                            VariantFields::Named(fields) => {
+                                #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                                let mut walked: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+                                for f in fields.iter() {
+                                    let n = escaped_name(&emit_text(world, f.name));
+                                    walked.push(format!(" + nikaia_std::__nikaia_deep_size!(*{})", n));
+                                    bound.push(n);
+                                }
+                                arms.push(format!("Self::{} {{ {} }} => 0{}", vname, nikaia_std::block::Text::from(bound.join(", ")), nikaia_std::block::Text::from(walked.join(""))));
+                            },
+                        }
+                    }
+                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        match self {{ {} }}\n    }}\n}}\n", params, escaped_name(&enum_name), params, nikaia_std::block::Text::from(arms.join(", "))));
+                }
             },
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -207,7 +236,7 @@ impl EmitState {
                     let field_vis = if field.is_public || is_extern { "pub " } else { "" };
                     body.push(&format!("    {}{}: {},\n", field_vis, escaped_name(&field_text), self.boxed_ty(&text, &field_text, lowered)));
                 }
-                let mut hidden: i64 = 0;
+                let mut hidden: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots;
                 if seeded { hidden = emit_seeds_finish(&mut walk.place, 0); }
                 let mut parts: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
                 if self.borrowing.contains(&text) {
@@ -215,7 +244,7 @@ impl EmitState {
                     let mut more: i64 = 1;
                     while ((more) as usize) < slots.len() {
                         parts.push(format!("'a{}", more));
-                        more += 1;
+                        more = unsafe { nikaia_std::proven::add::<i64>(more, 1) };
                     }
                 }
                 for g in generics.iter() { parts.push(emit_bounded(world, g)); }
@@ -236,6 +265,29 @@ impl EmitState {
                     if !same.is_empty() { compared = nikaia_std::block::Text::from(same.join(" && ")); }
                     out.push(&format!("impl{} PartialEq for {}{} {{\n    fn eq(&self, other: &Self) -> bool {{ {} }}\n}}\n", declares, me, applied, compared));
                     if self.facts.compares_totally.contains(&text) { out.push(&format!("impl{} Eq for {}{} {{}}\n", declares, me, applied)); }
+                }
+                if !self.is_std {
+                    #[allow(unused_mut)] let mut declared: Vec<String> = vec![];
+                    #[allow(unused_mut)] let mut applied: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+                    if self.borrowing.contains(&text) {
+                        declared.push(String::from("'a"));
+                        applied.push(String::from("'a"));
+                        let mut more: i64 = 1;
+                        while ((more) as usize) < slots.len() {
+                            declared.push(format!("'a{}", more));
+                            applied.push(format!("'a{}", more));
+                            more = unsafe { nikaia_std::proven::add::<i64>(more, 1) };
+                        }
+                    }
+                    for g in generics.iter() {
+                        declared.push(emit_bounded(world, g));
+                        applied.push(escaped_name(world.words.resolve(g.name)));
+                    }
+                    for s in emit_seeds_declared(0, hidden, false) { declared.push(s); }
+                    for s in emit_seeds_applied(0, hidden) { applied.push(s); }
+                    let mut walked: String = String::from("0"); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut applied = applied;
+                    for f in fields.iter() { walked = format!("{} + nikaia_std::__nikaia_deep_size!(self.{})", walked, escaped_name(&emit_text(world, f.name))); }
+                    out.push(&format!("#[automatically_derived]\nimpl{} nikaia_std::block::DeepSize for {}{} {{\n    fn heap(&self) -> usize {{\n        {}\n    }}\n}}\n", emit_angled(&declared), escaped_name(&text), emit_angled(&applied), walked));
                 }
             },
             Item::Fn { name, .. } => {
@@ -267,8 +319,8 @@ impl EmitState {
                     let s = *s;
                     segments.push(emit_text(world, s));
                 }
-                if self.is_std && alias.is_none() && segments.len() == 2 && *nikaia_std::index::get(&segments, 0) == "std" {
-                    out.push(&format!("#[allow(unused_imports)]\nuse nikaia_std::{};\n", *nikaia_std::index::get(&segments, 1)));
+                if self.is_std && alias.is_none() && segments.len() == 2 && *unsafe { nikaia_std::proven::read(&segments, (0) as usize) } == "std" {
+                    out.push(&format!("#[allow(unused_imports)]\nuse nikaia_std::{};\n", *unsafe { nikaia_std::proven::read(&segments, (1) as usize) }));
                     return Ok(());
                 }
                 let joined = nikaia_std::block::Text::from(segments.join("::"));
@@ -385,24 +437,24 @@ impl EmitState {
             out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied));
             let mut i: i64 = 0;
             for method in methods.iter() {
-                if (*nikaia_std::index::get(&wider, (i) as usize)).is_some() {
+                if (*unsafe { nikaia_std::proven::read(&wider, (i) as usize) }).is_some() {
                     self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, (match declared_by.as_ref() {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     }).as_deref(), Some(public))?;
                 }
-                i += 1;
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             }
             out.push("}\n");
         }
         if has_trait { out.push(&format!("impl{} {} for {}{} {{\n", declares, trait_text, target_name, applied)); } else { out.push(&format!("impl{} {}{} {{\n", declares, target_name, applied)); }
         let mut i: i64 = 0;
         for method in methods.iter() {
-            let w = match nikaia_std::index::get(&wider, (i) as usize) {
+            let w = match unsafe { nikaia_std::proven::read(&wider, (i) as usize) } {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             };
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             match w {
                 None => {
                     self.emit_item_method(world, walk, out, host, method, lifetimes.clone(), &target_name, (match declared_by.as_ref() {
@@ -462,6 +514,11 @@ impl EmitState {
                 walk.in_parameter = inside;
                 walk.code_parameter_runs = held;
                 if self.emit_fn_lends(world, &key, at) { reference = "&"; }
+            } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, &key, at) {
+                let mut viewed = arg.ty.clone();
+                viewed.is_view = true;
+                viewed.either = false;
+                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &viewed, &EmitLifetimes::Elided));
             } else { written = self.emit_item_ty(world, walk, host, &arg.ty, &EmitLifetimes::Elided); }
             let plain_list = !foreign && emit_text(world, arg.ty.name) == "Vec" && arg.ty.generics.len() == 1 && !arg.ty.is_nullable && !arg.ty.is_slice;
             if plain_list && written.starts_with("&Vec<") && written.ends_with('>') {
@@ -502,7 +559,7 @@ impl EmitState {
     pub(crate) fn emit_foreign_ty<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type) -> String {
         if self.writes_a_run(world, ty) {
             let mut element: String = String::from("u8");
-            if !ty.generics.is_empty() { element = self.emit_foreign_ty(world, walk, host, nikaia_std::index::get(&ty.generics, 0)); }
+            if !ty.generics.is_empty() { element = self.emit_foreign_ty(world, walk, host, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }); }
             return format!("*{} {}", pointing(ty.is_mut), element);
         }
         if ty.is_view {

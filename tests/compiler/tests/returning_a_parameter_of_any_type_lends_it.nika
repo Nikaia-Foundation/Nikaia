@@ -1,0 +1,33 @@
+// Returning a parameter hands back a view of it and does not keep it, for
+// every type (ADR-views-3 D12, #1498): `pick` and `second` lend both
+// arguments, the result is `from y`, and the caller reuses `x` and `y`.
+
+struct P {
+    name: String,
+}
+
+fn pick(_x: P, y: P) -> P {
+    return y
+}
+
+fn second[T](_x: T, y: T) -> T {
+    return y
+}
+
+fn make(s: String) -> String {
+    let mut made = String()
+    made.push_str(s)
+    return made
+}
+
+fn main() throws {
+    let x = P { name: make("a") }
+    let y = P { name: make("b") }
+    let r = pick(x, y)
+    println(r.name)
+    println(y.name)
+    let s = second(x, y)
+    println(s.name)
+    println(x.name)
+    println(f"{second(3, 4)}")
+}

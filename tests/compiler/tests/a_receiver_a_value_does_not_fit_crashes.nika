@@ -1,0 +1,37 @@
+// ADR-327 D9 (#1543): a receiver a value does not fit panics at the take and ends Crashed, not OverBudget.
+use std::channel
+
+struct Tight {}
+
+impl task::Admission for Tight {
+	fn decide(mut self, _load: task::Load) -> task::Decision sync {
+		return task::Decision { start: 1, budget: 262144 }
+	}
+}
+
+struct Big {
+	items: Vec[i64],
+}
+
+fn take_one(rx: channel::Receiver[Big]) -> i64 {
+	let xs = rx.recv() ?? return 0
+	return xs.items.len()
+}
+
+fn main() throws {
+	let (tx, rx) = channel::bounded[Big](1)
+	let mut big: Vec[i64] = []
+	for i in 0..<100000 {
+		big.push(i)
+	}
+	tx.send(Big { items: big })
+	let t = async(detached, admission: Tight {}) fn { take_one(rx) }
+	let got = t.join() catch {
+		match error {
+			task::Crashed { message, .. } => println(f"the receiver crashed: {message}"),
+			else => println(f"failed: {error}"),
+		}
+		0
+	}
+	println(f"got {got}")
+}

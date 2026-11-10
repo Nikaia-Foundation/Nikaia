@@ -90,7 +90,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_async_body_group(&self, body: &Block) -> i64 {
         if body.stmts.is_empty() { return 0; }
-        let group = -1 - nikaia_std::index::get(&body.stmts, 0).span.start as i64;
+        let group = -1 - unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.start as i64;
         if self.facts.async_waits.values().any(|wait| { wait.group == group }) { return group; }
         0
     }
@@ -112,7 +112,7 @@ impl EmitState {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match c.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= signature.params.len() as i64 { return false; }
-        nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1.is_a_view()
+        unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1.is_a_view()
     }
     pub(crate) fn emit_fn_keeps(&self, key: &str, name: &str) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -122,7 +122,7 @@ impl EmitState {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let signature = match c.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
         if at < 0 || at >= signature.config.len() as i64 { return false; }
-        lends_option(c, nikaia_std::index::get(&signature.config, nikaia_std::index::at(at)))
+        lends_option(c, unsafe { nikaia_std::proven::read(&signature.config, (at) as usize) })
     }
     pub(crate) fn emit_fn_keeps_bytes(&self, key: &str, at: i64) -> bool {
         let c = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -183,7 +183,7 @@ impl EmitState {
             if pair.second != name { continue; }
             let place = match args.iter().find(|&a| { emit_text(world, a.name) == pair.first }) { Some(__nikaia_value) => __nikaia_value, None => return false };
             let mut held = place.ty.clone();
-            if held.generics.len() == 1 && emit_text(world, held.name) == "Vec" { held = (*nikaia_std::index::get(&held.generics, 0)).clone(); }
+            if held.generics.len() == 1 && emit_text(world, held.name) == "Vec" { held = (*unsafe { nikaia_std::proven::read(&held.generics, (0) as usize) }).clone(); }
             if held.name == source.ty.name || held.is_view || emit_holds_a_ref_of_a_type(world, &held) { return false; }
         }
         true
@@ -242,13 +242,13 @@ impl EmitState {
                                 let mut at: i64 = 0;
                                 for each in args.iter() {
                                     if self.carries_a_view(world, &each.ty) { carrying.push(at); }
-                                    at += 1;
+                                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                                 }
                                 if carrying.len() == 1 {
-                                    let one = *nikaia_std::index::get(&carrying, 0);
+                                    let one = *unsafe { nikaia_std::proven::read(&carrying, (0) as usize) };
                                     let lent = self.emit_fn_lends(world, &key, one) && !self.emit_fn_written_as_view(&key, one);
                                     let changed = self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(one)).name));
-                                    if !nikaia_std::index::get(&args, nikaia_std::index::at(one)).ty.is_view && !nikaia_std::index::get(&args, nikaia_std::index::at(one)).ty.either && (lent || changed) { inner_views = Some(nikaia_std::index::get(&args, nikaia_std::index::at(one)).name); }
+                                    if !unsafe { nikaia_std::proven::read(&args, (one) as usize) }.ty.is_view && !unsafe { nikaia_std::proven::read(&args, (one) as usize) }.ty.either && (lent || changed) { inner_views = Some(unsafe { nikaia_std::proven::read(&args, (one) as usize) }.name); }
                                 }
                             }
                         },
@@ -309,12 +309,12 @@ impl EmitState {
                 let mut index: i64 = 0;
                 for each in args.iter() {
                     if self.emit_fn_lowered_as_a_view(world, &key, recv, index, each) { lowered_views += 1; }
-                    index += 1;
+                    index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
                 }
                 let mut source_at: Option<i64> = None;
-                if has_borrows && plain_signature && named.len() == 1 && *nikaia_std::index::get(&named, 0) != "self" {
+                if has_borrows && plain_signature && named.len() == 1 && *unsafe { nikaia_std::proven::read(&named, (0) as usize) } != "self" {
                     let mut found: Option<i64> = None;
-                    for k in 0..args.len() as i64 { if found.is_none() && emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(k)).name) == *nikaia_std::index::get(&named, 0) { found = Some(k); } }
+                    for k in 0..args.len() as i64 { if found.is_none() && emit_text(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }.name) == *unsafe { nikaia_std::proven::read(&named, (0) as usize) } { found = Some(k); } }
                     let at = nikaia_std::index::or(found, || -1);
                     if at >= 0 && self.emit_fn_lowered_as_a_view(world, &key, recv, at, nikaia_std::index::get(&args, nikaia_std::index::at(at))) {
                         let loan = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view || self.emit_fn_lends(world, &key, at + recv);
@@ -332,7 +332,7 @@ impl EmitState {
                     let mut found: Vec<i64> = vec![];
                     for each in wanted.iter() {
                         let mut position: Option<i64> = None;
-                        for k in 0..args.len() as i64 { if position.is_none() && emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(k)).name) == *each { position = Some(k); } }
+                        for k in 0..args.len() as i64 { if position.is_none() && emit_text(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }.name) == *each { position = Some(k); } }
                         let at = nikaia_std::index::or(position, || -1);
                         let mut owned_views = false;
                         if at >= 0 { owned_views = !nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.is_view && !self.emit_fn_lends(world, &key, at + recv) && !self.emit_fn_changes(&key, &emit_text(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)) && self.carries_a_view(world, &nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty) && nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.generics.is_empty(); }
@@ -346,7 +346,7 @@ impl EmitState {
                 }
                 if receiver.is_some() && !several_at.is_empty() && nikaia_std::list::contains(&named, &"self") && *nikaia_std::index::get(&params, 0) == "&self" { { let __nikaia_stored = String::from("&'r self"); nikaia_std::index::set(&mut params, 0usize, __nikaia_stored); } }
                 let mut source_option: Option<i64> = None;
-                if has_borrows && plain_signature && named.len() == 1 && source_at.is_none() { for k in 0..config.len() as i64 { if source_option.is_none() && emit_text(world, nikaia_std::index::get(&config, nikaia_std::index::at(k)).name) == *nikaia_std::index::get(&named, 0) && (self.carries_a_view(world, &nikaia_std::index::get(&config, nikaia_std::index::at(k)).ty) || self.emit_fn_lent_option(&key, k)) { source_option = Some(k); } } }
+                if has_borrows && plain_signature && named.len() == 1 && source_at.is_none() { for k in 0..config.len() as i64 { if source_option.is_none() && emit_text(world, unsafe { nikaia_std::proven::read(&config, (k) as usize) }.name) == *unsafe { nikaia_std::proven::read(&named, (0) as usize) } && (self.carries_a_view(world, &unsafe { nikaia_std::proven::read(&config, (k) as usize) }.ty) || self.emit_fn_lent_option(&key, k)) { source_option = Some(k); } } }
                 let mut source_nested = false;
                 if source_at.is_some() {
                     let at = nikaia_std::index::or(source_at, || 0);
@@ -358,7 +358,7 @@ impl EmitState {
                     }
                     let list = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.clone();
                     if list.generics.len() == 1 && emit_text(world, list.name) == "Vec" && !list.is_nullable && !list.is_slice {
-                        let element = (*nikaia_std::index::get(&list.generics, 0)).clone();
+                        let element = (*unsafe { nikaia_std::proven::read(&list.generics, (0) as usize) }).clone();
                         if self.carries_a_view(world, &element) && self.borrows(world, element.name) && element.generics.is_empty() && !element.is_view && !element.is_nullable {
                             match ret_type {
                                 Some(each) => { source_nested = each.name != element.name && !emit_holds_a_ref_of_a_type(world, each); },
@@ -371,6 +371,21 @@ impl EmitState {
                 if source_at.is_some() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(nikaia_std::index::or(source_at, || 0))).name); } else if !several_at.is_empty() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(*nikaia_std::index::get(&several_at, 0))).name); } else if source_option.is_some() { source_name = Some(nikaia_std::index::get(&config, nikaia_std::index::at(nikaia_std::index::or(source_option, || 0))).name); }
                 let source_kept = source_name.is_some() && has_kept && self.tethered_position(&key, "<result>");
                 let shared = source_name.is_some() && !source_kept;
+                let mut lifted_whole = false;
+                if shared && !source_nested && emit_is_elided(&lifetimes) && inner_views.is_none() && stores.is_empty() {
+                    match source_at {
+                        Some(at) => {
+                            let ty = nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.clone();
+                            if self.carries_a_view(world, &ty) && self.borrows(world, ty.name) && ty.generics.is_empty() && !ty.is_nullable {
+                                match ret_type {
+                                    Some(each) => { lifted_whole = emit_text(world, each.name) == emit_text(world, ty.name) && each.generics.is_empty() && !each.is_nullable; },
+                                    None => { },
+                                }
+                            }
+                        },
+                        None => { },
+                    }
+                }
                 let mut nothing_borrowed = false;
                 if emit_is_elided(&lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
                     match ret_type {
@@ -391,13 +406,13 @@ impl EmitState {
                 let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open;
                 for each in args.iter() {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count.is_none() && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array";
-                    let lent_run = any && (self.emit_fn_changes(&key, &emit_text(world, each.name)) || self.emit_fn_lends(world, &key, at + recv));
+                    let lent_run = any && (self.emit_fn_changes(&key, &emit_text(world, each.name)) || self.emit_fn_lends(world, &key, unsafe { nikaia_std::proven::add::<i64>(at, recv) }));
                     runs.push(lent_run);
                     if any && !lent_run {
                         lengths.push(format!("__NIKAIA_N{}", at));
                         open.push(format!("const __NIKAIA_N{}: usize", at));
                     } else { lengths.push(String::from("")); }
-                    at += 1;
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 }
                 let on_a_cycle = code_on_a_cycle(&self.code_cycle_graph, &self.own_contracts, &key);
                 walk.dyn_code = on_a_cycle;
@@ -405,12 +420,12 @@ impl EmitState {
                 let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut either_first = either_first;
                 for each in args.iter() {
                     if emit_text(world, each.ty.name) == "meta::Field" {
-                        k += 1;
+                        k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                         continue;
                     }
                     let is_source = nikaia_std::index::or(source_at, || -1) == k || several_at.contains(nikaia_std::index::AsKey::as_key(&k));
                     let pname = emit_text(world, each.name);
-                    let at = k + recv;
+                    let at = unsafe { nikaia_std::proven::add::<i64>(k, recv) };
                     let changes = self.emit_fn_changes(&key, &pname);
                     let lent_option = !changes && each.ty.is_nullable && (!each.ty.is_view || each.ty.either) && !each.ty.is_slice && (*each.ty.code).is_none() && self.emit_fn_lends(world, &key, at);
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(&key, at);
@@ -426,10 +441,10 @@ impl EmitState {
                     let mut how = self.emit_how(&sig, each.name, &pname, ty.is_view, read_only);
                     if ty.is_view && self.emit_store_nested(world, &args, &stores, each) { how = EmitLifetimes::Inner; }
                     let mut spelled: String = String::from("");
-                    if *nikaia_std::index::get(&lengths, nikaia_std::index::at(k)) != "" || *nikaia_std::index::get(&runs, nikaia_std::index::at(k)) {
+                    if *unsafe { nikaia_std::proven::read(&lengths, (k) as usize) } != "" || *unsafe { nikaia_std::proven::read(&runs, (k) as usize) } {
                         let mut element: String = String::from("u8");
-                        if !each.ty.generics.is_empty() { element = self.emit_fn_ty(world, walk, host, nikaia_std::index::get(&each.ty.generics, 0), &how, &key, &pname); }
-                        spelled = if *nikaia_std::index::get(&runs, nikaia_std::index::at(k)) { format!("[{}]", element) } else { format!("[{}; {}]", element, *nikaia_std::index::get(&lengths, nikaia_std::index::at(k))) };
+                        if !each.ty.generics.is_empty() { element = self.emit_fn_ty(world, walk, host, unsafe { nikaia_std::proven::read(&each.ty.generics, (0) as usize) }, &how, &key, &pname); }
+                        spelled = if *unsafe { nikaia_std::proven::read(&runs, (k) as usize) } { format!("[{}]", element) } else { format!("[{}; {}]", element, *unsafe { nikaia_std::proven::read(&lengths, (k) as usize) }) };
                     } else {
                         let runs = !self.emit_fn_keeps(&key, &pname);
                         let held = walk.code_parameter_runs;
@@ -437,7 +452,7 @@ impl EmitState {
                         let inside = walk.in_parameter;
                         walk.in_parameter = true;
                         let mut position = how;
-                        if is_source && shared { if source_nested { position = EmitLifetimes::Within; } else { position = EmitLifetimes::Shared; } }
+                        if is_source && shared { if source_nested { position = EmitLifetimes::Within; } else if lifted_whole { position = EmitLifetimes::SharedIn; } else { position = EmitLifetimes::Shared; } }
                         let fast = standalone && self.fast_slots.contains(&format!("p:{}:{}", own_name, k));
                         let outer = walk.trusting;
                         walk.trusting = fast;
@@ -478,7 +493,7 @@ impl EmitState {
                         either_first.push(format!("let {} = {}.{}();", local, local, into));
                         params.push(format!("{}: impl nikaia_std::either_text::{}<Either = nikaia_std::either_text::EitherText<'e>>", local, by));
                     } else { params.push(format!("{}: {}{}", local, reference, spelled)); }
-                    k += 1;
+                    k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
                 let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 for each in config.iter() {
@@ -490,7 +505,7 @@ impl EmitState {
                     let local = emit_local_name(&self.facts.comptime_names, &pname);
                     let spelled = self.emit_fn_ty(world, walk, host, &option_ty, &position, &key, &pname);
                     params.push(format!("{}: {}", local, spelled));
-                    j += 1;
+                    j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
                 }
                 let mut has_dsl = false;
                 match spread {
@@ -512,6 +527,7 @@ impl EmitState {
                 }
                 if has_kept && emit_is_kept(&kept_lt) { declared.insert(0, String::from("'k")); }
                 if emit_is_elided(&lifetimes) && (!input_empty || inner_views.is_some() || !stores.is_empty()) { declared.insert(0, String::from("'a")); }
+                if lifted_whole && !nikaia_std::list::contains(&declared, &"'a") { declared.insert(0, String::from("'a")); }
                 if shared { declared.insert(0, String::from("'r")); }
                 if !either_first.is_empty() { declared.insert(0, String::from("'e")); }
                 walk.either_prelude = either_first.copy_owned();
@@ -521,7 +537,7 @@ impl EmitState {
                         if emit_text(world, ty.name) == "Self::dsl" {
                             if !has_dsl {
                                 let message = "`Self::dsl` stands for the function's `...args: Self::dsl` parameters, but this function has none.";
-                                if !body.stmts.is_empty() { return Err(nikaia_std::error::throwing(EmitRefused { message: nikaia_std::block::Text::from(message.to_string()), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
+                                if !body.stmts.is_empty() { return Err(nikaia_std::error::throwing(EmitRefused { message: nikaia_std::block::Text::from(message.to_string()), at: Some(i64::from(unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.start)) }, &"emit_function")); }
                                 return Err(nikaia_std::error::throwing(EmitRefused { message: nikaia_std::block::Text::from(message.to_string()), at: None }, &"emit_function"));
                             }
                             returned = String::from("NikaiaDsl");
@@ -531,13 +547,13 @@ impl EmitState {
                             for each in args.iter() {
                                 let lasting_text = each.ty.is_view && each.ty.lasting;
                                 if !lasting_text && (self.carries_a_view(world, &each.ty) || self.emit_fn_lowered_as_a_view(world, &key, recv, index, each)) { borrows_from_something = true; }
-                                index += 1;
+                                index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
                             }
                             let widens = emit_is_elided(&lifetimes) && !answers_a_trait && self.carries_a_view(world, ty) && (!borrows_from_something || nothing_borrowed);
                             let mut lifetimes_of_args = false;
                             for each in args.iter() { if self.carries_a_view(world, &each.ty) && !(each.ty.either && each.ty.generics.is_empty()) { lifetimes_of_args = true; } }
                             let mut result: EmitLifetimes = lifetimes;
-                            if has_kept && self.tethered_position(&key, "<result>") { result = kept_lt; } else if shared { result = EmitLifetimes::Shared; } else if widens { result = EmitLifetimes::Static; } else if inner_views.is_some() { result = EmitLifetimes::Named; } else if emit_is_elided(&lifetimes) && receiver.is_none() && !walk.either_prelude.is_empty() && !lifetimes_of_args { result = EmitLifetimes::Each; }
+                            if has_kept && self.tethered_position(&key, "<result>") { result = kept_lt; } else if lifted_whole { result = EmitLifetimes::SharedIn; } else if shared { result = EmitLifetimes::Shared; } else if widens { result = EmitLifetimes::Static; } else if inner_views.is_some() { result = EmitLifetimes::Named; } else if emit_is_elided(&lifetimes) && receiver.is_none() && !walk.either_prelude.is_empty() && !lifetimes_of_args { result = EmitLifetimes::Each; }
                             let fast = standalone && self.fast_slots.contains(&format!("r:{}", own_name));
                             let outer = walk.trusting;
                             walk.trusting = fast;
@@ -576,9 +592,9 @@ impl EmitState {
                                 let mut done = false;
                                 for existing in params.iter() {
                                     if !done && existing.starts_with(&*head) { done = true; }
-                                    if !done { p += 1; }
+                                    if !done { p = unsafe { nikaia_std::proven::add::<i64>(p, 1) }; }
                                 }
-                                if done { { let __nikaia_stored = emit_renamed_lifetime(nikaia_std::index::get(&params, (p) as usize), "'r", &each.second); nikaia_std::index::set(&mut params, (p) as usize, __nikaia_stored); } }
+                                if done { { let __nikaia_stored = emit_renamed_lifetime(nikaia_std::index::get(&params, (p) as usize), "'r", &each.second); unsafe { nikaia_std::proven::write(&mut params, (p) as usize, __nikaia_stored) }; } }
                             }
                             match ret_type {
                                 Some(t) => {
@@ -592,14 +608,14 @@ impl EmitState {
                             let mut at: i64 = 0;
                             let mut q: i64 = 0;
                             for each in declared.iter() {
-                                if each == "'r" && at == 0 { at = q + 1; }
-                                q += 1;
+                                if each == "'r" && at == 0 { at = unsafe { nikaia_std::proven::add::<i64>(q, 1) }; }
+                                q = unsafe { nikaia_std::proven::add::<i64>(q, 1) };
                             }
                             let mut offset: i64 = 0;
                             for each in found.own.iter() {
                                 if each.second != "'r" {
                                     declared.insert(nikaia_std::count::of(at + offset), nikaia_std::block::Text::from(each.second.to_string()));
-                                    offset += 1;
+                                    offset = unsafe { nikaia_std::proven::add::<i64>(offset, 1) };
                                 }
                             }
                         },
@@ -608,6 +624,14 @@ impl EmitState {
                 }
                 let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
+                let a_copy = walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())));
+                let weighed = self.facts.weighed_of(&key);
+                if !a_copy && !weighed.is_empty() {
+                    let mut clauses: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                    for each in weighed.iter() { clauses.push(format!("{}: nikaia_std::block::DeepSize", each)); }
+                    let joined = nikaia_std::block::Text::from(clauses.join(", "));
+                    ret = format!("{} where {}", ret, joined);
+                }
                 let ended = emit_seeds_end(walk, begun.seeded, begun.base);
                 for each in ended.declared.iter() { declared.push(nikaia_std::block::Text::from(each.to_string())); }
                 let outer_unpinned = walk.unpinned;
@@ -642,7 +666,7 @@ impl EmitState {
                     out.push("#[allow(non_snake_case)]\n");
                     out.push(&pad);
                 }
-                if args.len() as i64 + recv > 7 {
+                if unsafe { nikaia_std::proven::add::<i64>(args.len() as i64, recv) } > 7 {
                     out.push("#[allow(clippy::too_many_arguments)]\n");
                     out.push(&pad);
                 }
@@ -814,16 +838,16 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
     let mut at: i64 = 0;
     while at < sources.len() as i64 {
         group.push(at);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     for (_, params) in of_field.iter() {
         let first_at = emit_split_index(sources, nikaia_std::index::get(&params, 0));
         let mut next: i64 = 1;
         while ((next) as usize) < params.len() {
             let first = emit_split_root(&group, first_at);
-            let other = emit_split_root(&group, emit_split_index(sources, nikaia_std::index::get(&params, (next) as usize)));
-            if first < other { { let __nikaia_stored = first; nikaia_std::index::set(&mut group, nikaia_std::index::at(other), __nikaia_stored); } } else { { let __nikaia_stored = other; nikaia_std::index::set(&mut group, nikaia_std::index::at(first), __nikaia_stored); } }
-            next += 1;
+            let other = emit_split_root(&group, emit_split_index(sources, unsafe { nikaia_std::proven::read(&params, (next) as usize) }));
+            if first < other { { let __nikaia_stored = first; unsafe { nikaia_std::proven::write(&mut group, (other) as usize, __nikaia_stored) }; } } else { { let __nikaia_stored = other; unsafe { nikaia_std::proven::write(&mut group, (first) as usize, __nikaia_stored) }; } }
+            next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
         }
     }
     let mut named: collections::BTreeMap<i64, String> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let slots = slots;
@@ -838,7 +862,7 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
             named.insert(root, lifetime);
         }
         own.push(EmitPair { first: nikaia_std::block::Text::from(param.to_string()), second: nikaia_std::block::Text::from(nikaia_std::index::or(named.get(&root), || "").to_string()) });
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let mut fields: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
     for slot in slots.iter() {
@@ -853,14 +877,14 @@ pub(crate) fn emit_split_index(sources: &[String], name: &str) -> i64 {
     let mut at: i64 = 0;
     for source in sources.iter() {
         if source == name { return at; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     -1
 }
 
 pub(crate) fn emit_split_root(group: &[i64], at: i64) -> i64 {
     let mut here = at;
-    while *nikaia_std::index::get(&group, nikaia_std::index::at(here)) != here { here = *nikaia_std::index::get(&group, nikaia_std::index::at(here)); }
+    while *nikaia_std::index::get(&group, nikaia_std::index::at(here)) != here { here = *unsafe { nikaia_std::proven::read(&group, (here) as usize) }; }
     here
 }
 

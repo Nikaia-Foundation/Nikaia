@@ -6,8 +6,8 @@ pub(crate) fn check_core_flow_named(name: &str) -> Ty { Ty::Named { name: nikaia
 pub(crate) fn check_core_flow_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     if parts.is_empty() { return nikaia_std::block::Text::from(name.to_string()); }
-    let last = parts.len() as i64 - 1;
-    format!("{}", *nikaia_std::index::get(&parts, nikaia_std::index::at(last)))
+    let last = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
+    format!("{}", *unsafe { nikaia_std::proven::read(&parts, (last) as usize) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -178,14 +178,14 @@ pub(crate) fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorl
     let mut finding: CheckFinding = match arms_that_disagree(arms, is_if, span) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut at = check_span_at(world, expr, span);
     if !arms.is_empty() {
-        let first = nikaia_std::index::get(&arms, 0).ty.unseen();
+        let first = unsafe { nikaia_std::proven::read(&arms, (0) as usize) }.ty.unseen();
         let mut i: i64 = 1;
         while i < arms.len() as i64 {
-            if nikaia_std::index::get(&arms, (i) as usize).ty.unseen() != first && nikaia_std::index::get(&arms, (i) as usize).tail.is_some() {
-                at = check_span_at(world, nikaia_std::index::or(nikaia_std::index::get(&arms, (i) as usize).tail, || expr.into()), span);
+            if unsafe { nikaia_std::proven::read(&arms, (i) as usize) }.ty.unseen() != first && unsafe { nikaia_std::proven::read(&arms, (i) as usize) }.tail.is_some() {
+                at = check_span_at(world, nikaia_std::index::or(unsafe { nikaia_std::proven::read(&arms, (i) as usize) }.tail, || expr.into()), span);
                 break;
             }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
     }
     finding.span = at;
@@ -373,10 +373,10 @@ pub(crate) fn check_core_flow_member(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
     let mut owner: String = String::from("");
     if path.len() >= 2 {
         let mut at: i64 = 0;
-        while at < path.len() as i64 - 1 {
+        while at < unsafe { nikaia_std::proven::sub::<i64>(path.len() as i64, 1) } {
             if at > 0 { owner = format!("{}::", owner); }
-            owner = format!("{}{}", owner, world.words.resolve(*nikaia_std::index::get(&path, (at) as usize)));
-            at += 1;
+            owner = format!("{}{}", owner, world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (at) as usize) }));
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     let mut whole: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -423,23 +423,23 @@ pub(crate) fn check_core_flow_a_lent_name(state: &CheckState, world: &CheckWorld
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_guard<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, guard: &Expr, span: &Span) {
     let boxed = state.boxed_names(world, pattern);
-    let last = state.scope.len() as i64 - 1;
+    let last = unsafe { nikaia_std::proven::sub::<i64>(state.scope.len() as i64, 1) };
     let mut saved: Vec<CheckLocal> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if last >= 0 {
-        saved = (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).copy_owned();
+        saved = (*unsafe { nikaia_std::proven::read(&state.scope, (last) as usize) }).copy_owned();
         for at in 0..saved.len() as i64 {
-            if nikaia_std::list::contains(&boxed, &nikaia_std::index::get(&saved, nikaia_std::index::at(at)).name) {
-                state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].ty = view_of_type(&nikaia_std::index::get(&saved, nikaia_std::index::at(at)).ty);
-                state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].lent = true;
+            if nikaia_std::list::contains(&boxed, &unsafe { nikaia_std::proven::read(&saved, (at) as usize) }.name) {
+                (*unsafe { nikaia_std::proven::slot(&mut state.scope, (last) as usize) })[nikaia_std::index::at(at)].ty = view_of_type(&unsafe { nikaia_std::proven::read(&saved, (at) as usize) }.ty);
+                (*unsafe { nikaia_std::proven::slot(&mut state.scope, (last) as usize) })[nikaia_std::index::at(at)].lent = true;
             }
         }
     }
     let found = check_core_expr(state, world, host, guard, span);
     if last >= 0 {
         for at in 0..saved.len() as i64 {
-            if at < (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).len() as i64 && nikaia_std::list::contains(&boxed, &nikaia_std::index::get(&saved, nikaia_std::index::at(at)).name) {
-                state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].ty = nikaia_std::index::get(&saved, nikaia_std::index::at(at)).ty.clone();
-                state.scope[nikaia_std::index::at(last)][nikaia_std::index::at(at)].lent = nikaia_std::index::get(&saved, nikaia_std::index::at(at)).lent;
+            if at < (*nikaia_std::index::get(&state.scope, nikaia_std::index::at(last))).len() as i64 && nikaia_std::list::contains(&boxed, &unsafe { nikaia_std::proven::read(&saved, (at) as usize) }.name) {
+                (*unsafe { nikaia_std::proven::slot(&mut state.scope, (last) as usize) })[nikaia_std::index::at(at)].ty = unsafe { nikaia_std::proven::read(&saved, (at) as usize) }.ty.clone();
+                (*unsafe { nikaia_std::proven::slot(&mut state.scope, (last) as usize) })[nikaia_std::index::at(at)].lent = unsafe { nikaia_std::proven::read(&saved, (at) as usize) }.lent;
             }
         }
     }
@@ -493,7 +493,7 @@ pub(crate) fn check_core_flow_takes_all(state: &CheckState, world: &CheckWorld<'
         MatchPattern::Otherwise => return true,
         MatchPattern::Path(p) => {
             if p.len() != 1 { return false; }
-            let word = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&p, 0)).to_string());
+            let word = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&p, (0) as usize) }).to_string());
             return match check_core_flow_inside(ty) {
                 Ty::Named { ref name, .. } => !state.is_variant(name, &word) && !state.variant_parts.contains_key(&format!("{}::{}", name, word)),
                 _ => true,
@@ -547,7 +547,7 @@ pub(crate) fn check_core_flow_same_part(world: &CheckWorld<'_, '_, '_, '_, '_, '
         _ => return false,
     }; #[allow(clippy::redundant_locals)] let a = a;
     if a.is_empty() || (a.len() as i64) != b.len() as i64 { return false; }
-    for at in 0..a.len() as i64 { if *nikaia_std::index::get(&a, (at) as usize) != *nikaia_std::index::get(&b, (at) as usize) { return false; } }
+    for at in 0..a.len() as i64 { if *unsafe { nikaia_std::proven::read(&a, (at) as usize) } != *unsafe { nikaia_std::proven::read(&b, (at) as usize) } { return false; } }
     true
 }
 
@@ -592,9 +592,9 @@ pub(crate) fn check_core_flow_covers_null_at(state: &CheckState, world: &CheckWo
     if !shapes_is_null(nikaia_std::index::get(&earlier, nikaia_std::index::at(at))) { return false; }
     let mut j: i64 = 0;
     while j < types.len() as i64 {
-        let all = j == at || check_core_flow_takes_all(state, world, nikaia_std::index::get(&earlier, nikaia_std::index::at(j)), nikaia_std::index::get(&types, nikaia_std::index::at(j)));
+        let all = j == at || check_core_flow_takes_all(state, world, nikaia_std::index::get(&earlier, nikaia_std::index::at(j)), unsafe { nikaia_std::proven::read(&types, (j) as usize) });
         if !all && !check_core_flow_same_part(world, nikaia_std::index::get(&earlier, nikaia_std::index::at(j)), nikaia_std::index::get(&parts, nikaia_std::index::at(j))) { return false; }
-        j += 1;
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
     }
     true
 }
@@ -607,37 +607,37 @@ pub(crate) fn check_core_flow_set_tuple(state: &mut CheckState, world: &CheckWor
         _ => return None,
     };
     let count = types.len() as i64;
-    let parts: Vec<MatchPattern> = match check_core_flow_tuple_parts(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern, count) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let parts: Vec<MatchPattern> = match check_core_flow_tuple_parts(&unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.pattern, count) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut set: Vec<i64> = vec![];
     let mut narrowed: Vec<Ty> = vec![];
     for i in 0..types.len() as i64 {
-        let nullable = matches!(*nikaia_std::index::get(&types, nikaia_std::index::at(i)), Ty::Nullable(_));
+        let nullable = matches!(*unsafe { nikaia_std::proven::read(&types, (i) as usize) }, Ty::Nullable(_));
         let mut covered = false;
-        if nullable && check_core_flow_a_bare_name(&state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), nikaia_std::index::get(&types, nikaia_std::index::at(i))) {
+        if nullable && check_core_flow_a_bare_name(&state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), unsafe { nikaia_std::proven::read(&types, (i) as usize) }) {
             let mut before: i64 = 0;
             while before < at && !covered {
-                let arm = nikaia_std::index::get(&arms, (before) as usize);
-                before += 1;
+                let arm = unsafe { nikaia_std::proven::read(&arms, (before) as usize) };
+                before = unsafe { nikaia_std::proven::add::<i64>(before, 1) };
                 if arm.guard.is_some() { continue; }
                 let earlier: Vec<MatchPattern> = match check_core_flow_tuple_parts(&arm.pattern, count) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 covered = check_core_flow_covers_null_at(&state, world, &earlier, &parts, i, &types);
             }
-        } else if nullable && check_core_flow_a_value_part(&state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), nikaia_std::index::get(&types, nikaia_std::index::at(i))) { covered = true; }
+        } else if nullable && check_core_flow_a_value_part(&state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), unsafe { nikaia_std::proven::read(&types, (i) as usize) }) { covered = true; }
         if covered {
             set.push(i);
-            narrowed.push(check_core_flow_inside(nikaia_std::index::get(&types, nikaia_std::index::at(i))));
-        } else { narrowed.push((*nikaia_std::index::get(&types, nikaia_std::index::at(i))).clone()); }
+            narrowed.push(check_core_flow_inside(unsafe { nikaia_std::proven::read(&types, (i) as usize) }));
+        } else { narrowed.push((*unsafe { nikaia_std::proven::read(&types, (i) as usize) }).clone()); }
     }
     if set.is_empty() { return None; }
-    state.facts.set_positions.insert(id_of(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).body) as i64, set);
+    state.facts.set_positions.insert(id_of(&unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.body) as i64, set);
     Some(Ty::Tuple(narrowed))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_set_fields(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[MatchArm], at: i64, typed: &Ty) {
-    let set = check_core_flow_fields_set(&state, world, arms, at, &nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern, typed);
-    if !set.is_empty() { state.facts.set_positions.insert(id_of(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).body) as i64, set); }
+    let set = check_core_flow_fields_set(&state, world, arms, at, &unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.pattern, typed);
+    if !set.is_empty() { state.facts.set_positions.insert(id_of(&unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.body) as i64, set); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -651,20 +651,20 @@ pub(crate) fn check_core_flow_fields_set(state: &CheckState, world: &CheckWorld<
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return set };
     for i in 0..fields.len() as i64 {
-        let name = nikaia_std::block::Text::from(world.words.resolve(nikaia_std::index::get(&fields, nikaia_std::index::at(i)).name).to_string());
+        let name = nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.name).to_string());
         let ty: Ty = match check_core_flow_field_type(&declared, &name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let nullable = matches!(ty, Ty::Nullable(_));
         let mut covered = false;
-        if nullable && check_core_flow_a_bare_name(state, world, &nikaia_std::index::get(&fields, nikaia_std::index::at(i)).pat, &ty) {
+        if nullable && check_core_flow_a_bare_name(state, world, &unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.pat, &ty) {
             let mut before: i64 = 0;
             while before < at && !covered {
-                let arm = nikaia_std::index::get(&arms, (before) as usize);
-                before += 1;
+                let arm = unsafe { nikaia_std::proven::read(&arms, (before) as usize) };
+                before = unsafe { nikaia_std::proven::add::<i64>(before, 1) };
                 if arm.guard.is_some() || check_core_flow_named_key(state, world, &arm.pattern, typed) != key { continue; }
                 let earlier: Vec<PatternField> = match check_core_flow_named_parts(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 covered = check_core_flow_covers_null_field(state, world, &earlier, &fields, &name, &declared);
             }
-        } else if nullable && check_core_flow_a_value_part(state, world, &nikaia_std::index::get(&fields, nikaia_std::index::at(i)).pat, &ty) { covered = true; }
+        } else if nullable && check_core_flow_a_value_part(state, world, &unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.pat, &ty) { covered = true; }
         if covered { set.push(i); }
     }
     set
@@ -673,8 +673,8 @@ pub(crate) fn check_core_flow_fields_set(state: &CheckState, world: &CheckWorld<
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_set_variant(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[MatchArm], at: i64, typed: &Ty) {
-    let set = check_core_flow_variant_set(&state, world, arms, at, &nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern, typed);
-    if !set.is_empty() { state.facts.set_positions.insert(id_of(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).body) as i64, set); }
+    let set = check_core_flow_variant_set(&state, world, arms, at, &unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.pattern, typed);
+    if !set.is_empty() { state.facts.set_positions.insert(id_of(&unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.body) as i64, set); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -689,18 +689,18 @@ pub(crate) fn check_core_flow_variant_set(state: &CheckState, world: &CheckWorld
     } { Some(__nikaia_value) => __nikaia_value, None => return set };
     if (types.len() as i64) != parts.len() as i64 { return set; }
     for i in 0..types.len() as i64 {
-        let nullable = matches!(*nikaia_std::index::get(&types, nikaia_std::index::at(i)), Ty::Nullable(_));
+        let nullable = matches!(*unsafe { nikaia_std::proven::read(&types, (i) as usize) }, Ty::Nullable(_));
         let mut covered = false;
-        if nullable && check_core_flow_a_bare_name(state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), nikaia_std::index::get(&types, nikaia_std::index::at(i))) {
+        if nullable && check_core_flow_a_bare_name(state, world, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, unsafe { nikaia_std::proven::read(&types, (i) as usize) }) {
             let mut before: i64 = 0;
             while before < at && !covered {
-                let arm = nikaia_std::index::get(&arms, (before) as usize);
-                before += 1;
+                let arm = unsafe { nikaia_std::proven::read(&arms, (before) as usize) };
+                before = unsafe { nikaia_std::proven::add::<i64>(before, 1) };
                 if arm.guard.is_some() || check_core_flow_variant_key(state, world, &arm.pattern, typed) != key { continue; }
                 let earlier: Vec<MatchPattern> = match check_core_flow_variant_values(&arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 if (earlier.len() as i64) == types.len() as i64 { covered = check_core_flow_covers_null_at(state, world, &earlier, &parts, i, &types); }
             }
-        } else if nullable && check_core_flow_a_value_part(state, world, nikaia_std::index::get(&parts, nikaia_std::index::at(i)), nikaia_std::index::get(&types, nikaia_std::index::at(i))) { covered = true; }
+        } else if nullable && check_core_flow_a_value_part(state, world, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, unsafe { nikaia_std::proven::read(&types, (i) as usize) }) { covered = true; }
         if covered { set.push(i); }
     }
     set
@@ -709,7 +709,7 @@ pub(crate) fn check_core_flow_variant_set(state: &CheckState, world: &CheckWorld
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_set_alternatives(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[MatchArm], at: i64, typed: &Ty) {
-    let alternatives: Vec<MatchPattern> = match &nikaia_std::index::get(&arms, nikaia_std::index::at(at)).pattern {
+    let alternatives: Vec<MatchPattern> = match &unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.pattern {
         MatchPattern::Or(alternatives) => alternatives.copy_owned(),
         _ => return,
     };
@@ -721,7 +721,7 @@ pub(crate) fn check_core_flow_set_alternatives(state: &mut CheckState, world: &C
         if !set.is_empty() { any = true; }
         sets.push(set);
     }
-    if any { state.facts.set_alternatives.insert(id_of(&nikaia_std::index::get(&arms, nikaia_std::index::at(at)).body) as i64, sets); }
+    if any { state.facts.set_alternatives.insert(id_of(&unsafe { nikaia_std::proven::read(&arms, (at) as usize) }.body) as i64, sets); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1047,7 +1047,7 @@ pub(crate) fn check_core_flow_changed_copies(state: &mut CheckState, body: &Expr
         let mut seen = changed_from;
         while seen < state.changed.len() as i64 {
             if *nikaia_std::index::get(&state.changed, nikaia_std::index::at(seen)) == local.name && !state.drained.contains(&seen) { changed = true; }
-            seen += 1;
+            seen = unsafe { nikaia_std::proven::add::<i64>(seen, 1) };
         }
         for (_, binding) in state.facts.mut_arg_bindings.iter() {
             let binding = nikaia_std::num::value(binding);
@@ -1223,7 +1223,7 @@ pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &Check
         check_core_flow_set_alternatives(state, world, arms, taken, &arm_typed);
         if in_place_name { state.narrowing.in_place_arms.push((in_place_binding, id_of(&arm.body) as i64)); }
         let got = check_core_flow_arm(state, world, host, value, &on, arm, &arm_typed, lendable, through_the_reference, (mut_subject).as_deref(), choice, taken, span);
-        taken += 1;
+        taken = unsafe { nikaia_std::proven::add::<i64>(taken, 1) };
         if got.is_some() {
             let ty = nikaia_std::index::or(got, || Ty::Unknown);
             answered.push(CheckArm { tail: Some(&arm.body), ty: ty.clone() });
@@ -1296,8 +1296,8 @@ pub(crate) fn check_core_flow_text_parts(state: &mut CheckState, parts: &[Expr],
     for at in 0..types.len() as i64 {
         let mut here: Vec<MatchPattern> = vec![];
         for pattern in patterns.iter() { check_core_flow_parts_at(pattern, at, types.len() as i64, &mut here); }
-        let ty = (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).clone();
-        let read: Ty = match nikaia_std::index::get(&parts, nikaia_std::index::at(at)) {
+        let ty = (*unsafe { nikaia_std::proven::read(&types, (at) as usize) }).clone();
+        let read: Ty = match unsafe { nikaia_std::proven::read(&parts, (at) as usize) } {
             Expr::Tuple(inner, _) => check_core_flow_text_parts(state, inner, &ty, &here),
             _ => {
                 let nullable = match ty {
@@ -1307,7 +1307,7 @@ pub(crate) fn check_core_flow_text_parts(state: &mut CheckState, parts: &[Expr],
                 let mut seen = false;
                 for part in here.iter() { if check_core_flow_text_pattern(part) { seen = true; } }
                 if seen && (nullable || check_core_flow_owned_text(&ty)) {
-                    state.facts.text_parts.insert(id_of(nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64, nullable);
+                    state.facts.text_parts.insert(id_of(unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) as i64, nullable);
                     view_of_type(&ty)
                 } else { ty }
             },
@@ -1378,7 +1378,7 @@ pub(crate) fn check_core_flow_caught_type(guarded: &CheckGuarded) -> Ty {
         thrown.push(nikaia_std::block::Text::from(name.to_string()));
     }
     if unknown { return Ty::Unknown; }
-    if thrown.len() == 1 { return check_core_flow_named(nikaia_std::index::get(&thrown, 0)); }
+    if thrown.len() == 1 { return check_core_flow_named(unsafe { nikaia_std::proven::read(&thrown, (0) as usize) }); }
     if thrown.len() >= 2 {
         let mut args: Vec<Ty> = vec![];
         for name in thrown.iter() { args.push(check_core_flow_named(name)); }
@@ -1472,7 +1472,7 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
                 match answers {
                     Ty::Named { ref name, ref args, .. } => {
                         if (name == "TaskHandle" || name == CHILD_HANDLE) && args.len() == 1 {
-                            if !state.block_leaves(world, handler) && !(*nikaia_std::index::get(&args, 0)).is_unknown() && value.text() != "()" && !value.fits(nikaia_std::index::get(&args, 0)) { state.expect_type(world, &value.owned(), nikaia_std::index::get(&args, 0), span, "catch", &|found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
+                            if !state.block_leaves(world, handler) && !(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown() && value.text() != "()" && !value.fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { state.expect_type(world, &value.owned(), unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span, "catch", &|found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
                             return answers;
                         }
                     },

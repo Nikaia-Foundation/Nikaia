@@ -77,8 +77,8 @@ pub fn sv_dense_combine(a: i64, x: &[i64], b: i64, y: &[i64]) -> Option<Vec<i64>
     let mut out: Vec<i64> = vec![];
     let mut i: i64 = 0;
     while ((i) as usize) < x.len() {
-        out.push(match sv_mul_add(a, *nikaia_std::index::get(&x, (i) as usize), b, *nikaia_std::index::get(&y, (i) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None });
-        i += 1;
+        out.push(match sv_mul_add(a, *unsafe { nikaia_std::proven::read(&x, (i) as usize) }, b, *unsafe { nikaia_std::proven::read(&y, (i) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None });
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Some(sv_reduced(out))
 }
@@ -117,7 +117,7 @@ pub fn sv_pick_column(x: &[i64], y: &[i64], width: i64, opposite: bool) -> i64 {
                 best_cost = nikaia_std::index::or(cost, || 0);
             }
         }
-        j += 1;
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
     }
     best
 }
@@ -126,7 +126,7 @@ pub(crate) fn sv_column_cost(xj: i64, yj: i64) -> Option<i64> {
     if xj == 1 || xj == -1 || yj == 1 || yj == -1 { return Some(0); }
     let ab = match sv_cancelling(xj, yj) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let b = match (*nikaia_std::index::get(&ab, 1)).checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return None };
-    (*nikaia_std::index::get(&ab, 0)).checked_mul(b)
+    (*unsafe { nikaia_std::proven::read(&ab, (0) as usize) }).checked_mul(b)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

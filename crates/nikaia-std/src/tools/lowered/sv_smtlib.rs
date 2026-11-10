@@ -124,10 +124,10 @@ pub(crate) fn sv_overflow(what: String) -> SvGot { SvGot::Failed(SvReadWhy::Over
 pub(crate) fn sv_decimal(a: &str) -> SvGot {
     let mut parts: Vec<&str> = vec![];
     for part in a.split('.') { parts.push(part); }
-    if parts.len() != 2 || !sv_is_numeral(*nikaia_std::index::get(&parts, 0)) || !sv_is_numeral(*nikaia_std::index::get(&parts, 1)) { return SvGot::Failed(SvReadWhy::Unsupported(format!("the numeral {}", a))); }
-    let n = match text::parse_i64(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 0)), ::core::convert::AsRef::<str>::as_ref(nikaia_std::index::get(&parts, 1)))))) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
+    if parts.len() != 2 || !sv_is_numeral(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) || !sv_is_numeral(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) { return SvGot::Failed(SvReadWhy::Unsupported(format!("the numeral {}", a))); }
+    let n = match text::parse_i64(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(::core::convert::AsRef::<str>::as_ref(unsafe { nikaia_std::proven::read(&parts, (0) as usize) }), ::core::convert::AsRef::<str>::as_ref(unsafe { nikaia_std::proven::read(&parts, (1) as usize) }))))) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
     let mut den: i64 = 1;
-    for _ in 0..(*nikaia_std::index::get(&parts, 1)).len() as i64 { den = match den.checked_mul(10) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) }; }
+    for _ in 0..(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).len() as i64 { den = match den.checked_mul(10) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) }; }
     let r = match sv_rat(n, den) { Some(__nikaia_value) => __nikaia_value, None => return sv_overflow(format!("the decimal {}", a)) };
     SvGot::Val(SvVal::Lin(sv_lin_constant(r)))
 }
@@ -197,10 +197,10 @@ impl SvSmtReader {
         format!("|sv!|{}:{}", kind, self.fresh)
     }
     pub(crate) fn symbol(&mut self, name: &str) -> SvGot {
-        let mut at = self.bound_names.len() as i64 - 1;
+        let mut at = unsafe { nikaia_std::proven::sub::<i64>(self.bound_names.len() as i64, 1) };
         while at >= 0 {
-            if *nikaia_std::index::get(&self.bound_names, nikaia_std::index::at(at)) == name { return SvGot::Val((*nikaia_std::index::get(&self.bound_values, nikaia_std::index::at(at))).clone()); }
-            at -= 1;
+            if *unsafe { nikaia_std::proven::read(&self.bound_names, (at) as usize) } == name { return SvGot::Val((*nikaia_std::index::get(&self.bound_values, nikaia_std::index::at(at))).clone()); }
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
         }
         match self.defined.get(name) {
             None => { },
@@ -260,7 +260,7 @@ impl SvSmtReader {
                 SvGot::Val(ref v) => { out.push(v.clone()); },
                 SvGot::Failed(ref why) => { return Some(why.clone()); },
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         None
     }
@@ -426,7 +426,7 @@ impl SvSmtReader {
     }
     pub(crate) fn let_term(&mut self, sexp: &LgSexp, items: &[LgSexp]) -> SvGot {
         if items.len() != 3 { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
-        let bindings = match (*nikaia_std::index::get(&items, 1)).clone() {
+        let bindings = match (*unsafe { nikaia_std::proven::read(&items, (1) as usize) }).clone() {
             LgSexp::List(inside) => inside,
             LgSexp::Atom(_) => { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); },
         };
@@ -445,7 +445,7 @@ impl SvSmtReader {
                 LgSexp::Atom(_) => { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); },
             };
             if pair.len() != 2 || !lg_is_atom(&pair, 0) { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
-            match self.term(nikaia_std::index::get(&pair, 1)) {
+            match self.term(unsafe { nikaia_std::proven::read(&pair, (1) as usize) }) {
                 SvGot::Val(ref v) => { values.push(v.clone()); },
                 SvGot::Failed(SvReadWhy::Undeclared(ref name)) => {
                     if own.contains(name) { return SvGot::Failed(SvReadWhy::Malformed(format!("{} is unbound: a parallel let binds its names only in its body", name))); }
@@ -457,17 +457,17 @@ impl SvSmtReader {
         }
         let depth = self.bound_names.len() as i64;
         for i in 0..names.len() as i64 {
-            self.bound_names.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (i) as usize)).to_string()));
+            self.bound_names.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (i) as usize) }).to_string()));
             self.bound_values.push((*nikaia_std::index::get(&values, (i) as usize)).clone());
         }
-        let body = self.term(nikaia_std::index::get(&items, 2));
+        let body = self.term(unsafe { nikaia_std::proven::read(&items, (2) as usize) });
         self.bound_names.truncate(nikaia_std::count::of(depth));
         self.bound_values.truncate(nikaia_std::count::of(depth));
         body
     }
     pub(crate) fn annotated(&mut self, sexp: &LgSexp, items: &[LgSexp]) -> SvGot {
         if items.len() < 2 { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
-        let got = self.term(nikaia_std::index::get(&items, 1));
+        let got = self.term(unsafe { nikaia_std::proven::read(&items, (1) as usize) });
         let value = match got {
             SvGot::Val(ref v) => v.clone(),
             SvGot::Failed(_) => { return got; },
@@ -481,7 +481,7 @@ impl SvSmtReader {
     }
     pub(crate) fn ite(&mut self, sexp: &LgSexp, items: &[LgSexp]) -> SvGot {
         if items.len() != 4 { return SvGot::Failed(SvReadWhy::Unsupported(lg_show(sexp))); }
-        let c = match self.formula(nikaia_std::index::get(&items, 1)) {
+        let c = match self.formula(unsafe { nikaia_std::proven::read(&items, (1) as usize) }) {
             SvGot::Val(SvVal::Formula(id)) => id,
             SvGot::Val(_) => -1,
             SvGot::Failed(ref why) => { return SvGot::Failed(why.clone()); },
@@ -629,12 +629,12 @@ impl SvSmtReader {
             if op == "and" { return SvGot::Val(SvVal::Formula(self.arena.and(formulas))); }
             if op == "or" { return SvGot::Val(SvVal::Formula(self.arena.or(formulas))); }
             if op == "=>" && n >= 2 {
-                let mut acc = *nikaia_std::index::get(&formulas, nikaia_std::index::at(n - 1));
-                let mut at = n - 2;
+                let mut acc = *nikaia_std::index::get(&formulas, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, 1) }));
+                let mut at = unsafe { nikaia_std::proven::sub::<i64>(n, 2) };
                 while at >= 0 {
-                    let not_x = self.arena.not(*nikaia_std::index::get(&formulas, nikaia_std::index::at(at)));
+                    let not_x = self.arena.not(*unsafe { nikaia_std::proven::read(&formulas, (at) as usize) });
                     acc = { let __nikaia_value = self.arena.or(vec![not_x, acc]); __nikaia_value };
-                    at -= 1;
+                    at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
                 }
                 return SvGot::Val(SvVal::Formula(acc));
             }
@@ -642,25 +642,25 @@ impl SvSmtReader {
                 let mut acc = *nikaia_std::index::get(&formulas, 0);
                 for at in 1..n {
                     let not_b = self.arena.not(*nikaia_std::index::get(&formulas, nikaia_std::index::at(at)));
-                    acc = self.choice(acc, not_b, *nikaia_std::index::get(&formulas, nikaia_std::index::at(at)));
+                    acc = self.choice(acc, not_b, *unsafe { nikaia_std::proven::read(&formulas, (at) as usize) });
                 }
                 return SvGot::Val(SvVal::Formula(acc));
             }
             if op == "=" && n >= 2 {
                 let mut links: Vec<i64> = vec![];
-                for at in 0..n - 1 { links.push(self.iff(*nikaia_std::index::get(&formulas, nikaia_std::index::at(at)), *nikaia_std::index::get(&formulas, nikaia_std::index::at(at + 1)))); }
-                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*nikaia_std::index::get(&links, 0))); }
+                for at in 0..unsafe { nikaia_std::proven::sub::<i64>(n, 1) } { links.push(self.iff(*nikaia_std::index::get(&formulas, nikaia_std::index::at(at)), *nikaia_std::index::get(&formulas, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) })))); }
+                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*unsafe { nikaia_std::proven::read(&links, (0) as usize) })); }
                 return SvGot::Val(SvVal::Formula(self.arena.and(links)));
             }
             if op == "distinct" && n >= 2 {
                 let mut links: Vec<i64> = vec![];
                 for i in 0..n {
-                    for j in i + 1..n {
+                    for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..n {
                         let same = self.iff(*nikaia_std::index::get(&formulas, (i) as usize), *nikaia_std::index::get(&formulas, nikaia_std::index::at(j)));
                         links.push(self.arena.not(same));
                     }
                 }
-                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*nikaia_std::index::get(&links, 0))); }
+                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*unsafe { nikaia_std::proven::read(&links, (0) as usize) })); }
                 return SvGot::Val(SvVal::Formula(self.arena.and(links)));
             }
         }
@@ -724,20 +724,20 @@ impl SvSmtReader {
             }
             if (op == "<=" || op == "<" || op == ">=" || op == ">" || op == "=") && n >= 2 {
                 let mut links: Vec<i64> = vec![];
-                for at in 0..n - 1 {
-                    match self.compare(&op, nikaia_std::index::get(&lins, nikaia_std::index::at(at)), nikaia_std::index::get(&lins, nikaia_std::index::at(at + 1))) {
+                for at in 0..unsafe { nikaia_std::proven::sub::<i64>(n, 1) } {
+                    match self.compare(&op, nikaia_std::index::get(&lins, nikaia_std::index::at(at)), nikaia_std::index::get(&lins, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, 1) }))) {
                         SvGot::Val(SvVal::Formula(id)) => { links.push(id); },
                         SvGot::Val(_) => { },
                         SvGot::Failed(ref why) => { return SvGot::Failed(why.clone()); },
                     }
                 }
-                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*nikaia_std::index::get(&links, 0))); }
+                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*unsafe { nikaia_std::proven::read(&links, (0) as usize) })); }
                 return SvGot::Val(SvVal::Formula(self.arena.and(links)));
             }
             if op == "distinct" && n >= 2 {
                 let mut links: Vec<i64> = vec![];
                 for i in 0..n {
-                    for j in i + 1..n {
+                    for j in unsafe { nikaia_std::proven::add::<i64>(i, 1) }..n {
                         match self.compare("distinct", nikaia_std::index::get(&lins, (i) as usize), nikaia_std::index::get(&lins, nikaia_std::index::at(j))) {
                             SvGot::Val(SvVal::Formula(id)) => { links.push(id); },
                             SvGot::Val(_) => { },
@@ -745,7 +745,7 @@ impl SvSmtReader {
                         }
                     }
                 }
-                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*nikaia_std::index::get(&links, 0))); }
+                if links.len() == 1 { return SvGot::Val(SvVal::Formula(*unsafe { nikaia_std::proven::read(&links, (0) as usize) })); }
                 return SvGot::Val(SvVal::Formula(self.arena.and(links)));
             }
         }
@@ -886,7 +886,7 @@ pub fn sv_smtlib_script(source: &str) -> SvSmtRead {
             asserted += 1;
             match reader.formula(nikaia_std::index::get(&items, 1)) {
                 SvGot::Val(SvVal::Formula(id)) => {
-                    let last = stack.len() as i64 - 1;
+                    let last = unsafe { nikaia_std::proven::sub::<i64>(stack.len() as i64, 1) };
                     stack[nikaia_std::index::at(last)].push(id);
                 },
                 SvGot::Val(_) => { },

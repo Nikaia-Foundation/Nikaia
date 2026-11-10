@@ -96,7 +96,7 @@ pub fn sysroot_native_cpu(said: &str) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn sysroot_length(read: &mut Vec<u8>, n: i64) { for i in 0..8 { read.push(u8::try_from(n >> 8 * i & 255).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))); } }
+pub(crate) fn sysroot_length(read: &mut Vec<u8>, n: i64) { for i in 0..8 { read.push(u8::try_from(unsafe { nikaia_std::proven::shr::<i64>(n, (8 * i) as u32) } & 255).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))); } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -122,7 +122,7 @@ pub fn sysroot_interface<H: SysrootHost>(compiler: &str, salt: &str, setting: &s
     sysroot_part(&mut read, setting);
     sysroot_part(&mut read, own);
     for at in 0..names.len() as i64 {
-        sysroot_part(&mut read, nikaia_std::index::get(&names, (at) as usize));
+        sysroot_part(&mut read, unsafe { nikaia_std::proven::read(&names, (at) as usize) });
         sysroot_part(&mut read, nikaia_std::index::get(&bodiless, (at) as usize));
     }
     hash::sha256_hex(&read)
@@ -158,7 +158,7 @@ pub fn sysroot_inlined(files: &[(String, String)]) -> String {
     if files.is_empty() { return String::from(""); }
     let mut text: String = nikaia_std::block::Text::from(nikaia_std::index::get(&files, 0).1.to_string());
     for at in 1..files.len() as i64 {
-        let replaced = nikaia_std::block::Text::from(text.replace(&*format!("include!(\"{}\");", nikaia_std::index::get(&files, (at) as usize).0), &*nikaia_std::index::get(&files, (at) as usize).1));
+        let replaced = nikaia_std::block::Text::from(text.replace(&*format!("include!(\"{}\");", unsafe { nikaia_std::proven::read(&files, (at) as usize) }.0), &*unsafe { nikaia_std::proven::read(&files, (at) as usize) }.1));
         text = replaced;
     }
     text
@@ -230,14 +230,14 @@ pub fn sysroot_unpack(packed: &str) -> Option<Vec<(String, String)>> {
     let mut files: Vec<(String, String)> = vec![];
     let pieces: Vec<&str> = packed.split("\n").collect::<Vec<_>>();
     for at in 0..pieces.len() as i64 {
-        let line: String = match ((at + 1) as usize) < pieces.len() {
-            true => format!("{}\n", *nikaia_std::index::get(&pieces, (at) as usize)),
-            false => nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, (at) as usize)).to_string()),
+        let line: String = match ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < pieces.len() {
+            true => format!("{}\n", *unsafe { nikaia_std::proven::read(&pieces, (at) as usize) }),
+            false => nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (at) as usize) }).to_string()),
         };
         if line.is_empty() { continue; }
         if line.starts_with(AsRef::<str>::as_ref(SYSROOT_PACKED)) { files.push((nikaia_std::block::Text::from(nikaia_std::index::or(line.strip_prefix(AsRef::<str>::as_ref(SYSROOT_PACKED)), || "").trim_end().to_string()), String::from(""))); } else {
             if files.is_empty() { return None; }
-            let last = files.len() as i64 - 1;
+            let last = unsafe { nikaia_std::proven::sub::<i64>(files.len() as i64, 1) };
             files[nikaia_std::index::at(last)].1.push_str(&line);
         }
     }

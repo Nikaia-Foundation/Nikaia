@@ -83,7 +83,7 @@ impl CheckState {
                 for part in parts.iter() {
                     match part {
                         FPart::Hole { expr, .. } => {
-                            if index < names.len() as i64 && *nikaia_std::index::get(&names, nikaia_std::index::at(index)) { self.a_name_in_a_hole(world, expr, span); }
+                            if index < names.len() as i64 && *unsafe { nikaia_std::proven::read(&names, (index) as usize) } { self.a_name_in_a_hole(world, expr, span); }
                             index = index + 1;
                         },
                         _ => { },

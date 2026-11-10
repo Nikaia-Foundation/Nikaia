@@ -37,7 +37,7 @@ pub(crate) fn sv_rat_abs(b: &SvRat) -> Option<SvRat> {
 
 pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Option<i64> {
     if l.def < 0 || l.def >= defs.len() as i64 { return None; }
-    let t = (*nikaia_std::index::get(&defs, nikaia_std::index::at(l.def))).clone();
+    let t = (*unsafe { nikaia_std::proven::read(&defs, (l.def) as usize) }).clone();
     let m = nikaia_std::block::Text::from(t.name.to_string());
     let x = nikaia_std::block::Text::from(t.a.to_string());
     let y = nikaia_std::block::Text::from(t.b.to_string());
@@ -45,8 +45,8 @@ pub fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Op
     let one = sv_int(1);
     let s = nikaia_std::block::Text::from(l.schema.to_string());
     if s == "mono" || s == "pow2-mono" || s == "congruence" {
-        if l.other < 0 || l.other >= defs.len() as i64 || nikaia_std::index::get(&defs, nikaia_std::index::at(l.other)).op != t.op { return None; }
-        let u = (*nikaia_std::index::get(&defs, nikaia_std::index::at(l.other))).clone();
+        if l.other < 0 || l.other >= defs.len() as i64 || unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) }.op != t.op { return None; }
+        let u = (*unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) }).clone();
         if s == "congruence" {
             let mut parts: Vec<i64> = vec![match sv_lvv(arena, "distinct", &x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None }];
             if t.op != "pow2" { parts.push(match sv_lvv(arena, "distinct", &y, &u.b) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
@@ -218,10 +218,10 @@ pub(crate) fn sv_nl_value(t: &SvNl, values: &collections::BTreeMap<String, SvRat
 
 pub fn sv_nl_holds(defs: &[SvNl], values: &collections::BTreeMap<String, SvRat>) -> bool {
     for i in 0..defs.len() as i64 {
-        let mine = sv_real_named(values, &nikaia_std::index::get(&defs, (i) as usize).name);
-        match sv_nl_value(nikaia_std::index::get(&defs, (i) as usize), values) {
+        let mine = sv_real_named(values, &unsafe { nikaia_std::proven::read(&defs, (i) as usize) }.name);
+        match sv_nl_value(unsafe { nikaia_std::proven::read(&defs, (i) as usize) }, values) {
             SvNlValue::Value(r) => { if sv_rat_cmp(&r, &mine) != 0 { return false; } },
-            SvNlValue::Free => { for j in 0..i { if sv_nl_same_place(nikaia_std::index::get(&defs, (i) as usize), nikaia_std::index::get(&defs, (j) as usize), values) && sv_rat_cmp(&sv_real_named(values, &nikaia_std::index::get(&defs, (j) as usize).name), &mine) != 0 { return false; } } },
+            SvNlValue::Free => { for j in 0..i { if sv_nl_same_place(unsafe { nikaia_std::proven::read(&defs, (i) as usize) }, unsafe { nikaia_std::proven::read(&defs, (j) as usize) }, values) && sv_rat_cmp(&sv_real_named(values, &unsafe { nikaia_std::proven::read(&defs, (j) as usize) }.name), &mine) != 0 { return false; } } },
             SvNlValue::Overflow => { return false; },
         }
     }

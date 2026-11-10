@@ -14,7 +14,7 @@ pub fn published_entries(ledger: &Ledger, foreign: &collections::BTreeSet<String
 
 pub(crate) fn of_another(key: &str, foreign: &collections::BTreeSet<String>) -> bool {
     let parts: Vec<&str> = key.splitn(2, "::").collect::<Vec<_>>();
-    parts.len() == 2 && foreign.contains(*nikaia_std::index::get(&parts, 0))
+    parts.len() == 2 && foreign.contains(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) })
 }
 
 pub fn stale_units(ledger: &Ledger, sources: &collections::BTreeMap<String, String>) -> Vec<String> {
@@ -148,32 +148,32 @@ pub(crate) fn qualified_default(text: &str, prefix: &str, declared: &collections
     let mut at: i64 = 0;
     let mut quoted = false;
     while ((at) as usize) < c.len() {
-        let here = *nikaia_std::index::get(&c, (at) as usize);
+        let here = *unsafe { nikaia_std::proven::read(&c, (at) as usize) };
         if quoted {
             out.push(here);
-            if here == '\\' && ((at + 1) as usize) < c.len() {
-                out.push(*nikaia_std::index::get(&c, (at + 1) as usize));
-                at += 2;
+            if here == '\\' && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() {
+                out.push(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) });
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
                 continue;
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             if here == '"' { quoted = false; }
             continue;
         }
         if here == '"' {
             quoted = true;
             out.push(here);
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }
         if here.is_alphabetic() || here == '_' {
             let start: i64 = at;
             let mut word: String = String::from("");
-            while ((at) as usize) < c.len() && ((*nikaia_std::index::get(&c, (at) as usize)).is_alphanumeric() || *nikaia_std::index::get(&c, (at) as usize) == '_') {
-                word.push(*nikaia_std::index::get(&c, (at) as usize));
-                at += 1;
+            while ((at) as usize) < c.len() && ((*unsafe { nikaia_std::proven::read(&c, (at) as usize) }).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '_') {
+                word.push(*unsafe { nikaia_std::proven::read(&c, (at) as usize) });
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
-            let after_path = start >= 2 && *nikaia_std::index::get(&c, nikaia_std::index::at(start - 1)) == ':' && *nikaia_std::index::get(&c, nikaia_std::index::at(start - 2)) == ':';
+            let after_path = start >= 2 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(start, 1)) as usize) } == ':' && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(start, 2)) as usize) } == ':';
             if !after_path && declared.contains(&word) {
                 out.push_str(prefix);
                 out.push_str("::");
@@ -182,7 +182,7 @@ pub(crate) fn qualified_default(text: &str, prefix: &str, declared: &collections
             continue;
         }
         out.push(here);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out
 }

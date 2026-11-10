@@ -20,7 +20,7 @@ pub(crate) fn lends_with(contract: &FnContract, at: i64, copying: &[&Ledger], ow
             let a_lent_variable = own && !nikaia_std::list::contains(&contract.by_value, &name) && a_plain_variable(ty);
             return (!signature.takes_a_receiver() || own_lends || viewed_by_the_result) && (moves(ty) || a_lent_variable) && !a_ledger_copies(ty, copying) && !nikaia_std::list::contains(&contract.keeps, &name);
         }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     false
 }
@@ -155,11 +155,11 @@ pub(crate) fn parameter_at(contract: &FnContract, at: i64) -> Option<String> {
     let mut position: i64 = 0;
     for (name, _) in signature.params.iter() {
         if position == at { return Some(nikaia_std::block::Text::from(name.to_string())); }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     for option in signature.config.iter() {
         if position == at { return Some(nikaia_std::block::Text::from(option.name.to_string())); }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     None
 }
@@ -169,7 +169,7 @@ pub fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
     let mut position = signature.params.len() as i64;
     for option in signature.config.iter() {
         if option.name == name { return Some(position); }
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     None
 }

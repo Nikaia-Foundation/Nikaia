@@ -1,0 +1,38 @@
+// `std`'s strategy shares the memory the system reports among the tasks
+// (ADR-327 D7, D15): asked for one task after another, each holding all of
+// its budget, every task it starts gets at least a segment, and the budgets
+// together stay within the memory reported. Where a share is less than a
+// segment, it starts none.
+use std::task
+
+fn main() throws {
+    let reported = 1073741824
+    let mut strategy = task::Adaptive()
+    let mut held = 0
+    let mut running = 0
+    let mut refused = 0
+    let mut smallest = reported
+    for _ in 0..<1000 {
+        let load = task::Load {
+            running: running,
+            waiting: 1,
+            descriptors_in_use: 0,
+            descriptors_allowed: 0,
+            memory_reported: reported,
+            memory_held: held,
+        }
+        let decision = strategy.decide(load)
+        if decision.start > 0 {
+            held += decision.budget
+            running += 1
+            if decision.budget < smallest {
+                smallest = decision.budget
+            }
+        } else {
+            refused += 1
+        }
+    }
+    println(f"started: {running}, refused: {refused}")
+    println(f"each at least a segment: {smallest >= 65536}")
+    println(f"within the memory reported: {held <= reported}")
+}

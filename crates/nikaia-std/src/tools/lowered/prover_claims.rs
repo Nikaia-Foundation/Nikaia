@@ -117,7 +117,7 @@ pub(crate) fn whole_result_of(result: Option<&Ty>) -> bool {
 pub fn foreign_from(contract: &FnContract, shape: ForeignShape, requires: &[i64], ensures: &[i64]) -> Foreign {
     let mut foreign = Foreign { params: shape.params, whole_result: shape.whole_result, requires: vec![], ensures: vec![] };
     for at in 0..requires.len() as i64 {
-        let term = *nikaia_std::index::get(&requires, nikaia_std::index::at(at));
+        let term = *unsafe { nikaia_std::proven::read(&requires, (at) as usize) };
         if term < 0 { continue; }
         let written = assert_of(contract, at);
         let text = nikaia_std::index::get(&contract.requires, nikaia_std::index::at(at));
@@ -126,20 +126,20 @@ pub fn foreign_from(contract: &FnContract, shape: ForeignShape, requires: &[i64]
         foreign.requires.push(PreClaim { term, written, computed, message: None, origin: None, site: None });
     }
     for at in 0..ensures.len() as i64 {
-        let term = *nikaia_std::index::get(&ensures, nikaia_std::index::at(at));
+        let term = *unsafe { nikaia_std::proven::read(&ensures, (at) as usize) };
         if term < 0 { continue; }
-        foreign.ensures.push(PostClaim { term, written: assert_of(contract, contract.requires.len() as i64 + at) });
+        foreign.ensures.push(PostClaim { term, written: assert_of(contract, unsafe { nikaia_std::proven::add::<i64>(contract.requires.len() as i64, at) }) });
     }
     foreign
 }
 
 pub(crate) fn assert_of(contract: &FnContract, at: i64) -> String {
     if at >= contract.from.len() as i64 { return String::from(""); }
-    let from = nikaia_std::index::get(&contract.from, nikaia_std::index::at(at));
+    let from = unsafe { nikaia_std::proven::read(&contract.from, (at) as usize) };
     if !from.starts_with("assert(") || !from.ends_with(')') { return String::from(""); }
     let c: Vec<scalar> = nikaia_std::list::chars(from.chars());
     let mut inner: String = String::from("");
-    for k in 7..c.len() as i64 - 1 { inner.push(*nikaia_std::index::get(&c, (k) as usize)); }
+    for k in 7..unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 1) } { inner.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     inner
 }
 

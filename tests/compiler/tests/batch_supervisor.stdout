@@ -1,0 +1,12 @@
+deviation: CUT a.md: Deviation: x
+deviation accepted: BATCH DONE
+gate red: CUT a.md: Gate: red x
+gate red accepted: BATCH DONE
+partial: CUT a.md: Result: partial, rest in #2
+partial accepted: BATCH DONE
+blocked: CUT a.md: Result: blocked
+blocked accepted: CUT a.md: Result: blocked
+rejected: CUT a.md: Pushed: rejected
+rejected accepted: CUT a.md: Pushed: rejected
+not accepted: CUT a.md: Deviation: x
+owner: OWNER a.md: which way?

@@ -203,7 +203,7 @@ impl CheckState {
     pub fn an_escape_nothing_names(&mut self, text: &str, written: &str, why: &str, all: &str, span: &Span) {
         let letters: Vec<scalar> = nikaia_std::list::chars(written.chars());
         let mut help: String = String::from("");
-        if letters.len() > 1 && (*nikaia_std::index::get(&letters, 1) == 'x' || *nikaia_std::index::get(&letters, 1) == 'u') { help = String::from("Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."); } else {
+        if letters.len() > 1 && (*unsafe { nikaia_std::proven::read(&letters, (1) as usize) } == 'x' || *unsafe { nikaia_std::proven::read(&letters, (1) as usize) } == 'u') { help = String::from("Write a character above `\\x7F` as `\\u{…}`, with up to six hexadecimal digits: `\\u{80}`, `\\u{1F600}`."); } else {
             let doubled = nikaia_std::block::Text::from(text.replace("\\", "\\\\"));
             help = format!("If you meant a backslash, write it twice: `\"{}\"`. Otherwise use one of the escapes above.", doubled);
         }
@@ -219,7 +219,7 @@ impl CheckState {
             return Ty::Unknown;
         }
         let mut held = Ty::Unknown;
-        if !found.is_empty() { held = (*nikaia_std::index::get(&found, 0)).clone(); }
+        if !found.is_empty() { held = (*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).clone(); }
         let inner = nikaia_std::index::or(a_named_type(&held), || "".into());
         if !inner.is_empty() && is_hull(&inner) {
             self.findings.push(check_refusal("NK1123", span, format!("This is already a `{}`, so wrapping it in `{}` adds nothing.", inner, handle), vec![String::from("A shared handle is copied by passing it on, never by wrapping it again.")], Some(format!("Pass the `{}` on as it is.", inner))));
@@ -237,10 +237,10 @@ impl CheckState {
         let mut keys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for (key, _) in world.library.functions.iter() { if key.ends_with(AsRef::<str>::as_ref(&suffix)) { keys.push(nikaia_std::block::Text::from(key.to_string())); } }
         if keys.len() != 1 { return; }
-        let key = nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, 0)).to_string());
+        let key = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (0) as usize) }).to_string());
         let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return; }
-        let module = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); ::core::mem::drop(parts);
+        let module = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()); ::core::mem::drop(parts);
         if !self.std_modules.contains(&module) { return; }
         self.findings.push(check_refusal("NK1117", span, format!("`{}` isn't available without its module.", name), vec![format!("`std` has `{}`, and it's reached through its module.", key), String::from("Only a few names are always available; the rest live in a module.")], Some(format!("Write `use std::{}` at the top of the file, and `{}(…)` here.", module, key))));
     }

@@ -33,7 +33,7 @@ impl EmitState {
     pub(crate) fn emit_patterns<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, patterns: &[Spanned<Pattern>], separator: &str) -> Result<(), Box<dyn std::error::Error>> {
         for i in 0..patterns.len() as i64 {
             if i > 0 { out.push(separator); }
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&patterns, nikaia_std::index::at(i)))?;
+            self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&patterns, (i) as usize) })?;
             if separator == " " { emit_texts_a_guard_reads(world, &walk, out, patterns, i); }
         }
         Ok(())
@@ -143,7 +143,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_text_parts<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() == 1 {
-            match &nikaia_std::index::get(&args, 0).node {
+            match &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node {
                 Pattern::Seq(parts) => {
                     self.emit_text_run(world, walk, out, host, name, parts)?;
                     return Ok(());
@@ -159,10 +159,10 @@ impl EmitState {
     pub(crate) fn emit_text_run<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, parts: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
         for k in 0..parts.len() as i64 {
             if k > 0 { out.push(" "); }
-            let at = if k == 0 { "from" } else if k == parts.len() as i64 - 1 { "to" } else { "" };
-            if at == "" || emit_text_nested(world, &walk, &nikaia_std::index::get(&parts, (k) as usize).node) { self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (k) as usize))?; } else {
+            let at = if k == 0 { "from" } else if k == unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { "to" } else { "" };
+            if at == "" || emit_text_nested(world, &walk, &unsafe { nikaia_std::proven::read(&parts, (k) as usize) }.node) { self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&parts, (k) as usize) })?; } else {
                 out.push("(");
-                self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&parts, (k) as usize))?;
+                self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&parts, (k) as usize) })?;
                 out.push(&format!(") @ __nikaia_{}_{}", name, at));
             }
         }
@@ -190,8 +190,8 @@ impl EmitState {
         for i in 0..rule.args.len() as i64 {
             if !first { out.push(", "); }
             first = false;
-            out.push(&format!("{} = ", emit_text(world, nikaia_std::index::get(&rule.args, (i) as usize).name)));
-            if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, nikaia_std::index::get(&args, (i) as usize))?; }
+            out.push(&format!("{} = ", emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name)));
+            if ((i) as usize) < args.len() { self.emit_grammar_value(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) })?; }
         }
         for option in rule.config.iter() {
             if !first { out.push(", "); }
@@ -217,7 +217,7 @@ impl EmitState {
         let called = emit_text(world, name);
         if called == "list" && generics.is_empty() && args.len() == 2 {
             out.push("__nikaia_list");
-            match &nikaia_std::index::get(&args, 0).node {
+            match &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node {
                 Pattern::Ref { name: item, args: none, .. } => {
                     let item = *item;
                     if none.is_empty() {
@@ -234,15 +234,15 @@ impl EmitState {
                 _ => { },
             }
             out.push("(item = ");
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) })?;
             out.push(", sep = ");
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 1))?;
+            self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (1) as usize) })?;
             out.push(")");
             return Ok(());
         }
         if called == "count" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
             out.push(&format!("{}(p = (", emit_count_rule()));
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) })?;
             out.push("))");
             return Ok(());
         }
@@ -256,7 +256,7 @@ impl EmitState {
         }
         if called == "span" && generics.is_empty() && args.len() == 1 && !walk.grammar_rules.contains(&called) {
             out.push(&format!("{}(p = (", emit_span_rule()));
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) })?;
             out.push("))");
             return Ok(());
         }
@@ -285,7 +285,7 @@ impl EmitState {
             for g in generics.iter() { params.push(host.ty_named(walk, g)?); }
             out.push(&format!("<{}>", nikaia_std::block::Text::from(params.join(", "))));
         }
-        if args.len() == 1 && called == "intern" && emit_groups_parts(&nikaia_std::index::get(&args, 0).node) {
+        if args.len() == 1 && called == "intern" && emit_groups_parts(&unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node) {
             out.push("(text(");
             self.emit_built_in_args(world, walk, out, host, &called, args)?;
             out.push("))");
@@ -299,9 +299,9 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_built_in_args<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, called: &str, args: &[Spanned<Pattern>]) -> Result<(), Box<dyn std::error::Error>> {
-        if args.len() == 1 && called != "until" && emit_groups_parts(&nikaia_std::index::get(&args, 0).node) {
+        if args.len() == 1 && called != "until" && emit_groups_parts(&unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node) {
             out.push("(");
-            self.emit_pattern(world, walk, out, host, nikaia_std::index::get(&args, 0))?;
+            self.emit_pattern(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) })?;
             out.push(")");
         } else { self.emit_patterns(world, walk, out, host, args, ", ")?; }
         Ok(())
@@ -317,7 +317,7 @@ pub(crate) fn emit_is_a_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk,
 
 pub(crate) fn emit_is_a_binding_span(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern, nested: bool) -> bool {
     match pattern {
-        Pattern::Ref { args, .. } => emit_is_a_span(world, walk, pattern) && !nested && args.len() == 1 && emit_is_a_bound_run(&nikaia_std::index::get(&args, 0).node),
+        Pattern::Ref { args, .. } => emit_is_a_span(world, walk, pattern) && !nested && args.len() == 1 && emit_is_a_bound_run(&unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node),
         _ => false,
     }
 }
@@ -348,7 +348,7 @@ pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
 pub(crate) fn emit_texts_a_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, out: &mut EmitOut, patterns: &[Spanned<Pattern>], at: i64) {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-    emit_text_bindings(world, walk, nikaia_std::index::get(&patterns, nikaia_std::index::at(at)), &mut names, &mut ranges);
+    emit_text_bindings(world, walk, unsafe { nikaia_std::proven::read(&patterns, (at) as usize) }, &mut names, &mut ranges);
     for (name, range) in names.iter().zip(ranges.iter()) { if patterns.iter().skip(nikaia_std::count::of(at + 1)).any(|later| { emit_guard_reads(world, &later.node, name) }) { out.push(&format!(" {}:{}(at = {})", name, emit_covered_rule(), range)); } }
 }
 
@@ -401,7 +401,7 @@ pub(crate) fn emit_hidden_text(pattern: &Spanned<Pattern>) -> String { format!("
 
 pub(crate) fn emit_text_edge(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, args: &[Spanned<Pattern>], at: &str) -> String {
     if args.len() == 1 {
-        match &nikaia_std::index::get(&args, 0).node {
+        match &unsafe { nikaia_std::proven::read(&args, (0) as usize) }.node {
             Pattern::Seq(parts) => { return emit_text_edge_of(world, walk, name, parts, at); },
             _ => { },
         }
@@ -410,7 +410,7 @@ pub(crate) fn emit_text_edge(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk,
 }
 
 pub(crate) fn emit_text_edge_of(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, name: &str, parts: &[Spanned<Pattern>], at: &str) -> String {
-    let k = if at == "from" { 0 } else { parts.len() as i64 - 1 };
+    let k = if at == "from" { 0 } else { unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } };
     match &nikaia_std::index::get(&parts, nikaia_std::index::at(k)).node {
         Pattern::Bind { name: inner, pat: grouped } => {
             let grouped = nikaia_std::boxed::open(grouped); let inner = *inner;
@@ -422,7 +422,7 @@ pub(crate) fn emit_text_edge_of(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWa
                 }
             }
         },
-        Pattern::Ref { args: within, .. } => { if emit_is_a_binding_text(world, walk, &nikaia_std::index::get(&parts, nikaia_std::index::at(k)).node) { return emit_text_edge(world, walk, &emit_hidden_text(nikaia_std::index::get(&parts, nikaia_std::index::at(k))), within, at); } },
+        Pattern::Ref { args: within, .. } => { if emit_is_a_binding_text(world, walk, &unsafe { nikaia_std::proven::read(&parts, (k) as usize) }.node) { return emit_text_edge(world, walk, &emit_hidden_text(unsafe { nikaia_std::proven::read(&parts, (k) as usize) }), within, at); } },
         _ => { },
     }
     if parts.len() == 1 { return format!("__nikaia_{}_from", name); }

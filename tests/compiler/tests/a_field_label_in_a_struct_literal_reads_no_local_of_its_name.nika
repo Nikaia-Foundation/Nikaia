@@ -1,0 +1,20 @@
+// #1501: a struct literal's field label is no read of a local of the same
+// name: `Kept { v: field }` reads `field` only, so the list `v` is not bound
+// again after `field` (#490), and rustc warns of no unused `v`.
+struct Kept {
+    v: Vec[String],
+}
+
+fn count(v: Vec[String]) -> i64 {
+    return v.len()
+}
+
+fn main() throws {
+    let v: Vec[String] = [f"a{1}"]
+    println(count(v))
+    let field: Vec[String] = [f"f{2}"]
+    let k = Kept { v: field }
+    println(k.v.len())
+    let w = k with { v: [f"g{3}"] }
+    println(w.v[0])
+}

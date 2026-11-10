@@ -63,8 +63,9 @@ pub struct Cli {
     /// type; what is proved does not depend on them, and a check nothing
     /// proves stays either way; every build asks a check a loop leaves open
     /// through the loop's invariant (ADR-361 D14). `skip-free-at-exit:on`
-    /// leaves what `main` holds at its end to the operating system. All are
-    /// `off` by default.
+    /// leaves what `main` holds at its end to the operating system. The two
+    /// `remove-*` are `on` unless the build says `off` (ADR-306 D26);
+    /// `skip-free-at-exit` is `off`.
     ///
     /// May be given more than once; overrides `nikaia.toml`'s
     /// `[build] optimization`.
@@ -172,7 +173,7 @@ pub struct Cli {
     /// Print every index into a list and every `+`, `-` and `*` the
     /// optimizations may drop the check of, and for each whether it was proved
     /// or why it is still checked (#389). At the build's
-    /// `--optimization` levels, or at `aggressive` where it asks for none.
+    /// `--optimization` levels, `on` where it names none (ADR-306 D26).
     ///
     /// Like `--asserts`, it explains a decision rather than changing one.
     #[arg(long, global = true)]
@@ -609,7 +610,7 @@ fn lower_std(sysroot: Option<PathBuf>) -> Result<i32> {
 
 /// `nikaia lower-std --bounds` (#1053): the tools package's `--bounds`
 /// report, each file seeing the package, at the `--optimization` levels
-/// given (each `off` where none is). With `--asserts`, each file's
+/// given (each `on` where none is, ADR-306 D26). With `--asserts`, each file's
 /// `check --asserts` block too, after its `--bounds` one; `--asserts` alone
 /// prints those blocks alone.
 fn lower_std_bounds(

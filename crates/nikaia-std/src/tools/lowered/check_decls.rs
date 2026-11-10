@@ -34,12 +34,12 @@ impl CheckState {
         if base == "String" || base == "str" || base == "Bytes" { return true; }
         if base == "Array" {
             if args.len() == 2 {
-                return match nikaia_std::index::get(&args, 1) {
-                    Ty::Count(n) => { let n = *n; n > 0 && self.takes_space(nikaia_std::index::get(&args, 0), &mut collections::BTreeSet::new()) },
+                return match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
+                    Ty::Count(n) => { let n = *n; n > 0 && self.takes_space(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut collections::BTreeSet::new()) },
                     _ => false,
                 };
             }
-            if args.len() == 1 { return self.takes_space(nikaia_std::index::get(&args, 0), &mut collections::BTreeSet::new()); }
+            if args.len() == 1 { return self.takes_space(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut collections::BTreeSet::new()); }
             return false;
         }
         if base == "HashMap" || base == "Map" || base == "BTreeMap" {
@@ -47,7 +47,7 @@ impl CheckState {
             return false;
         }
         if args.is_empty() { return false; }
-        self.takes_space(nikaia_std::index::get(&args, 0), &mut collections::BTreeSet::new())
+        self.takes_space(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut collections::BTreeSet::new())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -75,8 +75,8 @@ impl CheckState {
         if base == "String" || base == "str" || base == "Bytes" || base == "Vec" || base == "List" || base == "HashMap" || base == "Map" || base == "BTreeMap" || base == "HashSet" || base == "Set" || base == "BTreeSet" || base == "Box" || base == "Shared" || base == "SharedMut" { return true; }
         if base == "Array" {
             if args.len() == 2 {
-                return match nikaia_std::index::get(&args, 1) {
-                    Ty::Count(n) => { let n = *n; n > 0 && self.takes_space(nikaia_std::index::get(&args, 0), seen) },
+                return match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
+                    Ty::Count(n) => { let n = *n; n > 0 && self.takes_space(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, seen) },
                     _ => false,
                 };
             }
@@ -142,8 +142,8 @@ impl CheckState {
     pub fn grammar_path(&self, name: &str) -> Option<String> {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() != 2 { return None; }
-        let rules = match *nikaia_std::index::get(&self.grammars, *nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if !rules.contains(*nikaia_std::index::get(&parts, 1)) { return None; } ::core::mem::drop(parts);
+        let rules = match *nikaia_std::index::get(&self.grammars, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if !rules.contains(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }) { return None; } ::core::mem::drop(parts);
         Some(nikaia_std::block::Text::from(name.to_string()))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -242,7 +242,7 @@ pub(crate) fn a_nonempty(fields: &[FieldContract]) -> Option<Vec<FieldContract>>
 // this was written - see `contracts::sync`.
 pub fn a_type_base(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string())
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

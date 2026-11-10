@@ -147,7 +147,7 @@ impl EmitState {
         for receiver in receivers.iter() {
             let receiver = *receiver;
             let safe = *nikaia_std::index::get(&walked.safe, (k) as usize);
-            k += 1;
+            k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             if !self.facts.held_reaches.contains(&node_key(receiver)) { continue; }
             if !safe || !holdable { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("This `?.` returns a view of a value that's gone at the end of this line. Put the value in a `let` on the line before, and use `?.` on that name."), at: Some(span.start as i64) }, &"emit_core_hold_found")); }
             let name = format!("__nikaia_held_{}", walk.held.len() as i64);
@@ -240,8 +240,8 @@ impl EmitState {
         } { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         if signature.takes_a_receiver() { return Ok(()); }
         for i in 0..args.len() as i64 {
-            if ((i) as usize) >= signature.params.len() || !nikaia_std::list::contains(&borrows, &nikaia_std::index::get(&signature.params, (i) as usize).0) { continue; }
-            let arg = nikaia_std::index::get(&args, (i) as usize);
+            if ((i) as usize) >= signature.params.len() || !nikaia_std::list::contains(&borrows, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0) { continue; }
+            let arg = unsafe { nikaia_std::proven::read(&args, (i) as usize) };
             let made = match arg {
                 Expr::Call { .. } => true,
                 Expr::MethodCall { method, .. } => { let method = *method; owns_its_text(&emit_text(world, method)) },
@@ -391,14 +391,16 @@ impl EmitState {
         if deref && !slicing && !shares { out.push("*"); }
         let nested = self.emit_read_nested(world, &walk, &scope.function, base);
         if !slicing && self.proven_indices.contains(&node_key(base)) && self.map_key(index, false).is_none() {
-            out.push("unsafe { nikaia_std::proven::read(");
+            out.open_unsafe();
+            out.push("nikaia_std::proven::read(");
             if nested { self.emit_read_inner(world, walk, out, host, base, depth, flow, scope)?; } else {
                 out.push("&");
                 self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
             }
             out.push(", (");
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
-            out.push(") as usize) }");
+            out.push(") as usize)");
+            out.close_unsafe();
             if self.reads_through_handle(world, &walk, &scope.function, base) { out.push(".get()"); }
             if shares { out.push(".clone()"); }
             return Ok(());
@@ -407,13 +409,15 @@ impl EmitState {
             match index {
                 Expr::Range { start, end, inclusive, .. } => {
                     let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
-                    out.push("unsafe { nikaia_std::proven::cut(&");
+                    out.open_unsafe();
+                    out.push("nikaia_std::proven::cut(&");
                     self.emit_core_postfix_base(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(", (");
                     if only_literals(start) { self.emit_expr(world, walk, out, host, start, depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, start, depth, flow, scope)?; }
                     out.push(") as usize, (");
                     if only_literals(end) { self.emit_expr(world, walk, out, host, end, depth, flow.inferred(), scope)?; } else { self.emit_expr(world, walk, out, host, end, depth, flow, scope)?; }
-                    if inclusive { out.push(") as usize + 1) }"); } else { out.push(") as usize) }"); }
+                    if inclusive { out.push(") as usize + 1)"); } else { out.push(") as usize)"); }
+                    out.close_unsafe();
                     return Ok(());
                 },
                 _ => { },
@@ -501,8 +505,8 @@ impl EmitState {
             }
         }
         let mut order: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for k in 0..count { if *nikaia_std::index::get(&pauses, nikaia_std::index::at(k)) { order.push(k); } }
-        for k in 0..count { if !*nikaia_std::index::get(&pauses, nikaia_std::index::at(k)) { order.push(k); } }
+        for k in 0..count { if *unsafe { nikaia_std::proven::read(&pauses, (k) as usize) } { order.push(k); } }
+        for k in 0..count { if !*unsafe { nikaia_std::proven::read(&pauses, (k) as usize) } { order.push(k); } }
         let fallible = (flow.can_throw || flow.handled_here) && any_fails;
         let mut channel = nikaia_std::block::Text::from(scope.channel.to_string());
         if flow.handled_here {
@@ -542,7 +546,7 @@ impl EmitState {
             let mut k: i64 = 0;
             for stmt in block.stmts.iter() {
                 if k == from { self.emit_read_branch(world, walk, out, host, stmt, &body, fallible, queued, &wrapper, &channel, depth, &flow, scope)?; }
-                k += 1;
+                k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
             }
         }
         out.push(&nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + extra))));
@@ -622,7 +626,7 @@ impl EmitState {
             let mut bound = nikaia_std::block::Text::from(named.to_string());
             if fallible { bound = String::from("__nikaia_won"); }
             out.push(&format!("{}nikaia_std::task::Race{}::{}({}) => ", inner, count, self.emit_read_ordinal(at), bound));
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             if fallible && flow.handled_here {
                 out.push(&format!("match __nikaia_won {{\n{}    Err(__nikaia_failed) => Err(__nikaia_failed),\n{}    Ok({}) => {{ let __nikaia_value = ", inner, inner, named));
                 let st = out.mark();

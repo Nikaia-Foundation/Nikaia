@@ -8,9 +8,9 @@ struct OneAtATime {}
 impl task::Admission for OneAtATime {
 	fn decide(mut self, load: task::Load) -> task::Decision sync {
 		if load.running == 0 {
-			return task::Decision { start: 1 }
+			return task::Decision { start: 1, budget: 1048576 }
 		}
-		return task::Decision { start: 0 }
+		return task::Decision { start: 0, budget: 1048576 }
 	}
 }
 

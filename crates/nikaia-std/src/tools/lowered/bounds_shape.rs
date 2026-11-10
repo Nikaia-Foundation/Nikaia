@@ -118,7 +118,7 @@ pub fn only_removes(method: &str) -> bool { matches!(method, "pop" | "remove" | 
 
 pub fn key_root(key: &str) -> String {
     let parts: Vec<&str> = key.split('[').collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string())
 }
 
 pub fn root_name(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
@@ -221,7 +221,7 @@ pub fn is_empty_map(expr: &Expr, words: &winnow_grammar::InternerContext) -> boo
             let last = match func {
                 Expr::Path(segments, _) => {
                     if segments.is_empty() { return false; }
-                    nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))).to_string())
+                    nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) }))).to_string())
                 },
                 Expr::Variable(n, _) => { let n = *n; nikaia_std::block::Text::from(words.resolve(n).to_string()) },
                 _ => return false,
@@ -254,7 +254,7 @@ pub(crate) fn lose_by_call(func: &Expr, args: &[Expr], around: &Around, words: &
     let mut at: i64 = 0;
     for arg in args.iter() {
         if hands_on((params).as_ref(), at) { lose(arg, words, seen); }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
 }
 
@@ -286,14 +286,14 @@ pub(crate) fn look_statement_here(stmt: &Stmt, look: &Look, words: &winnow_gramm
         Look::Lets => { match stmt {
             Stmt::Let { names, mutable, ty, value, .. } => {
                 let mutable = *mutable;
-                if names.len() == 1 { read_let(words.resolve(*nikaia_std::index::get(&names, 0)), mutable, (ty).as_ref(), value, words, seen); }
+                if names.len() == 1 { read_let(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), mutable, (ty).as_ref(), value, words, seen); }
             },
             _ => { },
         }; },
         Look::Aliases => { match stmt {
             Stmt::Let { names, mutable, value, .. } => {
                 let mutable = *mutable;
-                if names.len() == 1 && !mutable { read_alias(words.resolve(*nikaia_std::index::get(&names, 0)), value, words, seen); }
+                if names.len() == 1 && !mutable { read_alias(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }), value, words, seen); }
             },
             _ => { },
         }; },

@@ -45,6 +45,8 @@ fn main() throws {
 "#;
 
 const ON: &str = "remove-bounds-checks:on,remove-overflow-checks:on";
+/// Both `off`, named: the default is `on` (ADR-306 D26).
+const OFF: &str = "remove-bounds-checks:off,remove-overflow-checks:off";
 
 fn lowered(name: &str, source: &str, optimization: Option<&str>) -> String {
     let dir = common::scratch_dir(name);
@@ -67,9 +69,9 @@ fn lowered(name: &str, source: &str, optimization: Option<&str>) -> String {
 
 #[test]
 fn with_every_switch_off_the_emitted_code_holds_no_unsafe() {
-    let rust = lowered("unsafe-off", DROPPED, None);
+    let rust = lowered("unsafe-off", DROPPED, Some(OFF));
     assert_eq!(rust.matches("unsafe").count(), 0, "{rust}");
-    let rust = lowered("unsafe-off-vouched", VOUCHED, None);
+    let rust = lowered("unsafe-off-vouched", VOUCHED, Some(OFF));
     assert_eq!(rust.matches("unsafe").count(), 0, "{rust}");
 }
 

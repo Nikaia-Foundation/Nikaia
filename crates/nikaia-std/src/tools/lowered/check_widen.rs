@@ -98,7 +98,7 @@ pub fn unsigned_from_signed(found: &Ty, want: &Ty) -> Option<String> {
 pub fn number_where_no_number_is(want: &Ty, value: &Expr) -> Option<Ty> {
     match want {
         Ty::Named { name, args, .. } => {
-            if name == "Vec" && args.len() == 1 && a_float_type(nikaia_std::index::get(&args, 0)) {
+            if name == "Vec" && args.len() == 1 && a_float_type(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
                 match value {
                     Expr::ListLit { items, .. } => {
                         let mut integer = false;
@@ -306,15 +306,15 @@ impl CheckState {
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
         while at < wanted.len() as i64 && at < found.len() as i64 {
             let here: i64 = at;
-            at = at + 1;
-            let variable = match a_variable_by_value(&nikaia_std::index::get(&wanted, nikaia_std::index::at(here)).1) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            if here < given.len() as i64 && is_a_literal(nikaia_std::index::get(&given, nikaia_std::index::at(here))) { continue; }
-            let ty = match an_integer_named(nikaia_std::index::get(&found, nikaia_std::index::at(here))) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            let variable = match a_variable_by_value(&unsafe { nikaia_std::proven::read(&wanted, (here) as usize) }.1) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if here < given.len() as i64 && is_a_literal(unsafe { nikaia_std::proven::read(&given, (here) as usize) }) { continue; }
+            let ty = match an_integer_named(unsafe { nikaia_std::proven::read(&found, (here) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let mut seen: i64 = -1;
             let mut scan: i64 = 0;
             while scan < variables.len() as i64 {
-                if *nikaia_std::index::get(&variables, nikaia_std::index::at(scan)) == variable { seen = scan; }
-                scan = scan + 1;
+                if *unsafe { nikaia_std::proven::read(&variables, (scan) as usize) } == variable { seen = scan; }
+                scan = unsafe { nikaia_std::proven::add::<i64>(scan, 1) };
             }
             if seen < 0 {
                 variables.push(nikaia_std::block::Text::from(variable.to_string()));
@@ -344,7 +344,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_variable_by_value(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Var { name, view } => { let view = *view; if !view { Some(nikaia_std::block::Text::from(name.to_string())) } else { None } },
+        Ty::Var { name, .. } => Some(nikaia_std::block::Text::from(name.to_string())),
         _ => None,
     }
 }

@@ -95,10 +95,12 @@ pub fn unproved_claims(word: String) -> String throws {
 /// ([ADR-306](../../../docs/specification/adr/adr-306.md) D14). The names are
 /// `remove-bounds-checks` and `remove-overflow-checks`
 /// ([ADR-306](../../../docs/specification/adr/adr-306.md) D6); a later word for
-/// a name wins over an earlier one.
+/// a name wins over an earlier one. **A name the words leave out is `on`**
+/// ([ADR-306](../../../docs/specification/adr/adr-306.md) D26): a check the
+/// walk proved is dropped unless the build says `off`.
 pub fn optimizations(words: String) -> (BoundsChecks, OverflowChecks) throws {
-    let mut bounds = BoundsChecks::Kept
-    let mut overflow = OverflowChecks::Kept
+    let mut bounds = BoundsChecks::Removed
+    let mut overflow = OverflowChecks::Removed
     for word in words.split(",").map(fn(w) { w.trim() }).filter(fn(w) { !w.is_empty() }) {
         let (name, level) = word.split_once(":") ?? throw ProjectSettingsRefusal::Refused(f"`--optimization={word}` needs `on` or `off`: write `--optimization=remove-bounds-checks:on` or `--optimization=remove-overflow-checks:on`")
         match name {
@@ -174,7 +176,7 @@ pub fn cpu_config(words: ref ProjectWords, target: Target) -> Vec[String] {
 /// The cache's view of this build (ADR-021 D5): the key of
 /// `Settings::choices`, whose backend is `"rust"`. `cpu_key` is
 /// `Settings::cpu_key`'s answer, read only where a level is named.
-pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String, crate_root: ref String) -> String {
+pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: OverflowChecks, skip_free_on: bool, through_loops_on: bool, cpu_key: String, crate_root: ref String, counts_heap: bool) -> String {
     let tests = if words.tests { "/tests" } else { "" }
     // A build that lets a refuted claim through must not hand its
     // lowering to one that refuses it.
@@ -194,7 +196,9 @@ pub fn choices_key(words: ref ProjectWords, bounds: BoundsChecks, overflow: Over
     // The package's items under a hand-written root are written below
     // another path (ADR-393 D7, #1447).
     let root = if crate_root == "crate" { "" } else { f"/root:{crate_root}" }
-    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}"
+    // A dependency's lowering writes no allocator (ADR-327 D9).
+    let heap = if counts_heap { "" } else { "/dependency" }
+    return f"{words.target}/{words.user_parallelism}/{words.reentrancy_check}{tests}{refuted}{unproved}{removed_bounds}{removed_overflow}{skip_free}{library}{cpu}{root}{heap}"
 }
 
 /// What a panic does on this machine (ADR-037 D1), in Cargo's vocabulary.

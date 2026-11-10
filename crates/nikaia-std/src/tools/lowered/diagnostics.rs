@@ -85,13 +85,13 @@ pub fn diagnostics_placed(read: &[DiagnosticsRead], sources: &[&str]) -> Vec<Dia
         let mut placed = DiagnosticsPlaced { level: nikaia_std::block::Text::from(one.level.to_string()), message, located: false, line: 0, column: 0, span: Span::nowhere(), unit: 0, generated_line: one.generated_line, notes, internal, label, about_the_program: false };
         if one.located && one.unit >= 0 && one.unit < starts.len() as i64 {
             let at = one.span.start as i64;
-            let line = diagnostics_line_of(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), at);
+            let line = diagnostics_line_of(unsafe { nikaia_std::proven::read(&starts, (one.unit) as usize) }, at);
             placed.located = true;
             placed.line = line + 1;
-            placed.column = at - *nikaia_std::index::get(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), nikaia_std::index::at(line)) + 1;
+            placed.column = at - *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&starts, (one.unit) as usize) }, nikaia_std::index::at(line)) + 1;
             placed.span = one.span.clone();
             placed.unit = one.unit;
-            placed.about_the_program = one.code.is_none() && diagnostics_in_a_grammar(nikaia_std::index::get(&starts, nikaia_std::index::at(one.unit)), *nikaia_std::index::get(&sources, nikaia_std::index::at(one.unit)), at);
+            placed.about_the_program = one.code.is_none() && diagnostics_in_a_grammar(unsafe { nikaia_std::proven::read(&starts, (one.unit) as usize) }, *nikaia_std::index::get(&sources, nikaia_std::index::at(one.unit)), at);
         }
         out.push(placed);
     }
@@ -102,9 +102,9 @@ pub(crate) fn diagnostics_in_a_grammar(starts: &[i64], source: &str, at: i64) ->
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
     let mut line = diagnostics_line_of(starts, at);
     while line >= 0 && line < lines.len() as i64 {
-        let first = nikaia_std::index::or((*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).chars().next(), || ' '.into());
-        if first.is_alphabetic() { return (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).starts_with("grammar ") || (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).starts_with("pub grammar "); }
-        line -= 1;
+        let first = nikaia_std::index::or((*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).chars().next(), || ' '.into());
+        if first.is_alphabetic() { return (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).starts_with("grammar ") || (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).starts_with("pub grammar "); }
+        line = unsafe { nikaia_std::proven::sub::<i64>(line, 1) };
     }
     false
 }

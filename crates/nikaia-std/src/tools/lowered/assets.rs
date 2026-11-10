@@ -14,7 +14,7 @@ pub fn allowlist_entries(text: &str) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for line in text.lines() {
         let parts: Vec<&str> = line.split('#').collect::<Vec<_>>();
-        let entry = (*nikaia_std::index::get(&parts, 0)).trim();
+        let entry = (*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).trim();
         if !entry.is_empty() { out.insert(nikaia_std::block::Text::from(entry.to_string())); }
     }
     out

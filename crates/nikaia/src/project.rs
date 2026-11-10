@@ -319,6 +319,7 @@ impl Settings {
                 build.prove_through_loops,
                 &cpu_key,
                 build.crate_root,
+                build.counts_heap,
             ),
             "rust",
         )
@@ -1519,18 +1520,12 @@ impl ProjectMembersForeignHost for ForeignHost {
         Ledger::read_beside(path)
     }
 
-    fn absorb(&self, into: Ledger, other: Ledger) -> Ledger {
-        let mut into = into;
-        into.absorb(None, other);
-        into
-    }
-
     fn empty_ledger(&self) -> Ledger {
         Ledger::empty()
     }
 
-    fn crate_root(&self, root: &Path, name: String) -> Option<PathBuf> {
-        crate::describe::crate_root(root, &name)
+    fn crate_root(&self, root: &Path, name: &str) -> Option<PathBuf> {
+        crate::describe::crate_root(root, name)
     }
 }
 
@@ -3159,12 +3154,21 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         // **Below a hand-written root** (ADR-393 D7, #1447) the member's
         // items are `crate::<native>`, and the lowering is asked for that.
         let rooted;
-        let settings = if crate_root == project.settings.build.crate_root {
+        let mut settings = if crate_root == project.settings.build.crate_root {
             &project.settings
         } else {
             rooted = project.settings.rooted_at(crate_root);
             &rooted
         };
+        // **Only the entry writes the allocator** (ADR-327 D9): a program
+        // test links its package, and a binary takes one.
+        let dependency;
+        if at != 0 {
+            let mut changed = settings.clone();
+            changed.build.counts_heap = false;
+            dependency = changed;
+            settings = &dependency;
+        }
         let outer = WARNED.with(|warned| warned.replace(project.warned));
         let shown = match &project.written {
             Some(written) if canonical(&member.entry) == canonical(&project.entry()) => {
@@ -3661,11 +3665,13 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
         &self,
         source: &Path,
         no_cache: bool,
-        allowlist: Option<PathBuf>,
-        shown: Option<String>,
+        allowlist: Option<&Path>,
+        shown: Option<&str>,
+        program: bool,
     ) -> HostResult<(String, Vec<PathBuf>)> {
         let lowered = (|| {
-            let settings = Settings::from_env()?;
+            let mut settings = Settings::from_env()?;
+            settings.build.counts_heap = program;
             // **The packages, found the same way the project build finds
             // them**: the manifest above the `.nika` path Cargo handed over,
             // read here because a dependency list is not a switch the
@@ -3676,9 +3682,8 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
                 Some(root) => packages_of(&manifest, root, false)?,
                 None => Vec::new(),
             };
-            let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown));
-            let lowered =
-                lower_reading(source, &settings, no_cache, &packages, allowlist.as_deref());
+            let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown.map(String::from)));
+            let lowered = lower_reading(source, &settings, no_cache, &packages, allowlist);
             SHOWN_AS.with(|cell| cell.replace(shown_outer));
             lowered
         })();

@@ -114,7 +114,7 @@ impl EmitState {
             let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut generics = generics;
             for i in 0..parameters.len() as i64 {
                 generics.push(format!("P{}", i));
-                fields.push(format!("    pub {}: P{},", *nikaia_std::index::get(&parameters, (i) as usize), i));
+                fields.push(format!("    pub {}: P{},", *unsafe { nikaia_std::proven::read(&parameters, (i) as usize) }, i));
             }
             let listed = nikaia_std::block::Text::from(generics.join(", "));
             let body = nikaia_std::block::Text::from(fields.join("\n"));
@@ -157,20 +157,20 @@ impl EmitState {
         let entry = self.entry_point(world, host.user_parallelism(), &channel, &types, &passing);
         if entry.is_empty() { return; }
         out.push(&entry);
-        if host.skip_free_at_exit() { out.push(&emit_program_allocator()); }
+        if host.skip_free_at_exit() { out.push(&emit_program_allocator()); } else if host.counts_heap() { out.push("\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"); }
     }
 }
 
 pub(crate) fn emit_program_param_type(param: &str) -> String {
     let parts: Vec<&str> = param.split(": ").collect::<Vec<_>>();
     if parts.len() < 2 { return String::from("_"); }
-    let mut ty = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string());
-    for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *nikaia_std::index::get(&parts, (i) as usize)); }
+    let mut ty = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string());
+    for i in 2..parts.len() as i64 { ty = format!("{}: {}", ty, *unsafe { nikaia_std::proven::read(&parts, (i) as usize) }); }
     ty
 }
 
 pub(crate) fn emit_program_allocator() -> String {
-    let lines: Vec<&'static str> = vec!["", "struct NikaiaHeap;", "// SAFETY: every call is the system allocator's; a free that is skipped leaves", "// the block allocated until the process ends, which is always sound.", "unsafe impl std::alloc::GlobalAlloc for NikaiaHeap {", "    #[inline]", "    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::alloc(&std::alloc::System, layout) }", "    }", "    #[inline]", "    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&std::alloc::System, layout) }", "    }", "    #[inline]", "    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {", "        if nikaia_std::rt::exit::frees() {", "            unsafe { std::alloc::GlobalAlloc::dealloc(&std::alloc::System, ptr, layout) }", "        }", "    }", "    #[inline]", "    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::realloc(&std::alloc::System, ptr, layout, size) }", "    }", "}", "#[global_allocator]", "static NIKAIA_HEAP: NikaiaHeap = NikaiaHeap;", ""];
+    let lines: Vec<&'static str> = vec!["", "struct NikaiaHeap;", "// SAFETY: every call is the counting system allocator's; a free that is", "// skipped leaves the block allocated until the process ends, which is", "// always sound.", "unsafe impl std::alloc::GlobalAlloc for NikaiaHeap {", "    #[inline]", "    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::alloc(&nikaia_std::block::Counting, layout) }", "    }", "    #[inline]", "    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&nikaia_std::block::Counting, layout) }", "    }", "    #[inline]", "    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {", "        if nikaia_std::rt::exit::frees() {", "            unsafe { std::alloc::GlobalAlloc::dealloc(&nikaia_std::block::Counting, ptr, layout) }", "        }", "    }", "    #[inline]", "    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {", "        unsafe { std::alloc::GlobalAlloc::realloc(&nikaia_std::block::Counting, ptr, layout, size) }", "    }", "}", "#[global_allocator]", "static NIKAIA_HEAP: NikaiaHeap = NikaiaHeap;", ""];
     nikaia_std::block::Text::from(lines.join("\n"))
 }
 

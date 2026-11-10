@@ -224,7 +224,12 @@ fn main() throws {
 /// CPU level; one nothing guards keeps its check.
 #[test]
 fn a_proved_load_has_no_check() {
-    let (said, kept) = tool("simd-kept", "lower", GUARDED, &[]);
+    let (said, kept) = tool(
+        "simd-kept",
+        "lower",
+        GUARDED,
+        &["--optimization", "remove-bounds-checks:off"],
+    );
     assert_eq!(kept.matches("load_proven").count(), 0, "{said}{kept}");
     let (said, rust) = tool(
         "simd-proved",

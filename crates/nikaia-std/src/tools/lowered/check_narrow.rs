@@ -105,12 +105,12 @@ pub fn check_narrow_proved_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
 pub(crate) fn check_narrow_bound_where(state: &CheckState, name: &str) -> Option<CheckBoundAt> {
     let mut frame_at = state.scope.len() as i64;
     while frame_at > 0 {
-        frame_at = frame_at - 1;
-        let frame = nikaia_std::index::get(&state.scope, nikaia_std::index::at(frame_at));
+        frame_at = unsafe { nikaia_std::proven::sub::<i64>(frame_at, 1) };
+        let frame = unsafe { nikaia_std::proven::read(&state.scope, (frame_at) as usize) };
         let mut at = frame.len() as i64;
         while at > 0 {
-            at = at - 1;
-            if nikaia_std::index::get(&frame, nikaia_std::index::at(at)).name == name { return Some(CheckBoundAt { frame: frame_at, at, id: nikaia_std::index::get(&frame, nikaia_std::index::at(at)).id }); }
+            at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
+            if unsafe { nikaia_std::proven::read(&frame, (at) as usize) }.name == name { return Some(CheckBoundAt { frame: frame_at, at, id: unsafe { nikaia_std::proven::read(&frame, (at) as usize) }.id }); }
         }
     }
     None
@@ -161,7 +161,7 @@ pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_, '
 pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) {
     let names = check_narrow_proved_names(world, cond, holds);
     if state.scope.is_empty() { return; }
-    let frame = state.scope.len() as i64 - 1;
+    let frame = unsafe { nikaia_std::proven::sub::<i64>(state.scope.len() as i64, 1) };
     let markers = check_narrow_proofs_for(state, &names, frame);
     for marker in markers.iter() { state.scope[nikaia_std::index::at(frame)].push(marker.clone()); }
 }
@@ -193,17 +193,17 @@ pub(crate) fn check_narrow_proved(state: &CheckState, name: &str, here: i64) -> 
     while from < state.written_at.len() as i64 {
         let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(from));
         if check_narrow_ends(name, &written.0) && written.1 != here { return CheckProved::Lost(CheckLost { name: nikaia_std::block::Text::from(name.to_string()), at: written.1, written: nikaia_std::block::Text::from(written.0.to_string()), handed: false }); }
-        from = from + 1;
+        from = unsafe { nikaia_std::proven::add::<i64>(from, 1) };
     }
     if narrow.root >= 0 {
         let walls = state.narrowing.walls.len() as i64;
-        if walls > 0 && narrow.frame < *nikaia_std::index::get(&state.narrowing.walls, nikaia_std::index::at(walls - 1)) { return CheckProved::No; }
+        if walls > 0 && narrow.frame < *unsafe { nikaia_std::proven::read(&state.narrowing.walls, (nikaia_std::proven::sub::<i64>(walls, 1)) as usize) } { return CheckProved::No; }
         let mut handed_from = narrow.handed_from;
         if handed_from > state.narrowing.handed_at.len() as i64 { handed_from = state.narrowing.handed_at.len() as i64; }
         while handed_from < state.narrowing.handed_at.len() as i64 {
             let handed = nikaia_std::index::get(&state.narrowing.handed_at, nikaia_std::index::at(handed_from));
             if check_narrow_ends(name, &handed.0) && handed.1 != here { return CheckProved::Lost(CheckLost { name: nikaia_std::block::Text::from(name.to_string()), at: handed.1, written: nikaia_std::block::Text::from(handed.0.to_string()), handed: true }); }
-            handed_from = handed_from + 1;
+            handed_from = unsafe { nikaia_std::proven::add::<i64>(handed_from, 1) };
         }
     }
     for repeats in state.repeats.iter() { if repeats.what == "loop" && repeats.frame > narrow.frame { for revived in repeats.revived.iter() { if check_narrow_ends(name, revived) { return CheckProved::Lost(CheckLost { name: nikaia_std::block::Text::from(name.to_string()), at: -1, written: nikaia_std::block::Text::from(revived.to_string()), handed: false }); } } } }
@@ -299,7 +299,7 @@ pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty,
     if lent && (inner.is_a_view() || lent_binding) && !a_view && !viewed { return ty.clone(); }
     let operand = state.narrowing.operand_reads.contains(&node);
     let mut bits: i64 = 0;
-    if copied || a_view { bits = bits + 1; }
+    if copied || a_view { bits = unsafe { nikaia_std::proven::add::<i64>(bits, 1) }; }
     if operand { bits = bits + 2; }
     if lent && !a_view { bits = bits + 4; }
     if viewed { bits = bits + 32; }
@@ -380,20 +380,20 @@ pub fn check_narrow_turn_ends(state: &mut CheckState) {
     let mut at = turn.reads;
     while at < state.narrowing.path_reads.len() as i64 {
         let read: CheckPathRead = (*nikaia_std::index::get(&state.narrowing.path_reads, nikaia_std::index::at(at))).clone();
-        at = at + 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         if read.frame >= turn.frame { continue; }
         let mut lost: Option<CheckLost> = None;
         let mut w = turn.written;
         while w < state.written_at.len() as i64 && lost.is_none() {
             let written = nikaia_std::index::get(&state.written_at, nikaia_std::index::at(w));
             if written.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &written.0) { lost = Some(CheckLost { name: nikaia_std::block::Text::from(read.path.to_string()), at: written.1, written: nikaia_std::block::Text::from(written.0.to_string()), handed: false }); }
-            w = w + 1;
+            w = unsafe { nikaia_std::proven::add::<i64>(w, 1) };
         }
         let mut h = turn.handed;
         while h < state.narrowing.handed_at.len() as i64 && lost.is_none() {
             let handed = nikaia_std::index::get(&state.narrowing.handed_at, nikaia_std::index::at(h));
             if handed.1 >= i64::from(read.span.start) && check_narrow_ends(&read.path, &handed.0) { lost = Some(CheckLost { name: nikaia_std::block::Text::from(read.path.to_string()), at: handed.1, written: nikaia_std::block::Text::from(handed.0.to_string()), handed: true }); }
-            h = h + 1;
+            h = unsafe { nikaia_std::proven::add::<i64>(h, 1) };
         }
         let found: CheckLost = match lost { Some(__nikaia_value) => __nikaia_value, None => continue };
         let path = nikaia_std::block::Text::from(read.path.to_string());
@@ -430,8 +430,8 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
         };
     }
     if through.is_some() {
-        let last = state.findings.len() as i64 - 1;
-        state.findings[nikaia_std::index::at(last)].notes.push(format!("This read goes through {}, so it is not a path of fields from a name: {} is computed anew at each read, and a `null` test of it proves nothing here (ADR-382 D4). Copy it into a local and test that: `let x = …`.", through.as_ref().unwrap(), through.as_ref().unwrap()));
+        let last = unsafe { nikaia_std::proven::sub::<i64>(state.findings.len() as i64, 1) };
+        (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).notes.push(format!("This read goes through {}, so it is not a path of fields from a name: {} is computed anew at each read, and a `null` test of it proves nothing here (ADR-382 D4). Copy it into a local and test that: `let x = …`.", through.as_ref().unwrap(), through.as_ref().unwrap()));
         return;
     }
     let found: Option<CheckLost> = match state.narrowing.lost_reads.get(&key) {
@@ -440,14 +440,14 @@ pub fn check_narrow_a_proof_taken_back(state: &mut CheckState, lhs: &Expr, rhs: 
     };
     let lost: CheckLost = match found { Some(__nikaia_value) => __nikaia_value, None => return };
     let name = nikaia_std::block::Text::from(lost.name.to_string());
-    let last = state.findings.len() as i64 - 1;
+    let last = unsafe { nikaia_std::proven::sub::<i64>(state.findings.len() as i64, 1) };
     if lost.at == -1 {
-        state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name));
+        (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).notes.push(format!("A test before proved `{}` is not `null`, but a loop around this use assigns `{}`, so the next turn may read it `null`.", name, name));
         return;
     }
-    if lost.handed { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is handed over `mut` after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); } else if lost.written == name { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); } else { state.findings[nikaia_std::index::at(last)].notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); }
-    let read = nikaia_std::index::get(&state.findings, nikaia_std::index::at(last)).span.clone();
-    state.findings[nikaia_std::index::at(last)].labels.push(CheckLabel { span: read, word: nikaia_std::block::Text::from(name.to_string()), text: String::from("read here, where it may be `null`"), main: true });
-    state.findings[nikaia_std::index::at(last)].labels.push(check_narrow_label(&lost));
+    if lost.handed { (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).notes.push(format!("A test before proved `{}` is not `null`, but `{}` is handed over `mut` after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); } else if lost.written == name { (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on it is a `T?` again.", name, name)); } else { (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).notes.push(format!("A test before proved `{}` is not `null`, but `{}` is assigned after the test, and from there on `{}` is a `T?` again.", name, lost.written, name)); }
+    let read = unsafe { nikaia_std::proven::read(&state.findings, (last) as usize) }.span.clone();
+    (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).labels.push(CheckLabel { span: read, word: nikaia_std::block::Text::from(name.to_string()), text: String::from("read here, where it may be `null`"), main: true });
+    (*unsafe { nikaia_std::proven::slot(&mut state.findings, (last) as usize) }).labels.push(check_narrow_label(&lost));
 }
 

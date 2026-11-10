@@ -51,14 +51,14 @@ pub(crate) fn item_fn_takes_either(view: &ParsedView<'_, '_, '_, '_, '_, '_>, na
     let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if view.text(symbol) != own { return false; }
     if at < 0 || at >= args.len() as i64 { return false; }
-    nikaia_std::index::get(&args, nikaia_std::index::at(at)).ty.either
+    unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.either
 }
 
 pub fn either_param(view: &ParsedView<'_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let parts: Vec<&str> = key.split("::").collect::<Vec<_>>();
-    let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
+    let own = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
     let mut target: String = String::from("");
-    if parts.len() > 1 { target = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 2))).to_string()); }
+    if parts.len() > 1 { target = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 2)) as usize) }).to_string()); }
     for item in view.items.iter() {
         if target == "" { if item_takes_either(view, &item.node, &own, at) { return true; } } else {
             let found = match &item.node {
@@ -108,13 +108,13 @@ pub fn imports_a_package(view: &ParsedView<'_, '_, '_, '_, '_, '_>, name: &str) 
 pub(crate) fn item_import_is(view: &ParsedView<'_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], alias: Option<winnow_grammar::Symbol>, name: &str) -> bool {
     if alias.is_some() { return view.text(match alias { Some(__nikaia_value) => __nikaia_value, None => return false }) == name; }
     if path.is_empty() { return false; }
-    view.text(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))) == name
+    view.text(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }) == name
 }
 
 pub fn imports_exactly(view: &ParsedView<'_, '_, '_, '_, '_, '_>, head: &str) -> bool {
     for item in view.items.iter() {
         let found = match &item.node {
-            Item::Import { path, .. } => path.len() == 1 && view.text(*nikaia_std::index::get(&path, 0)) == head,
+            Item::Import { path, .. } => path.len() == 1 && view.text(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == head,
             _ => false,
         };
         if found { return true; }
@@ -171,7 +171,7 @@ pub fn a_c_value(view: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: &Type) -> bool {
         for item in view.items.iter() { if item_c_enum(view, &item.node, &name) { return true; } }
         return false;
     }
-    if name == "Array" && ty.generics.len() == 2 { return a_c_value(view, nikaia_std::index::get(&ty.generics, 0)); }
+    if name == "Array" && ty.generics.len() == 2 { return a_c_value(view, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }); }
     false
 }
 
@@ -216,7 +216,7 @@ impl CheckState {
             _ => return false,
         };
         if segments.len() < 2 { return false; }
-        let head = view.unaliased(&view.text(*nikaia_std::index::get(&segments, 0)));
+        let head = view.unaliased(&view.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }));
         let used = imports_exactly(view, &head);
         if !(used || self.modules.contains(&head)) || self.std_modules.contains(&head) { return false; }
         let prefix = format!("{}::", head);
@@ -553,7 +553,7 @@ pub(crate) fn item_held_inline(parsed: &ParsedView<'_, '_, '_, '_, '_, '_>, ty: 
     }
     let name = parsed.text(ty.name);
     if name == "Array" {
-        if !ty.generics.is_empty() { item_held_inline(parsed, nikaia_std::index::get(&ty.generics, 0), generics, out); }
+        if !ty.generics.is_empty() { item_held_inline(parsed, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, generics, out); }
         return;
     }
     if ty.generics.is_empty() {
@@ -574,12 +574,12 @@ pub(crate) fn item_held_through(generic: &ItemGeneric<'_>, member: &Type, at: &P
     }
     let name = generic.file.text(member.name);
     if name == "Array" {
-        if !member.generics.is_empty() { item_held_through(generic, nikaia_std::index::get(&member.generics, 0), at, arguments, generics, out); }
+        if !member.generics.is_empty() { item_held_through(generic, unsafe { nikaia_std::proven::read(&member.generics, (0) as usize) }, at, arguments, generics, out); }
         return;
     }
     if !member.generics.is_empty() { return; }
     for k in 0..generic.params.len() as i64 {
-        if *nikaia_std::index::get(&generic.params, (k) as usize) == name {
+        if *unsafe { nikaia_std::proven::read(&generic.params, (k) as usize) } == name {
             item_held_inline(at, nikaia_std::index::get(&arguments, (k) as usize), generics, out);
             return;
         }
@@ -612,7 +612,7 @@ pub(crate) fn item_members_of(file: &ParsedView<'_, '_, '_, '_, '_, '_>, node: &
                 let variant = file.text(v.name);
                 match &v.fields {
                     VariantFields::Unit => { },
-                    VariantFields::Tuple(types) => { for at in 0..types.len() as i64 { out.push(ItemMember { member: boxed_member(&variant, at, ""), ty: (*nikaia_std::index::get(&types, nikaia_std::index::at(at))).clone() }); } },
+                    VariantFields::Tuple(types) => { for at in 0..types.len() as i64 { out.push(ItemMember { member: boxed_member(&variant, at, ""), ty: (*unsafe { nikaia_std::proven::read(&types, (at) as usize) }).clone() }); } },
                     VariantFields::Named(fields) => { for f in fields.iter() { out.push(ItemMember { member: boxed_member(&variant, -1, &file.text(f.name)), ty: f.ty.clone() }); } },
                 }
             }

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1373 (Draft)
+**Version:** 0.0.1374 (Draft)
 **Date:** 2026-11-10
 
 ---
@@ -875,7 +875,7 @@ pub trait Admission {
 }
 ```
 
-`decide` runs on the runtime's side, on a beat it chooses; `Load` carries what the runtime counts (children running and waiting, the budget left, descriptors in use and allowed), and `Decision` how many children may start until the next decision. **What this guarantees:** no fan-out, and no memory a child allocates through Nikaia, ends the program. **What it does not cover:** memory a Rust crate or a C library keeps, other processes, and the kernel's buffers.
+`decide` runs on the runtime's side, on a beat it chooses; `Load` carries what the runtime counts (children running and waiting, descriptors in use and allowed, the memory the system reports and what the tasks hold), and `Decision` how many children may start until the next decision and the budget each of them gets: a block of whole 64 KiB segments up to it, kept until the task ends (ADR-327 D15). `main`'s budget is the first decision, taken before `main` runs. **What this guarantees:** no fan-out, and no memory a child allocates through Nikaia, ends the program. **What it does not cover:** memory a Rust crate or a C library keeps, other processes, and the kernel's buffers.
 
 ### 12.1. The `sync` Keyword (CPU Constraints)
 Every function in Nikaia may pause unless it says otherwise. The `sync` keyword marks a function that **never pauses** and is never moved between threads mid-execution.

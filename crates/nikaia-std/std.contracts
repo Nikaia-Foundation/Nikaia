@@ -5440,23 +5440,27 @@ copies = true
 variants = ["Keep", "Cancel"]
 
 # **What the runtime counts for an admission strategy** (ADR-async-5 D18):
-# the tasks of the form running and waiting, and the descriptors the process
-# holds and may hold (`0` allowed where the system does not say). The memory
-# budget joins it with #490.
+# the tasks of the form running and waiting, the descriptors the process
+# holds and may hold (`0` allowed where the system does not say), and the
+# memory (ADR-327 D15): what the system reports, the cgroup's limit where one
+# is set, else the memory available (`0` where it does not say), and what the
+# tasks' blocks hold, in bytes.
 [type."task::Load"]
 pub = true
 crosses = true
 compares = true
 copies = true
-fields = ["pub running: i64", "pub waiting: i64", "pub descriptors_in_use: i64", "pub descriptors_allowed: i64"]
+fields = ["pub running: i64", "pub waiting: i64", "pub descriptors_in_use: i64", "pub descriptors_allowed: i64", "pub memory_reported: i64", "pub memory_held: i64"]
 
-# **How many tasks may start until the next decision** (ADR-async-5 D18).
+# **How many tasks may start until the next decision, and the budget each of
+# them gets** (ADR-async-5 D18, ADR-327 D7, D15): the bytes a task starting now
+# may hold, kept until it ends; less than a segment (64 KiB) is a segment.
 [type."task::Decision"]
 pub = true
 crosses = true
 compares = true
 copies = true
-fields = ["pub start: i64"]
+fields = ["pub start: i64", "pub budget: i64"]
 
 # **Who decides when the next task of a form starts** (ADR-async-5 D18):
 # `async(admission: s) { … }` takes one; asked where a task wants to start and
@@ -5469,8 +5473,11 @@ pub = true
 sync = true
 signature = "(mut self, load: task::Load) -> task::Decision"
 
-# **`std`'s strategy** (ADR-async-5 D18): tasks start while descriptors are
-# free, a quarter of the free ones at a time, keeping a reserve.
+# **`std`'s strategy** (ADR-async-5 D18, ADR-327 D15): tasks start while
+# descriptors are free, a quarter of the free ones at a time, keeping a
+# reserve; the memory not held is shared among the tasks running and wanting
+# to start and one share more, a starting task's budget, and none starts where
+# a share is less than a segment.
 [type."task::Adaptive"]
 pub = true
 crosses = true
@@ -5483,6 +5490,14 @@ touches = []
 signature = "() -> task::Adaptive"
 
 [impl."task::Admission for task::Adaptive"]
+
+# `std`'s decision for a load, as a task that wants to start asks it: a program
+# may ask it too, to see what it would decide.
+[fn."task::Adaptive::decide"]
+pub = true
+sync = true
+touches = []
+signature = "(mut self, load: task::Load) -> task::Decision"
 
 # **What `join(within:)` throws when the time ran out** (ADR-346 D4).
 [type."task::TimedOut"]
@@ -5962,6 +5977,9 @@ pub = true
 #
 # No `touches`, which is the fail-closed answer: what a send orders against is
 # whatever the other end does with the value.
+#
+# **`keeps = ["value"]`**: the value leaves the giver (ADR-327 D9), so what is
+# handed to a send is given away rather than lent, as with `Vec::push` (#1544).
 # Put a value in, waiting for room where there is none.
 #
 # It gives the thread up rather than holding it, so other work runs while this
@@ -5969,6 +5987,7 @@ pub = true
 [fn."channel::Sender::send"]
 pub = true
 panics = false
+keeps = ["value"]
 signature = "[T](self: ref channel::Sender[T], value: ?)"
 
 # **`-> T?`**, and the `?` is D3: a closed channel is the ordinary **end** of a
@@ -6906,7 +6925,6 @@ fields = ["pub last_uptime: time::Duration", "pub consecutive: i64", "pub since_
 [fn."supervisor::Restart::decide"]
 pub = true
 sync = true
-keeps = ["history"]
 signature = "(ref self, history: supervisor::Failures) -> supervisor::Next"
 
 # --- `simd`: vectors a program holds (ADR-377, provisional) ------------------

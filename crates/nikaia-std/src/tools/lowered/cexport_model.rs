@@ -274,8 +274,8 @@ pub(crate) fn cx_one_part(words: &winnow_grammar::InternerContext, plains: &[CxP
     let name = words.resolve(ty.name);
     let mut index: i64 = 0;
     while index < declared.len() as i64 {
-        if *nikaia_std::index::get(&declared, nikaia_std::index::at(index)) == name { return Some(CxPart::Record(index)); }
-        index += 1;
+        if *unsafe { nikaia_std::proven::read(&declared, (index) as usize) } == name { return Some(CxPart::Record(index)); }
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     None
 }
@@ -283,8 +283,8 @@ pub(crate) fn cx_one_part(words: &winnow_grammar::InternerContext, plains: &[CxP
 pub(crate) fn cx_part(words: &winnow_grammar::InternerContext, plains: &[CxPlain], declared: &[String], ty: &Type, written: &str) -> Result<CxPart, nikaia_std::error::Thrown<CxRefused>> {
     let mut found: Option<CxPart> = None;
     if words.resolve(ty.name) == "Array" && ty.generics.len() == 2 {
-        let element = cx_one_part(words, plains, declared, nikaia_std::index::get(&ty.generics, 0));
-        let count = nikaia_std::index::get(&ty.generics, 1).count;
+        let element = cx_one_part(words, plains, declared, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
+        let count = unsafe { nikaia_std::proven::read(&ty.generics, (1) as usize) }.count;
         if element.is_some() && count.is_some() { found = Some(CxPart::Array(Box::new(nikaia_std::index::or(element, || CxPart::Choice(0))), nikaia_std::index::or(count, || 0))); }
     } else { found = cx_one_part(words, plains, declared, ty); }
     Ok(match found { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(written, "field of an `extern` struct or enum")), &"cx_part")) })
@@ -363,8 +363,8 @@ pub fn cx_record_of(words: &winnow_grammar::InternerContext, records: &[CxRecord
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
     while ((at) as usize) < records.len() {
-        if nikaia_std::index::get(&records, (at) as usize).name == name { return Some(at); }
-        at += 1;
+        if unsafe { nikaia_std::proven::read(&records, (at) as usize) }.name == name { return Some(at); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     None
 }
@@ -375,7 +375,7 @@ pub fn cx_records_in_order(records: &[CxRecord]) -> Vec<i64> {
     while at < records.len() as i64 {
         let mut walking: Vec<i64> = vec![];
         cx_ordered(at, records, &mut order, &mut walking);
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     order
 }
@@ -424,8 +424,8 @@ pub fn cx_choice(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ty
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
     while ((at) as usize) < plains.len() {
-        if nikaia_std::index::get(&plains, (at) as usize).name == name { return Some(at); }
-        at += 1;
+        if unsafe { nikaia_std::proven::read(&plains, (at) as usize) }.name == name { return Some(at); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     None
 }
@@ -435,8 +435,8 @@ pub fn cx_handle_of(words: &winnow_grammar::InternerContext, handles: &[CxHandle
     let name = words.resolve(ty.name);
     let mut at: i64 = 0;
     while ((at) as usize) < handles.len() {
-        if nikaia_std::index::get(&handles, (at) as usize).name == name { return Some(at); }
-        at += 1;
+        if unsafe { nikaia_std::proven::read(&handles, (at) as usize) }.name == name { return Some(at); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     None
 }
@@ -446,7 +446,7 @@ pub fn cx_taken(words: &winnow_grammar::InternerContext, plains: &[CxPlain], han
     if record.is_some() { return Some(CxIn::Record(match record { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     let name = words.resolve(ty.name);
     if (name == "Array" || name == "Vec") && ty.generics.len() == 1 && !ty.is_nullable {
-        let element = cx_record_of(words, records, nikaia_std::index::get(&ty.generics, 0));
+        let element = cx_record_of(words, records, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
         if element.is_some() {
             let at = match element { Some(__nikaia_value) => __nikaia_value, None => return None };
             if name == "Array" && ty.is_view { return Some(CxIn::Records { record: at, whole: false }); }
@@ -477,7 +477,7 @@ pub fn cx_taken(words: &winnow_grammar::InternerContext, plains: &[CxPlain], han
     if ty.is_nullable || (*ty.code).is_some() { return None; }
     if (name == "String" || name == "str") && ty.is_view && ty.generics.is_empty() { return Some(CxIn::Run { rust: String::from("u8"), c: String::from("uint8_t"), as_text: true }); }
     if name == "Array" && ty.is_view && ty.generics.len() == 1 {
-        let shape = match cx_by_value(words, nikaia_std::index::get(&ty.generics, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let shape = match cx_by_value(words, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if shape.scalar { return None; }
         return Some(CxIn::Run { rust: shape.rust, c: shape.c, as_text: false });
     }
@@ -490,7 +490,7 @@ pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ha
     if record.is_some() { return Some(CxOut::Record(match record { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     let name = words.resolve(ty.name);
     if name == "Vec" && ty.generics.len() == 1 && !ty.is_view && !ty.is_nullable {
-        let element = cx_record_of(words, records, nikaia_std::index::get(&ty.generics, 0));
+        let element = cx_record_of(words, records, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
         if element.is_some() { return Some(CxOut::Records(match element { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     }
     if ty.is_nullable && !ty.is_view {
@@ -514,7 +514,7 @@ pub fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPlain], ha
     if choice.is_some() { return Some(CxOut::Choice(match choice { Some(__nikaia_value) => __nikaia_value, None => return None })); }
     if ty.is_nullable || ty.is_view || (*ty.code).is_some() { return None; }
     if (name == "String" || name == "Bytes") && ty.generics.is_empty() { return Some(CxOut::Buffer); }
-    if name == "Vec" && ty.generics.len() == 1 && words.resolve(nikaia_std::index::get(&ty.generics, 0).name) == "u8" { return Some(CxOut::Buffer); }
+    if name == "Vec" && ty.generics.len() == 1 && words.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name) == "u8" { return Some(CxOut::Buffer); }
     None
 }
 
@@ -537,7 +537,7 @@ pub fn cx_parameter_names(params: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     for param in names.iter() {
         let pieces: Vec<&str> = param.split(':').collect::<Vec<_>>();
-        out.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).trim().to_string()));
+        out.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).trim().to_string()));
     }
     out
 }
@@ -582,10 +582,10 @@ pub fn cx_handled_structs(words: &winnow_grammar::InternerContext, items: &[Span
                                 let mut other: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut places = places;
                                 while ((other) as usize) < types.len() {
                                     if other == at { places.push("__nikaia_v"); } else { places.push("_"); }
-                                    other += 1;
+                                    other = unsafe { nikaia_std::proven::add::<i64>(other, 1) };
                                 }
                                 fields.push((format!("{}_{}", variant_name, at), format!("{}({})", path, nikaia_std::block::Text::from(places.join(", "))), field.clone()));
-                                at += 1;
+                                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                             }
                         },
                         VariantFields::Named(named) => {
@@ -699,7 +699,7 @@ pub fn cx_variant_codes(words: &winnow_grammar::InternerContext, items: &[Spanne
                 for variant in variants.iter() {
                     let variant_name = nikaia_std::block::Text::from(words.resolve(variant.name).to_string());
                     next += 1;
-                    codes.push(CxCode { constant: nikaia_std::block::Text::from(variant_name.to_uppercase()), variant: Some(variant_name), number: next - 1, errno: None });
+                    codes.push(CxCode { constant: nikaia_std::block::Text::from(variant_name.to_uppercase()), variant: Some(variant_name), number: unsafe { nikaia_std::proven::sub::<i64>(next, 1) }, errno: None });
                 }
                 out.push(CxRaising { error, codes });
             },

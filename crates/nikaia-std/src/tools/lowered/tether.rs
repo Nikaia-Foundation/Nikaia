@@ -159,7 +159,7 @@ pub fn is_a_buffer(ty: &Ty) -> bool {
 pub(crate) fn a_buffer_name(name: &str, args: &[Ty]) -> bool {
     let base = base_name(name);
     if base == "String" || base == "Bytes" || base == "Mapped" { return true; }
-    if (base == "Vec" || base == "List") && !args.is_empty() { return names_u8(nikaia_std::index::get(&args, 0)); }
+    if (base == "Vec" || base == "List") && !args.is_empty() { return names_u8(unsafe { nikaia_std::proven::read(&args, (0) as usize) }); }
     false
 }
 
@@ -187,8 +187,8 @@ pub(crate) fn lives_in_a_local_keep(keep: &KeepAt) -> bool { matches!(keep, Keep
 pub(crate) fn an_argument(key: &str) -> String {
     let parts: Vec<&str> = key.split('#').collect::<Vec<_>>();
     if parts.len() < 2 { return format!("what `{}` reads", key); }
-    let place = nikaia_std::index::or(text::parse_i64(*nikaia_std::index::get(&parts, 1)), || 0) + 1;
-    format!("argument {} made in the call to `{}`", place, *nikaia_std::index::get(&parts, 0))
+    let place = nikaia_std::index::or(text::parse_i64(*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }), || 0) + 1;
+    format!("argument {} made in the call to `{}`", place, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) })
 }
 
 pub(crate) fn buffer_named(plan: &BufferPlan, wanted: i64) -> Option<String> {
@@ -209,7 +209,7 @@ pub(crate) fn padded(word: &str, width: i64) -> String {
     let mut n = nikaia_std::list::chars(word.chars()).len() as i64;
     while n < width {
         out.push(' ');
-        n = n + 1;
+        n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };
     }
     out
 }

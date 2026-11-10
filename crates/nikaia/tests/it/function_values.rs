@@ -256,7 +256,7 @@ fn a_method_named_where_a_function_value_is_kept_runs() {
          \x20   f: fn(ref P, i64) -> i64 sync,\n\
          }\n\
          struct Own {\n\
-         \x20   f: fn(P, i64) -> i64,\n\
+         \x20   f: fn(keep P, i64) -> i64,\n\
          }\n\
          struct Slow {\n\
          \x20   f: fn(i64) -> i64,\n\
@@ -268,7 +268,7 @@ fn a_method_named_where_a_function_value_is_kept_runs() {
          fn keep(keep f: fn(ref P, i64) -> i64 sync) -> One {\n\
          \x20   return One { f: f }\n\
          }\n\
-         fn keep_own(keep f: fn(P, i64) -> i64) -> Own {\n\
+         fn keep_own(keep f: fn(keep P, i64) -> i64) -> Own {\n\
          \x20   return Own { f: f }\n\
          }\n\
          fn keep_slow(keep f: fn(i64) -> i64) -> Slow {\n\

@@ -51,7 +51,7 @@ impl CheckState {
         #[allow(unused_mut)] let mut sorted: Vec<String> = ring.copy_owned();
         sorted.sort();
         let mut unique: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
-        for name in sorted.iter() { if unique.is_empty() || *nikaia_std::index::get(&unique, nikaia_std::index::at(unique.len() as i64 - 1)) != *name { unique.push(nikaia_std::block::Text::from(name.to_string())); } }
+        for name in sorted.iter() { if unique.is_empty() || *unsafe { nikaia_std::proven::read(&unique, (nikaia_std::proven::sub::<i64>(unique.len() as i64, 1)) as usize) } != *name { unique.push(nikaia_std::block::Text::from(name.to_string())); } }
         if self.said_rings.contains(&unique) { return; }
         self.said_rings.insert(unique);
         let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);

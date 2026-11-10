@@ -4,9 +4,9 @@
 pub fn previous_token(source: &str, end: i64) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(source.chars());
     if end <= 0 { return String::from(""); }
-    let last = *nikaia_std::index::get(&c, nikaia_std::index::at(end - 1));
-    let mut start = end - 1;
-    if a_word_char(last) { while start > 0 && a_word_char(*nikaia_std::index::get(&c, nikaia_std::index::at(start - 1))) { start -= 1; } } else if an_operator_char(last) { while start > 0 && an_operator_char(*nikaia_std::index::get(&c, nikaia_std::index::at(start - 1))) { start -= 1; } }
+    let last = *nikaia_std::index::get(&c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(end, 1) }));
+    let mut start = unsafe { nikaia_std::proven::sub::<i64>(end, 1) };
+    if a_word_char(last) { while start > 0 && a_word_char(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(start, 1)) as usize) }) { start = unsafe { nikaia_std::proven::sub::<i64>(start, 1) }; } } else if an_operator_char(last) { while start > 0 && an_operator_char(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::sub::<i64>(start, 1)) as usize) }) { start = unsafe { nikaia_std::proven::sub::<i64>(start, 1) }; } }
     slice(&c, start, end)
 }
 
@@ -20,12 +20,12 @@ pub fn unclosed_quote(source: &str) -> i64 {
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if open >= 0 {
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '\\' {
-                at += 2;
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
                 continue;
             }
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' { open = -1; }
-        } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' { open = at; } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '/' && at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/' {
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { open = -1; }
+        } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { open = at; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
             at = past_the_line(&c, at);
             continue;
         }
@@ -41,24 +41,24 @@ pub fn unclosed_bracket(source: &str) -> i64 {
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if in_string {
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '\\' {
-                at += 2;
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
                 continue;
             }
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' { in_string = false; }
-        } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' { in_string = true; } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '/' && at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/' {
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { in_string = false; }
+        } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' { in_string = true; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
             at = past_the_line(&c, at);
             continue;
-        } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '{' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '(' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '[' { stack.push(at); } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '}' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == ')' || *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == ']' { stack.pop(); }
+        } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '{' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '(' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '[' { stack.push(at); } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '}' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ')' || *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == ']' { stack.pop(); }
         at += 1;
     }
     if stack.is_empty() { return -1; }
-    *nikaia_std::index::get(&stack, nikaia_std::index::at(stack.len() as i64 - 1))
+    *unsafe { nikaia_std::proven::read(&stack, (nikaia_std::proven::sub::<i64>(stack.len() as i64, 1)) as usize) }
 }
 
 pub(crate) fn past_the_line(c: &[scalar], at: i64) -> i64 {
     let mut k = at;
-    while k < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(k)) != '\n' { k += 1; }
+    while k < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (k) as usize) } != '\n' { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
     k + 1
 }
 
@@ -68,43 +68,43 @@ pub fn opening_of_an_unclosed_comment(source: &str) -> i64 {
     let mut at: i64 = 0;
     while at < c.len() as i64 {
         if open.is_empty() {
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' {
-                at += 1;
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' {
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                 while at < c.len() as i64 {
-                    if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '\\' { at += 2; } else if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '"' {
-                        at += 1;
+                    if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' { at = unsafe { nikaia_std::proven::add::<i64>(at, 2) }; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '"' {
+                        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                         break;
-                    } else { at += 1; }
+                    } else { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
                 }
                 continue;
             }
-            if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '/' && at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/' {
-                while at < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at)) != '\n' { at += 1; }
+            if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' {
+                while at < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (at) as usize) } != '\n' { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
                 continue;
             }
         }
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '/' && at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '*' {
+        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '/' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '*' {
             open.push(at);
-            at += 2;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;
         }
-        if *nikaia_std::index::get(&c, nikaia_std::index::at(at)) == '*' && at + 1 < c.len() as i64 && *nikaia_std::index::get(&c, nikaia_std::index::at(at + 1)) == '/' && !open.is_empty() {
+        if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '*' && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == '/' && !open.is_empty() {
             open.pop();
-            at += 2;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 2) };
             continue;
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     if open.is_empty() { return -1; }
-    *nikaia_std::index::get(&open, 0)
+    *unsafe { nikaia_std::proven::read(&open, (0) as usize) }
 }
 
 pub fn first_sentence(text: &str) -> Vec<String> {
     let c: Vec<scalar> = nikaia_std::list::chars(text.chars());
     let mut quoted = false;
     for at in 0..c.len() as i64 {
-        if *nikaia_std::index::get(&c, (at) as usize) == '`' { quoted = !quoted; } else if *nikaia_std::index::get(&c, (at) as usize) == '.' && !quoted && ((at + 1) as usize) < c.len() && *nikaia_std::index::get(&c, (at + 1) as usize) == ' ' {
-            let rest = nikaia_std::block::Text::from(slice(&c, at + 1, c.len() as i64).trim().to_string());
+        if *nikaia_std::index::get(&c, (at) as usize) == '`' { quoted = !quoted; } else if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '.' && !quoted && ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < c.len() && *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } == ' ' {
+            let rest = nikaia_std::block::Text::from(slice(&c, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, c.len() as i64).trim().to_string());
             if rest.is_empty() { return vec![slice(&c, 0, at + 1)]; }
             return vec![slice(&c, 0, at + 1), rest];
         }

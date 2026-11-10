@@ -70,7 +70,7 @@ pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i
     };
     if !block.stmts.is_empty() {
         let first = nikaia_std::index::get(&block.stmts, 0).span.start as i64;
-        let last = nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).span.end as i64;
+        let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.span.end as i64;
         cut.push((first, last));
     }
 }
@@ -78,7 +78,7 @@ pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i
 pub(crate) fn sysroot_package_at(text: &str, at: i64, word: &str) -> bool {
     let n = word.as_bytes().len() as i64;
     if at < 0 || at + n > text.as_bytes().len() as i64 { return false; }
-    let head = match nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(at..at + n)).text() {
+    let head = match unsafe { nikaia_std::proven::cut(&text.as_bytes(), (at) as usize, (nikaia_std::proven::add::<i64>(at, n)) as usize) }.text() {
         Ok(value) => value,
         Err(_error) => { return false; },
     };
@@ -97,7 +97,7 @@ pub(crate) fn sysroot_package_word_byte(b: i64) -> bool { b >= 48 && b <= 57 || 
 pub(crate) fn sysroot_package_has_for(text: &str, at: i64) -> bool {
     let n = text.as_bytes().len() as i64;
     let mut end = at;
-    while end < n && *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(end)) != 123 { end += 1; }
+    while end < n && *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(end)) != 123 { end = unsafe { nikaia_std::proven::add::<i64>(end, 1) }; }
     sysroot_package_slice(text, at, end).contains(" for ")
 }
 
@@ -195,20 +195,20 @@ pub fn sysroot_package_shared(text: &str) -> String {
 pub(crate) fn sysroot_package_raw_string(text: &str, at: i64) -> Option<i64> {
     let n = text.as_bytes().len() as i64;
     let mut i = at;
-    if *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) == 98 { i += 1; }
+    if *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) == 98 { i = unsafe { nikaia_std::proven::add::<i64>(i, 1) }; }
     if i >= n || *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) != 114 { return None; }
-    i += 1;
+    i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     let mut close: String = String::from("\"");
     while i < n && *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) == 35 {
         close.push_str("#");
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if i >= n || *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(i)) != 34 { return None; }
     let width = close.as_bytes().len() as i64;
-    let mut j = i + 1;
+    let mut j = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     while j + width <= n {
         if sysroot_package_at(text, j, &close) { return Some(j + width - 1); }
-        j += 1;
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
     }
     None
 }
@@ -252,20 +252,20 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
     let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut imports = imports;
     let mut has_grammar = false;
     for at in 0..names.len() as i64 {
-        let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (at) as usize)).to_string());
+        let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (at) as usize) }).to_string());
         let mut body: String = String::from("");
         let all: Vec<String> = (*nikaia_std::index::get(&lowered, (at) as usize)).lines().map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
         let mut i: i64 = 0; #[allow(clippy::redundant_locals)] let all = all;
         while ((i) as usize) < all.len() {
-            if *nikaia_std::index::get(&all, (i) as usize) == "#[allow(unused_imports)]" && ((i + 1) as usize) < all.len() && (*nikaia_std::index::get(&all, (i + 1) as usize)).starts_with("use nikaia_std::") {
-                let import = nikaia_std::block::Text::from((*nikaia_std::index::get(&all, (i + 1) as usize)).to_string());
-                i += 2;
+            if *unsafe { nikaia_std::proven::read(&all, (i) as usize) } == "#[allow(unused_imports)]" && ((unsafe { nikaia_std::proven::add::<i64>(i, 1) }) as usize) < all.len() && (*unsafe { nikaia_std::proven::read(&all, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }).starts_with("use nikaia_std::") {
+                let import = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&all, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }).to_string());
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 2) };
                 if !nikaia_std::list::contains(&imports, &import) { imports.push(import); }
                 continue;
             }
-            body.push_str(nikaia_std::index::get(&all, (i) as usize));
+            body.push_str(unsafe { nikaia_std::proven::read(&all, (i) as usize) });
             body.push_str("\n");
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         let file_grammar = nikaia_std::index::get(&views, (at) as usize).items.iter().any(|item| { matches!(item.node, Item::Grammar(_)) });
         if file_grammar { has_grammar = true; }
@@ -274,11 +274,11 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
             false => "    #[allow(unused_imports)]\n    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};\n",
         };
         let stem = name.trim_end_matches(".nika");
-        modules.push((nikaia_std::block::Text::from(stem.to_string()), format!("mod {}_lowered {{\n    #[allow(unused_imports)]\n    use super::*;\n{}    include!(\"{}/{}.rs\");\n}}\n#[allow(unused_imports)]\npub use {}_lowered::*;\n\n", stem, block_names, SYSROOT_TOOLS_FILES, stem, stem)));
+        modules.push((nikaia_std::block::Text::from(stem.to_string()), format!("#[allow(unsafe_code)]\nmod {}_lowered {{\n    #[allow(unused_imports)]\n    use super::*;\n{}    include!(\"{}/{}.rs\");\n}}\n#[allow(unused_imports)]\npub use {}_lowered::*;\n\n", stem, block_names, SYSROOT_TOOLS_FILES, stem, stem)));
         let shown = sysroot_package_shared(body.trim_start_matches("\n"));
         let text = format!("// Generated by the Nikaia bootstrap compiler (Stage 0).\n// Edit {} in the directory above, not this file.\n\n{}", name, shown);
         files.push((format!("{}/{}.rs", SYSROOT_TOOLS_FILES, stem), text));
-        facades.push((nikaia_std::block::Text::from(stem.to_string()), sysroot_package_facade(&name, nikaia_std::index::get(&views, (at) as usize))));
+        facades.push((nikaia_std::block::Text::from(stem.to_string()), sysroot_package_facade(&name, unsafe { nikaia_std::proven::read(&views, (at) as usize) })));
     }
     modules.sort();
     facades.sort();
@@ -312,14 +312,14 @@ pub(crate) const SYSROOT_PACKAGE_HANDED: &[&str] = &["scalar", "IntoEither", "In
 pub fn sysroot_package_with_dependencies(package: &[(String, String)], dependencies: &[(String, Vec<(String, String)>)]) -> Vec<(String, String)> {
     let mut index = nikaia_std::block::Text::from(nikaia_std::index::get(&package, 0).1.to_string());
     let mut files: Vec<(String, String)> = vec![];
-    for at in 1..package.len() as i64 { files.push((*nikaia_std::index::get(&package, (at) as usize)).clone()); }
+    for at in 1..package.len() as i64 { files.push((*unsafe { nikaia_std::proven::read(&package, (at) as usize) }).clone()); }
     let handed = SYSROOT_PACKAGE_HANDED.iter().join(", ");
     for (name, theirs) in dependencies.iter() {
         index.push_str(&format!("pub mod {} {{\n    #[allow(unused_imports)]\n    use super::{{{}}};\n    include!(\"{}/{}/{}\");\n}}\n", name, handed, SYSROOT_TOOLS_FILES, name, SYSROOT_TOOLS_PACKAGE));
         for (file, text) in theirs.iter() { files.push((format!("{}/{}/{}", SYSROOT_TOOLS_FILES, name, file), nikaia_std::block::Text::from(text.to_string()))); }
     }
     files.sort();
-    let mut all: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(nikaia_std::index::get(&package, 0).0.to_string()), index)];
+    let mut all: Vec<(String, String)> = vec![(nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&package, (0) as usize) }.0.to_string()), index)];
     all.extend(files);
     all
 }

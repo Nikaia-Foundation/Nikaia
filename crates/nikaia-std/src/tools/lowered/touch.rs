@@ -210,14 +210,14 @@ pub(crate) fn literal_for(contract: &FnContract, parameter: &str, literals: &[Op
         if name == "self" { return None; }
         if name == parameter {
             if ((at) as usize) >= literals.len() { return None; }
-            let text = match match nikaia_std::index::get(&literals, (at) as usize) {
+            let text = match match unsafe { nikaia_std::proven::read(&literals, (at) as usize) } {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             } { Some(__nikaia_value) => __nikaia_value, None => return None };
             if text.contains("\"") || text.contains("\\") || text.contains("\n") { return None; }
             return Some(text);
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     None
 }

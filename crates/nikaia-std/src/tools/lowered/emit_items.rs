@@ -115,7 +115,7 @@ pub fn library_error_path(name: &str, is_std: bool) -> String {
 pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections::BTreeSet<String>, library: &Ledger, pattern: &MatchPattern) -> Option<String> {
     let path = match match_path(pattern) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if path.len() == 1 {
-        let bare = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, 0)).to_string());
+        let bare = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         if error_kind(declared, library, &bare) == 1 { return Some(bare); }
         return None;
     }
@@ -128,7 +128,7 @@ pub fn member_of(words: &winnow_grammar::InternerContext, declared: &collections
     let written = nikaia_std::block::Text::from(whole.join("::"));
     if error_kind(declared, library, &written) != 0 { return Some(written); }
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for at in 0..path.len() as i64 - 1 { parts.push(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, (at) as usize)).to_string())); }
+    for at in 0..unsafe { nikaia_std::proven::sub::<i64>(path.len() as i64, 1) } { parts.push(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&path, (at) as usize) }).to_string())); }
     let member = nikaia_std::block::Text::from(parts.join("::"));
     if error_kind(declared, library, &member) == 0 { return None; }
     Some(member)

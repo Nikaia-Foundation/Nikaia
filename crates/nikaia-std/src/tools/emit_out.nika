@@ -41,16 +41,37 @@ pub fn emit_out_placed(mut entries: Vec[EmitMapEntry], by: i64, unit: i64) {
 pub struct EmitOut {
     pub buf: String,
     pub entries: Vec[EmitMapEntry],
+    /// How many `unsafe { … }` blocks of a proved operation the text being
+    /// written is inside (ADR-306 D26): a proved read inside a proved index
+    /// writes no second `unsafe`, which `rustc` would call unnecessary.
+    pub unsafe_depth: i64,
 }
 
 impl EmitOut {
     /// An empty buffer and an empty map.
     pub fn empty() -> EmitOut {
-        return EmitOut { buf: "", entries: [] }
+        return EmitOut { buf: "", entries: [], unsafe_depth: 0 }
     }
 
     pub fn push(ref mut self, text: ref String) {
         self.buf.push_str(text)
+    }
+
+    /// Opens the `unsafe` block a proved operation stands in: `unsafe { `,
+    /// only where no such block is open already (ADR-306 D26).
+    pub fn open_unsafe(ref mut self) {
+        if self.unsafe_depth == 0 {
+            self.buf.push_str("unsafe { ")
+        }
+        self.unsafe_depth += 1
+    }
+
+    /// Closes what `open_unsafe` opened: ` }` once the outermost is done.
+    pub fn close_unsafe(ref mut self) {
+        self.unsafe_depth -= 1
+        if self.unsafe_depth == 0 {
+            self.buf.push_str(" }")
+        }
     }
 
     /// Where what is about to be written starts.

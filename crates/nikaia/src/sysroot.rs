@@ -392,6 +392,9 @@ pub fn tools_build() -> crate::emit::Build {
     crate::emit::Build {
         target: crate::emit::Target::X86_64Linux,
         user_parallelism: crate::emit::UserParallelism::Yes,
+        // **The D26 default** ([ADR-306](../../../docs/specification/adr/adr-306.md) D27).
+        bounds: crate::bounds::BoundsChecks::Removed,
+        overflow: crate::bounds::OverflowChecks::Removed,
         ..crate::emit::Build::default()
     }
 }

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1374] — 2026-11-10
+
+**Memory budget: weigh a value at a hand-over (ADR-327 D9) (#1540)**
+- Memory budget follows a value across a hand-over: send, receive, shared set and join move its weight to the receiver; one that does not fit crashes the receiving task, a shared value is poisoned (ADR-327 D9).
+
 ## [0.0.1373] — 2026-11-10
 
 **http: head_timeout, body_bytes_per_second and idle_timeout with keep-alive, on net::Connection.read(within:) (#1526)**

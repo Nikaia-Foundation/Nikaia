@@ -93,7 +93,7 @@ pub fn describe_adopt_refusal(declared: &str, crate_word: &str, shipped: &std::p
     let more = match moved.len() as i64 {
         1 => String::from(""),
         2 => String::from(" and 1 more file"),
-        _ => format!(" and {} more files", moved.len() as i64 - 1),
+        _ => format!(" and {} more files", unsafe { nikaia_std::proven::sub::<i64>(moved.len() as i64, 1) }),
     };
     Some(format!("`{}` has changed since its shipped description was reviewed: `{}`{} changed since.\nA description is written by a person, so the crate's nikaia.contracts has to be reviewed again, not just regenerated.", declared, first, more))
 }

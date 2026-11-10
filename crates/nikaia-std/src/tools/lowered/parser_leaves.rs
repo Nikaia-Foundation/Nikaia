@@ -64,7 +64,7 @@ impl PrTrivia {
     pub fn noted(&mut self, start: i64, end: i64) {
         let low = self.before(start);
         let mut around: i64 = -1;
-        if low < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(low)) == start { around = low; } else if low > 0 { around = low - 1; }
+        if low < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(low)) == start { around = low; } else if low > 0 { around = unsafe { nikaia_std::proven::sub::<i64>(low, 1) }; }
         if around >= 0 && *nikaia_std::index::get(&self.ends, nikaia_std::index::at(around)) >= end { return; }
         while low < self.starts.len() as i64 && *nikaia_std::index::get(&self.starts, nikaia_std::index::at(low)) < end {
             self.starts.remove(nikaia_std::count::of(low));

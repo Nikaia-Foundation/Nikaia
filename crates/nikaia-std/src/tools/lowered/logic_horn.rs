@@ -182,7 +182,7 @@ pub(crate) fn lg_horn_and(arena: &TermArena, parts: &[i64], first: &str) -> Stri
         written.push(lg_term(arena, part));
     }
     if written.is_empty() { return String::from("true"); }
-    if written.len() == 1 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&written, 0)).to_string()); }
+    if written.len() == 1 { return nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written, (0) as usize) }).to_string()); }
     format!("(and {})", nikaia_std::block::Text::from(written.join(" ")))
 }
 

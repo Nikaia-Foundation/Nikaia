@@ -42,7 +42,7 @@ pub fn check_byte_literal(written: &str) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn block_tail(block: &Block) -> Vec<&Expr> {
     if block.stmts.is_empty() { return vec![]; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(value) => vec![value],
         _ => vec![],
     }
@@ -52,7 +52,7 @@ pub(crate) fn block_tail(block: &Block) -> Vec<&Expr> {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_texts_ends_in_a_jump(block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
-    matches!(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node, Stmt::Return(_) | Stmt::Break | Stmt::Continue)
+    matches!(unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node, Stmt::Return(_) | Stmt::Break | Stmt::Continue)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -76,7 +76,7 @@ pub(crate) fn both_tails_text(first: &Block, second: &Block) -> bool { tail_is_t
 // this was written - see `contracts::sync`.
 pub(crate) fn tail_is_text(block: &Block) -> bool {
     let tail = block_tail(block);
-    tail.len() == 1 && ends_in_text(*nikaia_std::index::get(&tail, 0))
+    tail.len() == 1 && ends_in_text(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -119,7 +119,7 @@ pub fn ends_in_null(expr: &Expr) -> bool {
 // this was written - see `contracts::sync`.
 pub(crate) fn tail_is_null(block: &Block) -> bool {
     let tail = block_tail(block);
-    tail.len() == 1 && ends_in_null(*nikaia_std::index::get(&tail, 0))
+    tail.len() == 1 && ends_in_null(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -154,7 +154,7 @@ pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
             let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
             let first = block_tail(then_branch);
             let second = block_tail(otherwise); #[allow(clippy::redundant_locals)] let first = first;
-            return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), text) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), text);
+            return first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&first, (0) as usize) }, text) && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&second, (0) as usize) }, text);
         },
         Expr::Match { arms, .. } => {
             if arms.is_empty() { return false; }
@@ -163,11 +163,11 @@ pub(crate) fn check_texts_ends_in_literal(expr: &Expr, text: bool) -> bool {
         },
         Expr::Block(block, _) => {
             let ends = block_tail(block);
-            return ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), text);
+            return ends.len() == 1 && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&ends, (0) as usize) }, text);
         },
         Expr::AsyncGroup(block, _, _, _, _) => {
             let ends = block_tail(block);
-            return ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), text);
+            return ends.len() == 1 && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&ends, (0) as usize) }, text);
         },
         _ => return false,
     }
@@ -187,7 +187,7 @@ impl CheckState {
         }
         if method_word(world, value) == "to_string" {
             let receiver = receiver_of(value);
-            if receiver.len() == 1 && a_text_literal_expr(*nikaia_std::index::get(&receiver, 0)) { return self.text_literal(world, want, *nikaia_std::index::get(&receiver, 0), owned); }
+            if receiver.len() == 1 && a_text_literal_expr(*unsafe { nikaia_std::proven::read(&receiver, (0) as usize) }) { return self.text_literal(world, want, *unsafe { nikaia_std::proven::read(&receiver, (0) as usize) }, owned); }
         }
         match value {
             Expr::LitChar(written, _) => {
@@ -241,9 +241,9 @@ impl CheckState {
                     let otherwise = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
                     let first = block_tail(then_branch);
                     let second = block_tail(otherwise); #[allow(clippy::redundant_locals)] let first = first;
-                    if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&first, 0), true) && check_texts_ends_in_literal(*nikaia_std::index::get(&second, 0), true) {
-                        self.text_literal(world, want, *nikaia_std::index::get(&first, 0), owned);
-                        return self.text_literal(world, want, *nikaia_std::index::get(&second, 0), owned);
+                    if first.len() == 1 && second.len() == 1 && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&first, (0) as usize) }, true) && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&second, (0) as usize) }, true) {
+                        self.text_literal(world, want, *unsafe { nikaia_std::proven::read(&first, (0) as usize) }, owned);
+                        return self.text_literal(world, want, *unsafe { nikaia_std::proven::read(&second, (0) as usize) }, owned);
                     }
                     return None;
                 }
@@ -256,17 +256,17 @@ impl CheckState {
             },
             Expr::Block(block, _) => {
                 let ends = block_tail(block);
-                if ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), true) { return self.text_literal(world, want, *nikaia_std::index::get(&ends, 0), owned); }
+                if ends.len() == 1 && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&ends, (0) as usize) }, true) { return self.text_literal(world, want, *unsafe { nikaia_std::proven::read(&ends, (0) as usize) }, owned); }
                 return None;
             },
             Expr::AsyncGroup(block, _, _, _, _) => {
                 let ends = block_tail(block);
-                if ends.len() == 1 && check_texts_ends_in_literal(*nikaia_std::index::get(&ends, 0), true) { return self.text_literal(world, want, *nikaia_std::index::get(&ends, 0), owned); }
+                if ends.len() == 1 && check_texts_ends_in_literal(*unsafe { nikaia_std::proven::read(&ends, (0) as usize) }, true) { return self.text_literal(world, want, *unsafe { nikaia_std::proven::read(&ends, (0) as usize) }, owned); }
                 return None;
             },
             Expr::ListLit { items, .. } => {
                 let element: Ty = match want {
-                    Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown },
+                    Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { Ty::Unknown },
                     _ => Ty::Unknown,
                 };
                 if !items.is_empty() && check_texts_all_text(&element, items) {
@@ -286,8 +286,8 @@ impl CheckState {
                 if !parts.is_empty() && (wanted.len() as i64) == parts.len() as i64 && check_texts_tuple_all_text(&wanted, parts) {
                     let mut i: i64 = 0;
                     while ((i) as usize) < parts.len() {
-                        self.text_literal(world, nikaia_std::index::get(&wanted, (i) as usize), nikaia_std::index::get(&parts, (i) as usize), true);
-                        i += 1;
+                        self.text_literal(world, unsafe { nikaia_std::proven::read(&wanted, (i) as usize) }, unsafe { nikaia_std::proven::read(&parts, (i) as usize) }, true);
+                        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
                     }
                     return Some(want.clone());
                 }
@@ -304,7 +304,7 @@ impl CheckState {
                 if else_branch.is_some() {
                     for block in [then_branch, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }] {
                         let tail = block_tail(block);
-                        if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) {
+                        if tail.len() == 1 { self.some_at_the_tails(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) }); } else if !check_texts_ends_in_a_jump(block) {
                             self.facts.some_tails.insert(text_key(arm));
                             return;
                         }
@@ -315,11 +315,11 @@ impl CheckState {
             },
             Expr::Block(block, _) => {
                 let tail = block_tail(block);
-                if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
+                if tail.len() == 1 { self.some_at_the_tails(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) }); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
             },
             Expr::AsyncGroup(block, _, _, _, _) => {
                 let tail = block_tail(block);
-                if tail.len() == 1 { self.some_at_the_tails(*nikaia_std::index::get(&tail, 0)); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
+                if tail.len() == 1 { self.some_at_the_tails(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) }); } else if !check_texts_ends_in_a_jump(block) { self.facts.some_tails.insert(text_key(arm)); }
             },
             Expr::Match { arms, .. } => { for each in arms.iter() { self.some_at_the_tails(&each.body); } },
             Expr::LitNull(_) => { },
@@ -334,11 +334,11 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub fn tuple_list_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let element: Ty = match want {
-            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return None; },
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return None; },
             _ => return None,
         };
         let held: Ty = match found {
-            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { return None; },
+            Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return None; },
             _ => return None,
         };
         match value {
@@ -396,27 +396,27 @@ impl CheckState {
         let mut answered: Vec<Ty> = vec![];
         let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts;
         while at < parts.len() as i64 {
-            let mut got = self.text_literal(world, nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at)), true);
-            if got.is_none() { got = self.tuple_literal(world, nikaia_std::index::get(&founds, nikaia_std::index::at(at)), nikaia_std::index::get(&wants, nikaia_std::index::at(at)), *nikaia_std::index::get(&parts, nikaia_std::index::at(at))); }
-            if got.is_none() && check_core_stmt_element_view(self, world, *nikaia_std::index::get(&parts, nikaia_std::index::at(at)), nikaia_std::index::get(&founds, nikaia_std::index::at(at)), nikaia_std::index::get(&wants, nikaia_std::index::at(at))) == 1 {
-                self.facts.lent_reads.insert(node_key(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))));
-                if check_overflow_a_nullable(nikaia_std::index::get(&wants, nikaia_std::index::at(at))) {
-                    self.facts.wrapped.remove(&(id_of(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64));
-                    self.facts.nullable_args.insert(id_of(*nikaia_std::index::get(&parts, nikaia_std::index::at(at))) as i64, FactWrap::Constructor);
+            let mut got = self.text_literal(world, unsafe { nikaia_std::proven::read(&wants, (at) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (at) as usize) }, true);
+            if got.is_none() { got = self.tuple_literal(world, unsafe { nikaia_std::proven::read(&founds, (at) as usize) }, unsafe { nikaia_std::proven::read(&wants, (at) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (at) as usize) }); }
+            if got.is_none() && check_core_stmt_element_view(self, world, *unsafe { nikaia_std::proven::read(&parts, (at) as usize) }, unsafe { nikaia_std::proven::read(&founds, (at) as usize) }, unsafe { nikaia_std::proven::read(&wants, (at) as usize) }) == 1 {
+                self.facts.lent_reads.insert(node_key(*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }));
+                if check_overflow_a_nullable(unsafe { nikaia_std::proven::read(&wants, (at) as usize) }) {
+                    self.facts.wrapped.remove(&(id_of(*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) as i64));
+                    self.facts.nullable_args.insert(id_of(*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }) as i64, FactWrap::Constructor);
                 }
-                got = Some((*nikaia_std::index::get(&wants, nikaia_std::index::at(at))).clone());
+                got = Some((*unsafe { nikaia_std::proven::read(&wants, (at) as usize) }).clone());
             }
-            if got.is_none() && check_overflow_a_nullable(nikaia_std::index::get(&wants, nikaia_std::index::at(at))) {
-                match *nikaia_std::index::get(&parts, nikaia_std::index::at(at)) {
-                    Expr::LitNull(_) => { got = Some((*nikaia_std::index::get(&wants, nikaia_std::index::at(at))).clone()); },
+            if got.is_none() && check_overflow_a_nullable(unsafe { nikaia_std::proven::read(&wants, (at) as usize) }) {
+                match *unsafe { nikaia_std::proven::read(&parts, (at) as usize) } {
+                    Expr::LitNull(_) => { got = Some((*unsafe { nikaia_std::proven::read(&wants, (at) as usize) }).clone()); },
                     _ => { },
                 }
             }
             if got.is_some() {
                 built = true;
                 answered.push(nikaia_std::index::or(got, || Ty::Unknown));
-            } else { answered.push((*nikaia_std::index::get(&founds, nikaia_std::index::at(at))).clone()); }
-            at = at + 1;
+            } else { answered.push((*unsafe { nikaia_std::proven::read(&founds, (at) as usize) }).clone()); }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         if !built { return None; }
         Some(Ty::Tuple(answered))
@@ -432,12 +432,12 @@ impl CheckState {
         let found_args = named_arguments(found);
         let items = list_items(value);
         if name != "Vec" || items.is_empty() || wanted_args.len() != 1 || found_args.len() != 1 { return None; }
-        let a_tuple = matches!(*nikaia_std::index::get(&wanted_args, 0), Ty::Tuple(_));
+        let a_tuple = matches!(*unsafe { nikaia_std::proven::read(&wanted_args, (0) as usize) }, Ty::Tuple(_));
         if !a_tuple { return None; }
         let mut built: Option<Ty> = None;
         for item in items.iter() {
             let item = *item;
-            built = self.tuple_literal(world, nikaia_std::index::get(&found_args, 0), nikaia_std::index::get(&wanted_args, 0), item);
+            built = self.tuple_literal(world, unsafe { nikaia_std::proven::read(&found_args, (0) as usize) }, unsafe { nikaia_std::proven::read(&wanted_args, (0) as usize) }, item);
             if built.is_none() { return None; }
         }
         let element = match built { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -472,19 +472,19 @@ pub fn tuple_ends(expr: &Expr) -> Vec<&Expr> {
             for block in [then_branch, otherwise] {
                 let tail = block_tail(block);
                 if tail.len() != 1 { return vec![]; }
-                for end in tuple_ends(*nikaia_std::index::get(&tail, 0)) { out.push(end); }
+                for end in tuple_ends(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) }) { out.push(end); }
             }
         },
         Expr::Match { arms, .. } => { for arm in arms.iter() { for end in tuple_ends(&arm.body) { out.push(end); } } },
         Expr::Block(block, _) => {
             let tail = block_tail(block);
             if tail.len() != 1 { return vec![]; }
-            return tuple_ends(*nikaia_std::index::get(&tail, 0));
+            return tuple_ends(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) });
         },
         Expr::AsyncGroup(block, _, _, _, _) => {
             let tail = block_tail(block);
             if tail.len() != 1 { return vec![]; }
-            return tuple_ends(*nikaia_std::index::get(&tail, 0));
+            return tuple_ends(*unsafe { nikaia_std::proven::read(&tail, (0) as usize) });
         },
         _ => { out.push(expr); },
     }
@@ -576,7 +576,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_texts_all_chars(element: &Ty, items: &[Expr]) -> bool {
     let (bytes, inner) = match element {
-        Ty::Named { name, args, view } => { let view = *view; (!view && name == "u8" && args.is_empty(), if !view && name == "Vec" && args.len() == 1 { (*nikaia_std::index::get(&args, 0)).clone() } else { Ty::Unknown }) },
+        Ty::Named { name, args, view } => { let view = *view; (!view && name == "u8" && args.is_empty(), if !view && name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { Ty::Unknown }) },
         _ => (false, Ty::Unknown),
     };
     for item in items.iter() {
@@ -621,8 +621,8 @@ pub(crate) fn check_texts_text_for(element: &Ty, item: &Expr) -> bool {
 pub(crate) fn check_texts_tuple_all_text(each: &[Ty], parts: &[Expr]) -> bool {
     let mut i: i64 = 0;
     while ((i) as usize) < parts.len() {
-        if !check_texts_text_for(nikaia_std::index::get(&each, (i) as usize), nikaia_std::index::get(&parts, (i) as usize)) { return false; }
-        i += 1;
+        if !check_texts_text_for(nikaia_std::index::get(&each, (i) as usize), unsafe { nikaia_std::proven::read(&parts, (i) as usize) }) { return false; }
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     true
 }

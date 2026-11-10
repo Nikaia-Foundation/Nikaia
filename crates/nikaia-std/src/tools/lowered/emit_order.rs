@@ -29,17 +29,17 @@ pub fn emit_order(block: &Block, proofs: &EmitOrderProofs, words: &winnow_gramma
             let mut other = EmitOrderTouch { reads: vec![], writes: vec![] };
             if emit_order_branch(&stmt.node, proofs, words, &mut other) { passable.insert(i, other); }
         }
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     for i in 0..count {
         let mut at = order.len() as i64;
-        if i + 1 < count && movable.contains_key(&i) {
+        if unsafe { nikaia_std::proven::add::<i64>(i, 1) } < count && movable.contains_key(&i) {
             let moved = match *nikaia_std::index::get(&movable, &i) { Some(__nikaia_value) => __nikaia_value, None => return emit_order_written(count) };
             while at > 0 {
-                let before = *nikaia_std::index::get(&order, nikaia_std::index::at(at - 1));
+                let before = *unsafe { nikaia_std::proven::read(&order, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) };
                 let passed = match *nikaia_std::index::get(&passable, &before) { Some(__nikaia_value) => __nikaia_value, None => break };
                 if !emit_order_independent(moved, passed) { break; }
-                at -= 1;
+                at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) };
             }
         }
         order.insert(nikaia_std::count::of(at), i);

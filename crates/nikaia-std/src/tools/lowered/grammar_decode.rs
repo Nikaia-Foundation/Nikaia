@@ -23,7 +23,7 @@ impl GrCursor {
             self.detail = detail;
         }
     }
-    pub(crate) fn skip_blanks(&mut self) { while self.at < self.chars.len() as i64 && (*nikaia_std::index::get(&self.chars, nikaia_std::index::at(self.at))).is_whitespace() { self.at += 1; } }
+    pub(crate) fn skip_blanks(&mut self) { while self.at < self.chars.len() as i64 && (*nikaia_std::index::get(&self.chars, nikaia_std::index::at(self.at))).is_whitespace() { self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) }; } }
     pub(crate) fn expect(&mut self, want: scalar) {
         if self.failed { return; }
         if self.at >= self.chars.len() as i64 {
@@ -31,7 +31,7 @@ impl GrCursor {
             return;
         }
         let found = *nikaia_std::index::get(&self.chars, nikaia_std::index::at(self.at));
-        self.at += 1;
+        self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
         if found != want { self.fail(format!("expected `{}` and found `{}`", want, found)); }
     }
     pub(crate) fn word(&mut self) -> String {
@@ -40,7 +40,7 @@ impl GrCursor {
             let c = *nikaia_std::index::get(&self.chars, nikaia_std::index::at(self.at));
             if c.is_whitespace() || c == '(' || c == ')' { break; }
             out.push(c);
-            self.at += 1;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
         }
         out
     }
@@ -54,7 +54,7 @@ impl GrCursor {
                 return written;
             }
             let c = *nikaia_std::index::get(&self.chars, nikaia_std::index::at(self.at));
-            self.at += 1;
+            self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             if c == '"' { break; }
             written.push(c);
             if c == '\\' {
@@ -62,8 +62,8 @@ impl GrCursor {
                     self.fail(String::from("the dump ended inside an escape"));
                     return written;
                 }
-                written.push(*nikaia_std::index::get(&self.chars, nikaia_std::index::at(self.at)));
-                self.at += 1;
+                written.push(*unsafe { nikaia_std::proven::read(&self.chars, (self.at) as usize) });
+                self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             }
         }
         let decoded = decoded(&written, char_of);

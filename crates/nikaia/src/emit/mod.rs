@@ -86,6 +86,11 @@ pub struct Build {
     /// ([ADR-348](../../docs/specification/adr/adr-348.md) D1): what `main`
     /// still holds at its end is not freed.
     pub skip_free_at_exit: bool,
+    /// **The unit is the program's own crate** and writes the allocator that
+    /// counts each task's heap (ADR-327 D9). A package lowered as another
+    /// member's dependency does not: a program test links it, and a binary
+    /// takes one allocator.
+    pub counts_heap: bool,
     /// **A check a loop leaves open is asked once more through the loop's
     /// invariant** ([ADR-361](../../docs/specification/adr/adr-361.md) D10),
     /// in every build (D14): `true` wherever a build is made. It changes what
@@ -130,6 +135,7 @@ impl Default for Build {
             bounds: crate::bounds::BoundsChecks::Kept,
             overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
+            counts_heap: true,
             prove_through_loops: true,
             counts_steps: false,
             leaves_values: false,
@@ -154,6 +160,7 @@ impl Build {
             bounds: crate::bounds::BoundsChecks::Kept,
             overflow: crate::bounds::OverflowChecks::Kept,
             skip_free_at_exit: false,
+            counts_heap: true,
             prove_through_loops: true,
             counts_steps: false,
             leaves_values: false,
@@ -346,6 +353,9 @@ pub fn emit_std_against(
     // and the committed text must not depend on where it was lowered.
     let build = Build {
         target: Target::X86_64Linux,
+        // **The D26 default** ([ADR-306](../../docs/specification/adr/adr-306.md) D27).
+        bounds: crate::bounds::BoundsChecks::Removed,
+        overflow: crate::bounds::OverflowChecks::Removed,
         ..Build::default()
     };
     let mut library = std_ledger().clone();
@@ -1051,8 +1061,8 @@ pub(crate) fn literal_expressions(parsed: &Parsed, expr: &Expr) -> Vec<Expr> {
 /// (`tools/emit_holes.nika`): a template's hole parsed once per text at one
 /// site, and an `f"…"`'s hole with what the tier pass hands over inside it.
 impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
-    fn hole(&self, site: u32, text: String) -> nikaia_std::tools::emit_holes::EmitHole {
-        match Parsed::hole(self, site, &text) {
+    fn hole(&self, site: u32, text: &str) -> nikaia_std::tools::emit_holes::EmitHole {
+        match Parsed::hole(self, site, text) {
             Ok(expr) => nikaia_std::tools::emit_holes::EmitHole::Parsed(expr),
             Err(error) => nikaia_std::tools::emit_holes::EmitHole::Refused(error.to_text()),
         }

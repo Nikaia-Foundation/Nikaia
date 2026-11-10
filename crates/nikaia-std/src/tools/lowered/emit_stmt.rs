@@ -8,7 +8,7 @@ pub(crate) fn emit_stmt_makes_a_map(world: &EmitWorld<'_, '_, '_, '_>, node: &Ex
             if !args.is_empty() { return false; }
             let name = match func {
                 Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
-                Expr::Path(segments, _) => if segments.is_empty() { String::from("") } else { emit_text(world, *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1))) },
+                Expr::Path(segments, _) => if segments.is_empty() { String::from("") } else { emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }) },
                 _ => String::from(""),
             };
             name == "HashMap" || name == "HashSet"
@@ -21,10 +21,10 @@ pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 { nikaia_
 
 pub(crate) fn emit_stmt_tuple_pattern(names: &[String], shape: &[i64]) -> String {
     if shape.is_empty() {
-        if names.len() == 1 { return nikaia_std::block::Text::from((*nikaia_std::index::get(&names, 0)).to_string()); }
+        if names.len() == 1 { return nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()); }
         return format!("({})", nikaia_std::block::Text::from(names.join(", ")));
     }
-    if *nikaia_std::index::get(&shape, 0) == -1 { return format!("({})", nikaia_std::block::Text::from(names.join(", "))); }
+    if *unsafe { nikaia_std::proven::read(&shape, (0) as usize) } == -1 { return format!("({})", nikaia_std::block::Text::from(names.join(", "))); }
     let mut at: i64 = 0;
     let mut next: i64 = 0;
     emit_stmt_tuple_part(names, shape, &mut at, &mut next)
@@ -142,9 +142,9 @@ impl EmitState {
             let keeps = walk.async_keeps;
             let rests = walk.async_rests.len() as i64;
             walk.async_keeps = false;
-            self.emit_stmt(world, walk, &mut rendered, host, &nikaia_std::index::get(&block.stmts, 0).node, &nikaia_std::index::get(&block.stmts, 0).span, depth, &tail, flow, scope)?;
+            self.emit_stmt(world, walk, &mut rendered, host, &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node, &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span, depth, &tail, flow, scope)?;
             walk.async_keeps = keeps;
-            rendered.record(&nikaia_std::index::get(&block.stmts, 0).span, st);
+            rendered.record(&unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span, st);
             if !rendered.buf.contains("\n") && (walk.async_rests.len() as i64) == rests {
                 out.push("{ ");
                 out.append(&rendered);
@@ -163,14 +163,14 @@ impl EmitState {
             out.push(nikaia_std::index::or(opening.as_deref(), || ""));
             out.push("\n");
         }
-        let last = block.stmts.len() as i64 - 1;
+        let last = unsafe { nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1) };
         let keeps = walk.async_keeps;
         let rests = walk.async_rests.len() as i64;
         let order = host.order_of(block);
         let mut pos: i64 = 0;
         while ((pos) as usize) < order.len() {
-            let i = *nikaia_std::index::get(&order, (pos) as usize);
-            if i < last && ((pos + 1) as usize) < order.len() && *nikaia_std::index::get(&order, (pos + 1) as usize) == i + 1 && emit_filled_at_once(world, &self.own_contracts, &self.own_methods, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).node) {
+            let i = *unsafe { nikaia_std::proven::read(&order, (pos) as usize) };
+            if i < last && ((unsafe { nikaia_std::proven::add::<i64>(pos, 1) }) as usize) < order.len() && *unsafe { nikaia_std::proven::read(&order, (nikaia_std::proven::add::<i64>(pos, 1)) as usize) } == i + 1 && emit_filled_at_once(world, &self.own_contracts, &self.own_methods, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).node, &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).node) {
                 let args = emit_resize_args(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).node);
                 if args.len() == 2 {
                     let mut declared = EmitOut::empty();
@@ -183,11 +183,11 @@ impl EmitState {
                     if head.is_some() {
                         let beside = flow.at(nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64);
                         let mut value = EmitOut::empty();
-                        self.emit_expr(world, walk, &mut value, host, *nikaia_std::index::get(&args, 1), depth + 1, beside, scope)?;
+                        self.emit_expr(world, walk, &mut value, host, *unsafe { nikaia_std::proven::read(&args, (1) as usize) }, depth + 1, beside, scope)?;
                         let mut count = EmitOut::empty();
-                        if only_literals(*nikaia_std::index::get(&args, 0)) { self.emit_expr(world, walk, &mut count, host, *nikaia_std::index::get(&args, 0), depth + 1, beside.inferred(), scope)?; } else {
+                        if only_literals(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { self.emit_expr(world, walk, &mut count, host, *unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth + 1, beside.inferred(), scope)?; } else {
                             count.push("nikaia_std::count::of(");
-                            self.emit_expr(world, walk, &mut count, host, *nikaia_std::index::get(&args, 0), depth + 1, beside, scope)?;
+                            self.emit_expr(world, walk, &mut count, host, *unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth + 1, beside, scope)?;
                             count.push(")");
                         }
                         out.push(&inner_pad);
@@ -196,7 +196,7 @@ impl EmitState {
                         out.record(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i)).span, st);
                         out.push(&self.emit_stmt_late_puts(walk, &scope.function, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(i + 1)).span.start as i64));
                         out.push("\n");
-                        pos += 2;
+                        pos = unsafe { nikaia_std::proven::add::<i64>(pos, 2) };
                         continue;
                     }
                 }
@@ -213,7 +213,7 @@ impl EmitState {
             if ending && here.is_value() {
                 let mut at = st;
                 if (walk.async_rests.len() as i64) > before {
-                    let cell = nikaia_std::block::Text::from((*nikaia_std::index::get(&walk.async_rests, nikaia_std::index::at(walk.async_rests.len() as i64 - 1))).to_string());
+                    let cell = nikaia_std::block::Text::from((*nikaia_std::index::get(&walk.async_rests, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(walk.async_rests.len() as i64, 1) }))).to_string());
                     let declared = format!("let {} = nikaia_std::task::Rest::new(); ", cell);
                     let found = nikaia_std::index::or(nikaia_std::search::find(&out.buf, &declared, 0), || -1);
                     if found >= st { at = found + declared.len() as i64; }
@@ -264,7 +264,7 @@ impl EmitState {
                             let failing = emit_stmt_first(&out.buf, "task::FailingTask::", mark);
                             let boxed = emit_stmt_first(&out.buf, "task::BoxedTask::", mark);
                             let plain = started < failing && started < boxed;
-                            let name = emit_text(world, *nikaia_std::index::get(&names, 0));
+                            let name = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
                             if plain { walk.plain_tasks.insert(name); } else { walk.plain_tasks.remove(&name); }
                         }
                     },
@@ -625,11 +625,15 @@ impl EmitState {
             _ => { },
         }
         if self.proven_indices.contains(&node_key(base)) && self.map_key(index, true).is_none() {
-            if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
+            out.push("; ");
+            out.open_unsafe();
+            if lent_on { out.push("nikaia_std::proven::write(&mut *"); } else { out.push("nikaia_std::proven::write(&mut "); }
             self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
             out.push(", (");
             if only_literals(index) { self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?; } else { self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?; }
-            out.push(") as usize, __nikaia_stored) }; }");
+            out.push(") as usize, __nikaia_stored)");
+            out.close_unsafe();
+            out.push("; }");
             return Ok(());
         }
         if lent_on { out.push("; nikaia_std::index::set(&mut *"); } else { out.push("; nikaia_std::index::set(&mut "); }
@@ -718,16 +722,22 @@ impl EmitState {
                 let arithmetic = self.proven_arithmetic.get(&at);
                 let wide = *given == BinaryOp::Add || *given == BinaryOp::Sub || *given == BinaryOp::Mul;
                 if arithmetic.is_some() && wide {
-                    out.push(&format!("unsafe {{ {}::<{}>(", emit_flow_proven(given), nikaia_std::index::or(arithmetic, || "")));
+                    out.open_unsafe();
+                    out.push(&format!("{}::<{}>(", emit_flow_proven(given), nikaia_std::index::or(arithmetic, || "")));
                     self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)?;
-                    out.push(", __nikaia_stored) }");
+                    out.push(", __nikaia_stored)");
+                    out.close_unsafe();
                 } else {
                     self.emit_stmt_proven_read(world, walk, out, host, base, depth, flow, scope)?;
                     out.push(&format!(" {} __nikaia_stored", binary_op(given)));
                 }
-                if lent_on { out.push("; unsafe { nikaia_std::proven::write(&mut *"); } else { out.push("; unsafe { nikaia_std::proven::write(&mut "); }
+                out.push("; ");
+                out.open_unsafe();
+                if lent_on { out.push("nikaia_std::proven::write(&mut *"); } else { out.push("nikaia_std::proven::write(&mut "); }
                 self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
-                out.push(", __nikaia_at, __nikaia_stored) }; }");
+                out.push(", __nikaia_at, __nikaia_stored)");
+                out.close_unsafe();
+                out.push("; }");
                 return Ok(true);
             },
             _ => return Ok(false),
@@ -737,9 +747,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_stmt_proven_read<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, base: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        out.push("*unsafe { nikaia_std::proven::read(&");
+        out.push("*");
+        out.open_unsafe();
+        out.push("nikaia_std::proven::read(&");
         self.emit_expr(world, walk, out, host, base, depth, flow.place(), scope)?;
-        out.push(", __nikaia_at) }");
+        out.push(", __nikaia_at)");
+        out.close_unsafe();
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -753,11 +766,15 @@ impl EmitState {
         let place = matches!(target, Expr::Variable(_, _) | Expr::Field { .. });
         if !place { return Ok(false); }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
-        out.push(&format!(" = unsafe {{ {}::<{}>(", emit_flow_proven(given), ty));
+        out.push(" = ");
+        out.open_unsafe();
+        out.push(&format!("{}::<{}>(", emit_flow_proven(given), ty));
         self.emit_expr(world, walk, out, host, target, depth, flow, scope)?;
         out.push(", ");
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-        out.push(") };");
+        out.push(")");
+        out.close_unsafe();
+        out.push(";");
         Ok(true)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -771,7 +788,7 @@ impl EmitState {
             let fields = self.unrolls_here(world, &walk, &parameter, &on, iter);
             if fields.is_some() {
                 let mut first: String = String::from("");
-                if !bindings.is_empty() { first = emit_text(world, *nikaia_std::index::get(&bindings, 0)); }
+                if !bindings.is_empty() { first = emit_text(world, *unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }); }
                 let list = match fields { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
                 let outer_name = match walk.field_names.get(&first) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),

@@ -121,7 +121,7 @@ pub(crate) fn in_order(placed: &[Placed]) -> Vec<Placed> {
     let mut out: Vec<Placed> = vec![];
     for one in placed.iter() {
         let mut at = out.len() as i64;
-        while at > 0 && (nikaia_std::index::get(&out, nikaia_std::index::at(at - 1)).line > one.line || nikaia_std::index::get(&out, nikaia_std::index::at(at - 1)).line == one.line && nikaia_std::index::get(&out, nikaia_std::index::at(at - 1)).column > one.column) { at -= 1; }
+        while at > 0 && (unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.line > one.line || unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.line == one.line && unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) }.column > one.column) { at = unsafe { nikaia_std::proven::sub::<i64>(at, 1) }; }
         out.insert(nikaia_std::count::of(at), one.clone());
     }
     out
@@ -129,15 +129,15 @@ pub(crate) fn in_order(placed: &[Placed]) -> Vec<Placed> {
 
 pub(crate) fn line_of(lines: &[&str], line: i64) -> String {
     if line < 1 || line > lines.len() as i64 { return String::from(""); }
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&lines, (nikaia_std::proven::sub::<i64>(line, 1)) as usize) }).to_string())
 }
 
 pub(crate) fn line_at(lines: &[&str], offset: i64) -> (i64, i64) {
     let mut line: i64 = 0;
     let mut start: i64 = 0;
-    while ((line + 1) as usize) < lines.len() && (start + (*nikaia_std::index::get(&lines, (line) as usize)).len() as i64) < offset {
-        start += (*nikaia_std::index::get(&lines, (line) as usize)).len() as i64 + 1;
-        line += 1;
+    while ((line + 1) as usize) < lines.len() && (start + (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).len() as i64) < offset {
+        start += (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).len() as i64 + 1;
+        line = unsafe { nikaia_std::proven::add::<i64>(line, 1) };
     }
     (line, start)
 }
@@ -222,12 +222,12 @@ pub fn paused(pause: &Pause) -> Shown {
 pub(crate) fn package_and_function(callee: &str) -> (String, String) {
     let parts: Vec<&str> = callee.splitn(2, "::").collect::<Vec<_>>();
     if parts.len() < 2 { return (String::from("its package"), nikaia_std::block::Text::from(callee.to_string())); }
-    (nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()), nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 1)).to_string()))
+    (nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()), nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).to_string()))
 }
 
 pub fn an_or_a(word: &str) -> String {
     let first: Vec<scalar> = nikaia_std::list::chars(word.chars());
-    if !first.is_empty() && (*nikaia_std::index::get(&first, 0) == 'i' || *nikaia_std::index::get(&first, 0) == 'a' || *nikaia_std::index::get(&first, 0) == 'e' || *nikaia_std::index::get(&first, 0) == 'o' || *nikaia_std::index::get(&first, 0) == 'I' || *nikaia_std::index::get(&first, 0) == 'A' || *nikaia_std::index::get(&first, 0) == 'E' || *nikaia_std::index::get(&first, 0) == 'O') { return String::from("an"); }
+    if !first.is_empty() && (*unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'i' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'e' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'o' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'I' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'A' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'E' || *unsafe { nikaia_std::proven::read(&first, (0) as usize) } == 'O') { return String::from("an"); }
     String::from("a")
 }
 

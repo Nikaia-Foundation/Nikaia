@@ -29,7 +29,7 @@ pub fn uses_in(body: &Block, interner: &winnow_grammar::InternerContext, holes_o
     let mut walk = KeepsWalk { uses: Uses { kept: collections::BTreeSet::new(), passed: vec![] }, aliases: collections::BTreeMap::new(), views: collections::BTreeMap::new() };
     keeps_block(body, interner, holes_of, context, own, library, &mut walk);
     if context.hands_back_its_last && !body.stmts.is_empty() {
-        match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(body.stmts.len() as i64 - 1)).node {
+        match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Expr(value) => { hand_over(value, interner, holes_of, context, own, library, &mut walk); },
             _ => { },
         }
@@ -201,7 +201,7 @@ pub(crate) fn reached_of(expr: &Expr, interner: &winnow_grammar::InternerContext
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn reached_by_last(block: &Block, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &KeepsWalk, through_calls: bool, found: &mut collections::BTreeSet<String>) {
     if block.stmts.is_empty() { return; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(value) => { found.extend(reached_of(value, interner, context, own, library, walk, through_calls)); },
         _ => { },
     }
@@ -236,7 +236,7 @@ pub(crate) fn keeps_viewed_of(expr: &Expr, interner: &winnow_grammar::InternerCo
 
 pub(crate) fn viewed_by_last(block: &Block, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &KeepsWalk, found: &mut collections::BTreeSet<String>) {
     if block.stmts.is_empty() { return; }
-    match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(block.stmts.len() as i64 - 1)).node {
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Expr(value) => { found.extend(keeps_viewed_of(value, interner, context, own, library, walk)); },
         _ => { },
     }
@@ -245,7 +245,7 @@ pub(crate) fn viewed_by_last(block: &Block, interner: &winnow_grammar::InternerC
 pub(crate) fn through_a_view(func: &Expr, args: &[Expr], interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &KeepsWalk) -> collections::BTreeSet<String> {
     let mut found: collections::BTreeSet<String> = collections::BTreeSet::new();
     let callee = resolved_callee(func, interner, own, library);
-    for at in 0..args.len() as i64 { if a_position_the_result_points_into((callee).as_deref(), at, own, library) { found.extend(reached_of(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, context, own, library, walk, true)); } }
+    for at in 0..args.len() as i64 { if a_position_the_result_points_into((callee).as_deref(), at, own, library) { found.extend(reached_of(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, context, own, library, walk, true)); } }
     found
 }
 
@@ -258,8 +258,8 @@ pub(crate) fn a_position_the_result_points_into(callee: Option<&str>, at: i64, o
 pub fn keeps_its_bytes(contract: &FnContract, at: i64) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if at < 0 || at >= signature.params.len() as i64 { return false; }
-    let parameter = &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).0;
-    let is_bytes = match &nikaia_std::index::get(&signature.params, nikaia_std::index::at(at)).1 {
+    let parameter = &unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.0;
+    let is_bytes = match &unsafe { nikaia_std::proven::read(&signature.params, (at) as usize) }.1 {
         Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == "Bytes" },
         _ => false,
     };
@@ -283,7 +283,7 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
             keeps_expression(func, interner, holes_of, context, own, library, walk);
             let callee = resolved_callee(func, interner, own, library);
             for at in 0..args.len() as i64 {
-                let lent = match nikaia_std::index::get(&args, nikaia_std::index::at(at)) {
+                let lent = match unsafe { nikaia_std::proven::read(&args, (at) as usize) } {
                     Expr::Coalesce { value, fallback, .. } => {
                         let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
                         if a_position_the_result_points_into((callee).as_deref(), at, own, library) {
@@ -294,7 +294,7 @@ pub(crate) fn keeps_expression(expr: &Expr, interner: &winnow_grammar::InternerC
                     },
                     _ => false,
                 };
-                if !lent && a_read_option(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, context) { keeps_read_option(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, &holes_of, context, own, library, walk); } else if !lent { keeps_expression(nikaia_std::index::get(&args, nikaia_std::index::at(at)), interner, holes_of, context, own, library, walk); }
+                if !lent && a_read_option(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, context) { keeps_read_option(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, &holes_of, context, own, library, walk); } else if !lent { keeps_expression(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, interner, holes_of, context, own, library, walk); }
             }
             for setting in config.iter() { keeps_expression(&setting.value, interner, holes_of, context, own, library, walk); }
         },
@@ -499,8 +499,8 @@ pub(crate) fn classify(expr: &Expr, interner: &winnow_grammar::InternerContext, 
                 _ => vec![],
             };
             for at in 0..args.len() as i64 {
-                if at < lends.len() as i64 && *nikaia_std::index::get(&lends, nikaia_std::index::at(at)) { continue; }
-                if !a_position_the_result_points_into((callee).as_deref(), at, own, library) { keep_argument(nikaia_std::index::get(&args, nikaia_std::index::at(at)), (callee).as_deref(), at, interner, holes_of, context, own, library, walk); }
+                if at < lends.len() as i64 && *unsafe { nikaia_std::proven::read(&lends, (at) as usize) } { continue; }
+                if !a_position_the_result_points_into((callee).as_deref(), at, own, library) { keep_argument(unsafe { nikaia_std::proven::read(&args, (at) as usize) }, (callee).as_deref(), at, interner, holes_of, context, own, library, walk); }
             }
             for setting in config.iter() { keep_option(setting, (callee).as_deref(), interner, context, own, library, walk); }
         },
@@ -596,19 +596,19 @@ pub(crate) fn keep_method_arguments(receiver: &Expr, args: &[Expr], method: &str
     if code.is_some() {
         let params: Vec<Ty> = nikaia_std::index::or(code, || vec![].into());
         for k in 0..args.len() as i64 {
-            if ((k) as usize) < params.len() && ((*nikaia_std::index::get(&params, (k) as usize)).is_a_view() || lent_mut(nikaia_std::index::get(&params, (k) as usize)).is_some()) { continue; }
-            for name in keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); }
+            if ((k) as usize) < params.len() && ((*unsafe { nikaia_std::proven::read(&params, (k) as usize) }).is_a_view() || lent_mut(unsafe { nikaia_std::proven::read(&params, (k) as usize) }).is_some()) { continue; }
+            for name in keeps_handed(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, interner, context, own, library, &walk) { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); }
         }
         return;
     }
     let owner = keeps_owner_of(receiver, method, interner, context, own, library);
     let ours = candidate_keys(own, context.own_methods, method, (owner).as_deref(), args.len() as i64);
     for k in 0..args.len() as i64 {
-        let theirs = keeps_at_in(library, context.library_methods, method, k + 1, (owner).as_deref());
-        let mut handed = keeps_handed(nikaia_std::index::get(&args, (k) as usize), interner, context, own, library, &walk);
-        handed.extend(keeps_named_by_a_lambda(nikaia_std::index::get(&args, (k) as usize), interner, holes_of, context, &walk));
+        let theirs = keeps_at_in(library, context.library_methods, method, unsafe { nikaia_std::proven::add::<i64>(k, 1) }, (owner).as_deref());
+        let mut handed = keeps_handed(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, interner, context, own, library, &walk);
+        handed.extend(keeps_named_by_a_lambda(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, interner, holes_of, context, &walk));
         for name in handed.iter() {
-            for key in ours.iter() { walk.uses.passed.push(Passed { parameter: nikaia_std::block::Text::from(name.to_string()), callee: nikaia_std::block::Text::from(key.to_string()), at: k + 1 }); }
+            for key in ours.iter() { walk.uses.passed.push(Passed { parameter: nikaia_std::block::Text::from(name.to_string()), callee: nikaia_std::block::Text::from(key.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(k, 1) } }); }
             if theirs.hit || ours.is_empty() && !theirs.any { walk.uses.kept.insert(nikaia_std::block::Text::from(name.to_string())); }
         }
     }
@@ -1004,7 +1004,7 @@ pub(crate) fn names_a_pattern_binds(pattern: &MatchPattern, interner: &winnow_gr
     match pattern {
         MatchPattern::Path(segments) => {
             if segments.len() == 1 {
-                let name = interner.resolve(*nikaia_std::index::get(&segments, 0));
+                let name = interner.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
                 if !names_a_type(name) { bound.insert(nikaia_std::block::Text::from(name.to_string())); }
             }
         },
@@ -1045,7 +1045,7 @@ pub(crate) fn hands_on_a_bound_tail(block: &Block, interner: &winnow_grammar::In
 
 pub trait KeepsHost {
     fn holes(&self, unit: i64, expr: &Expr) -> Vec<Expr>;
-    fn keeping_statement(&self, unit: i64, method: &Spanned<Item>, target: String, parameter: String, own_kept: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> Span;
+    fn keeping_statement(&self, unit: i64, method: &Spanned<Item>, target: &str, parameter: &str, own_kept: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> Span;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1154,29 +1154,6 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
     let mut graph: collections::BTreeMap<String, Uses> = collections::BTreeMap::new();
     let mut package = PackageTypes::empty();
     for view in units.iter() { declare_unit(view.words, view.items, &mut package); }
-    let mut trait_keeps: collections::BTreeMap<String, Vec<i64>> = collections::BTreeMap::new();
-    for view in units.iter() {
-        for item in view.items.iter() {
-            match &item.node {
-                Item::Trait { name, methods, .. } => {
-                    let name = *name;
-                    let owner = view.text(name);
-                    for method in methods.iter() {
-                        let positions: Vec<i64> = method.node.args.iter().enumerate().map(|(at, item)| (at as i64, item)).filter(|&__nikaia_tuple87508| {
-                            let (at, arg) = __nikaia_tuple87508; let at = nikaia_std::num::value(at);
-                            by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) && !keeps_a_copied_scalar(&written_ty(view.words, view.aliases, &arg.ty))
-                        }).map(|__nikaia_tuple87684| {
-                            let (at, arg) = __nikaia_tuple87684;
-                            at
-                        }).collect::<Vec<_>>();
-                        let called = view.text(method.node.name);
-                        trait_keeps.insert(format!("{}::{}", owner, called), positions);
-                    }
-                },
-                _ => { },
-            }
-        }
-    }
     let mut impls_of: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     let mut impl_rows: Vec<KeepsImplRow<'_>> = vec![];
     let mut unit: i64 = 0;
@@ -1202,12 +1179,11 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                                     let name = *name;
                                     let own = view.text(match name { Some(__nikaia_value) => __nikaia_value, None => continue });
                                     let at_trait = format!("{}::{}", owner, own);
-                                    for at in trait_positions(&trait_keeps, &at_trait) { if at < args.len() as i64 { found.uses.kept.insert(view.text(nikaia_std::index::get(&args, nikaia_std::index::at(at)).name)); } }
                                     let first: i64 = if receiver.is_some() { 1 } else { 0 };
                                     let mut at: i64 = 0;
                                     for arg in args.iter() {
-                                        if by_value(arg) && (*arg.ty.code).is_some() { found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(at_trait.to_string()), at: at + first }); }
-                                        at += 1;
+                                        if by_value(arg) { found.uses.passed.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(at_trait.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); }
+                                        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                                     }
                                     add_impl(&mut impls_of, &at_trait, &found.key);
                                     impl_rows.push(KeepsImplRow { unit, method, target: nikaia_std::block::Text::from(target_name.to_string()), key: nikaia_std::block::Text::from(found.key.to_string()), trait_name: nikaia_std::block::Text::from(owner.to_string()), at_trait: nikaia_std::block::Text::from(at_trait.to_string()), first });
@@ -1222,10 +1198,8 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                     let name = *name;
                     let owner = view.text(name);
                     for method in methods.iter() {
-                        let mut uses = no_uses();
-                        for arg in method.node.args.iter() { if by_value(arg) && (*arg.ty.code).is_none() && !method.node.ret_from.contains(&arg.name) { uses.kept.insert(view.text(arg.name)); } }
                         let called = view.text(method.node.name);
-                        graph.insert(format!("{}::{}", owner, called), uses);
+                        graph.insert(format!("{}::{}", owner, called), no_uses());
                     }
                 },
                 Item::Grammar(def) => {
@@ -1258,8 +1232,8 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
                         let mut edges: Vec<Passed> = vec![];
                         let mut at: i64 = 0;
                         for arg in method.node.args.iter() {
-                            if by_value(arg) && (*arg.ty.code).is_some() { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: at + first }); } }
-                            at += 1;
+                            if by_value(arg) { for callee in impls.iter() { edges.push(Passed { parameter: view.text(arg.name), callee: nikaia_std::block::Text::from(callee.to_string()), at: unsafe { nikaia_std::proven::add::<i64>(at, first) } }); } }
+                            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                         }
                         if graph.contains_key(&key) {
                             let uses = match nikaia_std::index::get_mut(&mut graph, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -1408,14 +1382,9 @@ pub(crate) fn keeps_path_key(view: &ParsedView<'_, '_, '_, '_, '_, '_>, expr: &E
 
 pub(crate) fn keeps_path_text(view: &ParsedView<'_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol], owner: &str) -> Option<String> {
     if segments.len() != 2 { return None; }
-    let first = view.text(*nikaia_std::index::get(&segments, 0));
+    let first = view.text(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
     let ty = if first == "Self" { nikaia_std::block::Text::from(owner.to_string()) } else { first };
-    Some(format!("{}::{}", ty, view.text(*nikaia_std::index::get(&segments, 1))))
-}
-
-pub(crate) fn trait_positions(keeps: &collections::BTreeMap<String, Vec<i64>>, key: &str) -> Vec<i64> {
-    let held = match *nikaia_std::index::get(&keeps, key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
-    held.copy_owned()
+    Some(format!("{}::{}", ty, view.text(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) })))
 }
 
 pub(crate) fn add_impl(impls_of: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, at_trait: &str, name: &str) {
@@ -1459,12 +1428,12 @@ pub(crate) fn keeps_the_impls_own<H: KeepsHost>(units: &[ParsedView<'_, '_, '_, 
                 let view = nikaia_std::index::get(&units, nikaia_std::index::at(row.unit));
                 let mut at: i64 = 0;
                 for arg in args.iter() {
-                    at += 1;
+                    at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
                     let parameter = view.text(arg.name);
-                    if !by_value(arg) || (*arg.ty.code).is_none() || !mine.contains(&parameter) { continue; }
-                    let theirs = match trait_parameter_at(&contract, at - 1 + row.first) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if !by_value(arg) || !mine.contains(&parameter) { continue; }
+                    let theirs = match trait_parameter_at(&contract, unsafe { nikaia_std::proven::sub::<i64>(at, 1) } + row.first) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if foreign && nikaia_std::list::contains(&contract.keeps, &theirs) { continue; }
-                    let span = host.keeping_statement(row.unit, row.method, nikaia_std::block::Text::from(row.target.to_string()), nikaia_std::block::Text::from(parameter.to_string()), &own_kept, ledger, library);
+                    let span = host.keeping_statement(row.unit, row.method, &nikaia_std::block::Text::from(row.target.to_string()), &nikaia_std::block::Text::from(parameter.to_string()), &own_kept, ledger, library);
                     if !foreign {
                         add_keeper(&mut column, &row.at_trait, &theirs, KeepsKeeper { name: nikaia_std::block::Text::from(row.key.to_string()), unit: row.unit, span });
                         continue;
@@ -1486,11 +1455,11 @@ pub(crate) fn trait_parameter_at(contract: &FnContract, at: i64) -> Option<Strin
 }
 
 pub(crate) fn asks_a_column(row: &KeepsImplRow<'_>, graph: &collections::BTreeMap<String, Uses>, library: &Ledger) -> bool {
-    let takes_a_fn = match &row.method.node {
-        Item::Fn { args, .. } => args.iter().any(|a| { by_value(a) && (*a.ty.code).is_some() }),
+    let takes_by_value = match &row.method.node {
+        Item::Fn { args, .. } => args.iter().any(|a| { by_value(a) }),
         _ => false,
     };
-    takes_a_fn && (graph.contains_key(&row.at_trait) || library.functions.contains_key(&row.at_trait))
+    takes_by_value && (graph.contains_key(&row.at_trait) || library.functions.contains_key(&row.at_trait))
 }
 
 pub(crate) fn add_keeper(column: &mut KeepsColumn, at_trait: &str, parameter: &str, keeper: KeepsKeeper) {

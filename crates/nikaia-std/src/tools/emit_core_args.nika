@@ -544,10 +544,12 @@ impl EmitState {
         // task's block (a local handed to a call never is in it), so the
         // conversion gives Rust the memory the list was built in, no copy.
         let rust_owner = if method_callee == null && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(self.described, callee, i) } else { "" }
+        // **And it leaves the task's account at the call** (ADR-327 D9,
+        // #1541): the Rust owner keeps it.
         if rust_owner == "Vec" {
-            out.push("::std::vec::Vec::from(")
+            out.push("nikaia_std::block::handed_list(")
         } else if rust_owner == "String" {
-            out.push("::std::string::String::from(")
+            out.push("nikaia_std::block::handed_text(")
         }
         if either {
             out.push("nikaia_std::either_text::either(")
@@ -619,6 +621,10 @@ impl EmitState {
                 // place, which a second call of the callee there shares (#678).
                 let keep = if lend && made_in_the_call(arg) { self.argument_keep(walk, scope.function, flow.statement, callee, i) ?? "" } else { "" }
                 if lend && keep != "" {
+                    // Text of its own lent as a view (#1498): `&(k).put(t).as_str()`.
+                    if self.facts.lent_text_views.contains(node) {
+                        out.push("&")
+                    }
                     out.push(f"({keep}).put(")
                     kept_here = true
                 } else if self.facts.lent_arms.contains(node) {
@@ -705,6 +711,12 @@ impl EmitState {
         }
         if kept_here {
             out.push(")")
+        }
+        // **Text of its own lent where a type variable holds a view of text**
+        // (ADR-views-3 D12, #1498): `&o.as_str()`, the `&str` beside the
+        // literal's `&"p"`.
+        if lend && self.facts.lent_text_views.contains(node) {
+            out.push(".as_str()")
         }
         if keeps_bytes {
             out.push(")")
@@ -917,11 +929,12 @@ impl EmitState {
     }
 
     /// For an argument that names a function of this unit without a receiver,
-    /// whether each of its parameters is lent (lowered behind a `&`) where the
-    /// parameter of function type it is handed to takes it by value; empty
-    /// where none is, or the argument is no such name, or a kept function
-    /// value already calls it (#757).
-    fn emit_arg_lent_params(ref self, world: ref EmitWorld, arg: ref Expr) -> Vec[bool] {
+    /// how each of its parameters is handed on: `1` where it is lent (lowered
+    /// behind a `&`) and the parameter of function type it is handed to takes
+    /// it by value (#757), `2` where that parameter lends a copy the function
+    /// takes by value (#1504), else `0`; empty where all are `0`, or the
+    /// argument is no such name, or a kept function value already calls it.
+    fn emit_arg_lent_params(ref self, world: ref EmitWorld, arg: ref Expr) -> Vec[i64] {
         let key = match arg {
             Expr::Variable(name, _) => emit_text(world, name),
             else => return [],
@@ -935,11 +948,16 @@ impl EmitState {
         if signature.takes_a_receiver() {
             return []
         }
-        let mut lent: Vec[bool] = []
+        let mut lent: Vec[i64] = []
         let mut any = false
         for at in 0..<signature.params.len() {
-            let one = emit_arg_lends_own(contract, at, world.library, self.described) && !(at < viewed.len() && viewed[at])
-            any = any || one
+            let lends = emit_arg_lends_own(contract, at, world.library, self.described)
+            let slot_lends = at < viewed.len() && viewed[at]
+            // **A copy the slot lends, to a function that takes it by value**
+            // (#1504): `fn(T)` with `T` a number lends it, `inc(v: i64)` takes
+            // the number, so the closure copies it out.
+            let one = if lends && !slot_lends { 1 } else if !lends && slot_lends { 2 } else { 0 }
+            any = any || one != 0
             lent.push(one)
         }
         if !any {
@@ -997,13 +1015,16 @@ impl EmitState {
 }
 
 /// The arguments a closure around a named function hands it: each name, behind
-/// a `&` where the function lends that parameter (#757).
-fn emit_arg_passing(names: ref Vec[String], lent: ref Vec[bool]) -> String {
+/// a `&` where the function lends that parameter (#757), copied out of the
+/// view where the parameter of function type lends a copy it takes (#1504).
+fn emit_arg_passing(names: ref Vec[String], lent: ref Vec[i64]) -> String {
     let mut passed: Vec[String] = []
     let mut at = 0
     for name in names {
-        if at < lent.len() && lent[at] {
+        if at < lent.len() && lent[at] == 1 {
             passed.push(f"&{name}")
+        } else if at < lent.len() && lent[at] == 2 {
+            passed.push(f"*{name}")
         } else {
             passed.push(name.clone())
         }
@@ -2205,6 +2226,9 @@ impl EmitState {
             return false
         }
         let mut written: String = self.facts.unrolled_calls.get(node_key(base))?.clone() ?? ""
+        if written == "" && self.facts.plain_bracket_calls.contains(node_key(base)) {
+            return false
+        }
         if written == "" {
             let mut types: Vec[String] = []
             let parts: Vec[Expr] = match index {

@@ -311,7 +311,11 @@ fn a_position_find_all_yields_indexes_its_bytes_without_a_check() {
     let filtered = &on[on.find("fn filtered").expect("filtered")..];
     let filtered = &filtered[..filtered.find("\n}").expect("its end")];
     assert!(filtered.contains("nikaia_std::index::get(&b"), "{filtered}");
-    let off = lowered("byte-sets-positions-off", POSITIONS);
+    let off = lowered_with(
+        "byte-sets-positions-off",
+        POSITIONS,
+        &["--optimization", "remove-bounds-checks:off"],
+    );
     assert_eq!(off.matches("nikaia_std::proven::read(").count(), 0, "{off}");
     assert_eq!(
         run("byte-sets-positions-run", POSITIONS),

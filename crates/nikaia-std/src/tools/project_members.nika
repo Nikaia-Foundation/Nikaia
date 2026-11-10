@@ -584,12 +584,10 @@ fn project_members_crate_root_of(root: ref fs::Path) -> fs::Path throws {
 }
 
 /// What a build's foreign boundary asks of the compiler (P4b): the ledger's
-/// reading and merging stay Rust (`LedgerOps`).
+/// reading stays Rust (`LedgerOps`); the merging is `absorb_into` (#1498).
 pub trait ProjectMembersForeignHost {
     /// The ledger at `path`, where it is there and parses (`Ledger::read_beside`).
     fn read_beside(ref self, path: ref fs::Path) -> Ledger? sync
-    /// `into` with `other`'s entries added, under the names it gives them.
-    fn absorb(ref self, into: Ledger, other: Ledger) -> Ledger sync
     /// A ledger of this toolchain with no entries (`Ledger::empty`).
     fn empty_ledger(ref self) -> Ledger sync
     /// Where the sources of the Rust crate `name` are (`describe::crate_root`).
@@ -705,6 +703,7 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
     let mut described: collections::BTreeSet[String] = collections::BTreeSet()
     let mut descriptions = host.empty_ledger()
     let mut moved: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+    let none: collections::BTreeMap[String, String] = collections::BTreeMap()
     for name in declared {
         let mut ledger = project_members_description_at(root, name, host) ?? continue
         described.insert(name.clone())
@@ -722,7 +721,7 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
         // `None`: a description's names are already qualified with the crate
         // word a program writes (`hyper_shim::serve_once`), so there is
         // nothing to put in front of them.
-        descriptions = host.absorb(descriptions, ledger)
+        absorb_into(descriptions, null, none, ledger)
     }
     let mut beneath: collections::BTreeSet[String] = collections::BTreeSet()
     let mut seen: collections::HashSet[fs::Path] = collections::HashSet()

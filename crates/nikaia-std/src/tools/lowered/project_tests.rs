@@ -712,7 +712,7 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
 
 #[allow(clippy::too_many_arguments)]
 pub async fn project_tests_run<H: ProjectTestsHost>(host: &H, blocks: &[(String, fs::Path, i64)], test_builds: &[(String, fs::Path)], outputs: &[OutputTest], programs: &[(String, fs::Path)], program_tests: i64, root: &std::path::Path, bless: bool, stderr: bool) -> Result<Vec<ProjectTestsFailed>, Box<dyn std::error::Error>> {
-    let total = blocks.len() as i64 + outputs.len() as i64 + program_tests;
+    let total = unsafe { nikaia_std::proven::add::<i64>(blocks.len() as i64, outputs.len() as i64) } + program_tests;
     project_tests_running(total)?;
     let mut failed: Vec<ProjectTestsFailed> = vec![];
     for (k, (title, path, line)) in blocks.iter().enumerate().map(|(at, item)| (at as i64, item)) {

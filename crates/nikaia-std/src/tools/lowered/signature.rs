@@ -50,11 +50,11 @@ pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: 
     }
     let parts = split_top_level(nikaia_std::index::or(resulted.as_deref(), || ""));
     let mut ok: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
-    if !parts.is_empty() { ok = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, 0)).to_string()); }
+    if !parts.is_empty() { ok = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).to_string()); }
     let fine = translate(&ok, crate_word, parameters, types, mentioned);
     let mut fails: String = String::from("?"); #[allow(clippy::redundant_locals)] let parts = parts;
     if parts.len() > 1 {
-        let error = (*nikaia_std::index::get(&parts, 1)).trim();
+        let error = (*unsafe { nikaia_std::proven::read(&parts, (1) as usize) }).trim();
         if types.contains(error) { fails = format!("{}::{}", crate_word, error); }
     }
     Resulted { ty: fine.ty, fails: Some(fails) }
@@ -76,7 +76,7 @@ pub fn sent_across(names: &[String], types: &[String], bounds: &str) -> Vec<Stri
         let named = unreferenced(ty);
         let mut reached = bounds_send(ty);
         for one in sent.iter() { if *one == named { reached = true; } }
-        if reached { out.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, (at) as usize)).to_string())); }
+        if reached { out.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (at) as usize) }).to_string())); }
     }
     out
 }
@@ -100,7 +100,7 @@ pub fn sends(bounds: &str) -> Vec<String> {
 pub(crate) fn unreferenced(ty: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::chars(ty.chars());
     let mut from: i64 = 0;
-    while from < c.len() as i64 && (*nikaia_std::index::get(&c, nikaia_std::index::at(from)) == '&' || *nikaia_std::index::get(&c, nikaia_std::index::at(from)) == ' ') { from += 1; }
+    while from < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (from) as usize) } == '&' || *unsafe { nikaia_std::proven::read(&c, (from) as usize) } == ' ') { from = unsafe { nikaia_std::proven::add::<i64>(from, 1) }; }
     let rest = slice(&c, from, c.len() as i64);
     let trimmed = rest.trim();
     if trimmed.starts_with("mut ") {
@@ -125,8 +125,8 @@ pub fn contract(written: &WrittenFn, crate_word: &str, types: &collections::BTre
     let mut params: Vec<(String, Ty)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut keeps = keeps;
     for at in 0..written.names.len() as i64 {
         let translated = translate(nikaia_std::index::get(&written.types, (at) as usize), crate_word, &written.parameters, types, mentioned);
-        if translated.kept { keeps.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&written.names, (at) as usize)).to_string())); }
-        params.push((nikaia_std::block::Text::from((*nikaia_std::index::get(&written.names, (at) as usize)).to_string()), translated.ty));
+        if translated.kept { keeps.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written.names, (at) as usize) }).to_string())); }
+        params.push((nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&written.names, (at) as usize) }).to_string()), translated.ty));
     }
     let mut fails: Vec<String> = vec![];
     let mut answer: Option<Ty> = None;

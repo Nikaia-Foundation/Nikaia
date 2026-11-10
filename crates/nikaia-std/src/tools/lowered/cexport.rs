@@ -42,13 +42,13 @@ pub(crate) fn cx_sum_name(members: &[String]) -> String {
 pub(crate) fn cx_replace_first(text: &str, from: &str, to: &str) -> String {
     let pieces: Vec<&str> = text.split(AsRef::<str>::as_ref(from)).collect::<Vec<_>>();
     if pieces.len() < 2 { return nikaia_std::block::Text::from(text.to_string()); }
-    let mut out = nikaia_std::block::Text::from((*nikaia_std::index::get(&pieces, 0)).to_string());
+    let mut out = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).to_string());
     out.push_str(to);
     let mut at: i64 = 1;
     while ((at) as usize) < pieces.len() {
         if at > 1 { out.push_str(from); }
-        out.push_str(*nikaia_std::index::get(&pieces, (at) as usize));
-        at += 1;
+        out.push_str(*unsafe { nikaia_std::proven::read(&pieces, (at) as usize) });
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out
 }
@@ -86,7 +86,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             let mut names: Vec<String> = vec![];
             for variant in handle.variants.iter() { names.push(nikaia_std::block::Text::from(variant.name.to_string())); }
             plains.push(CxPlain { name: format!("{}_Kind", handle.name), variants: names, stem: nikaia_std::block::Text::from(handle.name.to_uppercase()) });
-            kinds.push(Some(plains.len() as i64 - 1));
+            kinds.push(Some(unsafe { nikaia_std::proven::sub::<i64>(plains.len() as i64, 1) }));
         } else { kinds.push(None); }
     }
     let mut crossing: Vec<bool> = vec![];
@@ -118,14 +118,14 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     let mut index: i64 = 0;
     while ((index) as usize) < handles.len() {
         if !*nikaia_std::index::get(&held, (index) as usize) {
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             continue;
         }
-        let handle = nikaia_std::index::get(&handles, (index) as usize);
+        let handle = unsafe { nikaia_std::proven::read(&handles, (index) as usize) };
         for (field, ty) in handle.fields.iter() { all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(handle.name.to_string())), name: nikaia_std::block::Text::from(field.to_string()), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(ty.clone()), getter: true, of_variant: None, kind_of: None }); }
         let kind = *nikaia_std::index::get(&kinds, (index) as usize);
         if kind.is_none() {
-            index += 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             continue;
         }
         let ty = nikaia_std::block::Text::from(handle.name.to_string());
@@ -138,7 +138,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
         rust.push_str(&format!("\n/// The kinds of `{}`, as `{}_{}_kind` writes them (ADR-284 D31).\n#[allow(non_camel_case_types, dead_code)]\n#[derive(Clone, Copy)]\nenum {}_Kind {{ {} }}\n\n#[allow(non_snake_case, dead_code)]\nfn __nikaia_kind_{}(value: &{}) -> ({}_Kind, &'static str) {{\n    match value {{ {} }}\n}}\n", ty, prefix, ty, ty, nikaia_std::block::Text::from(names.join(", ")), ty, ty, ty, nikaia_std::block::Text::from(arms.join(" "))));
         all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(ty.to_string())), name: String::from("kind"), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: None, getter: true, of_variant: None, kind_of: std::convert::identity(kind) });
         for variant in handle.variants.iter() { for (getter, pattern, field) in variant.fields.iter() { all.push(CxEntry { owner: Some(nikaia_std::block::Text::from(ty.to_string())), name: nikaia_std::block::Text::from(getter.to_string()), receiver: Some(CxHold::Shared), exclusive: false, arg_names: vec![], arg_types: vec![], ret_type: Some(field.clone()), getter: true, of_variant: Some(CxVariantOf { variant: nikaia_std::block::Text::from(variant.name.to_string()), pattern: nikaia_std::block::Text::from(pattern.to_string()) }), kind_of: None }); } }
-        index += 1;
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     for record in records.iter() {
         for part in record.parts() {
@@ -174,13 +174,13 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     let mut at: i64 = 0;
     while at < handles.len() as i64 {
         if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
-            let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&handles, nikaia_std::index::at(at)).name.to_string());
+            let ty = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&handles, (at) as usize) }.name.to_string());
             let symbol = format!("{}_{}_free", prefix, ty);
             cx_claim(&mut build.symbols, &symbol, &ty)?;
             build.rust.push_str(&format!("\n#[unsafe(no_mangle)]\npub extern \"C\" fn {}(handle: *mut nikaia_std::c_boundary::Handle<{}>) -> std::ffi::c_int {{\n    if let Err(status) = __nikaia_enter() {{\n        return status;\n    }}\n    // SAFETY: the C caller hands a handle this library made, or NULL, and uses it no more (ADR-284 D6).\n    unsafe {{ nikaia_std::c_boundary::free(handle) }}\n}}\n", symbol, ty));
             build.declarations.push_str(&format!("int {}({}_{} *handle);\n", symbol, prefix, ty));
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     for entry in all.iter() { cx_wrapper(words, &ctx, contracts, entry, &mut build)?; }
     if build.any_pause {
@@ -193,15 +193,15 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     at = 0;
     while at < handles.len() as i64 {
         if *nikaia_std::index::get(&held, nikaia_std::index::at(at)) {
-            let name = nikaia_std::block::Text::from(nikaia_std::index::get(&handles, nikaia_std::index::at(at)).name.to_string());
+            let name = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&handles, (at) as usize) }.name.to_string());
             types.push_str(&format!("typedef struct {}_{} {}_{};\n\n", prefix, name, prefix, name));
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     at = 0;
     while at < plains.len() as i64 {
         if *nikaia_std::index::get(&build.crossing, nikaia_std::index::at(at)) {
-            let plain = nikaia_std::index::get(&plains, nikaia_std::index::at(at));
+            let plain = unsafe { nikaia_std::proven::read(&plains, (at) as usize) };
             #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
             for variant in plain.variants.iter() {
@@ -210,7 +210,7 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
             }
             types.push_str(&format!("typedef enum {{\n{}\n}} {}_{};\n\n", nikaia_std::block::Text::from(values.join(",\n")), prefix, plain.name));
         }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     for place in cx_records_in_order(&records) { types.push_str(&cx_record_type(nikaia_std::index::get(&records, nikaia_std::index::at(place)), &ctx)); }
     let guard = format!("{}_H", upper);
@@ -224,8 +224,8 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
 pub(crate) fn cx_handle_named(handles: &[CxHandled], name: &str) -> Option<i64> {
     let mut at: i64 = 0;
     while ((at) as usize) < handles.len() {
-        if nikaia_std::index::get(&handles, (at) as usize).name == name { return Some(at); }
-        at += 1;
+        if unsafe { nikaia_std::proven::read(&handles, (at) as usize) }.name == name { return Some(at); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     None
 }
@@ -497,12 +497,12 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
     #[allow(unused_mut)] let mut params = CxParams { rust_params: rust_params.copy_owned(), c_params: c_params.copy_owned(), checks: nikaia_std::block::Text::from(checks.to_string()), call_args: call_args.copy_owned() };
     let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
     while position < entry.arg_names.len() as i64 {
-        let param = nikaia_std::block::Text::from((*nikaia_std::index::get(&entry.arg_names, nikaia_std::index::at(position))).to_string());
+        let param = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&entry.arg_names, (position) as usize) }).to_string());
         let local = cx_escaped(&param);
         let ty = (*nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position))).clone();
         let taken = match cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, &ty) { Some(__nikaia_value) => __nikaia_value, None => return Err(nikaia_std::error::throwing(CxRefused::Because(cx_not_yet(&written, &format!("parameter `{}`", param))), &"cx_wrapper")) };
         cx_parameter(ctx, contracts, &key, position, &param, &local, &taken, &mut params, &mut build.crossing);
-        position += 1;
+        position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
     }
     rust_params = params.rust_params.copy_owned();
     c_params = params.c_params.copy_owned();
@@ -692,7 +692,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
                         { let __nikaia_stored = true; nikaia_std::index::set(&mut *crossing, nikaia_std::index::at(which), __nikaia_stored); }
                         rust_args.push(String::from("std::ffi::c_int"));
                         c_args.push(format!("{}_{}", prefix, plain.name));
-                        closure_params.push(format!("{}: {}", name, plain.name));
+                        closure_params.push(format!("{}: &{}", name, plain.name));
                         passed.push(format!("match {} {{ {} }}", name, cx_choice_arms_out(&plain)));
                     },
                     CxLent::Text => {
@@ -770,7 +770,7 @@ pub(crate) fn cx_call_text(entry: &CxEntry, owner: &str, name: &str, args_text: 
 }
 
 pub(crate) fn cx_matched(thrown: &[CxRaising]) -> String {
-    if thrown.len() == 1 { return format!("match thrown.split().0 {{ {} }}", cx_arms(nikaia_std::index::get(&thrown, 0))); }
+    if thrown.len() == 1 { return format!("match thrown.split().0 {{ {} }}", cx_arms(unsafe { nikaia_std::proven::read(&thrown, (0) as usize) })); }
     let mut members: Vec<String> = vec![];
     for raising in thrown.iter() { members.push(nikaia_std::block::Text::from(raising.error.to_string())); }
     let sum = cx_sum_name(&members);

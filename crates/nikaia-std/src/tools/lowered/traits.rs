@@ -196,7 +196,7 @@ pub(crate) fn incomplete(trait_name: &str, target: &str, missing: &[String], spa
     let mut listed: String = String::from("");
     for at in 0..missing.len() as i64 {
         if at > 0 { listed.push_str(", "); }
-        let one = nikaia_std::index::get(&missing, (at) as usize);
+        let one = unsafe { nikaia_std::proven::read(&missing, (at) as usize) };
         let quoted = format!("`{}`", one);
         listed.push_str(&quoted);
     }

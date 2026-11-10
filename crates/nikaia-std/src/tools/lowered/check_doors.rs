@@ -7,10 +7,10 @@ impl CheckState {
     pub fn a_lock_inside_a_lock(&mut self, called: &str, holds: &Lock, span: &Span) {
         if !self.inside_a_door || !holds.holds() { return; }
         let parts: Vec<&str> = called.split("::").collect::<Vec<_>>();
-        let method = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string()); ::core::mem::drop(parts);
+        let method = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string()); ::core::mem::drop(parts);
         let letters: Vec<scalar> = nikaia_std::list::chars(called.chars());
         let mut written = nikaia_std::block::Text::from(called.to_string());
-        if !letters.is_empty() && (*nikaia_std::index::get(&letters, 0)).to_ascii_lowercase() != *nikaia_std::index::get(&letters, 0) { written = nikaia_std::block::Text::from(method.to_string()); }
+        if !letters.is_empty() && (*unsafe { nikaia_std::proven::read(&letters, (0) as usize) }).to_ascii_lowercase() != *unsafe { nikaia_std::proven::read(&letters, (0) as usize) } { written = nikaia_std::block::Text::from(method.to_string()); }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2203"), message: format!("`{}` takes a lock, but you're already holding one here.", written), notes: vec![String::from("This block runs while a lock is held, so taking a second lock inside it can deadlock.")], help: Some(String::from("Take both locks at once with `access_all(a, b) fn(x, y) { … }`, or compute the value before the block and pass it in.")), labels: vec![CheckLabel { span: span.clone(), word: method, text: String::from("takes a second lock"), main: true }] });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -40,12 +40,12 @@ impl CheckState {
         let mut hands_back = false;
         let mut at: i64 = 0;
         while at < body.stmts.len() as i64 {
-            match &nikaia_std::index::get(&body.stmts, nikaia_std::index::at(at)).node {
+            match &unsafe { nikaia_std::proven::read(&body.stmts, (at) as usize) }.node {
                 Stmt::Return(value) => { if value.is_some() { hands_back = true; } },
-                Stmt::Expr(value) => { if at == body.stmts.len() as i64 - 1 && plainly_a_value(value) { hands_back = true; } },
+                Stmt::Expr(value) => { if at == unsafe { nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1) } && plainly_a_value(value) { hands_back = true; } },
                 _ => { },
             }
-            at = at + 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         if !hands_back { return; }
         self.findings.push(check_refusal("NK1141", span, String::from("An `update` changes the value in place, so it has nothing to return."), vec![String::from("The block gets the value itself and changes it where it is, so a value it returns would go nowhere.")], Some(String::from("Change it instead: write `fn(mut v) { v += 1 }`, not `fn(v) { v + 1 }`."))));
@@ -57,8 +57,8 @@ impl CheckState {
         let mut declared: i64 = -1;
         let mut frame_at: i64 = 0;
         while frame_at < self.scope.len() as i64 {
-            for local in (*nikaia_std::index::get(&self.scope, nikaia_std::index::at(frame_at))).iter() { if local.name == name { declared = frame_at; } }
-            frame_at = frame_at + 1;
+            for local in (*unsafe { nikaia_std::proven::read(&self.scope, (frame_at) as usize) }).iter() { if local.name == name { declared = frame_at; } }
+            frame_at = unsafe { nikaia_std::proven::add::<i64>(frame_at, 1) };
         }
         if declared < 0 || declared >= depth { return; }
         let mut message: String = format!("You're changing `{}` in a lambda that runs on several cores at once, and they all share `{}`.", name, name);

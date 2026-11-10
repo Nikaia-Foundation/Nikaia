@@ -20,6 +20,7 @@ use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
 use nikaia_std::text;
 
+#[allow(unsafe_code)]
 mod main_lowered {
     #[allow(unused_imports)]
     use super::*;

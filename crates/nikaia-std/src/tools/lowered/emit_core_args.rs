@@ -27,7 +27,7 @@ pub(crate) fn emit_arg_opening_inside(inner: &Ty) -> String {
 
 pub fn emit_rust_owner(ty: &Ty) -> String {
     match ty {
-        Ty::Named { name, args, view } => { let view = *view; if view { String::from("") } else if name == "String" && args.is_empty() { String::from("String") } else if name == "Vec" && args.len() == 1 && !emit_ty_holds_text(nikaia_std::index::get(&args, 0)) { String::from("Vec") } else { String::from("") } },
+        Ty::Named { name, args, view } => { let view = *view; if view { String::from("") } else if name == "String" && args.is_empty() { String::from("String") } else if name == "Vec" && args.len() == 1 && !emit_ty_holds_text(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { String::from("Vec") } else { String::from("") } },
         _ => String::from(""),
     }
 }
@@ -58,8 +58,8 @@ pub(crate) fn emit_arg_opening_in(contract: &FnContract, i: i64, library: &Ledge
     if i >= params.len() as i64 { return String::from(""); }
     let written = emit_arg_opening_of(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1);
     if written != "" { return written; }
-    let at = if signature.takes_a_receiver() { i + 1 } else { i };
-    if emit_arg_plain_option(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1) && emit_arg_lends_own(contract, at, library, described) { return emit_arg_opening_plain(&nikaia_std::index::get(&params, nikaia_std::index::at(i)).1); }
+    let at = if signature.takes_a_receiver() { unsafe { nikaia_std::proven::add::<i64>(i, 1) } } else { i };
+    if emit_arg_plain_option(&unsafe { nikaia_std::proven::read(&params, (i) as usize) }.1) && emit_arg_lends_own(contract, at, library, described) { return emit_arg_opening_plain(&unsafe { nikaia_std::proven::read(&params, (i) as usize) }.1); }
     String::from("")
 }
 
@@ -266,7 +266,7 @@ impl EmitState {
                 lets.push("; ");
                 out.push(&format!("__nikaia_arg{}", i));
             } else { self.emit_core_argument(world, walk, out, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?; }
-            i += 1;
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         if !hoisted.is_empty() { walk.hoisted_lets = Some(lets); }
         Ok(())
@@ -275,7 +275,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        if i < part_counts.len() as i64 { walk.hull_count = Some(*nikaia_std::index::get(&part_counts, nikaia_std::index::at(i))); } else { walk.hull_count = None; }
+        if i < part_counts.len() as i64 { walk.hull_count = Some(*unsafe { nikaia_std::proven::read(&part_counts, (i) as usize) }); } else { walk.hull_count = None; }
         let copies = self.facts.kept_fn_copies.contains(&node_key(arg)) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if copies { walk.uncopied = node_key(arg); }
         let scalar = nikaia_std::index::or(self.facts.char_patterns.get(&node_key(arg)), || "");
@@ -298,7 +298,7 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
-        let boxed_here = i < boxed_mask.len() as i64 && *nikaia_std::index::get(&boxed_mask, nikaia_std::index::at(i));
+        let boxed_here = i < boxed_mask.len() as i64 && *unsafe { nikaia_std::proven::read(&boxed_mask, (i) as usize) };
         if boxed_here { out.push("Box::new("); }
         let node = node_key(arg);
         if i == 0 && self.facts.lookup_keys.contains(&node) {
@@ -315,7 +315,7 @@ impl EmitState {
                 return Ok(());
             }
         }
-        let shares_a_handle = i < takes_a_handle.len() as i64 && *nikaia_std::index::get(&takes_a_handle, nikaia_std::index::at(i)) && emit_arg_names_a_place(arg);
+        let shares_a_handle = i < takes_a_handle.len() as i64 && *unsafe { nikaia_std::proven::read(&takes_a_handle, (i) as usize) } && emit_arg_names_a_place(arg);
         let hands_on_kept = emit_arg_is_variable(arg) && !self.facts.named_fn_values.contains_key(&node) && self.keeps_code_at(&nikaia_std::index::or(match method_callee {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
@@ -343,7 +343,7 @@ impl EmitState {
         if lent_option || lent_path { out.push("&"); }
         out.push(&before);
         let rust_owner = if method_callee.is_none() && !lend && !change && !self.own_contracts.functions.contains_key(callee) { emit_rust_owner_param(&self.described, callee, i) } else { String::from("") };
-        if rust_owner == "Vec" { out.push("::std::vec::Vec::from("); } else if rust_owner == "String" { out.push("::std::string::String::from("); }
+        if rust_owner == "Vec" { out.push("nikaia_std::block::handed_list("); } else if rust_owner == "String" { out.push("nikaia_std::block::handed_text("); }
         if either { out.push("nikaia_std::either_text::either("); }
         let keeps_bytes = self.emit_arg_keeps_bytes(world, callee, method_callee, i);
         if keeps_bytes { out.push("&*nikaia_std::bytes::kept("); }
@@ -376,6 +376,7 @@ impl EmitState {
             if change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
+                    if self.facts.lent_text_views.contains(&node) { out.push("&"); }
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
                 } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) && !emit_stmt_a_kept_name(world, &walk, arg) {
@@ -406,6 +407,7 @@ impl EmitState {
         if has_how && how != "" { out.push(&how); }
         if count { out.push(")"); }
         if kept_here { out.push(")"); }
+        if lend && self.facts.lent_text_views.contains(&node) { out.push(".as_str()"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
@@ -534,7 +536,7 @@ impl EmitState {
         out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(())
     }
-    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<bool> {
+    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<i64> {
         let key = match arg {
             Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
             _ => return vec![],
@@ -547,11 +549,13 @@ impl EmitState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         if signature.takes_a_receiver() { return vec![]; }
-        let mut lent: Vec<bool> = vec![];
+        let mut lent: Vec<i64> = vec![];
         let mut any = false;
         for at in 0..signature.params.len() as i64 {
-            let one = emit_arg_lends_own(contract, at, world.library, &self.described) && !(at < viewed.len() as i64 && *nikaia_std::index::get(&viewed, nikaia_std::index::at(at)));
-            any = any || one;
+            let lends = emit_arg_lends_own(contract, at, world.library, &self.described);
+            let slot_lends = at < viewed.len() as i64 && *unsafe { nikaia_std::proven::read(&viewed, (at) as usize) };
+            let one: i64 = if lends && !slot_lends { 1 } else if !lends && slot_lends { 2 } else { 0 };
+            any = any || one != 0;
             lent.push(one);
         }
         if !any { return vec![]; }
@@ -585,7 +589,7 @@ impl EmitState {
         let mut typed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
         for n in 0..lent.len() as i64 {
             names.push(format!("__nikaia_a{}", n));
-            typed.push(format!("__nikaia_a{}: {}", n, *nikaia_std::index::get(&written, (n) as usize)));
+            typed.push(format!("__nikaia_a{}: {}", n, *unsafe { nikaia_std::proven::read(&written, (n) as usize) }));
         }
         out.push(&format!("|{}| ", nikaia_std::block::Text::from(typed.join(", "))));
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
@@ -594,12 +598,12 @@ impl EmitState {
     }
 }
 
-pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
+pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
     #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
     for name in names.iter() {
-        if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
-        at += 1;
+        if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } == 1 { passed.push(format!("&{}", name)); } else if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } == 2 { passed.push(format!("*{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     nikaia_std::block::Text::from(passed.join(", "))
 }
@@ -629,7 +633,7 @@ pub(crate) fn emit_async_wait(gates: &[i64]) -> String {
 
 pub fn emit_async_line(gates: &[i64]) -> String {
     if gates.is_empty() { return String::from(""); }
-    format!("{}_waiting", emit_async_group_name(*nikaia_std::index::get(&gates, nikaia_std::index::at(gates.len() as i64 - 1))))
+    format!("{}_waiting", emit_async_group_name(*unsafe { nikaia_std::proven::read(&gates, (nikaia_std::proven::sub::<i64>(gates.len() as i64, 1)) as usize) }))
 }
 
 pub fn emit_async_pause(walk: &EmitWalk) -> String {
@@ -730,7 +734,7 @@ impl EmitState {
         let callee_name = nikaia_std::index::or(emit_callee_text(world, func), || "".into());
         let callee_parts: Vec<&str> = callee_name.split("::").collect::<Vec<_>>();
         let mut callee_last: String = String::from(""); #[allow(clippy::redundant_locals)] let callee_parts = callee_parts;
-        if !callee_parts.is_empty() { callee_last = nikaia_std::block::Text::from((*nikaia_std::index::get(&callee_parts, nikaia_std::index::at(callee_parts.len() as i64 - 1))).to_string()); }
+        if !callee_parts.is_empty() { callee_last = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&callee_parts, (nikaia_std::proven::sub::<i64>(callee_parts.len() as i64, 1)) as usize) }).to_string()); }
         if self.seeded_calls.contains_key(&callee_last) {
             let hidden = match self.seeded_calls.get(&callee_last) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let mut fill: &'static str = "nikaia_std::hash::Keyed";
@@ -749,10 +753,10 @@ impl EmitState {
             let boxed = flow.handled_here && channel == "Box<dyn std::error::Error>";
             let mut written = false;
             if channel != "nikaia_std::task::Crashed" && args.len() == 1 {
-                match nikaia_std::index::get(&args, 0) {
+                match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
                     Expr::Closure { params, body, .. } => {
                         if params.len() == 1 {
-                            let named = emit_local_name(&self.facts.comptime_names, &emit_text(world, *nikaia_std::index::get(&params, 0)));
+                            let named = emit_local_name(&self.facts.comptime_names, &emit_text(world, *unsafe { nikaia_std::proven::read(&params, (0) as usize) }));
                             out.push(&format!("|{}| {{ let __scope_body: Result<_, {}> = (|| {{ let {} = {}; Ok(", named, channel, named, named));
                             self.emit_call_scope_body(world, walk, out, host, body, depth, &flow, scope, &channel, &owner, false)?;
                             out.push(&format!(") }})(); {}.settled(__scope_body) }}", named));
@@ -1138,7 +1142,7 @@ impl EmitState {
                                 tasks.push((inner.clone(), id.get() as i64));
                                 deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
                                 admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
-                                named = emit_text(world, *nikaia_std::index::get(&names, 0));
+                                named = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
                                 fallback = true;
                             }
                         },
@@ -1150,7 +1154,7 @@ impl EmitState {
                             tasks.push((inner.clone(), id.get() as i64));
                             deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
                             admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
-                            named = emit_text(world, *nikaia_std::index::get(&names, 0));
+                            named = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
                         }
                     },
                     Expr::Tuple(parts, _) => {
@@ -1194,7 +1198,7 @@ impl EmitState {
             walk.async_fallback = fallback;
             walk.async_within = nikaia_std::block::Text::from((*nikaia_std::index::get(&deadlines, nikaia_std::index::at(index))).to_string());
             walk.async_admission = nikaia_std::block::Text::from((*nikaia_std::index::get(&admissions, nikaia_std::index::at(index))).to_string());
-            index = index + 1;
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, &here, scope)?;
             walk.async_fallback = false;
             let mut joined = emit_async_joined(&handle, &channel, fallback);
@@ -1212,7 +1216,7 @@ impl EmitState {
         if waits < 0 && fallback { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate the fallback of `async e` yet where nothing names its binding or only another task does (#986): name it in a statement of this group."), at: Some(span.start as i64) }, &"emit_async_binding")); }
         if waits < 0 {
             walk.async_joining = collections::BTreeMap::new();
-            if named != "" { walk.async_handles.insert(named, nikaia_std::block::Text::from((*nikaia_std::index::get(&inside, 0)).to_string())); }
+            if named != "" { walk.async_handles.insert(named, nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&inside, (0) as usize) }).to_string())); }
             return Ok(true);
         }
         let mut kept = EmitOut::empty();
@@ -1233,7 +1237,7 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_paused_scope<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, args: &[Expr], depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if args.is_empty() { return Ok(false); }
-        Ok(match nikaia_std::index::get(&args, 0) {
+        Ok(match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::Closure { params, body, .. } => {
                 if params.len() != 1 { return Ok(false); }
                 let mut made = "PausedScope";
@@ -1242,7 +1246,7 @@ impl EmitState {
                     made = "PausedPoolScope";
                     run = "scope_paused_on_pool";
                 }
-                let named = emit_local_name(&self.facts.comptime_names, &emit_text(world, *nikaia_std::index::get(&params, 0)));
+                let named = emit_local_name(&self.facts.comptime_names, &emit_text(world, *unsafe { nikaia_std::proven::read(&params, (0) as usize) }));
                 let mut channel = emit_call_tasks_channel(&flow, scope);
                 let mut owner: String = String::from("");
                 if channel == scope.channel { owner = nikaia_std::block::Text::from(scope.function.to_string()); }
@@ -1325,7 +1329,7 @@ impl EmitState {
             None => None,
         }, || "".into());
         if copy == "" {
-            let on: String = match nikaia_std::index::get(&args, nikaia_std::index::at(slot)) {
+            let on: String = match unsafe { nikaia_std::proven::read(&args, (slot) as usize) } {
                 Expr::Variable(name, _) => { let name = *name; self.type_named(world, &walk, &emit_text(world, name)) },
                 Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; nikaia_std::index::or(self.reflected_field_type(world, &walk, base, name, "ty"), || "".into()) },
                 _ => String::from(""),
@@ -1342,7 +1346,7 @@ impl EmitState {
                 first = false;
                 self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         out.push(")");
         Ok(true)
@@ -1357,7 +1361,7 @@ impl EmitState {
         };
         let slot = emit_field_slot_of(world, &callee);
         if slot < 0 || slot >= args.len() as i64 { return Ok(false); }
-        let binding: String = match nikaia_std::index::get(&args, nikaia_std::index::at(slot)) {
+        let binding: String = match unsafe { nikaia_std::proven::read(&args, (slot) as usize) } {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(emit_text(world, name).to_string()) },
             _ => return Ok(false),
         };
@@ -1378,7 +1382,7 @@ impl EmitState {
                 first = false;
                 self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
             }
-            at += 1;
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         out.push(")");
         Ok(true)
@@ -1400,6 +1404,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
+        if written == "" && self.facts.plain_bracket_calls.contains(&node_key(base)) { return Ok(false); }
         if written == "" {
             let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let parts: Vec<Expr> = match index {
@@ -1478,12 +1483,12 @@ impl EmitState {
         Ok(match func {
             Expr::Path(segments, _) => {
                 if segments.len() != 2 || args.len() != 1 { return Ok(false); }
-                if emit_text(world, *nikaia_std::index::get(&segments, 0)) != "SharedMut" || emit_text(world, *nikaia_std::index::get(&segments, 1)) != "supervised" { return Ok(false); }
+                if emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) != "SharedMut" || emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "supervised" { return Ok(false); }
                 let count = self.emit_call_hull_count(host, walk, scope);
                 let hulls = match self.hull_new(world, host.crossings_are_possible(), walk.trusting, "SharedMut", &count) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 if hulls.len() != 2 { return Ok(false); }
-                out.push(&format!("{}::new({}::supervised_kept(", *nikaia_std::index::get(&hulls, 0), *nikaia_std::index::get(&hulls, 1)));
-                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                out.push(&format!("{}::new({}::supervised_kept(", *unsafe { nikaia_std::proven::read(&hulls, (0) as usize) }, *unsafe { nikaia_std::proven::read(&hulls, (1) as usize) }));
+                self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                 out.push(", ");
                 let mut named = false;
                 for a in config.iter() {
@@ -1504,9 +1509,9 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_by_name<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, text: &str, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if (text == "access_all" || text == "update_all") && !args.is_empty() {
-            let copied = if text == "update_all" && self.facts.copied_doors.contains(&node_key(nikaia_std::index::get(&args, 0))) { "_copied" } else { "" };
+            let copied = if text == "update_all" && self.facts.copied_doors.contains(&node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) })) { "_copied" } else { "" };
             out.push(&format!("nikaia_std::lock::{}{}(", text, copied));
-            let last = args.len() as i64 - 1;
+            let last = unsafe { nikaia_std::proven::sub::<i64>(args.len() as i64, 1) };
             let mut at: i64 = 0;
             for lock in args.iter() {
                 if at < last {
@@ -1514,7 +1519,7 @@ impl EmitState {
                     self.emit_expr(world, walk, out, host, lock, depth, flow, scope)?;
                     out.push(", ");
                 } else { self.emit_expr(world, walk, out, host, lock, depth, flow, scope)?; }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
             out.push(")");
             return Ok(true);
@@ -1525,7 +1530,7 @@ impl EmitState {
             if hulls.is_some() {
                 let paths = match hulls { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
                 for path in paths.iter() { out.push(&format!("{}::new(", path)); }
-                self.emit_expr(world, walk, out, host, nikaia_std::index::get(&args, 0), depth, flow, scope)?;
+                self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                 for _ in paths.iter() { out.push(")"); }
                 return Ok(true);
             }
@@ -1559,7 +1564,7 @@ impl EmitState {
         let callee = if fails { format!("nikaia_std::io::{}(format_args!", text) } else { format!("{}!", text) };
         let ending = if fails { ")" } else { "" };
         if args.len() == 1 {
-            let given = nikaia_std::index::get(&args, 0);
+            let given = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
             let key = node_key(&given);
             if self.facts.path_holes.contains_key(&key) {
                 let names = match self.facts.path_holes.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
@@ -1598,8 +1603,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_call_by_path<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, segments: &[winnow_grammar::Symbol], args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         if segments.len() == 2 {
-            let module = emit_text(world, *nikaia_std::index::get(&segments, 0));
-            let name = emit_text(world, *nikaia_std::index::get(&segments, 1));
+            let module = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (0) as usize) });
+            let name = emit_text(world, *unsafe { nikaia_std::proven::read(&segments, (1) as usize) });
             let key = format!("{}::{}::new", module, name);
             if world.library.functions.contains_key(&key) {
                 out.push(&format!("{}::{}", module, self.path(world, walk.trusting, walk.unpinned, &vec![nikaia_std::block::Text::from(name.to_string()), String::from("new")])));

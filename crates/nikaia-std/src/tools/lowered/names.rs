@@ -7,7 +7,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let name = *name;
             out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
         },
-        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&segments, 0)).to_string())); } },
+        Expr::Path(segments, _) => { if !segments.is_empty() { out.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string())); } },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             names_in(func, words, out);
@@ -65,7 +65,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let name = *name;
             out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
             for field in fields.iter() {
-                out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string()));
+                if field.value.is_none() { out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string())); }
                 maybe_names_in((field.value).as_ref(), words, out);
             }
         },
@@ -73,7 +73,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
             let base = nikaia_std::boxed::open(base);
             names_in(base, words, out);
             for field in fields.iter() {
-                out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string()));
+                if field.value.is_none() { out.insert(nikaia_std::block::Text::from(words.resolve(field.name).to_string())); }
                 maybe_names_in((field.value).as_ref(), words, out);
             }
         },

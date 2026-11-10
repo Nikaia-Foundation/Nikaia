@@ -26,18 +26,18 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
     let mut held: Vec<SvHeld> = vec![];
     let mut c: i64 = 0;
     while ((c) as usize) < cnf.query.clauses.len() {
-        let clause = (*nikaia_std::index::get(&cnf.query.clauses, (c) as usize)).copy_owned();
-        if clause.len() == 1 && sv_pre_theory_atom(cnf, (*nikaia_std::index::get(&clause, 0) / 2u32) as i64) {
-            match book.lit_bound(*nikaia_std::index::get(&clause, 0)) {
+        let clause = (*unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) }).copy_owned();
+        if clause.len() == 1 && sv_pre_theory_atom(cnf, (*unsafe { nikaia_std::proven::read(&clause, (0) as usize) } / 2u32) as i64) {
+            match book.lit_bound(*unsafe { nikaia_std::proven::read(&clause, (0) as usize) }) {
                 None => { },
                 Some(ref b) => {
-                    unit_lits.push(*nikaia_std::index::get(&clause, 0));
+                    unit_lits.push(*unsafe { nikaia_std::proven::read(&clause, (0) as usize) });
                     unit_ids.push(*nikaia_std::index::get(&ids, (c) as usize));
-                    held.push(SvHeld { row: b.row.clone(), src: SvSrc::Lit(*nikaia_std::index::get(&clause, 0)) });
+                    held.push(SvHeld { row: b.row.clone(), src: SvSrc::Lit(*unsafe { nikaia_std::proven::read(&clause, (0) as usize) }) });
                 },
             }
         }
-        c += 1;
+        c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
     }
     let given = held.copy_owned();
     let mut solved: Vec<SvSolved> = vec![];
@@ -47,10 +47,10 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
             let mut hints: Vec<u32> = vec![];
             let mut i: i64 = 0;
             while ((i) as usize) < unit_lits.len() {
-                let l = *nikaia_std::index::get(&unit_lits, (i) as usize);
+                let l = *unsafe { nikaia_std::proven::read(&unit_lits, (i) as usize) };
                 let negation = if l % 2u32 == 0u32 { l + 1u32 } else { l - 1u32 };
                 if lemma.lits.contains(&negation) && !hints.contains(nikaia_std::index::get(&unit_ids, (i) as usize)) { hints.push(*nikaia_std::index::get(&unit_ids, (i) as usize)); }
-                i += 1;
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             }
             hints.push(lemma.id);
             book.learn(vec![], hints);
@@ -65,7 +65,7 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
     for h in held.iter() { sides.push(h.clone()); }
     for h in sides.iter() {
         if h.row.cols.len() != 1 { continue; }
-        let col = *nikaia_std::index::get(&h.row.cols, 0);
+        let col = *unsafe { nikaia_std::proven::read(&h.row.cols, (0) as usize) };
         if *nikaia_std::index::get(&h.row.ks, 0) == 1 {
             let v = match sv_mul_add(-1, h.row.constant, 0, 0) { Some(__nikaia_value) => __nikaia_value, None => return out };
             let tighter = match upper.get(&col) {
@@ -114,7 +114,7 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
             let mut multipliers: Vec<i64> = vec![1];
             let mut i: i64 = 0;
             while width > 1 && ((i) as usize) < b.row.cols.len() {
-                let col = *nikaia_std::index::get(&b.row.cols, (i) as usize);
+                let col = *unsafe { nikaia_std::proven::read(&b.row.cols, (i) as usize) };
                 let k = *nikaia_std::index::get(&b.row.ks, (i) as usize);
                 let lo = lower.get(&col);
                 let hi = upper.get(&col);
@@ -127,7 +127,7 @@ pub(crate) fn sv_pre(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvPre {
                         multipliers.push(m);
                     }
                 }
-                i += 1;
+                i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             }
             if sources.len() == 1 { continue; }
             out.fixed += 1;

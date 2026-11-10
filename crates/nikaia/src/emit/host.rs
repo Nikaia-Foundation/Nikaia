@@ -218,6 +218,10 @@ impl EmitHost for Emitter<'_> {
         self.build.skip_free_at_exit
     }
 
+    fn counts_heap(&self) -> bool {
+        self.build.counts_heap
+    }
+
     fn char_literal(&self, written: &str) -> String {
         crate::check::char_literal(written)
     }

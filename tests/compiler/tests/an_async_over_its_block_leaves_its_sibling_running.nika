@@ -1,6 +1,16 @@
 // A task over its budget fails only itself (ADR-327 D13, ADR-async-5 D19): its sibling in
 // the group runs on, and the function that started both fails with
-// `task::OverBudget`, which its caller catches.
+// `task::OverBudget`, which its caller catches. Its strategy gives the task
+// one segment (D15).
+// A strategy that gives each task one segment, 64 KiB (ADR-327 D15).
+struct Small {}
+
+impl task::Admission for Small {
+    fn decide(mut self, load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 65536 }
+    }
+}
+
 fn fill() -> i64 {
     let mut xs: Vec[i64] = []
     for i in 0..<100000 {
@@ -18,7 +28,7 @@ fn small() -> i64 {
 }
 
 fn total() -> i64 throws {
-    let a = async fill()
+    let a = async(admission: Small {}) fill()
     let b = async small()
     println(f"the sibling gave {b}")
     return a + b

@@ -45,7 +45,7 @@ pub(crate) fn written_path(names: &winnow_grammar::InternerContext, segments: &[
     let mut written: String = String::from("");
     for k in 0..segments.len() as i64 {
         if k > 0 { written = format!("{}::", written); }
-        let segment = names.resolve(*nikaia_std::index::get(&segments, (k) as usize));
+        let segment = names.resolve(*unsafe { nikaia_std::proven::read(&segments, (k) as usize) });
         written = format!("{}{}", written, segment);
     }
     written

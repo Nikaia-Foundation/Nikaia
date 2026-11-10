@@ -16,8 +16,8 @@ impl CheckState {
     pub(crate) fn a_declared_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Ty], view: bool) -> Option<String> {
         if !view && args.is_empty() && (self.fields_of(world, name).is_some() || self.enums.contains_key(name)) { return Some(nikaia_std::block::Text::from(name.to_string())); }
         if !view && name == "Array" && args.len() == 2 {
-            return match nikaia_std::index::get(&args, 1) {
-                Ty::Count(n) => { let n = *n; self.a_run_of(world, nikaia_std::index::get(&args, 0), "[", &format!("; {}]", n)) },
+            return match unsafe { nikaia_std::proven::read(&args, (1) as usize) } {
+                Ty::Count(n) => { let n = *n; self.a_run_of(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, "[", &format!("; {}]", n)) },
                 _ => None,
             };
         }
@@ -138,7 +138,7 @@ impl CheckState {
         let viewable = match fallback {
             Expr::LitStr { .. } => text,
             Expr::Variable(_, _) => text || !other.is_a_view(),
-            Expr::Path(segments, _) => !text && segments.len() == 2 && self.is_variant(world.words.resolve(*nikaia_std::index::get(&segments, 0)), world.words.resolve(*nikaia_std::index::get(&segments, 1))),
+            Expr::Path(segments, _) => !text && segments.len() == 2 && self.is_variant(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }), world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) })),
             _ => false,
         };
         if !viewable { return None; }
@@ -199,7 +199,7 @@ impl CheckState {
             _ => return false,
         };
         if view || args.len() != 1 || list != "Vec" && list != "Array" { return false; }
-        match *nikaia_std::index::get(&args, 0) {
+        match *unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Ty::Named { ref name, args: ref inner, view: element_view } => !element_view && inner.is_empty() && a_type_base(name) == "String",
             _ => false,
         }
@@ -288,7 +288,7 @@ impl CheckState {
     pub fn a_mut_parameter_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Expr) -> Option<String> {
         let path = match dotted_path(world, subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let parts: Vec<&str> = path.split('.').collect::<Vec<_>>();
-        let found = match self.binding(*nikaia_std::index::get(&parts, 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }; ::core::mem::drop(parts);
+        let found = match self.binding(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None }; ::core::mem::drop(parts);
         if found.changing { return Some(path); }
         None
     }
@@ -298,7 +298,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub fn element_of(ty: &Ty) -> Ty {
     match ty {
-        Ty::Named { name, args, .. } => if name == "Array" && !args.is_empty() { (*nikaia_std::index::get(&args, 0)).clone() } else { ty.clone() },
+        Ty::Named { name, args, .. } => if name == "Array" && !args.is_empty() { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { ty.clone() },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; if slice && !mutable { item.clone() } else { ty.clone() } },
         _ => ty.clone(),
     }
@@ -347,8 +347,8 @@ pub(crate) fn a_from_call_reads_only(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
     if !held.is_a_view() || (params.len() as i64) != args.len() as i64 { return false; }
     let mut reads = false;
     for at in 0..params.len() as i64 {
-        if (*nikaia_std::index::get(&params, (at) as usize)).is_a_view() {
-            let named = match nikaia_std::index::get(&args, (at) as usize) {
+        if (*unsafe { nikaia_std::proven::read(&params, (at) as usize) }).is_a_view() {
+            let named = match unsafe { nikaia_std::proven::read(&args, (at) as usize) } {
                 Expr::Variable(name, _) => { let name = *name; nikaia_std::list::contains(&borrows, &world.words.resolve(name)) },
                 _ => false,
             };

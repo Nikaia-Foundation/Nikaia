@@ -8,7 +8,7 @@ pub fn aliases_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerConte
             Item::Import { path, alias } => {
                 let alias = *alias;
                 if path.len() == 1 && alias.is_some() {
-                    let package = *nikaia_std::index::get(&path, 0);
+                    let package = *unsafe { nikaia_std::proven::read(&path, (0) as usize) };
                     let name = nikaia_std::index::or(alias, || package.into());
                     out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()), nikaia_std::block::Text::from(words.resolve(package).to_string()));
                 }

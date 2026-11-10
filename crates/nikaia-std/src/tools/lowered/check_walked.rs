@@ -78,13 +78,13 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
         let name = intern(&format!("__nikaia_arg{}", at));
         names.push(name);
         args.push(Expr::Variable(name, fresh_id()));
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let call = match func {
         Expr::Path(segments, _) => {
             if receiver && !args.is_empty() {
                 let first = args.remove(0);
-                Expr::MethodCall { receiver: Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(segments.len() as i64 - 1)), args, config: vec![], id: fresh_id() }
+                Expr::MethodCall { receiver: Box::new(first), method: *nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) })), args, config: vec![], id: fresh_id() }
             } else { Expr::Call { func: Box::new(Expr::Path(segments.copy_owned(), fresh_id())), args, config: vec![], id: fresh_id() } }
         },
         Expr::Variable(name, _) => { let name = *name; Expr::Call { func: Box::new(Expr::Variable(name, fresh_id())), args, config: vec![], id: fresh_id() } },
@@ -142,7 +142,7 @@ pub fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, 
                 for rule in def.rules.iter() { if rule.is_entry { entries.insert(world.here.text(rule.name)); } }
                 state.grammars.insert(world.here.text(def.name), entries);
             },
-            Item::Import { path, .. } => { if path.len() == 2 && world.here.text(*nikaia_std::index::get(&path, 0)) == "std" { state.std_in_scope.insert(world.here.text(*nikaia_std::index::get(&path, 1))); } },
+            Item::Import { path, .. } => { if path.len() == 2 && world.here.text(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == "std" { state.std_in_scope.insert(world.here.text(*unsafe { nikaia_std::proven::read(&path, (1) as usize) })); } },
             Item::Extern { declarations, opaque, .. } => {
                 for handle in opaque.iter() { state.opaque_handles.insert(world.here.text(handle.node.name)); }
                 for declared in declarations.iter() { state.foreign_names.insert(world.here.text(declared.node.name)); }

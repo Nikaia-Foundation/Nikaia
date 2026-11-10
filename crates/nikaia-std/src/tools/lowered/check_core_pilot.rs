@@ -17,13 +17,13 @@ pub fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &Che
     match declared {
         Some(contract) => {
             let signature = nikaia_std::index::or(contract.signature, || Signature::empty());
-            let wanted = signature.params.len() as i64 - 1;
-            if wanted >= 0 && args.len() as i64 - 1 != wanted { state.findings.push(check_refusal("NK1101", span, format!("`{}` takes the input and {}, but you passed {} arguments.", key, counted(wanted, "value"), args.len() as i64), vec![String::from("An entry takes the text or bytes to parse first, then the values its rule declares (ADR-grammar-1 D2).")], Some(String::from("Give the input, then one value for each, by position.")))); }
+            let wanted = unsafe { nikaia_std::proven::sub::<i64>(signature.params.len() as i64, 1) };
+            if wanted >= 0 && unsafe { nikaia_std::proven::sub::<i64>(args.len() as i64, 1) } != wanted { state.findings.push(check_refusal("NK1101", span, format!("`{}` takes the input and {}, but you passed {} arguments.", key, counted(wanted, "value"), args.len() as i64), vec![String::from("An entry takes the text or bytes to parse first, then the values its rule declares (ADR-grammar-1 D2).")], Some(String::from("Give the input, then one value for each, by position.")))); }
             for i in 1..args.len() as i64 {
                 if ((i) as usize) < signature.params.len() {
-                    let named = nikaia_std::block::Text::from(nikaia_std::index::get(&signature.params, (i) as usize).0.to_string());
-                    let given = check_core_expr(state, world, host, nikaia_std::index::get(&args, (i) as usize), span);
-                    state.expect_type(world, &given, &nikaia_std::index::get(&signature.params, (i) as usize).1, span, "argument", &|was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
+                    let named = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0.to_string());
+                    let given = check_core_expr(state, world, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, span);
+                    state.expect_type(world, &given, &unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.1, span, "argument", &|was, wanted| { format!("The value for `{}` is `{}`, but `{}` takes `{}`.", named, was, key, wanted) });
                 }
             }
             for c in config.iter() {
@@ -181,12 +181,12 @@ pub fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: 
     let before = state.findings.len() as i64;
     let mut given: Ty = Ty::Unknown;
     if slot >= 0 {
-        given = check_core_type_argument(state, world, nikaia_std::index::get(&args, nikaia_std::index::at(slot)), name, span);
+        given = check_core_type_argument(state, world, unsafe { nikaia_std::proven::read(&args, (slot) as usize) }, name, span);
         state.findings.truncate(nikaia_std::count::of(before));
         if given.is_unknown() { return; }
-    } else { given = check_core_expr(state, world, host, nikaia_std::index::get(&args, 0), span); }
+    } else { given = check_core_expr(state, world, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     state.findings.truncate(nikaia_std::count::of(before));
-    let literal = slot < 0 && matches!(*nikaia_std::index::get(&args, 0), Expr::LitInt { .. });
+    let literal = slot < 0 && matches!(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }, Expr::LitInt { .. });
     check_core_instantiate(state, world, name, call, &given, literal);
 }
 
@@ -226,7 +226,7 @@ pub fn check_core_slot_index(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, nam
     let mut at: i64 = 0;
     for param in signature.params.iter() {
         if param.0 == "" { return at; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     -1
 }
@@ -311,7 +311,7 @@ pub fn check_reflect_kind(state: &CheckState, ty: &Ty) -> String {
 }
 
 pub(crate) fn check_reflect_named_kind(state: &CheckState, name: &str, args: &[Ty]) -> String {
-    if (name == "Shared" || name == "SharedMut") && args.len() == 1 { return check_reflect_kind(state, nikaia_std::index::get(&args, 0)); }
+    if (name == "Shared" || name == "SharedMut") && args.len() == 1 { return check_reflect_kind(state, unsafe { nikaia_std::proven::read(&args, (0) as usize) }); }
     if state.structs.contains_key(name) { return String::from("Struct"); }
     if state.enums.contains_key(name) { return String::from("Enum"); }
     check_reflect_builtin_kind(name)
@@ -376,12 +376,12 @@ pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'
         _ => return None,
     };
     if segments.len() == 3 {
-        let case = world.words.resolve(*nikaia_std::index::get(&segments, 2));
-        if world.words.resolve(*nikaia_std::index::get(&segments, 0)) == "meta" && world.words.resolve(*nikaia_std::index::get(&segments, 1)) == "Type" && check_reflect_bare_kind(case) { return Some(nikaia_std::block::Text::from(case.to_string())); }
+        let case = world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) });
+        if world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_bare_kind(case) { return Some(nikaia_std::block::Text::from(case.to_string())); }
         return None;
     }
-    if segments.len() != 2 || world.words.resolve(*nikaia_std::index::get(&segments, 1)) != "kind" { return None; }
-    let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string());
+    if segments.len() != 2 || world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "kind" { return None; }
+    let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
     if state.is_variant(&ty, "kind") || !check_reflect_a_type(&state, &ty) { return None; }
     if state.type_parameters.contains_key(&ty) { return Some(String::from("?")); }
     let kind = check_reflect_named_kind(&state, &ty, &vec![]);
@@ -406,15 +406,15 @@ pub fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_,
 pub fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, segments: &[winnow_grammar::Symbol], span: &Span) -> Option<Ty> {
     let meta = Ty::Named { name: String::from("meta::Type"), args: vec![], view: false };
     if segments.len() == 3 {
-        if world.words.resolve(*nikaia_std::index::get(&segments, 0)) == "meta" && world.words.resolve(*nikaia_std::index::get(&segments, 1)) == "Type" && check_reflect_bare_kind(world.words.resolve(*nikaia_std::index::get(&segments, 2))) {
-            state.a_kind_kept_at_run_time(&format!("meta::Type::{}", world.words.resolve(*nikaia_std::index::get(&segments, 2))), span);
+        if world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_bare_kind(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })) {
+            state.a_kind_kept_at_run_time(&format!("meta::Type::{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })), span);
             return Some(meta);
         }
         return None;
     }
     if segments.len() != 2 { return None; }
-    let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string());
-    let member = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&segments, 1)).to_string());
+    let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
+    let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }).to_string());
     if member != "kind" && member != "name" { return None; }
     if state.is_variant(&ty, &member) || resolve_call(world, &format!("{}::{}", ty, member)).is_some() || !check_reflect_a_type(&state, &ty) { return None; }
     if member == "name" {
@@ -574,19 +574,19 @@ pub fn check_reflect_arm(words: &winnow_grammar::InternerContext, pattern: &Matc
         },
         MatchPattern::Path(path) => {
             if path.is_empty() { return None; }
-            let case = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string());
+            let case = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string());
             let names: Vec<String> = vec![];
             Some((case, names))
         },
         MatchPattern::Tuple { path, parts } => {
             if path.is_empty() { return None; }
-            let case = nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&path, nikaia_std::index::at(path.len() as i64 - 1))).to_string());
+            let case = nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string());
             let mut names: Vec<String> = vec![];
             for part in parts.iter() {
                 match part {
                     MatchPattern::Path(written) => {
                         if written.len() != 1 { return None; }
-                        names.push(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&written, 0)).to_string()));
+                        names.push(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&written, (0) as usize) }).to_string()));
                     },
                     MatchPattern::Otherwise => { names.push(String::from("_")); },
                     _ => { return None; },
@@ -606,8 +606,8 @@ pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWo
         Expr::Path(segments, _) => segments,
         _ => return false,
     };
-    if segments.len() != 2 || world.words.resolve(*nikaia_std::index::get(&segments, 1)) != "kind" { return false; }
-    let ty = nikaia_std::block::Text::from(world.words.resolve(*nikaia_std::index::get(&segments, 0)).to_string());
+    if segments.len() != 2 || world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) != "kind" { return false; }
+    let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string());
     if state.is_variant(&ty, "kind") || !check_reflect_a_type(&state, &ty) { return false; }
     if !state.type_parameters.contains_key(&ty) {
         let kind = check_reflect_named_kind(&state, &ty, &vec![]);

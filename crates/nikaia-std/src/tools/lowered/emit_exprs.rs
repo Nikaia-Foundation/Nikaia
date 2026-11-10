@@ -15,7 +15,7 @@ pub(crate) fn emit_candidates(ledger: &Ledger, method: &str) -> Vec<FnContract> 
 pub(crate) fn emit_takes_self(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return true };
     if signature.params.is_empty() { return false; }
-    nikaia_std::index::get(&signature.params, 0).0 == "self"
+    unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self"
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub(crate) fn emit_argument(contract: &FnContract, i: i64) -> Option<EmitArg> {
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     let arguments = call_arguments(&signature);
     if i < 0 || i >= arguments.len() as i64 { return None; }
-    let found = (*nikaia_std::index::get(&arguments, nikaia_std::index::at(i))).clone();
+    let found = (*unsafe { nikaia_std::proven::read(&arguments, (i) as usize) }).clone();
     Some(EmitArg { name: found.0, ty: found.1 })
 }
 
@@ -159,7 +159,7 @@ impl EmitState {
     }
     pub(crate) fn first_generic<'r>(&self, words: &'r winnow_grammar::InternerContext, generics: &[GenericParam]) -> &'r str {
         if generics.is_empty() { return ""; }
-        words.resolve(nikaia_std::index::get(&generics, 0).name)
+        words.resolve(unsafe { nikaia_std::proven::read(&generics, (0) as usize) }.name)
     }
     pub fn walks_a_shape(&self, world: &EmitWorld<'_, '_, '_, '_>, item: &Item) -> Option<String> {
         match item {
@@ -216,9 +216,9 @@ impl EmitState {
     pub fn mapped_path(&self, trusting: bool, name: &str) -> String {
         let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
         if parts.len() < 2 { return self.map_name(trusting, name); }
-        let last = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
+        let last = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
         let mut module: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for at in 0..parts.len() as i64 - 1 { module.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (at) as usize)).to_string())); }
+        for at in 0..unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { module.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }).to_string())); }
         format!("{}::{}", nikaia_std::block::Text::from(module.join("::")), self.map_name(trusting, &last))
     }
 }

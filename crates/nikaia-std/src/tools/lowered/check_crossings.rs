@@ -36,9 +36,9 @@ pub(crate) fn check_crossings_mentioned(world: &CheckWorld<'_, '_, '_, '_, '_, '
 pub(crate) fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
     let mut at = from;
     while at < stmts.len() as i64 {
-        let flow = check_crossings_step(world, name, &nikaia_std::index::get(&stmts, nikaia_std::index::at(at)).node, in_loop);
+        let flow = check_crossings_step(world, name, &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node, in_loop);
         if flow != CheckCrossingsPath::Falls { return flow; }
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     CheckCrossingsPath::Falls
 }
@@ -71,7 +71,7 @@ pub(crate) fn check_crossings_names_cancel(world: &CheckWorld<'_, '_, '_, '_, '_
         Expr::Path(parts, _) => {
             let count = parts.len() as i64;
             if count < 2 { return false; }
-            return format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(count - 1)))) == "Cancel" && format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(count - 2)))) == "OnTimeout";
+            return format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) })) == "Cancel" && format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(count, 2)) as usize) })) == "OnTimeout";
         },
         _ => return false,
     }
@@ -154,7 +154,7 @@ pub(crate) fn check_crossings_reaches_timed_out(world: &CheckWorld<'_, '_, '_, '
         MatchPattern::Path(parts) => {
             let count = parts.len() as i64;
             if count == 1 { return true; }
-            return format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(count - 1)))) == "TimedOut";
+            return format!("{}", world.words.resolve(*nikaia_std::index::get(&parts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })))) == "TimedOut";
         },
         MatchPattern::Or(choices) => {
             for choice in choices.iter() { if check_crossings_reaches_timed_out(world, choice) { return true; } }
@@ -261,7 +261,7 @@ pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
                 Expr::Spawn { .. } => { },
                 _ => { if !handles.contains(&at) { return None; } },
             }
-            let name: String = format!("{}", world.words.resolve(*nikaia_std::index::get(&names, 0)));
+            let name: String = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
             if name == "_" { return None; }
             return Some(name);
         },
@@ -274,7 +274,7 @@ pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 pub fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         let spawned: Option<String> = check_crossings_spawned(world, &state.flow.handle_lets, &stmt.node, stmt.span.start as i64);
         if spawned.is_some() {
             let name: String = nikaia_std::index::or(spawned, || "".into());
@@ -373,14 +373,14 @@ pub fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld
 pub fn check_crossings_a_task_of_a_scope(state: &mut CheckState, args: &[Expr]) {
     if state.in_parallel.is_none() { state.in_parallel = Some(state.scope.len() as i64); }
     state.scoped_task = true;
-    if !args.is_empty() { state.facts.scope_tasks.insert(id_of(nikaia_std::index::get(&args, 0)) as i64); }
+    if !args.is_empty() { state.facts.scope_tasks.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn check_crossings_a_scope_that_pauses(state: &mut CheckState, args: &[Expr], paused: &[i64], span: &Span) {
     if args.is_empty() { return; }
-    let body = id_of(nikaia_std::index::get(&args, 0)) as i64;
+    let body = id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64;
     if !paused.contains(&body) { return; }
     state.facts.paused_scopes.insert(body);
     state.a_call_that_may_pause("task::scope", true, false, span);
@@ -428,7 +428,7 @@ pub fn check_crossings_a_lambda_that_pauses_at_an_entry(state: &mut CheckState, 
         return result;
     }
     let entry = match check_crossings_entry(&state, key, chained) { Some(__nikaia_value) => __nikaia_value, None => return result };
-    state.facts.pausing_lambdas.insert(id_of(nikaia_std::index::get(&args, nikaia_std::index::at(lambda_at))) as i64, entry);
+    state.facts.pausing_lambdas.insert(id_of(unsafe { nikaia_std::proven::read(&args, (lambda_at) as usize) }) as i64, entry);
     if key == "Seq::map" || key == "Seq::filter" { return a_pausing_sequence(result, on); }
     let written = id_of(receiver) as i64;
     state.flow.settled_methods.remove(&written);
@@ -460,17 +460,17 @@ pub fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState,
     };
     if check_crossings_known(bound, &name) { return; }
     let mut skip: i64 = 0;
-    if !signature.params.is_empty() && nikaia_std::index::get(&signature.params, 0).0 == "self" { skip = 1; }
+    if !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" { skip = 1; }
     let mut at: Vec<i64> = vec![];
     let mut i: i64 = skip;
     while i < signature.params.len() as i64 {
-        if i - skip < args.len() as i64 && check_crossings_is_var(&nikaia_std::index::get(&signature.params, nikaia_std::index::at(i)).1, &name) { at.push(i - skip); }
-        i += 1;
+        if unsafe { nikaia_std::proven::sub::<i64>(i, skip) } < args.len() as i64 && check_crossings_is_var(&unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.1, &name) { at.push(unsafe { nikaia_std::proven::sub::<i64>(i, skip) }); }
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if at.is_empty() { return; }
     for k in at.iter() {
         let k = nikaia_std::num::value(k);
-        if !state.number_shaped(world, nikaia_std::index::get(&args, nikaia_std::index::at(k))) && !state.a_member_of_an_open_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(k))) { return; }
+        if !state.number_shaped(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }) && !state.a_member_of_an_open_argument(world, unsafe { nikaia_std::proven::read(&args, (k) as usize) }) { return; }
     }
     state.flow.open_calls.insert(id_of(nikaia_std::index::get(&args, 0)) as i64, at);
 }

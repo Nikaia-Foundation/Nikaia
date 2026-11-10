@@ -706,10 +706,13 @@ fn skip_free_at_exit_keeps_output_cleanups_and_status() {
         emit_program(&parsed, how).expect("the source lowers").rust
     };
     let default = lowered(Build::default());
-    assert!(!default.contains("global_allocator"), "{default}");
+    // The default counts the heap per task (ADR-327 D9); skipping the free
+    // leaves it to the OS instead.
+    assert!(!default.contains("NikaiaHeap"), "{default}");
+    assert!(default.contains("block::Counting"), "{default}");
     assert!(!default.contains("main_ends"), "{default}");
     let skipped = lowered(on(Build::default()));
-    assert!(skipped.contains("#[global_allocator]"), "{skipped}");
+    assert!(skipped.contains("NikaiaHeap"), "{skipped}");
     assert!(
         skipped.contains("nikaia_std::rt::exit::main_ends();"),
         "{skipped}"

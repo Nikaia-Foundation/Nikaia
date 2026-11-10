@@ -94,26 +94,26 @@ pub(crate) fn keep_marks_against_trait(view: &ParsedView<'_, '_, '_, '_, '_, '_>
             let own = view.text(match name { Some(__nikaia_value) => __nikaia_value, None => return });
             let at_trait = format!("{}::{}", owner, own);
             let marks = match *nikaia_std::index::get(&traits, &at_trait) { Some(__nikaia_value) => __nikaia_value, None => return };
-            if (marks.len() as i64) != args.len() as i64 + 1 { return; }
+            if (marks.len() as i64) != unsafe { nikaia_std::proven::add::<i64>(args.len() as i64, 1) } { return; }
             let consumes = match receiver {
                 None => false,
                 Some(r) => r.is_keep,
             };
-            if receiver.is_some() && consumes != *nikaia_std::index::get(&marks, 0) {
-                let written = if *nikaia_std::index::get(&marks, 0) { "`keep self`" } else { "`self` without `keep`" };
+            if receiver.is_some() && consumes != *unsafe { nikaia_std::proven::read(&marks, (0) as usize) } {
+                let written = if *unsafe { nikaia_std::proven::read(&marks, (0) as usize) } { "`keep self`" } else { "`self` without `keep`" };
                 let help = format!("Write {}, as the trait does.", written);
                 out.push(check_refusal("NK2302", &method.span, format!("`{}` marks `self` otherwise than `{}` does.", own, at_trait), vec![String::from("A trait's signature fixes `keep` for every implementation (ADR-views-3 D2).")], Some(help)));
             }
             let mut at: i64 = 0;
             for arg in args.iter() {
-                let marked = *nikaia_std::index::get(&marks, (at + 1) as usize);
+                let marked = *unsafe { nikaia_std::proven::read(&marks, (nikaia_std::proven::add::<i64>(at, 1)) as usize) };
                 if arg.keep != marked {
                     let parameter = view.text(arg.name);
                     let help = if marked { format!("Write `keep` before `{}`, as the trait does.", parameter) } else { format!("Remove `keep` before `{}`, as the trait does.", parameter) };
                     let said = if marked { "keeps" } else { "lends" };
                     out.push(check_refusal("NK2302", &arg.span, format!("`{}` marks `{}` otherwise than `{}`, which {} it.", own, parameter, at_trait, said), vec![String::from("A trait's signature fixes `keep` for every implementation (ADR-views-3 D2): a caller through the trait reads that signature, not this one.")], Some(help)));
                 }
-                at += 1;
+                at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             }
         },
         _ => { },

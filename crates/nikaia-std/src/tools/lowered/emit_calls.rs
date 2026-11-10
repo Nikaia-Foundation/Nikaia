@@ -109,13 +109,13 @@ pub(crate) fn call_throws_of(ledger: &Ledger, name: &str) -> Option<Vec<String>>
 
 pub fn call_returns_either(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>], function: &str) -> bool {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
-    let own = nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string());
+    let own = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string());
     let mut wanted: String = String::from("");
     let mut qualified = false;
     if parts.len() > 1 {
         qualified = true;
         let mut before: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for at in 0..parts.len() as i64 - 1 { before.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, (at) as usize)).to_string())); }
+        for at in 0..unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { before.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (at) as usize) }).to_string())); }
         wanted = nikaia_std::block::Text::from(before.join("::"));
     }
     for item in items.iter() {

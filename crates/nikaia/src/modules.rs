@@ -136,7 +136,7 @@ struct Parsing {
 }
 
 impl ModulesHost for Parsing {
-    fn parse_unit(&self, path: &Path, source: &str, package: Option<String>) -> Option<i64> {
+    fn parse_unit(&self, path: &Path, source: &str, package: Option<&str>) -> Option<i64> {
         // A parse error is a finding, rendered here where the path is known;
         // any other failure keeps the path as its context. Either way it
         // keeps its type, which is what says this is a refusal of the program
@@ -144,7 +144,7 @@ impl ModulesHost for Parsing {
         // Its text tiers wait for the package's other files (`units`).
         match parser::parse_unrefined(source) {
             Ok(mut parsed) => {
-                parsed.package = package;
+                parsed.package = package.map(String::from);
                 let mut kept = self.parsed.borrow_mut();
                 kept.push(Some(parsed));
                 Some(kept.len() as i64 - 1)
@@ -1016,7 +1016,7 @@ impl collecting::ModulesEmitHost for EmitHost<'_> {
     fn emit_unit(
         &self,
         at: i64,
-        provenance: crate::contracts::Provenance,
+        provenance: &crate::contracts::Provenance,
         offset: i64,
     ) -> std::result::Result<String, Box<dyn std::error::Error>> {
         let at = at as usize;
@@ -1026,7 +1026,7 @@ impl collecting::ModulesEmitHost for EmitHost<'_> {
                 &unit.parsed,
                 &self.beside,
                 self.build,
-                provenance,
+                *provenance,
                 &self.program.contracts,
                 &self.program.described,
                 // The entry is the only file ADR-303 D4's generated `fn main`

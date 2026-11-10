@@ -616,6 +616,27 @@ impl EmitState {
                 // buffer the body made (D23) as well: one lifetime over both.
                 let source_kept = source_name != null && has_kept && self.tethered_position(key, "<result>")
                 let shared = source_name != null && !source_kept
+                // **A parameter handed back whole is borrowed apart from what
+                // it views** (ADR-views-3 D12, #1498): `fn leaf<'r, 'a>(n: &'r
+                // N<'a>) -> &'r N<'a>`, so a copy of the result outlives the
+                // argument it was read from.
+                let mut lifted_whole = false
+                if shared && !source_nested && emit_is_elided(lifetimes) && inner_views == null && stores.is_empty() {
+                    match source_at {
+                        at => {
+                            let ty = args[at].ty.clone()
+                            if self.carries_a_view(world, ty) && self.borrows(world, ty.name) && ty.generics.is_empty() && !ty.is_nullable {
+                                match ret_type {
+                                    each => {
+                                        lifted_whole = emit_text(world, each.name) == emit_text(world, ty.name) && each.generics.is_empty() && !each.is_nullable
+                                    },
+                                    null => {},
+                                }
+                            }
+                        },
+                        null => {},
+                    }
+                }
                 // **No parameter at all**: the literal outlives everything.
                 let mut nothing_borrowed = false
                 if emit_is_elided(lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
@@ -734,6 +755,8 @@ impl EmitState {
                         if is_source && shared {
                             if source_nested {
                                 position = EmitLifetimes::Within
+                            } else if lifted_whole {
+                                position = EmitLifetimes::SharedIn
                             } else {
                                 position = EmitLifetimes::Shared
                             }
@@ -864,6 +887,9 @@ impl EmitState {
                 if emit_is_elided(lifetimes) && (!input_empty || inner_views != null || !stores.is_empty()) {
                     declared.insert(0, "'a")
                 }
+                if lifted_whole && !declared.contains("'a") {
+                    declared.insert(0, "'a")
+                }
                 if shared {
                     declared.insert(0, "'r")
                 }
@@ -913,6 +939,8 @@ impl EmitState {
                             let mut result: EmitLifetimes = lifetimes
                             if has_kept && self.tethered_position(key, "<result>") {
                                 result = kept_lt
+                            } else if lifted_whole {
+                                result = EmitLifetimes::SharedIn
                             } else if shared {
                                 result = EmitLifetimes::Shared
                             } else if widens {
@@ -1021,6 +1049,19 @@ impl EmitState {
                     ret = f" -> Result<{returned}, {channel}>"
                 } else if ret_type != null {
                     ret = f" -> {returned}"
+                }
+                // **A type parameter a std operation weighs is `DeepSize`**
+                // (ADR-327 D9, #1559): the weight is the language's, so no
+                // Nikaia bound says it; a copy has no parameter left.
+                let a_copy = walk.specialising != null && (walk.slotted || self.copy_substitutes((walk.specialising?.second ?? "").clone()))
+                let weighed = self.facts.weighed_of(key)
+                if !a_copy && !weighed.is_empty() {
+                    let mut clauses: Vec[String] = []
+                    for each in weighed {
+                        clauses.push(f"{each}: nikaia_std::block::DeepSize")
+                    }
+                    let joined = clauses.join(", ")
+                    ret = f"{ret} where {joined}"
                 }
 
                 let ended = emit_seeds_end(walk, begun.seeded, begun.base)

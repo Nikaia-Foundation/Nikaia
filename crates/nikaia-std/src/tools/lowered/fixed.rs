@@ -34,12 +34,12 @@ pub fn build(keys: &[String]) -> Option<Table> {
         let mut written: Vec<String> = vec![];
         let mut order: Vec<i64> = vec![];
         for at in 0..n {
-            written.push(nikaia_std::block::Text::from((*nikaia_std::index::get(&keys, nikaia_std::index::at(at))).to_string()));
+            written.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keys, (at) as usize) }).to_string()));
             order.push(at);
         }
         return Some(Table { seed: 0, disps: vec![], keys: written, order });
     }
-    let mut buckets = (n + 4) / 5;
+    let mut buckets = (unsafe { nikaia_std::proven::add::<i64>(n, 4) }) / 5;
     if buckets < 1 { buckets = 1; }
     for seed in 0..200 {
         let table = attempt(keys, u64::try_from(seed).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")), buckets, n);
@@ -54,16 +54,16 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
     let mut by_bucket: Vec<Vec<(i64, u32, u32)>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for _ in 0..buckets { by_bucket.push(vec![]); }
     for at in 0..n {
-        let hash = fnv(nikaia_std::index::get(&keys, nikaia_std::index::at(at)), seed);
+        let hash = fnv(unsafe { nikaia_std::proven::read(&keys, (at) as usize) }, seed);
         let g = (hash >> 32) as u32;
         let f1 = hash as u32;
         let f2 = (hash >> 16) as u32;
         by_bucket[nikaia_std::index::at(g as i64 % buckets)].push((at, f1, f2));
     }
-    let mut order: Vec<(i64, i64)> = vec![];
+    let mut order: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for b in 0..buckets {
         let size = (*nikaia_std::index::get(&by_bucket, (b) as usize)).len() as i64;
-        if size > 0 { order.push((0 - size, b)); }
+        if size > 0 { order.push((unsafe { nikaia_std::proven::sub::<i64>(0, size) }, b)); }
     }
     order.sort();
     let mut disps: Vec<(u32, u32)> = vec![];

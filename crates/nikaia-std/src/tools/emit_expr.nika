@@ -68,7 +68,7 @@ impl EmitState {
                     // is wanted, is copied out** (ADR-387 D1, #1291): a
                     // `let` of a map's read binds `Option<&T>` below.
                     let copied_out = self.facts.copied_views.contains(at) && !self.facts.copied_args.contains(at)
-                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [] }, if copied_out { how + 64 } else { how }, false)
+                    self.emit_expr_narrowed(out, EmitOut { buf: emit_text(world, name), entries: [], unsafe_depth: 0 }, if copied_out { how + 64 } else { how }, false)
                     return
                 },
                 // **A path of fields, as written, and then unwrapped**.
@@ -408,7 +408,12 @@ impl EmitState {
                 // A view of a copied word is read at the call (ADR-views-3
                 // D12, #1239): `Clone::clone(hand(&3))`, which leaves the open `3` to
                 // the type its uses decide (#497).
-                let copied = self.facts.copied_results.contains(node_key(func))
+                // `id[i64](3)` is checked on its callee's name (#1498).
+                let callee = match func {
+                    Expr::Index { base, .. } => base,
+                    else => func,
+                }
+                let copied = self.facts.copied_results.contains(node_key(callee))
                 if copied {
                     out.push("Clone::clone(")
                 }
@@ -683,9 +688,11 @@ impl EmitState {
         // without its check, by `proven-index` (ADR-378 D2).
         if negation && self.proven_negations.contains_key(node_key(node)) {
             let ty = (self.proven_negations.get(node_key(node)) ?? "").clone()
-            out.push(f"unsafe {{ nikaia_std::proven::neg::<{ty}>(")
+            out.open_unsafe()
+            out.push(f"nikaia_std::proven::neg::<{ty}>(")
             self.emit_expr(world, walk, out, host, operand, depth, flow, scope)
-            out.push(") }")
+            out.push(")")
+            out.close_unsafe()
             return
         }
         out.push(unary_op(op))

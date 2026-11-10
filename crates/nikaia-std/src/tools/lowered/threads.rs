@@ -204,7 +204,7 @@ pub(crate) fn in_one_ledger(name: &str, suffix: &str, ledger: &Ledger) -> Option
 
 pub(crate) fn base_name(name: &str) -> String {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
-    nikaia_std::block::Text::from((*nikaia_std::index::get(&parts, nikaia_std::index::at(parts.len() as i64 - 1))).to_string())
+    nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::sub::<i64>(parts.len() as i64, 1)) as usize) }).to_string())
 }
 
 pub(crate) fn one_of(names: &[&str], name: &str) -> bool {
