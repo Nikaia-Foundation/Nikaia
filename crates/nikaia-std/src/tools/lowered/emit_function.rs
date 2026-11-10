@@ -608,6 +608,14 @@ impl EmitState {
                 }
                 let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if throws_ { ret = format!(" -> Result<{}, {}>", returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
+                let a_copy = walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())));
+                let weighed = self.facts.weighed_of(&key);
+                if !a_copy && !weighed.is_empty() {
+                    let mut clauses: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                    for each in weighed.iter() { clauses.push(format!("{}: nikaia_std::block::DeepSize", each)); }
+                    let joined = nikaia_std::block::Text::from(clauses.join(", "));
+                    ret = format!("{} where {}", ret, joined);
+                }
                 let ended = emit_seeds_end(walk, begun.seeded, begun.base);
                 for each in ended.declared.iter() { declared.push(nikaia_std::block::Text::from(each.to_string())); }
                 let outer_unpinned = walk.unpinned;

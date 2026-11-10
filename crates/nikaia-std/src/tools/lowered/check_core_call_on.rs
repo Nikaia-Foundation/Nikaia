@@ -1064,6 +1064,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     for (name, ty) in argument_bindings(contract, &found) { bound.entry(String::from(name)).or_insert(ty); }
     state.a_bound_the_argument_does_not_meet(world, key, &bound, span);
     check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
+    check_core_call_on_weighed_through(state, key, &bound);
     let substituted = substitute(&result, &bound);
     state.flow.text_slot = views_text_slots(&result, &bound, true);
     state.flow.text_walk = views_text_slots(&result, &bound, false);
@@ -1100,6 +1101,8 @@ pub fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWor
     }
     let has_name = check_core_call_on_has_name(&on);
     let type_name = check_core_call_on_type_name(&on);
+    check_core_call_on_weighs(state, &on, entry);
+    check_core_call_on_hashed_key(state, world, &on, entry, span);
     if entry == "clone" && args.is_empty() {
         let copied: Option<Ty> = check_core_call_on_copied(&on);
         let parts: Vec<String> = check_core_call_on_part_copies(&on);
@@ -1274,6 +1277,78 @@ pub(crate) fn check_core_call_on_names_text(ty: &Ty) -> bool {
     match ty {
         Ty::Named { name, args, .. } => args.is_empty() && (type_last_segment(name) == "String" || type_last_segment(name) == "str"),
         _ => false,
+    }
+}
+
+pub(crate) fn check_core_call_on_parameters_in(state: &CheckState, ty: &Ty) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut stack: Vec<Ty> = nikaia_std::block::List::from_array_in([ty.clone()], nikaia_std::block::Place::Block);
+    while !stack.is_empty() {
+        let one = match stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        match one {
+            Ty::Named { ref name, ref args, .. } => {
+                if args.is_empty() && state.type_parameters.contains_key(name) { out.insert(nikaia_std::block::Text::from(name.to_string())); }
+                for arg in args.iter() { stack.push(arg.clone()); }
+            },
+            Ty::Tuple(ref parts) => { for part in parts.iter() { stack.push(part.clone()); } },
+            Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); stack.push(inner.clone()); },
+            _ => { },
+        }
+    }
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_weighs(state: &mut CheckState, on: &Ty, entry: &str) {
+    let current = nikaia_std::block::Text::from(match state.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
+    let base = match on.unseen() {
+        Ty::Named { ref name, .. } => type_last_segment(name),
+        _ => return,
+    };
+    if base != "Sender" && !(base == "SharedMut" && entry == "set") { return; }
+    let found = check_core_call_on_parameters_in(&state, &on.unseen());
+    if found.is_empty() { return; }
+    let mut held: collections::BTreeSet<String> = nikaia_std::index::or(match state.facts.weighed.get(&current) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into());
+    held.extend(found);
+    state.facts.weighed.insert(current, held);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_core_call_on_weighed_through(state: &mut CheckState, key: &str, bound: &collections::BTreeMap<String, Ty>) {
+    let current = nikaia_std::block::Text::from(match state.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
+    let mut edges: collections::BTreeSet<(String, String, String)> = collections::BTreeSet::new();
+    for (param, ty) in bound.iter() { for own in check_core_call_on_parameters_in(&state, ty) { edges.insert((nikaia_std::block::Text::from(key.to_string()), nikaia_std::block::Text::from(param.to_string()), nikaia_std::block::Text::from(own.to_string()))); } }
+    if edges.is_empty() { return; }
+    let mut held: collections::BTreeSet<(String, String, String)> = nikaia_std::index::or(match state.facts.weighed_through.get(&current) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into());
+    held.extend(edges);
+    state.facts.weighed_through.insert(current, held);
+}
+
+pub(crate) fn check_core_call_on_keyless(entry: &str) -> bool { entry == "len" || entry == "is_empty" || entry == "iter" || entry == "iter_mut" || entry == "keys" || entry == "values" || entry == "values_mut" || entry == "into_keys" || entry == "into_values" || entry == "clear" || entry == "drain" || entry == "retain" || entry == "clone" || entry == "capacity" }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_hashed_key(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, entry: &str, span: &Span) {
+    let (base, args) = match on.unseen() {
+        Ty::Named { ref name, ref args, .. } => (type_last_segment(name), args.copy_owned()),
+        _ => return,
+    };
+    if base != "HashMap" && base != "HashSet" || args.is_empty() || check_core_call_on_keyless(entry) { return; }
+    for name in check_core_call_on_parameters_in(&state, nikaia_std::index::get(&args, 0)) {
+        let bounds = match state.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut allowed = false;
+        for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && (bound == "Eq" || bound == "Ord") { allowed = true; } }
+        if allowed { continue; }
+        let what = if base == "HashSet" { "an element of a `HashSet`" } else { "a key of a `HashMap`" };
+        state.findings.push(check_refusal("NK1248", span, format!("`{}` needs `{}: Eq`: `{}` is {}.", entry, name, name, what), vec![format!("`{}` can be any type the caller picks, and a key is compared and hashed, so it needs a bound that says how.", name)], Some(format!("Write `[{}: Eq]`.", name))));
     }
 }
 

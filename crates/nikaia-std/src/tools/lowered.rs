@@ -3140,7 +3140,7 @@ pub mod check_core_call {
 }
 pub mod check_core_call_on {
     #[allow(unused_imports)]
-    pub use super::{check_core_call_on_reached, check_core_call_on_map_written, check_core_call_on_key_read, check_core_call_on_retyped, check_core_call_on_entry_values, check_core_call_on, check_core_a_safe_call};
+    pub use super::{check_core_call_on_reached, check_core_call_on_map_written, check_core_call_on_key_read, check_core_call_on_retyped, check_core_call_on_entry_values, check_core_call_on, check_core_a_safe_call, check_core_call_on_weighed_through};
 }
 pub mod check_core_comptime {
     #[allow(unused_imports)]

@@ -1009,6 +1009,19 @@ impl EmitState {
                 } else if ret_type != null {
                     ret = f" -> {returned}"
                 }
+                // **A type parameter a std operation weighs is `DeepSize`**
+                // (ADR-327 D9, #1559): the weight is the language's, so no
+                // Nikaia bound says it; a copy has no parameter left.
+                let a_copy = walk.specialising != null && (walk.slotted || self.copy_substitutes((walk.specialising?.second ?? "").clone()))
+                let weighed = self.facts.weighed_of(key)
+                if !a_copy && !weighed.is_empty() {
+                    let mut clauses: Vec[String] = []
+                    for each in weighed {
+                        clauses.push(f"{each}: nikaia_std::block::DeepSize")
+                    }
+                    let joined = clauses.join(", ")
+                    ret = f"{ret} where {joined}"
+                }
 
                 let ended = emit_seeds_end(walk, begun.seeded, begun.base)
                 for each in ended.declared {
