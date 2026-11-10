@@ -197,7 +197,11 @@ pub struct Local<T> {
     /// handed the **address**, so nothing is moved out and no slot is ever
     /// empty. What a panicking block leaves behind is D4's, and for this shape
     /// that is a value changed as far as the block got.
-    inner: RefCell<T>,
+    ///
+    /// **In a block of its own** (ADR-327 D5, #1536): what a door places in
+    /// the block while it runs is the value's, not the task's that opened
+    /// it, and a full one poisons the value (D6).
+    inner: RefCell<crate::block::Housed<T>>,
     /// **Set when a block panicked while it held the value** (ADR-327 D1):
     /// every door after that panics rather than read it.
     poisoned: std::cell::Cell<bool>,
@@ -209,7 +213,7 @@ pub struct Local<T> {
 impl<T> Local<T> {
     pub fn new(value: T) -> Self {
         Self {
-            inner: RefCell::new(value),
+            inner: RefCell::new(crate::block::Housed::new(value)),
             poisoned: std::cell::Cell::new(false),
             rebuild: None,
         }
@@ -233,7 +237,7 @@ impl<T> Local<T> {
         policy: impl crate::supervisor::Restart + Send + 'static,
     ) -> Self {
         Self {
-            inner: RefCell::new(build()),
+            inner: RefCell::new(crate::block::Housed::built(&build)),
             poisoned: std::cell::Cell::new(false),
             rebuild: Some((Builder(Box::new(build)), Phase::new(policy))),
         }
@@ -244,7 +248,7 @@ impl<T> Local<T> {
     /// is supervised.
     #[track_caller]
     #[inline]
-    fn opened(&self) -> std::cell::RefMut<'_, T> {
+    fn opened(&self) -> std::cell::RefMut<'_, crate::block::Housed<T>> {
         // **Re-entry first**: a door inside the block finds the value held,
         // and that is what it is told, not that the value is poisoned.
         let Ok(mut held) = self.inner.try_borrow_mut() else {
@@ -254,7 +258,7 @@ impl<T> Local<T> {
             match &self.rebuild {
                 Some((build, phase)) => {
                     Phase::recover(phase);
-                    *held = (build.0)();
+                    held.inside(|value| *value = (build.0)());
                     self.poisoned.set(false);
                 }
                 None => poisoned(),
@@ -274,7 +278,7 @@ impl<T> Local<T> {
         // the mark and without it; a guard asking `thread::panicking` on the
         // way out made it 26.
         self.poisoned.set(true);
-        let result = f(&mut held);
+        let result = held.inside(f);
         self.poisoned.set(false);
         result
     }
@@ -285,7 +289,7 @@ impl<T> Local<T> {
     #[track_caller]
     #[inline]
     fn unmarked<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
-        f(&mut self.opened())
+        self.opened().inside(f)
     }
 
     /// Part II 12.2's first door: a copy out. No code of the user's runs while
@@ -411,7 +415,8 @@ impl<T> Local<T> {
 pub struct Crossing<T> {
     /// The value itself, for the reason [`Local`]'s is
     /// ([ADR-281](../../../docs/specification/adr/adr-281.md) D12).
-    inner: Mutex<T>,
+    /// In a block of its own, as [`Local`]'s (ADR-327 D5).
+    inner: Mutex<crate::block::Housed<T>>,
     /// Which task holds it, or `0` for nobody.
     ///
     /// **An atomic and not a second `Mutex`**, which is a correctness point
@@ -437,7 +442,7 @@ pub struct Crossing<T> {
 impl<T> Crossing<T> {
     pub fn new(value: T) -> Self {
         Self {
-            inner: Mutex::new(value),
+            inner: Mutex::new(crate::block::Housed::new(value)),
             held_by: AtomicU64::new(NOBODY),
             rebuild: None,
         }
@@ -457,7 +462,7 @@ impl<T> Crossing<T> {
         policy: impl crate::supervisor::Restart + Send + 'static,
     ) -> Self {
         Self {
-            inner: Mutex::new(build()),
+            inner: Mutex::new(crate::block::Housed::built(&build)),
             held_by: AtomicU64::new(NOBODY),
             rebuild: Some((Builder(Box::new(build)), Phase::new(policy))),
         }
@@ -561,7 +566,7 @@ impl<T> Crossing<T> {
                 Some((build, phase)) => {
                     Phase::recover(phase);
                     let mut guard = left.into_inner();
-                    *guard = (build.0)();
+                    guard.inside(|value| *value = (build.0)());
                     self.inner.clear_poison();
                     guard
                 }
@@ -576,7 +581,7 @@ impl<T> Crossing<T> {
         // would make the next door read as a re-entry rather than as the
         // poisoned value it is.
         let _released = Released(&self.held_by);
-        f(&mut guard)
+        guard.inside(f)
     }
 
     /// **The guard with no poison** (ADR-327 D11), for a block that cannot
