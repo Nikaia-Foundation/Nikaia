@@ -331,7 +331,12 @@ struct Driver<'a> {
 
 impl nikaia_std::tools::grammar_run::GrammarDriverHost for Driver<'_> {
     fn lowered_own(&self) -> Result<String, Box<dyn std::error::Error>> {
-        crate::emit::emit_program(&self.items, crate::emit::Build::default())
+        // The bundle it links has the allocator already.
+        let build = crate::emit::Build {
+            counts_heap: false,
+            ..Default::default()
+        };
+        crate::emit::emit_program(&self.items, build)
             .map(|emitted| emitted.rust)
             .map_err(|error| format!("{error:#}").into())
     }

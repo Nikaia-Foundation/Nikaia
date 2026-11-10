@@ -527,10 +527,13 @@ thread_local! {
         const { std::cell::RefCell::new(BTreeSet::new()) };
 }
 
-/// A run's lowering is built with its steps counted (ADR-321 D7).
+/// A run's lowering is built with its steps counted (ADR-321 D7). It writes
+/// no allocator: the bundle it links already has one (`LIVE`, ADR-321 D7), and
+/// a second is a rustc error.
 fn counted() -> crate::emit::Build {
     crate::emit::Build {
         counts_steps: true,
+        counts_heap: false,
         ..Default::default()
     }
 }

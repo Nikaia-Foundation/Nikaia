@@ -48,4 +48,10 @@ pub struct Reading<'a> {
     name: &'a str,
     temp: i32,
 }
+#[automatically_derived]
+impl<'a> nikaia_std::block::Weigh for Reading<'a> {
+    fn heap(&self) -> usize {
+        0 + nikaia_std::__nikaia_weigh!(self.name) + nikaia_std::__nikaia_weigh!(self.temp)
+    }
+}
 
