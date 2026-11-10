@@ -1,0 +1,39 @@
+// #1501: a `let` without a type bound to a list of text literals, handed whole
+// to a `Vec[String]` parameter another caller hands text of its own, takes the
+// parameter's type (ADR-282 D3, D16): its text is built, not NK1102.
+struct Kept {
+    v: Vec[String],
+}
+
+fn count(v: Vec[String]) -> i64 {
+    return v.len()
+}
+
+fn other(v: Vec[String]) -> i64 {
+    return v.len() + 1
+}
+
+fn keep(v: Vec[String]) -> Kept {
+    return Kept { v: v }
+}
+
+fn main() throws {
+    let v = ["a"]
+    println(count(v))
+    let w = [f"c{1}"]
+    println(count(w))
+    let both = ["b", "c"]
+    for s in both {
+        println(s)
+    }
+    println(count(both))
+    println(other(both))
+    let held = ["d"]
+    println(keep(held).v.len())
+    println(keep([f"e{2}"]).v[0])
+    let field = ["f"]
+    let k = Kept { v: field }
+    println(k.v.len())
+    let made = Kept { v: [f"g{3}"] }
+    println(made.v[0])
+}

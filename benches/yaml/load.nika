@@ -1,0 +1,71 @@
+// The tree of each file named on the command line, through `yaml::load`,
+// written in the canonical dump every load program of the bench prints
+// (README, *The output*): one line per node, `{` and `}` around a mapping
+// (its keys and values in turn), `[` and `]` around a sequence, `~` a null,
+// `true` / `false`, `#` and an integer's text, `%` and a float's text, `"`
+// and a string's text. A file the parser refuses prints `error`.
+use std::cli
+use std::fs
+use yaml
+
+fn escaped(t: String) -> String {
+	let mut out = String()
+	for c in t.chars() {
+		if c == '\\' {
+			out.push_str("\\\\")
+		} else if c == '\n' {
+			out.push_str("\\n")
+		} else if c == '\t' {
+			out.push_str("\\t")
+		} else if c == '\r' {
+			out.push_str("\\r")
+		} else {
+			out.push(c)
+		}
+	}
+	return out
+}
+
+fn dump(n: yaml::Node, mut out: String) {
+	match n.value {
+		yaml::Value::Null => out.push_str("~\n")
+		yaml::Value::Bool(b) => out.push_str(if b { "true\n" } else { "false\n" })
+		yaml::Value::Int(t) => out.push_str(f"#{t}\n")
+		yaml::Value::Float(t) => out.push_str(f"%{t}\n")
+		yaml::Value::Str(s) => out.push_str(f"\"{escaped(yaml::text(s))}\n")
+		yaml::Value::Alias(a) => out.push_str(f"*{a}\n")
+		yaml::Value::Seq(items) => {
+			out.push_str("[\n")
+			for x in items {
+				dump(x, out)
+			}
+			out.push_str("]\n")
+		}
+		yaml::Value::Map(entries) => {
+			out.push_str("{\n")
+			for e in entries {
+				dump(e.key, out)
+				dump(e.value, out)
+			}
+			out.push_str("}\n")
+		}
+	}
+}
+
+fn main() throws {
+	let mut out = String()
+	let mut args = cli::args()
+	args.nth(0)
+	for path in args {
+		let input = fs::read(path, fs::Root::Anywhere)
+		let docs = yaml::load(input) catch {
+			out.push_str("error\n")
+			continue
+		}
+		for d in docs {
+			out.push_str("---\n")
+			dump(d, out)
+		}
+	}
+	print(out)
+}

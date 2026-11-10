@@ -846,7 +846,10 @@ fn cx_parameter(ctx: ref CxCtx, contracts: ref Ledger, key: ref String, position
                         crossing[which] = true
                         rust_args.push("std::ffi::c_int")
                         c_args.push(f"{prefix}_{plain.name}")
-                        closure_params.push(f"{name}: {plain.name}")
+                        // A payloadless enum is lent to code like any plain
+                        // parameter of a struct or a variable (#1504), so
+                        // the closure takes the `&` the function type has.
+                        closure_params.push(f"{name}: &{plain.name}")
                         passed.push(f"match {name} {{ {cx_choice_arms_out(plain)} }}")
                     },
                     CxLent::Text => {

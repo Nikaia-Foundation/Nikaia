@@ -473,6 +473,8 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         entry.places = value == "true"
     } else if key == "pieces" {
         entry.pieces = value == "true"
+    } else if key == "interns" {
+        entry.interns = value == "true"
     } else if key == "consumers" {
         entry.consumers = entries(value, n)
     } else if key == "requires" {

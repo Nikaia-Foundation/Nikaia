@@ -1,0 +1,20 @@
+# `typed_serde_yaml.rs` over the yaml package's serde_yaml facade (#1439):
+# `bench.nika` builds the package as the Rust crate `nikaia_yaml` in a copy
+# beside this one and builds this with the same profile as `../Cargo.toml`.
+[package]
+name = "typed-facade"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+nikaia_yaml = { path = "../yaml/target/rust-library/nikaia_yaml" }
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+incremental = false
+
+[workspace]

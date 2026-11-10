@@ -6916,7 +6916,6 @@ fields = ["pub last_uptime: time::Duration", "pub consecutive: i64", "pub since_
 [fn."supervisor::Restart::decide"]
 pub = true
 sync = true
-keeps = ["history"]
 signature = "(ref self, history: supervisor::Failures) -> supervisor::Next"
 
 # --- `simd`: vectors a program holds (ADR-377, provisional) ------------------

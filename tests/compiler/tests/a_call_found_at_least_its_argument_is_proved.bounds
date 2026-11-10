@@ -1,0 +1,8 @@
+bounds in tests/a_call_found_at_least_its_argument_is_proved.nika: 3 indexes, 3 proved; 2 operations, 2 proved
+    10  cs[i]   proved
+    11  i += 1  proved
+    20  cs[i]   proved
+    21  i + 1   proved
+    32  xs[j]   proved
+  derived  first: 0 <= k, proved at the calls on lines 38, 38
+  derived  skip: 0 <= from, proved at the calls on lines 21, 30

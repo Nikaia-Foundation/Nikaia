@@ -1,0 +1,27 @@
+# The Rust half of the yaml bench (#1517): the tuned YAML libraries the yaml
+# package is counted against, each program a binary of its own (docs/measuring.md).
+# A workspace of its own, so that its dependencies stay out of the
+# repository's `Cargo.lock`; `bench.nika` builds it.
+[package]
+name = "yaml-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# serde_yaml 0.9: its parser is `unsafe-libyaml`, libyaml translated to Rust.
+serde_yaml = "0.9"
+unsafe-libyaml = "0.2"
+# The maintained pure-Rust parser, yaml-rust's successor.
+saphyr = "0.0.6"
+saphyr-parser = "0.0.6"
+serde = { version = "1", features = ["derive"] }
+
+# The same as the Nikaia programs' `[build.x86_64-linux]` in `bench.nika`.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+incremental = false
+
+[workspace]

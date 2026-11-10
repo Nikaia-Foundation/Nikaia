@@ -75,7 +75,7 @@ pub fn nothing_is_known(_: Symbol) -> Option<Constant> {
 /// A step that left the type a declared operand pinned is answered with that
 /// step's number, so the caller refuses it where the language below would.
 pub fn constant_of(expr: &Expr, name_is: Lookup<'_>) -> Option<Constant> {
-    let lookup = |name: Symbol| match name_is(name).as_ref().and_then(to_nikaia) {
+    let lookup = |name: &Symbol| match name_is(*name).as_ref().and_then(to_nikaia) {
         Some(known) => nika::Folded::Value(known),
         None => nika::Folded::Nothing,
     };

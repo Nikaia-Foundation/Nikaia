@@ -1520,18 +1520,12 @@ impl ProjectMembersForeignHost for ForeignHost {
         Ledger::read_beside(path)
     }
 
-    fn absorb(&self, into: Ledger, other: Ledger) -> Ledger {
-        let mut into = into;
-        into.absorb(None, other);
-        into
-    }
-
     fn empty_ledger(&self) -> Ledger {
         Ledger::empty()
     }
 
-    fn crate_root(&self, root: &Path, name: String) -> Option<PathBuf> {
-        crate::describe::crate_root(root, &name)
+    fn crate_root(&self, root: &Path, name: &str) -> Option<PathBuf> {
+        crate::describe::crate_root(root, name)
     }
 }
 
@@ -3671,8 +3665,8 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
         &self,
         source: &Path,
         no_cache: bool,
-        allowlist: Option<PathBuf>,
-        shown: Option<String>,
+        allowlist: Option<&Path>,
+        shown: Option<&str>,
         program: bool,
     ) -> HostResult<(String, Vec<PathBuf>)> {
         let lowered = (|| {
@@ -3688,9 +3682,8 @@ impl project_drive::ProjectDriveWrapperHost for WrapperHost {
                 Some(root) => packages_of(&manifest, root, false)?,
                 None => Vec::new(),
             };
-            let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown));
-            let lowered =
-                lower_reading(source, &settings, no_cache, &packages, allowlist.as_deref());
+            let shown_outer = SHOWN_AS.with(|cell| cell.replace(shown.map(String::from)));
+            let lowered = lower_reading(source, &settings, no_cache, &packages, allowlist);
             SHOWN_AS.with(|cell| cell.replace(shown_outer));
             lowered
         })();

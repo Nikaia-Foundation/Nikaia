@@ -1,0 +1,35 @@
+// **An arm that throws its binding takes it** (#1520): `e => throw e` over
+// an `Error?` field hands the error on by value, as `return e` would, so the
+// arm binds the error itself and not a view of it, which could not leave the
+// function.
+
+pub struct Bad { pub message: String }
+
+impl Error for Bad {
+	fn message(self) -> String { return self.message.clone() }
+}
+
+pub struct Got { pub items: Vec[i64], pub error: Bad? }
+
+fn got(n: i64) -> Got {
+	if n > 0 { return Got { items: [1, 2], error: null } }
+	return Got { items: [], error: Bad { message: "none" } }
+}
+
+fn items(n: i64) -> Vec[i64] throws {
+	let got = got(n)
+	match got.error {
+		null => {}
+		e => throw e
+	}
+	return got.items
+}
+
+fn main() throws {
+	let found = items(1) catch { return }
+	println(f"items: {found.len()}")
+	items(0) catch {
+		println(f"error: {error}")
+		return
+	}
+}

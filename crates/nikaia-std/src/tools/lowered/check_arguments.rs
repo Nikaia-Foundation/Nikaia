@@ -15,6 +15,19 @@ pub(crate) fn check_arguments_a_var(ty: &Ty) -> bool { matches!(ty, Ty::Var { ..
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_var_name(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Var { name, .. } => Some(nikaia_std::block::Text::from(name.to_string())),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn string_ty() -> Ty { Ty::Named { name: String::from("String"), args: vec![], view: false } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_arguments_nullable(ty: &Ty) -> bool { matches!(ty, Ty::Nullable(_)) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -144,7 +157,16 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let ty = option.ty.text();
             state.expect_type(world, found_option, &option.ty, span, "field", &|found_text, wanted_text| { format!("The option `{}` of `{}` takes `{}`, but you're passing `{}`.", name, key, ty, found_text) });
         }
+        if !known && name == "words" && contract.interns {
+            known = true;
+            state.expect_type(world, &found_option.owned(), &Ty::Named { name: String::from("winnow_grammar::InternerContext"), args: vec![], view: false }, span, "argument", &|was, wanted| { format!("The table `words` is `{}`, but `{}` takes a `ref {}`.", was, key, wanted) });
+        }
         if !known { state.no_such_option(key, name, signature, span); }
+    }
+    if contract.interns && !passed.iter().any(|p| { p.0 == "words" }) && !signature.config.iter().any(|o| { o.name == "words" }) {
+        let result = signature.result_or_unit();
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        if check_holds_a_symbol(&state, world, &result, &mut seen) { state.findings.push(check_refusal("NK1330", span, format!("`{}` hands back `{}`, which holds a `winnow_grammar::Symbol`, but it isn't handed the table its names are interned into.", key, result.text()), vec![String::from("Without `words:` the entry interns into a table of its own, which is gone after the call: a symbol it hands back could never be read as text (ADR-388 D2).")], Some(format!("Make a table and hand it over: `let table = winnow_grammar::InternerContext()`, then `{}(input; words: table)`; `table.resolve(symbol)` reads a name back.", key)))); }
     }
     let text_view = Ty::Named { name: String::from("str"), args: vec![], view: true };
     let mut expanded: Vec<CheckArgument<'_>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -173,6 +195,20 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
     }
     let own = world.own.functions.contains_key(key);
     let offset: i64 = if signature.takes_a_receiver() { 1 } else { 0 };
+    let mut viewed_vars: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if own {
+        let mut next: i64 = 0;
+        while ((next) as usize) < expanded.len() {
+            let argument = nikaia_std::index::get(&expanded, (next) as usize);
+            next += 1;
+            let var = match check_arguments_var_name(&nikaia_std::index::get(&wanted, nikaia_std::index::at(argument.at)).1) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let literal = match argument.given {
+                None => false,
+                Some(value) => a_text_literal_expr(value),
+            };
+            if literal || is_a_view_of_a_string(&argument.found) || argument.found == text_view { viewed_vars.insert(var); }
+        }
+    }
     for argument in expanded.iter() {
         let at = argument.at;
         let given_here: Option<&Expr> = argument.given;
@@ -222,7 +258,7 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
         }
         let mut literal_wants = want.clone();
         if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
-        let a_lent_variable = lent && own && check_arguments_a_var(&declared) && !declared.is_a_view();
+        let a_lent_variable = own && check_arguments_a_var(&declared) && (lent || declared.is_a_view());
         if given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             let array = state.array_literal(world, &found_here, &want, value, span);
@@ -235,6 +271,11 @@ pub fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             if !found_here.is_a_view() || found_here == text_view { state.facts.lent_args.insert(id_of(value) as i64); }
             if a_text_literal_expr(value) && !state.facts.owned_texts.contains(&(id_of(value) as i64)) { state.facts.lent_literals.insert(id_of(value) as i64); }
+            let var = match check_arguments_var_name(&declared) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if viewed_vars.contains(&var) {
+                state.facts.viewed_text_calls.insert(span.start as i64);
+                if found_here == string_ty() && !a_text_literal_expr(value) { state.facts.lent_text_views.insert(id_of(value) as i64); }
+            }
             continue;
         }
         if state.lends_where_a_function_type_reads(world, given_here, &found_here, &want) {

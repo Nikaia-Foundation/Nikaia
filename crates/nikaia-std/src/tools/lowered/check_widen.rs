@@ -344,7 +344,7 @@ impl CheckState {
 // this was written - see `contracts::sync`.
 pub(crate) fn a_variable_by_value(ty: &Ty) -> Option<String> {
     match ty {
-        Ty::Var { name, view } => { let view = *view; if !view { Some(nikaia_std::block::Text::from(name.to_string())) } else { None } },
+        Ty::Var { name, .. } => Some(nikaia_std::block::Text::from(name.to_string())),
         _ => None,
     }
 }

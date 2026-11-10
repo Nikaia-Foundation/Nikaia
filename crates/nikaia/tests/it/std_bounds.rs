@@ -53,7 +53,7 @@ fn a_bound_gives_the_operators() {
          fn main() throws { println(biggest(1, 2)) }\n";
     assert!(codes(source).is_empty(), "{:#?}", findings(source));
     let rust = lowered(source);
-    assert!(rust.contains("fn biggest<T: Ord>"), "{rust}");
+    assert!(rust.contains("fn biggest<'r, T: Ord>"), "{rust}");
     assert!(rust.contains("fn same<T: Eq>"), "{rust}");
 }
 

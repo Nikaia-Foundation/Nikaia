@@ -8,7 +8,7 @@ would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
 == batch done (exit 0)
-would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -20,7 +20,7 @@ would run: red: write T/qa-input.txt, mkdir -p T/qa, copy docs/qa-task.md to T/q
 would run: wait for the suite (drive_settle), then stop for the supervisor (exit 2)
 DRY-RUN STOP BATCH DONE
 == cut (exit 0)
-would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -41,7 +41,7 @@ would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (
 would run: append T/b1.md to T/unpushed.txt (no suite until the batch ends)
 DRY-RUN NEXT b1
 == red, nothing queued (exit 0)
-would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf target/debug target/nikaia-example-tests; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental; print CLEANUP freed <N> MB, <M> MB free
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt

@@ -212,12 +212,70 @@ pub fn way_out_of_a_mismatch(found: &Ty, want: &Ty) -> String {
     if found.is_a_view() && !want.is_a_view() && found.owned().text() == want_text { return String::from("Write `.clone()` to turn this view into a value of its own."); }
     if want_text == "time::Duration" && a_number_name(&found_text) { return String::from("Make the number a span: `20.seconds()` or `20.millis()`."); }
     if a_number_name(&found_text) && a_number_name(&want_text) { return format!("Convert it with `as {}`. A number goes into another type on its own only where every value it can hold fits.", want_text); }
-    let shown = want.owned().text();
+    let keeps_where_lent = code_keeps_where_lent(found, want);
+    let found_written = if keeps_where_lent { nikaia_std::index::or(code_as_written(found), || found_text.into()) } else { nikaia_std::block::Text::from(found_text.to_string()) };
+    let shown = if keeps_where_lent { nikaia_std::index::or(code_as_written(want), || want.owned().text().into()) } else { want.owned().text() };
     let article = if shown.starts_with('i') || shown.starts_with('a') || shown.starts_with('e') || shown.starts_with('o') || shown.starts_with('I') || shown.starts_with('A') || shown.starts_with('E') || shown.starts_with('O') { "an" } else { "a" };
     let mut wanted: String = format!("Make it {} `{}`", article, shown);
     if want.is_a_view() && shown != want_text { wanted = format!("Make it a view of {} `{}` that something else keeps", article, shown); }
     if found.is_a_view() { return format!("{}.", wanted); }
-    format!("{}, or change the declaration to `{}`.", wanted, found_text)
+    format!("{}, or change the declaration to `{}`.", wanted, found_written)
+}
+
+pub(crate) fn code_as_written(ty: &Ty) -> Option<String> {
+    match ty {
+        Ty::Fn { params, result, is_sync, can_throw } => {
+            let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
+            let mut listed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for part in params.iter() { listed.push(code_param_as_written(part)); }
+            let bare = Ty::Fn { params: vec![], result: Box::new(match result {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                None => None,
+            }), is_sync, can_throw };
+            let whole = bare.text();
+            let rest = nikaia_std::index::or(whole.strip_prefix("fn()"), || "");
+            let joined = nikaia_std::block::Text::from(listed.join(", "));
+            Some(format!("fn({}){}", joined, rest))
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn code_keeps_where_lent(found: &Ty, want: &Ty) -> bool {
+    let given = match found {
+        Ty::Fn { params, .. } => params.copy_owned(),
+        _ => return false,
+    };
+    let wanted = match want {
+        Ty::Fn { params, .. } => params.copy_owned(),
+        _ => return false,
+    };
+    if (given.len() as i64) != wanted.len() as i64 { return false; }
+    for at in 0..given.len() as i64 {
+        let plain = (*nikaia_std::index::get(&given, (at) as usize)).text();
+        if (*nikaia_std::index::get(&wanted, (at) as usize)).is_a_view() && !(*nikaia_std::index::get(&given, (at) as usize)).is_a_view() && plain != "String" && code_param_as_written(nikaia_std::index::get(&given, (at) as usize)).starts_with("keep ") { return true; }
+    }
+    false
+}
+
+pub(crate) fn code_param_as_written(part: &Ty) -> String {
+    let changed = lent_mut(part);
+    if changed.is_some() {
+        let item = nikaia_std::index::or(match changed.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.text()),
+            None => None,
+        }, || "".into());
+        return format!("mut {}", item);
+    }
+    if part.is_a_view() { return part.owned().text(); }
+    let plain = part.text();
+    let copies = match part {
+        Ty::Named { args, .. } => args.is_empty() && (a_number_name(&plain) || plain == "int" || plain == "bool" || plain == "char" || plain == "scalar"),
+        Ty::Var { .. } => false,
+        _ => true,
+    };
+    if copies { return plain; }
+    format!("keep {}", plain)
 }
 
 pub(crate) fn part_of_a_list(found: &Ty, want: &Ty) -> Option<String> {

@@ -2,8 +2,8 @@
 // bounded by them. `ranged`'s `k += 1` is proved at both settings (`k == t`,
 // `t < n`); `every`, `some`, `same` and `entries` walk a collection whose
 // length the checker records, so their counters are proved too (`t <
-// xs.len()`). `walked_chars` walks a produced sequence, which has no
-// recorded length, and stays checked. The soundness rows stay checked: a
+// xs.len()`). `walked_chars` walks a text's characters, each one byte or
+// more, so it turns at most `text.len()` times (#1516). The soundness rows stay checked: a
 // start the walk does not bound, a `u8` that 2 a turn takes past 255, a
 // reset, a counter grown in an inner loop, a doubling, and a `u8` counted
 // over a range of unknown length.

@@ -1,0 +1,42 @@
+// A stream read up to its first failing document (#1520, ADR-yaml-1 D7):
+// `yaml::read` gives the documents before it and then its error, as
+// serde_yaml's loader hands out the documents before a broken one;
+// `documents` fails the whole stream at that error.
+use yaml
+
+fn show(text: String) throws {
+	let input = Bytes(text.bytes().collect())
+	let read = yaml::read(input)
+	let mut roots: Vec[String] = []
+	for d in read.documents {
+		roots.push(f"{d.root.start}-{d.root.end}")
+	}
+	let error = match read.error {
+		null => "none"
+		e => f"{e.line}:{e.column} {e.kind:?}"
+	}
+	println(f"{read.documents.len()} good [{roots.join(", ")}], error {error}")
+	let docs = yaml::documents(input) catch {
+		println(f"  documents: error {error.line}:{error.column}")
+		return
+	}
+	println(f"  documents: {docs.len()}")
+}
+
+fn main() throws {
+	// serde_yaml's test_second_document_syntax_error
+	show("---\n0\n---\n]\n")
+	// a good stream
+	show("a\n---\nb\n...\n")
+	// the error in the first document: nothing before it
+	show("]\n---\n0\n")
+	// the third document fails; a bare document after `...`
+	show("0\n...\n1\n--- [2\n")
+	// a document whose scalar does not fit its tag stops the stream there
+	show("--- 0\n--- !!int x\n--- 2\n")
+	// an unclosed flow sequence whose error is seen at the next marker
+	show("--- 0\n--- [1,\n--- 2\n")
+	// a scalar not fitting its tag before a syntax error further on is the
+	// first error
+	show("--- !!bool x\n--- ]\n")
+}

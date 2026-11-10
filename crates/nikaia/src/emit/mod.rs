@@ -1058,8 +1058,8 @@ pub(crate) fn literal_expressions(parsed: &Parsed, expr: &Expr) -> Vec<Expr> {
 /// (`tools/emit_holes.nika`): a template's hole parsed once per text at one
 /// site, and an `f"…"`'s hole with what the tier pass hands over inside it.
 impl nikaia_std::tools::emit_holes::EmitHolesHost for Parsed {
-    fn hole(&self, site: u32, text: String) -> nikaia_std::tools::emit_holes::EmitHole {
-        match Parsed::hole(self, site, &text) {
+    fn hole(&self, site: u32, text: &str) -> nikaia_std::tools::emit_holes::EmitHole {
+        match Parsed::hole(self, site, text) {
             Ok(expr) => nikaia_std::tools::emit_holes::EmitHole::Parsed(expr),
             Err(error) => nikaia_std::tools::emit_holes::EmitHole::Refused(error.to_text()),
         }

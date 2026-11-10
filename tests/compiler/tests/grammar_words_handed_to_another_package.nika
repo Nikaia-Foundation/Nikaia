@@ -1,0 +1,32 @@
+// #1519: a program hands its `words:` table to another package's grammar
+// entry that interns (ADR-388 D1), `@stream` or not: the ledger says the entry
+// interns, and the parse interns into the caller's table, so `resolve` reads
+// each symbol back and one spelling is one symbol across two parses.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{tmp}/words/src", f"{tmp}/app/src"])
+    fs::write(f"{tmp}/words/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"words\"\nversion = \"0.1.0\"\n")
+    fs::write(f"{tmp}/words/src/main.nika", fs::Root::Anywhere, "pub grammar Interned {\n\t@stream entry rule names -> winnow_grammar::Symbol = name+\n\tentry rule all -> Vec[winnow_grammar::Symbol] = ns:name+ eof -> { ns }\n\tentry rule count -> i64 = ns:name+ eof -> { ns.len() as i64 }\n\tentry rule plain -> String = w:until(\";\") \";\" eof -> { w.clone() }\n\trule name -> winnow_grammar::Symbol = n:ident \";\" -> { n }\n}\n")
+    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nwords = { path = \"../words\" }\n")
+    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use words\nuse std::winnow_grammar\n\nfn main() throws {\n\tlet table = winnow_grammar::InternerContext()\n\tfor s in words::Interned::names(\"ab;cd;\"; words: table) {\n\t\tprintln(table.resolve(s))\n\t}\n\tlet all = words::Interned::all(\"x;ab;\"; words: table)\n\tprintln(table.resolve(all[0]))\n\tprintln(all[1] == words::Interned::all(\"ab;\"; words: table)[0])\n\tprintln(words::Interned::count(\"x;y;z;\"))\n\tprintln(words::Interned::count(\"x;y;\"; words: table))\n}\n")
+    let out = process::run(toolchain(), ["run", "src/main.nika"]; dir: f"{tmp}/app")
+    let mut shown: Vec[String] = []
+    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+        let text = line.trim()
+        if !text.starts_with("Compiling") && !text.starts_with("Finished") && !text.starts_with("Running") {
+            shown.push(line.clone())
+        }
+    }
+    println(shown.join("\n"))
+    println(f"exit {out.code}")
+    process::run("rm", ["-rf", tmp])
+}

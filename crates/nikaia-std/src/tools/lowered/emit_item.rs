@@ -514,6 +514,11 @@ impl EmitState {
                 walk.in_parameter = inside;
                 walk.code_parameter_runs = held;
                 if self.emit_fn_lends(world, &key, at) { reference = "&"; }
+            } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, &key, at) {
+                let mut viewed = arg.ty.clone();
+                viewed.is_view = true;
+                viewed.either = false;
+                written = a_list_read_as_a_slice(self.emit_item_ty(world, walk, host, &viewed, &EmitLifetimes::Elided));
             } else { written = self.emit_item_ty(world, walk, host, &arg.ty, &EmitLifetimes::Elided); }
             let plain_list = !foreign && emit_text(world, arg.ty.name) == "Vec" && arg.ty.generics.len() == 1 && !arg.ty.is_nullable && !arg.ty.is_slice;
             if plain_list && written.starts_with("&Vec<") && written.ends_with('>') {

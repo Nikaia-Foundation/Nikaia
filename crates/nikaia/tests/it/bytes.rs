@@ -91,7 +91,7 @@ fn bytes_needs_no_use() {
 /// prelude publishes the name, so nothing has to be spelled out below.
 #[test]
 fn bytes_lowers_to_the_shared_buffer() {
-    let rust = lowered("fn hold(data: Bytes) -> Bytes { return data }\nfn main() { }\n");
+    let rust = lowered("fn hold(keep data: Bytes) -> Bytes { return data }\nfn main() { }\n");
     assert!(rust.contains("fn hold(data: Bytes) -> Bytes"), "{rust}");
 }
 

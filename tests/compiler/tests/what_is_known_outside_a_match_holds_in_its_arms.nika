@@ -1,0 +1,24 @@
+// What is known outside a `match` holds in each of its arms, of every name
+// the arm's pattern does not bind (#1516): a pattern's binding hides the
+// outer name, of which nothing known is carried in.
+
+enum Shape {
+    Dot,
+    Line(i64),
+}
+
+fn width(xs: Vec[i64], shape: Shape) -> i64 sync {
+    let n = xs.len() as i64
+    if n == 0 {
+        return 0
+    }
+    return match shape {
+        Shape::Dot => xs[n - 1],
+        Shape::Line(n) => xs[n - 1],
+    }
+}
+
+fn main() throws {
+    println(width([1, 2, 3], Shape::Dot))
+    println(width([1, 2, 3], Shape::Line(2)))
+}

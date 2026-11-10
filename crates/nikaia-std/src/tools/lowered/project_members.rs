@@ -429,9 +429,8 @@ pub(crate) fn project_members_crate_root_of(root: &std::path::Path) -> Result<fs
 
 pub trait ProjectMembersForeignHost {
     fn read_beside(&self, path: &std::path::Path) -> Option<Ledger>;
-    fn absorb(&self, into: Ledger, other: Ledger) -> Ledger;
     fn empty_ledger(&self) -> Ledger;
-    fn crate_root(&self, root: &std::path::Path, name: String) -> Option<fs::Path>;
+    fn crate_root(&self, root: &std::path::Path, name: &str) -> Option<fs::Path>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -470,6 +469,7 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
     let mut described: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut descriptions = host.empty_ledger();
     let mut moved: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
+    let none: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for name in declared.iter() {
         let mut ledger = match project_members_description_at(root, name, host) { Some(__nikaia_value) => __nikaia_value, None => continue };
         described.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -480,7 +480,7 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
         }
         let differing = project_members_sources_that_moved(root, name, &ledger, host).await;
         if !differing.is_empty() { moved.insert(nikaia_std::block::Text::from(name.to_string()), differing); }
-        descriptions = host.absorb(descriptions, ledger);
+        absorb_into(&mut descriptions, None, &none, &ledger);
     }
     let mut beneath: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut seen: collections::HashSet<fs::Path> = collections::HashSet::new();
@@ -500,7 +500,7 @@ impl ProjectMembersForeign {
 
 pub(crate) async fn project_members_sources_that_moved<H: ProjectMembersForeignHost>(root: &std::path::Path, name: &str, ledger: &Ledger, host: &H) -> Vec<String> {
     if ledger.sources.is_empty() { return vec![]; }
-    let crate_root = match host.crate_root(root, nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+    let crate_root = match host.crate_root(root, &nikaia_std::block::Text::from(name.to_string())) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     let mut out: Vec<String> = vec![];
     for (file, recorded) in ledger.sources.iter() {
         let bytes = match fs::read(&nikaia_std::fs::path::join(&(crate_root), std::path::Path::new(&(file))), &fs::Root::Anywhere).await {

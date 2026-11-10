@@ -159,6 +159,7 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
     if !contract.maps.is_empty() { out.push_str(&format!("maps = [{}]\n", quoted_all(&contract.maps))); }
     if contract.ends_by_length { out.push_str("ends_by_length = true\n"); }
     if contract.pieces { out.push_str("pieces = true\n"); }
+    if contract.interns { out.push_str("interns = true\n"); }
     if !contract.consumers.is_empty() { out.push_str(&format!("consumers = [{}]\n", quoted_all(&contract.consumers))); }
     out.push_str(&claims_text("requires", &contract.requires));
     out.push_str(&claims_text("ensures", &contract.ensures));

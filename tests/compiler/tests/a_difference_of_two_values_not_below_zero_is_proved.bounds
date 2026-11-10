@@ -1,0 +1,5 @@
+bounds in tests/a_difference_of_two_values_not_below_zero_is_proved.nika: 1 indexes, 1 proved; 3 operations, 2 proved
+     8  cs[i]   proved
+     9  i += 1  proved
+    11  n - i   proved
+    15  a - b   checked: a parameter no precondition bounds: an `assert` at the top of the function makes it one (ADR-269 D5)

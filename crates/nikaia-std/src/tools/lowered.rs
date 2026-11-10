@@ -2985,7 +2985,7 @@ pub mod bounds_basic {
 }
 pub mod bounds_body {
     #[allow(unused_imports)]
-    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
+    pub use super::{breaks, turn_jumps, pinned_in, assigned_in_statement, assigned_in, assigned_in_expr, follows_only, untracked_in, filled_once, changes_length_in_statement, changes_length_in_expr, changes_length_in};
 }
 pub mod bounds_derived {
     #[allow(unused_imports)]
@@ -3025,7 +3025,7 @@ pub mod bounds_shape {
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
-    pub use super::{BoundsContext, BoundsReturns, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields, bounds_returns};
+    pub use super::{BoundsContext, BoundsReturns, Ensured, BoundsProven, BoundsChanged, bounds_aggressive, bounds_fields, bounds_action_range, bounds_returns};
 }
 pub mod buffers {
     #[allow(unused_imports)]
@@ -3168,7 +3168,7 @@ pub mod check_core_ops {
 }
 pub mod check_core_pilot {
     #[allow(unused_imports)]
-    pub use super::{check_specialised, check_core_grammar_call, check_grammar_entry_interns, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_instantiate, check_core_slot_index, check_core_type_argument, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_builtin_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type, check_reflect_a_field, check_core_field_copies, check_reflected_field_kept, check_reflect_arm, check_reflect_match};
+    pub use super::{check_specialised, check_core_grammar_call, check_holds_a_symbol, check_grammar_entry_interns, check_core_a_compound_write_to_a_map_slot, check_core_an_instantiation, check_core_instantiate, check_core_slot_index, check_core_type_argument, check_core_a_mut_parameter_given_away, check_reflect_kind, check_reflect_builtin_kind, check_reflect_written, check_reflect_compared, check_reflect_path, check_reflect_field_type, check_reflect_a_field, check_core_field_copies, check_reflected_field_kept, check_reflect_arm, check_reflect_match};
 }
 pub mod check_core_places {
     #[allow(unused_imports)]
@@ -3662,7 +3662,7 @@ pub mod ledger_defaults {
 }
 pub mod ledger_items {
     #[allow(unused_imports)]
-    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
+    pub use super::{types_this_file_declares, types_declared_in, impl_parameters, a_literal, declared_extern, declared_grammar, grammar_entry_interns, literal_of, PublishedEnsures, expression_ensures, ComputedAt, declare_items, attribute_values, ledger_items_stored, LedgerInferHost, ledger_infer_package};
 }
 pub mod ledger_ops {
     #[allow(unused_imports)]

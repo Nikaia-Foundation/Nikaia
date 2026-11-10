@@ -60,7 +60,7 @@ pub(crate) fn attempt(keys: &[String], seed: u64, buckets: i64, n: i64) -> Optio
         let f2 = (hash >> 16) as u32;
         by_bucket[nikaia_std::index::at(g as i64 % buckets)].push((at, f1, f2));
     }
-    let mut order: Vec<(i64, i64)> = vec![];
+    let mut order: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for b in 0..buckets {
         let size = (*nikaia_std::index::get(&by_bucket, (b) as usize)).len() as i64;
         if size > 0 { order.push((0 - size, b)); }

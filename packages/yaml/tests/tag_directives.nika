@@ -1,0 +1,71 @@
+// `%TAG` handles are resolved when loading (#1515; YAML 1.2.2 6.8.2,
+// 6.9.1): a node's tag is the prefix its document's directive declares plus
+// the suffix, `%xx` decoded; the handle is presentation and is not kept.
+// `write` writes a tag the default handles (`!`, `!!`) do not abbreviate
+// verbatim, `!<tag>`, and `load` reads it back to the same tag. The parsed
+// tree keeps the tag as written. An undeclared named handle is refused.
+use yaml
+
+fn tags(n: ref yaml::Node) -> String {
+	let own = match yaml::tag(n) {
+		null => "-"
+		t => t
+	}
+	return match n.value {
+		yaml::Value::Seq(items) => {
+			let parts: Vec[String] = items.iter().map(fn(x) { tags(x) }).collect()
+			f"{own} [{parts.join(", ")}]"
+		}
+		yaml::Value::Map(entries) => {
+			let parts: Vec[String] = entries.iter().map(fn(e) {
+				f"{tags(e.key)}: {tags(e.value)}"
+			}).collect()
+			f"{own} {{{parts.join(", ")}}}"
+		}
+		else => own
+	}
+}
+
+fn line(text: String) throws {
+	println(f"# {text.replace("\n", "\\n")}")
+	let input = Bytes(text.bytes().collect())
+	let parsed = yaml::parse(input) catch {
+		println(f"  error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	let as_written: Vec[String] = parsed.iter().map(fn(d) { tags(d) }).collect()
+	println(f"  parsed {as_written.join(" | ")}")
+	let docs = yaml::load(input) catch {
+		println(f"  error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	let loaded: Vec[String] = docs.iter().map(fn(d) { tags(d) }).collect()
+	println(f"  loaded {loaded.join(" | ")}")
+	let written = yaml::write(docs)
+	println(f"  wrote  {written.replace("\n", "\\n")}")
+	let again = Bytes(written.bytes().collect())
+	let back = yaml::load(again) catch {
+		println(f"  error {error.line}:{error.column}: {error.message}")
+		return
+	}
+	let read: Vec[String] = back.iter().map(fn(d) { tags(d) }).collect()
+	println(f"  same   {read.join(" | ") == loaded.join(" | ")}")
+}
+
+fn main() throws {
+	// a declared named handle (example 6.20)
+	line("%TAG !e! tag:example.com,2000:app/\n---\n!e!foo \"bar\"\n")
+	// `!!` given another prefix (example 6.19): no longer the core schema's
+	line("%TAG !! tag:example.com,2000:app/\n---\n!!int 1 - 3 # Interval, not integer\n")
+	// the primary `!` given a prefix, and the next document without it
+	line("%TAG ! tag:example.com,2000:local/\n--- !x [!!str a]\n--- !x [!!str a]\n")
+	// the default handles and verbatim tags, the non-specific `!`
+	line("- !!str a\n- !local b\n- !<tag:yaml.org,2002:int> 1\n- !<!bar> c\n- !<tag:v> d\n- ! e\n")
+	// a suffix's `%xx` decoded, and written back escaped
+	line("%TAG !e! tag:example.com,2000:app/\n---\n- !e!tag%21 a\n- !!x%2Fy b\n- !l%C3%A9 c\n")
+	// a key and a collection tagged by a named handle
+	line("%TAG !e! tag:e:\n--- !e!m\n!e!k v: !e!s [x]\n")
+	// an undeclared named handle
+	line("--- !e!foo bar\n")
+	line("%TAG !e! tag:a:\n--- !e!x 1\n--- !e!y 2\n")
+}

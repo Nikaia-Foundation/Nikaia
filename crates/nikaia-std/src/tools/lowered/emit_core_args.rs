@@ -376,6 +376,7 @@ impl EmitState {
             if change && self.facts.reborrowed_args.contains(&node) { out.push("&mut *"); } else if change { out.push("&mut "); } else {
                 let keep = if lend && made_in_the_call(arg) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, callee, i), || "".into()) } else { String::from("") };
                 if lend && keep != "" {
+                    if self.facts.lent_text_views.contains(&node) { out.push("&"); }
                     out.push(&format!("({}).put(", keep));
                     kept_here = true;
                 } else if self.facts.lent_arms.contains(&node) { out.push("&*"); } else if lend && !self.facts.views_handed_on.contains(&node) && !emit_stmt_a_kept_name(world, &walk, arg) {
@@ -406,6 +407,7 @@ impl EmitState {
         if has_how && how != "" { out.push(&how); }
         if count { out.push(")"); }
         if kept_here { out.push(")"); }
+        if lend && self.facts.lent_text_views.contains(&node) { out.push(".as_str()"); }
         if keeps_bytes { out.push(")"); }
         if either { out.push(")"); }
         if copy_in { out.push(".clone()"); }
@@ -534,7 +536,7 @@ impl EmitState {
         out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(())
     }
-    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<bool> {
+    pub(crate) fn emit_arg_lent_params(&self, world: &EmitWorld<'_, '_, '_, '_>, arg: &Expr) -> Vec<i64> {
         let key = match arg {
             Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
             _ => return vec![],
@@ -547,11 +549,13 @@ impl EmitState {
             None => None,
         } { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
         if signature.takes_a_receiver() { return vec![]; }
-        let mut lent: Vec<bool> = vec![];
+        let mut lent: Vec<i64> = vec![];
         let mut any = false;
         for at in 0..signature.params.len() as i64 {
-            let one = emit_arg_lends_own(contract, at, world.library, &self.described) && !(at < viewed.len() as i64 && *nikaia_std::index::get(&viewed, nikaia_std::index::at(at)));
-            any = any || one;
+            let lends = emit_arg_lends_own(contract, at, world.library, &self.described);
+            let slot_lends = at < viewed.len() as i64 && *nikaia_std::index::get(&viewed, nikaia_std::index::at(at));
+            let one: i64 = if lends && !slot_lends { 1 } else if !lends && slot_lends { 2 } else { 0 };
+            any = any || one != 0;
             lent.push(one);
         }
         if !any { return vec![]; }
@@ -594,11 +598,11 @@ impl EmitState {
     }
 }
 
-pub(crate) fn emit_arg_passing(names: &[String], lent: &[bool]) -> String {
+pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
     #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
     for name in names.iter() {
-        if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) { passed.push(format!("&{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
+        if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) == 1 { passed.push(format!("&{}", name)); } else if ((at) as usize) < lent.len() && *nikaia_std::index::get(&lent, (at) as usize) == 2 { passed.push(format!("*{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
         at += 1;
     }
     nikaia_std::block::Text::from(passed.join(", "))
@@ -1400,6 +1404,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "".into());
+        if written == "" && self.facts.plain_bracket_calls.contains(&node_key(base)) { return Ok(false); }
         if written == "" {
             let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             let parts: Vec<Expr> = match index {

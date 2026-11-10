@@ -367,6 +367,10 @@ pub(crate) fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_g
                 let value = nikaia_std::boxed::open(value);
                 if value.is_some() && check_gives_back_is_name(match value { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words) { found = true; }
             },
+            Expr::Throw(value, _) => {
+                let value = nikaia_std::boxed::open(value);
+                if check_gives_back_is_name(value, name, words) { found = true; }
+            },
             Expr::Block(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
             Expr::AsyncGroup(block, _, _, _, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },
             Expr::Unsafe(block, _) => { if check_gives_back_block_returns(block, name, words) { found = true; } },

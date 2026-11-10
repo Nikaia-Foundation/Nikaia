@@ -5,5 +5,5 @@ error[NK1102]: `total` expects `make` to be `fn(ref Vec[i64]) -> Held`, but you'
     |                        ^^^^
     |
     = note: It's declared as `total(xs: Vec[i64], make: fn(ref Vec[i64]) -> Held) -> i64`.
-    = help: Make it a `fn(ref Vec[i64]) -> Held`, or change the declaration to `fn(Vec[i64]) -> Held sync`.
+    = help: Make it a `fn(Vec[i64]) -> Held`, or change the declaration to `fn(keep Vec[i64]) -> Held sync`.
 1 type error

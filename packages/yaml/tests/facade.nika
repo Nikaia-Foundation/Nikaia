@@ -1,7 +1,8 @@
 // The serde_yaml facade (#1439; ADR-yaml-1 D10, ADR-393 D7): `nikaia build`
 // writes the package as the Rust crate `nikaia_yaml`, with `rust/` as its
 // hand-written root over `native`, and the Rust crate `tests/facade` runs
-// serde_yaml 0.9's `test_de.rs`, `test_value.rs` and `test_error.rs` (#1441).
+// serde_yaml 0.9's `test_de.rs`, `test_value.rs`, `test_error.rs` (#1441) and
+// `test_serde.rs` (#1515).
 // A `FAILED` line is a case the native core does not pass yet, filed
 // against the core.
 use std::fs

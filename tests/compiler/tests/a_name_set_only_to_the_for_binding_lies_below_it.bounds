@@ -1,0 +1,13 @@
+bounds in tests/a_name_set_only_to_the_for_binding_lies_below_it.nika: 5 indexes, 3 proved; 7 operations, 5 proved
+    12  lines[i]          proved
+    15  lines[prev]       proved
+    16  i - prev          proved
+    20  n - prev + t % 2  proved
+    20  n - prev          proved
+    27  n - 1             proved
+    28  lines[prev]       proved
+    32  n - prev          proved
+    39  lines[prev]       checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    44  n - prev          checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    53  lines[prev]       checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    58  n - prev          checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

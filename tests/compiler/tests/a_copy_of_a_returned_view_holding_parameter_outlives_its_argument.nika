@@ -1,0 +1,25 @@
+// A parameter handed back whole is a view of it (ADR-views-3 D12, #1498);
+// where its type holds views, the view of the parameter and what it views
+// are two lifetimes, `fn leaf<'r, 'a>(n: &'r N<'a>) -> &'r N<'a>`, so a
+// copy of the result outlives the local it was read from.
+
+struct N { raw: String }
+
+fn leaf(n: N) -> N sync {
+	return n
+}
+
+fn walk(n: N) -> N sync {
+	let m = N { raw: n.raw }
+	let k = leaf(m).clone()
+	return k
+}
+
+fn make(s: String) -> N {
+	return N { raw: s.trim() }
+}
+
+fn main() throws {
+	let s = "  a  "
+	println(walk(make(s)).raw)
+}

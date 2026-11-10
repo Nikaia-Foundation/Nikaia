@@ -33,9 +33,10 @@ signature = "(ref mut self, name: ref String, start: u32, input: ref Bytes) -> N
 [fn."Loader::resolved"]
 sync = true
 throws = ["Error"]
-returns = "anchor: ref(self | n), raw: ref(self | n), style: ref(self | n), tag: ref(self | n), value: ref(self | n)"
+returns = "anchor: ref(self | n), raw: ref(self | n), style: ref(self | n), value: ref(self | n)"
 keeps = ["n"]
 panics = true
+places = true
 touches = []
 views = ["self: borrowed", "n: borrowed", "input: borrowed", "<result>: borrowed"]
 signature = "(ref mut self, n: Node, input: ref Bytes) -> Node"
@@ -46,9 +47,130 @@ throws = ["Error"]
 returns = "key: ref(self | entries), value: ref(self | entries)"
 keeps = ["entries"]
 panics = true
+places = true
 touches = []
 views = ["self: borrowed", "entries: borrowed", "input: borrowed", "<result>: borrowed"]
 signature = "(ref mut self, entries: Vec[Entry], input: ref Bytes) -> Vec[Entry]"
+
+[fn."Writer::decrease"]
+sync = true
+panics = false
+touches = []
+signature = "(ref mut self)"
+
+[fn."Writer::document"]
+pub = true
+sync = true
+keeps = ["root"]
+panics = true
+places = true
+touches = []
+views = ["root: borrowed"]
+signature = "(ref mut self, root: ref Node) -> String"
+
+[fn."Writer::double"]
+sync = true
+panics = true
+touches = []
+views = ["t: borrowed"]
+signature = "(ref mut self, t: String)"
+
+[fn."Writer::end"]
+pub = true
+sync = true
+panics = true
+touches = []
+signature = "(ref mut self) -> String"
+
+[fn."Writer::increase"]
+sync = true
+panics = true
+touches = []
+signature = "(ref mut self, flow: bool, indentless: bool)"
+
+[fn."Writer::indicator"]
+sync = true
+panics = true
+touches = []
+signature = "(ref mut self, s: ref String, need_space: bool, is_space: bool, is_indention: bool)"
+
+[fn."Writer::line"]
+sync = true
+panics = true
+touches = []
+signature = "(ref mut self)"
+
+[fn."Writer::literal"]
+sync = true
+panics = true
+touches = []
+views = ["t: borrowed"]
+signature = "(ref mut self, t: String)"
+
+[fn."Writer::node"]
+sync = true
+keeps = ["n"]
+panics = true
+places = true
+touches = []
+views = ["n: borrowed"]
+signature = "(ref mut self, n: ref Node, mapping: bool, simple: bool)"
+
+[fn."Writer::plain"]
+sync = true
+panics = true
+touches = []
+views = ["t: borrowed"]
+signature = "(ref mut self, t: String)"
+
+[fn."Writer::properties"]
+sync = true
+keeps = ["n"]
+panics = true
+touches = []
+views = ["n: borrowed"]
+signature = "(ref mut self, n: ref Node)"
+
+[fn."Writer::put"]
+sync = true
+panics = true
+touches = []
+signature = "(ref mut self, c: scalar)"
+
+[fn."Writer::put_break"]
+sync = true
+panics = false
+touches = []
+signature = "(ref mut self)"
+
+[fn."Writer::put_text"]
+sync = true
+panics = true
+touches = []
+views = ["s: borrowed"]
+signature = "(ref mut self, s: String)"
+
+[fn."Writer::put_text_break"]
+sync = true
+panics = false
+touches = []
+signature = "(ref mut self, c: scalar)"
+
+[fn."Writer::scalar"]
+sync = true
+keeps = ["n"]
+panics = true
+places = true
+touches = []
+views = ["n: borrowed"]
+signature = "(ref mut self, n: ref Node, simple: bool)"
+
+[fn."Writer::single"]
+sync = true
+panics = true
+touches = []
+views = ["t: borrowed"]
+signature = "(ref mut self, t: String)"
 
 [fn."Yaml::stream"]
 sync = true
@@ -57,6 +179,13 @@ keeps = ["input", "lim"]
 touches = []
 views = ["input: borrowed", "<result>: borrowed"]
 signature = "(input: ?, lim: Limits) -> Vec[Document]"
+
+[fn."allowed"]
+sync = true
+panics = false
+touches = []
+views = ["t: borrowed"]
+signature = "(t: String) -> Allowed"
 
 [fn."as_f64"]
 pub = true
@@ -84,12 +213,27 @@ touches = []
 views = ["<result>: borrowed"]
 signature = "(kind: EventKind, start: u32, end: u32) -> Event"
 
+[fn."blank"]
+sync = true
+panics = false
+touches = []
+signature = "(c: scalar) -> bool"
+
 [fn."block"]
 sync = true
 panics = true
+places = true
 touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, indent: i64, chomp: Chomp, folded: bool) -> String"
+
+[fn."block_content_fits"]
+sync = true
+panics = true
+places = true
+touches = []
+views = ["raw: borrowed"]
+signature = "(k: TagKind, raw: ref String, indent: i64, chomp: Chomp, style: Style) -> bool"
 
 [fn."block_end"]
 sync = true
@@ -103,6 +247,14 @@ sync = true
 panics = false
 touches = []
 signature = "(k: TagKind) -> bool"
+
+[fn."block_text"]
+sync = true
+panics = true
+places = true
+touches = []
+views = ["raw: borrowed"]
+signature = "(raw: ref String, indent: i64, chomp: Chomp, style: Style) -> String"
 
 [fn."breaks"]
 sync = true
@@ -136,7 +288,7 @@ sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(s: ref String, from: i64, radix: i64) -> bool"
+signature = "(s: String, from: i64, radix: i64) -> bool"
 
 [fn."documents"]
 pub = true
@@ -170,6 +322,12 @@ touches = []
 views = ["input: borrowed", "rendered: borrowed"]
 signature = "(input: ref Bytes, rendered: String) -> Error"
 
+[fn."escape"]
+sync = true
+panics = true
+touches = []
+signature = "(c: scalar) -> String"
+
 [fn."escape_event"]
 sync = true
 panics = false
@@ -196,6 +354,7 @@ pub = true
 sync = true
 returns = "anchor: ref(docs), style: ref(docs), value: ref(docs)"
 panics = true
+places = true
 touches = []
 views = ["docs: borrowed", "<result>: borrowed"]
 signature = "(docs: ref Vec[Document]) -> Vec[Event]"
@@ -212,7 +371,7 @@ sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(k: TagKind, s: ref String) -> bool"
+signature = "(k: TagKind, s: String) -> bool"
 
 [fn."fits_node"]
 sync = true
@@ -235,6 +394,12 @@ touches = []
 views = ["ds: borrowed"]
 signature = "(ds: ref Vec[Dir]) -> bool"
 
+[fn."hex"]
+sync = true
+panics = true
+touches = []
+signature = "(v: i64, width: i64) -> String"
+
 [fn."hex_value"]
 sync = true
 panics = false
@@ -247,6 +412,12 @@ panics = false
 touches = []
 views = ["n: borrowed"]
 signature = "(n: ref Node) -> bool"
+
+[fn."is_break"]
+sync = true
+panics = false
+touches = []
+signature = "(c: scalar) -> bool"
 
 [fn."is_core"]
 sync = true
@@ -266,14 +437,14 @@ sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(s: ref String) -> bool"
+signature = "(s: String) -> bool"
 
 [fn."is_float"]
 sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(s: ref String) -> bool"
+signature = "(s: String) -> bool"
 
 [fn."is_flow_indicator"]
 sync = true
@@ -292,7 +463,7 @@ sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(s: ref String) -> bool"
+signature = "(s: String) -> bool"
 
 [fn."is_merge_key"]
 sync = true
@@ -306,7 +477,7 @@ sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(s: ref String) -> bool"
+signature = "(s: String) -> bool"
 
 [fn."is_space"]
 sync = true
@@ -319,7 +490,7 @@ sync = true
 panics = false
 touches = []
 views = ["s: borrowed"]
-signature = "(s: ref String) -> bool"
+signature = "(s: String) -> bool"
 
 [fn."is_uri"]
 sync = true
@@ -336,6 +507,7 @@ signature = "(x: scalar) -> bool"
 [fn."key_of"]
 sync = true
 panics = true
+places = true
 touches = []
 views = ["n: borrowed"]
 signature = "(n: ref Node) -> String?"
@@ -362,13 +534,21 @@ touches = []
 views = ["t: borrowed"]
 signature = "(t: String) -> i64"
 
+[fn."leading_zero_digits"]
+sync = true
+panics = false
+touches = []
+views = ["t: borrowed"]
+signature = "(t: String) -> bool"
+
 [fn."load"]
 pub = true
 sync = true
 throws = ["Error"]
-returns = "anchor: ref(input), raw: ref(input), style: ref(input), tag: ref(input), value: ref(input)"
+returns = "anchor: ref(input), directives: ref(input), raw: ref(input), style: ref(input), value: ref(input)"
 keeps = ["input", "limits"]
 panics = true
+places = true
 touches = []
 views = ["input: borrowed", "<result>: borrowed"]
 signature = "(input: ref Bytes; limits: Limits = Limits { alias_nodes: 10000, bytes: 4294967295, depth: 128 }) -> Vec[Node]"
@@ -396,6 +576,7 @@ throws = ["Error"]
 returns = "anchor: ref(node), raw: ref(node), style: ref(node), tag: ref(node), value: ref(node)"
 keeps = ["node"]
 panics = true
+places = true
 touches = []
 views = ["node: borrowed", "input: borrowed", "<result>: borrowed"]
 signature = "(node: Node, input: ref Bytes) -> Node"
@@ -416,6 +597,7 @@ throws = ["Error"]
 returns = "key: ref(entries), value: ref(entries)"
 keeps = ["entries"]
 panics = true
+places = true
 touches = []
 views = ["entries: borrowed", "input: borrowed", "<result>: borrowed"]
 signature = "(entries: Vec[Entry], input: ref Bytes) -> Vec[Entry]"
@@ -426,6 +608,7 @@ throws = ["Error"]
 returns = "ref(m)"
 keeps = ["m"]
 panics = true
+places = true
 touches = []
 views = ["m: borrowed", "input: borrowed", "<result>: borrowed"]
 signature = "(m: Node, input: ref Bytes) -> Vec[Entry]"
@@ -443,6 +626,16 @@ panics = false
 touches = []
 views = ["xs: borrowed"]
 signature = "(xs: ref Vec[i64]) -> i64"
+
+[fn."node"]
+pub = true
+sync = true
+returns = "value: ref(value)"
+keeps = ["value"]
+panics = false
+touches = []
+views = ["value: borrowed", "<result>: borrowed"]
+signature = "(value: Value) -> Node"
 
 [fn."nodes_in"]
 sync = true
@@ -530,6 +723,12 @@ panics = false
 touches = []
 signature = "(x: scalar, flow: bool) -> bool"
 
+[fn."printable"]
+sync = true
+panics = false
+touches = []
+signature = "(c: scalar) -> bool"
+
 [fn."properties"]
 sync = true
 panics = false
@@ -537,12 +736,35 @@ touches = []
 views = ["e: borrowed"]
 signature = "(e: ref Event) -> String"
 
+[fn."quoted_node"]
+pub = true
+sync = true
+keeps = ["t"]
+panics = false
+touches = []
+views = ["<result>: borrowed"]
+signature = "(t: String) -> Node"
+
 [fn."radix_value"]
 sync = true
 panics = true
 touches = []
 views = ["t: borrowed"]
 signature = "(t: String, radix: i64) -> i64?"
+
+[fn."reads_as_other"]
+sync = true
+panics = false
+touches = []
+views = ["t: borrowed"]
+signature = "(t: String) -> bool"
+
+[fn."requested"]
+sync = true
+panics = false
+touches = []
+views = ["n: borrowed", "t: borrowed"]
+signature = "(n: ref Node, t: String) -> i64"
 
 [fn."resolve"]
 sync = true
@@ -556,7 +778,24 @@ sync = true
 panics = true
 touches = []
 views = ["ds: borrowed", "t: borrowed"]
-signature = "(ds: ref Vec[Dir], t: ref String?) -> String?"
+signature = "(ds: ref Vec[Dir], t: String?) -> String?"
+
+[fn."scalar_text"]
+sync = true
+panics = true
+places = true
+touches = []
+views = ["n: borrowed"]
+signature = "(n: ref Node) -> String"
+
+[fn."simple_key"]
+sync = true
+keeps = ["n"]
+panics = true
+places = true
+touches = []
+views = ["n: borrowed"]
+signature = "(n: ref Node) -> bool"
 
 [fn."skip_blanks"]
 sync = true
@@ -565,11 +804,28 @@ touches = []
 views = ["cs: borrowed"]
 signature = "(cs: ref Vec[scalar], from: i64) -> i64"
 
+[fn."string_node"]
+pub = true
+sync = true
+keeps = ["t"]
+panics = false
+touches = []
+views = ["<result>: borrowed"]
+signature = "(t: String) -> Node"
+
 [fn."style_mark"]
 sync = true
 panics = false
 touches = []
 signature = "(s: Style) -> ref String"
+
+[fn."tag"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["n: borrowed"]
+signature = "(n: ref Node) -> String?"
 
 [fn."tag_kind"]
 sync = true
@@ -578,10 +834,36 @@ touches = []
 views = ["ds: borrowed", "t: borrowed"]
 signature = "(ds: ref Vec[Dir], t: ref String?) -> TagKind"
 
+[fn."tag_length"]
+sync = true
+keeps = ["tag"]
+panics = true
+touches = []
+views = ["tag: borrowed"]
+signature = "(tag: ref String?) -> i64"
+
+[fn."tag_written"]
+sync = true
+panics = true
+touches = []
+views = ["tag: borrowed"]
+signature = "(tag: String) -> String"
+
+[fn."tagged"]
+pub = true
+sync = true
+returns = "ref(n)"
+keeps = ["n", "tag"]
+panics = false
+touches = []
+views = ["n: borrowed", "<result>: borrowed"]
+signature = "(n: Node, tag: String) -> Node"
+
 [fn."text"]
 pub = true
 sync = true
 panics = true
+places = true
 touches = []
 views = ["s: borrowed"]
 signature = "(s: ref Scalar) -> String"
@@ -593,14 +875,46 @@ touches = []
 views = ["s: borrowed"]
 signature = "(s: ref String) -> String"
 
+[fn."uri_escaped"]
+sync = true
+panics = true
+touches = []
+views = ["t: borrowed"]
+signature = "(t: String) -> String"
+
 [fn."walk"]
 sync = true
 returns = "anchor: ref(n), style: ref(n), value: ref(n)"
 keeps = ["n"]
 panics = true
+places = true
 touches = []
 views = ["n: borrowed", "ds: borrowed", "<result>: borrowed"]
 signature = "(n: ref Node, ds: ref Vec[Dir]) -> Vec[Event]"
+
+[fn."write"]
+pub = true
+sync = true
+panics = true
+places = true
+touches = []
+views = ["nodes: borrowed"]
+signature = "(nodes: ref Vec[Node]) -> String"
+
+[fn."writer"]
+pub = true
+sync = true
+panics = false
+touches = []
+signature = "() -> Writer"
+
+[fn."written_tag"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["tag: borrowed"]
+signature = "(tag: String) -> String"
 
 [fn."yaml_once"]
 sync = true
@@ -612,6 +926,9 @@ signature = "(ds: ref Vec[Dir]) -> bool"
 [impl."Error for ConvertError"]
 
 [impl."Error for Error"]
+
+[type."Allowed"]
+fields = ["multiline: bool", "plain: bool", "single: bool", "block: bool"]
 
 [type."Anchored"]
 fields = ["node: Node?", "nodes: i64"]
@@ -665,8 +982,8 @@ pub = true
 fields = ["pub depth: i64", "pub alias_nodes: i64", "pub bytes: i64"]
 
 [type."Loader"]
-fields = ["anchors: collections::HashMap[ref String, Anchored]", "made: i64", "expanded: i64", "limit: i64", "alias_nodes: i64"]
-tethered = ["anchors"]
+fields = ["anchors: collections::HashMap[ref String, Anchored]", "made: i64", "expanded: i64", "limit: i64", "alias_nodes: i64", "directives: Vec[Dir]"]
+tethered = ["anchors", "directives"]
 
 [type."Next"]
 fields = ["ended: bool", "doc: Document"]
@@ -674,7 +991,7 @@ tethered = ["doc"]
 
 [type."Node"]
 pub = true
-fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "pub tag: ref String?", "pub flow: bool", "pub raw: ref String", "pub style: Style", "pub value: Value"]
+fields = ["pub start: u32", "pub end: u32", "pub anchor: ref String?", "tag: String?", "pub flow: bool", "pub raw: ref String", "pub style: Style", "pub value: Value"]
 tethered = ["anchor", "tag", "raw", "value"]
 
 [type."Props"]
@@ -697,3 +1014,7 @@ variants = ["Untagged", "NonSpecific", "Null", "Bool", "Int", "Float", "Str", "S
 pub = true
 variants = ["Null", "Bool(bool)", "Int(ref String)", "Float(ref String)", "Str(Scalar)", "Seq(Vec[Node])", "Map(Vec[Entry])", "Alias(ref String)"]
 tethered = ["Int", "Float", "Str", "Seq", "Map", "Alias"]
+
+[type."Writer"]
+pub = true
+fields = ["out: String", "column: i64", "indent: i64", "indents: Vec[i64]", "whitespace: bool", "indention: bool", "open_ended: i64", "first: bool"]

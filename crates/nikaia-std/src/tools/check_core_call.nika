@@ -195,7 +195,7 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
         let key = f"{current}::{name}"
         let a_param = !current.contains("::") && check_core_call_a_param_of(world, current, name)
         if fails && world.own.code_throws.contains_key(key) {
-            let set = world.own.code_throws[key] ?? return gives
+            let set = world.own.code_throws[key] ?? return gives.clone()
             let mut contract = FnContract::empty()
             contract.fails_with = set.clone()
             state.may_fail_here(world, host, key, contract, span)
@@ -210,7 +210,7 @@ fn check_core_call_kept[H: CheckHost](mut state: CheckState, world: ref CheckWor
             }
         }
     }
-    return gives
+    return gives.clone()
 }
 
 // The arguments handed to `mut` parameters, whose code may change there.
@@ -854,6 +854,12 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         state.facts.copied_results.insert(id_of(func) as i64)
         return unviewed_type(made)
     }
+    // **A view of a variable that holds a view of text is read at the call**
+    // (ADR-views-3 D12, #1498): the `&&str` the result is points into the
+    // call's own `&`, and its copy is the `&str` the arguments view.
+    if check_core_call_hands_back_a_variable(contract) && state.facts.viewed_text_calls.contains(span.start as i64) {
+        state.facts.copied_results.insert(id_of(func) as i64)
+    }
     return made
 }
 
@@ -1026,6 +1032,7 @@ fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckW
     if !needed {
         let note: String = "Brackets after a function's name are allowed while their uses are collected; here the arguments already say the type."
         state.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: "NK1233", message: f"`{name}[…]` names a type the arguments of the call already say.", notes: [note], help: f"Leave the brackets out, `{name}(…)`, or add your use case to https://github.com/Nikaia-Foundation/Nikaia/issues/514.", labels: [] })
+        state.facts.plain_bracket_calls.insert(id_of(base) as i64)
     }
     // The type the function walks decides the copy, as a value of it would.
     let walked: String = state.walks_fields.get(name)?.clone() ?? ""

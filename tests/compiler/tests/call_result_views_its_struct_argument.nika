@@ -1,7 +1,8 @@
 // A call's result built from a by-value struct argument that holds views
 // points into that argument, not into a `ref` argument beside it (#1094):
 // storing it into a field of a struct literal keeps no view of `input`.
-// Row a: a call stored into a field; b: the call recursive; c: through a
+// Row a: a call stored into a field (copied: handing a parameter back alone
+// is a view of it, ADR-views-3 D12); b: the call recursive; c: through a
 // `let`; d: pushed without a struct literal.
 
 struct N { raw: String, kids: Vec[E] }
@@ -15,7 +16,7 @@ fn leaf(n: N, _input: ref Bytes) -> N sync {
 fn walk_a(n: N, input: ref Bytes) -> N sync {
 	let mut out: Vec[E] = []
 	for e in n.kids.drain() {
-		out.push(E { key: leaf(e.key, input) })
+		out.push(E { key: leaf(e.key, input).clone() })
 	}
 	return N { raw: n.raw, kids: out }
 }

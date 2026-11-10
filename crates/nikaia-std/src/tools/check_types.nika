@@ -304,7 +304,12 @@ pub fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if a_number_name(found_text) && a_number_name(want_text) {
         return f"Convert it with `as {want_text}`. A number goes into another type on its own only where every value it can hold fits."
     }
-    let shown = want.owned().text()
+    // **A function that keeps, where a function type lends** (Part I §C,
+    // #1504): both as the source writes them, a lent parameter plain and a
+    // kept one `keep`, never the boundary's `ref`.
+    let keeps_where_lent = code_keeps_where_lent(found, want)
+    let found_written = if keeps_where_lent { code_as_written(found) ?? found_text } else { found_text.clone() }
+    let shown = if keeps_where_lent { code_as_written(want) ?? want.owned().text() } else { want.owned().text() }
     let article = if shown.starts_with("i") || shown.starts_with("a") || shown.starts_with("e") || shown.starts_with("o") || shown.starts_with("I") || shown.starts_with("A") || shown.starts_with("E") || shown.starts_with("O") { "an" } else { "a" }
     let mut wanted: String = f"Make it {article} `{shown}`"
     if want.is_a_view() && shown != want_text {
@@ -313,7 +318,74 @@ pub fn way_out_of_a_mismatch(found: ref Ty, want: ref Ty) -> String {
     if found.is_a_view() {
         return f"{wanted}."
     }
-    return f"{wanted}, or change the declaration to `{found_text}`."
+    return f"{wanted}, or change the declaration to `{found_written}`."
+}
+
+/// A function type in the source's spelling (#1504): a parameter it lends is
+/// written plain, one it keeps `keep`, one never lent (a number, `bool`,
+/// `char`, an option, a tuple, code) plain, a `mut` one `mut`; `null` for
+/// any other type.
+fn code_as_written(ty: ref Ty) -> String? {
+    return match ty {
+        Ty::Fn { params, result, is_sync, can_throw } => {
+            let mut listed: Vec[String] = []
+            for part in params {
+                listed.push(code_param_as_written(part))
+            }
+            let bare = Ty::Fn { params: [], result: result?.clone(), is_sync: is_sync, can_throw: can_throw }
+            let whole = bare.text()
+            let rest = whole.strip_prefix("fn()") ?? ""
+            let joined = listed.join(", ")
+            f"fn({joined}){rest}"
+        }
+        else => null,
+    }
+}
+
+/// Whether `found` is code that keeps a parameter `want` lends.
+fn code_keeps_where_lent(found: ref Ty, want: ref Ty) -> bool {
+    let given = match found {
+        Ty::Fn { params, .. } => params.clone(),
+        else => return false,
+    }
+    let wanted = match want {
+        Ty::Fn { params, .. } => params.clone(),
+        else => return false,
+    }
+    if given.len() != wanted.len() {
+        return false
+    }
+    for at in 0..<given.len() {
+        // Text a function lends reads `String` here as well (ADR-184 D2),
+        // so a text parameter tells nothing.
+        let plain = given[at].text()
+        if wanted[at].is_a_view() && !given[at].is_a_view() && plain != "String" && code_param_as_written(given[at]).starts_with("keep ") {
+            return true
+        }
+    }
+    return false
+}
+
+fn code_param_as_written(part: ref Ty) -> String {
+    let changed = lent_mut(part)
+    if changed != null {
+        let item = changed?.text() ?? ""
+        return f"mut {item}"
+    }
+    if part.is_a_view() {
+        return part.owned().text()
+    }
+    let plain = part.text()
+    let copies = match part {
+        Ty::Named { args, .. } => args.is_empty() && (a_number_name(plain) || plain == "int" || plain == "bool" || plain == "char" || plain == "scalar"),
+        Ty::Var { .. } => false,
+        // An option, a tuple or code is not lent (`code_lends_at`).
+        else => true,
+    }
+    if copies {
+        return plain
+    }
+    return f"keep {plain}"
 }
 
 /// A view of a run handed where a `Vec` is wanted: the element's text.

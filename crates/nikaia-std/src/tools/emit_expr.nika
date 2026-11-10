@@ -408,7 +408,12 @@ impl EmitState {
                 // A view of a copied word is read at the call (ADR-views-3
                 // D12, #1239): `Clone::clone(hand(&3))`, which leaves the open `3` to
                 // the type its uses decide (#497).
-                let copied = self.facts.copied_results.contains(node_key(func))
+                // `id[i64](3)` is checked on its callee's name (#1498).
+                let callee = match func {
+                    Expr::Index { base, .. } => base,
+                    else => func,
+                }
+                let copied = self.facts.copied_results.contains(node_key(callee))
                 if copied {
                     out.push("Clone::clone(")
                 }

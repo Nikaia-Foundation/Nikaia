@@ -1,0 +1,12 @@
+bounds in tests/a_product_of_values_a_call_hands_back_is_proved.nika: 0 indexes, 0 proved; 11 operations, 11 proved
+     6  (c & 15) + 9 * (c >> 6)           proved
+     6  9 * (c >> 6)                      proved
+    10  hex_value(a) * 16 + hex_value(b)  proved
+    10  hex_value(a) * 16                 proved
+    19  d * d                             proved
+    24  a * 16 + b                        proved
+    24  a * 16                            proved
+    25  a * 256 + b                       proved
+    25  a * 256                           proved
+    26  a * 65536 + b                     proved
+    26  a * 65536                         proved

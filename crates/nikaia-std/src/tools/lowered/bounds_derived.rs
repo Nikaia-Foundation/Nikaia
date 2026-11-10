@@ -217,6 +217,22 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, words: 
             _ => { },
         }
     }
+    for stmt in body.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, value, .. } => {
+                if names.len() == 1 && compared.contains(words.resolve(*nikaia_std::index::get(&names, 0))) {
+                    match value {
+                        Expr::Variable(name, _) => {
+                            let name = *name;
+                            compared.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
     let mut claims: Vec<DerivedClaim> = vec![];
     for p in ints.iter() {
         if !compared.contains(p) { continue; }
