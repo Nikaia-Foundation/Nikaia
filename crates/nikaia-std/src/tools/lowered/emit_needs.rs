@@ -67,7 +67,7 @@ impl EmitNeeds {
         EmitNeeds { uses_grammar: self.uses_grammar || other.uses_grammar, driver: self.driver || other.driver, uses_std: self.uses_std || other.uses_std, fails: self.fails || other.fails, foreign_traits: traits }
     }
     pub fn preamble(&self) -> String {
-        let mut out: String = String::from("#![allow(unused_unsafe)]\n");
+        let mut out: String = String::from("");
         if self.uses_grammar { out.push_str("use winnow_grammar::grammar;\n"); }
         if self.driver {
             out.push_str("use winnow_grammar::rt::Parallelism;\n");
